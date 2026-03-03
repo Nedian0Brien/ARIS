@@ -1,2 +1,6 @@
 references/
 
+.env
+deploy/.env
+services/aris-web/.env
+services/aris-backend/.env

@@ -1,0 +1,11 @@
+{$ARIS_DOMAIN} {
+  encode zstd gzip
+  reverse_proxy aris-web:3000
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Frame-Options "DENY"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+}

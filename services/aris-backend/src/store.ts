@@ -1,0 +1,231 @@
+import { randomUUID } from 'node:crypto';
+import type {
+  PermissionDecision,
+  PermissionRequest,
+  PermissionRisk,
+  RuntimeMessage,
+  RuntimeSession,
+  SessionAction,
+  SessionStatus,
+} from './types.js';
+
+type CreateSessionInput = {
+  path: string;
+  flavor: RuntimeSession['metadata']['flavor'];
+  status?: SessionStatus;
+  riskScore?: number;
+};
+
+type AppendMessageInput = {
+  type: string;
+  title?: string;
+  text: string;
+  meta?: Record<string, unknown>;
+};
+
+type CreatePermissionInput = {
+  sessionId: string;
+  agent: PermissionRequest['agent'];
+  command: string;
+  reason: string;
+  risk: PermissionRisk;
+};
+
+export class RuntimeStore {
+  private readonly sessions = new Map<string, RuntimeSession>();
+  private readonly messages = new Map<string, RuntimeMessage[]>();
+  private readonly permissions = new Map<string, PermissionRequest>();
+
+  constructor(defaultProjectPath: string) {
+    const sessionA = this.createSession({
+      path: defaultProjectPath,
+      flavor: 'claude',
+      status: 'running',
+      riskScore: 22,
+    });
+
+    const sessionB = this.createSession({
+      path: '/srv/legacy',
+      flavor: 'codex',
+      status: 'error',
+      riskScore: 78,
+    });
+
+    this.appendMessage(sessionA.id, {
+      type: 'message',
+      title: 'Text Reply',
+      text: 'Agent initialized and workspace scanned.',
+    });
+    this.appendMessage(sessionA.id, {
+      type: 'tool',
+      title: 'Command Execution',
+      text: '$ npm test\\nexit code: 0',
+    });
+    this.appendMessage(sessionA.id, {
+      type: 'read',
+      title: 'Code Read',
+      text: 'Opened file: src/main.ts',
+    });
+
+    this.appendMessage(sessionB.id, {
+      type: 'write',
+      title: 'Code Write',
+      text: 'Modified files: app/auth.ts and middleware.ts',
+    });
+
+    this.createPermission({
+      sessionId: sessionA.id,
+      agent: 'claude',
+      command: 'npm install sharp',
+      reason: 'Native dependency for image pipeline',
+      risk: 'medium',
+    });
+
+    this.createPermission({
+      sessionId: sessionB.id,
+      agent: 'codex',
+      command: 'rm -rf node_modules',
+      reason: 'Recreate dependency tree from lockfile',
+      risk: 'high',
+    });
+  }
+
+  listSessions(): RuntimeSession[] {
+    return [...this.sessions.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  getSession(sessionId: string): RuntimeSession | null {
+    return this.sessions.get(sessionId) ?? null;
+  }
+
+  createSession(input: CreateSessionInput): RuntimeSession {
+    const now = new Date().toISOString();
+    const session: RuntimeSession = {
+      id: randomUUID(),
+      metadata: {
+        flavor: input.flavor,
+        path: input.path,
+      },
+      state: {
+        status: input.status ?? 'idle',
+      },
+      updatedAt: now,
+      riskScore: input.riskScore ?? 20,
+    };
+
+    this.sessions.set(session.id, session);
+    this.messages.set(session.id, []);
+    return session;
+  }
+
+  listMessages(sessionId: string): RuntimeMessage[] {
+    return this.messages.get(sessionId) ?? [];
+  }
+
+  appendMessage(sessionId: string, input: AppendMessageInput): RuntimeMessage {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error('SESSION_NOT_FOUND');
+    }
+
+    const message: RuntimeMessage = {
+      id: randomUUID(),
+      sessionId,
+      type: input.type,
+      title: input.title ?? input.type,
+      text: input.text,
+      meta: input.meta,
+      createdAt: new Date().toISOString(),
+    };
+
+    const list = this.messages.get(sessionId) ?? [];
+    list.push(message);
+    this.messages.set(sessionId, list);
+
+    session.updatedAt = message.createdAt;
+    this.sessions.set(sessionId, session);
+    return message;
+  }
+
+  applySessionAction(sessionId: string, action: SessionAction): { accepted: boolean; message: string; at: string } {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error('SESSION_NOT_FOUND');
+    }
+
+    const at = new Date().toISOString();
+    const statusByAction: Record<SessionAction, SessionStatus> = {
+      abort: 'stopped',
+      retry: 'running',
+      kill: 'stopped',
+      resume: 'running',
+    };
+
+    session.state.status = statusByAction[action];
+    session.updatedAt = at;
+
+    if (action === 'kill') {
+      session.riskScore = 85;
+    } else if (action === 'retry' || action === 'resume') {
+      session.riskScore = Math.max(10, session.riskScore - 15);
+    }
+
+    this.sessions.set(sessionId, session);
+    this.appendMessage(sessionId, {
+      type: 'tool',
+      title: 'Command Execution',
+      text: `$ session ${action}\\nexit code: 0`,
+      meta: { system: true, action },
+    });
+
+    return {
+      accepted: true,
+      message: `${action.toUpperCase()} acknowledged`,
+      at,
+    };
+  }
+
+  listPermissions(state?: PermissionRequest['state']): PermissionRequest[] {
+    const list = [...this.permissions.values()].sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
+    return state ? list.filter((item) => item.state === state) : list;
+  }
+
+  createPermission(input: CreatePermissionInput): PermissionRequest {
+    if (!this.sessions.has(input.sessionId)) {
+      throw new Error('SESSION_NOT_FOUND');
+    }
+
+    const permission: PermissionRequest = {
+      id: randomUUID(),
+      sessionId: input.sessionId,
+      agent: input.agent,
+      command: input.command,
+      reason: input.reason,
+      risk: input.risk,
+      requestedAt: new Date().toISOString(),
+      state: 'pending',
+    };
+
+    this.permissions.set(permission.id, permission);
+    return permission;
+  }
+
+  decidePermission(permissionId: string, decision: PermissionDecision): PermissionRequest {
+    const permission = this.permissions.get(permissionId);
+    if (!permission) {
+      throw new Error('PERMISSION_NOT_FOUND');
+    }
+
+    permission.state = decision === 'deny' ? 'denied' : 'approved';
+    this.permissions.set(permission.id, permission);
+
+    this.appendMessage(permission.sessionId, {
+      type: 'message',
+      title: 'Text Reply',
+      text: `Permission ${permission.command} -> ${permission.state}`,
+      meta: { permissionId, decision },
+    });
+
+    return permission;
+  }
+}

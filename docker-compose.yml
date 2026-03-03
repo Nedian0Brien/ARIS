@@ -1,0 +1,111 @@
+name: aris-stack
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-aris}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-aris}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - aris_net
+
+  aris-backend:
+    build:
+      context: ./services/aris-backend
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: 4080
+      RUNTIME_API_TOKEN: ${RUNTIME_API_TOKEN:-change-this-runtime-token}
+      DEFAULT_PROJECT_PATH: /workspace
+      LOG_LEVEL: ${BACKEND_LOG_LEVEL:-info}
+    expose:
+      - "4080"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:4080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks:
+      - aris_net
+
+  aris-web:
+    build:
+      context: ./services/aris-web
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      aris-backend:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_APP_NAME: ARIS
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-replace-with-very-long-random-secret-at-least-32-characters}
+      AUTH_TOKEN_TTL_SECONDS: ${AUTH_TOKEN_TTL_SECONDS:-900}
+      AUTH_COOKIE_NAME: aris_session
+      ARIS_ADMIN_EMAIL: ${ARIS_ADMIN_EMAIL:-admin@example.com}
+      ARIS_ADMIN_PASSWORD: ${ARIS_ADMIN_PASSWORD:-change-me}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-aris}
+      HAPPY_SERVER_URL: http://aris-backend:4080
+      HAPPY_SERVER_TOKEN: ${RUNTIME_API_TOKEN:-change-this-runtime-token}
+      SSH_BASE_COMMAND: ${SSH_BASE_COMMAND:-ssh ubuntu@your-server}
+      SSH_LINK_TTL_SECONDS: ${SSH_LINK_TTL_SECONDS:-300}
+    expose:
+      - "3000"
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+    networks:
+      - aris_net
+
+  caddy:
+    image: caddy:2.8-alpine
+    profiles: ["edge"]
+    restart: unless-stopped
+    depends_on:
+      aris-web:
+        condition: service_healthy
+    environment:
+      ARIS_DOMAIN: ${ARIS_DOMAIN:-aris.example.com}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - aris_net
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  aris_net:
+    driver: bridge

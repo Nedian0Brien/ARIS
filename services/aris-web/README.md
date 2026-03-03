@@ -39,4 +39,7 @@ npm run seed
 npm run dev
 ```
 
+If you are using the local runtime backend, start `services/aris-backend` and set matching values for
+`HAPPY_SERVER_URL` and `HAPPY_SERVER_TOKEN`.
+
 Default login credentials come from `.env` (`ARIS_ADMIN_EMAIL`, `ARIS_ADMIN_PASSWORD`).
