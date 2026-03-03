@@ -37,20 +37,20 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
 
   return (
     <div className="form">
-      <div className="login-header">
-        <div className="brand">ARIS</div>
-        <h1>Secure Runtime Access</h1>
-        <p className="muted">Operator and viewer login for cross-device agentic coding sessions.</p>
+      <div style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
+        <div style={{ fontWeight: 700, fontSize: '1.5rem', letterSpacing: '-0.02em', marginBottom: '0.5rem' }}>ARIS</div>
+        <h1 style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>Secure Runtime Access</h1>
+        <p className="muted" style={{ fontSize: '0.875rem' }}>Operator and viewer login for cross-device agentic coding sessions.</p>
       </div>
 
       <form onSubmit={onSubmit}>
         <label className="field">
-          <span>Email</span>
+          <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>Email</span>
           <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" required />
         </label>
 
         <label className="field">
-          <span>Password</span>
+          <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>Password</span>
           <input
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -60,9 +60,9 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
           />
         </label>
 
-        {error ? <p style={{ color: '#9b1c1c' }}>{error}</p> : null}
+        {error ? <p style={{ color: '#b91c1c', fontSize: '0.875rem', marginBottom: '1rem', padding: '0.5rem', backgroundColor: '#fee2e2', borderRadius: 'var(--radius-sm)' }}>{error}</p> : null}
 
-        <button className="primary" type="submit" disabled={loading}>
+        <button className="primary" type="submit" disabled={loading} style={{ width: '100%', marginTop: '0.5rem' }}>
           {loading ? 'Signing in...' : 'Sign in'}
         </button>
       </form>
