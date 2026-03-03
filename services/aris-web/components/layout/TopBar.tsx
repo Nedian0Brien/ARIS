@@ -8,10 +8,10 @@ export function TopBar({ user }: { user: AuthenticatedUser }) {
         <Link href="/" style={{ fontWeight: 700, fontSize: '1.25rem', letterSpacing: '-0.02em', color: 'var(--text)', textDecoration: 'none' }}>
           ARIS
         </Link>
-        <Link href="/" className="muted" style={{ fontSize: '0.875rem', padding: '0.5rem', borderRadius: 'var(--radius-md)' }}>
-          Agent Workspace
+        <Link href="/" className="muted" style={{ fontSize: '0.875rem', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--surface-soft)' }}>
+          Sessions
         </Link>
-        <Link href="/ssh" className="muted" style={{ fontSize: '0.875rem', padding: '0.5rem', borderRadius: 'var(--radius-md)' }}>
+        <Link href="/ssh" className="muted" style={{ fontSize: '0.875rem', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-md)' }}>
           SSH Fallback
         </Link>
       </div>

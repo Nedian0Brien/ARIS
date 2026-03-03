@@ -157,6 +157,39 @@ export async function listSessions(): Promise<SessionSummary[]> {
   }
 }
 
+export async function createSession(input: {
+  path: string;
+  agent: SessionSummary['agent'];
+}): Promise<SessionSummary> {
+  try {
+    const raw = await fetchHappy('/v1/sessions', {
+      method: 'POST',
+      body: JSON.stringify({
+        path: input.path,
+        flavor: input.agent,
+      }),
+    });
+
+    const obj = asObject(raw);
+    const session = obj?.session;
+    if (session) {
+      return normalizeSessions([session])[0];
+    }
+    throw new Error('Invalid response from happy server');
+  } catch (error) {
+    // Mock mode fallback
+    const mock: SessionSummary = {
+      id: `mock-${Date.now()}`,
+      agent: input.agent,
+      status: 'running',
+      lastActivityAt: new Date().toISOString(),
+      riskScore: 0,
+      projectName: input.path,
+    };
+    return mock;
+  }
+}
+
 export async function getSessionEvents(sessionId: string): Promise<{ session: SessionDetail; events: UiEvent[] }> {
   try {
     const sessionRaw = await fetchHappy('/v1/sessions');
