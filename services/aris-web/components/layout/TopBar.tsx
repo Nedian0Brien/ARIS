@@ -9,7 +9,7 @@ export function TopBar({ user }: { user: AuthenticatedUser }) {
           ARIS
         </Link>
         <Link href="/" className="muted nav-link">
-          Runtime Dashboard
+          Agent Workspace
         </Link>
         <Link href="/ssh" className="muted nav-link">
           SSH Fallback

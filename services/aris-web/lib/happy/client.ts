@@ -184,6 +184,58 @@ export async function getSessionEvents(sessionId: string): Promise<{ session: Se
   }
 }
 
+export async function appendSessionMessage(input: {
+  sessionId: string;
+  type: 'message' | 'tool' | 'read' | 'write';
+  title?: string;
+  text: string;
+  meta?: Record<string, unknown>;
+}): Promise<UiEvent> {
+  try {
+    const raw = await fetchHappy(`/v3/sessions/${encodeURIComponent(input.sessionId)}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: input.type,
+        title: input.title,
+        text: input.text,
+        meta: input.meta,
+      }),
+    });
+
+    const obj = asObject(raw);
+    const message = obj?.message;
+    const normalized = normalizeEvents(message ? [message] : []);
+    if (normalized[0]) {
+      return normalized[0];
+    }
+  } catch {
+    // Mock mode below.
+  }
+
+  return {
+    id: `evt-${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    kind: classifyMockKind(input.type),
+    title: input.title ?? 'User Instruction',
+    body: input.text,
+    meta: input.meta,
+    severity: 'info',
+  };
+}
+
+function classifyMockKind(type: 'message' | 'tool' | 'read' | 'write'): UiEvent['kind'] {
+  if (type === 'tool') {
+    return 'command_execution';
+  }
+  if (type === 'read') {
+    return 'code_read';
+  }
+  if (type === 'write') {
+    return 'code_write';
+  }
+  return 'text_reply';
+}
+
 export async function listPermissionRequests(sessionId?: string): Promise<PermissionRequest[]> {
   try {
     const raw = await fetchHappy('/v1/permissions?state=pending');

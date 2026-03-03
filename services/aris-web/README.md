@@ -5,7 +5,7 @@ Next.js 15 App Router implementation for ARIS phase-1.
 ## Features included
 
 - JWT login/logout and role-aware session guards
-- Runtime dashboard and session detail (read-only)
+- Chat-first agent workspace (session sidebar + timeline + composer)
 - Response type renderer (`text_reply`, `command_execution`, `code_read`, `code_write`)
 - Intent composer, permission center, and operator session actions (`abort/retry/kill/resume`)
 - Mobile quick actions for permission and session controls
