@@ -14,6 +14,9 @@ Set at minimum:
 - `ARIS_ADMIN_EMAIL`
 - `ARIS_ADMIN_PASSWORD`
 - `RUNTIME_API_TOKEN`
+- `POSTGRES_PASSWORD`
+
+Use unique random values. Do not use placeholder or generic defaults.
 
 ## 2. Start local stack
 

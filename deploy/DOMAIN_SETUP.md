@@ -25,6 +25,8 @@ In `deploy/.env`:
 - `APP_BASE_URL=https://aris.lawdigest.cloud`
 - `AUTH_JWT_SECRET=<long-random-secret>`
 - `RUNTIME_API_TOKEN=<long-random-token>`
+- `ARIS_ADMIN_PASSWORD=<strong-random-password>`
+- `POSTGRES_PASSWORD=<strong-random-password>`
 
 ## 4. Start edge profile
 
