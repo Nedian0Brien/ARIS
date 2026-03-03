@@ -31,25 +31,7 @@ export default async function SessionListPage() {
                 <Link
                   key={session.id}
                   href={`/sessions/${encodeURIComponent(session.id)}`}
-                  className="card animate-slide-up"
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    textDecoration: 'none',
-                    color: 'var(--text)',
-                    padding: '1.25rem 1.5rem',
-                    transition: 'all 0.2s',
-                    borderColor: 'var(--line)',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = '#93c5fd';
-                    e.currentTarget.style.backgroundColor = '#eff6ff';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = 'var(--line)';
-                    e.currentTarget.style.backgroundColor = 'var(--surface)';
-                  }}
+                  className="session-card animate-slide-up"
                 >
                   <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
                     <div style={{ 

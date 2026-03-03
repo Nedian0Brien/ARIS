@@ -259,3 +259,25 @@ button.secondary:hover:not(:disabled) {
   gap: 0.5rem;
   margin-bottom: 1rem;
 }
+
+/* Session List Card */
+.session-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-decoration: none;
+  color: var(--text);
+  padding: 1.25rem 1.5rem;
+  transition: all 0.2s;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.session-card:hover {
+  border-color: #93c5fd;
+  background-color: #f0f7ff;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
