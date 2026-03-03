@@ -11,21 +11,18 @@ function parseEventActor(event: UiEvent): 'user' | 'agent' | 'system' {
 }
 
 export function ChatStream({ events }: { events: UiEvent[] }) {
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
   }, [events]);
 
   return (
     <section 
-      style={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        gap: '1.25rem', 
-        paddingBottom: '2rem',
-        minHeight: '50vh'
-      }} 
+      ref={scrollRef}
+      className="chat-stream-container"
       aria-live="polite"
     >
       {events.length === 0 ? (
@@ -72,7 +69,6 @@ export function ChatStream({ events }: { events: UiEvent[] }) {
           </article>
         );
       })}
-      <div ref={bottomRef} />
     </section>
   );
 }

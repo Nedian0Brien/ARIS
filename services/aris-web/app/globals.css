@@ -275,9 +275,30 @@ button.secondary:hover:not(:disabled) {
   box-shadow: var(--shadow-sm);
 }
 
-.session-card:hover {
-  border-color: #93c5fd;
-  background-color: #f0f7ff;
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+/* Chat layout specific scroll containment */
+.chat-stream-container {
+  max-height: calc(100vh - 350px);
+  overflow-y: auto;
+  padding-right: 0.5rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding-bottom: 2rem;
+  /* Scroll anchoring to prevent jumps when polling */
+  overflow-anchor: auto;
+}
+
+.chat-stream-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-stream-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-stream-container::-webkit-scrollbar-thumb {
+  background-color: var(--line);
+  border-radius: 10px;
 }

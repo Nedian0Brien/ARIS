@@ -144,6 +144,19 @@ export class RuntimeStore {
 
     session.updatedAt = message.createdAt;
     this.sessions.set(sessionId, session);
+
+    // Mock Agent Response Logic
+    if (input.type === 'message' && (!input.meta || input.meta.role !== 'agent')) {
+      setTimeout(() => {
+        this.appendMessage(sessionId, {
+          type: 'message',
+          title: 'Text Reply',
+          text: `[${session.metadata.flavor}] I received your message: "${input.text}". How can I help you with the code in ${session.metadata.path}?`,
+          meta: { role: 'agent' },
+        });
+      }, 1500);
+    }
+
     return message;
   }
 
