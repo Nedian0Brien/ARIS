@@ -30,6 +30,8 @@ services:
       LOG_LEVEL: ${BACKEND_LOG_LEVEL:-info}
     expose:
       - "4080"
+    volumes:
+      - ${HOST_PROJECTS_ROOT:-/tmp/aris-workspace}:/workspace
     healthcheck:
       test:
         [

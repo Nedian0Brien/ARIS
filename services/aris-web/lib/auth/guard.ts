@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import type { AuthenticatedUser } from '@/lib/auth/types';
 import { getAuthenticatedUserFromToken, getCurrentUserFromCookies } from '@/lib/auth/session';
 import { AUTH_COOKIE } from '@/lib/auth/constants';
 
 export async function requireApiUser(request: NextRequest): Promise<{ user: AuthenticatedUser } | { response: NextResponse }> {
-  const token = request.cookies.get(AUTH_COOKIE)?.value;
+  const cookieStore = await cookies();
+  const token = cookieStore.get(AUTH_COOKIE)?.value;
+  
   if (!token) {
     return { response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }

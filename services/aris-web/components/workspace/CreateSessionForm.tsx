@@ -54,6 +54,9 @@ export function CreateSessionForm({ isOperator }: { isOperator: boolean }) {
             required
             disabled={!isOperator || loading}
           />
+          <p className="muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>
+            Note: Path should be within the mapped host projects root.
+          </p>
         </div>
         <div className="field">
           <label style={{ fontSize: '0.875rem', fontWeight: 600 }}>Choose Agent</label>
