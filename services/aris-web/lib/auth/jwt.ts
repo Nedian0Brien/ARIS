@@ -4,13 +4,16 @@ import type { SessionJwtPayload } from '@/lib/auth/types';
 
 const secret = new TextEncoder().encode(env.AUTH_JWT_SECRET);
 
-export async function signSessionJwt(payload: SessionJwtPayload): Promise<string> {
+export async function signSessionJwt(
+  payload: SessionJwtPayload,
+  ttlSeconds: number = env.AUTH_TOKEN_TTL_SECONDS,
+): Promise<string> {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(payload.sub)
     .setJti(payload.jti)
     .setIssuedAt()
-    .setExpirationTime(`${env.AUTH_TOKEN_TTL_SECONDS}s`)
+    .setExpirationTime(`${ttlSeconds}s`)
     .sign(secret);
 }
 

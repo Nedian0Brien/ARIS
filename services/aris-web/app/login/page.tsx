@@ -7,11 +7,11 @@ import { Button, Input, Card } from '@/components/ui';
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
+  const [autoLogin, setAutoLogin] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [show2FA, setShow2FA] = useState(false);
   const [twoFactorMethod, setTwoFactorMethod] = useState<'totp' | 'email'>('totp');
-  const [pendingData, setPendingData] = useState<{ userId: string; deviceId: string } | null>(null);
+  const [pendingData, setPendingData] = useState<{ userId: string; deviceId: string; rememberMe: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -21,7 +21,7 @@ export default function LoginPage() {
     const savedEmail = localStorage.getItem('aris_remembered_email');
     if (savedEmail) {
       setEmail(savedEmail);
-      setRememberMe(true);
+      setAutoLogin(true);
     }
   }, []);
 
@@ -30,8 +30,8 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
 
-    // Save or clear email based on rememberMe
-    if (rememberMe) {
+    // Save or clear email based on auto-login setting
+    if (autoLogin) {
       localStorage.setItem('aris_remembered_email', email);
     } else {
       localStorage.removeItem('aris_remembered_email');
@@ -41,7 +41,7 @@ export default function LoginPage() {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, rememberMe: autoLogin }),
       });
 
       const body = await response.json();
@@ -54,7 +54,7 @@ export default function LoginPage() {
       if (body.status === '2fa_required') {
         setShow2FA(true);
         setTwoFactorMethod(body.method);
-        setPendingData({ userId: body.userId, deviceId: body.deviceId });
+        setPendingData({ userId: body.userId, deviceId: body.deviceId, rememberMe: body.rememberMe ?? false });
         return;
       }
 
@@ -83,6 +83,7 @@ export default function LoginPage() {
           deviceId: pendingData.deviceId,
           code: twoFactorCode,
           method: twoFactorMethod,
+          rememberMe: pendingData.rememberMe,
         }),
       });
 
@@ -136,12 +137,12 @@ export default function LoginPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <input 
                 type="checkbox" 
-                id="remember" 
-                checked={rememberMe} 
-                onChange={(e) => setRememberMe(e.target.checked)}
+                id="auto-login" 
+                checked={autoLogin} 
+                onChange={(e) => setAutoLogin(e.target.checked)}
                 style={{ width: 'auto', minHeight: 'auto' }}
               />
-              <label htmlFor="remember" className="text-sm text-muted" style={{ cursor: 'pointer' }}>이메일 기억하기</label>
+              <label htmlFor="auto-login" className="text-sm text-muted" style={{ cursor: 'pointer' }}>자동 로그인</label>
             </div>
 
             {error && <div style={{ color: 'var(--accent-red)', fontSize: '0.875rem' }}>{error}</div>}

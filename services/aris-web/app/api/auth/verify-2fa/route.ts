@@ -12,6 +12,7 @@ const verifySchema = z.object({
   code: z.string().length(6),
   deviceId: z.string().min(1),
   method: z.enum(['totp', 'email']).default('totp'),
+  rememberMe: z.boolean().default(false),
 });
 
 export async function POST(request: NextRequest) {
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { userId, code, deviceId, method } = parsed.data;
+  const { userId, code, deviceId, method, rememberMe } = parsed.data;
   const user = await prisma.user.findUnique({ where: { id: userId } });
 
   if (!user) {
@@ -73,9 +74,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid or expired verification code' }, { status: 401 });
   }
 
-  // Success: Trust device and create session
-  await trustDevice(user.id, deviceId);
-  const token = await createSessionCookieValue({ id: user.id, email: user.email, role: user.role });
+  const sessionTtlSeconds = rememberMe ? env.AUTH_TOKEN_REMEMBER_TTL_SECONDS : env.AUTH_TOKEN_TTL_SECONDS;
+
+  // Success: optionally trust device and create session
+  if (rememberMe) {
+    await trustDevice(user.id, deviceId);
+  }
+  const token = await createSessionCookieValue(
+    { id: user.id, email: user.email, role: user.role },
+    sessionTtlSeconds,
+  );
 
   const response = NextResponse.json({
     status: 'success',
@@ -91,7 +99,7 @@ export async function POST(request: NextRequest) {
     sameSite: 'lax',
     secure: env.NODE_ENV === 'production',
     path: '/',
-    maxAge: env.AUTH_TOKEN_TTL_SECONDS,
+    ...(rememberMe ? { maxAge: sessionTtlSeconds } : {}),
   });
 
   response.cookies.set(DEVICE_COOKIE, deviceId, {

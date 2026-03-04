@@ -8,8 +8,13 @@ export async function GET(request: NextRequest) {
     return auth.response;
   }
 
-  const sessions = await listSessions();
-  return NextResponse.json({ sessions });
+  try {
+    const sessions = await listSessions();
+    return NextResponse.json({ sessions });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to load sessions';
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
 }
 
 export async function POST(request: NextRequest) {

@@ -11,9 +11,11 @@ function mergeEvents(events: UiEvent[]): UiEvent[] {
 
 export function useSessionEvents(sessionId: string, initialEvents: UiEvent[]) {
   const [events, setEvents] = useState<UiEvent[]>(initialEvents);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
     setEvents(initialEvents);
+    setSyncError(null);
   }, [sessionId, initialEvents]);
 
   useEffect(() => {
@@ -24,14 +26,20 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[]) {
         const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/events`, {
           cache: 'no-store',
         });
-        if (!response.ok) return;
+        if (!response.ok) {
+          setSyncError(`백엔드 이벤트 API 응답 오류 (${response.status})`);
+          return;
+        }
 
         const body = (await response.json()) as { events?: UiEvent[] };
         if (!aborted && Array.isArray(body.events)) {
           setEvents((prev) => mergeEvents([...prev, ...body.events!]));
+          setSyncError(null);
         }
       } catch {
-        // Polling failure is non-fatal
+        if (!aborted) {
+          setSyncError('백엔드 이벤트 동기화를 확인하세요.');
+        }
       }
     }
 
@@ -48,5 +56,5 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[]) {
     setEvents((prev) => mergeEvents([...prev, event]));
   };
 
-  return { events, addEvent };
+  return { events, addEvent, syncError };
 }

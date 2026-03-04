@@ -10,79 +10,6 @@ import type {
   UiEvent,
 } from '@/lib/happy/types';
 
-const mockSessions: SessionSummary[] = [
-  {
-    id: 'mock-1',
-    agent: 'claude',
-    status: 'running',
-    lastActivityAt: new Date().toISOString(),
-    riskScore: 15,
-    projectName: '/home/ubuntu/project/web-agentic-coding',
-  },
-  {
-    id: 'mock-2',
-    agent: 'codex',
-    status: 'error',
-    lastActivityAt: new Date(Date.now() - 300_000).toISOString(),
-    riskScore: 80,
-    projectName: '/srv/legacy',
-  },
-];
-
-const mockEvents: UiEvent[] = [
-  {
-    id: 'evt-1',
-    timestamp: new Date().toISOString(),
-    kind: 'text_reply',
-    title: 'Text Reply',
-    body: 'Refactor complete. 3 files updated.',
-  },
-  {
-    id: 'evt-2',
-    timestamp: new Date().toISOString(),
-    kind: 'command_execution',
-    title: 'Command Execution',
-    body: '$ npm test\nexit code: 0',
-  },
-  {
-    id: 'evt-3',
-    timestamp: new Date().toISOString(),
-    kind: 'code_read',
-    title: 'Code Read',
-    body: 'Opened file: src/App.tsx',
-  },
-  {
-    id: 'evt-4',
-    timestamp: new Date().toISOString(),
-    kind: 'code_write',
-    title: 'Code Write',
-    body: 'Modified 2 files. Added auth middleware.',
-  },
-];
-
-const mockPermissionQueue: PermissionRequest[] = [
-  {
-    id: 'perm-1',
-    sessionId: 'mock-1',
-    agent: 'claude',
-    command: 'npm install sharp',
-    reason: 'Native image optimization dependency',
-    risk: 'medium',
-    requestedAt: new Date(Date.now() - 60_000).toISOString(),
-    state: 'pending',
-  },
-  {
-    id: 'perm-2',
-    sessionId: 'mock-2',
-    agent: 'codex',
-    command: 'rm -rf node_modules',
-    reason: 'Clean reinstall requested by workflow',
-    risk: 'high',
-    requestedAt: new Date(Date.now() - 180_000).toISOString(),
-    state: 'pending',
-  },
-];
-
 type JsonObject = Record<string, unknown>;
 
 function asObject(value: unknown): JsonObject | null {
@@ -119,7 +46,7 @@ function findSessionById(list: unknown[], sessionId: string): unknown | null {
 
 async function fetchHappy(path: string, init?: RequestInit): Promise<unknown> {
   if (!env.HAPPY_SERVER_TOKEN) {
-    throw new Error('HAPPY_SERVER_TOKEN is not configured');
+    throw new Error('HAPPY_SERVER_TOKEN이 설정되어 있지 않습니다.');
   }
 
   const response = await fetch(`${env.HAPPY_SERVER_URL}${path}`, {
@@ -133,7 +60,21 @@ async function fetchHappy(path: string, init?: RequestInit): Promise<unknown> {
   });
 
   if (!response.ok) {
-    throw new Error(`happy request failed: ${response.status}`);
+    const body = (await response.text().catch(() => '')).trim();
+    const message = (() => {
+      if (!body) {
+        return `요청이 실패했습니다. (${response.status} ${response.statusText})`;
+      }
+
+      try {
+        const parsed = JSON.parse(body) as { error?: string };
+        return parsed.error ?? body;
+      } catch {
+        return body;
+      }
+    })();
+
+    throw new Error(`백엔드 응답 오류 (${response.status}): ${message}`);
   }
 
   return response.json();
@@ -141,80 +82,59 @@ async function fetchHappy(path: string, init?: RequestInit): Promise<unknown> {
 
 export async function getRuntimeHealth(): Promise<{ api: 'up' | 'down'; happy: 'up' | 'down'; lastSyncAt: string | null }> {
   try {
-    await fetchHappy('/v1/sessions');
-    return { api: 'up', happy: 'up', lastSyncAt: new Date().toISOString() };
+    const response = await fetch(`${env.HAPPY_SERVER_URL}/health`, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(`healthy check failed (${response.status})`);
+    }
+
+    return {
+      api: 'up',
+      happy: 'up',
+      lastSyncAt: new Date().toISOString(),
+    };
   } catch {
     return { api: 'up', happy: 'down', lastSyncAt: null };
   }
 }
 
 export async function listSessions(): Promise<SessionSummary[]> {
-  try {
-    const raw = await fetchHappy('/v1/sessions');
-    return normalizeSessions(extractArrayPayload(raw, 'sessions'));
-  } catch {
-    return mockSessions;
-  }
+  const raw = await fetchHappy('/v1/sessions');
+  return normalizeSessions(extractArrayPayload(raw, 'sessions'));
 }
 
 export async function createSession(input: {
   path: string;
   agent: SessionSummary['agent'];
 }): Promise<SessionSummary> {
-  try {
-    const raw = await fetchHappy('/v1/sessions', {
-      method: 'POST',
-      body: JSON.stringify({
-        path: input.path,
-        flavor: input.agent,
-      }),
-    });
+  const raw = await fetchHappy('/v1/sessions', {
+    method: 'POST',
+    body: JSON.stringify({
+      path: input.path,
+      flavor: input.agent,
+    }),
+  });
 
-    const obj = asObject(raw);
-    const session = obj?.session;
-    if (session) {
-      return normalizeSessions([session])[0];
-    }
-    throw new Error('Invalid response from happy server');
-  } catch (error) {
-    // Mock mode fallback
-    const mock: SessionSummary = {
-      id: `mock-${Date.now()}`,
-      agent: input.agent,
-      status: 'running',
-      lastActivityAt: new Date().toISOString(),
-      riskScore: 0,
-      projectName: input.path,
-    };
-    return mock;
+  const obj = asObject(raw);
+  const session = obj?.session;
+  if (!session) {
+    throw new Error('백엔드 응답이 올바르지 않습니다.');
   }
+
+  return normalizeSessions([session])[0];
 }
 
 export async function getSessionEvents(sessionId: string): Promise<{ session: SessionDetail; events: UiEvent[] }> {
-  try {
-    const sessionRaw = await fetchHappy('/v1/sessions');
-    const sessions = extractArrayPayload(sessionRaw, 'sessions');
-    const found = findSessionById(sessions, sessionId) ?? sessions[0] ?? { id: sessionId };
+  const sessionRaw = await fetchHappy('/v1/sessions');
+  const sessions = extractArrayPayload(sessionRaw, 'sessions');
+  const found = findSessionById(sessions, sessionId) ?? sessions[0] ?? { id: sessionId };
 
-    const messageRaw = await fetchHappy(`/v3/sessions/${encodeURIComponent(sessionId)}/messages`);
-    const messages = extractArrayPayload(messageRaw, 'messages');
+  const messageRaw = await fetchHappy(`/v3/sessions/${encodeURIComponent(sessionId)}/messages`);
+  const messages = extractArrayPayload(messageRaw, 'messages');
 
-    return {
-      session: normalizeSessionDetail(found),
-      events: normalizeEvents(messages),
-    };
-  } catch {
-    return {
-      session: {
-        id: sessionId,
-        agent: 'unknown',
-        status: 'unknown',
-        projectName: 'mock-project',
-        lastActivityAt: new Date().toISOString(),
-      },
-      events: mockEvents,
-    };
-  }
+  return {
+    session: normalizeSessionDetail(found),
+    events: normalizeEvents(messages),
+  };
 }
 
 export async function appendSessionMessage(input: {
@@ -224,99 +144,65 @@ export async function appendSessionMessage(input: {
   text: string;
   meta?: Record<string, unknown>;
 }): Promise<UiEvent> {
-  try {
-    const raw = await fetchHappy(`/v3/sessions/${encodeURIComponent(input.sessionId)}/messages`, {
-      method: 'POST',
-      body: JSON.stringify({
-        type: input.type,
-        title: input.title,
-        text: input.text,
-        meta: input.meta,
-      }),
-    });
+  const raw = await fetchHappy(`/v3/sessions/${encodeURIComponent(input.sessionId)}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({
+      type: input.type,
+      title: input.title,
+      text: input.text,
+      meta: input.meta,
+    }),
+  });
 
-    const obj = asObject(raw);
-    const message = obj?.message;
-    const normalized = normalizeEvents(message ? [message] : []);
-    if (normalized[0]) {
-      return normalized[0];
-    }
-  } catch {
-    // Mock mode below.
+  const obj = asObject(raw);
+  const message = obj?.message;
+  const normalized = normalizeEvents(message ? [message] : []);
+  if (normalized[0]) {
+    return normalized[0];
   }
 
-  return {
-    id: `evt-${Date.now()}`,
-    timestamp: new Date().toISOString(),
-    kind: classifyMockKind(input.type),
-    title: input.title ?? 'User Instruction',
-    body: input.text,
-    meta: input.meta,
-    severity: 'info',
-  };
-}
-
-function classifyMockKind(type: 'message' | 'tool' | 'read' | 'write'): UiEvent['kind'] {
-  if (type === 'tool') {
-    return 'command_execution';
-  }
-  if (type === 'read') {
-    return 'code_read';
-  }
-  if (type === 'write') {
-    return 'code_write';
-  }
-  return 'text_reply';
+  throw new Error('백엔드 응답에서 이벤트를 읽을 수 없습니다.');
 }
 
 export async function listPermissionRequests(sessionId?: string): Promise<PermissionRequest[]> {
-  try {
-    const raw = await fetchHappy('/v1/permissions?state=pending');
-    const list = extractArrayPayload(raw, 'permissions').map((item, idx): PermissionRequest => {
-      const rec = asObject(item);
-      return {
-        id: String(rec?.id ?? `perm-${idx}`),
-        sessionId: String(rec?.sessionId ?? 'unknown'),
-        agent: (() => {
-          const value = String(rec?.agent ?? 'unknown');
-          if (value === 'claude' || value === 'codex' || value === 'gemini') {
-            return value;
-          }
-          return 'unknown';
-        })(),
-        command: String(rec?.command ?? ''),
-        reason: String(rec?.reason ?? 'Runtime requested elevated permission'),
-        risk: (() => {
-          const value = String(rec?.risk ?? 'medium');
-          if (value === 'low' || value === 'medium' || value === 'high') {
-            return value;
-          }
-          return 'medium';
-        })(),
-        requestedAt: String(rec?.requestedAt ?? new Date().toISOString()),
-        state: 'pending',
-      };
-    });
+  const raw = await fetchHappy('/v1/permissions?state=pending');
+  const list = extractArrayPayload(raw, 'permissions').map((item, idx): PermissionRequest => {
+    const rec = asObject(item);
+    return {
+      id: String(rec?.id ?? `perm-${idx}`),
+      sessionId: String(rec?.sessionId ?? 'unknown'),
+      agent: (() => {
+        const value = String(rec?.agent ?? 'unknown');
+        if (value === 'claude' || value === 'codex' || value === 'gemini') {
+          return value;
+        }
+        return 'unknown';
+      })(),
+      command: String(rec?.command ?? ''),
+      reason: String(rec?.reason ?? 'Runtime requested elevated permission'),
+      risk: (() => {
+        const value = String(rec?.risk ?? 'medium');
+        if (value === 'low' || value === 'medium' || value === 'high') {
+          return value;
+        }
+        return 'medium';
+      })(),
+      requestedAt: String(rec?.requestedAt ?? new Date().toISOString()),
+      state: 'pending',
+    };
+  });
 
-    return sessionId ? list.filter((item) => item.sessionId === sessionId) : list;
-  } catch {
-    const pending = mockPermissionQueue.filter((item) => item.state === 'pending');
-    return sessionId ? pending.filter((item) => item.sessionId === sessionId) : pending;
-  }
+  return sessionId ? list.filter((item) => item.sessionId === sessionId) : list;
 }
 
 export async function decidePermissionRequest(input: {
   permissionId: string;
   decision: PermissionDecision;
 }): Promise<{ id: string; state: 'approved' | 'denied' }> {
-  try {
-    await fetchHappy(`/v1/permissions/${encodeURIComponent(input.permissionId)}/decision`, {
-      method: 'POST',
-      body: JSON.stringify({ decision: input.decision }),
-    });
-  } catch {
-    // Mock mode only returns local response.
-  }
+  await fetchHappy(`/v1/permissions/${encodeURIComponent(input.permissionId)}/decision`, {
+    method: 'POST',
+    body: JSON.stringify({ decision: input.decision }),
+  });
 
   return {
     id: input.permissionId,
@@ -325,14 +211,10 @@ export async function decidePermissionRequest(input: {
 }
 
 export async function runSessionAction(sessionId: string, action: SessionAction): Promise<SessionActionResult> {
-  try {
-    await fetchHappy(`/v1/sessions/${encodeURIComponent(sessionId)}/actions`, {
-      method: 'POST',
-      body: JSON.stringify({ action }),
-    });
-  } catch {
-    // Mock mode only returns local response.
-  }
+  await fetchHappy(`/v1/sessions/${encodeURIComponent(sessionId)}/actions`, {
+    method: 'POST',
+    body: JSON.stringify({ action }),
+  });
 
   return {
     sessionId,

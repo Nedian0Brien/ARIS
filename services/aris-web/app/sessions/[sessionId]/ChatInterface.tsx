@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { Button, Card, Badge } from '@/components/ui';
+import { BackendNotice } from '@/components/ui/BackendNotice';
 import { Send, TerminalSquare, FileCode2, Code, ShieldAlert, Cpu } from 'lucide-react';
 import type { UiEvent, PermissionRequest } from '@/lib/happy/types';
 
@@ -77,10 +78,11 @@ export function ChatInterface({
   projectName: string;
   agentFlavor: string;
 }) {
-  const { events, addEvent } = useSessionEvents(sessionId, initialEvents);
-  const { pendingPermissions, decidePermission } = usePermissions(sessionId, initialPermissions);
+  const { events, addEvent, syncError } = useSessionEvents(sessionId, initialEvents);
+  const { pendingPermissions, decidePermission, error: permissionError } = usePermissions(sessionId, initialPermissions);
   const [prompt, setPrompt] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -94,6 +96,7 @@ export function ChatInterface({
     if (!prompt.trim() || !isOperator || isSubmitting) return;
 
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       const response = await fetch(`/api/runtime/sessions/${sessionId}/events`, {
         method: 'POST',
@@ -106,11 +109,20 @@ export function ChatInterface({
         }),
       });
 
-      const body = await response.json();
+      const body = (await response.json().catch(() => ({ error: '백엔드 응답을 읽을 수 없습니다.' }))) as {
+        event?: UiEvent;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(body.error ?? '메시지 전송에 실패했습니다.');
+      }
+
       if (body.event) addEvent(body.event);
       setPrompt('');
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : '백엔드 연결 상태를 확인해 주세요.');
+      console.error(error);
     } finally {
       setIsSubmitting(false);
     }
@@ -131,6 +143,10 @@ export function ChatInterface({
           {sessionId.slice(0, 8)}...
         </div>
       </div>
+
+      {(submitError || permissionError || syncError) && (
+        <BackendNotice message={`백엔드 연결 상태: ${submitError ?? permissionError ?? syncError ?? ''}`} />
+      )}
 
       {/* Message Stream */}
       <div className="chat-stream-container no-scrollbar" ref={scrollRef}>

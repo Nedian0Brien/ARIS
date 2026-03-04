@@ -6,11 +6,12 @@ import { signSessionJwt, verifySessionJwt } from '@/lib/auth/jwt';
 import type { AuthenticatedUser } from '@/lib/auth/types';
 import { AUTH_COOKIE } from '@/lib/auth/constants';
 
-import { DEVICE_COOKIE } from '@/lib/auth/constants';
-
-export async function createSessionCookieValue(user: AuthenticatedUser): Promise<string> {
+export async function createSessionCookieValue(
+  user: AuthenticatedUser,
+  ttlSeconds: number = env.AUTH_TOKEN_TTL_SECONDS,
+): Promise<string> {
   const jti = randomUUID();
-  const expiresAt = new Date(Date.now() + env.AUTH_TOKEN_TTL_SECONDS * 1000);
+  const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
   await prisma.authSession.create({
     data: {
@@ -25,7 +26,7 @@ export async function createSessionCookieValue(user: AuthenticatedUser): Promise
     email: user.email,
     role: user.role,
     jti,
-  });
+  }, ttlSeconds);
 }
 
 export async function isDeviceTrusted(userId: string, deviceId: string | undefined): Promise<boolean> {

@@ -6,16 +6,19 @@ import { Header } from '@/components/layout/Header';
 import { SessionDashboard } from './SessionDashboard';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { Card } from '@/components/ui';
+import { BackendNotice } from '@/components/ui/BackendNotice';
 import { Construction } from 'lucide-react';
 import type { AuthenticatedUser } from '@/lib/auth/types';
 import type { SessionSummary } from '@/lib/happy/types';
 
 export default function HomePageWrapper({ 
   user, 
-  initialSessions 
+  initialSessions,
+  runtimeError
 }: { 
   user: AuthenticatedUser; 
   initialSessions: SessionSummary[];
+  runtimeError: string | null;
 }) {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('sessions');
@@ -87,6 +90,7 @@ export default function HomePageWrapper({
         onTabChange={setActiveTab} 
       />
       <main className="main container">
+        {runtimeError && <BackendNotice message={runtimeError} />}
         {renderContent()}
       </main>
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />

@@ -12,6 +12,7 @@ import { sendVerificationEmail } from '@/lib/email/sender';
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  rememberMe: z.boolean().default(false),
 });
 
 export async function POST(request: NextRequest) {
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { email, password } = parsed.data;
+  const { email, password, rememberMe } = parsed.data;
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
     await writeAuditLog({
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest) {
   }
 
   const trusted = await isDeviceTrusted(user.id, deviceId);
+  const sessionTtlSeconds = rememberMe ? env.AUTH_TOKEN_REMEMBER_TTL_SECONDS : env.AUTH_TOKEN_TTL_SECONDS;
   
   // 2FA TOTP Check
   if (user.twoFactorSecret && !trusted) {
@@ -61,7 +63,8 @@ export async function POST(request: NextRequest) {
       status: '2fa_required', 
       method: 'totp',
       userId: user.id,
-      deviceId
+      deviceId,
+      rememberMe,
     });
   }
 
@@ -84,12 +87,16 @@ export async function POST(request: NextRequest) {
       status: '2fa_required', 
       method: 'email',
       userId: user.id,
-      deviceId
+      deviceId,
+      rememberMe,
     });
   }
 
   // If trusted or no 2FA setup, proceed
-  const token = await createSessionCookieValue({ id: user.id, email: user.email, role: user.role });
+  const token = await createSessionCookieValue(
+    { id: user.id, email: user.email, role: user.role },
+    sessionTtlSeconds,
+  );
 
   const response = NextResponse.json({
     status: 'success',
@@ -105,7 +112,7 @@ export async function POST(request: NextRequest) {
     sameSite: 'lax',
     secure: env.NODE_ENV === 'production',
     path: '/',
-    maxAge: env.AUTH_TOKEN_TTL_SECONDS,
+    ...(rememberMe ? { maxAge: sessionTtlSeconds } : {}),
   });
 
   // Always refresh/set device cookie
