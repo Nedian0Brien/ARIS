@@ -633,7 +633,7 @@ export class HappyRuntimeStore {
   private async runCodexCliWithEvents(
     session: RuntimeSession,
     prompt: string,
-  ): Promise<{ output: string; cwd: string }> {
+  ): Promise<{ output: string; cwd: string; streamedPersisted: boolean }> {
     const safeCwd = this.resolveExecutionCwd(session.metadata.path);
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
     const child = spawn('codex', ['exec', '--json', prompt], {
@@ -645,7 +645,21 @@ export class HappyRuntimeStore {
     const stdoutLines = createInterface({ input: child.stdout });
     let stderr = '';
     let appendChain: Promise<void> = Promise.resolve();
-    const finalMessages: string[] = [];
+    let lastAgentMessage = '';
+    let streamedPersisted = false;
+
+    const enqueueAppend = (
+      text: string,
+      meta: Record<string, unknown>,
+      options: { type?: string; title?: string } = {},
+    ) => {
+      appendChain = appendChain
+        .then(() => this.appendAgentMessage(session.id, text, meta, options))
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`failed to persist codex stream event: ${message}`);
+        });
+    };
 
     child.stderr.on('data', (chunk: Buffer | string) => {
       stderr += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
@@ -670,7 +684,17 @@ export class HappyRuntimeStore {
       if (itemType === 'agent_message') {
         const text = asString(item.text, '').trim();
         if (text) {
-          finalMessages.push(text);
+          lastAgentMessage = text;
+          streamedPersisted = true;
+          enqueueAppend(
+            text,
+            {
+              requestedPath: session.metadata.path,
+              execCwd: safeCwd,
+              streamEvent: 'agent_message',
+            },
+            { type: 'message', title: 'Text Reply' },
+          );
         }
         return;
       }
@@ -697,23 +721,22 @@ export class HappyRuntimeStore {
       }
       const body = bodyParts.join('\n');
 
-      appendChain = appendChain
-        .then(() => this.appendAgentMessage(
-          session.id,
-          body,
-          {
-            requestedPath: session.metadata.path,
-            execCwd: safeCwd,
-            actionType,
-            command,
-            exitCode: exitCode ?? undefined,
-          },
-          { type: 'tool', title },
-        ))
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          console.error(`failed to persist codex command event: ${message}`);
-        });
+      streamedPersisted = true;
+      enqueueAppend(
+        body,
+        {
+          requestedPath: session.metadata.path,
+          execCwd: safeCwd,
+          actionType,
+          command,
+          exitCode: exitCode ?? undefined,
+          streamEvent: 'command_execution',
+        },
+        {
+          type: 'tool',
+          title,
+        },
+      );
     });
 
     const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
@@ -723,17 +746,17 @@ export class HappyRuntimeStore {
 
     await appendChain;
 
-    const finalText = finalMessages.join('\n\n').trim();
+    const finalText = lastAgentMessage.trim();
     if (result.code !== 0 && !finalText) {
       const detail = stripAnsi(stderr).slice(0, 800) || `exit code ${result.code}`;
       throw new Error(`codex CLI failed: ${detail}`);
     }
 
-    if (!finalText) {
-      throw new Error('codex returned an empty response');
-    }
-
-    return { output: trimOutput(finalText), cwd: safeCwd };
+    return {
+      output: trimOutput(finalText),
+      cwd: safeCwd,
+      streamedPersisted,
+    };
   }
 
   private async generateAndPersistAgentReply(session: RuntimeSession, prompt: string): Promise<void> {
@@ -743,13 +766,17 @@ export class HappyRuntimeStore {
     }
 
     try {
+      const isCodex = flavor === 'codex';
       const response = flavor === 'codex'
         ? await this.runCodexCliWithEvents(session, prompt)
         : await this.runAgentCli(flavor, prompt, session.metadata.path);
-      await this.appendAgentMessage(session.id, response.output, {
-        requestedPath: session.metadata.path,
-        execCwd: response.cwd,
-      });
+      const streamedPersisted = 'streamedPersisted' in response ? response.streamedPersisted : false;
+      if (!isCodex || !streamedPersisted) {
+        await this.appendAgentMessage(session.id, response.output, {
+          requestedPath: session.metadata.path,
+          execCwd: response.cwd,
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown runtime error';
       try {

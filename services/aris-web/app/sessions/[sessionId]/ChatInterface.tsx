@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { Button, Badge } from '@/components/ui';
@@ -184,8 +185,266 @@ function isNearBottom(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= AUTO_SCROLL_THRESHOLD_PX;
 }
 
+type MarkdownBlock =
+  | { type: 'heading'; level: 1 | 2 | 3 | 4; text: string }
+  | { type: 'paragraph'; text: string }
+  | { type: 'ul'; items: string[] }
+  | { type: 'ol'; items: string[] }
+  | { type: 'quote'; text: string }
+  | { type: 'code'; language: string; code: string };
+
+function isMarkdownBoundary(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) {
+    return true;
+  }
+  return (
+    trimmed.startsWith('```') ||
+    /^#{1,4}\s+/.test(trimmed) ||
+    /^>\s?/.test(trimmed) ||
+    /^[-*+]\s+/.test(trimmed) ||
+    /^\d+\.\s+/.test(trimmed)
+  );
+}
+
+function parseMarkdownBlocks(source: string): MarkdownBlock[] {
+  const lines = source.replace(/\r\n/g, '\n').split('\n');
+  const blocks: MarkdownBlock[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      i += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith('```')) {
+      const language = trimmed.slice(3).trim();
+      i += 1;
+      const codeLines: string[] = [];
+      while (i < lines.length && !lines[i].trim().startsWith('```')) {
+        codeLines.push(lines[i]);
+        i += 1;
+      }
+      if (i < lines.length && lines[i].trim().startsWith('```')) {
+        i += 1;
+      }
+      blocks.push({ type: 'code', language, code: codeLines.join('\n') });
+      continue;
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,4})\s+(.+)$/);
+    if (headingMatch) {
+      const level = Math.min(4, headingMatch[1].length) as 1 | 2 | 3 | 4;
+      blocks.push({ type: 'heading', level, text: headingMatch[2].trim() });
+      i += 1;
+      continue;
+    }
+
+    if (/^>\s?/.test(trimmed)) {
+      const quoteLines: string[] = [];
+      while (i < lines.length && /^>\s?/.test(lines[i].trim())) {
+        quoteLines.push(lines[i].trim().replace(/^>\s?/, ''));
+        i += 1;
+      }
+      blocks.push({ type: 'quote', text: quoteLines.join('\n').trim() });
+      continue;
+    }
+
+    if (/^[-*+]\s+/.test(trimmed)) {
+      const items: string[] = [];
+      while (i < lines.length && /^[-*+]\s+/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^[-*+]\s+/, ''));
+        i += 1;
+      }
+      blocks.push({ type: 'ul', items });
+      continue;
+    }
+
+    if (/^\d+\.\s+/.test(trimmed)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^\d+\.\s+/, ''));
+        i += 1;
+      }
+      blocks.push({ type: 'ol', items });
+      continue;
+    }
+
+    const paragraphLines: string[] = [];
+    while (i < lines.length && lines[i].trim() && !isMarkdownBoundary(lines[i])) {
+      paragraphLines.push(lines[i]);
+      i += 1;
+    }
+    if (paragraphLines.length === 0) {
+      paragraphLines.push(line);
+      i += 1;
+    }
+    blocks.push({ type: 'paragraph', text: paragraphLines.join('\n').trim() });
+  }
+
+  return blocks;
+}
+
+function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
+  const pattern = /(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*|_([^_]+)_)/g;
+  const result: ReactNode[] = [];
+  let cursor = 0;
+  let token = 0;
+
+  for (const match of text.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    if (index > cursor) {
+      result.push(text.slice(cursor, index));
+    }
+
+    if (match[2] && match[3]) {
+      result.push(
+        <a
+          key={`${keyPrefix}-link-${token}`}
+          className={styles.markdownLink}
+          href={match[3]}
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          {match[2]}
+        </a>
+      );
+    } else if (match[4]) {
+      result.push(
+        <code key={`${keyPrefix}-code-${token}`} className={styles.markdownInlineCode}>
+          {match[4]}
+        </code>
+      );
+    } else if (match[5] || match[6]) {
+      result.push(
+        <strong key={`${keyPrefix}-strong-${token}`} className={styles.markdownStrong}>
+          {match[5] || match[6]}
+        </strong>
+      );
+    } else if (match[7] || match[8]) {
+      result.push(
+        <em key={`${keyPrefix}-em-${token}`} className={styles.markdownEmphasis}>
+          {match[7] || match[8]}
+        </em>
+      );
+    }
+
+    cursor = index + match[0].length;
+    token += 1;
+  }
+
+  if (cursor < text.length) {
+    result.push(text.slice(cursor));
+  }
+
+  if (result.length === 0) {
+    result.push(text);
+  }
+
+  return result;
+}
+
+function renderInlineWithBreaks(text: string, keyPrefix: string): ReactNode[] {
+  const lines = text.split('\n');
+  const result: ReactNode[] = [];
+
+  lines.forEach((line, index) => {
+    if (index > 0) {
+      result.push(<br key={`${keyPrefix}-br-${index}`} />);
+    }
+    result.push(...renderInlineMarkdown(line, `${keyPrefix}-line-${index}`));
+  });
+
+  return result;
+}
+
+function MarkdownContent({ body }: { body: string }) {
+  const blocks = useMemo(() => parseMarkdownBlocks(body), [body]);
+
+  return (
+    <div className={styles.markdownRoot}>
+      {blocks.map((block, index) => {
+        const key = `md-${index}`;
+
+        if (block.type === 'heading') {
+          if (block.level === 1) {
+            return <h1 key={key} className={styles.markdownHeading}>{renderInlineWithBreaks(block.text, key)}</h1>;
+          }
+          if (block.level === 2) {
+            return <h2 key={key} className={styles.markdownHeading}>{renderInlineWithBreaks(block.text, key)}</h2>;
+          }
+          if (block.level === 3) {
+            return <h3 key={key} className={styles.markdownHeading}>{renderInlineWithBreaks(block.text, key)}</h3>;
+          }
+          return <h4 key={key} className={styles.markdownHeading}>{renderInlineWithBreaks(block.text, key)}</h4>;
+        }
+
+        if (block.type === 'paragraph') {
+          return (
+            <p key={key} className={styles.markdownParagraph}>
+              {renderInlineWithBreaks(block.text, key)}
+            </p>
+          );
+        }
+
+        if (block.type === 'ul') {
+          return (
+            <ul key={key} className={styles.markdownList}>
+              {block.items.map((item, itemIndex) => (
+                <li key={`${key}-li-${itemIndex}`} className={styles.markdownListItem}>
+                  {renderInlineWithBreaks(item, `${key}-li-${itemIndex}`)}
+                </li>
+              ))}
+            </ul>
+          );
+        }
+
+        if (block.type === 'ol') {
+          return (
+            <ol key={key} className={styles.markdownList}>
+              {block.items.map((item, itemIndex) => (
+                <li key={`${key}-oi-${itemIndex}`} className={styles.markdownListItem}>
+                  {renderInlineWithBreaks(item, `${key}-oi-${itemIndex}`)}
+                </li>
+              ))}
+            </ol>
+          );
+        }
+
+        if (block.type === 'quote') {
+          return (
+            <blockquote key={key} className={styles.markdownQuote}>
+              {renderInlineWithBreaks(block.text, key)}
+            </blockquote>
+          );
+        }
+
+        return (
+          <pre key={key} className={styles.markdownCodeBlock}>
+            {block.language && <span className={styles.markdownCodeLang}>{block.language}</span>}
+            <code>{block.code}</code>
+          </pre>
+        );
+      })}
+    </div>
+  );
+}
+
 function TextReply({ body, isUser }: { body: string; isUser: boolean }) {
-  return <p className={isUser ? styles.userText : styles.agentText}>{body}</p>;
+  const normalized = body.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return (
+    <div className={isUser ? styles.userText : styles.agentText}>
+      <MarkdownContent body={normalized} />
+    </div>
+  );
 }
 
 function ActionResultPreview({

@@ -341,10 +341,97 @@
 .userText,
 .agentText {
   margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  line-height: 1.45;
   font-size: 0.89rem;
+  line-height: 1.5;
+  color: #0f172a;
+}
+
+.markdownRoot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+  word-break: break-word;
+}
+
+.markdownParagraph {
+  margin: 0;
+}
+
+.markdownHeading {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.35;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.markdownList {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 0.24rem;
+}
+
+.markdownListItem {
+  margin: 0;
+}
+
+.markdownQuote {
+  margin: 0;
+  padding: 0.42rem 0.6rem;
+  border-left: 3px solid rgba(59, 130, 246, 0.45);
+  background: rgba(239, 246, 255, 0.85);
+  border-radius: 8px;
+}
+
+.markdownCodeBlock {
+  margin: 0;
+  padding: 0.56rem;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.95);
+  color: #e2e8f0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.markdownCodeLang {
+  display: inline-block;
+  margin-bottom: 0.36rem;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+  color: #cbd5e1;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.markdownInlineCode {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  border-radius: 6px;
+  padding: 0.08rem 0.32rem;
+  background: rgba(15, 23, 42, 0.08);
+  color: #0f172a;
+}
+
+.markdownLink {
+  color: #1d4ed8;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdownStrong {
+  font-weight: 800;
+}
+
+.markdownEmphasis {
+  font-style: italic;
 }
 
 .actionCard {
