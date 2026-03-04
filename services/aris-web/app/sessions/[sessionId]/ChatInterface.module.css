@@ -296,6 +296,12 @@
   background: rgba(255, 255, 255, 0.96);
 }
 
+.messageBubbleAction {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
 .messageKindRow {
   margin-bottom: 0.45rem;
 }
@@ -438,10 +444,10 @@
 }
 
 .actionCard {
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 12px;
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.92) 0%, rgba(241, 245, 249, 0.8) 100%);
-  padding: 0.48rem 0.52rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .actionCompact {
@@ -538,9 +544,9 @@
 
 .actionResult {
   margin: 0;
-  padding: 0.52rem;
+  padding: 0.42rem 0.5rem;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  border: 0;
   background: rgba(15, 23, 42, 0.95);
   color: #e2e8f0;
   font-size: 0.71rem;

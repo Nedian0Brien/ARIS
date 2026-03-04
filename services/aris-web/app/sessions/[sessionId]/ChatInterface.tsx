@@ -503,7 +503,6 @@ function ActionEventCard({
             </span>
             <span className={styles.actionCompactPrimary}>{primary}</span>
           </div>
-          <span className={styles.actionCompactResult}>{resultLine}</span>
         </div>
         <button
           type="button"
@@ -871,7 +870,11 @@ export function ChatInterface({
                     </div>
                   )}
 
-                  <div className={`${styles.messageBubble} ${userEvent ? styles.messageBubbleUser : styles.messageBubbleAgent}`}>
+                  <div
+                    className={`${styles.messageBubble} ${userEvent ? styles.messageBubbleUser : styles.messageBubbleAgent} ${
+                      actionEvent ? styles.messageBubbleAction : ''
+                    }`}
+                  >
                     {!userEvent && !actionEvent && (
                       <div className={styles.messageKindRow}>
                         <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
