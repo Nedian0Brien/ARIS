@@ -32,6 +32,7 @@ const PREVIEW_MAX_LINES = 12;
 const PREVIEW_MAX_CHARS = 600;
 const COMPOSER_MIN_HEIGHT_PX = 52;
 const COMPOSER_MAX_HEIGHT_PX = 180;
+const MAX_VISIBLE_ACTIONS_PER_RUN = 4;
 
 type AgentMeta = {
   label: string;
@@ -41,6 +42,9 @@ type AgentMeta = {
 
 type Tone = 'sky' | 'amber' | 'cyan' | 'emerald' | 'violet' | 'red';
 type ActionKind = 'command_execution' | 'file_list' | 'file_read' | 'file_write';
+type StreamRenderItem =
+  | { type: 'event'; event: UiEvent }
+  | { type: 'action_overflow'; runId: string; hiddenCount: number };
 
 const TONE_CLASS: Record<Tone, string> = {
   sky: styles.toneSky,
@@ -183,16 +187,54 @@ function resolveRecentSummary(event: UiEvent): string {
   return truncateSingleLine(event.title || event.kind);
 }
 
-function resolveActionResultLine(event: UiEvent): string {
-  const result = event.result ?? fallbackResult(event);
-  if (!result?.preview) {
-    return '결과 없음';
+function buildStreamRenderItems(events: UiEvent[], expandedActionRunIds: Record<string, boolean>): StreamRenderItem[] {
+  const items: StreamRenderItem[] = [];
+  let cursor = 0;
+
+  while (cursor < events.length) {
+    const current = events[cursor];
+    const canGroup = !isUserEvent(current) && isActionKind(current.kind);
+
+    if (!canGroup) {
+      items.push({ type: 'event', event: current });
+      cursor += 1;
+      continue;
+    }
+
+    const runKind = current.kind;
+    let end = cursor + 1;
+    while (end < events.length) {
+      const next = events[end];
+      if (isUserEvent(next) || !isActionKind(next.kind) || next.kind !== runKind) {
+        break;
+      }
+      end += 1;
+    }
+
+    const runEvents = events.slice(cursor, end);
+    if (runEvents.length <= MAX_VISIBLE_ACTIONS_PER_RUN) {
+      runEvents.forEach((event) => items.push({ type: 'event', event }));
+      cursor = end;
+      continue;
+    }
+
+    const runId = `${runKind}:${runEvents[0].id}`;
+    const expanded = Boolean(expandedActionRunIds[runId]);
+    if (expanded) {
+      runEvents.forEach((event) => items.push({ type: 'event', event }));
+    } else {
+      runEvents.slice(0, MAX_VISIBLE_ACTIONS_PER_RUN).forEach((event) => items.push({ type: 'event', event }));
+      items.push({
+        type: 'action_overflow',
+        runId,
+        hiddenCount: runEvents.length - MAX_VISIBLE_ACTIONS_PER_RUN,
+      });
+    }
+
+    cursor = end;
   }
-  const firstLine = result.preview
-    .split('\n')
-    .map((line) => line.trim())
-    .find((line) => line.length > 0);
-  return truncateSingleLine(firstLine ?? result.preview.replace(/\n/g, ' '), 92);
+
+  return items;
 }
 
 function isNearBottom(element: HTMLElement): boolean {
@@ -489,8 +531,8 @@ function ActionEventCard({
 
   const kindMeta = EVENT_KIND_META[event.kind];
   const KindIcon = kindMeta.Icon;
-  const primary = truncateSingleLine(resolveActionPrimary(event), 88);
-  const resultLine = resolveActionResultLine(event);
+  const fullPrimary = resolveActionPrimary(event).replace(/\s+/g, ' ').trim();
+  const compactPrimary = truncateSingleLine(fullPrimary, 88);
 
   if (!expanded) {
     return (
@@ -501,7 +543,7 @@ function ActionEventCard({
               <KindIcon size={13} />
               {kindMeta.label}
             </span>
-            <span className={styles.actionCompactPrimary}>{primary}</span>
+            <span className={styles.actionCompactPrimary}>{compactPrimary}</span>
           </div>
         </div>
         <button
@@ -527,9 +569,8 @@ function ActionEventCard({
               <KindIcon size={14} />
               {kindMeta.label}
             </span>
-            <span className={styles.actionPrimary}>{primary}</span>
+            <span className={styles.actionPrimary}>{fullPrimary}</span>
           </div>
-          <span className={styles.actionCompactResult}>{resultLine}</span>
         </div>
         <button
           type="button"
@@ -598,6 +639,7 @@ export function ChatInterface({
   const [awaitingReplySince, setAwaitingReplySince] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
+  const [expandedActionRunIds, setExpandedActionRunIds] = useState<Record<string, boolean>>({});
   const chatShellRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerDockRef = useRef<HTMLElement>(null);
@@ -615,12 +657,25 @@ export function ChatInterface({
     [events]
   );
   const agentReplies = useMemo(() => events.filter((event) => !isUserEvent(event)).length, [events]);
+  const streamItems = useMemo(() => buildStreamRenderItems(events, expandedActionRunIds), [events, expandedActionRunIds]);
 
   const toggleResult = useCallback((eventId: string) => {
     setExpandedResultIds((prev) => ({
       ...prev,
       [eventId]: !prev[eventId],
     }));
+  }, []);
+
+  const expandActionRun = useCallback((runId: string) => {
+    setExpandedActionRunIds((prev) => {
+      if (prev[runId]) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [runId]: true,
+      };
+    });
   }, []);
 
   const syncComposerDockMetrics = useCallback(() => {
@@ -843,7 +898,28 @@ export function ChatInterface({
           )}
 
           <div className={styles.stream} ref={scrollRef} onScroll={handleStreamScroll}>
-            {events.map((event) => {
+            {streamItems.map((item) => {
+              if (item.type === 'action_overflow') {
+                return (
+                  <article key={`overflow-${item.runId}`} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                    <div className={`${styles.messageBubble} ${styles.messageBubbleAgent} ${styles.messageBubbleAction}`}>
+                      <div className={styles.actionOverflow}>
+                        <button
+                          type="button"
+                          className={styles.actionOverflowButton}
+                          onClick={() => expandActionRun(item.runId)}
+                          title={`행동 ${item.hiddenCount}개 더 보기`}
+                          aria-label={`숨겨진 행동 ${item.hiddenCount}개 펼치기`}
+                        >
+                          ...
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              }
+
+              const event = item.event;
               const userEvent = isUserEvent(event);
               const actionEvent = !userEvent && isActionKind(event.kind);
               const kindMeta = EVENT_KIND_META[event.kind] ?? EVENT_KIND_META.unknown;
