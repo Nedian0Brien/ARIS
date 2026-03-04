@@ -855,21 +855,21 @@ export function ChatInterface({
                   key={event.id}
                   className={`${styles.messageRow} ${userEvent ? styles.messageRowUser : styles.messageRowAgent}`}
                 >
-                  <div className={`${styles.messageMeta} ${userEvent ? styles.messageMetaUser : ''}`}>
-                    <span className={`${styles.rolePill} ${userEvent ? styles.roleUser : styles.roleAgent}`}>
-                      {userEvent ? (
-                        'YOU'
-                      ) : actionEvent ? (
-                        'ACTION'
-                      ) : (
-                        <>
-                          <agentMeta.Icon size={12} />
-                          {agentMeta.label}
-                        </>
-                      )}
-                    </span>
-                    <span className={styles.messageTime}>{formatClock(event.timestamp)}</span>
-                  </div>
+                  {!actionEvent && (
+                    <div className={`${styles.messageMeta} ${userEvent ? styles.messageMetaUser : ''}`}>
+                      <span className={`${styles.rolePill} ${userEvent ? styles.roleUser : styles.roleAgent}`}>
+                        {userEvent ? (
+                          'YOU'
+                        ) : (
+                          <>
+                            <agentMeta.Icon size={12} />
+                            {agentMeta.label}
+                          </>
+                        )}
+                      </span>
+                      <span className={styles.messageTime}>{formatClock(event.timestamp)}</span>
+                    </div>
+                  )}
 
                   <div className={`${styles.messageBubble} ${userEvent ? styles.messageBubbleUser : styles.messageBubbleAgent}`}>
                     {!userEvent && !actionEvent && (
