@@ -21,9 +21,9 @@ export default async function SessionPage({
     ]);
 
     return (
-      <div className="app-shell" style={{ height: '100vh', overflow: 'hidden' }}>
+      <div className="app-shell" style={{ minHeight: '100dvh', paddingBottom: 0 }}>
         <Header userEmail={user.email} role={user.role} />
-        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)' }}>
+        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <ChatInterface 
             sessionId={sessionId}
             initialEvents={detail.events}
@@ -40,9 +40,9 @@ export default async function SessionPage({
     const message = error instanceof Error ? error.message : '세션 정보를 불러올 수 없습니다.';
 
     return (
-      <div className="app-shell" style={{ height: '100vh', overflow: 'hidden' }}>
+      <div className="app-shell" style={{ minHeight: '100dvh', paddingBottom: 0 }}>
         <Header userEmail={user.email} role={user.role} />
-        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', padding: '1.5rem', gap: '1rem' }}>
+        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: '1.5rem', gap: '1rem' }}>
           <BackendNotice message={`백엔드 연결 문제: ${message}`} />
           <Card style={{ padding: '4rem 1.5rem', textAlign: 'center' }}>
             <p className="text-muted">현재 세션을 표시할 수 없습니다. 백엔드 연결을 확인하고 다시 시도해 주세요.</p>
@@ -55,4 +55,3 @@ export default async function SessionPage({
     );
   }
 }
-

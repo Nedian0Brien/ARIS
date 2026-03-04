@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
+import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 import type {
   PermissionDecision,
@@ -398,12 +399,78 @@ function stripAnsi(value: string): string {
     .trim();
 }
 
+function parseJsonLine(line: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(line);
+    return asRecord(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function unwrapShellCommand(command: string): string {
+  const trimmed = command.trim();
+  const shellPrefix = "/bin/bash -lc '";
+  if (trimmed.startsWith(shellPrefix) && trimmed.endsWith("'")) {
+    return trimmed.slice(shellPrefix.length, -1);
+  }
+  return trimmed;
+}
+
+function inferActionTypeFromCommand(command: string): 'command_execution' | 'file_list' | 'file_read' | 'file_write' {
+  const normalized = command.toLowerCase();
+  if (
+    normalized.includes('rg --files') ||
+    normalized.includes(' ls ') ||
+    normalized.startsWith('ls ') ||
+    normalized.includes(' find ') ||
+    normalized.startsWith('find ') ||
+    normalized.includes(' tree ') ||
+    normalized.startsWith('tree ')
+  ) {
+    return 'file_list';
+  }
+  if (
+    normalized.includes(' cat ') ||
+    normalized.startsWith('cat ') ||
+    normalized.includes(' sed ') ||
+    normalized.startsWith('sed ') ||
+    normalized.includes(' head ') ||
+    normalized.startsWith('head ') ||
+    normalized.includes(' tail ') ||
+    normalized.startsWith('tail ')
+  ) {
+    return 'file_read';
+  }
+  if (
+    normalized.includes('apply_patch') ||
+    normalized.includes(' tee ') ||
+    normalized.includes(' > ') ||
+    normalized.includes('>>') ||
+    normalized.includes(' perl -pi') ||
+    normalized.includes(' sed -i')
+  ) {
+    return 'file_write';
+  }
+  return 'command_execution';
+}
+
+function titleForActionType(actionType: 'command_execution' | 'file_list' | 'file_read' | 'file_write'): string {
+  if (actionType === 'file_list') {
+    return 'File Listing';
+  }
+  if (actionType === 'file_read') {
+    return 'File Read';
+  }
+  if (actionType === 'file_write') {
+    return 'File Write';
+  }
+  return 'Command Execution';
+}
+
 function buildAgentCommand(agent: RuntimeAgent, prompt: string): AgentCommand | null {
   if (agent === 'claude') {
     return { command: 'claude', args: ['--dangerously-skip-permissions', '--print', prompt], requiresPty: true };
-  }
-  if (agent === 'codex') {
-    return { command: 'codex', args: ['exec', prompt] };
   }
   if (agent === 'gemini') {
     return { command: 'gemini', args: ['-p', prompt] };
@@ -534,14 +601,21 @@ export class HappyRuntimeStore {
     return { output, cwd: safeCwd };
   }
 
-  private async appendAgentMessage(sessionId: string, text: string, meta: Record<string, unknown> = {}): Promise<void> {
+  private async appendAgentMessage(
+    sessionId: string,
+    text: string,
+    meta: Record<string, unknown> = {},
+    options: { type?: string; title?: string } = {},
+  ): Promise<void> {
     const cleanedText = text.replace(/\n?0;\s*$/g, '').trim();
     const localId = `aris-agent-${randomUUID()}`;
+    const type = options.type ?? 'message';
+    const title = options.title ?? (type === 'message' ? 'Text Reply' : 'Command Execution');
     const content = JSON.stringify({
       role: 'agent',
-      title: 'Text Reply',
+      title,
       text: cleanedText,
-      type: 'message',
+      type,
       meta: {
         source: 'cli-agent',
         ...meta,
@@ -556,6 +630,112 @@ export class HappyRuntimeStore {
     });
   }
 
+  private async runCodexCliWithEvents(
+    session: RuntimeSession,
+    prompt: string,
+  ): Promise<{ output: string; cwd: string }> {
+    const safeCwd = this.resolveExecutionCwd(session.metadata.path);
+    const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
+    const child = spawn('codex', ['exec', '--json', prompt], {
+      cwd: safeCwd,
+      env: { ...process.env, PATH: mergedPath },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    const stdoutLines = createInterface({ input: child.stdout });
+    let stderr = '';
+    let appendChain: Promise<void> = Promise.resolve();
+    const finalMessages: string[] = [];
+
+    child.stderr.on('data', (chunk: Buffer | string) => {
+      stderr += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+    });
+
+    stdoutLines.on('line', (line) => {
+      const payload = parseJsonLine(line.trim());
+      if (!payload) {
+        return;
+      }
+
+      if (payload.type !== 'item.completed') {
+        return;
+      }
+
+      const item = asRecord(payload.item);
+      if (!item) {
+        return;
+      }
+
+      const itemType = asString(item.type, '');
+      if (itemType === 'agent_message') {
+        const text = asString(item.text, '').trim();
+        if (text) {
+          finalMessages.push(text);
+        }
+        return;
+      }
+
+      if (itemType !== 'command_execution') {
+        return;
+      }
+
+      const commandRaw = asString(item.command, '').trim();
+      const command = unwrapShellCommand(commandRaw);
+      const output = stripAnsi(asString(item.aggregated_output, '')).trim();
+      const exitCodeValue = item.exit_code;
+      const exitCode = typeof exitCodeValue === 'number' && Number.isFinite(exitCodeValue)
+        ? exitCodeValue
+        : null;
+      const actionType = inferActionTypeFromCommand(command);
+      const title = titleForActionType(actionType);
+      const bodyParts = [`$ ${command || 'command'}`];
+      if (output) {
+        bodyParts.push(output);
+      }
+      if (exitCode !== null) {
+        bodyParts.push(`exit code: ${exitCode}`);
+      }
+      const body = bodyParts.join('\n');
+
+      appendChain = appendChain
+        .then(() => this.appendAgentMessage(
+          session.id,
+          body,
+          {
+            requestedPath: session.metadata.path,
+            execCwd: safeCwd,
+            actionType,
+            command,
+            exitCode: exitCode ?? undefined,
+          },
+          { type: 'tool', title },
+        ))
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`failed to persist codex command event: ${message}`);
+        });
+    });
+
+    const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', (code, signal) => resolve({ code, signal }));
+    });
+
+    await appendChain;
+
+    const finalText = finalMessages.join('\n\n').trim();
+    if (result.code !== 0 && !finalText) {
+      const detail = stripAnsi(stderr).slice(0, 800) || `exit code ${result.code}`;
+      throw new Error(`codex CLI failed: ${detail}`);
+    }
+
+    if (!finalText) {
+      throw new Error('codex returned an empty response');
+    }
+
+    return { output: trimOutput(finalText), cwd: safeCwd };
+  }
+
   private async generateAndPersistAgentReply(session: RuntimeSession, prompt: string): Promise<void> {
     const flavor = session.metadata.flavor;
     if (flavor === 'unknown') {
@@ -563,7 +743,9 @@ export class HappyRuntimeStore {
     }
 
     try {
-      const response = await this.runAgentCli(flavor, prompt, session.metadata.path);
+      const response = flavor === 'codex'
+        ? await this.runCodexCliWithEvents(session, prompt)
+        : await this.runAgentCli(flavor, prompt, session.metadata.path);
       await this.appendAgentMessage(session.id, response.output, {
         requestedPath: session.metadata.path,
         execCwd: response.cwd,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { Button, Badge } from '@/components/ui';
@@ -10,20 +10,25 @@ import {
   CheckCircle2,
   CircleAlert,
   Clock3,
-  Code,
   Cpu,
-  FileCode2,
+  FilePenLine,
+  FileSearch,
+  FolderTree,
   MessageSquareText,
   Send,
   ShieldAlert,
   TerminalSquare,
 } from 'lucide-react';
-import type { PermissionRequest, UiEvent, UiEventKind } from '@/lib/happy/types';
+import type { PermissionRequest, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
 import styles from './ChatInterface.module.css';
 
 const AGENT_REPLY_TIMEOUT_MS = 90000;
 const AUTO_SCROLL_THRESHOLD_PX = 80;
+const PREVIEW_MAX_LINES = 12;
+const PREVIEW_MAX_CHARS = 600;
+const COMPOSER_MIN_HEIGHT_PX = 52;
+const COMPOSER_MAX_HEIGHT_PX = 180;
 
 type AgentMeta = {
   label: string;
@@ -31,11 +36,13 @@ type AgentMeta = {
   Icon: React.ComponentType<{ size?: number }>;
 };
 
-type Tone = 'sky' | 'amber' | 'emerald' | 'violet' | 'red';
+type Tone = 'sky' | 'amber' | 'cyan' | 'emerald' | 'violet' | 'red';
+type ActionKind = 'command_execution' | 'file_list' | 'file_read' | 'file_write';
 
 const TONE_CLASS: Record<Tone, string> = {
   sky: styles.toneSky,
   amber: styles.toneAmber,
+  cyan: styles.toneCyan,
   emerald: styles.toneEmerald,
   violet: styles.toneViolet,
   red: styles.toneRed,
@@ -50,8 +57,9 @@ const AGENT_TONE_CLASS: Record<AgentMeta['tone'], string> = {
 const EVENT_KIND_META: Record<UiEventKind, { label: string; tone: Tone; Icon: React.ComponentType<{ size?: number }> }> = {
   text_reply: { label: 'TEXT', tone: 'sky', Icon: MessageSquareText },
   command_execution: { label: 'COMMAND', tone: 'amber', Icon: TerminalSquare },
-  code_read: { label: 'READ', tone: 'violet', Icon: FileCode2 },
-  code_write: { label: 'WRITE', tone: 'emerald', Icon: Code },
+  file_list: { label: 'LIST', tone: 'cyan', Icon: FolderTree },
+  file_read: { label: 'READ', tone: 'violet', Icon: FileSearch },
+  file_write: { label: 'WRITE', tone: 'emerald', Icon: FilePenLine },
   unknown: { label: 'EVENT', tone: 'red', Icon: CircleAlert },
 };
 
@@ -70,6 +78,10 @@ function resolveAgentMeta(agentFlavor: string): AgentMeta {
 
 function isUserEvent(event: UiEvent): boolean {
   return event.meta?.role === 'user' || event.title === 'User Instruction';
+}
+
+function isActionKind(kind: UiEventKind): kind is ActionKind {
+  return kind === 'command_execution' || kind === 'file_list' || kind === 'file_read' || kind === 'file_write';
 }
 
 function formatClock(timestamp: string): string {
@@ -97,144 +109,168 @@ function formatRelative(timestamp: string): string {
   return date.toLocaleDateString();
 }
 
-function TextReply({ body, isUser }: { body: string; isUser: boolean }) {
-  return <p className={isUser ? styles.userText : styles.agentText}>{body}</p>;
+function truncateSingleLine(input: string, max = 68): string {
+  const compact = input.replace(/\s+/g, ' ').trim();
+  if (compact.length <= max) {
+    return compact;
+  }
+  return `${compact.slice(0, max).trimEnd()}…`;
 }
 
-function CommandExecution({ body }: { body: string }) {
+function buildPreview(text: string): UiEventResult | undefined {
+  const normalized = text.replace(/\r\n/g, '\n').trimEnd();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const lines = normalized.split('\n');
+  const lineLimited = lines.slice(0, PREVIEW_MAX_LINES).join('\n');
+  const charLimited = lineLimited.slice(0, PREVIEW_MAX_CHARS);
+  const truncated = lines.length > PREVIEW_MAX_LINES || normalized.length > PREVIEW_MAX_CHARS;
+
+  return {
+    preview: truncated ? `${charLimited.trimEnd()}\n…` : normalized,
+    full: truncated ? normalized : undefined,
+    truncated,
+    totalLines: lines.length,
+    shownLines: Math.min(lines.length, PREVIEW_MAX_LINES),
+  };
+}
+
+function fallbackResult(event: UiEvent): UiEventResult | undefined {
+  const body = event.body.replace(/\r\n/g, '\n');
+  if (!body.trim()) {
+    return undefined;
+  }
+
   const lines = body.split('\n');
-  const command = lines[0]?.replace('$ ', '') || 'command';
-  const output = lines.slice(1).join('\n').trim();
-  const exitCode = body.match(/exit code: (-?\d+)/)?.[1] ?? null;
-
-  return (
-    <div className={styles.commandWrap}>
-      <div className={styles.commandLine}>
-        <TerminalSquare size={16} />
-        <span className={styles.commandSymbol}>$</span>
-        <span className={styles.commandText}>{command}</span>
-      </div>
-      {output && <pre className={styles.commandOutput}>{output}</pre>}
-      {exitCode && (
-        <div className={styles.commandFooter}>
-          <span className={`${styles.exitBadge} ${exitCode === '0' ? styles.exitSuccess : styles.exitFail}`}>exit {exitCode}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CodeAction({ body, kind }: { body: string; kind: 'code_read' | 'code_write' }) {
-  const lines = body.split('\n');
-  const path = lines[0] || 'unknown/path';
-  const code = lines.slice(1).join('\n').trim();
-  const isRead = kind === 'code_read';
-  const kindMeta = isRead ? EVENT_KIND_META.code_read : EVENT_KIND_META.code_write;
-  const KindIcon = kindMeta.Icon;
-
-  return (
-    <div className={styles.codeWrap}>
-      <div className={styles.codeHeader}>
-        <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
-          <KindIcon size={14} />
-          {kindMeta.label}
-        </span>
-        <span className={styles.filePath}>{path}</span>
-      </div>
-      {code && <pre className={styles.codeBlock}>{code}</pre>}
-    </div>
-  );
-}
-
-function renderEventPayload(event: UiEvent, userEvent: boolean) {
-  if (userEvent) {
-    return <TextReply body={event.body || event.title} isUser />;
+  if (isActionKind(event.kind) && lines.length > 1) {
+    return buildPreview(lines.slice(1).join('\n'));
   }
 
-  if (event.kind === 'command_execution') {
-    return <CommandExecution body={event.body} />;
-  }
-
-  if (event.kind === 'code_read' || event.kind === 'code_write') {
-    return <CodeAction body={event.body} kind={event.kind} />;
-  }
-
-  return <TextReply body={event.body || event.title} isUser={false} />;
+  return buildPreview(body);
 }
 
-function hasParsedArtifacts(event: UiEvent): boolean {
-  return Boolean(
-    event.parsed && (
-      event.parsed.commands.length > 0 ||
-      event.parsed.files.length > 0 ||
-      event.parsed.snippets.length > 0
-    )
-  );
+function resolveActionPrimary(event: UiEvent): string {
+  if (event.action?.command) {
+    return event.action.command;
+  }
+  if (event.action?.path) {
+    return event.action.path;
+  }
+
+  const firstLine = event.body.split('\n')[0]?.trim() ?? '';
+  if (!firstLine) {
+    return event.title || event.kind;
+  }
+
+  return firstLine.startsWith('$ ') ? firstLine.slice(2).trim() : firstLine;
+}
+
+function resolveRecentSummary(event: UiEvent): string {
+  if (isUserEvent(event)) {
+    return truncateSingleLine(event.body || event.title || '사용자 메시지');
+  }
+
+  const primary = resolveActionPrimary(event);
+  if (primary) {
+    return truncateSingleLine(primary);
+  }
+
+  return truncateSingleLine(event.title || event.kind);
 }
 
 function isNearBottom(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= AUTO_SCROLL_THRESHOLD_PX;
 }
 
-function EventArtifacts({ event }: { event: UiEvent }) {
-  if (!event.parsed) {
+function TextReply({ body, isUser }: { body: string; isUser: boolean }) {
+  return <p className={isUser ? styles.userText : styles.agentText}>{body}</p>;
+}
+
+function ActionResultPreview({
+  event,
+  expanded,
+  onToggle,
+}: {
+  event: UiEvent;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const result = event.result ?? fallbackResult(event);
+  if (!result || !result.preview) {
     return null;
   }
 
-  const { commands, files, snippets } = event.parsed;
+  const expandedContent = expanded && result.full ? result.full : result.preview;
+  const canExpand = Boolean(result.truncated && result.full);
 
   return (
-    <div className={styles.artifactPanel}>
-      {commands.length > 0 && (
-        <div className={styles.artifactSection}>
-          <div className={styles.artifactTitle}>
-            <TerminalSquare size={14} />
-            실행 명령어
-          </div>
-          <div className={styles.artifactStack}>
-            {commands.map((command, index) => (
-              <code key={`cmd-${index}-${command}`} className={styles.artifactCode}>
-                {command}
-              </code>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {files.length > 0 && (
-        <div className={styles.artifactSection}>
-          <div className={styles.artifactTitle}>
-            <FileCode2 size={14} />
-            참조 파일
-          </div>
-          <div className={styles.artifactStack}>
-            {files.map((file, index) => (
-              <code key={`file-${index}-${file}`} className={styles.artifactPath}>
-                {file}
-              </code>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {snippets.length > 0 && (
-        <div className={styles.artifactSection}>
-          <div className={styles.artifactTitle}>
-            <Code size={14} />
-            코드 일부
-          </div>
-          <div className={styles.artifactStack}>
-            {snippets.map((snippet, index) => (
-              <div key={`snippet-${index}-${snippet.language}`} className={styles.artifactSnippet}>
-                <div className={styles.artifactSnippetLang}>{snippet.language}</div>
-                <pre className={styles.artifactSnippetCode}>{snippet.code}</pre>
-              </div>
-            ))}
-          </div>
-        </div>
+    <div className={styles.actionResultWrap}>
+      <pre className={styles.actionResult}>{expandedContent}</pre>
+      {canExpand && (
+        <button
+          type="button"
+          className={styles.expandButton}
+          onClick={onToggle}
+          aria-expanded={expanded}
+          aria-controls={`result-${event.id}`}
+        >
+          {expanded ? '결과 접기' : '결과 더보기'}
+        </button>
       )}
     </div>
   );
+}
+
+function ActionEventCard({
+  event,
+  expanded,
+  onToggle,
+}: {
+  event: UiEvent;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  if (!isActionKind(event.kind)) {
+    return <TextReply body={event.body || event.title} isUser={false} />;
+  }
+
+  const kindMeta = EVENT_KIND_META[event.kind];
+  const KindIcon = kindMeta.Icon;
+  const primary = resolveActionPrimary(event);
+
+  return (
+    <div className={styles.actionCard}>
+      <div className={styles.actionHeader}>
+        <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
+          <KindIcon size={14} />
+          {kindMeta.label}
+        </span>
+        <span className={styles.actionPrimary}>{primary}</span>
+      </div>
+      <div id={`result-${event.id}`}>
+        <ActionResultPreview event={event} expanded={expanded} onToggle={onToggle} />
+      </div>
+    </div>
+  );
+}
+
+function renderEventPayload(
+  event: UiEvent,
+  userEvent: boolean,
+  expanded: boolean,
+  onToggleExpand: () => void,
+) {
+  if (userEvent) {
+    return <TextReply body={event.body || event.title} isUser />;
+  }
+
+  if (isActionKind(event.kind)) {
+    return <ActionEventCard event={event} expanded={expanded} onToggle={onToggleExpand} />;
+  }
+
+  return <TextReply body={event.body || event.title} isUser={false} />;
 }
 
 export function ChatInterface({
@@ -268,7 +304,9 @@ export function ChatInterface({
   const [isAwaitingReply, setIsAwaitingReply] = useState(false);
   const [awaitingReplySince, setAwaitingReplySince] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
+  const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const shouldStickToBottomRef = useRef(true);
 
   const agentMeta = resolveAgentMeta(agentFlavor);
@@ -282,6 +320,39 @@ export function ChatInterface({
     [events]
   );
   const agentReplies = useMemo(() => events.filter((event) => !isUserEvent(event)).length, [events]);
+
+  const toggleResult = useCallback((eventId: string) => {
+    setExpandedResultIds((prev) => ({
+      ...prev,
+      [eventId]: !prev[eventId],
+    }));
+  }, []);
+
+  const resizeComposerInput = useCallback(() => {
+    const input = composerInputRef.current;
+    if (!input) {
+      return;
+    }
+
+    input.style.height = '0px';
+    const nextHeight = Math.min(COMPOSER_MAX_HEIGHT_PX, Math.max(COMPOSER_MIN_HEIGHT_PX, input.scrollHeight));
+    input.style.height = `${nextHeight}px`;
+  }, []);
+
+  const handleComposerFocus = useCallback(() => {
+    const stream = scrollRef.current;
+    if (!stream) {
+      return;
+    }
+    shouldStickToBottomRef.current = true;
+    requestAnimationFrame(() => {
+      stream.scrollTop = stream.scrollHeight;
+    });
+  }, []);
+
+  useEffect(() => {
+    resizeComposerInput();
+  }, [prompt, resizeComposerInput]);
 
   useEffect(() => {
     const stream = scrollRef.current;
@@ -421,7 +492,7 @@ export function ChatInterface({
             {recentPrompts.map((event) => (
               <div key={event.id} className={styles.miniItem}>
                 <span className={styles.miniTime}>{formatClock(event.timestamp)}</span>
-                <span className={styles.miniText}>{event.body || event.title}</span>
+                <span className={styles.miniText}>{truncateSingleLine(event.body || event.title)}</span>
               </div>
             ))}
           </div>
@@ -479,8 +550,12 @@ export function ChatInterface({
                         </span>
                       </div>
                     )}
-                    {renderEventPayload(event, userEvent)}
-                    {!userEvent && hasParsedArtifacts(event) && <EventArtifacts event={event} />}
+                    {renderEventPayload(
+                      event,
+                      userEvent,
+                      Boolean(expandedResultIds[event.id]),
+                      () => toggleResult(event.id)
+                    )}
                   </div>
                 </article>
               );
@@ -550,30 +625,38 @@ export function ChatInterface({
 
           <footer className={styles.composerDock}>
             <form onSubmit={handleSubmit} className={styles.composerForm}>
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                    handleSubmit(e);
-                  }
-                }}
-                placeholder={isOperator ? '명령을 입력하세요. (Ctrl/Cmd + Enter 전송)' : 'Viewer 권한입니다.'}
-                disabled={!isOperator || isSubmitting || isAwaitingReply}
-                className={styles.composerInput}
-              />
-              <div className={styles.composerMeta}>
-                <span className={styles.composerHint}>아이콘 중심 상태 표현 · 둥근 레이어 UI</span>
-                <Button
+              <div className={styles.composerFloating}>
+                <textarea
+                  ref={composerInputRef}
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onInput={resizeComposerInput}
+                  onFocus={handleComposerFocus}
+                  rows={1}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      handleSubmit(e);
+                    }
+                  }}
+                  placeholder={isOperator ? '명령을 입력하세요. (Ctrl/Cmd + Enter 전송)' : 'Viewer 권한입니다.'}
+                  disabled={!isOperator || isSubmitting || isAwaitingReply}
+                  className={styles.composerInput}
+                />
+                <button
                   type="submit"
-                  disabled={!prompt.trim() || !isOperator || isAwaitingReply}
-                  isLoading={isSubmitting || isAwaitingReply}
-                  className={styles.sendButton}
+                  disabled={!prompt.trim() || !isOperator || isSubmitting || isAwaitingReply}
+                  className={styles.sendIconButton}
                   title="Send message"
+                  aria-label="메시지 전송"
                 >
-                  {!isSubmitting && !isAwaitingReply && <Send size={16} />}
-                </Button>
+                  {isSubmitting || isAwaitingReply ? (
+                    <span className={styles.sendSpinner} aria-hidden />
+                  ) : (
+                    <Send size={18} />
+                  )}
+                </button>
               </div>
+              <span className={styles.composerHint}>행동별 아이콘 · 색상 구분 · 결과 프리뷰 확장</span>
             </form>
           </footer>
         </section>
@@ -609,12 +692,23 @@ export function ChatInterface({
           <div className={styles.panelHeading}>최근 이벤트</div>
           <div className={styles.miniList}>
             {recentEvents.length === 0 && <p className={styles.emptyHint}>표시할 이벤트가 없습니다.</p>}
-            {recentEvents.map((event) => (
-              <div key={event.id} className={styles.miniItem}>
-                <span className={styles.miniTime}>{formatClock(event.timestamp)}</span>
-                <span className={styles.miniText}>{event.title || event.kind}</span>
-              </div>
-            ))}
+            {recentEvents.map((event) => {
+              const userEvent = isUserEvent(event);
+              const kindMeta = EVENT_KIND_META[event.kind] ?? EVENT_KIND_META.unknown;
+              const KindIcon = kindMeta.Icon;
+              return (
+                <div key={event.id} className={styles.miniItem}>
+                  <span className={styles.miniTime}>{formatClock(event.timestamp)}</span>
+                  <span className={styles.miniEventRow}>
+                    <span className={`${styles.miniKindChip} ${TONE_CLASS[kindMeta.tone]}`}>
+                      <KindIcon size={11} />
+                      {userEvent ? 'YOU' : kindMeta.label}
+                    </span>
+                    <span className={styles.miniText}>{resolveRecentSummary(event)}</span>
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </section>
 

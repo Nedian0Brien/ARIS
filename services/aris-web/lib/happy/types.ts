@@ -12,7 +12,38 @@ export type SessionSummary = {
   isPinned?: boolean;
 };
 
-export type UiEventKind = 'text_reply' | 'command_execution' | 'code_read' | 'code_write' | 'unknown';
+export type UiEventKind =
+  | 'text_reply'
+  | 'command_execution'
+  | 'file_list'
+  | 'file_read'
+  | 'file_write'
+  | 'unknown';
+
+export type UiEventSnippet = {
+  language: string;
+  code: string;
+};
+
+export type UiEventParsed = {
+  commands: string[];
+  files: string[];
+  snippets: UiEventSnippet[];
+};
+
+export type UiEventAction = {
+  command?: string;
+  path?: string;
+  target?: string;
+};
+
+export type UiEventResult = {
+  preview: string;
+  full?: string;
+  truncated: boolean;
+  totalLines?: number;
+  shownLines?: number;
+};
 
 export type UiEvent = {
   id: string;
@@ -21,6 +52,9 @@ export type UiEvent = {
   title: string;
   body: string;
   meta?: Record<string, unknown>;
+  action?: UiEventAction;
+  result?: UiEventResult;
+  parsed?: UiEventParsed;
   severity?: 'info' | 'warning' | 'danger' | 'success';
 };
 

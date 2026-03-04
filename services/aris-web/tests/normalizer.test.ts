@@ -7,14 +7,19 @@ describe('classifyEventKind', () => {
     expect(kind).toBe('command_execution');
   });
 
-  it('classifies code write events', () => {
+  it('classifies file write events', () => {
     const kind = classifyEventKind({ type: 'diff', text: 'modified 3 files' });
-    expect(kind).toBe('code_write');
+    expect(kind).toBe('file_write');
   });
 
-  it('classifies code read events', () => {
+  it('classifies file read events', () => {
     const kind = classifyEventKind({ type: 'read-file', text: 'opened file: src/app.tsx' });
-    expect(kind).toBe('code_read');
+    expect(kind).toBe('file_read');
+  });
+
+  it('classifies file list events', () => {
+    const kind = classifyEventKind({ type: 'tool-call', text: '$ rg --files src\nindex.ts\napp.tsx' });
+    expect(kind).toBe('file_list');
   });
 
   it('defaults text to text_reply', () => {
@@ -53,5 +58,28 @@ describe('normalizeEvents', () => {
       title: 'text reply',
       body: 'hello',
     });
+  });
+
+  it('builds action and result payload for command output previews', () => {
+    const events = normalizeEvents([
+      { id: 'e2', type: 'tool-call', text: '$ ls src\nindex.ts\napp.tsx\nutils.ts' },
+    ]);
+    expect(events[0].kind).toBe('file_list');
+    expect(events[0].action?.command).toBe('ls src');
+    expect(events[0].result?.preview).toContain('index.ts');
+  });
+
+  it('prioritizes explicit meta actionType over text heuristics', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e3',
+        type: 'message',
+        text: '$ cat src/app.tsx',
+        meta: { actionType: 'file_read', path: 'src/app.tsx' },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('file_read');
+    expect(events[0].action?.path).toBe('src/app.tsx');
   });
 });

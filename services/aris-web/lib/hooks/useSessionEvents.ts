@@ -22,7 +22,12 @@ function areEventsEqual(prev: UiEvent[], next: UiEvent[]): boolean {
       before.timestamp !== after.timestamp ||
       before.kind !== after.kind ||
       before.title !== after.title ||
-      before.body !== after.body
+      before.body !== after.body ||
+      before.action?.command !== after.action?.command ||
+      before.action?.path !== after.action?.path ||
+      before.result?.preview !== after.result?.preview ||
+      before.result?.full !== after.result?.full ||
+      before.result?.truncated !== after.result?.truncated
     ) {
       return false;
     }
