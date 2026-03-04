@@ -9,6 +9,28 @@ function mergeEvents(events: UiEvent[]): UiEvent[] {
   return [...dedup.values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
 
+function areEventsEqual(prev: UiEvent[], next: UiEvent[]): boolean {
+  if (prev.length !== next.length) {
+    return false;
+  }
+
+  for (let i = 0; i < prev.length; i += 1) {
+    const before = prev[i];
+    const after = next[i];
+    if (
+      before.id !== after.id ||
+      before.timestamp !== after.timestamp ||
+      before.kind !== after.kind ||
+      before.title !== after.title ||
+      before.body !== after.body
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function useSessionEvents(sessionId: string, initialEvents: UiEvent[]) {
   const [events, setEvents] = useState<UiEvent[]>(initialEvents);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -33,7 +55,10 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[]) {
 
         const body = (await response.json()) as { events?: UiEvent[] };
         if (!aborted && Array.isArray(body.events)) {
-          setEvents((prev) => mergeEvents([...prev, ...body.events!]));
+          setEvents((prev) => {
+            const merged = mergeEvents([...prev, ...body.events!]);
+            return areEventsEqual(prev, merged) ? prev : merged;
+          });
           setSyncError(null);
         }
       } catch {
