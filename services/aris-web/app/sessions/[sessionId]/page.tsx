@@ -16,7 +16,7 @@ export default async function SessionPage({
 
   try {
     const [detail, permissions] = await Promise.all([
-      getSessionEvents(sessionId),
+      getSessionEvents(sessionId, user.id),
       listPermissionRequests(sessionId),
     ]);
 
@@ -30,6 +30,7 @@ export default async function SessionPage({
             initialPermissions={permissions}
             isOperator={user.role === 'operator'}
             projectName={detail.session.projectName}
+            alias={detail.session.alias}
             agentFlavor={detail.session.agent}
           />
         </main>

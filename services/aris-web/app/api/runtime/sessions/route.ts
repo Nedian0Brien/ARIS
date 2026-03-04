@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
 import { listSessions, createSession } from '@/lib/happy/client';
+import { prisma } from '@/lib/db/prisma';
 
 export async function GET(request: NextRequest) {
   const auth = await requireApiUser(request);
@@ -10,12 +11,34 @@ export async function GET(request: NextRequest) {
 
   try {
     const sessions = await listSessions();
-    return NextResponse.json({ sessions });
+
+    // Fetch metadata for these sessions for this user
+    const sessionIds = sessions.map(s => s.id);
+    const metadatas = await prisma.sessionMetadata.findMany({
+      where: {
+        sessionId: { in: sessionIds },
+        userId: auth.user.id
+      }
+    });
+
+    const metadataMap = new Map(metadatas.map(m => [m.sessionId, m]));
+
+    const mergedSessions = sessions.map(s => {
+      const meta = metadataMap.get(s.id);
+      return {
+        ...s,
+        alias: meta?.alias || null,
+        isPinned: meta?.isPinned ?? false
+      };
+    });
+
+    return NextResponse.json({ sessions: mergedSessions });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load sessions';
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }
+
 
 export async function POST(request: NextRequest) {
   const auth = await requireApiUser(request);

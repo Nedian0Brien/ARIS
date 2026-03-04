@@ -1,4 +1,5 @@
 import { env } from '@/lib/config';
+import { prisma } from '@/lib/db/prisma';
 import { normalizeEvents, normalizeSessionDetail, normalizeSessions } from '@/lib/happy/normalizer';
 import type {
   PermissionDecision,
@@ -97,9 +98,31 @@ export async function getRuntimeHealth(): Promise<{ api: 'up' | 'down'; happy: '
   }
 }
 
-export async function listSessions(): Promise<SessionSummary[]> {
+export async function listSessions(userId?: string): Promise<SessionSummary[]> {
   const raw = await fetchHappy('/v1/sessions');
-  return normalizeSessions(extractArrayPayload(raw, 'sessions'));
+  const sessions = normalizeSessions(extractArrayPayload(raw, 'sessions'));
+
+  if (!userId) {
+    return sessions;
+  }
+
+  const metadatas = await prisma.sessionMetadata.findMany({
+    where: {
+      sessionId: { in: sessions.map((s) => s.id) },
+      userId,
+    },
+  });
+
+  const metadataMap = new Map(metadatas.map((m) => [m.sessionId, m]));
+
+  return sessions.map((s) => {
+    const meta = metadataMap.get(s.id);
+    return {
+      ...s,
+      alias: meta?.alias || null,
+      isPinned: meta?.isPinned ?? false,
+    };
+  });
 }
 
 export async function createSession(input: {
@@ -123,7 +146,7 @@ export async function createSession(input: {
   return normalizeSessions([session])[0];
 }
 
-export async function getSessionEvents(sessionId: string): Promise<{ session: SessionDetail; events: UiEvent[] }> {
+export async function getSessionEvents(sessionId: string, userId?: string): Promise<{ session: SessionDetail; events: UiEvent[] }> {
   const sessionRaw = await fetchHappy('/v1/sessions');
   const sessions = extractArrayPayload(sessionRaw, 'sessions');
   const found = findSessionById(sessions, sessionId) ?? sessions[0] ?? { id: sessionId };
@@ -131,8 +154,21 @@ export async function getSessionEvents(sessionId: string): Promise<{ session: Se
   const messageRaw = await fetchHappy(`/v3/sessions/${encodeURIComponent(sessionId)}/messages`);
   const messages = extractArrayPayload(messageRaw, 'messages');
 
+  const sessionDetail = normalizeSessionDetail(found);
+
+  if (userId) {
+    const meta = await prisma.sessionMetadata.findUnique({
+      where: { sessionId_userId: { sessionId, userId } },
+    });
+
+    if (meta) {
+      sessionDetail.alias = meta.alias || null;
+      sessionDetail.isPinned = meta.isPinned;
+    }
+  }
+
   return {
-    session: normalizeSessionDetail(found),
+    session: sessionDetail,
     events: normalizeEvents(messages),
   };
 }

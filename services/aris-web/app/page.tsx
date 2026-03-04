@@ -13,7 +13,7 @@ export default async function HomePage() {
     runtimeError = '백엔드 런타임 API에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.';
   } else {
     try {
-      sessions = await listSessions();
+      sessions = await listSessions(user.id);
     } catch (error) {
       if (
         error instanceof Error &&

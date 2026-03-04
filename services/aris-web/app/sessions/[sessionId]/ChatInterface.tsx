@@ -72,6 +72,7 @@ export function ChatInterface({
   initialPermissions,
   isOperator,
   projectName,
+  alias,
   agentFlavor
 }: {
   sessionId: string;
@@ -79,8 +80,10 @@ export function ChatInterface({
   initialPermissions: PermissionRequest[];
   isOperator: boolean;
   projectName: string;
+  alias?: string | null;
   agentFlavor: string;
 }) {
+  const displayName = alias || projectName;
   const { events, addEvent, syncError } = useSessionEvents(sessionId, initialEvents);
   const { pendingPermissions, decidePermission, error: permissionError } = usePermissions(sessionId, initialPermissions);
   const [prompt, setPrompt] = useState('');
@@ -196,7 +199,7 @@ export function ChatInterface({
       <aside className="chat-left-panel">
         <Card className="chat-panel-card">
           <div className="chat-panel-title">세션</div>
-          <div className="chat-session-name">{projectName}</div>
+          <div className="chat-session-name">{displayName}</div>
           <Badge variant="sky">
             {agentFlavor === 'claude' && <ClaudeIcon size={12} />}
             {agentFlavor === 'gemini' && <GeminiIcon size={12} />}
@@ -229,7 +232,7 @@ export function ChatInterface({
         <div className="chat-center-frame">
           <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', zIndex: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', overflow: 'hidden' }}>
-              <h2 style={{ fontSize: '0.875rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{projectName}</h2>
+              <h2 style={{ fontSize: '0.875rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</h2>
               <Badge variant="sky">
                 {agentFlavor === 'claude' && <ClaudeIcon size={12} />}
                 {agentFlavor === 'gemini' && <GeminiIcon size={12} />}

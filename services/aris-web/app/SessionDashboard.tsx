@@ -38,8 +38,6 @@ interface DirectoryInfo {
 }
 
 const PATH_HISTORY_STORAGE_KEY = 'aris:new-session-path-history';
-const PINNED_SESSIONS_KEY = 'aris:pinned-sessions';
-const SESSION_ALIASES_KEY = 'aris:session-aliases';
 const MAX_PATH_HISTORY_ITEMS = 8;
 const FALLBACK_DATE_ISO = '1970-01-01T00:00:00.000Z';
 
@@ -160,6 +158,16 @@ export function SessionDashboard({
 
   useEffect(() => {
     setSessionsList(initialSessions);
+    
+    // Initialize pinned and aliases from initialSessions (fetched from DB)
+    const pins = new Set<string>();
+    const aliases: Record<string, string> = {};
+    initialSessions.forEach(s => {
+      if (s.isPinned) pins.add(s.id);
+      if (s.alias) aliases[s.id] = s.alias;
+    });
+    setPinnedSessions(pins);
+    setSessionAliases(aliases);
   }, [initialSessions]);
 
   useEffect(() => {
@@ -182,18 +190,6 @@ export function SessionDashboard({
       }
     }
 
-    // Load Pinned
-    const savedPinned = localStorage.getItem(PINNED_SESSIONS_KEY);
-    if (savedPinned) {
-      try { setPinnedSessions(new Set(JSON.parse(savedPinned))); } catch(e){}
-    }
-
-    // Load Aliases
-    const savedAliases = localStorage.getItem(SESSION_ALIASES_KEY);
-    if (savedAliases) {
-      try { setSessionAliases(JSON.parse(savedAliases)); } catch(e){}
-    }
-
     const handleClickOutside = () => setOpenMenuId(null);
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
@@ -202,10 +198,8 @@ export function SessionDashboard({
   useEffect(() => {
     if (mounted) {
       localStorage.setItem(PATH_HISTORY_STORAGE_KEY, JSON.stringify(pathHistory));
-      localStorage.setItem(PINNED_SESSIONS_KEY, JSON.stringify(Array.from(pinnedSessions)));
-      localStorage.setItem(SESSION_ALIASES_KEY, JSON.stringify(sessionAliases));
     }
-  }, [pathHistory, pinnedSessions, sessionAliases, mounted]);
+  }, [pathHistory, mounted]);
 
   useEffect(() => {
     if (isBrowsing && directories.length === 0) {
@@ -290,8 +284,12 @@ export function SessionDashboard({
   }
 
   // --- Session Actions ---
-  const togglePin = (id: string, e: React.MouseEvent) => {
+  const togglePin = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const isPinnedNow = pinnedSessions.has(id);
+    const nextValue = !isPinnedNow;
+
+    // Optimistic Update
     setPinnedSessions(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -299,6 +297,24 @@ export function SessionDashboard({
       return next;
     });
     setOpenMenuId(null);
+
+    try {
+      const res = await fetch(`/api/runtime/sessions/${id}/metadata`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPinned: nextValue }),
+      });
+      if (!res.ok) throw new Error('Failed to save pin status');
+    } catch (err) {
+      console.error(err);
+      // Revert on error
+      setPinnedSessions(prev => {
+        const next = new Set(prev);
+        if (isPinnedNow) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+    }
   };
 
   const openRenameModal = (session: SessionSummary, e: React.MouseEvent) => {
@@ -309,12 +325,32 @@ export function SessionDashboard({
     setOpenMenuId(null);
   };
 
-  const saveRename = (e: React.FormEvent) => {
+  const saveRename = async (e: React.FormEvent) => {
     e.preventDefault();
     if (renameModalSession && newNameInput.trim()) {
-      setSessionAliases(prev => ({...prev, [renameModalSession.id]: newNameInput.trim()}));
+      const sessionId = renameModalSession.id;
+      const nextAlias = newNameInput.trim();
+      const prevAlias = sessionAliases[sessionId];
+
+      // Optimistic Update
+      setSessionAliases(prev => ({...prev, [sessionId]: nextAlias}));
+      setRenameModalSession(null);
+
+      try {
+        const res = await fetch(`/api/runtime/sessions/${sessionId}/metadata`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ alias: nextAlias }),
+        });
+        if (!res.ok) throw new Error('Failed to save alias');
+      } catch (err) {
+        console.error(err);
+        // Revert on error
+        setSessionAliases(prev => ({...prev, [sessionId]: prevAlias}));
+      }
+    } else {
+      setRenameModalSession(null);
     }
-    setRenameModalSession(null);
   };
 
   const executeSessionAction = async (id: string, action: 'retry' | 'abort' | 'kill', e: React.MouseEvent) => {

@@ -8,6 +8,8 @@ export type SessionSummary = {
   lastActivityAt: string | null;
   riskScore: number;
   projectName: string;
+  alias?: string | null;
+  isPinned?: boolean;
 };
 
 export type UiEventKind = 'text_reply' | 'command_execution' | 'code_read' | 'code_write' | 'unknown';
@@ -28,6 +30,8 @@ export type SessionDetail = {
   status: SessionStatus;
   projectName: string;
   lastActivityAt: string | null;
+  alias?: string | null;
+  isPinned?: boolean;
 };
 
 export type PermissionRisk = 'low' | 'medium' | 'high';
