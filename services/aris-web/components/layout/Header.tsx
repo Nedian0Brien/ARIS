@@ -39,7 +39,7 @@ export function Header({ userEmail, role, activeTab, onTabChange }: HeaderProps)
         </Link>
 
         {/* Desktop Navigation */}
-        <nav style={{ display: 'none', alignItems: 'center', gap: '0.5rem' }} className="md:flex">
+        <nav className="flex-desktop" style={{ display: 'none', alignItems: 'center', gap: '0.5rem' }}>
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -72,7 +72,7 @@ export function Header({ userEmail, role, activeTab, onTabChange }: HeaderProps)
       </div>
       
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-        <div style={{ textAlign: 'right', display: 'none' }} className="md:block">
+        <div style={{ textAlign: 'right', display: 'none' }} className="block-desktop">
           <div className="text-sm" style={{ fontWeight: 600 }}>{userEmail}</div>
           <div className="text-sm text-muted" style={{ fontSize: '0.75rem', textTransform: 'uppercase' }}>{role}</div>
         </div>
@@ -82,16 +82,6 @@ export function Header({ userEmail, role, activeTab, onTabChange }: HeaderProps)
           </Button>
         </form>
       </div>
-      <style jsx>{`
-        @media (min-width: 768px) {
-          .md\\:block { display: block !important; }
-          .md\\:flex { display: flex !important; }
-        }
-        .nav-btn:hover {
-          background: var(--surface-subtle);
-          color: var(--text);
-        }
-      `}</style>
     </header>
   );
 }

@@ -303,6 +303,35 @@ button, input, textarea, select {
   }
 }
 
+/* Responsive Utilities */
+.hidden-mobile {
+  display: none !important;
+}
+
+@media (min-width: 768px) {
+  .hidden-mobile {
+    display: flex !important;
+  }
+  .hidden-desktop {
+    display: none !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .flex-desktop {
+    display: none !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .flex-desktop {
+    display: flex !important;
+  }
+  .block-desktop {
+    display: block !important;
+  }
+}
+
 /* Typography Helpers */
 .title-lg { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.025em; }
 .title-md { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.015em; }
