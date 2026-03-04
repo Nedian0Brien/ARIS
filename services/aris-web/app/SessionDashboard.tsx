@@ -322,101 +322,93 @@ export function SessionDashboard({
   const createModal = isCreateModalOpen && mounted
     ? createPortal(
         <div className="modal-overlay" onClick={() => setIsCreateModalOpen(false)}>
-          <div className="modal-content create-session-modal animate-in" onClick={(e) => e.stopPropagation()} style={{ padding: 0 }}>
-            <div className="create-session-header">
-              <div className="create-session-title-wrap">
-                <div className="create-session-badge">
-                  <PlusCircle size={18} />
+          <div className="modal-content new-session-modal animate-in" onClick={(e) => e.stopPropagation()}>
+            <header className="modal-header">
+              <div className="header-title-group">
+                <div className="header-icon-box">
+                  <PlusCircle size={20} />
                 </div>
                 <div>
-                  <h3 className="title-sm">새 세션 시작</h3>
-                  <p className="text-sm text-muted">최근 경로를 선택하거나 새로운 경로로 바로 시작할 수 있습니다.</p>
+                  <h3 className="modal-title">새 세션 시작</h3>
+                  <p className="modal-subtitle">프로젝트 경로와 에이전트를 선택하여 시작하세요.</p>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                onClick={() => setIsCreateModalOpen(false)}
-                style={{ padding: '0.25rem', minHeight: 'auto', borderRadius: 'var(--radius-full)' }}
-              >
-                <X size={20} />
+              <Button variant="ghost" onClick={() => setIsCreateModalOpen(false)} className="close-btn">
+                <X size={22} />
               </Button>
-            </div>
+            </header>
 
-            <form onSubmit={handleCreateSession} className="create-session-form no-scrollbar">
-              <section className="modal-block">
-                <label className="text-sm block-title">Project Path</label>
-                <div className="path-row">
+            <form onSubmit={handleCreateSession} className="modal-body no-scrollbar">
+              <div className="form-section">
+                <label className="section-label">Project Path</label>
+                <div className="input-group">
                   <Input
                     value={newPath}
                     onChange={(e) => setNewPath(e.target.value)}
-                    placeholder="/workspace/my-app"
+                    placeholder="/home/user/my-project"
                     required
                     disabled={!isOperator || isCreating}
-                    style={{ flex: 1 }}
                   />
                   <Button
                     type="button"
                     variant="secondary"
                     onClick={() => setIsDirModalOpen(true)}
                     disabled={!isOperator || isCreating}
-                    style={{ padding: '0 0.75rem' }}
+                    className="browse-btn"
                   >
                     <Search size={18} />
                   </Button>
                 </div>
-              </section>
+              </div>
 
               {pathHistory.length > 0 && (
-                <section className="modal-block">
-                  <div className="block-head">
-                    <span className="text-sm block-title">Recent Paths</span>
-                    <span className="text-sm text-muted">{pathHistory.length}개</span>
+                <div className="form-section">
+                  <div className="section-header">
+                    <label className="section-label">Recent History</label>
+                    <span className="count-badge">{pathHistory.length}</span>
                   </div>
-
-                  <div className="history-list no-scrollbar">
+                  <div className="history-stack">
                     {pathHistory.map((entry) => {
                       const agent = getAgentOption(entry.agent);
                       const AgentIcon = agent.Icon;
-                      const hasLiveSession = Boolean(entry.sessionId && initialSessions.some((session) => session.id === entry.sessionId));
+                      const isLive = Boolean(entry.sessionId && initialSessions.some(s => s.id === entry.sessionId));
 
                       return (
-                        <div key={`${entry.path}-${entry.sessionId ?? 'new'}`} className="history-item">
+                        <div key={`${entry.path}-${entry.sessionId ?? 'new'}`} className="history-card">
                           <button
                             type="button"
-                            className={`history-main ${sanitizePath(newPath) === entry.path ? 'is-active' : ''}`}
+                            className={`history-info-btn ${sanitizePath(newPath) === entry.path ? 'selected' : ''}`}
                             onClick={() => applyHistory(entry)}
-                            disabled={!isOperator || isCreating}
                           >
-                            <span className="history-path">{entry.path}</span>
-                            <span className="history-meta">
-                              <span className="history-agent" style={{ color: agent.accentColor }}>
+                            <span className="path-text">{entry.path}</span>
+                            <div className="meta-row">
+                              <span className="meta-item" style={{ color: agent.accentColor }}>
                                 <AgentIcon size={12} /> {agent.label}
                               </span>
-                              <span className="history-date">
+                              <span className="meta-item">
                                 <Clock3 size={12} /> {formatHistoryDate(entry.lastUsedAt)}
                               </span>
-                            </span>
+                            </div>
                           </button>
-
                           <Button
                             type="button"
                             variant="secondary"
                             onClick={() => void handleQuickResume(entry)}
-                            disabled={!isOperator || isCreating}
-                            className="history-action"
+                            className="resume-btn"
                           >
-                            {hasLiveSession ? <ArrowUpRight size={13} /> : <Play size={13} fill="currentColor" />} {hasLiveSession ? '열기' : '재개'}
+                            {isLive ? <ArrowUpRight size={14} /> : <Play size={14} fill="currentColor" />}
+                            <span>{isLive ? '열기' : '재개'}</span>
                           </Button>
                         </div>
                       );
                     })}
                   </div>
-                </section>
+                </div>
               )}
 
-              <section className="modal-block">
-                <label className="text-sm block-title">Agent Flavor</label>
-                <div className="agent-grid" role="radiogroup" aria-label="Agent Flavor">
+              <div className="form-section">
+                <label className="section-label">Agent Flavor</label>
+                <div className="agent-selection-grid">
                   {AGENT_OPTIONS.map((agent) => {
                     const AgentIcon = agent.Icon;
                     const isSelected = newAgent === agent.id;
@@ -425,36 +417,31 @@ export function SessionDashboard({
                       <button
                         key={agent.id}
                         type="button"
-                        role="radio"
-                        aria-checked={isSelected}
-                        className={`agent-card ${isSelected ? 'is-selected' : ''}`}
+                        className={`agent-select-card ${isSelected ? 'active' : ''}`}
                         onClick={() => setNewAgent(agent.id)}
-                        disabled={!isOperator || isCreating}
                       >
-                        <span className="agent-logo" style={{ background: agent.accentBg, color: agent.accentColor }}>
-                          <AgentIcon size={16} />
-                        </span>
-                        <div className="agent-info">
-                          <span className="agent-name">{agent.label}</span>
-                          <span className="agent-subtitle">{agent.subtitle}</span>
+                        <div className="agent-visual" style={{ backgroundColor: agent.accentBg, color: agent.accentColor }}>
+                          <AgentIcon size={20} />
+                        </div>
+                        <div className="agent-details">
+                          <div className="agent-label">{agent.label}</div>
+                          <div className="agent-desc">{agent.subtitle}</div>
                         </div>
                       </button>
                     );
                   })}
                 </div>
-              </section>
-
-              {error && <div className="text-sm" style={{ color: 'var(--accent-red)' }}>{error}</div>}
-
-              <div className="modal-actions">
-                <Button type="button" variant="secondary" onClick={() => setIsCreateModalOpen(false)} style={{ flex: 1 }}>
-                  취소
-                </Button>
-                <Button type="submit" isLoading={isCreating} disabled={!isOperator || !sanitizePath(newPath)} style={{ flex: 2 }}>
-                  <Play size={16} fill="currentColor" /> 세션 시작
-                </Button>
               </div>
             </form>
+
+            <footer className="modal-footer">
+              <Button type="button" variant="ghost" onClick={() => setIsCreateModalOpen(false)}>
+                취소
+              </Button>
+              <Button type="submit" isLoading={isCreating} disabled={!isOperator || !sanitizePath(newPath)} className="submit-btn">
+                <Play size={18} fill="currentColor" /> 세션 시작하기
+              </Button>
+            </footer>
           </div>
         </div>,
         document.body,
@@ -560,253 +547,280 @@ export function SessionDashboard({
           display: none;
         }
 
-        .empty-state-primary-action {
-          display: inline-flex;
-          width: fit-content;
-          margin: 2rem auto 0;
-        }
-
-        .create-session-modal {
-          width: calc(100% - 2rem);
-          max-width: 760px !important;
-          max-height: min(86vh, 760px);
-          border: 1px solid var(--line);
+        .new-session-modal {
+          width: 100%;
+          max-width: 680px;
           background: var(--surface);
+          border: 1px solid var(--line);
+          display: flex;
+          flex-direction: column;
+          padding: 0;
+          overflow: hidden;
         }
 
-        .create-session-header {
-          padding: 1rem 1.25rem;
-          border-bottom: 1px solid var(--line);
+        /* Header */
+        .modal-header {
+          padding: 1.25rem 1.5rem;
           display: flex;
-          align-items: flex-start;
+          align-items: center;
           justify-content: space-between;
-          gap: 1rem;
-          background: linear-gradient(180deg, rgba(248, 250, 252, 0.9) 0%, rgba(248, 250, 252, 0.55) 100%);
+          border-bottom: 1px solid var(--line);
+          background: linear-gradient(to bottom, #ffffff, #f9fafb);
         }
 
-        .create-session-title-wrap {
+        .header-title-group {
           display: flex;
-          align-items: flex-start;
+          align-items: center;
+          gap: 1rem;
+        }
+
+        .header-icon-box {
+          width: 42px;
+          height: 42px;
+          border-radius: 12px;
+          background: var(--accent-sky-bg);
+          color: var(--primary);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .modal-title {
+          font-size: 1.125rem;
+          font-weight: 700;
+          color: var(--text);
+          margin: 0;
+        }
+
+        .modal-subtitle {
+          font-size: 0.8125rem;
+          color: var(--text-muted);
+          margin: 0;
+        }
+
+        /* Body */
+        .modal-body {
+          padding: 1.5rem;
+          display: flex;
+          flex-direction: column;
+          gap: 1.75rem;
+          max-height: 60vh;
+          overflow-y: auto;
+        }
+
+        .form-section {
+          display: flex;
+          flex-direction: column;
           gap: 0.75rem;
         }
 
-        .create-session-badge {
-          width: 2rem;
-          height: 2rem;
-          border-radius: var(--radius-md);
-          background: rgba(59, 130, 246, 0.12);
-          color: var(--primary);
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          margin-top: 0.05rem;
-        }
-
-        .create-session-form {
-          display: flex;
-          flex-direction: column;
-          gap: 0.9rem;
-          padding: 1rem;
-          overflow-y: auto;
-        }
-
-        .modal-block {
-          border: 1px solid var(--line);
-          border-radius: var(--radius-md);
-          background: var(--surface);
-          padding: 0.75rem;
-          display: flex;
-          flex-direction: column;
-          gap: 0.6rem;
-        }
-
-        .block-title {
-          font-weight: 700;
-          letter-spacing: -0.01em;
-        }
-
-        .block-head {
+        .section-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 0.5rem;
         }
 
-        .path-row {
+        .section-label {
+          font-size: 0.875rem;
+          font-weight: 700;
+          color: var(--text);
+          text-transform: uppercase;
+          letter-spacing: 0.025em;
+        }
+
+        .count-badge {
+          font-size: 0.75rem;
+          font-weight: 600;
+          padding: 0.125rem 0.5rem;
+          background: var(--surface-subtle);
+          border-radius: 99px;
+          color: var(--text-muted);
+        }
+
+        /* Input Group */
+        .input-group {
           display: flex;
           gap: 0.5rem;
         }
 
-        .history-list {
+        .browse-btn {
+          padding: 0 1rem !important;
+          flex-shrink: 0;
+        }
+
+        /* History */
+        .history-stack {
           display: flex;
           flex-direction: column;
           gap: 0.5rem;
-          max-height: 168px;
-          overflow-y: auto;
-          padding-right: 0.15rem;
         }
 
-        .history-item {
-          border: 1px solid var(--line);
-          border-radius: var(--radius-md);
-          background: var(--surface-subtle);
+        .history-card {
           display: flex;
           align-items: stretch;
-          gap: 0.45rem;
-          padding: 0.4rem;
-          min-width: 0;
+          gap: 0.5rem;
+          background: var(--bg);
+          border: 1px solid var(--line);
+          border-radius: var(--radius-md);
+          padding: 0.5rem;
+          transition: border-color 0.2s;
         }
 
-        .history-main {
+        .history-card:hover {
+          border-color: var(--line-strong);
+        }
+
+        .history-info-btn {
           flex: 1;
-          min-width: 0;
+          text-align: left;
+          padding: 0.5rem 0.75rem;
           border-radius: var(--radius-sm);
-          padding: 0.35rem 0.45rem;
           display: flex;
           flex-direction: column;
-          justify-content: center;
-          align-items: flex-start;
-          gap: 0.3rem;
-          text-align: left;
-          transition: background-color 0.2s ease;
+          gap: 0.25rem;
+          min-width: 0;
+          transition: background 0.2s;
         }
 
-        .history-main:hover:not(:disabled) {
-          background: rgba(59, 130, 246, 0.08);
+        .history-info-btn:hover {
+          background: var(--surface-soft);
         }
 
-        .history-main.is-active {
-          background: rgba(59, 130, 246, 0.12);
+        .history-info-btn.selected {
+          background: var(--accent-sky-bg);
+          box-shadow: inset 0 0 0 1px var(--primary);
         }
 
-        .history-path {
-          width: 100%;
-          font-size: 0.84rem;
-          font-weight: 700;
+        .path-text {
+          font-size: 0.875rem;
+          font-weight: 600;
           color: var(--text);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
-        .history-meta {
+        .meta-row {
           display: flex;
           align-items: center;
-          gap: 0.65rem;
-          font-size: 0.72rem;
+          gap: 0.75rem;
+          font-size: 0.75rem;
           color: var(--text-muted);
         }
 
-        .history-agent,
-        .history-date {
-          display: inline-flex;
+        .meta-item {
+          display: flex;
           align-items: center;
           gap: 0.25rem;
         }
 
-        .history-action {
-          min-height: 36px;
-          padding: 0.35rem 0.55rem;
-          font-size: 0.75rem;
-          white-space: nowrap;
-          align-self: center;
+        .resume-btn {
           flex-shrink: 0;
+          height: auto !important;
+          font-size: 0.8125rem !important;
+          padding: 0 0.75rem !important;
         }
 
-        .agent-grid {
+        /* Agent Selection */
+        .agent-selection-grid {
           display: grid;
           grid-template-columns: 1fr;
-          gap: 0.55rem;
+          gap: 0.75rem;
         }
 
-        .agent-card {
+        .agent-select-card {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          padding: 1rem;
           border: 1px solid var(--line-strong);
           border-radius: var(--radius-md);
           background: var(--surface);
-          padding: 0.75rem;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
           text-align: left;
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          transition: border-color 0.2s ease, box-shadow 0.2s ease;
-          min-width: 0;
           cursor: pointer;
         }
 
-        .agent-card:hover:not(:disabled) {
-          border-color: rgba(59, 130, 246, 0.45);
-          box-shadow: var(--shadow-sm);
+        .agent-select-card:hover {
+          border-color: var(--primary);
+          background: var(--surface-subtle);
+          transform: translateY(-1px);
         }
 
-        .agent-card.is-selected {
-          border-color: rgba(59, 130, 246, 0.7);
-          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.14);
-          background: linear-gradient(180deg, rgba(248, 250, 252, 1) 0%, rgba(241, 245, 249, 0.86) 100%);
+        .agent-select-card.active {
+          border-color: var(--primary);
+          background: var(--accent-sky-bg);
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
-        .agent-logo {
-          width: 32px;
-          height: 32px;
-          border-radius: var(--radius-sm);
-          display: inline-flex;
+        .agent-visual {
+          width: 44px;
+          height: 44px;
+          border-radius: 10px;
+          display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
         }
 
-        .agent-info {
+        .agent-details {
           display: flex;
           flex-direction: column;
+          gap: 0.125rem;
           min-width: 0;
-          gap: 0.15rem;
         }
 
-        .agent-name {
-          font-size: 0.875rem;
+        .agent-label {
+          font-size: 0.9375rem;
           font-weight: 700;
           color: var(--text);
-          line-height: 1.2;
         }
 
-        .agent-subtitle {
-          font-size: 0.75rem;
+        .agent-desc {
+          font-size: 0.8125rem;
           color: var(--text-muted);
-          line-height: 1.3;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          line-height: 1.4;
         }
 
-        .modal-actions {
+        /* Footer */
+        .modal-footer {
+          padding: 1.25rem 1.5rem;
+          border-top: 1px solid var(--line);
           display: flex;
-          gap: 0.75rem;
-          padding-top: 0.15rem;
+          gap: 1rem;
+          background: #fcfcfd;
         }
 
-        @media (max-width: 767px) {
-          .empty-state-primary-action {
-            display: none;
-          }
+        .modal-footer > :first-child {
+          flex: 1;
+        }
 
-          .create-session-header {
-            padding: 0.95rem 1rem;
-          }
+        .submit-btn {
+          flex: 2;
+        }
 
-          .create-session-form {
-            padding: 0.85rem;
-          }
-
-          .history-item {
-            flex-direction: column;
-          }
-
-          .history-action {
-            width: 100%;
+        /* Responsive */
+        @media (max-width: 640px) {
+          .modal-content {
+            margin: 0;
+            border-radius: 0;
+            height: 100%;
+            max-height: 100%;
           }
           
-          .agent-subtitle {
-            white-space: normal;
+          .modal-body {
+            max-height: none;
+            flex: 1;
+          }
+
+          .modal-footer {
+            padding: 1rem;
+            flex-direction: column-reverse;
+          }
+
+          .modal-footer > * {
+            flex: none !important;
+            width: 100%;
           }
         }
 
@@ -815,25 +829,26 @@ export function SessionDashboard({
             display: inline-flex !important;
           }
 
-          .empty-state-primary-action {
-            display: inline-flex !important;
+          .agent-selection-grid {
+            grid-template-columns: repeat(3, 1fr);
           }
 
-          .agent-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-          }
-
-          .agent-card {
-            min-height: 110px;
+          .agent-select-card {
             flex-direction: column;
             align-items: flex-start;
-            justify-content: flex-start;
-            gap: 0.85rem;
+            padding: 1.25rem;
+            height: 100%;
           }
-          
-          .agent-subtitle {
-            white-space: normal;
+
+          .agent-visual {
+            margin-bottom: 0.5rem;
           }
+        }
+
+        .empty-state-primary-action {
+          display: inline-flex;
+          width: fit-content;
+          margin: 2rem auto 0;
         }
       `}</style>
     </div>
