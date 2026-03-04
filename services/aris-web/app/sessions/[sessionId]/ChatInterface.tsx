@@ -496,11 +496,13 @@ function ActionEventCard({
     return (
       <div className={styles.actionCompact}>
         <div className={styles.actionCompactMain}>
-          <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
-            <KindIcon size={13} />
-            {kindMeta.label}
-          </span>
-          <span className={styles.actionCompactPrimary}>{primary}</span>
+          <div className={styles.actionCompactTopRow}>
+            <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
+              <KindIcon size={13} />
+              {kindMeta.label}
+            </span>
+            <span className={styles.actionCompactPrimary}>{primary}</span>
+          </div>
           <span className={styles.actionCompactResult}>{resultLine}</span>
         </div>
         <button
@@ -521,11 +523,13 @@ function ActionEventCard({
     <div className={styles.actionCard}>
       <div className={styles.actionHeader}>
         <div className={styles.actionHeaderMain}>
-          <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
-            <KindIcon size={14} />
-            {kindMeta.label}
-          </span>
-          <span className={styles.actionPrimary}>{primary}</span>
+          <div className={styles.actionCompactTopRow}>
+            <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
+              <KindIcon size={14} />
+              {kindMeta.label}
+            </span>
+            <span className={styles.actionPrimary}>{primary}</span>
+          </div>
           <span className={styles.actionCompactResult}>{resultLine}</span>
         </div>
         <button

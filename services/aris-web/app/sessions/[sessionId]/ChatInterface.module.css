@@ -457,6 +457,13 @@
   gap: 0.15rem;
 }
 
+.actionCompactTopRow {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+}
+
 .actionHeader {
   display: flex;
   align-items: flex-start;
@@ -471,7 +478,10 @@
 }
 
 .actionCompactPrimary {
+  display: block;
+  flex: 1;
   min-width: 0;
+  text-align: right;
   font-size: 0.76rem;
   font-family: var(--font-mono);
   color: #0f172a;
@@ -510,7 +520,10 @@
 }
 
 .actionPrimary {
+  display: block;
+  flex: 1;
   min-width: 0;
+  text-align: right;
   font-size: 0.76rem;
   font-family: var(--font-mono);
   color: #0f172a;
