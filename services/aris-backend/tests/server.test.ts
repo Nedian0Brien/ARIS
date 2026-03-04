@@ -26,6 +26,20 @@ describe('aris-backend API', () => {
       DEFAULT_PROJECT_PATH: '/tmp/project',
       LOG_LEVEL: 'silent',
     });
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: {
+        ...authHeader(),
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        path: '/tmp/project',
+        flavor: 'claude',
+      }),
+    });
+
+    expect(createResponse.statusCode).toBe(201);
 
     const sessionsResponse = await app.inject({
       method: 'GET',
@@ -35,7 +49,7 @@ describe('aris-backend API', () => {
 
     expect(sessionsResponse.statusCode).toBe(200);
     const payload = sessionsResponse.json() as { sessions: Array<{ id: string }> };
-    expect(payload.sessions.length).toBeGreaterThan(0);
+    expect(payload.sessions.length).toBe(1);
 
     const messagesResponse = await app.inject({
       method: 'GET',
@@ -56,12 +70,44 @@ describe('aris-backend API', () => {
       DEFAULT_PROJECT_PATH: '/tmp/project',
       LOG_LEVEL: 'silent',
     });
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: {
+        ...authHeader(),
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        path: '/tmp/project',
+        flavor: 'claude',
+      }),
+    });
+    expect(createResponse.statusCode).toBe(201);
 
     const sessions = (await app.inject({
       method: 'GET',
       url: '/v1/sessions',
       headers: authHeader(),
     })).json() as { sessions: Array<{ id: string }> };
+    expect(sessions.sessions.length).toBe(1);
+
+    const permissionCreateResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/permissions',
+      headers: {
+        ...authHeader(),
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        sessionId: sessions.sessions[0].id,
+        agent: 'claude',
+        command: 'npm install sharp',
+        reason: 'Native dependency for image pipeline',
+        risk: 'medium',
+      }),
+    });
+    expect(permissionCreateResponse.statusCode).toBe(201);
+    const permission = permissionCreateResponse.json() as { permission: { id: string } };
 
     const actionResponse = await app.inject({
       method: 'POST',
@@ -85,7 +131,7 @@ describe('aris-backend API', () => {
 
     const decisionResponse = await app.inject({
       method: 'POST',
-      url: `/v1/permissions/${permissions.permissions[0].id}/decision`,
+      url: `/v1/permissions/${permission.permission.id}/decision`,
       headers: {
         ...authHeader(),
         'content-type': 'application/json',

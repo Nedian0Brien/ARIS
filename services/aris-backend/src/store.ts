@@ -37,57 +37,9 @@ export class RuntimeStore {
   private readonly permissions = new Map<string, PermissionRequest>();
 
   constructor(defaultProjectPath: string) {
-    const sessionA = this.createSession({
-      path: defaultProjectPath,
-      flavor: 'claude',
-      status: 'running',
-      riskScore: 22,
-    });
-
-    const sessionB = this.createSession({
-      path: '/srv/legacy',
-      flavor: 'codex',
-      status: 'error',
-      riskScore: 78,
-    });
-
-    this.appendMessage(sessionA.id, {
-      type: 'message',
-      title: 'Text Reply',
-      text: 'Agent initialized and workspace scanned.',
-    });
-    this.appendMessage(sessionA.id, {
-      type: 'tool',
-      title: 'Command Execution',
-      text: '$ npm test\\nexit code: 0',
-    });
-    this.appendMessage(sessionA.id, {
-      type: 'read',
-      title: 'Code Read',
-      text: 'Opened file: src/main.ts',
-    });
-
-    this.appendMessage(sessionB.id, {
-      type: 'write',
-      title: 'Code Write',
-      text: 'Modified files: app/auth.ts and middleware.ts',
-    });
-
-    this.createPermission({
-      sessionId: sessionA.id,
-      agent: 'claude',
-      command: 'npm install sharp',
-      reason: 'Native dependency for image pipeline',
-      risk: 'medium',
-    });
-
-    this.createPermission({
-      sessionId: sessionB.id,
-      agent: 'codex',
-      command: 'rm -rf node_modules',
-      reason: 'Recreate dependency tree from lockfile',
-      risk: 'high',
-    });
+    // Keep store intentionally empty on startup.
+    // Sessions, messages, and permissions should be created only by real user actions or runtime events.
+    void defaultProjectPath;
   }
 
   listSessions(): RuntimeSession[] {

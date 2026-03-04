@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button, Input, Card, Badge } from '@/components/ui';
 import { DirectoryModal } from '@/components/ui/DirectoryModal';
-import { Play, Terminal, BrainCircuit, Box, Search, PlusCircle, X, Plus } from 'lucide-react';
+import { Play, Terminal, BrainCircuit, FolderOpen, Search, PlusCircle, X, Plus } from 'lucide-react';
 import type { SessionSummary } from '@/lib/happy/types';
 
 export function SessionDashboard({ 
@@ -128,28 +128,31 @@ export function SessionDashboard({
         <h2 className="title-md" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Terminal size={24} color="var(--primary)" /> Active Sessions
         </h2>
-        <Button 
-          onClick={() => setIsCreateModalOpen(true)} 
-          disabled={!isOperator}
-          style={{ display: 'none' }}
-          className="md:inline-flex"
-        >
-          <Plus size={18} /> New Session
-        </Button>
+        {isOperator && (
+          <Button 
+            onClick={() => setIsCreateModalOpen(true)} 
+            className="desktop-create-button"
+          >
+            <Plus size={18} /> 새 세션
+          </Button>
+        )}
       </div>
       
       <div className="animate-in">
         {initialSessions.length === 0 ? (
           <Card style={{ padding: '4rem 2rem', textAlign: 'center', backgroundColor: 'var(--surface-subtle)', borderStyle: 'dashed' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem', color: 'var(--text-muted)' }}>
-              <Box size={64} strokeWidth={1} />
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem', color: 'var(--text-muted)' }}>
+              <FolderOpen size={68} strokeWidth={1.5} />
             </div>
             <h3 className="title-sm" style={{ marginBottom: '0.5rem' }}>활성화된 세션이 없습니다</h3>
-            <p className="text-muted text-sm">에이전틱 워크스페이스를 시작하려면 새 세션을 생성하세요.</p>
+            <p className="text-muted text-sm" style={{ margin: '0 auto', maxWidth: '320px' }}>
+              아직 실행 중인 세션이 없습니다. 프로젝트 경로를 지정해서 첫 세션을 시작해 보세요.
+            </p>
             <Button 
               onClick={() => setIsCreateModalOpen(true)} 
               disabled={!isOperator}
               style={{ marginTop: '2rem' }}
+              className="hidden-mobile"
             >
               <PlusCircle size={18} /> 첫 세션 시작하기
             </Button>
@@ -204,8 +207,12 @@ export function SessionDashboard({
       />
 
       <style jsx>{`
+        .desktop-create-button {
+          display: none;
+        }
+
         @media (min-width: 768px) {
-          .md\\:inline-flex { display: inline-flex !important; }
+          .desktop-create-button { display: inline-flex !important; }
         }
       `}</style>
     </div>
