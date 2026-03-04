@@ -9,6 +9,8 @@ import { BackendNotice } from '@/components/ui/BackendNotice';
 import {
   Activity,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   CircleAlert,
   Clock3,
   Cpu,
@@ -179,6 +181,18 @@ function resolveRecentSummary(event: UiEvent): string {
   }
 
   return truncateSingleLine(event.title || event.kind);
+}
+
+function resolveActionResultLine(event: UiEvent): string {
+  const result = event.result ?? fallbackResult(event);
+  if (!result?.preview) {
+    return '결과 없음';
+  }
+  const firstLine = result.preview
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+  return truncateSingleLine(firstLine ?? result.preview.replace(/\n/g, ' '), 92);
 }
 
 function isNearBottom(element: HTMLElement): boolean {
@@ -447,38 +461,16 @@ function TextReply({ body, isUser }: { body: string; isUser: boolean }) {
   );
 }
 
-function ActionResultPreview({
-  event,
-  expanded,
-  onToggle,
-}: {
-  event: UiEvent;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
+function ActionResultDetail({ event }: { event: UiEvent }) {
   const result = event.result ?? fallbackResult(event);
-  if (!result || !result.preview) {
+  if (!result?.preview) {
     return null;
   }
 
-  const expandedContent = expanded && result.full ? result.full : result.preview;
-  const canExpand = Boolean(result.truncated && result.full);
+  const fullText = result.full ?? result.preview;
 
   return (
-    <div className={styles.actionResultWrap}>
-      <pre className={styles.actionResult}>{expandedContent}</pre>
-      {canExpand && (
-        <button
-          type="button"
-          className={styles.expandButton}
-          onClick={onToggle}
-          aria-expanded={expanded}
-          aria-controls={`result-${event.id}`}
-        >
-          {expanded ? '결과 접기' : '결과 더보기'}
-        </button>
-      )}
-    </div>
+    <pre className={styles.actionResult}>{fullText}</pre>
   );
 }
 
@@ -497,19 +489,58 @@ function ActionEventCard({
 
   const kindMeta = EVENT_KIND_META[event.kind];
   const KindIcon = kindMeta.Icon;
-  const primary = resolveActionPrimary(event);
+  const primary = truncateSingleLine(resolveActionPrimary(event), 88);
+  const resultLine = resolveActionResultLine(event);
+
+  if (!expanded) {
+    return (
+      <div className={styles.actionCompact}>
+        <div className={styles.actionCompactMain}>
+          <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
+            <KindIcon size={13} />
+            {kindMeta.label}
+          </span>
+          <span className={styles.actionCompactPrimary}>{primary}</span>
+          <span className={styles.actionCompactResult}>{resultLine}</span>
+        </div>
+        <button
+          type="button"
+          className={styles.actionExpandButton}
+          onClick={onToggle}
+          aria-expanded={false}
+          aria-controls={`result-${event.id}`}
+          title="행동 상세 펼치기"
+        >
+          <ChevronRight size={15} />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.actionCard}>
       <div className={styles.actionHeader}>
-        <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
-          <KindIcon size={14} />
-          {kindMeta.label}
-        </span>
-        <span className={styles.actionPrimary}>{primary}</span>
+        <div className={styles.actionHeaderMain}>
+          <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
+            <KindIcon size={14} />
+            {kindMeta.label}
+          </span>
+          <span className={styles.actionPrimary}>{primary}</span>
+          <span className={styles.actionCompactResult}>{resultLine}</span>
+        </div>
+        <button
+          type="button"
+          className={styles.actionExpandButton}
+          onClick={onToggle}
+          aria-expanded
+          aria-controls={`result-${event.id}`}
+          title="행동 상세 접기"
+        >
+          <ChevronDown size={15} />
+        </button>
       </div>
-      <div id={`result-${event.id}`}>
-        <ActionResultPreview event={event} expanded={expanded} onToggle={onToggle} />
+      <div id={`result-${event.id}`} className={styles.actionResultWrap}>
+        <ActionResultDetail event={event} />
       </div>
     </div>
   );
@@ -821,13 +852,20 @@ export function ChatInterface({
                 >
                   <div className={`${styles.messageMeta} ${userEvent ? styles.messageMetaUser : ''}`}>
                     <span className={`${styles.rolePill} ${userEvent ? styles.roleUser : styles.roleAgent}`}>
-                      {userEvent ? 'YOU' : 'ARIS'}
+                      {userEvent ? (
+                        'YOU'
+                      ) : (
+                        <>
+                          <agentMeta.Icon size={12} />
+                          {agentMeta.label}
+                        </>
+                      )}
                     </span>
                     <span className={styles.messageTime}>{formatClock(event.timestamp)}</span>
                   </div>
 
                   <div className={`${styles.messageBubble} ${userEvent ? styles.messageBubbleUser : styles.messageBubbleAgent}`}>
-                    {!userEvent && (
+                    {!userEvent && !isActionKind(event.kind) && (
                       <div className={styles.messageKindRow}>
                         <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
                           <KindIcon size={14} />
@@ -849,7 +887,10 @@ export function ChatInterface({
             {isAwaitingReply && (
               <article className={`${styles.messageRow} ${styles.messageRowAgent}`}>
                 <div className={styles.messageMeta}>
-                  <span className={`${styles.rolePill} ${styles.roleAgent}`}>ARIS</span>
+                  <span className={`${styles.rolePill} ${styles.roleAgent}`}>
+                    <agentMeta.Icon size={12} />
+                    {agentMeta.label}
+                  </span>
                   <span className={styles.messageTime}>생성 중...</span>
                 </div>
                 <div className={`${styles.messageBubble} ${styles.messageBubbleAgent}`} role="status" aria-live="polite">
