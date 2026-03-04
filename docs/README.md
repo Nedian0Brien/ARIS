@@ -26,6 +26,7 @@ ARIS(Agentic Runtime Interface System)의 문서는 **사용자 의도 중심(Ch
 - `01-mvp-feature-spec.md`: MVP 기능/수용기준
 - `02-roadmap.md`: 단계별 구현 계획
 - `03-feature-backlog.md`: Post-MVP 백로그
+- `04-deployment-guide.md`: 배포 절차와 런타임 이슈 트러블슈팅
 
 ## 권장 읽기 순서
 
