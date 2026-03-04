@@ -40,6 +40,11 @@ Use the same token in both services:
   - `HAPPY_SERVER_URL=http://localhost:4080`
   - `HAPPY_SERVER_TOKEN=...`
 
+To switch backend mode:
+
+- `RUNTIME_BACKEND=mock` (default): in-memory mock runtime.
+- `RUNTIME_BACKEND=happy`: proxy requests to a real Happy-compatible server using `HAPPY_SERVER_URL`.
+
 ## Notes
 
 - Current store is in-memory; restart resets data.

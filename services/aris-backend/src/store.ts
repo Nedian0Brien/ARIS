@@ -8,6 +8,9 @@ import type {
   SessionAction,
   SessionStatus,
 } from './types.js';
+import { HappyRuntimeStore } from './runtime/happyClient.js';
+
+type RuntimeBackend = 'mock' | 'happy';
 
 type CreateSessionInput = {
   path: string;
@@ -31,7 +34,19 @@ type CreatePermissionInput = {
   risk: PermissionRisk;
 };
 
-export class RuntimeStore {
+interface RuntimeStoreBackend {
+  listSessions(): Promise<RuntimeSession[]>;
+  getSession(sessionId: string): Promise<RuntimeSession | null>;
+  createSession(input: CreateSessionInput): Promise<RuntimeSession>;
+  listMessages(sessionId: string): Promise<RuntimeMessage[]>;
+  appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage>;
+  applySessionAction(sessionId: string, action: SessionAction): Promise<{ accepted: boolean; message: string; at: string }>;
+  listPermissions(state?: PermissionRequest['state']): Promise<PermissionRequest[]>;
+  createPermission(input: CreatePermissionInput): Promise<PermissionRequest>;
+  decidePermission(permissionId: string, decision: PermissionDecision): Promise<PermissionRequest>;
+}
+
+class MockRuntimeStore implements RuntimeStoreBackend {
   private readonly sessions = new Map<string, RuntimeSession>();
   private readonly messages = new Map<string, RuntimeMessage[]>();
   private readonly permissions = new Map<string, PermissionRequest>();
@@ -42,15 +57,15 @@ export class RuntimeStore {
     void defaultProjectPath;
   }
 
-  listSessions(): RuntimeSession[] {
+  async listSessions(): Promise<RuntimeSession[]> {
     return [...this.sessions.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
-  getSession(sessionId: string): RuntimeSession | null {
+  async getSession(sessionId: string): Promise<RuntimeSession | null> {
     return this.sessions.get(sessionId) ?? null;
   }
 
-  createSession(input: CreateSessionInput): RuntimeSession {
+  async createSession(input: CreateSessionInput): Promise<RuntimeSession> {
     const now = new Date().toISOString();
     const session: RuntimeSession = {
       id: randomUUID(),
@@ -70,11 +85,11 @@ export class RuntimeStore {
     return session;
   }
 
-  listMessages(sessionId: string): RuntimeMessage[] {
+  async listMessages(sessionId: string): Promise<RuntimeMessage[]> {
     return this.messages.get(sessionId) ?? [];
   }
 
-  appendMessage(sessionId: string, input: AppendMessageInput): RuntimeMessage {
+  async appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage> {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
@@ -100,7 +115,7 @@ export class RuntimeStore {
     // Mock Agent Response Logic
     if (input.type === 'message' && (!input.meta || input.meta.role !== 'agent')) {
       setTimeout(() => {
-        this.appendMessage(sessionId, {
+        void this.appendMessage(sessionId, {
           type: 'message',
           title: 'Text Reply',
           text: `[${session.metadata.flavor}] I received your message: "${input.text}". How can I help you with the code in ${session.metadata.path}?`,
@@ -112,7 +127,7 @@ export class RuntimeStore {
     return message;
   }
 
-  applySessionAction(sessionId: string, action: SessionAction): { accepted: boolean; message: string; at: string } {
+  async applySessionAction(sessionId: string, action: SessionAction): Promise<{ accepted: boolean; message: string; at: string }> {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
@@ -136,10 +151,10 @@ export class RuntimeStore {
     }
 
     this.sessions.set(sessionId, session);
-    this.appendMessage(sessionId, {
+    await this.appendMessage(sessionId, {
       type: 'tool',
       title: 'Command Execution',
-      text: `$ session ${action}\\nexit code: 0`,
+      text: `$ session ${action}\nexit code: 0`,
       meta: { system: true, action },
     });
 
@@ -150,12 +165,12 @@ export class RuntimeStore {
     };
   }
 
-  listPermissions(state?: PermissionRequest['state']): PermissionRequest[] {
+  async listPermissions(state?: PermissionRequest['state']): Promise<PermissionRequest[]> {
     const list = [...this.permissions.values()].sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
     return state ? list.filter((item) => item.state === state) : list;
   }
 
-  createPermission(input: CreatePermissionInput): PermissionRequest {
+  async createPermission(input: CreatePermissionInput): Promise<PermissionRequest> {
     if (!this.sessions.has(input.sessionId)) {
       throw new Error('SESSION_NOT_FOUND');
     }
@@ -175,7 +190,7 @@ export class RuntimeStore {
     return permission;
   }
 
-  decidePermission(permissionId: string, decision: PermissionDecision): PermissionRequest {
+  async decidePermission(permissionId: string, decision: PermissionDecision): Promise<PermissionRequest> {
     const permission = this.permissions.get(permissionId);
     if (!permission) {
       throw new Error('PERMISSION_NOT_FOUND');
@@ -184,7 +199,7 @@ export class RuntimeStore {
     permission.state = decision === 'deny' ? 'denied' : 'approved';
     this.permissions.set(permission.id, permission);
 
-    this.appendMessage(permission.sessionId, {
+    await this.appendMessage(permission.sessionId, {
       type: 'message',
       title: 'Text Reply',
       text: `Permission ${permission.command} -> ${permission.state}`,
@@ -192,5 +207,68 @@ export class RuntimeStore {
     });
 
     return permission;
+  }
+}
+
+export class RuntimeStore {
+  private readonly delegate: RuntimeStoreBackend;
+
+  constructor(
+    defaultProjectPath: string,
+    runtimeBackend: RuntimeBackend = 'mock',
+    happyServerUrl?: string,
+    happyServerToken?: string,
+    hostProjectsRoot?: string,
+  ) {
+    if (runtimeBackend === 'happy') {
+      if (!happyServerUrl) {
+        throw new Error('HAPPY_SERVER_URL is required when RUNTIME_BACKEND=happy');
+      }
+      this.delegate = new HappyRuntimeStore({
+        serverUrl: happyServerUrl,
+        token: happyServerToken ?? '',
+        workspaceRoot: defaultProjectPath,
+        hostProjectsRoot: hostProjectsRoot ?? '',
+      });
+      return;
+    }
+
+    this.delegate = new MockRuntimeStore(defaultProjectPath);
+  }
+
+  async listSessions() {
+    return this.delegate.listSessions();
+  }
+
+  async getSession(sessionId: string) {
+    return this.delegate.getSession(sessionId);
+  }
+
+  async createSession(input: CreateSessionInput) {
+    return this.delegate.createSession(input);
+  }
+
+  async listMessages(sessionId: string) {
+    return this.delegate.listMessages(sessionId);
+  }
+
+  async appendMessage(sessionId: string, input: AppendMessageInput) {
+    return this.delegate.appendMessage(sessionId, input);
+  }
+
+  async applySessionAction(sessionId: string, action: SessionAction) {
+    return this.delegate.applySessionAction(sessionId, action);
+  }
+
+  async listPermissions(state?: PermissionRequest['state']) {
+    return this.delegate.listPermissions(state);
+  }
+
+  async createPermission(input: CreatePermissionInput) {
+    return this.delegate.createPermission(input);
+  }
+
+  async decidePermission(permissionId: string, decision: PermissionDecision) {
+    return this.delegate.decidePermission(permissionId, decision);
   }
 }

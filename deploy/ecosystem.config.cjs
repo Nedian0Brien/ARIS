@@ -36,11 +36,7 @@ function readEnvValue(filePath, key) {
   return '';
 }
 
-function resolveRuntimeToken() {
-  if (process.env.RUNTIME_API_TOKEN) {
-    return process.env.RUNTIME_API_TOKEN;
-  }
-
+function resolveEnvValue(key, defaultValue = '') {
   const envFiles = [
     path.join(__dirname, '.env'),
     path.join(__dirname, '..', 'services', 'aris-backend', '.env'),
@@ -49,13 +45,17 @@ function resolveRuntimeToken() {
   ];
 
   for (const envFile of envFiles) {
-    const value = readEnvValue(envFile, 'RUNTIME_API_TOKEN');
+    const value = readEnvValue(envFile, key);
     if (value) {
       return value;
     }
   }
 
-  return 'change-this-runtime-token';
+  return defaultValue;
+}
+
+function resolveRuntimeToken() {
+  return resolveEnvValue('RUNTIME_API_TOKEN', 'change-this-runtime-token');
 }
 
 module.exports = {
@@ -70,6 +70,12 @@ module.exports = {
         HOST: '0.0.0.0',
         PORT: 4080,
         RUNTIME_API_TOKEN: resolveRuntimeToken(),
+        RUNTIME_BACKEND: resolveEnvValue('RUNTIME_BACKEND', 'mock'),
+        HAPPY_SERVER_URL: resolveEnvValue('HAPPY_SERVER_URL', 'http://127.0.0.1:4080'),
+        HAPPY_SERVER_TOKEN: resolveEnvValue('HAPPY_SERVER_TOKEN', ''),
+        HAPPY_ACCOUNT_SECRET: resolveEnvValue('HAPPY_ACCOUNT_SECRET', ''),
+        DEFAULT_PROJECT_PATH: resolveEnvValue('DEFAULT_PROJECT_PATH', '/workspace'),
+        HOST_PROJECTS_ROOT: resolveEnvValue('HOST_PROJECTS_ROOT', ''),
       },
       // Note: We recommend managing RUNTIME_API_TOKEN in deploy/services env files or passing it during launch.
       // e.g. pm2 start deploy/ecosystem.config.cjs --env production

@@ -16,7 +16,8 @@ export async function GET(
     const { events } = await getSessionEvents(sessionId);
     return NextResponse.json({ events });
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch events' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Failed to fetch events';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -45,6 +46,7 @@ export async function POST(
     });
     return NextResponse.json({ event });
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to send message' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Failed to send message';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

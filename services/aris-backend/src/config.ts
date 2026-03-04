@@ -4,7 +4,12 @@ const configSchema = z.object({
   HOST: z.string().min(1).default('0.0.0.0'),
   PORT: z.coerce.number().int().positive().default(4080),
   RUNTIME_API_TOKEN: z.string().min(12).default('change-this-runtime-token'),
+  RUNTIME_BACKEND: z.enum(['mock', 'happy']).default('mock'),
+  HAPPY_SERVER_URL: z.string().url().default('http://127.0.0.1:4080'),
+  HAPPY_SERVER_TOKEN: z.string().default(''),
+  HAPPY_ACCOUNT_SECRET: z.string().default(''),
   DEFAULT_PROJECT_PATH: z.string().min(1).default('/workspace'),
+  HOST_PROJECTS_ROOT: z.string().default(''),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 

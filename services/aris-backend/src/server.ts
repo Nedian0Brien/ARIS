@@ -5,7 +5,11 @@ import { RuntimeStore } from './store.js';
 
 type ServerConfig = {
   RUNTIME_API_TOKEN: string;
+  RUNTIME_BACKEND?: 'mock' | 'happy';
+  HAPPY_SERVER_URL?: string;
+  HAPPY_SERVER_TOKEN?: string;
   DEFAULT_PROJECT_PATH: string;
+  HOST_PROJECTS_ROOT?: string;
   LOG_LEVEL: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
 };
 
@@ -41,7 +45,13 @@ const decidePermissionSchema = z.object({
 
 export function buildServer(config: ServerConfig) {
   const app = Fastify({ logger: { level: config.LOG_LEVEL } });
-  const store = new RuntimeStore(config.DEFAULT_PROJECT_PATH);
+  const store = new RuntimeStore(
+    config.DEFAULT_PROJECT_PATH,
+    config.RUNTIME_BACKEND,
+    config.HAPPY_SERVER_URL,
+    config.HAPPY_SERVER_TOKEN,
+    config.HOST_PROJECTS_ROOT,
+  );
 
   app.addHook('onRequest', async (request, reply) => {
     if (request.url.startsWith('/health')) {
@@ -62,7 +72,9 @@ export function buildServer(config: ServerConfig) {
     now: new Date().toISOString(),
   }));
 
-  app.get('/v1/sessions', async () => ({ sessions: store.listSessions() }));
+  app.get('/v1/sessions', async () => ({
+    sessions: await store.listSessions(),
+  }));
 
   app.post('/v1/sessions', async (request, reply) => {
     const parsed = createSessionSchema.safeParse(request.body);
@@ -70,7 +82,7 @@ export function buildServer(config: ServerConfig) {
       return reply.code(400).send({ error: 'Invalid request body' });
     }
 
-    const session = store.createSession(parsed.data);
+    const session = await store.createSession(parsed.data);
     return reply.code(201).send({ session });
   });
 
@@ -81,9 +93,8 @@ export function buildServer(config: ServerConfig) {
     }
 
     const { sessionId } = request.params as { sessionId: string };
-
     try {
-      const result = store.applySessionAction(sessionId, parsed.data.action);
+      const result = await store.applySessionAction(sessionId, parsed.data.action);
       return { result: { sessionId, action: parsed.data.action, ...result } };
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
@@ -95,12 +106,13 @@ export function buildServer(config: ServerConfig) {
 
   app.get('/v3/sessions/:sessionId/messages', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
-    const session = store.getSession(sessionId);
+    const session = await store.getSession(sessionId);
     if (!session) {
       return reply.code(404).send({ error: 'Session not found' });
     }
 
-    return { messages: store.listMessages(sessionId) };
+    const messages = await store.listMessages(sessionId);
+    return { messages };
   });
 
   app.post('/v3/sessions/:sessionId/messages', async (request, reply) => {
@@ -112,7 +124,7 @@ export function buildServer(config: ServerConfig) {
     const { sessionId } = request.params as { sessionId: string };
 
     try {
-      const message = store.appendMessage(sessionId, parsed.data);
+      const message = await store.appendMessage(sessionId, parsed.data);
       return reply.code(201).send({ message });
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
@@ -124,7 +136,7 @@ export function buildServer(config: ServerConfig) {
 
   app.get('/v1/permissions', async (request) => {
     const { state } = request.query as { state?: 'pending' | 'approved' | 'denied' };
-    return { permissions: store.listPermissions(state) };
+    return { permissions: await store.listPermissions(state) };
   });
 
   app.post('/v1/permissions', async (request, reply) => {
@@ -134,7 +146,7 @@ export function buildServer(config: ServerConfig) {
     }
 
     try {
-      const permission = store.createPermission({
+      const permission = await store.createPermission({
         ...parsed.data,
       });
       return reply.code(201).send({ permission });
@@ -155,7 +167,7 @@ export function buildServer(config: ServerConfig) {
     const { permissionId } = request.params as { permissionId: string };
 
     try {
-      const permission = store.decidePermission(permissionId, parsed.data.decision);
+      const permission = await store.decidePermission(permissionId, parsed.data.decision);
       return { permission };
     } catch (error) {
       if (error instanceof Error && error.message === 'PERMISSION_NOT_FOUND') {
