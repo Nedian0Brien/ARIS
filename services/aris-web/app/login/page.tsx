@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Input, Card } from '@/components/ui';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [show2FA, setShow2FA] = useState(false);
   const [twoFactorMethod, setTwoFactorMethod] = useState<'totp' | 'email'>('totp');
@@ -15,10 +16,26 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+  // Load remembered email
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('aris_remembered_email');
+    if (savedEmail) {
+      setEmail(savedEmail);
+      setRememberMe(true);
+    }
+  }, []);
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
+
+    // Save or clear email based on rememberMe
+    if (rememberMe) {
+      localStorage.setItem('aris_remembered_email', email);
+    } else {
+      localStorage.removeItem('aris_remembered_email');
+    }
 
     try {
       const response = await fetch('/api/auth/login', {
@@ -115,6 +132,18 @@ export default function LoginPage() {
                 required 
               />
             </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <input 
+                type="checkbox" 
+                id="remember" 
+                checked={rememberMe} 
+                onChange={(e) => setRememberMe(e.target.checked)}
+                style={{ width: 'auto', minHeight: 'auto' }}
+              />
+              <label htmlFor="remember" className="text-sm text-muted" style={{ cursor: 'pointer' }}>이메일 기억하기</label>
+            </div>
+
             {error && <div style={{ color: 'var(--accent-red)', fontSize: '0.875rem' }}>{error}</div>}
             <Button type="submit" isLoading={loading}>Sign In</Button>
           </form>
