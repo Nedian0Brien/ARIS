@@ -842,6 +842,7 @@ export function ChatInterface({
           <div className={styles.stream} ref={scrollRef} onScroll={handleStreamScroll}>
             {events.map((event) => {
               const userEvent = isUserEvent(event);
+              const actionEvent = !userEvent && isActionKind(event.kind);
               const kindMeta = EVENT_KIND_META[event.kind] ?? EVENT_KIND_META.unknown;
               const KindIcon = kindMeta.Icon;
 
@@ -854,6 +855,8 @@ export function ChatInterface({
                     <span className={`${styles.rolePill} ${userEvent ? styles.roleUser : styles.roleAgent}`}>
                       {userEvent ? (
                         'YOU'
+                      ) : actionEvent ? (
+                        'ACTION'
                       ) : (
                         <>
                           <agentMeta.Icon size={12} />
@@ -865,7 +868,7 @@ export function ChatInterface({
                   </div>
 
                   <div className={`${styles.messageBubble} ${userEvent ? styles.messageBubbleUser : styles.messageBubbleAgent}`}>
-                    {!userEvent && !isActionKind(event.kind) && (
+                    {!userEvent && !actionEvent && (
                       <div className={styles.messageKindRow}>
                         <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
                           <KindIcon size={14} />
@@ -980,7 +983,7 @@ export function ChatInterface({
                   {isSubmitting || isAwaitingReply ? (
                     <span className={styles.sendSpinner} aria-hidden />
                   ) : (
-                    <Send size={18} />
+                    <Send size={20} />
                   )}
                 </button>
               </div>
