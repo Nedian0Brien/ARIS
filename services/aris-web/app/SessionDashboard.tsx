@@ -151,8 +151,7 @@ export function SessionDashboard({
             <Button 
               onClick={() => setIsCreateModalOpen(true)} 
               disabled={!isOperator}
-              style={{ marginTop: '2rem' }}
-              className="hidden-mobile"
+              className="hidden-mobile empty-state-primary-action"
             >
               <PlusCircle size={18} /> 첫 세션 시작하기
             </Button>
@@ -211,8 +210,15 @@ export function SessionDashboard({
           display: none;
         }
 
+        .empty-state-primary-action {
+          display: inline-flex;
+          width: fit-content;
+          margin: 2rem auto 0;
+        }
+
         @media (min-width: 768px) {
           .desktop-create-button { display: inline-flex !important; }
+          .empty-state-primary-action { display: inline-flex !important; }
         }
       `}</style>
     </div>
