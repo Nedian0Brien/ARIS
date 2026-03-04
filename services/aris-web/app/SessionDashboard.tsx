@@ -601,26 +601,25 @@ export function SessionDashboard({
         /* Body */
         .modal-body {
           padding: 1.5rem;
-          display: flex;
-          flex-direction: column;
-          gap: 1.75rem;
+          display: block;
           max-height: 60vh;
           overflow-y: auto;
         }
 
         .form-section {
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
+          display: block;
+          margin-bottom: 1.75rem;
         }
 
         .section-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
+          margin-bottom: 0.75rem;
         }
 
         .section-label {
+          display: block;
           font-size: 0.875rem;
           font-weight: 700;
           color: var(--text);
@@ -640,7 +639,12 @@ export function SessionDashboard({
         /* Input Group */
         .input-group {
           display: flex;
-          gap: 0.5rem;
+          align-items: stretch;
+          margin-top: 0.75rem;
+        }
+
+        .input-group :global(input) {
+          margin-right: 0.5rem;
         }
 
         .browse-btn {
@@ -650,20 +654,23 @@ export function SessionDashboard({
 
         /* History */
         .history-stack {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
+          display: block;
+          margin-top: 0.75rem;
         }
 
         .history-card {
           display: flex;
           align-items: stretch;
-          gap: 0.5rem;
           background: var(--bg);
           border: 1px solid var(--line);
           border-radius: var(--radius-md);
           padding: 0.5rem;
+          margin-bottom: 0.5rem;
           transition: border-color 0.2s;
+        }
+
+        .history-card:last-child {
+          margin-bottom: 0;
         }
 
         .history-card:hover {
@@ -675,9 +682,7 @@ export function SessionDashboard({
           text-align: left;
           padding: 0.5rem 0.75rem;
           border-radius: var(--radius-sm);
-          display: flex;
-          flex-direction: column;
-          gap: 0.25rem;
+          display: block;
           min-width: 0;
           transition: background 0.2s;
         }
@@ -692,18 +697,19 @@ export function SessionDashboard({
         }
 
         .path-text {
+          display: block;
           font-size: 0.875rem;
           font-weight: 600;
           color: var(--text);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          margin-bottom: 0.25rem;
         }
 
         .meta-row {
           display: flex;
           align-items: center;
-          gap: 0.75rem;
           font-size: 0.75rem;
           color: var(--text-muted);
         }
@@ -711,7 +717,15 @@ export function SessionDashboard({
         .meta-item {
           display: flex;
           align-items: center;
-          gap: 0.25rem;
+          margin-right: 0.75rem;
+        }
+
+        .meta-item:last-child {
+          margin-right: 0;
+        }
+
+        .meta-item :global(svg) {
+          margin-right: 0.25rem;
         }
 
         .resume-btn {
@@ -719,19 +733,19 @@ export function SessionDashboard({
           height: auto !important;
           font-size: 0.8125rem !important;
           padding: 0 0.75rem !important;
+          margin-left: 0.5rem;
         }
 
         /* Agent Selection */
         .agent-selection-grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 0.75rem;
+          display: block;
+          margin-top: 0.75rem;
         }
 
         .agent-select-card {
+          width: 100%;
           display: flex;
           align-items: center;
-          gap: 1rem;
           padding: 1rem;
           border: 1px solid var(--line-strong);
           border-radius: var(--radius-md);
@@ -739,6 +753,11 @@ export function SessionDashboard({
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
           text-align: left;
           cursor: pointer;
+          margin-bottom: 0.75rem;
+        }
+
+        .agent-select-card:last-child {
+          margin-bottom: 0;
         }
 
         .agent-select-card:hover {
@@ -761,22 +780,24 @@ export function SessionDashboard({
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
+          margin-right: 1rem;
         }
 
         .agent-details {
-          display: flex;
-          flex-direction: column;
-          gap: 0.125rem;
+          display: block;
           min-width: 0;
         }
 
         .agent-label {
+          display: block;
           font-size: 0.9375rem;
           font-weight: 700;
           color: var(--text);
+          margin-bottom: 0.125rem;
         }
 
         .agent-desc {
+          display: block;
           font-size: 0.8125rem;
           color: var(--text-muted);
           line-height: 1.4;
@@ -787,12 +808,12 @@ export function SessionDashboard({
           padding: 1.25rem 1.5rem;
           border-top: 1px solid var(--line);
           display: flex;
-          gap: 1rem;
           background: #fcfcfd;
         }
 
         .modal-footer > :first-child {
           flex: 1;
+          margin-right: 1rem;
         }
 
         .submit-btn {
@@ -815,11 +836,16 @@ export function SessionDashboard({
 
           .modal-footer {
             padding: 1rem;
+            display: flex;
             flex-direction: column-reverse;
           }
 
+          .modal-footer > :first-child {
+            margin-right: 0;
+            margin-top: 0.75rem;
+          }
+
           .modal-footer > * {
-            flex: none !important;
             width: 100%;
           }
         }
@@ -830,18 +856,21 @@ export function SessionDashboard({
           }
 
           .agent-selection-grid {
-            grid-template-columns: repeat(3, 1fr);
+            display: flex;
+            margin: 0.75rem -0.375rem 0;
           }
 
           .agent-select-card {
+            flex: 1;
             flex-direction: column;
             align-items: flex-start;
             padding: 1.25rem;
-            height: 100%;
+            margin: 0 0.375rem;
           }
 
           .agent-visual {
-            margin-bottom: 0.5rem;
+            margin-right: 0;
+            margin-bottom: 0.75rem;
           }
         }
 
