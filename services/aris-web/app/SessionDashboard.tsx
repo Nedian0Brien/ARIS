@@ -6,8 +6,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
 import { 
-  Play, Terminal, BrainCircuit, FolderOpen, Search, PlusCircle, X, Plus, 
-  Code, Sparkles, Clock3, ArrowUpRight, Folder, ArrowUp, Check, ChevronDown, ChevronUp 
+  Play, Terminal, Brain, FolderOpen, Search, PlusCircle, X, Plus, 
+  CodeXml, Sparkles, Clock3, ArrowUpRight, Folder, ArrowUp, Check, ChevronDown, ChevronUp 
 } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
 import type { SessionSummary } from '@/lib/happy/types';
@@ -44,25 +44,25 @@ const AGENT_OPTIONS: AgentOption[] = [
     id: 'claude',
     label: 'Claude',
     subtitle: 'Balanced coding flow',
-    Icon: BrainCircuit,
-    accentColor: 'var(--accent-violet)',
-    accentBg: 'var(--accent-violet-bg)',
+    Icon: Brain, // Anthropic's brand essence
+    accentColor: '#D97757', // Anthropic's signature terracotta
+    accentBg: 'rgba(217, 119, 87, 0.15)',
   },
   {
     id: 'codex',
     label: 'Codex',
     subtitle: 'Fast implementation',
-    Icon: Code,
-    accentColor: 'var(--primary)',
-    accentBg: 'rgba(59, 130, 246, 0.14)',
+    Icon: CodeXml, // Technical OpenAI flavor
+    accentColor: '#10a37f', // OpenAI green
+    accentBg: 'rgba(16, 163, 127, 0.15)',
   },
   {
     id: 'gemini',
     label: 'Gemini',
     subtitle: 'Broad reasoning',
-    Icon: Sparkles,
-    accentColor: 'var(--accent-emerald)',
-    accentBg: 'var(--accent-emerald-bg)',
+    Icon: Sparkles, // Google's Gemini identity
+    accentColor: '#4285F4', // Google blue
+    accentBg: 'rgba(66, 133, 244, 0.15)',
   },
 ];
 
@@ -593,7 +593,7 @@ export function SessionDashboard({
                 <Card style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', cursor: 'pointer', height: '100%' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div style={{ width: '48px', height: '48px', borderRadius: 'var(--radius-md)', background: 'var(--surface-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {session.agent === 'claude' ? <BrainCircuit size={24} color="var(--accent-violet)" /> : <Terminal size={24} color="var(--primary)" />}
+                      {session.agent === 'claude' ? <Brain size={24} color="#D97757" /> : <Terminal size={24} color="var(--primary)" />}
                     </div>
                     <Badge variant={session.status === 'running' ? 'emerald' : 'amber'}>
                       {session.status}
