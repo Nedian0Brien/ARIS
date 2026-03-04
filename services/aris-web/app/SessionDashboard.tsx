@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
-  Play, FolderOpen, Search, PlusCircle, X, Plus, 
+  Play, Terminal, FolderOpen, Search, PlusCircle, X, Plus, 
   Clock3, ArrowUpRight, Folder, ArrowUp, Check, ChevronDown, ChevronUp 
 } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
