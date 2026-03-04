@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { SessionDashboard } from './SessionDashboard';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
@@ -16,7 +17,15 @@ export default function HomePageWrapper({
   user: AuthenticatedUser; 
   initialSessions: SessionSummary[];
 }) {
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('sessions');
+
+  useEffect(() => {
+    const tab = searchParams.get('tab') as TabType;
+    if (tab && ['sessions', 'console', 'files', 'settings'].includes(tab)) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -71,7 +80,12 @@ export default function HomePageWrapper({
 
   return (
     <div className="app-shell">
-      <Header userEmail={user.email} role={user.role} />
+      <Header 
+        userEmail={user.email} 
+        role={user.role} 
+        activeTab={activeTab} 
+        onTabChange={setActiveTab} 
+      />
       <main className="main container">
         {renderContent()}
       </main>
