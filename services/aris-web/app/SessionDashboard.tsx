@@ -560,6 +560,7 @@ export function SessionDashboard({
           </div>
         )}
       </div>
+      {createModal}
     </div>
   );
 }
