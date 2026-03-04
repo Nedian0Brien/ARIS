@@ -350,6 +350,21 @@ button, input, textarea, select {
 }
 
 /* New Session Modal Styles (Moved from inline for stability) */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+  padding: 1rem;
+}
+
 .new-session-modal {
   width: 100%;
   max-width: 680px;
