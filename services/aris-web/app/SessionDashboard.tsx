@@ -329,7 +329,7 @@ export function SessionDashboard({
                   <PlusCircle size={20} />
                 </div>
                 <div>
-                  <h3 className="modal-title">새 세션 시작</h3>
+                  <h3 className="modal-title">새 세션 시작하기</h3>
                   <p className="modal-subtitle">프로젝트 경로와 에이전트를 선택하여 시작하세요.</p>
                 </div>
               </div>
