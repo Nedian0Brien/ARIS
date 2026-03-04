@@ -12,13 +12,17 @@
 1. `services/aris-web`
 - Next.js 기반 웹 클라이언트
 - 인증, UI 렌더링, 액션 API 프록시
+- **구동**: Docker 컨테이너
 
 2. `services/aris-backend`
 - 세션/메시지/권한/액션 API
 - 에이전트 런타임 데이터 소스 역할
+- **구동**: Host OS (PM2/Node.js) 직접 구동
+- **특징**: 호스트 파일 시스템, Nginx 설정, `systemctl` 등 OS 레벨 제어권 보유
 
 3. `postgres`
 - 계정/감사로그/서비스 데이터 저장
+- **구동**: Docker 컨테이너
 
 4. `nginx` + domain
 - TLS 종단 및 리버스 프록시

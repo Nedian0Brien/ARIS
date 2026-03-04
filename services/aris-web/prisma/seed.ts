@@ -6,6 +6,7 @@ const prisma = new PrismaClient();
 async function main() {
   const email = process.env.ARIS_ADMIN_EMAIL;
   const password = process.env.ARIS_ADMIN_PASSWORD;
+  const twoFactorSecret = process.env.ARIS_ADMIN_2FA_SECRET;
 
   if (!email || !password) {
     throw new Error('ARIS_ADMIN_EMAIL and ARIS_ADMIN_PASSWORD are required for seeding.');
@@ -15,11 +16,16 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email },
-    update: { passwordHash, role: UserRole.operator },
-    create: { email, passwordHash, role: UserRole.operator },
+    update: { passwordHash, role: UserRole.operator, twoFactorSecret },
+    create: { email, passwordHash, role: UserRole.operator, twoFactorSecret },
   });
 
   console.log(`Seeded admin user: ${email}`);
+  if (twoFactorSecret) {
+    console.log('2FA secret is set for the admin user.');
+  } else {
+    console.log('2FA is NOT set for the admin user (optional).');
+  }
 }
 
 main()

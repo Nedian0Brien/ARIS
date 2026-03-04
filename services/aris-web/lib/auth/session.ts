@@ -6,6 +6,8 @@ import { signSessionJwt, verifySessionJwt } from '@/lib/auth/jwt';
 import type { AuthenticatedUser } from '@/lib/auth/types';
 import { AUTH_COOKIE } from '@/lib/auth/constants';
 
+import { DEVICE_COOKIE } from '@/lib/auth/constants';
+
 export async function createSessionCookieValue(user: AuthenticatedUser): Promise<string> {
   const jti = randomUUID();
   const expiresAt = new Date(Date.now() + env.AUTH_TOKEN_TTL_SECONDS * 1000);
@@ -23,6 +25,26 @@ export async function createSessionCookieValue(user: AuthenticatedUser): Promise
     email: user.email,
     role: user.role,
     jti,
+  });
+}
+
+export async function isDeviceTrusted(userId: string, deviceId: string | undefined): Promise<boolean> {
+  if (!deviceId) return false;
+  const trusted = await prisma.trustedDevice.findUnique({
+    where: { deviceFingerprint: deviceId },
+  });
+  return !!trusted && trusted.userId === userId;
+}
+
+export async function trustDevice(userId: string, deviceId: string): Promise<void> {
+  await prisma.trustedDevice.upsert({
+    where: { deviceFingerprint: deviceId },
+    update: { trustedAt: new Date() },
+    create: {
+      userId,
+      deviceFingerprint: deviceId,
+      name: 'Auto-trusted Device',
+    },
   });
 }
 

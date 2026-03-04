@@ -18,40 +18,12 @@ services:
     networks:
       - aris_net
 
-  aris-backend:
-    build:
-      context: ./services/aris-backend
-    restart: unless-stopped
-    environment:
-      HOST: 0.0.0.0
-      PORT: 4080
-      RUNTIME_API_TOKEN: ${RUNTIME_API_TOKEN:?set in deploy/.env}
-      DEFAULT_PROJECT_PATH: /workspace
-      LOG_LEVEL: ${BACKEND_LOG_LEVEL:-info}
-    expose:
-      - "4080"
-    volumes:
-      - ${HOST_PROJECTS_ROOT:-/tmp/aris-workspace}:/workspace
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "node -e \"fetch('http://127.0.0.1:4080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
-        ]
-      interval: 10s
-      timeout: 3s
-      retries: 10
-    networks:
-      - aris_net
-
   aris-web:
     build:
       context: ./services/aris-web
     restart: unless-stopped
     depends_on:
       postgres:
-        condition: service_healthy
-      aris-backend:
         condition: service_healthy
     environment:
       NODE_ENV: production
@@ -64,10 +36,12 @@ services:
       ARIS_ADMIN_EMAIL: ${ARIS_ADMIN_EMAIL:?set in deploy/.env}
       ARIS_ADMIN_PASSWORD: ${ARIS_ADMIN_PASSWORD:?set in deploy/.env}
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?set in deploy/.env}@postgres:5432/${POSTGRES_DB:-aris}
-      HAPPY_SERVER_URL: http://aris-backend:4080
+      HAPPY_SERVER_URL: http://host.docker.internal:4080
       HAPPY_SERVER_TOKEN: ${RUNTIME_API_TOKEN:?set in deploy/.env}
       SSH_BASE_COMMAND: ${SSH_BASE_COMMAND:-ssh ubuntu@your-server}
       SSH_LINK_TTL_SECONDS: ${SSH_LINK_TTL_SECONDS:-300}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     expose:
       - "3000"
     ports:

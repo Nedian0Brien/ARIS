@@ -20,6 +20,20 @@ Use unique random values. Do not use placeholder or generic defaults.
 
 ## 2. Start local stack
 
+ARIS uses a hybrid deployment model:
+- **Web & DB**: Docker Compose
+- **Backend**: PM2 (running on Host for OS-level control)
+
+### 2.1 Backend (Host)
+```bash
+# In services/aris-backend
+npm install
+npm run build
+# Using pm2
+pm2 start deploy/ecosystem.config.cjs --env production
+```
+
+### 2.2 Web & DB (Docker)
 ```bash
 docker compose --env-file deploy/.env up -d --build
 ```
