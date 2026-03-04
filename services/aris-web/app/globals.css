@@ -370,10 +370,11 @@ button, input, textarea, select {
   max-width: 680px;
   background: var(--surface);
   border: 1px solid var(--line);
+  border-radius: var(--radius-lg); /* Rounded corners */
   display: flex;
   flex-direction: column;
   padding: 0;
-  overflow: hidden;
+  overflow: hidden; /* Clip children to rounded corners */
   box-shadow: var(--shadow-lg);
 }
 
@@ -503,7 +504,7 @@ button, input, textarea, select {
 }
 
 .browser-list {
-  max-height: 240px;
+  height: 240px; /* Fixed height to stop modal jumping */
   overflow-y: auto;
   padding: 0.5rem;
 }
@@ -678,14 +679,14 @@ button, input, textarea, select {
 
 @media (max-width: 640px) {
   .new-session-modal {
-    margin: 0;
-    border-radius: 0;
-    height: 100%;
-    max-height: 100%;
+    margin: 1rem; /* Add margin so rounded corners are visible */
+    width: calc(100% - 2rem);
+    height: auto;
+    max-height: calc(100% - 2rem);
   }
   .modal-body {
-    max-height: none;
-    flex: 1;
+    max-height: 60vh; /* Restore scrollable body instead of full height */
+    flex: none;
   }
   .modal-footer {
     flex-direction: column-reverse;
