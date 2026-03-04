@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Folder, FolderOpen, ArrowUp, X, Check } from 'lucide-react';
 import { Button, Card } from '@/components/ui';
 
@@ -21,6 +22,12 @@ export function DirectoryModal({ isOpen, onClose, onSelect }: DirectoryModalProp
   const [directories, setDirectories] = useState<DirectoryInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   const fetchDirectory = async (path: string) => {
     setLoading(true);
@@ -43,60 +50,66 @@ export function DirectoryModal({ isOpen, onClose, onSelect }: DirectoryModalProp
   useEffect(() => {
     if (isOpen) {
       fetchDirectory('/');
+      // Prevent body scroll when modal is open
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
     }
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
+  const modalContent = (
     <div className="modal-overlay" onClick={onClose}>
-      <Card 
-        className="modal-content animate-in" 
-        style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', maxWidth: '400px' }}
+      <div 
+        className="modal-content" 
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 className="title-md">Select Project Directory</h3>
-          <Button variant="ghost" onClick={onClose} style={{ padding: '0.25rem', minHeight: 'auto' }}>
+        <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 className="title-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <FolderOpen size={18} color="var(--primary)" /> Select Project Directory
+          </h3>
+          <Button variant="ghost" onClick={onClose} style={{ padding: '0.25rem', minHeight: 'auto', borderRadius: 'var(--radius-full)' }}>
             <X size={20} />
           </Button>
         </div>
 
-        <div style={{ background: 'var(--surface-soft)', padding: '0.5rem 1rem', borderRadius: 'var(--radius-md)', fontFamily: 'var(--font-mono)', fontSize: '0.875rem', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+        <div style={{ background: 'var(--surface-soft)', padding: '0.75rem 1.25rem', fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', overflowX: 'auto', whiteSpace: 'nowrap', borderBottom: '1px solid var(--line)' }}>
           <span style={{ color: 'var(--text-muted)' }}>/workspace</span>{currentPath !== '/' ? currentPath : ''}
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', minHeight: '200px', maxHeight: '40vh', border: '1px solid var(--line)', borderRadius: 'var(--radius-md)', padding: '0.5rem' }}>
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: '300px', maxHeight: '50vh', padding: '0.75rem' }} className="no-scrollbar">
           {loading ? (
-            <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading...</div>
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading...</div>
           ) : error ? (
-            <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--accent-red)' }}>{error}</div>
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--accent-red)' }}>{error}</div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.125rem' }}>
               {parentPath !== null && (
                 <button 
                   onClick={() => fetchDirectory(parentPath)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', padding: '0.5rem', borderRadius: 'var(--radius-sm)', cursor: 'pointer', textAlign: 'left' }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-subtle)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', padding: '0.625rem 0.75rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', textAlign: 'left' }}
+                  className="btn-ghost"
                 >
                   <ArrowUp size={18} color="var(--text-muted)" />
-                  <span>..</span>
+                  <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>..</span>
                 </button>
               )}
               {directories.length === 0 ? (
-                <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem' }}>Empty directory</div>
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem' }}>Empty directory</div>
               ) : (
                 directories.map((dir) => (
                   <button 
                     key={dir.path}
                     onClick={() => fetchDirectory(dir.path)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', padding: '0.5rem', borderRadius: 'var(--radius-sm)', cursor: 'pointer', textAlign: 'left' }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-subtle)'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', padding: '0.625rem 0.75rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', textAlign: 'left' }}
+                    className="btn-ghost"
                   >
-                    <Folder size={18} color="var(--accent-sky)" />
-                    <span>{dir.name}</span>
+                    <Folder size={18} color="var(--accent-sky)" fill="var(--accent-sky-bg)" />
+                    <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>{dir.name}</span>
                   </button>
                 ))
               )}
@@ -104,7 +117,7 @@ export function DirectoryModal({ isOpen, onClose, onSelect }: DirectoryModalProp
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+        <div style={{ padding: '1.25rem', borderTop: '1px solid var(--line)', display: 'flex', gap: '0.75rem', background: 'var(--surface-subtle)' }}>
           <Button variant="secondary" onClick={onClose} style={{ flex: 1 }}>Cancel</Button>
           <Button 
             variant="primary" 
@@ -112,12 +125,14 @@ export function DirectoryModal({ isOpen, onClose, onSelect }: DirectoryModalProp
               onSelect(`/workspace${currentPath === '/' ? '' : currentPath}`);
               onClose();
             }} 
-            style={{ flex: 1 }}
+            style={{ flex: 1.5 }}
           >
-            <Check size={16} style={{ marginRight: '0.25rem' }} /> Select Current
+            <Check size={18} /> Select Current
           </Button>
         </div>
-      </Card>
+      </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
