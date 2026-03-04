@@ -15,7 +15,15 @@ export default async function HomePage() {
     try {
       sessions = await listSessions();
     } catch (error) {
-      runtimeError = error instanceof Error ? error.message : '백엔드 통신에서 알 수 없는 오류가 발생했습니다.';
+      if (
+        error instanceof Error &&
+        error.message.includes('백엔드 응답 오류 (401)') &&
+        error.message.toLowerCase().includes('unauthorized')
+      ) {
+        runtimeError = '백엔드 인증 토큰이 일치하지 않습니다. 배포 시 적용한 RUNTIME_API_TOKEN과 HAPPY_SERVER_TOKEN이 동일한지 확인하세요.';
+      } else {
+        runtimeError = error instanceof Error ? error.message : '백엔드 통신에서 알 수 없는 오류가 발생했습니다.';
+      }
     }
   }
 

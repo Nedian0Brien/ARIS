@@ -29,8 +29,12 @@ ARIS uses a hybrid deployment model:
 # In services/aris-backend
 npm install
 npm run build
-# Using pm2
+# Start with pm2 (token is read from deploy/services env files automatically)
+source deploy/.env
 pm2 start deploy/ecosystem.config.cjs --env production
+
+# If already running, reload safely after token changes:
+pm2 restart aris-backend --update-env
 ```
 
 ### 2.2 Web & DB (Docker)
@@ -65,3 +69,22 @@ docker compose --env-file deploy/.env logs -f aris-backend
 docker compose --env-file deploy/.env ps
 docker compose --env-file deploy/.env down
 ```
+
+### Runtime auth check (recommended after token changes)
+
+```bash
+./deploy/check-runtime-connection.sh
+```
+
+This verifies:
+
+- `deploy/.env`와 `services/aris-backend/.env`의 `RUNTIME_API_TOKEN` 일치 여부
+- 백엔드 `/health` 접근성
+- `/v1/sessions`에 토큰이 없는 경우 401 반환
+- `/v1/sessions`를 `deploy/.env` 토큰으로 호출해 200이 나오는지
+
+`401`이 반복되면 다음 항목을 점검하세요:
+
+1. `deploy/.env`의 `RUNTIME_API_TOKEN`이 실제 PM2 백엔드 프로세스 환경으로 반영됐는지
+2. `services/aris-backend/.env`의 `RUNTIME_API_TOKEN`이 동일한지
+3. 토큰 변경 후 백엔드 재시작이 되었는지
