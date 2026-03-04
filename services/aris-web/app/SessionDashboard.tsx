@@ -4,13 +4,13 @@ import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { LucideIcon } from 'lucide-react';
 import { 
-  Play, Terminal, Brain, FolderOpen, Search, PlusCircle, X, Plus, 
-  CodeXml, Sparkles, Clock3, ArrowUpRight, Folder, ArrowUp, Check, ChevronDown, ChevronUp 
+  Play, FolderOpen, Search, PlusCircle, X, Plus, 
+  Clock3, ArrowUpRight, Folder, ArrowUp, Check, ChevronDown, ChevronUp 
 } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
 import type { SessionSummary } from '@/lib/happy/types';
+import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
 
 type AgentFlavor = 'claude' | 'codex' | 'gemini';
 
@@ -25,7 +25,7 @@ type AgentOption = {
   id: AgentFlavor;
   label: string;
   subtitle: string;
-  Icon: LucideIcon;
+  Icon: React.ComponentType<{ size?: number }>;
   accentColor: string;
   accentBg: string;
 };
@@ -44,24 +44,24 @@ const AGENT_OPTIONS: AgentOption[] = [
     id: 'claude',
     label: 'Claude',
     subtitle: 'Balanced coding flow',
-    Icon: Brain, // Anthropic's brand essence
-    accentColor: '#D97757', // Anthropic's signature terracotta
+    Icon: ClaudeIcon,
+    accentColor: '#D97757',
     accentBg: 'rgba(217, 119, 87, 0.15)',
   },
   {
     id: 'codex',
     label: 'Codex',
     subtitle: 'Fast implementation',
-    Icon: CodeXml, // Technical OpenAI flavor
-    accentColor: '#10a37f', // OpenAI green
+    Icon: CodexIcon,
+    accentColor: '#10a37f',
     accentBg: 'rgba(16, 163, 127, 0.15)',
   },
   {
     id: 'gemini',
     label: 'Gemini',
     subtitle: 'Broad reasoning',
-    Icon: Sparkles, // Google's Gemini identity
-    accentColor: '#4285F4', // Google blue
+    Icon: GeminiIcon,
+    accentColor: '#4285F4',
     accentBg: 'rgba(66, 133, 244, 0.15)',
   },
 ];
@@ -593,7 +593,11 @@ export function SessionDashboard({
                 <Card style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', cursor: 'pointer', height: '100%' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div style={{ width: '48px', height: '48px', borderRadius: 'var(--radius-md)', background: 'var(--surface-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {session.agent === 'claude' ? <Brain size={24} color="#D97757" /> : <Terminal size={24} color="var(--primary)" />}
+                      {(() => {
+                        const agent = getAgentOption(session.agent);
+                        const Icon = agent.Icon;
+                        return <Icon size={24} />;
+                      })()}
                     </div>
                     <Badge variant={session.status === 'running' ? 'emerald' : 'amber'}>
                       {session.status}

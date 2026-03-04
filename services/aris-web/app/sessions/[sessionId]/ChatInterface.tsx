@@ -7,6 +7,7 @@ import { Button, Card, Badge } from '@/components/ui';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import { Send, TerminalSquare, FileCode2, Code, ShieldAlert, Cpu } from 'lucide-react';
 import type { UiEvent, PermissionRequest } from '@/lib/happy/types';
+import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
 
 // Response Type Renderers
 const TextReply = ({ body }: { body: string }) => (
@@ -135,7 +136,10 @@ export function ChatInterface({
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', overflow: 'hidden' }}>
           <h2 style={{ fontSize: '0.875rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{projectName}</h2>
           <Badge variant="sky">
-            <Cpu size={12} />
+            {agentFlavor === 'claude' && <ClaudeIcon size={12} />}
+            {agentFlavor === 'gemini' && <GeminiIcon size={12} />}
+            {agentFlavor === 'codex' && <CodexIcon size={12} />}
+            {!['claude', 'gemini', 'codex'].includes(agentFlavor) && <Cpu size={12} />}
             {agentFlavor}
           </Badge>
         </div>
