@@ -365,7 +365,7 @@ button, input, textarea, select {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 999;
+  z-index: 2000; /* Increased to be above bottom-nav */
   padding: 1rem;
 }
 

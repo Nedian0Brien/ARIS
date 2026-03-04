@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
-import { Play, Terminal, BrainCircuit, FolderOpen, Search, PlusCircle, X, Plus, Code, Sparkles, Clock3 } from 'lucide-react';
+import { Play, Terminal, BrainCircuit, FolderOpen, Search, PlusCircle, X, Plus, Code, Sparkles, Clock3, ArrowUpRight } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
 import { DirectoryModal } from '@/components/ui/DirectoryModal';
 import type { SessionSummary } from '@/lib/happy/types';
@@ -16,44 +16,45 @@ type PathHistoryEntry = {
   path: string;
   agent: AgentFlavor;
   lastUsedAt: string;
+  sessionId?: string;
 };
 
 type AgentOption = {
   id: AgentFlavor;
   label: string;
-  description: string;
+  subtitle: string;
   Icon: LucideIcon;
-  accent: string;
+  accentColor: string;
   accentBg: string;
 };
 
 const PATH_HISTORY_STORAGE_KEY = 'aris:new-session-path-history';
 const MAX_PATH_HISTORY_ITEMS = 8;
-const MIN_DATE_ISO = new Date(0).toISOString();
+const FALLBACK_DATE_ISO = '1970-01-01T00:00:00.000Z';
 
 const AGENT_OPTIONS: AgentOption[] = [
   {
     id: 'claude',
     label: 'Claude',
-    description: 'Balanced planning + code edits',
+    subtitle: 'Balanced coding flow',
     Icon: BrainCircuit,
-    accent: 'var(--accent-violet)',
+    accentColor: 'var(--accent-violet)',
     accentBg: 'var(--accent-violet-bg)',
   },
   {
     id: 'codex',
     label: 'Codex',
-    description: 'Fast iterative coding workflow',
+    subtitle: 'Fast implementation',
     Icon: Code,
-    accent: 'var(--primary)',
+    accentColor: 'var(--primary)',
     accentBg: 'rgba(59, 130, 246, 0.14)',
   },
   {
     id: 'gemini',
     label: 'Gemini',
-    description: 'Broad reasoning and synthesis',
+    subtitle: 'Broad reasoning',
     Icon: Sparkles,
-    accent: 'var(--accent-emerald)',
+    accentColor: 'var(--accent-emerald)',
     accentBg: 'var(--accent-emerald-bg)',
   },
 ];
@@ -62,36 +63,52 @@ function isAgentFlavor(value: unknown): value is AgentFlavor {
   return value === 'claude' || value === 'codex' || value === 'gemini';
 }
 
-function resolveAgent(agent: unknown): AgentFlavor {
-  return isAgentFlavor(agent) ? agent : 'claude';
+function resolveAgent(value: unknown): AgentFlavor {
+  return isAgentFlavor(value) ? value : 'claude';
+}
+
+function getAgentOption(value: unknown): AgentOption {
+  const agent = resolveAgent(value);
+  return AGENT_OPTIONS.find((item) => item.id === agent) ?? AGENT_OPTIONS[0];
 }
 
 function sanitizePath(path: string): string {
   return path.trim();
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
+function normalizeDate(value: unknown): string {
+  if (typeof value !== 'string') {
+    return FALLBACK_DATE_ISO;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return FALLBACK_DATE_ISO;
+  }
+
+  return value;
+}
+
+function toRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }
   return value as Record<string, unknown>;
 }
 
-function normalizeHistoryEntry(value: unknown): PathHistoryEntry | null {
+function normalizeStorageEntry(value: unknown): PathHistoryEntry | null {
   if (typeof value === 'string') {
     const path = sanitizePath(value);
-    if (!path) {
-      return null;
-    }
-
-    return {
-      path,
-      agent: 'claude',
-      lastUsedAt: MIN_DATE_ISO,
-    };
+    return path
+      ? {
+          path,
+          agent: 'claude',
+          lastUsedAt: FALLBACK_DATE_ISO,
+        }
+      : null;
   }
 
-  const rec = asRecord(value);
+  const rec = toRecord(value);
   if (!rec) {
     return null;
   }
@@ -101,17 +118,17 @@ function normalizeHistoryEntry(value: unknown): PathHistoryEntry | null {
     return null;
   }
 
-  const rawDate = typeof rec.lastUsedAt === 'string' ? rec.lastUsedAt : MIN_DATE_ISO;
-  const date = Number.isNaN(new Date(rawDate).getTime()) ? MIN_DATE_ISO : rawDate;
+  const sessionId = typeof rec.sessionId === 'string' && rec.sessionId ? rec.sessionId : undefined;
 
   return {
     path,
-    agent: resolveAgent(typeof rec.agent === 'string' ? rec.agent : 'claude'),
-    lastUsedAt: date,
+    agent: resolveAgent(rec.agent),
+    lastUsedAt: normalizeDate(rec.lastUsedAt),
+    sessionId,
   };
 }
 
-function readPathHistoryFromStorage(): PathHistoryEntry[] {
+function readHistoryFromStorage(): PathHistoryEntry[] {
   if (typeof window === 'undefined') {
     return [];
   }
@@ -128,7 +145,7 @@ function readPathHistoryFromStorage(): PathHistoryEntry[] {
     }
 
     return parsed
-      .map((entry) => normalizeHistoryEntry(entry))
+      .map((entry) => normalizeStorageEntry(entry))
       .filter((entry): entry is PathHistoryEntry => entry !== null)
       .slice(0, MAX_PATH_HISTORY_ITEMS);
   } catch {
@@ -139,16 +156,15 @@ function readPathHistoryFromStorage(): PathHistoryEntry[] {
 function mergePathHistory(runtimeSessions: SessionSummary[], localHistory: PathHistoryEntry[]): PathHistoryEntry[] {
   const map = new Map<string, PathHistoryEntry>();
 
-  function upsert(entry: PathHistoryEntry) {
-    const existing = map.get(entry.path);
-
-    if (!existing || entry.lastUsedAt > existing.lastUsedAt) {
+  const upsert = (entry: PathHistoryEntry) => {
+    const current = map.get(entry.path);
+    if (!current || entry.lastUsedAt > current.lastUsedAt) {
       map.set(entry.path, entry);
     }
-  }
+  };
 
-  for (const entry of localHistory) {
-    upsert(entry);
+  for (const item of localHistory) {
+    upsert(item);
   }
 
   for (const session of runtimeSessions) {
@@ -157,11 +173,11 @@ function mergePathHistory(runtimeSessions: SessionSummary[], localHistory: PathH
       continue;
     }
 
-    const lastUsedAt = session.lastActivityAt ?? MIN_DATE_ISO;
     upsert({
       path,
       agent: resolveAgent(session.agent),
-      lastUsedAt,
+      lastUsedAt: normalizeDate(session.lastActivityAt),
+      sessionId: session.id,
     });
   }
 
@@ -170,17 +186,13 @@ function mergePathHistory(runtimeSessions: SessionSummary[], localHistory: PathH
     .slice(0, MAX_PATH_HISTORY_ITEMS);
 }
 
-function getAgentOption(agent: SessionSummary['agent'] | AgentFlavor): AgentOption {
-  const resolved = resolveAgent(agent);
-  return AGENT_OPTIONS.find((option) => option.id === resolved) ?? AGENT_OPTIONS[0];
-}
-
 function formatHistoryDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime()) || value === FALLBACK_DATE_ISO) {
     return '최근 사용';
   }
-  return date.toLocaleDateString();
+
+  return parsed.toLocaleDateString();
 }
 
 export function SessionDashboard({
@@ -197,20 +209,17 @@ export function SessionDashboard({
   const [isDirModalOpen, setIsDirModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [localPathHistory, setLocalPathHistory] = useState<PathHistoryEntry[]>([]);
+  const [localHistory, setLocalHistory] = useState<PathHistoryEntry[]>([]);
   const router = useRouter();
 
   useEffect(() => {
     setMounted(true);
-    setLocalPathHistory(readPathHistoryFromStorage());
+    setLocalHistory(readHistoryFromStorage());
 
     return () => setMounted(false);
   }, []);
 
-  const pathHistory = useMemo(
-    () => mergePathHistory(initialSessions, localPathHistory),
-    [initialSessions, localPathHistory],
-  );
+  const pathHistory = useMemo(() => mergePathHistory(initialSessions, localHistory), [initialSessions, localHistory]);
 
   useEffect(() => {
     if (!mounted || typeof window === 'undefined') {
@@ -220,20 +229,28 @@ export function SessionDashboard({
     window.localStorage.setItem(PATH_HISTORY_STORAGE_KEY, JSON.stringify(pathHistory));
   }, [mounted, pathHistory]);
 
-  function addHistory(path: string, agent: AgentFlavor) {
-    const trimmedPath = sanitizePath(path);
-    if (!trimmedPath) {
+  function recordHistory(pathInput: string, agent: AgentFlavor, sessionId?: string) {
+    const path = sanitizePath(pathInput);
+    if (!path) {
       return;
     }
 
-    setLocalPathHistory((prev) => {
-      const now = new Date().toISOString();
-      const withoutCurrentPath = prev.filter((entry) => entry.path !== trimmedPath);
-      return [{ path: trimmedPath, agent, lastUsedAt: now }, ...withoutCurrentPath].slice(0, MAX_PATH_HISTORY_ITEMS);
+    setLocalHistory((prev) => {
+      const next = [
+        {
+          path,
+          agent,
+          lastUsedAt: new Date().toISOString(),
+          sessionId,
+        },
+        ...prev.filter((item) => item.path !== path),
+      ];
+
+      return next.slice(0, MAX_PATH_HISTORY_ITEMS);
     });
   }
 
-  async function startSessionWith(pathInput: string, agentInput: AgentFlavor) {
+  async function createSession(pathInput: string, agentInput: AgentFlavor) {
     if (!isOperator) {
       return;
     }
@@ -254,7 +271,10 @@ export function SessionDashboard({
         body: JSON.stringify({ path, agent: agentInput }),
       });
 
-      const body = (await response.json().catch(() => ({}))) as { error?: string; session?: { id?: string } };
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        session?: { id?: string };
+      };
 
       if (!response.ok) {
         throw new Error(body.error ?? '세션 생성에 실패했습니다.');
@@ -265,7 +285,7 @@ export function SessionDashboard({
         throw new Error('세션 생성 응답이 올바르지 않습니다.');
       }
 
-      addHistory(path, agentInput);
+      recordHistory(path, agentInput, sessionId);
       router.push(`/sessions/${sessionId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.');
@@ -276,10 +296,24 @@ export function SessionDashboard({
 
   async function handleCreateSession(e: React.FormEvent) {
     e.preventDefault();
-    await startSessionWith(newPath, newAgent);
+    await createSession(newPath, newAgent);
   }
 
-  function applyHistoryEntry(entry: PathHistoryEntry) {
+  async function handleQuickResume(entry: PathHistoryEntry) {
+    if (!isOperator || isCreating) {
+      return;
+    }
+
+    if (entry.sessionId && initialSessions.some((session) => session.id === entry.sessionId)) {
+      recordHistory(entry.path, entry.agent, entry.sessionId);
+      router.push(`/sessions/${entry.sessionId}`);
+      return;
+    }
+
+    await createSession(entry.path, entry.agent);
+  }
+
+  function applyHistory(entry: PathHistoryEntry) {
     setNewPath(entry.path);
     setNewAgent(entry.agent);
     setError(null);
@@ -288,45 +322,44 @@ export function SessionDashboard({
   const createModal = isCreateModalOpen && mounted
     ? createPortal(
         <div className="modal-overlay" onClick={() => setIsCreateModalOpen(false)}>
-          <div className="modal-content new-session-modal animate-in" onClick={(e) => e.stopPropagation()}>
-            <div className="new-session-header">
-              <div className="new-session-title-wrap">
-                <div className="new-session-title-icon">
-                  <PlusCircle size={20} />
+          <div className="modal-content create-session-modal animate-in" onClick={(e) => e.stopPropagation()} style={{ padding: 0 }}>
+            <div className="create-session-header">
+              <div className="create-session-title-wrap">
+                <div className="create-session-badge">
+                  <PlusCircle size={18} />
                 </div>
                 <div>
                   <h3 className="title-sm">새 세션 시작</h3>
-                  <p className="text-sm text-muted">최근 경로에서 바로 재개하거나 새 워크스페이스를 생성하세요.</p>
+                  <p className="text-sm text-muted">최근 경로를 선택하거나 새로운 경로로 바로 시작할 수 있습니다.</p>
                 </div>
               </div>
               <Button
                 variant="ghost"
                 onClick={() => setIsCreateModalOpen(false)}
-                className="new-session-close"
                 style={{ padding: '0.25rem', minHeight: 'auto', borderRadius: 'var(--radius-full)' }}
               >
                 <X size={20} />
               </Button>
             </div>
 
-            <form onSubmit={handleCreateSession} className="new-session-form no-scrollbar">
-              <section className="modal-section">
-                <label className="text-sm modal-section-label">Project Path</label>
-                <div className="path-input-row">
+            <form onSubmit={handleCreateSession} className="create-session-form no-scrollbar">
+              <section className="modal-block">
+                <label className="text-sm block-title">Project Path</label>
+                <div className="path-row">
                   <Input
                     value={newPath}
                     onChange={(e) => setNewPath(e.target.value)}
                     placeholder="/workspace/my-app"
                     required
-                    disabled={!isOperator}
+                    disabled={!isOperator || isCreating}
                     style={{ flex: 1 }}
                   />
                   <Button
                     type="button"
                     variant="secondary"
                     onClick={() => setIsDirModalOpen(true)}
-                    disabled={!isOperator}
-                    className="path-picker-btn"
+                    disabled={!isOperator || isCreating}
+                    style={{ padding: '0 0.75rem' }}
                   >
                     <Search size={18} />
                   </Button>
@@ -334,43 +367,45 @@ export function SessionDashboard({
               </section>
 
               {pathHistory.length > 0 && (
-                <section className="modal-section path-history-section">
-                  <div className="modal-section-head">
-                    <span className="text-sm modal-section-label">Recent Paths</span>
+                <section className="modal-block">
+                  <div className="block-head">
+                    <span className="text-sm block-title">Recent Paths</span>
                     <span className="text-sm text-muted">{pathHistory.length}개</span>
                   </div>
-                  <div className="path-history-list no-scrollbar">
+
+                  <div className="history-list no-scrollbar">
                     {pathHistory.map((entry) => {
-                      const option = getAgentOption(entry.agent);
-                      const Icon = option.Icon;
-                      const isCurrent = sanitizePath(newPath) === entry.path;
+                      const agent = getAgentOption(entry.agent);
+                      const AgentIcon = agent.Icon;
+                      const hasLiveSession = Boolean(entry.sessionId && initialSessions.some((session) => session.id === entry.sessionId));
 
                       return (
-                        <div className={`path-history-item ${isCurrent ? 'is-current' : ''}`} key={`${entry.path}-${entry.agent}`}>
+                        <div key={`${entry.path}-${entry.sessionId ?? 'new'}`} className="history-item">
                           <button
                             type="button"
-                            className="path-history-select"
-                            onClick={() => applyHistoryEntry(entry)}
+                            className={`history-main ${sanitizePath(newPath) === entry.path ? 'is-active' : ''}`}
+                            onClick={() => applyHistory(entry)}
                             disabled={!isOperator || isCreating}
                           >
-                            <span className="path-history-path">{entry.path}</span>
-                            <span className="path-history-meta">
-                              <span className="path-history-agent" style={{ color: option.accent }}>
-                                <Icon size={13} /> {option.label}
+                            <span className="history-path">{entry.path}</span>
+                            <span className="history-meta">
+                              <span className="history-agent" style={{ color: agent.accentColor }}>
+                                <AgentIcon size={12} /> {agent.label}
                               </span>
-                              <span className="path-history-date">
+                              <span className="history-date">
                                 <Clock3 size={12} /> {formatHistoryDate(entry.lastUsedAt)}
                               </span>
                             </span>
                           </button>
+
                           <Button
                             type="button"
                             variant="secondary"
-                            onClick={() => void startSessionWith(entry.path, entry.agent)}
+                            onClick={() => void handleQuickResume(entry)}
                             disabled={!isOperator || isCreating}
-                            className="path-history-resume"
+                            className="history-action"
                           >
-                            <Play size={13} fill="currentColor" /> 재개
+                            {hasLiveSession ? <ArrowUpRight size={13} /> : <Play size={13} fill="currentColor" />} {hasLiveSession ? '열기' : '재개'}
                           </Button>
                         </div>
                       );
@@ -379,49 +414,43 @@ export function SessionDashboard({
                 </section>
               )}
 
-              <section className="modal-section">
-                <label className="text-sm modal-section-label">Agent Flavor</label>
-                <div className="agent-selector-grid" role="radiogroup" aria-label="Agent Flavor">
-                  {AGENT_OPTIONS.map((option) => {
-                    const Icon = option.Icon;
-                    const isSelected = newAgent === option.id;
+              <section className="modal-block">
+                <label className="text-sm block-title">Agent Flavor</label>
+                <div className="agent-grid" role="radiogroup" aria-label="Agent Flavor">
+                  {AGENT_OPTIONS.map((agent) => {
+                    const AgentIcon = agent.Icon;
+                    const isSelected = newAgent === agent.id;
 
                     return (
                       <button
-                        key={option.id}
+                        key={agent.id}
                         type="button"
                         role="radio"
                         aria-checked={isSelected}
-                        className={`agent-option ${isSelected ? 'is-selected' : ''}`}
-                        onClick={() => setNewAgent(option.id)}
+                        className={`agent-card ${isSelected ? 'is-selected' : ''}`}
+                        onClick={() => setNewAgent(agent.id)}
                         disabled={!isOperator || isCreating}
                       >
-                        <span className="agent-logo" style={{ color: option.accent, backgroundColor: option.accentBg }}>
-                          <Icon size={18} />
+                        <span className="agent-logo" style={{ background: agent.accentBg, color: agent.accentColor }}>
+                          <AgentIcon size={16} />
                         </span>
-                        <span className="agent-copy">
-                          <span className="agent-name">{option.label}</span>
-                          <span className="agent-desc">{option.description}</span>
-                        </span>
+                        <div className="agent-info">
+                          <span className="agent-name">{agent.label}</span>
+                          <span className="agent-subtitle">{agent.subtitle}</span>
+                        </div>
                       </button>
                     );
                   })}
                 </div>
               </section>
 
-              {error && <div className="text-sm new-session-error">{error}</div>}
+              {error && <div className="text-sm" style={{ color: 'var(--accent-red)' }}>{error}</div>}
 
-              <div className="new-session-actions">
+              <div className="modal-actions">
                 <Button type="button" variant="secondary" onClick={() => setIsCreateModalOpen(false)} style={{ flex: 1 }}>
                   취소
                 </Button>
-                <Button
-                  type="submit"
-                  isLoading={isCreating}
-                  disabled={!isOperator || !sanitizePath(newPath)}
-                  className="new-session-submit"
-                  style={{ flex: 2 }}
-                >
+                <Button type="submit" isLoading={isCreating} disabled={!isOperator || !sanitizePath(newPath)} style={{ flex: 2 }}>
                   <Play size={16} fill="currentColor" /> 세션 시작
                 </Button>
               </div>
@@ -474,41 +503,36 @@ export function SessionDashboard({
           </Card>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
-            {initialSessions.map((session) => {
-              const option = getAgentOption(session.agent);
-              const AgentIcon = option.Icon;
-
-              return (
-                <Link key={session.id} href={`/sessions/${session.id}`}>
-                  <Card style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', cursor: 'pointer', height: '100%' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ width: '48px', height: '48px', borderRadius: 'var(--radius-md)', background: option.accentBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: option.accent }}>
-                        <AgentIcon size={24} />
-                      </div>
-                      <Badge variant={session.status === 'running' ? 'emerald' : 'amber'}>
-                        {session.status}
-                      </Badge>
+            {initialSessions.map((session) => (
+              <Link key={session.id} href={`/sessions/${session.id}`}>
+                <Card style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', cursor: 'pointer', height: '100%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: 'var(--radius-md)', background: 'var(--surface-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {session.agent === 'claude' ? <BrainCircuit size={24} color="var(--accent-violet)" /> : <Terminal size={24} color="var(--primary)" />}
                     </div>
+                    <Badge variant={session.status === 'running' ? 'emerald' : 'amber'}>
+                      {session.status}
+                    </Badge>
+                  </div>
 
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.25rem', wordBreak: 'break-all' }}>{session.projectName}</div>
-                      <div className="text-sm text-muted">
-                        {option.label} Agent
-                      </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.25rem', wordBreak: 'break-all' }}>{session.projectName}</div>
+                    <div className="text-sm text-muted">
+                      {session.agent.toUpperCase()} Agent
                     </div>
+                  </div>
 
-                    <div style={{ borderTop: '1px solid var(--line)', paddingTop: '1rem', marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div className="text-sm text-muted" style={{ fontSize: '0.75rem' }}>
-                        {new Date(session.lastActivityAt || '').toLocaleDateString()}
-                      </div>
-                      <div style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                        워크스페이스 <Play size={14} fill="currentColor" />
-                      </div>
+                  <div style={{ borderTop: '1px solid var(--line)', paddingTop: '1rem', marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div className="text-sm text-muted" style={{ fontSize: '0.75rem' }}>
+                      {new Date(session.lastActivityAt || '').toLocaleDateString()}
                     </div>
-                  </Card>
-                </Link>
-              );
-            })}
+                    <div style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                      워크스페이스 <Play size={14} fill="currentColor" />
+                    </div>
+                  </div>
+                </Card>
+              </Link>
+            ))}
           </div>
         )}
       </div>
@@ -542,201 +566,188 @@ export function SessionDashboard({
           margin: 2rem auto 0;
         }
 
-        .new-session-modal {
-          max-width: 680px;
+        .create-session-modal {
+          width: calc(100% - 2rem);
+          max-width: 760px !important;
           max-height: min(86vh, 760px);
-          border: 1px solid rgba(148, 163, 184, 0.3);
-          background:
-            radial-gradient(circle at 0% 0%, rgba(14, 165, 233, 0.1), transparent 42%),
-            radial-gradient(circle at 100% 0%, rgba(139, 92, 246, 0.12), transparent 48%),
-            var(--surface);
+          border: 1px solid var(--line);
+          background: var(--surface);
         }
 
-        .new-session-header {
+        .create-session-header {
           padding: 1rem 1.25rem;
           border-bottom: 1px solid var(--line);
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
           gap: 1rem;
+          background: linear-gradient(180deg, rgba(248, 250, 252, 0.9) 0%, rgba(248, 250, 252, 0.55) 100%);
         }
 
-        .new-session-title-wrap {
+        .create-session-title-wrap {
           display: flex;
           align-items: flex-start;
           gap: 0.75rem;
         }
 
-        .new-session-title-icon {
+        .create-session-badge {
           width: 2rem;
           height: 2rem;
           border-radius: var(--radius-md);
-          background: linear-gradient(135deg, rgba(59, 130, 246, 0.18) 0%, rgba(14, 165, 233, 0.22) 100%);
+          background: rgba(59, 130, 246, 0.12);
           color: var(--primary);
           display: inline-flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
+          margin-top: 0.05rem;
         }
 
-        .new-session-close {
-          flex-shrink: 0;
-        }
-
-        .new-session-form {
-          padding: 1.125rem;
+        .create-session-form {
           display: flex;
           flex-direction: column;
           gap: 0.9rem;
+          padding: 1rem;
           overflow-y: auto;
         }
 
-        .modal-section {
+        .modal-block {
           border: 1px solid var(--line);
           border-radius: var(--radius-md);
-          background: rgba(255, 255, 255, 0.76);
-          padding: 0.8rem;
+          background: var(--surface);
+          padding: 0.75rem;
           display: flex;
           flex-direction: column;
           gap: 0.6rem;
         }
 
-        .modal-section-label {
+        .block-title {
           font-weight: 700;
           letter-spacing: -0.01em;
         }
 
-        .modal-section-head {
+        .block-head {
           display: flex;
-          justify-content: space-between;
           align-items: center;
+          justify-content: space-between;
           gap: 0.5rem;
         }
 
-        .path-input-row {
+        .path-row {
           display: flex;
           gap: 0.5rem;
         }
 
-        .path-picker-btn {
-          padding: 0 0.75rem;
-        }
-
-        .path-history-section {
-          gap: 0.7rem;
-        }
-
-        .path-history-list {
+        .history-list {
           display: flex;
           flex-direction: column;
           gap: 0.5rem;
-          max-height: 172px;
+          max-height: 168px;
           overflow-y: auto;
-          padding-right: 0.1rem;
+          padding-right: 0.15rem;
         }
 
-        .path-history-item {
+        .history-item {
           border: 1px solid var(--line);
           border-radius: var(--radius-md);
-          background: var(--surface);
-          padding: 0.45rem;
+          background: var(--surface-subtle);
           display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          transition: border-color 0.2s ease, box-shadow 0.2s ease;
+          align-items: stretch;
+          gap: 0.45rem;
+          padding: 0.4rem;
+          min-width: 0;
         }
 
-        .path-history-item.is-current {
-          border-color: rgba(59, 130, 246, 0.5);
-          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
-        }
-
-        .path-history-select {
+        .history-main {
           flex: 1;
           min-width: 0;
-          text-align: left;
+          border-radius: var(--radius-sm);
+          padding: 0.35rem 0.45rem;
           display: flex;
           flex-direction: column;
+          justify-content: center;
+          align-items: flex-start;
           gap: 0.3rem;
-          padding: 0.25rem;
-          border-radius: var(--radius-sm);
+          text-align: left;
           transition: background-color 0.2s ease;
         }
 
-        .path-history-select:hover:not(:disabled) {
+        .history-main:hover:not(:disabled) {
           background: rgba(59, 130, 246, 0.08);
         }
 
-        .path-history-path {
-          font-size: 0.875rem;
-          font-weight: 600;
+        .history-main.is-active {
+          background: rgba(59, 130, 246, 0.12);
+        }
+
+        .history-path {
+          width: 100%;
+          font-size: 0.84rem;
+          font-weight: 700;
+          color: var(--text);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          color: var(--text);
         }
 
-        .path-history-meta {
+        .history-meta {
           display: flex;
           align-items: center;
-          gap: 0.6rem;
-          font-size: 0.75rem;
+          gap: 0.65rem;
+          font-size: 0.72rem;
           color: var(--text-muted);
         }
 
-        .path-history-agent {
+        .history-agent,
+        .history-date {
           display: inline-flex;
           align-items: center;
           gap: 0.25rem;
-          font-weight: 700;
         }
 
-        .path-history-date {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.2rem;
-        }
-
-        .path-history-resume {
-          min-height: 34px;
+        .history-action {
+          min-height: 36px;
           padding: 0.35rem 0.55rem;
           font-size: 0.75rem;
           white-space: nowrap;
+          align-self: center;
+          flex-shrink: 0;
         }
 
-        .agent-selector-grid {
+        .agent-grid {
           display: grid;
           grid-template-columns: 1fr;
           gap: 0.55rem;
         }
 
-        .agent-option {
+        .agent-card {
           border: 1px solid var(--line-strong);
           border-radius: var(--radius-md);
           background: var(--surface);
-          padding: 0.65rem;
+          padding: 0.75rem;
+          text-align: left;
           display: flex;
           align-items: center;
-          gap: 0.7rem;
-          text-align: left;
-          transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+          gap: 0.75rem;
+          transition: border-color 0.2s ease, box-shadow 0.2s ease;
+          min-width: 0;
+          cursor: pointer;
         }
 
-        .agent-option:hover:not(:disabled) {
+        .agent-card:hover:not(:disabled) {
           border-color: rgba(59, 130, 246, 0.45);
-          transform: translateY(-1px);
           box-shadow: var(--shadow-sm);
         }
 
-        .agent-option.is-selected {
-          border-color: rgba(59, 130, 246, 0.65);
-          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
-          background: linear-gradient(180deg, rgba(248, 250, 252, 1) 0%, rgba(241, 245, 249, 0.72) 100%);
+        .agent-card.is-selected {
+          border-color: rgba(59, 130, 246, 0.7);
+          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.14);
+          background: linear-gradient(180deg, rgba(248, 250, 252, 1) 0%, rgba(241, 245, 249, 0.86) 100%);
         }
 
         .agent-logo {
-          width: 34px;
-          height: 34px;
+          width: 32px;
+          height: 32px;
           border-radius: var(--radius-sm);
           display: inline-flex;
           align-items: center;
@@ -744,39 +755,33 @@ export function SessionDashboard({
           flex-shrink: 0;
         }
 
-        .agent-copy {
+        .agent-info {
           display: flex;
           flex-direction: column;
           min-width: 0;
+          gap: 0.15rem;
         }
 
         .agent-name {
-          font-size: 0.92rem;
+          font-size: 0.875rem;
           font-weight: 700;
-          line-height: 1.2;
           color: var(--text);
+          line-height: 1.2;
         }
 
-        .agent-desc {
-          font-size: 0.74rem;
+        .agent-subtitle {
+          font-size: 0.75rem;
           color: var(--text-muted);
-          line-height: 1.25;
-          margin-top: 0.2rem;
+          line-height: 1.3;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
-        .new-session-error {
-          color: var(--accent-red);
-          margin-top: 0.1rem;
-        }
-
-        .new-session-actions {
+        .modal-actions {
           display: flex;
           gap: 0.75rem;
           padding-top: 0.15rem;
-        }
-
-        .new-session-submit {
-          justify-content: center;
         }
 
         @media (max-width: 767px) {
@@ -784,28 +789,24 @@ export function SessionDashboard({
             display: none;
           }
 
-          .new-session-modal {
-            max-height: 88vh;
+          .create-session-header {
+            padding: 0.95rem 1rem;
           }
 
-          .new-session-header {
-            padding: 0.9rem 1rem;
+          .create-session-form {
+            padding: 0.85rem;
           }
 
-          .new-session-form {
-            padding: 0.95rem;
+          .history-item {
+            flex-direction: column;
           }
 
-          .path-history-resume {
-            padding-left: 0.5rem;
-            padding-right: 0.5rem;
+          .history-action {
+            width: 100%;
           }
-
-          .new-session-actions {
-            position: sticky;
-            bottom: 0;
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 1) 35%);
-            padding-bottom: 0.2rem;
+          
+          .agent-subtitle {
+            white-space: normal;
           }
         }
 
@@ -818,28 +819,20 @@ export function SessionDashboard({
             display: inline-flex !important;
           }
 
-          .new-session-header {
-            padding: 1.2rem 1.35rem;
-          }
-
-          .new-session-form {
-            padding: 1.25rem 1.3rem;
-          }
-
-          .agent-selector-grid {
+          .agent-grid {
             grid-template-columns: repeat(3, minmax(0, 1fr));
           }
 
-          .agent-option {
-            min-height: 98px;
+          .agent-card {
+            min-height: 110px;
             flex-direction: column;
             align-items: flex-start;
             justify-content: flex-start;
-            gap: 0.58rem;
+            gap: 0.85rem;
           }
-
-          .agent-copy {
-            width: 100%;
+          
+          .agent-subtitle {
+            white-space: normal;
           }
         }
       `}</style>

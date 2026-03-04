@@ -14,7 +14,10 @@ export const Button = ({
   ...props 
 }: ButtonProps) => {
   const baseClass = 'btn';
-  const variantClass = variant === 'primary' ? 'btn-primary' : 'btn-secondary';
+  
+  let variantClass = 'btn-primary';
+  if (variant === 'secondary') variantClass = 'btn-secondary';
+  if (variant === 'ghost') variantClass = 'btn-ghost';
   
   return (
     <button 
