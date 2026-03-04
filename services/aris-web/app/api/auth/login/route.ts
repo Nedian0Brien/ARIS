@@ -8,6 +8,8 @@ import { AUTH_COOKIE, DEVICE_COOKIE } from '@/lib/auth/constants';
 import { env } from '@/lib/config';
 import { writeAuditLog } from '@/lib/audit/log';
 
+import { sendVerificationEmail } from '@/lib/email/sender';
+
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
@@ -54,11 +56,36 @@ export async function POST(request: NextRequest) {
 
   const trusted = await isDeviceTrusted(user.id, deviceId);
   
+  // 2FA TOTP Check
   if (user.twoFactorSecret && !trusted) {
     return NextResponse.json({ 
       status: '2fa_required', 
+      method: 'totp',
       userId: user.id,
-      deviceId // Return it so client can set it later or we set it in response
+      deviceId
+    });
+  }
+
+  // 2FA Email Check
+  if (user.twoFactorEmailEnabled && !trusted) {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
+    await prisma.emailVerificationToken.create({
+      data: {
+        userId: user.id,
+        code,
+        expiresAt,
+      },
+    });
+
+    await sendVerificationEmail(user.email, code);
+
+    return NextResponse.json({ 
+      status: '2fa_required', 
+      method: 'email',
+      userId: user.id,
+      deviceId
     });
   }
 

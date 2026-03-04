@@ -18,12 +18,25 @@ model User {
   passwordHash String
   role         UserRole     @default(viewer)
   twoFactorSecret String?   // TOTP secret
+  twoFactorEmailEnabled Boolean @default(false)
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   sessions     AuthSession[]
   auditLogs    AuditLog[]
   preferences  UiPreference?
   trustedDevices TrustedDevice[]
+  emailTokens    EmailVerificationToken[]
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model TrustedDevice {

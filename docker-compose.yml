@@ -35,6 +35,13 @@ services:
       AUTH_COOKIE_NAME: aris_session
       ARIS_ADMIN_EMAIL: ${ARIS_ADMIN_EMAIL:?set in deploy/.env}
       ARIS_ADMIN_PASSWORD: ${ARIS_ADMIN_PASSWORD:?set in deploy/.env}
+      ARIS_ADMIN_2FA_SECRET: ${ARIS_ADMIN_2FA_SECRET:-}
+      ARIS_ADMIN_2FA_EMAIL: ${ARIS_ADMIN_2FA_EMAIL:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@aris.local}
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?set in deploy/.env}@postgres:5432/${POSTGRES_DB:-aris}
       HAPPY_SERVER_URL: http://host.docker.internal:4080
       HAPPY_SERVER_TOKEN: ${RUNTIME_API_TOKEN:?set in deploy/.env}

@@ -8,6 +8,7 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
   const [password, setPassword] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [show2FA, setShow2FA] = useState(false);
+  const [twoFactorMethod, setTwoFactorMethod] = useState<'totp' | 'email'>('totp');
   const [pendingData, setPendingData] = useState<{ userId: string; deviceId: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -34,6 +35,7 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
 
       if (body.status === '2fa_required') {
         setShow2FA(true);
+        setTwoFactorMethod(body.method);
         setPendingData({ userId: body.userId, deviceId: body.deviceId });
         return;
       }
@@ -60,6 +62,7 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
           userId: pendingData.userId,
           deviceId: pendingData.deviceId,
           code: twoFactorCode,
+          method: twoFactorMethod,
         }),
       });
 
@@ -78,17 +81,22 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
   }
 
   if (show2FA) {
+    const isEmail = twoFactorMethod === 'email';
     return (
       <div className="form animate-slide-up">
         <div style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
           <div style={{ fontWeight: 700, fontSize: '1.5rem', letterSpacing: '-0.02em', marginBottom: '0.5rem' }}>Security Verification</div>
-          <h1 style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>Enter OTP</h1>
-          <p className="muted" style={{ fontSize: '0.875rem' }}>This is an untrusted device. Please enter the 6-digit code from your authenticator app.</p>
+          <h1 style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>Enter Verification Code</h1>
+          <p className="muted" style={{ fontSize: '0.875rem' }}>
+            {isEmail 
+              ? 'We sent a 6-digit code to your email address. Please check your inbox (and spam folder).' 
+              : 'This is an untrusted device. Please enter the 6-digit code from your authenticator app.'}
+          </p>
         </div>
 
         <form onSubmit={on2FASubmit}>
           <label className="field">
-            <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>Verification Code</span>
+            <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>{isEmail ? 'Email Code' : 'OTP Code'}</span>
             <input
               value={twoFactorCode}
               onChange={(e) => setTwoFactorCode(e.target.value)}

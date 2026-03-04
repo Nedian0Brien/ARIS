@@ -9,6 +9,13 @@ const envSchema = z.object({
   SSH_BASE_COMMAND: z.string().default('ssh ubuntu@your-server'),
   SSH_LINK_TTL_SECONDS: z.coerce.number().int().positive().default(300),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  
+  /* SMTP Configuration for Email 2FA */
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().default('noreply@aris.local'),
 });
 
 const parsed = envSchema.safeParse(process.env);

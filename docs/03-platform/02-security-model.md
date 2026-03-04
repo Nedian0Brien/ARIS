@@ -10,7 +10,9 @@
 ## 2. 인증/권한
 
 - 로그인 필수: `/login` 전 런타임 화면 접근 불가
-- **2FA (Two-Factor Authentication)**: 등록되지 않은 새로운 기기에서 접근 시 2차 인증(OTP 등) 요구
+- **2FA (Two-Factor Authentication)**: 등록되지 않은 새로운 기기에서 접근 시 2차 인증 요구
+  - **TOTP**: Google Authenticator 등 앱을 통한 인증
+  - **Email**: 등록된 이메일로 발송된 6자리 인증 코드를 통한 인증
 - **Device Trust**: 신뢰할 수 있는 기기 목록 관리 및 관리자 승인 기반 접근
 - 역할:
   - `operator`: 지시 전송, 권한 승인, 세션 제어, SSH fallback

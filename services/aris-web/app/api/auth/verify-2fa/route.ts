@@ -11,6 +11,7 @@ const verifySchema = z.object({
   userId: z.string().min(1),
   code: z.string().length(6),
   deviceId: z.string().min(1),
+  method: z.enum(['totp', 'email']).default('totp'),
 });
 
 export async function POST(request: NextRequest) {
@@ -19,29 +20,57 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { userId, code, deviceId } = parsed.data;
+  const { userId, code, deviceId, method } = parsed.data;
   const user = await prisma.user.findUnique({ where: { id: userId } });
 
-  if (!user || !user.twoFactorSecret) {
-    return NextResponse.json({ error: 'User not found or 2FA not enabled' }, { status: 400 });
+  if (!user) {
+    return NextResponse.json({ error: 'User not found' }, { status: 404 });
   }
 
-  const isValid = authenticator.verify({
-    token: code,
-    secret: user.twoFactorSecret,
-  });
+  let isValid = false;
+
+  if (method === 'totp') {
+    if (!user.twoFactorSecret) {
+      return NextResponse.json({ error: 'TOTP 2FA not enabled' }, { status: 400 });
+    }
+    isValid = authenticator.verify({
+      token: code,
+      secret: user.twoFactorSecret,
+    });
+  } else if (method === 'email') {
+    if (!user.twoFactorEmailEnabled) {
+      return NextResponse.json({ error: 'Email 2FA not enabled' }, { status: 400 });
+    }
+    
+    const token = await prisma.emailVerificationToken.findFirst({
+      where: {
+        userId: user.id,
+        code,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (token) {
+      isValid = true;
+      // Delete used token (and older ones)
+      await prisma.emailVerificationToken.deleteMany({
+        where: { userId: user.id },
+      });
+    }
+  }
 
   if (!isValid) {
     await writeAuditLog({
       userId: user.id,
-      action: 'auth.2fa_failed',
+      action: `auth.2fa_failed_${method}`,
       resourceType: 'user',
       resourceId: user.id,
       payload: { deviceId, reason: 'invalid_code' },
       ip: request.headers.get('x-forwarded-for'),
       userAgent: request.headers.get('user-agent'),
     });
-    return NextResponse.json({ error: 'Invalid verification code' }, { status: 401 });
+    return NextResponse.json({ error: 'Invalid or expired verification code' }, { status: 401 });
   }
 
   // Success: Trust device and create session
