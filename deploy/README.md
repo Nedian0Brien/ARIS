@@ -30,7 +30,6 @@ ARIS uses a hybrid deployment model:
 npm install
 npm run build
 # Start with pm2 (token is read from deploy/services env files automatically)
-source deploy/.env
 pm2 start deploy/ecosystem.config.cjs --env production
 
 # If already running, reload safely after token changes:
