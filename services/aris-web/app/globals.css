@@ -461,6 +461,95 @@ button, input, textarea, select {
   gap: 0.5rem;
 }
 
+/* Integrated Directory Browser */
+.directory-browser {
+  margin-top: 0.75rem;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.browser-header {
+  padding: 0.75rem 1rem;
+  background: var(--surface-soft);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.current-path-display {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path-prefix {
+  color: var(--text-muted);
+}
+
+.select-current-btn {
+  padding: 0 0.75rem !important;
+  min-height: 32px !important;
+  font-size: 0.75rem !important;
+  flex-shrink: 0;
+}
+
+.browser-list {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.browser-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text);
+  transition: background 0.2s;
+  text-align: left;
+}
+
+.browser-item:hover {
+  background: var(--surface-soft);
+}
+
+.browser-item.up-dir {
+  color: var(--text-muted);
+}
+
+.browser-item.folder {
+  color: var(--text);
+}
+
+.browser-item :global(svg) {
+  flex-shrink: 0;
+}
+
+.browser-item.folder :global(svg) {
+  color: var(--accent-sky);
+}
+
+.browser-loading,
+.browser-empty {
+  padding: 2rem;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
 .history-stack {
   display: block;
   margin-top: 0.75rem;

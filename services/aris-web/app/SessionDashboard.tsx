@@ -5,9 +5,11 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
-import { Play, Terminal, BrainCircuit, FolderOpen, Search, PlusCircle, X, Plus, Code, Sparkles, Clock3, ArrowUpRight } from 'lucide-react';
+import { 
+  Play, Terminal, BrainCircuit, FolderOpen, Search, PlusCircle, X, Plus, 
+  Code, Sparkles, Clock3, ArrowUpRight, Folder, ArrowUp, Check, ChevronDown, ChevronUp 
+} from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
-import { DirectoryModal } from '@/components/ui/DirectoryModal';
 import type { SessionSummary } from '@/lib/happy/types';
 
 type AgentFlavor = 'claude' | 'codex' | 'gemini';
@@ -27,6 +29,11 @@ type AgentOption = {
   accentColor: string;
   accentBg: string;
 };
+
+interface DirectoryInfo {
+  name: string;
+  path: string;
+}
 
 const PATH_HISTORY_STORAGE_KEY = 'aris:new-session-path-history';
 const MAX_PATH_HISTORY_ITEMS = 8;
@@ -206,10 +213,17 @@ export function SessionDashboard({
   const [newAgent, setNewAgent] = useState<AgentFlavor>('claude');
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isDirModalOpen, setIsDirModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [localHistory, setLocalHistory] = useState<PathHistoryEntry[]>([]);
+  
+  // Integrated Directory Browser States
+  const [isBrowsing, setIsBrowsing] = useState(false);
+  const [browserPath, setBrowserPath] = useState('/');
+  const [parentPath, setParentPath] = useState<string | null>(null);
+  const [directories, setDirectories] = useState<DirectoryInfo[]>([]);
+  const [isLoadingDirs, setIsLoadingDirs] = useState(false);
+
   const router = useRouter();
 
   useEffect(() => {
@@ -228,6 +242,29 @@ export function SessionDashboard({
 
     window.localStorage.setItem(PATH_HISTORY_STORAGE_KEY, JSON.stringify(pathHistory));
   }, [mounted, pathHistory]);
+
+  const fetchDirectory = async (path: string) => {
+    setIsLoadingDirs(true);
+    try {
+      const res = await fetch(`/api/fs/list?path=${encodeURIComponent(path)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch directory');
+      
+      setBrowserPath(data.currentPath || '/');
+      setParentPath(data.parentPath);
+      setDirectories(data.directories || []);
+    } catch (err) {
+      console.error('Directory fetch error:', err);
+    } finally {
+      setIsLoadingDirs(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isBrowsing) {
+      fetchDirectory(browserPath === '/' ? '/' : browserPath);
+    }
+  }, [isBrowsing]);
 
   function recordHistory(pathInput: string, agent: AgentFlavor, sessionId?: string) {
     const path = sanitizePath(pathInput);
@@ -354,16 +391,73 @@ export function SessionDashboard({
                   <Button
                     type="button"
                     variant="secondary"
-                    onClick={() => setIsDirModalOpen(true)}
+                    onClick={() => setIsBrowsing(!isBrowsing)}
                     disabled={!isOperator || isCreating}
                     className="browse-btn"
+                    title="디렉토리 탐색기 열기/닫기"
                   >
-                    <Search size={18} />
+                    {isBrowsing ? <ChevronUp size={18} /> : <Search size={18} />}
                   </Button>
                 </div>
+
+                {/* Integrated Directory Browser Panel */}
+                {isBrowsing && (
+                  <div className="directory-browser animate-in">
+                    <div className="browser-header">
+                      <span className="current-path-display">
+                        <span className="path-prefix">/workspace</span>
+                        {browserPath !== '/' ? browserPath : ''}
+                      </span>
+                      <Button 
+                        type="button"
+                        variant="primary" 
+                        className="select-current-btn"
+                        onClick={() => {
+                          setNewPath(`/workspace${browserPath === '/' ? '' : browserPath}`);
+                          setIsBrowsing(false);
+                        }}
+                      >
+                        <Check size={14} /> 이 경로 선택
+                      </Button>
+                    </div>
+                    
+                    <div className="browser-list no-scrollbar">
+                      {isLoadingDirs ? (
+                        <div className="browser-loading">탐색 중...</div>
+                      ) : (
+                        <>
+                          {parentPath !== null && (
+                            <button 
+                              type="button"
+                              onClick={() => fetchDirectory(parentPath)}
+                              className="browser-item up-dir"
+                            >
+                              <ArrowUp size={16} />
+                              <span>..</span>
+                            </button>
+                          )}
+                          {directories.length === 0 && parentPath === null && (
+                            <div className="browser-empty">표시할 디렉토리가 없습니다.</div>
+                          )}
+                          {directories.map((dir) => (
+                            <button 
+                              key={dir.path}
+                              type="button"
+                              onClick={() => fetchDirectory(dir.path)}
+                              className="browser-item folder"
+                            >
+                              <Folder size={16} />
+                              <span>{dir.name}</span>
+                            </button>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {pathHistory.length > 0 && (
+              {pathHistory.length > 0 && !isBrowsing && (
                 <div className="form-section">
                   <div className="section-header">
                     <label className="section-label">Recent History</label>
@@ -460,6 +554,7 @@ export function SessionDashboard({
           <Button
             onClick={() => {
               setError(null);
+              setIsBrowsing(false);
               setIsCreateModalOpen(true);
             }}
             className="desktop-create-button"
@@ -482,6 +577,7 @@ export function SessionDashboard({
             <Button
               onClick={() => {
                 setError(null);
+                setIsBrowsing(false);
                 setIsCreateModalOpen(true);
               }}
               disabled={!isOperator}
@@ -530,6 +626,7 @@ export function SessionDashboard({
         className="fab"
         onClick={() => {
           setError(null);
+          setIsBrowsing(false);
           setIsCreateModalOpen(true);
         }}
       >
@@ -537,12 +634,6 @@ export function SessionDashboard({
       </div>
 
       {createModal}
-
-      <DirectoryModal
-        isOpen={isDirModalOpen}
-        onClose={() => setIsDirModalOpen(false)}
-        onSelect={(path) => setNewPath(path)}
-      />
     </div>
   );
 }
