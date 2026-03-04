@@ -305,7 +305,9 @@ export function ChatInterface({
   const [awaitingReplySince, setAwaitingReplySince] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
+  const chatShellRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const composerDockRef = useRef<HTMLElement>(null);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const shouldStickToBottomRef = useRef(true);
 
@@ -328,6 +330,17 @@ export function ChatInterface({
     }));
   }, []);
 
+  const syncComposerDockMetrics = useCallback(() => {
+    const shell = chatShellRef.current;
+    const dock = composerDockRef.current;
+    if (!shell || !dock) {
+      return;
+    }
+
+    const height = Math.ceil(dock.getBoundingClientRect().height);
+    shell.style.setProperty('--composer-dock-height', `${height}px`);
+  }, []);
+
   const resizeComposerInput = useCallback(() => {
     const input = composerInputRef.current;
     if (!input) {
@@ -337,7 +350,8 @@ export function ChatInterface({
     input.style.height = '0px';
     const nextHeight = Math.min(COMPOSER_MAX_HEIGHT_PX, Math.max(COMPOSER_MIN_HEIGHT_PX, input.scrollHeight));
     input.style.height = `${nextHeight}px`;
-  }, []);
+    requestAnimationFrame(syncComposerDockMetrics);
+  }, [syncComposerDockMetrics]);
 
   const handleComposerFocus = useCallback(() => {
     const stream = scrollRef.current;
@@ -353,6 +367,18 @@ export function ChatInterface({
   useEffect(() => {
     resizeComposerInput();
   }, [prompt, resizeComposerInput]);
+
+  useEffect(() => {
+    syncComposerDockMetrics();
+    const handleResize = () => syncComposerDockMetrics();
+    window.addEventListener('resize', handleResize, { passive: true });
+    window.visualViewport?.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.visualViewport?.removeEventListener('resize', handleResize);
+    };
+  }, [syncComposerDockMetrics]);
 
   useEffect(() => {
     const stream = scrollRef.current;
@@ -459,7 +485,7 @@ export function ChatInterface({
   }
 
   return (
-    <div className={styles.chatShell}>
+    <div className={styles.chatShell} ref={chatShellRef}>
       <aside className={`${styles.sidePanel} ${styles.leftPanel}`}>
         <section className={styles.panelCard}>
           <div className={styles.panelHeading}>Session Profile</div>
@@ -623,25 +649,27 @@ export function ChatInterface({
             </section>
           )}
 
-          <footer className={styles.composerDock}>
+          <footer className={styles.composerDock} ref={composerDockRef}>
             <form onSubmit={handleSubmit} className={styles.composerForm}>
-              <div className={styles.composerFloating}>
-                <textarea
-                  ref={composerInputRef}
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  onInput={resizeComposerInput}
-                  onFocus={handleComposerFocus}
-                  rows={1}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                      handleSubmit(e);
-                    }
-                  }}
-                  placeholder={isOperator ? '명령을 입력하세요. (Ctrl/Cmd + Enter 전송)' : 'Viewer 권한입니다.'}
-                  disabled={!isOperator || isSubmitting || isAwaitingReply}
-                  className={styles.composerInput}
-                />
+              <div className={styles.composerDockInner}>
+                <div className={styles.composerFloating}>
+                  <textarea
+                    ref={composerInputRef}
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    onInput={resizeComposerInput}
+                    onFocus={handleComposerFocus}
+                    rows={1}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                        handleSubmit(e);
+                      }
+                    }}
+                    placeholder={isOperator ? '명령을 입력하세요. (Ctrl/Cmd + Enter 전송)' : 'Viewer 권한입니다.'}
+                    disabled={!isOperator || isSubmitting || isAwaitingReply}
+                    className={styles.composerInput}
+                  />
+                </div>
                 <button
                   type="submit"
                   disabled={!prompt.trim() || !isOperator || isSubmitting || isAwaitingReply}
