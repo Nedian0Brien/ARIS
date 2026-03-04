@@ -978,7 +978,7 @@ button, input, textarea, select {
 
 .session-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 1.25rem;
 }
 
@@ -994,6 +994,7 @@ button, input, textarea, select {
   flex-direction: column;
   gap: 1rem;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  overflow: visible;
 }
 
 .session-card:hover {
@@ -1074,8 +1075,8 @@ button, input, textarea, select {
 /* Dropdown Menu */
 .dropdown-menu {
   position: absolute;
-  top: 3rem;
-  right: 1rem;
+  top: 2.5rem;
+  right: 0;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(20px);
   border-radius: 1rem;

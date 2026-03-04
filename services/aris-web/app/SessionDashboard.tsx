@@ -802,7 +802,11 @@ export function SessionDashboard({
                     const isMenuOpen = openMenuId === session.id;
 
                     return (
-                      <div key={session.id} className="session-card">
+                      <div 
+                        key={session.id} 
+                        className="session-card"
+                        style={{ zIndex: isMenuOpen ? 100 : 1 }}
+                      >
                         {isPinned && (
                           <div className="pin-badge">
                             <Pin size={12} fill="currentColor" />
