@@ -34,13 +34,10 @@ export const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) => {
 export const Card = ({ 
   children, 
   className = '', 
-  style 
-}: { 
-  children: React.ReactNode; 
-  className?: string; 
-  style?: React.CSSProperties; 
-}) => {
-  return <div className={`card ${className}`} style={style}>{children}</div>;
+  style,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => {
+  return <div className={`card ${className}`} style={style} {...props}>{children}</div>;
 };
 
 export const Badge = ({ children, variant = 'sky' }: { children: React.ReactNode; variant?: 'sky' | 'amber' | 'emerald' | 'violet' | 'red' }) => {

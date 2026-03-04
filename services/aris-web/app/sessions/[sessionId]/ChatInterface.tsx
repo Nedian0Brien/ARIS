@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { Button, Card, Badge } from '@/components/ui';
+import { Send, TerminalSquare, FileCode2, Code, ShieldAlert, Cpu } from 'lucide-react';
 import type { UiEvent, PermissionRequest } from '@/lib/happy/types';
 
 // Response Type Renderers
@@ -19,11 +20,12 @@ const CommandExecution = ({ body }: { body: string }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', padding: '0.5rem 0.75rem', background: 'var(--surface-soft)', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid var(--accent-amber)' }}>
-        <span style={{ color: 'var(--text-muted)', marginRight: '0.5rem' }}>$</span>{command}
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', padding: '0.5rem 0.75rem', background: 'var(--surface-soft)', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid var(--accent-amber)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <TerminalSquare size={16} color="var(--text-muted)" />
+        <span style={{ color: 'var(--text-muted)', marginRight: '0.25rem' }}>$</span>{command}
       </div>
       {output && (
-        <pre style={{ margin: 0, padding: '0.75rem', background: '#1e1e1e', color: '#d4d4d4', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', overflowX: 'auto', fontFamily: 'var(--font-mono)' }}>
+        <pre className="no-scrollbar" style={{ margin: 0, padding: '0.75rem', background: '#1e1e1e', color: '#d4d4d4', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', overflowX: 'auto', fontFamily: 'var(--font-mono)' }}>
           {output}
         </pre>
       )}
@@ -45,11 +47,14 @@ const CodeAction = ({ body, kind }: { body: string; kind: 'code_read' | 'code_wr
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
       <div className="text-sm" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        <Badge variant={isRead ? 'violet' : 'emerald'}>{isRead ? 'READ' : 'WRITE'}</Badge>
-        <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>{path}</span>
+        <Badge variant={isRead ? 'violet' : 'emerald'}>
+          {isRead ? <FileCode2 size={12} /> : <Code size={12} />}
+          {isRead ? 'READ' : 'WRITE'}
+        </Badge>
+        <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', wordBreak: 'break-all' }}>{path}</span>
       </div>
       {code && (
-        <pre style={{ margin: 0, padding: '0.75rem', background: 'var(--surface-subtle)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', overflowX: 'auto', fontFamily: 'var(--font-mono)' }}>
+        <pre className="no-scrollbar" style={{ margin: 0, padding: '0.75rem', background: 'var(--surface-subtle)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', overflowX: 'auto', fontFamily: 'var(--font-mono)' }}>
           {code}
         </pre>
       )}
@@ -114,29 +119,32 @@ export function ChatInterface({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', maxWidth: '900px', margin: '0 auto', width: '100%', borderLeft: '1px solid var(--line)', borderRight: '1px solid var(--line)', background: 'var(--bg)' }}>
       {/* Session Header Info */}
-      <div style={{ padding: '0.75rem 1.5rem', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-subtle)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <h2 style={{ fontSize: '0.875rem', fontWeight: 700 }}>{projectName}</h2>
-          <Badge variant="sky">{agentFlavor}</Badge>
+      <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', zIndex: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', overflow: 'hidden' }}>
+          <h2 style={{ fontSize: '0.875rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{projectName}</h2>
+          <Badge variant="sky">
+            <Cpu size={12} />
+            {agentFlavor}
+          </Badge>
         </div>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-          Session: {sessionId.slice(0, 8)}...
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', flexShrink: 0, marginLeft: '1rem' }}>
+          {sessionId.slice(0, 8)}...
         </div>
       </div>
 
       {/* Message Stream */}
-      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+      <div className="chat-stream-container no-scrollbar" ref={scrollRef}>
         {events.map((event) => {
           const isUser = event.meta?.role === 'user' || event.title === 'User Instruction';
           
           return (
-            <div key={event.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignSelf: isUser ? 'flex-end' : 'flex-start', maxWidth: isUser ? '80%' : '100%', width: isUser ? 'auto' : '100%' }} className="animate-in">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+            <div key={event.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignSelf: isUser ? 'flex-end' : 'flex-start', maxWidth: isUser ? '85%' : '100%', width: isUser ? 'auto' : '100%' }} className="animate-in">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: isUser ? 'flex-end' : 'flex-start', padding: '0 0.25rem' }}>
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isUser ? 'var(--primary)' : 'var(--text-muted)' }}>
                   {isUser ? 'YOU' : 'ARIS'}
                 </span>
                 <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>
-                  {new Date(event.timestamp).toLocaleTimeString()}
+                  {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
               
@@ -161,14 +169,16 @@ export function ChatInterface({
 
       {/* Permission Strip */}
       {pendingPermissions.length > 0 && (
-        <div style={{ padding: '1rem 1.5rem', background: 'var(--accent-amber-bg)', borderTop: '1px solid var(--accent-amber)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--accent-amber)' }}>PENDING PERMISSIONS</div>
+        <div className="animate-in" style={{ padding: '1rem', background: 'var(--accent-amber-bg)', borderTop: '1px solid var(--accent-amber)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--accent-amber)', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+            <ShieldAlert size={16} /> PENDING PERMISSIONS
+          </div>
           {pendingPermissions.map((p) => (
-            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
-              <code style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.5)', padding: '0.25rem 0.5rem', borderRadius: '4px', flex: 1 }}>{p.command}</code>
+            <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <code style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.6)', padding: '0.375rem 0.5rem', borderRadius: '4px', wordBreak: 'break-all' }}>{p.command}</code>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <Button variant="secondary" onClick={() => decidePermission(p.id, 'deny')} style={{ minHeight: '32px', fontSize: '0.75rem' }}>Deny</Button>
-                <Button onClick={() => decidePermission(p.id, 'allow_once')} style={{ minHeight: '32px', fontSize: '0.75rem', background: 'var(--accent-amber)' }}>Allow</Button>
+                <Button variant="secondary" onClick={() => decidePermission(p.id, 'deny')} style={{ flex: 1, minHeight: '36px', fontSize: '0.75rem' }}>Deny</Button>
+                <Button onClick={() => decidePermission(p.id, 'allow_once')} style={{ flex: 1, minHeight: '36px', fontSize: '0.75rem', background: 'var(--accent-amber)', color: '#fff', border: 'none' }}>Allow</Button>
               </div>
             </div>
           ))}
@@ -176,7 +186,7 @@ export function ChatInterface({
       )}
 
       {/* Composer */}
-      <div style={{ padding: '1.5rem', borderTop: '1px solid var(--line)', background: 'var(--surface)' }}>
+      <div style={{ padding: '1rem', borderTop: '1px solid var(--line)', background: 'var(--surface)', zIndex: 10 }}>
         <form onSubmit={handleSubmit} style={{ position: 'relative' }}>
           <textarea
             value={prompt}
@@ -190,27 +200,31 @@ export function ChatInterface({
             disabled={!isOperator || isSubmitting}
             style={{
               width: '100%',
-              minHeight: '80px',
-              maxHeight: '200px',
+              minHeight: '60px',
+              maxHeight: '150px',
               padding: '0.75rem 1rem',
-              paddingBottom: '3rem',
+              paddingRight: '4rem',
               background: 'var(--surface-soft)',
-              border: '1px solid var(--line)',
-              borderRadius: 'var(--radius-md)',
+              border: '1px solid transparent',
+              borderRadius: 'var(--radius-lg)',
               fontSize: '0.875rem',
               resize: 'none',
               outline: 'none',
-              fontFamily: 'inherit'
+              fontFamily: 'inherit',
+              transition: 'border-color 0.2s'
             }}
+            onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+            onBlur={(e) => e.target.style.borderColor = 'transparent'}
           />
-          <div style={{ position: 'absolute', bottom: '0.75rem', right: '0.75rem', display: 'flex', gap: '0.5rem' }}>
+          <div style={{ position: 'absolute', bottom: '0.5rem', right: '0.5rem' }}>
             <Button 
               type="submit" 
               disabled={!prompt.trim() || !isOperator} 
               isLoading={isSubmitting}
-              style={{ minHeight: '32px', padding: '0 1rem', fontSize: '0.75rem' }}
+              style={{ width: '36px', height: '36px', padding: 0, minHeight: 'auto', borderRadius: 'var(--radius-full)' }}
+              title="Send message"
             >
-              Send
+              {!isSubmitting && <Send size={16} />}
             </Button>
           </div>
         </form>
