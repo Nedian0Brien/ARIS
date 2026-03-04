@@ -49,6 +49,8 @@ services:
       SSH_LINK_TTL_SECONDS: ${SSH_LINK_TTL_SECONDS:-300}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - ${HOST_PROJECTS_ROOT:-/tmp/aris-workspace}:/workspace
     expose:
       - "3000"
     ports:
