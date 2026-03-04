@@ -103,176 +103,105 @@ function toRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-function normalizeStorageEntry(value: unknown): PathHistoryEntry | null {
-  if (typeof value === 'string') {
-    const path = sanitizePath(value);
-    return path
-      ? {
-          path,
-          agent: 'claude',
-          lastUsedAt: FALLBACK_DATE_ISO,
-        }
-      : null;
-  }
-
-  const rec = toRecord(value);
-  if (!rec) {
-    return null;
-  }
-
-  const path = sanitizePath(typeof rec.path === 'string' ? rec.path : '');
-  if (!path) {
-    return null;
-  }
-
-  const sessionId = typeof rec.sessionId === 'string' && rec.sessionId ? rec.sessionId : undefined;
-
-  return {
-    path,
-    agent: resolveAgent(rec.agent),
-    lastUsedAt: normalizeDate(rec.lastUsedAt),
-    sessionId,
-  };
-}
-
-function readHistoryFromStorage(): PathHistoryEntry[] {
-  if (typeof window === 'undefined') {
-    return [];
-  }
-
+function formatHistoryDate(dateStr: string): string {
   try {
-    const raw = window.localStorage.getItem(PATH_HISTORY_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed
-      .map((entry) => normalizeStorageEntry(entry))
-      .filter((entry): entry is PathHistoryEntry => entry !== null)
-      .slice(0, MAX_PATH_HISTORY_ITEMS);
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return '방금 전';
+    if (diffMins < 60) return `${diffMins}분 전`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}시간 전`;
+    
+    return d.toLocaleDateString();
   } catch {
-    return [];
+    return 'unknown';
   }
 }
 
-function mergePathHistory(runtimeSessions: SessionSummary[], localHistory: PathHistoryEntry[]): PathHistoryEntry[] {
-  const map = new Map<string, PathHistoryEntry>();
-
-  const upsert = (entry: PathHistoryEntry) => {
-    const current = map.get(entry.path);
-    if (!current || entry.lastUsedAt > current.lastUsedAt) {
-      map.set(entry.path, entry);
-    }
-  };
-
-  for (const item of localHistory) {
-    upsert(item);
-  }
-
-  for (const session of runtimeSessions) {
-    const path = sanitizePath(session.projectName);
-    if (!path || path === 'unknown-project') {
-      continue;
-    }
-
-    upsert({
-      path,
-      agent: resolveAgent(session.agent),
-      lastUsedAt: normalizeDate(session.lastActivityAt),
-      sessionId: session.id,
-    });
-  }
-
-  return [...map.values()]
-    .sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt))
-    .slice(0, MAX_PATH_HISTORY_ITEMS);
-}
-
-function formatHistoryDate(value: string): string {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime()) || value === FALLBACK_DATE_ISO) {
-    return '최근 사용';
-  }
-
-  return parsed.toLocaleDateString();
-}
-
-export function SessionDashboard({
-  initialSessions,
-  isOperator,
-}: {
+export function SessionDashboard({ 
+  initialSessions, 
+  isOperator 
+}: { 
   initialSessions: SessionSummary[];
   isOperator: boolean;
 }) {
+  const router = useRouter();
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newPath, setNewPath] = useState('');
   const [newAgent, setNewAgent] = useState<AgentFlavor>('claude');
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [localHistory, setLocalHistory] = useState<PathHistoryEntry[]>([]);
-  
-  // Integrated Directory Browser States
+
+  // Directory Browser States
   const [isBrowsing, setIsBrowsing] = useState(false);
   const [browserPath, setBrowserPath] = useState('/');
-  const [parentPath, setParentPath] = useState<string | null>(null);
   const [directories, setDirectories] = useState<DirectoryInfo[]>([]);
+  const [parentPath, setParentPath] = useState<string | null>(null);
   const [isLoadingDirs, setIsLoadingDirs] = useState(false);
 
-  const router = useRouter();
+  // Recent History State
+  const [pathHistory, setPathHistory] = useState<PathHistoryEntry[]>([]);
 
   useEffect(() => {
     setMounted(true);
-    setLocalHistory(readHistoryFromStorage());
-
-    return () => setMounted(false);
+    const saved = localStorage.getItem(PATH_HISTORY_STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setPathHistory(parsed.map(item => ({
+            path: String(item.path || ''),
+            agent: resolveAgent(item.agent),
+            lastUsedAt: normalizeDate(item.lastUsedAt),
+            sessionId: item.sessionId ? String(item.sessionId) : undefined,
+          })));
+        }
+      } catch (e) {
+        console.error('Failed to parse path history', e);
+      }
+    }
   }, []);
 
-  const pathHistory = useMemo(() => mergePathHistory(initialSessions, localHistory), [initialSessions, localHistory]);
+  useEffect(() => {
+    if (mounted) {
+      localStorage.setItem(PATH_HISTORY_STORAGE_KEY, JSON.stringify(pathHistory));
+    }
+  }, [pathHistory, mounted]);
 
   useEffect(() => {
-    if (!mounted || typeof window === 'undefined') {
-      return;
+    if (isBrowsing && directories.length === 0) {
+      fetchDirectory(browserPath);
     }
+  }, [isBrowsing]);
 
-    window.localStorage.setItem(PATH_HISTORY_STORAGE_KEY, JSON.stringify(pathHistory));
-  }, [mounted, pathHistory]);
-
-  const fetchDirectory = async (path: string) => {
+  async function fetchDirectory(targetPath: string) {
     setIsLoadingDirs(true);
     try {
-      const res = await fetch(`/api/fs/list?path=${encodeURIComponent(path)}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to fetch directory');
+      const response = await fetch(`/api/fs/list?path=${encodeURIComponent(targetPath)}`);
+      const body = await response.json();
       
-      setBrowserPath(data.currentPath || '/');
-      setParentPath(data.parentPath);
-      setDirectories(data.directories || []);
+      if (!response.ok) throw new Error(body.error || 'Failed to list directory');
+      
+      setDirectories(body.directories || []);
+      setParentPath(body.parentPath);
+      setBrowserPath(targetPath);
     } catch (err) {
       console.error('Directory fetch error:', err);
     } finally {
       setIsLoadingDirs(false);
     }
-  };
-
-  useEffect(() => {
-    if (isBrowsing) {
-      fetchDirectory(browserPath === '/' ? '/' : browserPath);
-    }
-  }, [isBrowsing]);
+  }
 
   function recordHistory(pathInput: string, agent: AgentFlavor, sessionId?: string) {
     const path = sanitizePath(pathInput);
-    if (!path) {
-      return;
-    }
+    if (!path) return;
 
-    setLocalHistory((prev) => {
+    setPathHistory((prev) => {
       const next = [
         {
           path,
@@ -528,16 +457,22 @@ export function SessionDashboard({
                   })}
                 </div>
               </div>
-            </form>
 
-            <footer className="modal-footer">
-              <Button type="button" variant="ghost" onClick={() => setIsCreateModalOpen(false)}>
-                취소
-              </Button>
-              <Button type="submit" isLoading={isCreating} disabled={!isOperator || !sanitizePath(newPath)} className="submit-btn">
-                <Play size={18} fill="currentColor" /> 세션 시작하기
-              </Button>
-            </footer>
+              {error && (
+                <div className="form-error" style={{ color: 'var(--accent-red)', fontSize: '0.8125rem', padding: '0.5rem 0.75rem', background: 'var(--accent-red-bg)', borderRadius: 'var(--radius-sm)', marginBottom: '1rem' }}>
+                  {error}
+                </div>
+              )}
+
+              <footer className="modal-footer">
+                <Button type="button" variant="ghost" onClick={() => setIsCreateModalOpen(false)}>
+                  취소
+                </Button>
+                <Button type="submit" isLoading={isCreating} disabled={!isOperator || !sanitizePath(newPath)} className="submit-btn">
+                  <Play size={18} fill="currentColor" /> 세션 시작하기
+                </Button>
+              </footer>
+            </form>
           </div>
         </div>,
         document.body,
@@ -625,19 +560,6 @@ export function SessionDashboard({
           </div>
         )}
       </div>
-
-      <div
-        className="fab"
-        onClick={() => {
-          setError(null);
-          setIsBrowsing(false);
-          setIsCreateModalOpen(true);
-        }}
-      >
-        <Plus size={28} />
-      </div>
-
-      {createModal}
     </div>
   );
 }
