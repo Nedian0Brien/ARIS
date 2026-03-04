@@ -1,27 +1,16 @@
 import { notFound } from 'next/navigation';
-import { TopBar } from '@/components/layout/TopBar';
-import { ChatWorkspace } from '@/components/chat/ChatWorkspace';
 import { requirePageUser } from '@/lib/auth/guard';
-import { getSessionEvents, listPermissionRequests, listSessions } from '@/lib/happy/client';
+import { getSessionEvents, listPermissionRequests } from '@/lib/happy/client';
+import { Header } from '@/components/layout/Header';
+import { ChatInterface } from './ChatInterface';
 
-export default async function SessionWorkspacePage({
+export default async function SessionPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ sessionId: string }>;
-  searchParams: Promise<{ ssh_command?: string; ssh_expires_at?: string }>;
 }) {
   const user = await requirePageUser();
   const { sessionId } = await params;
-  const sessions = await listSessions();
-  
-  const currentSession = sessions.find((s) => s.id === sessionId);
-  if (!currentSession && sessions.length > 0) {
-    // If we're using mock data and session is not found in the list, 
-    // we still try to fetch events to see if it's a valid ID.
-  }
-
-  const query = await searchParams;
 
   try {
     const [detail, permissions] = await Promise.all([
@@ -30,17 +19,16 @@ export default async function SessionWorkspacePage({
     ]);
 
     return (
-      <div className="app-shell">
-        <TopBar user={user} />
-        <main className="container">
-          <ChatWorkspace
-            currentSessionId={sessionId}
-            sessions={sessions}
-            events={detail.events}
-            permissions={permissions}
+      <div className="app-shell" style={{ height: '100vh', overflow: 'hidden' }}>
+        <Header userEmail={user.email} role={user.role} />
+        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)' }}>
+          <ChatInterface 
+            sessionId={sessionId}
+            initialEvents={detail.events}
+            initialPermissions={permissions}
             isOperator={user.role === 'operator'}
-            sshCommand={query.ssh_command}
-            sshExpiresAt={query.ssh_expires_at}
+            projectName={detail.session.projectName}
+            agentFlavor={detail.session.agent}
           />
         </main>
       </div>
