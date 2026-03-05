@@ -830,11 +830,11 @@ export function SessionDashboard({
                           </div>
                         )}
                         <div className={styles.sessionCardHeader}>
-                          <div>
+                          <div className={styles.sessionCardHeaderMain}>
                             <div className={styles.sessionCardTitle} title={session.projectName}>{displayName}</div>
                             <div className={styles.sessionCardId}>{session.id.slice(0, 10)}...</div>
                           </div>
-                          <div style={{ position: 'relative' }} data-session-menu-anchor>
+                          <div className={styles.sessionCardMenuAnchor} data-session-menu-anchor>
                             <button 
                               type="button"
                               className={styles.sessionMenuBtn} 

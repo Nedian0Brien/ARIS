@@ -226,6 +226,17 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.sessionCardHeaderMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.sessionCardMenuAnchor {
+  position: relative;
+  flex-shrink: 0;
 }
 
 .sessionCardTitle {
@@ -235,7 +246,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 200px;
+  max-width: none;
 }
 
 .sessionCardId {
