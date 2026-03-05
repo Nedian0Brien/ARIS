@@ -32,6 +32,7 @@
   padding: 1.5rem;
   border: none;
   border-radius: 1.5rem;
+  overflow: visible;
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(20px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04);
@@ -401,7 +402,7 @@
   }
 
   .sessionChartContainer {
-    height: 128px;
+    height: 132px;
   }
 
   .sessionMainToolbar {
@@ -441,7 +442,7 @@
   }
 
   .sessionChartContainer {
-    height: 108px;
+    height: 120px;
   }
 
   .sessionChartCenterText {
