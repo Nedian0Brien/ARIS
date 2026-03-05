@@ -81,6 +81,8 @@ body {
   min-height: -webkit-fill-available;
   min-height: calc(var(--vh, 1vh) * 100);
   min-height: var(--app-vh, 100vh);
+  /* 100svh: small viewport height - 주소창 표시 상태 기준, iOS Safari 15.4+ */
+  min-height: 100svh;
 }
 
 a {
@@ -214,14 +216,20 @@ button, input, textarea, select {
   min-height: -webkit-fill-available;
   min-height: calc(var(--vh, 1vh) * 100);
   min-height: var(--app-vh, 100vh);
+  /* 100svh: 주소창 표시 상태 기준 최소 높이 보장 */
+  min-height: 100svh;
   background-color: var(--bg);
   padding-bottom: calc(96px + var(--safe-area-inset-bottom));
 }
 
 .app-shell-immersive {
   height: calc(var(--vh, 1vh) * 100);
+  height: var(--app-vh, calc(var(--vh, 1vh) * 100));
+  /* 100dvh: dynamic viewport height - 주소창 변화에 자동 대응, iOS Safari 15.4+ */
+  height: 100dvh;
   min-height: calc(var(--vh, 1vh) * 100);
   min-height: var(--app-vh, calc(var(--vh, 1vh) * 100));
+  min-height: 100dvh;
   padding-bottom: 0;
 }
 
