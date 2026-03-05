@@ -50,8 +50,18 @@
 
 .sessionChartContainer {
   width: 100%;
-  height: 140px;
+  height: 156px;
+  min-height: 156px;
   position: relative;
+  overflow: visible;
+}
+
+.sessionChartCenter {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
 }
 
 .sessionChartCenterText {
@@ -64,6 +74,83 @@
   font-size: 0.65rem;
   font-weight: 600;
   color: var(--text-muted);
+}
+
+.sessionChartLegend {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.sessionChartLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.sessionChartLegendDotUsed {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3b82f6;
+}
+
+.sessionChartLegendDotIdle {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e2e8f0;
+}
+
+.serverMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.serverMetricItem {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  border-radius: 0.85rem;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  padding: 0.6rem 0.5rem;
+  min-width: 0;
+}
+
+.serverMetricLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.serverMetricValue {
+  font-size: 1rem;
+  line-height: 1.1;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.serverMetricHint {
+  font-size: 0.63rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.serverMetricError {
+  margin-top: 0.5rem;
+  font-size: 0.68rem;
+  color: var(--accent-red);
 }
 
 .sessionSidebarStats {
@@ -402,7 +489,8 @@
   }
 
   .sessionChartContainer {
-    height: 132px;
+    height: 156px;
+    min-height: 156px;
   }
 
   .sessionMainToolbar {
@@ -442,7 +530,8 @@
   }
 
   .sessionChartContainer {
-    height: 120px;
+    height: 156px;
+    min-height: 156px;
   }
 
   .sessionChartCenterText {
@@ -451,6 +540,33 @@
 
   .sessionChartSubText {
     font-size: 0.6rem;
+  }
+
+  .sessionChartLegend {
+    gap: 0.7rem;
+    font-size: 0.68rem;
+  }
+
+  .serverMetricGrid {
+    gap: 0.42rem;
+    margin-top: 0.62rem;
+  }
+
+  .serverMetricItem {
+    padding: 0.48rem 0.4rem;
+    border-radius: 0.75rem;
+  }
+
+  .serverMetricLabel {
+    font-size: 0.6rem;
+  }
+
+  .serverMetricValue {
+    font-size: 0.88rem;
+  }
+
+  .serverMetricHint {
+    font-size: 0.56rem;
   }
 
   .sessionSidebarStats {

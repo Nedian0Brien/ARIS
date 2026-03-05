@@ -41,6 +41,20 @@ interface DirectoryInfo {
 const PATH_HISTORY_STORAGE_KEY = 'aris:new-session-path-history';
 const MAX_PATH_HISTORY_ITEMS = 8;
 const FALLBACK_DATE_ISO = '1970-01-01T00:00:00.000Z';
+const SERVER_METRICS_POLL_INTERVAL_MS = 10_000;
+
+type ServerMetric = {
+  percent: number;
+  usedBytes: number;
+  totalBytes: number;
+};
+
+type ServerMetrics = {
+  cpu: ServerMetric;
+  ram: ServerMetric;
+  mem: ServerMetric;
+  capturedAt: string;
+};
 
 const AGENT_OPTIONS: AgentOption[] = [
   {
@@ -126,6 +140,19 @@ function formatHistoryDate(dateStr: string): string {
   }
 }
 
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, value));
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 MB';
+  const gb = 1024 ** 3;
+  const mb = 1024 ** 2;
+  if (bytes >= gb) return `${(bytes / gb).toFixed(1)} GB`;
+  return `${Math.round(bytes / mb)} MB`;
+}
+
 export function SessionDashboard({ 
   initialSessions, 
   isOperator 
@@ -164,6 +191,9 @@ export function SessionDashboard({
 
   // Local mutation state
   const [sessionsList, setSessionsList] = useState<SessionSummary[]>(initialSessions);
+  const [serverMetrics, setServerMetrics] = useState<ServerMetrics | null>(null);
+  const [isLoadingServerMetrics, setIsLoadingServerMetrics] = useState(true);
+  const [serverMetricsError, setServerMetricsError] = useState<string | null>(null);
 
   useEffect(() => {
     setSessionsList(initialSessions);
@@ -221,6 +251,75 @@ export function SessionDashboard({
       fetchDirectory(browserPath);
     }
   }, [isBrowsing]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    let inFlight = false;
+
+    const fetchServerMetrics = async () => {
+      if (inFlight) return;
+      inFlight = true;
+
+      try {
+        const response = await fetch('/api/runtime/system', { cache: 'no-store' });
+        const body = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          metrics?: {
+            cpu?: { percent?: number };
+            ram?: { percent?: number; usedBytes?: number; totalBytes?: number };
+            mem?: { percent?: number; usedBytes?: number; totalBytes?: number };
+          };
+          capturedAt?: string;
+        };
+
+        if (!response.ok || !body.metrics) {
+          throw new Error(body.error ?? '서버 리소스 정보를 불러오지 못했습니다.');
+        }
+
+        if (!isCancelled) {
+          setServerMetrics({
+            cpu: {
+              percent: clampPercent(Number(body.metrics.cpu?.percent ?? 0)),
+              usedBytes: 0,
+              totalBytes: 0,
+            },
+            ram: {
+              percent: clampPercent(Number(body.metrics.ram?.percent ?? 0)),
+              usedBytes: Math.max(0, Number(body.metrics.ram?.usedBytes ?? 0)),
+              totalBytes: Math.max(0, Number(body.metrics.ram?.totalBytes ?? 0)),
+            },
+            mem: {
+              percent: clampPercent(Number(body.metrics.mem?.percent ?? 0)),
+              usedBytes: Math.max(0, Number(body.metrics.mem?.usedBytes ?? 0)),
+              totalBytes: Math.max(0, Number(body.metrics.mem?.totalBytes ?? 0)),
+            },
+            capturedAt: typeof body.capturedAt === 'string' ? body.capturedAt : new Date().toISOString(),
+          });
+          setServerMetricsError(null);
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          const message = error instanceof Error ? error.message : '서버 리소스 정보를 불러오지 못했습니다.';
+          setServerMetricsError(message);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingServerMetrics(false);
+        }
+        inFlight = false;
+      }
+    };
+
+    void fetchServerMetrics();
+    const timerId = window.setInterval(() => {
+      void fetchServerMetrics();
+    }, SERVER_METRICS_POLL_INTERVAL_MS);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(timerId);
+    };
+  }, []);
 
   async function fetchDirectory(targetPath: string) {
     setIsLoadingDirs(true);
@@ -639,11 +738,21 @@ export function SessionDashboard({
       )
     : null;
 
-  // Pie chart data
+  const cpuUsagePercent = clampPercent(serverMetrics?.cpu.percent ?? 0);
+  const ramUsagePercent = clampPercent(serverMetrics?.ram.percent ?? 0);
+  const memUsagePercent = clampPercent(serverMetrics?.mem.percent ?? 0);
+
   const pieData = [
-    { name: '사용중', value: 35, color: '#3b82f6' },
-    { name: '여유', value: 65, color: '#e2e8f0' },
+    { name: '사용중', value: cpuUsagePercent, color: '#3b82f6' },
+    { name: '여유', value: Math.max(0, 100 - cpuUsagePercent), color: '#e2e8f0' },
   ];
+  const cpuValueText = isLoadingServerMetrics && !serverMetrics ? '--' : `${Math.round(cpuUsagePercent)}%`;
+  const ramValueText = isLoadingServerMetrics && !serverMetrics ? '--' : `${Math.round(ramUsagePercent)}%`;
+  const memValueText = isLoadingServerMetrics && !serverMetrics ? '--' : `${Math.round(memUsagePercent)}%`;
+  const ramDetailText = serverMetrics
+    ? `${formatBytes(serverMetrics.ram.usedBytes)} / ${formatBytes(serverMetrics.ram.totalBytes)}`
+    : 'collecting';
+  const memDetailText = serverMetrics ? `RSS ${formatBytes(serverMetrics.mem.usedBytes)}` : 'collecting';
 
   return (
     <div style={{ position: 'relative' }}>
@@ -725,19 +834,39 @@ export function SessionDashboard({
                       </Pie>
                     </PieChart>
                   </ResponsiveContainer>
-                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                    <div className={styles.sessionChartCenterText}>35%</div>
-                    <div className={styles.sessionChartSubText}>CPU/MEM</div>
+                  <div className={styles.sessionChartCenter}>
+                    <div className={styles.sessionChartCenterText}>{cpuValueText}</div>
+                    <div className={styles.sessionChartSubText}>CPU</div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '0.5rem', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6' }}></span> 사용중
+                <div className={styles.sessionChartLegend}>
+                  <span className={styles.sessionChartLegendItem}>
+                    <span className={styles.sessionChartLegendDotUsed}></span> 사용중
                   </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#e2e8f0' }}></span> 여유
+                  <span className={styles.sessionChartLegendItem}>
+                    <span className={styles.sessionChartLegendDotIdle}></span> 여유
                   </span>
                 </div>
+                <div className={styles.serverMetricGrid}>
+                  <div className={styles.serverMetricItem}>
+                    <span className={styles.serverMetricLabel}>CPU</span>
+                    <strong className={styles.serverMetricValue}>{cpuValueText}</strong>
+                    <span className={styles.serverMetricHint}>전체 코어</span>
+                  </div>
+                  <div className={styles.serverMetricItem}>
+                    <span className={styles.serverMetricLabel}>RAM</span>
+                    <strong className={styles.serverMetricValue}>{ramValueText}</strong>
+                    <span className={styles.serverMetricHint}>{ramDetailText}</span>
+                  </div>
+                  <div className={styles.serverMetricItem}>
+                    <span className={styles.serverMetricLabel}>Mem</span>
+                    <strong className={styles.serverMetricValue}>{memValueText}</strong>
+                    <span className={styles.serverMetricHint}>{memDetailText}</span>
+                  </div>
+                </div>
+                {serverMetricsError && (
+                  <div className={styles.serverMetricError}>실시간 지표 갱신 실패: {serverMetricsError}</div>
+                )}
               </Card>
 
               {/* Session Status */}
