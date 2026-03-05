@@ -742,9 +742,13 @@ export function SessionDashboard({
   const ramUsagePercent = clampPercent(serverMetrics?.ram.percent ?? 0);
   const memUsagePercent = clampPercent(serverMetrics?.mem.percent ?? 0);
 
-  const pieData = [
+  const cpuPieData = [
     { name: '사용중', value: cpuUsagePercent, color: '#3b82f6' },
     { name: '여유', value: Math.max(0, 100 - cpuUsagePercent), color: '#e2e8f0' },
+  ];
+  const ramPieData = [
+    { name: '사용중', value: ramUsagePercent, color: '#10b981' },
+    { name: '여유', value: Math.max(0, 100 - ramUsagePercent), color: '#e2e8f0' },
   ];
   const cpuValueText = isLoadingServerMetrics && !serverMetrics ? '--' : `${Math.round(cpuUsagePercent)}%`;
   const ramValueText = isLoadingServerMetrics && !serverMetrics ? '--' : `${Math.round(ramUsagePercent)}%`;
@@ -812,57 +816,83 @@ export function SessionDashboard({
                 <h3 className={styles.sessionSidebarTitle}>
                   <Activity size={16} color="var(--primary)" /> 서버 리소스
                 </h3>
-                <div className={styles.sessionChartContainer}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={pieData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius="60%"
-                        outerRadius="86%"
-                        startAngle={90}
-                        endAngle={-270}
-                        dataKey="value"
-                        stroke="none"
-                        paddingAngle={1}
-                        cornerRadius={8}
-                      >
-                        {pieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className={styles.sessionChartCenter}>
-                    <div className={styles.sessionChartCenterText}>{cpuValueText}</div>
-                    <div className={styles.sessionChartSubText}>CPU</div>
+                <div className={styles.serverResourceGrid}>
+                  <div className={styles.serverDonutCard}>
+                    <div className={styles.serverDonutChart}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={cpuPieData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius="62%"
+                            outerRadius="86%"
+                            startAngle={90}
+                            endAngle={-270}
+                            dataKey="value"
+                            stroke="none"
+                            paddingAngle={1}
+                            cornerRadius={8}
+                          >
+                            {cpuPieData.map((entry, index) => (
+                              <Cell key={`cpu-cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className={styles.serverDonutCenter}>
+                        <div className={styles.serverDonutValue}>{cpuValueText}</div>
+                        <div className={styles.serverDonutLabel}>CPU</div>
+                      </div>
+                    </div>
+                    <div className={styles.serverDonutFoot}>
+                      <span className={styles.serverDonutHint}>전체 코어</span>
+                    </div>
+                  </div>
+
+                  <div className={styles.serverDonutCard}>
+                    <div className={styles.serverDonutChart}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={ramPieData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius="62%"
+                            outerRadius="86%"
+                            startAngle={90}
+                            endAngle={-270}
+                            dataKey="value"
+                            stroke="none"
+                            paddingAngle={1}
+                            cornerRadius={8}
+                          >
+                            {ramPieData.map((entry, index) => (
+                              <Cell key={`ram-cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className={styles.serverDonutCenter}>
+                        <div className={styles.serverDonutValue}>{ramValueText}</div>
+                        <div className={styles.serverDonutLabel}>RAM</div>
+                      </div>
+                    </div>
+                    <div className={styles.serverDonutFoot}>
+                      <span className={styles.serverDonutHint}>{ramDetailText}</span>
+                    </div>
                   </div>
                 </div>
-                <div className={styles.sessionChartLegend}>
-                  <span className={styles.sessionChartLegendItem}>
-                    <span className={styles.sessionChartLegendDotUsed}></span> 사용중
-                  </span>
-                  <span className={styles.sessionChartLegendItem}>
-                    <span className={styles.sessionChartLegendDotIdle}></span> 여유
-                  </span>
-                </div>
-                <div className={styles.serverMetricGrid}>
-                  <div className={styles.serverMetricItem}>
-                    <span className={styles.serverMetricLabel}>CPU</span>
-                    <strong className={styles.serverMetricValue}>{cpuValueText}</strong>
-                    <span className={styles.serverMetricHint}>전체 코어</span>
+
+                <div className={styles.serverMemCard}>
+                  <div className={styles.serverMemHeader}>
+                    <span className={styles.serverMemLabel}>Mem</span>
+                    <strong className={styles.serverMemValue}>{memValueText}</strong>
                   </div>
-                  <div className={styles.serverMetricItem}>
-                    <span className={styles.serverMetricLabel}>RAM</span>
-                    <strong className={styles.serverMetricValue}>{ramValueText}</strong>
-                    <span className={styles.serverMetricHint}>{ramDetailText}</span>
+                  <div className={styles.serverMemBarTrack} role="img" aria-label={`메모리 사용률 ${memValueText}`}>
+                    <div className={styles.serverMemBarFill} style={{ width: `${memUsagePercent}%` }} />
                   </div>
-                  <div className={styles.serverMetricItem}>
-                    <span className={styles.serverMetricLabel}>Mem</span>
-                    <strong className={styles.serverMetricValue}>{memValueText}</strong>
-                    <span className={styles.serverMetricHint}>{memDetailText}</span>
-                  </div>
+                  <div className={styles.serverMemHint}>{memDetailText}</div>
                 </div>
                 {serverMetricsError && (
                   <div className={styles.serverMetricError}>실시간 지표 갱신 실패: {serverMetricsError}</div>
