@@ -78,11 +78,11 @@ html, body {
 
 body {
   min-height: 100vh;
+  /* 주소창이 보이는 최소 높이 fallback */
+  min-height: 100svh;
   min-height: -webkit-fill-available;
   min-height: calc(var(--vh, 1vh) * 100);
-  min-height: var(--app-vh, 100vh);
-  /* 100svh: small viewport height - 주소창 표시 상태 기준, iOS Safari 15.4+ */
-  min-height: 100svh;
+  min-height: var(--app-vh, 100svh);
 }
 
 a {
@@ -213,23 +213,24 @@ button, input, textarea, select {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-height: 100svh;
   min-height: -webkit-fill-available;
   min-height: calc(var(--vh, 1vh) * 100);
-  min-height: var(--app-vh, 100vh);
-  /* 100svh: 주소창 표시 상태 기준 최소 높이 보장 */
-  min-height: 100svh;
+  min-height: var(--app-vh, 100svh);
   background-color: var(--bg);
   padding-bottom: calc(96px + var(--safe-area-inset-bottom));
 }
 
 .app-shell-immersive {
-  height: calc(var(--vh, 1vh) * 100);
-  height: var(--app-vh, calc(var(--vh, 1vh) * 100));
-  /* 100dvh: dynamic viewport height - 주소창 변화에 자동 대응, iOS Safari 15.4+ */
+  height: 100vh;
+  /* iOS Safari 15.4+ fallback */
   height: 100dvh;
-  min-height: calc(var(--vh, 1vh) * 100);
-  min-height: var(--app-vh, calc(var(--vh, 1vh) * 100));
+  height: calc(var(--vh, 1vh) * 100);
+  height: var(--app-vh, 100dvh);
+  min-height: 100vh;
   min-height: 100dvh;
+  min-height: calc(var(--vh, 1vh) * 100);
+  min-height: var(--app-vh, 100dvh);
   padding-bottom: 0;
 }
 
@@ -244,7 +245,7 @@ button, input, textarea, select {
   position: fixed;
   bottom: calc(1.25rem + var(--safe-area-inset-bottom));
   left: 50%;
-  transform: translateX(-50%) translateY(0);
+  transform: translateX(-50%);
   width: min(400px, calc(100vw - 2.5rem));
   max-width: 400px;
   height: 62px;
@@ -262,12 +263,12 @@ button, input, textarea, select {
     0 8px 32px rgba(15, 23, 42, 0.12),
     0 2px 8px rgba(15, 23, 42, 0.06),
     inset 0 1px 1px rgba(255, 255, 255, 0.85);
-  transition: transform 0.28s ease, opacity 0.2s ease;
-  will-change: transform, opacity;
+  transition: bottom 0.28s ease, opacity 0.2s ease;
+  will-change: bottom, opacity;
 }
 
 .bottom-nav-hidden {
-  transform: translateX(-50%) translateY(calc(100% + 1.75rem + var(--safe-area-inset-bottom)));
+  bottom: calc(-62px - 1.75rem - var(--safe-area-inset-bottom));
   opacity: 0;
   pointer-events: none;
 }
