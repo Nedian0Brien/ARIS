@@ -937,38 +937,31 @@ export function ChatInterface({
       <main className={styles.centerPanel} ref={centerPanelRef}>
         <section className={styles.centerFrame}>
           <header className={styles.centerHeader}>
-            <div className={styles.centerHeaderLeft}>
+            <span className={`${styles.agentAvatarHero} ${AGENT_AVATAR_TONE_CLASS[agentMeta.tone]}`}>
+              <agentMeta.Icon size={20} />
+            </span>
+            <div className={styles.centerHeaderInfo}>
               <h2 className={styles.centerTitle}>{displayName}</h2>
-              <div className={styles.agentIdentity}>
-                <span className={`${styles.agentAvatar} ${styles.agentAvatarLarge} ${AGENT_AVATAR_TONE_CLASS[agentMeta.tone]}`}>
-                  <agentMeta.Icon size={18} />
-                </span>
-                <span className={styles.agentIdentityText}>
-                  <span className={styles.agentIdentityName}>{agentMeta.label}</span>
-                  <span className={styles.agentIdentityMeta}>Agent Profile</span>
-                </span>
-              </div>
+              <span className={styles.centerAgentLabel}>{agentMeta.label} Agent</span>
             </div>
-            <div className={styles.centerHeaderRight}>
-              <span
-                className={`${styles.connectionPill} ${
-                  connectionState === 'running'
-                    ? styles.connectionRunning
-                    : connectionState === 'connected'
-                      ? styles.connectionGood
-                      : styles.connectionWarn
-                }`}
-              >
-                {connectionState === 'running' ? (
-                  <Activity size={14} className={styles.connectionRunningIcon} />
-                ) : connectionState === 'connected' ? (
-                  <CheckCircle2 size={14} />
-                ) : (
-                  <CircleAlert size={14} />
-                )}
-                {connectionLabel}
-              </span>
-            </div>
+            <span
+              className={`${styles.connectionPill} ${
+                connectionState === 'running'
+                  ? styles.connectionRunning
+                  : connectionState === 'connected'
+                    ? styles.connectionGood
+                    : styles.connectionWarn
+              }`}
+            >
+              {connectionState === 'running' ? (
+                <Activity size={13} className={styles.connectionRunningIcon} />
+              ) : connectionState === 'connected' ? (
+                <CheckCircle2 size={13} />
+              ) : (
+                <CircleAlert size={13} />
+              )}
+              {connectionLabel}
+            </span>
           </header>
 
           {runtimeNotice && (

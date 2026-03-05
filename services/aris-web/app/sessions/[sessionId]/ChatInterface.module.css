@@ -208,67 +208,48 @@
 .centerHeader {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.8rem;
-  padding: 0.8rem 0.9rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(255, 255, 255, 0.9);
+  gap: 0.85rem;
+  padding: 0.82rem 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.95) 100%);
+  flex-shrink: 0;
 }
 
-.centerHeaderLeft {
-  display: flex;
+.agentAvatarHero {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: inline-flex;
   align-items: center;
-  gap: 0.82rem;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+}
+
+.centerHeaderInfo {
+  flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
 }
 
 .centerTitle {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 800;
   color: #0f172a;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.2;
 }
 
-.centerHeaderRight {
-  display: flex;
-  align-items: center;
-}
-
-.agentIdentity {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: 999px;
-  background: rgba(248, 250, 252, 0.8);
-  padding: 0.24rem 0.58rem 0.24rem 0.24rem;
-}
-
-.agentIdentityText {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.02rem;
-}
-
-.agentIdentityName {
-  font-size: 0.73rem;
-  font-weight: 800;
-  color: #0f172a;
-  line-height: 1.1;
-}
-
-.agentIdentityMeta {
-  font-size: 0.64rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.centerAgentLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
   color: #64748b;
-  line-height: 1;
+  letter-spacing: 0.01em;
 }
 
 .connectionPill {
@@ -1042,11 +1023,17 @@
     box-shadow: none;
   }
 
-  .centerHeaderLeft {
-    gap: 0.58rem;
+  .centerHeader {
+    padding: 0.72rem 0.85rem;
+    gap: 0.72rem;
   }
 
-  .agentIdentityMeta {
+  .agentAvatarHero {
+    width: 36px;
+    height: 36px;
+  }
+
+  .centerAgentLabel {
     display: none;
   }
 
