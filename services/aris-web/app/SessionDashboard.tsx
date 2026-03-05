@@ -153,6 +153,28 @@ function formatBytes(bytes: number): string {
   return `${Math.round(bytes / mb)} MB`;
 }
 
+const WORKSPACE_PATH_ROOT = '/workspace';
+
+function trimWorkspacePath(path: string): string {
+  const normalized = path.replace(/\\/g, '/').trim().replace(/\/+$/, '');
+  if (!normalized || normalized === WORKSPACE_PATH_ROOT) return '/';
+
+  if (normalized.startsWith(`${WORKSPACE_PATH_ROOT}/`)) {
+    return normalized.slice(WORKSPACE_PATH_ROOT.length) || '/';
+  }
+
+  if (normalized.startsWith('/')) {
+    return normalized || '/';
+  }
+
+  return `/${normalized}`;
+}
+
+function buildWorkspacePath(relativePath: string): string {
+  const trimmed = trimWorkspacePath(relativePath);
+  return trimmed === '/' ? WORKSPACE_PATH_ROOT : `${WORKSPACE_PATH_ROOT}${trimmed}`;
+}
+
 export function SessionDashboard({ 
   initialSessions, 
   isOperator 
@@ -170,11 +192,12 @@ export function SessionDashboard({
 
   // Directory Browser States
   const [isBrowsing, setIsBrowsing] = useState(false);
-  const [pathInputMode, setPathInputMode] = useState<'browse' | 'manual'>('browse');
   const [browserPath, setBrowserPath] = useState('/');
   const [directories, setDirectories] = useState<DirectoryInfo[]>([]);
   const [parentPath, setParentPath] = useState<string | null>(null);
   const [isLoadingDirs, setIsLoadingDirs] = useState(false);
+  const [isBrowserPathEditing, setIsBrowserPathEditing] = useState(false);
+  const [browserPathDraft, setBrowserPathDraft] = useState(WORKSPACE_PATH_ROOT);
 
   // Recent History State
   const [pathHistory, setPathHistory] = useState<PathHistoryEntry[]>([]);
@@ -384,9 +407,24 @@ export function SessionDashboard({
 
   function openCreateSessionModal() {
     setError(null);
-    setPathInputMode('browse');
-    setIsBrowsing(true);
+    setNewPath('');
+    setIsBrowsing(false);
+    setBrowserPath('/');
+    setIsBrowserPathEditing(false);
+    setBrowserPathDraft(WORKSPACE_PATH_ROOT);
     setIsCreateModalOpen(true);
+  }
+
+  function openBrowserPathEditor() {
+    setBrowserPathDraft(buildWorkspacePath(browserPath));
+    setIsBrowserPathEditing(true);
+  }
+
+  function applyBrowserPath() {
+    const nextBrowserPath = trimWorkspacePath(browserPathDraft);
+    setIsBrowserPathEditing(false);
+    setBrowserPath(nextBrowserPath);
+    void fetchDirectory(nextBrowserPath);
   }
 
   async function handleQuickResume(entry: PathHistoryEntry) {
@@ -575,34 +613,11 @@ export function SessionDashboard({
 
             <form onSubmit={handleCreateSession} className="modal-body no-scrollbar">
               <div className="form-section">
-                <label className="section-label" htmlFor="project-path">Project Path</label>
+                <label className="section-label">Project Path</label>
                 <div className="input-group">
-                  <Input
-                    id="project-path"
-                    name="projectPath"
-                    value={newPath}
-                    onChange={(e) => setNewPath(e.target.value)}
-                    onClick={() => {
-                      if (pathInputMode !== 'manual') {
-                        setPathInputMode('manual');
-                        setIsBrowsing(false);
-                      }
-                    }}
-                    onFocus={() => {
-                      if (pathInputMode !== 'manual') {
-                        setPathInputMode('manual');
-                        setIsBrowsing(false);
-                      }
-                    }}
-                    placeholder={
-                      pathInputMode === 'browse'
-                        ? '기본은 클릭 선택 모드입니다. 직접 입력하려면 이 입력창을 클릭하세요.'
-                        : '/workspace/my-project'
-                    }
-                    readOnly={pathInputMode === 'browse'}
-                    required
-                    disabled={!isOperator || isCreating}
-                  />
+                  <div className="path-chooser-hint">
+                    경로를 직접 입력하려면 돋보기로 폴더 선택을 열고, 좌측 주소에서 수정하세요.
+                  </div>
                   <Button
                     type="button"
                     variant="secondary"
@@ -610,7 +625,10 @@ export function SessionDashboard({
                       setIsBrowsing((prev) => {
                         const next = !prev;
                         if (next) {
-                          setPathInputMode('browse');
+                          setBrowserPathDraft(buildWorkspacePath(browserPath));
+                          setIsBrowserPathEditing(false);
+                        } else {
+                          setIsBrowserPathEditing(false);
                         }
                         return next;
                       });
@@ -623,25 +641,62 @@ export function SessionDashboard({
                   </Button>
                 </div>
                 <p className="text-sm text-muted" style={{ marginTop: '0.5rem' }}>
-                  기본은 클릭으로 경로를 선택합니다. 직접 입력이 필요하면 입력창을 클릭해 편집 모드로 전환하세요.
+                  기본 상태에서는 텍스트 입력창이 숨겨져 있으며, 경로 선택은 브라우저에서 처리합니다.
                 </p>
 
                 {isBrowsing && (
                   <div className="directory-browser animate-in">
                     <div className="browser-header">
-                      <span className="current-path-display">
-                        <span className="path-prefix">/workspace</span>
-                        {browserPath !== '/' ? browserPath : ''}
-                      </span>
+                      <div className="current-path-edit-wrap">
+                        {isBrowserPathEditing ? (
+                          <input
+                            className="path-inline-input"
+                            type="text"
+                            value={browserPathDraft}
+                            onChange={(e) => setBrowserPathDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                applyBrowserPath();
+                              } else if (e.key === 'Escape') {
+                                setIsBrowserPathEditing(false);
+                              }
+                            }}
+                            disabled={!isOperator || isCreating}
+                            autoFocus
+                          />
+                        ) : (
+                          <span className="current-path-display">
+                            <span className="path-prefix">{WORKSPACE_PATH_ROOT}</span>
+                            {browserPath !== '/' ? browserPath : ''}
+                          </span>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="path-edit-btn"
+                          onClick={() => {
+                            if (isBrowserPathEditing) {
+                              applyBrowserPath();
+                            } else {
+                              openBrowserPathEditor();
+                            }
+                          }}
+                          disabled={!isOperator || isCreating}
+                          title={isBrowserPathEditing ? '현재 위치 적용' : '현재 위치 직접 수정'}
+                        >
+                          {isBrowserPathEditing ? <Check size={14} /> : <Edit2 size={14} />}
+                        </Button>
+                      </div>
                       <Button 
                         type="button"
                         variant="primary" 
-                        className="select-current-btn"
-                        onClick={() => {
-                          setNewPath(`/workspace${browserPath === '/' ? '' : browserPath}`);
-                          setPathInputMode('browse');
-                          setIsBrowsing(false);
-                        }}
+                          className="select-current-btn"
+                          onClick={() => {
+                            setNewPath(buildWorkspacePath(browserPath));
+                            setIsBrowsing(false);
+                            setIsBrowserPathEditing(false);
+                          }}
                       >
                         <Check size={14} /> 이 경로 선택
                       </Button>

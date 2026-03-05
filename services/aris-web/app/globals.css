@@ -562,6 +562,20 @@ button, input, textarea, select {
   gap: 0.5rem;
 }
 
+.path-chooser-hint {
+  flex: 1;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
 /* Integrated Directory Browser */
 .directory-browser {
   margin-top: 0.75rem;
@@ -590,6 +604,40 @@ button, input, textarea, select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.current-path-edit-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.path-inline-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  font-family: var(--font-mono);
+  padding: 0.35rem 0.55rem;
+}
+
+.path-inline-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
+.path-edit-btn {
+  width: 2rem !important;
+  min-height: 2rem !important;
+  padding: 0 !important;
+  flex-shrink: 0;
 }
 
 .path-prefix {
