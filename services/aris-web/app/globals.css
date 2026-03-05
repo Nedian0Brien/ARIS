@@ -200,7 +200,6 @@ button, input, textarea, select {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  min-height: 100dvh;
   padding-bottom: calc(96px + var(--safe-area-inset-bottom));
 }
 
