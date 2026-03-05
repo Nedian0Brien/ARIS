@@ -531,7 +531,8 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-@media (max-width: 1199px) {
+@media (max-width: 999px) {
+
   .sessionDashboardLayout {
     grid-template-columns: 1fr;
     gap: 1rem;

@@ -932,7 +932,7 @@ export function SessionDashboard({
                       <BarChart
                         layout="vertical"
                         data={sessionOverviewBarData}
-                        margin={{ top: 0, right: 0, left: -44, bottom: 0 }}
+                        margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
                         barSize={12}
                       >
                         <XAxis type="number" hide />
