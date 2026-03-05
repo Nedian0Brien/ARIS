@@ -104,7 +104,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', backgroundColor: 'var(--surface-subtle)' }}>
+    <div style={{ minHeight: 'var(--app-vh, 100vh)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', backgroundColor: 'var(--surface-subtle)' }}>
       <Card style={{ width: '100%', maxWidth: '400px', padding: '2rem', boxShadow: 'var(--shadow-md)' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <h1 className="title-lg" style={{ marginBottom: '0.5rem' }}>ARIS</h1>

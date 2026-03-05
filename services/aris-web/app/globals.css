@@ -63,6 +63,7 @@
 
 html, body {
   width: 100%;
+  min-height: 100%;
   background-color: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
@@ -71,6 +72,10 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
+}
+
+body {
+  min-height: var(--app-vh, 100vh);
 }
 
 a {
@@ -203,6 +208,10 @@ button, input, textarea, select {
   min-height: 100vh;
   min-height: var(--app-vh, 100vh);
   padding-bottom: calc(96px + var(--safe-area-inset-bottom));
+}
+
+.app-shell-immersive {
+  padding-bottom: 0;
 }
 
 @media (min-width: 768px) {
