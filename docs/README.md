@@ -27,6 +27,7 @@ ARIS(Agentic Runtime Interface System)의 문서는 **사용자 의도 중심(Ch
 - `02-roadmap.md`: 단계별 구현 계획
 - `03-feature-backlog.md`: Post-MVP 백로그
 - `04-deployment-guide.md`: 배포 절차와 런타임 이슈 트러블슈팅
+- `05-dark-mode-support-plan.md`: 다크모드 지원 설계/구현/검증 계획
 
 ## 권장 읽기 순서
 
