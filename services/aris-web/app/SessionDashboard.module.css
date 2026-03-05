@@ -14,7 +14,7 @@
 
 .sessionDashboardLayout {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-columns: 400px minmax(0, 1fr);
   gap: 1.5rem;
 }
 
@@ -57,15 +57,16 @@
 .serverDonutCard {
   border-radius: 1rem;
   background: rgba(255, 255, 255, 0.6);
-  border: 1px solid var(--line);
+  border: none;
   padding: 0.65rem 0.55rem 0.55rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 .serverDonutChart {
   position: relative;
   width: 100%;
-  height: 130px;
-  min-height: 130px;
+  height: 176px;
+  min-height: 176px;
 }
 
 .serverDonutCenter {
@@ -110,8 +111,9 @@
   margin-top: 0.65rem;
   border-radius: 1rem;
   background: rgba(255, 255, 255, 0.6);
-  border: 1px solid var(--line);
+  border: none;
   padding: 0.75rem 0.7rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 .serverMemHeader {
@@ -164,79 +166,85 @@
   color: var(--accent-red);
 }
 
-.sessionSidebarStats {
+.sessionSummaryBarChart {
+  width: 100%;
+  height: 172px;
+  min-height: 172px;
+}
+
+.sessionSummaryLegend {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
 }
 
-.sessionStatItem {
-  border-radius: 1rem;
-  padding: 1rem 0.5rem;
+.sessionSummaryLegendItem {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  text-align: center;
-  transition: transform 0.2s;
-}
-
-.sessionStatItem:hover {
-  transform: translateY(-2px);
-}
-
-.sessionStatItemTotal {
-  background: var(--surface-subtle);
-}
-
-.sessionStatItemRunning {
-  background: var(--accent-emerald-bg);
-}
-
-.sessionStatItemIdle {
-  background: var(--accent-amber-bg);
-}
-
-.sessionStatLabel {
-  color: var(--text-muted);
-  font-size: 0.75rem;
+  gap: 0.35rem;
+  font-size: 0.72rem;
   font-weight: 600;
+  color: var(--text-muted);
+  min-width: 0;
 }
 
-.sessionStatValue {
-  font-size: 1.5rem;
+.sessionSummaryLegendItem strong {
+  margin-left: auto;
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.sessionSummaryLegendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.sessionSidebarSubTitle {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 1rem 0 0.45rem;
+}
+
+.agentDonutWrap {
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.6);
+  border: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  padding: 0.5rem 0.45rem 0.35rem;
+}
+
+.agentDonutChart {
+  position: relative;
+  width: 100%;
+  height: 176px;
+  min-height: 176px;
+}
+
+.agentDonutCenter {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.agentDonutValue {
+  font-size: 1.1rem;
   font-weight: 800;
   color: var(--text);
+  line-height: 1;
 }
 
-.sessionAgentStats {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.sessionAgentStatRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.75rem;
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.5);
-  border: 1px solid var(--line);
-}
-
-.sessionAgentStatLeft {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-
-.sessionAgentStatRight {
-  font-weight: 800;
-  font-size: 1.1rem;
+.agentDonutLabel {
+  margin-top: 0.2rem;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
 }
 
 .sessionMainToolbar {
@@ -483,10 +491,14 @@
 
   .sessionDashboardSidebar {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.85rem;
     order: -1;
     margin-bottom: 0.35rem;
+  }
+
+  .sessionSidebarCardResource {
+    grid-column: 1 / -1;
   }
 
   .sessionSidebarCard {
@@ -514,14 +526,10 @@
 
   .sessionDashboardSidebar {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     gap: 0.65rem;
     order: -1;
     margin: 0 0 0.65rem;
-  }
-
-  .sessionSidebarCardAgents {
-    grid-column: 1 / -1;
   }
 
   .sessionSidebarCard {
@@ -545,8 +553,8 @@
   }
 
   .serverDonutChart {
-    height: 112px;
-    min-height: 112px;
+    height: 156px;
+    min-height: 156px;
   }
 
   .serverDonutValue {
@@ -583,59 +591,46 @@
     font-size: 0.56rem;
   }
 
-  .sessionSidebarStats {
-    gap: 0.45rem;
+  .sessionSummaryBarChart {
+    height: 150px;
+    min-height: 150px;
   }
 
-  .sessionStatItem {
-    padding: 0.65rem 0.35rem;
-    gap: 0.2rem;
+  .sessionSummaryLegend {
+    gap: 0.42rem;
   }
 
-  .sessionStatValue {
-    font-size: 1.05rem;
-    line-height: 1;
+  .sessionSummaryLegendItem {
+    font-size: 0.66rem;
   }
 
-  .sessionStatLabel {
-    font-size: 0.64rem;
+  .sessionSummaryLegendItem strong {
+    font-size: 0.71rem;
   }
 
-  .sessionAgentStats {
-    gap: 0.45rem;
+  .sessionSidebarSubTitle {
+    font-size: 0.72rem;
+    margin-top: 0.78rem;
   }
 
-  .sessionAgentStatRow {
-    padding: 0.5rem 0.55rem;
-    font-size: 0.75rem;
-    flex-direction: row;
-    align-items: center;
-    gap: 0.45rem;
+  .agentDonutWrap {
+    border-radius: 0.85rem;
+    padding: 0.4rem 0.35rem 0.3rem;
   }
 
-  .sessionAgentStatLeft {
-    flex-direction: row;
-    gap: 0.45rem;
-    font-size: 0.76rem;
-    min-width: 0;
+  .agentDonutChart {
+    height: 156px;
+    min-height: 156px;
   }
 
-  .sessionAgentStatLeft div {
-    width: 22px;
-    height: 22px;
-    border-radius: 7px;
-    flex-shrink: 0;
+  .agentDonutValue {
+    font-size: 0.98rem;
   }
 
-  .sessionAgentStatLeft svg {
-    width: 13px;
-    height: 13px;
+  .agentDonutLabel {
+    font-size: 0.57rem;
   }
 
-  .sessionAgentStatRight {
-    font-size: 0.95rem;
-    flex-shrink: 0;
-  }
 }
 
 @media (max-width: 560px) {
@@ -643,11 +638,11 @@
     grid-template-columns: 1fr;
   }
 
-  .sessionSidebarCardAgents {
-    grid-column: auto;
+  .serverResourceGrid {
+    grid-template-columns: 1fr;
   }
 
-  .serverResourceGrid {
+  .sessionSummaryLegend {
     grid-template-columns: 1fr;
   }
 }

@@ -1,4 +1,5 @@
 import os from 'node:os';
+import { readFile } from 'node:fs/promises';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
 
@@ -56,6 +57,54 @@ function ratioPercent(used: number, total: number): number {
   return clampPercent((used / total) * 100);
 }
 
+async function readNumericFile(path: string): Promise<number | null> {
+  try {
+    const raw = (await readFile(path, 'utf8')).trim();
+    if (!raw || raw === 'max') return null;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function readContainerMemorySnapshot(): Promise<{ usedBytes: number; totalBytes: number } | null> {
+  const candidates = [
+    {
+      usedPath: '/sys/fs/cgroup/memory.current',
+      totalPath: '/sys/fs/cgroup/memory.max',
+    },
+    {
+      usedPath: '/sys/fs/cgroup/memory/memory.usage_in_bytes',
+      totalPath: '/sys/fs/cgroup/memory/memory.limit_in_bytes',
+    },
+  ];
+
+  for (const candidate of candidates) {
+    const [used, total] = await Promise.all([
+      readNumericFile(candidate.usedPath),
+      readNumericFile(candidate.totalPath),
+    ]);
+
+    if (!used || !total) {
+      continue;
+    }
+
+    // Some cgroup v1 environments return extremely large "unlimited" values.
+    if (total >= Number.MAX_SAFE_INTEGER / 16) {
+      continue;
+    }
+
+    return {
+      usedBytes: used,
+      totalBytes: total,
+    };
+  }
+
+  return null;
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireApiUser(request);
   if ('response' in auth) {
@@ -65,7 +114,10 @@ export async function GET(request: NextRequest) {
   const totalMemoryBytes = Math.max(0, os.totalmem());
   const freeMemoryBytes = Math.max(0, os.freemem());
   const ramUsedBytes = Math.max(0, totalMemoryBytes - freeMemoryBytes);
+  const containerMemory = await readContainerMemorySnapshot();
   const processMemUsedBytes = Math.max(0, process.memoryUsage().rss);
+  const memUsedBytes = containerMemory?.usedBytes ?? processMemUsedBytes;
+  const memTotalBytes = containerMemory?.totalBytes ?? totalMemoryBytes;
   const cpuPercent = readCpuPercent();
 
   return NextResponse.json(
@@ -82,9 +134,9 @@ export async function GET(request: NextRequest) {
           totalBytes: totalMemoryBytes,
         },
         mem: {
-          percent: ratioPercent(processMemUsedBytes, totalMemoryBytes),
-          usedBytes: processMemUsedBytes,
-          totalBytes: totalMemoryBytes,
+          percent: ratioPercent(memUsedBytes, memTotalBytes),
+          usedBytes: memUsedBytes,
+          totalBytes: memTotalBytes,
         },
       },
       capturedAt: new Date().toISOString(),

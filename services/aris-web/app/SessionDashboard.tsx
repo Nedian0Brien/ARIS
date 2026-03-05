@@ -12,7 +12,7 @@ import {
 import { Button, Input, Card, Badge } from '@/components/ui';
 import type { SessionSummary } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis } from 'recharts';
 import styles from './SessionDashboard.module.css';
 
 type AgentFlavor = 'claude' | 'codex' | 'gemini';
@@ -756,7 +756,22 @@ export function SessionDashboard({
   const ramDetailText = serverMetrics
     ? `${formatBytes(serverMetrics.ram.usedBytes)} / ${formatBytes(serverMetrics.ram.totalBytes)}`
     : 'collecting';
-  const memDetailText = serverMetrics ? `RSS ${formatBytes(serverMetrics.mem.usedBytes)}` : 'collecting';
+  const memDetailText = serverMetrics
+    ? `${formatBytes(serverMetrics.mem.usedBytes)} / ${formatBytes(serverMetrics.mem.totalBytes)}`
+    : 'collecting';
+  const sessionOverviewBarData = [
+    { name: '전체', value: sessionStats.total, color: '#64748b' },
+    { name: '실행중', value: sessionStats.running, color: '#10b981' },
+    { name: '대기', value: sessionStats.idle, color: '#f59e0b' },
+  ];
+  const activeAgentDistribution = AGENT_OPTIONS.map((agent) => ({
+    name: agent.label,
+    value: agentStats[agent.id],
+    color: agent.accentColor,
+  })).filter((entry) => entry.value > 0);
+  const agentDistributionData = activeAgentDistribution.length > 0
+    ? activeAgentDistribution
+    : [{ name: '없음', value: 1, color: '#e2e8f0' }];
 
   return (
     <div style={{ position: 'relative' }}>
@@ -812,7 +827,7 @@ export function SessionDashboard({
             <aside className={styles.sessionDashboardSidebar}>
               
               {/* Server Status Apple-Style Card */}
-              <Card className={styles.sessionSidebarCard}>
+              <Card className={`${styles.sessionSidebarCard} ${styles.sessionSidebarCardResource}`}>
                 <h3 className={styles.sessionSidebarTitle}>
                   <Activity size={16} color="var(--primary)" /> 서버 리소스
                 </h3>
@@ -904,37 +919,64 @@ export function SessionDashboard({
                 <h3 className={styles.sessionSidebarTitle}>
                   <Terminal size={16} color="var(--accent-violet)" /> 세션 현황
                 </h3>
-                <div className={styles.sessionSidebarStats}>
-                  <div className={`${styles.sessionStatItem} ${styles.sessionStatItemTotal}`}>
-                    <span className={styles.sessionStatValue}>{sessionStats.total}</span>
-                    <span className={styles.sessionStatLabel}>전체</span>
-                  </div>
-                  <div className={`${styles.sessionStatItem} ${styles.sessionStatItemRunning}`}>
-                    <span className={styles.sessionStatValue} style={{ color: 'var(--accent-emerald)' }}>{sessionStats.running}</span>
-                    <span className={styles.sessionStatLabel}>실행중</span>
-                  </div>
-                  <div className={`${styles.sessionStatItem} ${styles.sessionStatItemIdle}`}>
-                    <span className={styles.sessionStatValue} style={{ color: 'var(--accent-amber)' }}>{sessionStats.idle}</span>
-                    <span className={styles.sessionStatLabel}>대기</span>
+                <div className={styles.sessionSummaryBarChart}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={sessionOverviewBarData} margin={{ top: 6, right: 4, left: -16, bottom: 0 }}>
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
+                      <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                        {sessionOverviewBarData.map((entry) => (
+                          <Cell key={`session-bar-${entry.name}`} fill={entry.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className={styles.sessionSummaryLegend}>
+                  {sessionOverviewBarData.map((entry) => (
+                    <div key={`session-legend-${entry.name}`} className={styles.sessionSummaryLegendItem}>
+                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: entry.color }}></span>
+                      <span>{entry.name}</span>
+                      <strong>{entry.value}</strong>
+                    </div>
+                  ))}
+                </div>
+
+                <h4 className={styles.sessionSidebarSubTitle}>에이전트 분포</h4>
+                <div className={styles.agentDonutWrap}>
+                  <div className={styles.agentDonutChart}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={agentDistributionData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius="62%"
+                          outerRadius="86%"
+                          startAngle={90}
+                          endAngle={-270}
+                          dataKey="value"
+                          stroke="none"
+                          paddingAngle={1}
+                          cornerRadius={8}
+                        >
+                          {agentDistributionData.map((entry, index) => (
+                            <Cell key={`agent-cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className={styles.agentDonutCenter}>
+                      <div className={styles.agentDonutValue}>{sessionStats.total}</div>
+                      <div className={styles.agentDonutLabel}>sessions</div>
+                    </div>
                   </div>
                 </div>
-              </Card>
-
-              {/* Agents */}
-              <Card className={`${styles.sessionSidebarCard} ${styles.sessionSidebarCardAgents}`}>
-                <h3 className={styles.sessionSidebarTitle}>에이전트 분포</h3>
-                <div className={styles.sessionAgentStats}>
-                  {AGENT_OPTIONS.map(agent => (
-                    <div key={agent.id} className={styles.sessionAgentStatRow}>
-                      <div className={styles.sessionAgentStatLeft}>
-                        <div style={{ width: 28, height: 28, borderRadius: 8, background: agent.accentBg, color: agent.accentColor, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <agent.Icon size={16} />
-                        </div>
-                        {agent.label}
-                      </div>
-                      <div className={styles.sessionAgentStatRight} style={{ color: agentStats[agent.id] > 0 ? 'var(--text)' : 'var(--text-muted)' }}>
-                        {agentStats[agent.id]}
-                      </div>
+                <div className={styles.sessionSummaryLegend}>
+                  {AGENT_OPTIONS.map((agent) => (
+                    <div key={`agent-legend-${agent.id}`} className={styles.sessionSummaryLegendItem}>
+                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: agent.accentColor }}></span>
+                      <span>{agent.label}</span>
+                      <strong>{agentStats[agent.id]}</strong>
                     </div>
                   ))}
                 </div>
