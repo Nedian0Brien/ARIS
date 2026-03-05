@@ -1,15 +1,19 @@
+# syntax=docker/dockerfile:1.7
+
 FROM node:20-alpine AS deps
 WORKDIR /app
 RUN apk add --no-cache libc6-compat openssl
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci --prefer-offline
 
 FROM node:20-alpine AS builder
 WORKDIR /app
 RUN apk add --no-cache libc6-compat openssl
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run prisma:generate && npm run build
+RUN --mount=type=cache,target=/root/.npm \
+    --mount=type=cache,target=/app/.next/cache \
+    npm run prisma:generate && npm run build
 
 FROM node:20-alpine AS runner
 WORKDIR /app

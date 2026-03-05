@@ -38,7 +38,21 @@ pm2 restart aris-backend --update-env
 
 ### 2.2 Web & DB (Docker)
 ```bash
-docker compose --env-file deploy/.env up -d --build
+./deploy/deploy_web.sh
+```
+
+`deploy_web.sh` defaults:
+- Build with BuildKit enabled (`DOCKER_BUILDKIT=1`)
+- Deploy only `aris-web` with `up -d --no-deps` (faster than full stack rebuild)
+- Cleanup policy: `PRUNE_MODE=light`
+  - `docker image prune -f` (dangling image only)
+  - `docker buildx prune -f --keep-storage 8gb` (build cache 상한 유지, fallback: `docker builder prune`)
+
+Useful overrides:
+```bash
+PRUNE_MODE=off ./deploy/deploy_web.sh
+PRUNE_MODE=aggressive CACHE_UNTIL=72h ./deploy/deploy_web.sh
+PULL_BASE=1 ./deploy/deploy_web.sh
 ```
 
 Access web UI:
@@ -67,6 +81,7 @@ docker compose --env-file deploy/.env logs -f aris-web
 docker compose --env-file deploy/.env logs -f aris-backend
 docker compose --env-file deploy/.env ps
 docker compose --env-file deploy/.env down
+docker system df -v
 ```
 
 ### Runtime auth check (recommended after token changes)

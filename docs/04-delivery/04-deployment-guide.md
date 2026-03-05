@@ -42,13 +42,27 @@ pm2 restart aris-backend --update-env
 ## 2. 웹/DB 배포
 ```bash
 cd /path/to/web-agentic-coding
-docker compose --env-file deploy/.env up -d --build aris-web
+./deploy/deploy_web.sh
 ```
 
 도메인 운영 시:
 
 ```bash
 docker compose --env-file deploy/.env --profile edge up -d --build
+```
+
+`deploy_web.sh` 기본 정책
+- `DOCKER_BUILDKIT=1` + `COMPOSE_DOCKER_CLI_BUILD=1`
+- `docker compose build aris-web` 후 `up -d --no-deps aris-web` (불필요한 의존 재기동 방지)
+- 배포 직후 경량 정리 실행:
+  - dangling image prune
+  - build cache 상한 유지 prune (`keep-storage 8gb`)
+
+운영 환경별 옵션 예시
+```bash
+PRUNE_MODE=off ./deploy/deploy_web.sh
+PRUNE_MODE=aggressive CACHE_UNTIL=72h ./deploy/deploy_web.sh
+PULL_BASE=1 ./deploy/deploy_web.sh
 ```
 
 ## 3. 배포 후 즉시 헬스체크
@@ -107,10 +121,12 @@ docker compose --env-file deploy/.env logs --tail=120 aris-backend
 ## 6. 일반적인 운영 커맨드
 ```bash
 docker compose --env-file deploy/.env up -d --build            # 전체 서비스 재기동
+./deploy/deploy_web.sh                                          # 웹 서비스 표준 배포(+정리)
 
 docker compose --env-file deploy/.env ps                        # 상태 확인
 docker compose --env-file deploy/.env logs -f aris-web aris-backend # 실시간 로그
 docker compose --env-file deploy/.env down                      # 스택 중지
+docker system df -v                                              # 디스크 사용량 점검
 ```
 
 ## 7. 배포 완료 체크리스트
