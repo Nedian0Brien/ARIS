@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
   Play, Terminal, FolderOpen, Search, PlusCircle, X, Plus, 
-  Clock3, ArrowUpRight, Folder, ArrowUp, Check, ChevronUp,
+  Clock3, ArrowUpRight, Folder, ArrowUp, Check,
   MoreVertical, Activity, Pin, Edit2, RotateCw, Square, Trash2, HardDrive
 } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
@@ -408,8 +408,10 @@ export function SessionDashboard({
   function openCreateSessionModal() {
     setError(null);
     setNewPath('');
-    setIsBrowsing(false);
+    setIsBrowsing(true);
     setBrowserPath('/');
+    setDirectories([]);
+    setParentPath(null);
     setIsBrowserPathEditing(false);
     setBrowserPathDraft(WORKSPACE_PATH_ROOT);
     setIsCreateModalOpen(true);
@@ -614,131 +616,98 @@ export function SessionDashboard({
             <form onSubmit={handleCreateSession} className="modal-body no-scrollbar">
               <div className="form-section">
                 <label className="section-label">Project Path</label>
-                <div className="input-group">
-                  <div className="path-chooser-hint">
-                    경로를 직접 입력하려면 돋보기로 폴더 선택을 열고, 좌측 주소에서 수정하세요.
-                  </div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      setIsBrowsing((prev) => {
-                        const next = !prev;
-                        if (next) {
-                          setBrowserPathDraft(buildWorkspacePath(browserPath));
-                          setIsBrowserPathEditing(false);
-                        } else {
-                          setIsBrowserPathEditing(false);
-                        }
-                        return next;
-                      });
-                    }}
-                    disabled={!isOperator || isCreating}
-                    className="browse-btn"
-                    title="디렉토리 탐색기 열기/닫기"
-                  >
-                    {isBrowsing ? <ChevronUp size={18} /> : <Search size={18} />}
-                  </Button>
-                </div>
-                <p className="text-sm text-muted" style={{ marginTop: '0.5rem' }}>
-                  기본 상태에서는 텍스트 입력창이 숨겨져 있으며, 경로 선택은 브라우저에서 처리합니다.
-                </p>
-
-                {isBrowsing && (
-                  <div className="directory-browser animate-in">
-                    <div className="browser-header">
-                      <div className="current-path-edit-wrap">
-                        {isBrowserPathEditing ? (
-                          <input
-                            className="path-inline-input"
-                            type="text"
-                            value={browserPathDraft}
-                            onChange={(e) => setBrowserPathDraft(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                applyBrowserPath();
-                              } else if (e.key === 'Escape') {
-                                setIsBrowserPathEditing(false);
-                              }
-                            }}
-                            disabled={!isOperator || isCreating}
-                            autoFocus
-                          />
-                        ) : (
-                          <span className="current-path-display">
-                            <span className="path-prefix">{WORKSPACE_PATH_ROOT}</span>
-                            {browserPath !== '/' ? browserPath : ''}
-                          </span>
-                        )}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="path-edit-btn"
-                          onClick={() => {
-                            if (isBrowserPathEditing) {
+                <div className="directory-browser animate-in">
+                  <div className="browser-header">
+                    <div className="current-path-edit-wrap">
+                      {isBrowserPathEditing ? (
+                        <input
+                          className="path-inline-input"
+                          type="text"
+                          value={browserPathDraft}
+                          onChange={(e) => setBrowserPathDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
                               applyBrowserPath();
-                            } else {
-                              openBrowserPathEditor();
+                            } else if (e.key === 'Escape') {
+                              setIsBrowserPathEditing(false);
                             }
                           }}
                           disabled={!isOperator || isCreating}
-                          title={isBrowserPathEditing ? '현재 위치 적용' : '현재 위치 직접 수정'}
-                        >
-                          {isBrowserPathEditing ? <Check size={14} /> : <Edit2 size={14} />}
-                        </Button>
-                      </div>
-                      <Button 
+                          autoFocus
+                        />
+                      ) : (
+                        <span className="current-path-display">
+                          <span className="path-prefix">{WORKSPACE_PATH_ROOT}</span>
+                          {browserPath !== '/' ? browserPath : ''}
+                        </span>
+                      )}
+                      <Button
                         type="button"
-                        variant="primary" 
-                          className="select-current-btn"
-                          onClick={() => {
-                            setNewPath(buildWorkspacePath(browserPath));
-                            setIsBrowsing(false);
-                            setIsBrowserPathEditing(false);
-                          }}
+                        variant="ghost"
+                        className="path-edit-btn"
+                        onClick={() => {
+                          if (isBrowserPathEditing) {
+                            applyBrowserPath();
+                          } else {
+                            openBrowserPathEditor();
+                          }
+                        }}
+                        disabled={!isOperator || isCreating}
+                        title={isBrowserPathEditing ? '현재 위치 적용' : '현재 위치 직접 수정'}
                       >
-                        <Check size={14} /> 이 경로 선택
+                        {isBrowserPathEditing ? <Check size={14} /> : <Edit2 size={14} />}
                       </Button>
                     </div>
-                    
-                    <div className="browser-list no-scrollbar">
-                      {isLoadingDirs ? (
-                        <div className="browser-loading">탐색 중...</div>
-                      ) : (
-                        <>
-                          {parentPath !== null && (
-                            <button 
-                              type="button"
-                              onClick={() => fetchDirectory(parentPath)}
-                              className="browser-item up-dir"
-                            >
-                              <ArrowUp size={16} />
-                              <span>..</span>
-                            </button>
-                          )}
-                          {directories.length === 0 && parentPath === null && (
-                            <div className="browser-empty">표시할 디렉토리가 없습니다.</div>
-                          )}
-                          {directories.map((dir) => (
-                            <button 
-                              key={dir.path}
-                              type="button"
-                              onClick={() => fetchDirectory(dir.path)}
-                              className="browser-item folder"
-                            >
-                              <Folder size={16} />
-                              <span>{dir.name}</span>
-                            </button>
-                          ))}
-                        </>
-                      )}
-                    </div>
+                    <Button 
+                      type="button"
+                      variant="primary" 
+                      className="select-current-btn"
+                      onClick={() => {
+                        setNewPath(buildWorkspacePath(browserPath));
+                        setIsBrowserPathEditing(false);
+                      }}
+                    >
+                      <Check size={14} /> 이 경로 선택
+                    </Button>
                   </div>
-                )}
+                  
+                  <div className="browser-list no-scrollbar">
+                    {isLoadingDirs ? (
+                      <div className="browser-loading">탐색 중...</div>
+                    ) : (
+                      <>
+                        {parentPath !== null && (
+                          <button 
+                            type="button"
+                            onClick={() => fetchDirectory(parentPath)}
+                            className="browser-item up-dir"
+                          >
+                            <ArrowUp size={16} />
+                            <span>..</span>
+                          </button>
+                        )}
+                        {directories.length === 0 && parentPath === null && (
+                          <div className="browser-empty">표시할 디렉토리가 없습니다.</div>
+                        )}
+                        {directories.map((dir) => (
+                          <button 
+                            key={dir.path}
+                            type="button"
+                            onClick={() => fetchDirectory(dir.path)}
+                            className="browser-item folder"
+                          >
+                            <Folder size={16} />
+                            <span>{dir.name}</span>
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              {pathHistory.length > 0 && !isBrowsing && (
+              {pathHistory.length > 0 && (
                 <div className="form-section">
                   <div className="section-header">
                     <label className="section-label">Recent History</label>

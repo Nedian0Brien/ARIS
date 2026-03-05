@@ -562,20 +562,6 @@ button, input, textarea, select {
   gap: 0.5rem;
 }
 
-.path-chooser-hint {
-  flex: 1;
-  min-height: 40px;
-  display: flex;
-  align-items: center;
-  padding: 0.55rem 0.7rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--line);
-  background: var(--surface-soft);
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  line-height: 1.35;
-}
-
 /* Integrated Directory Browser */
 .directory-browser {
   margin-top: 0.75rem;
