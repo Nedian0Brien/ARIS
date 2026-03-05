@@ -13,6 +13,7 @@ import { Button, Input, Card, Badge } from '@/components/ui';
 import type { SessionSummary } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import styles from './SessionDashboard.module.css';
 
 type AgentFlavor = 'claude' | 'codex' | 'gemini';
 
@@ -646,8 +647,8 @@ export function SessionDashboard({
 
   return (
     <div style={{ position: 'relative' }}>
-      <div className="dashboard-title-row">
-        <div className="dashboard-title-group">
+      <div className={styles.dashboardTitleRow}>
+        <div className={styles.dashboardTitleGroup}>
           <h2 className="title-lg" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Activity size={28} color="var(--primary)" /> Workspace
           </h2>
@@ -694,15 +695,15 @@ export function SessionDashboard({
             </Button>
           </Card>
         ) : (
-          <div className="session-dashboard-layout">
-            <aside className="session-dashboard-sidebar">
+          <div className={styles.sessionDashboardLayout}>
+            <aside className={styles.sessionDashboardSidebar}>
               
               {/* Server Status Apple-Style Card */}
-              <Card className="session-sidebar-card">
-                <h3 className="session-sidebar-title">
+              <Card className={styles.sessionSidebarCard}>
+                <h3 className={styles.sessionSidebarTitle}>
                   <Activity size={16} color="var(--primary)" /> 서버 리소스
                 </h3>
-                <div className="session-chart-container" style={{ height: '140px', width: '100%', position: 'relative' }}>
+                <div className={styles.sessionChartContainer}>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -724,8 +725,8 @@ export function SessionDashboard({
                     </PieChart>
                   </ResponsiveContainer>
                   <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                    <div className="session-chart-center-text" style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text)' }}>35%</div>
-                    <div className="session-chart-sub-text" style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--text-muted)' }}>CPU/MEM</div>
+                    <div className={styles.sessionChartCenterText}>35%</div>
+                    <div className={styles.sessionChartSubText}>CPU/MEM</div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '0.5rem', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>
@@ -739,39 +740,39 @@ export function SessionDashboard({
               </Card>
 
               {/* Session Status */}
-              <Card className="session-sidebar-card">
-                <h3 className="session-sidebar-title">
+              <Card className={styles.sessionSidebarCard}>
+                <h3 className={styles.sessionSidebarTitle}>
                   <Terminal size={16} color="var(--accent-violet)" /> 세션 현황
                 </h3>
-                <div className="session-sidebar-stats">
-                  <div className="session-stat-item total">
-                    <span className="session-stat-value">{sessionStats.total}</span>
-                    <span className="session-stat-label">전체</span>
+                <div className={styles.sessionSidebarStats}>
+                  <div className={`${styles.sessionStatItem} ${styles.sessionStatItemTotal}`}>
+                    <span className={styles.sessionStatValue}>{sessionStats.total}</span>
+                    <span className={styles.sessionStatLabel}>전체</span>
                   </div>
-                  <div className="session-stat-item running">
-                    <span className="session-stat-value" style={{ color: 'var(--accent-emerald)' }}>{sessionStats.running}</span>
-                    <span className="session-stat-label">실행중</span>
+                  <div className={`${styles.sessionStatItem} ${styles.sessionStatItemRunning}`}>
+                    <span className={styles.sessionStatValue} style={{ color: 'var(--accent-emerald)' }}>{sessionStats.running}</span>
+                    <span className={styles.sessionStatLabel}>실행중</span>
                   </div>
-                  <div className="session-stat-item idle">
-                    <span className="session-stat-value" style={{ color: 'var(--accent-amber)' }}>{sessionStats.idle}</span>
-                    <span className="session-stat-label">대기</span>
+                  <div className={`${styles.sessionStatItem} ${styles.sessionStatItemIdle}`}>
+                    <span className={styles.sessionStatValue} style={{ color: 'var(--accent-amber)' }}>{sessionStats.idle}</span>
+                    <span className={styles.sessionStatLabel}>대기</span>
                   </div>
                 </div>
               </Card>
 
               {/* Agents */}
-              <Card className="session-sidebar-card session-sidebar-card-agents">
-                <h3 className="session-sidebar-title">에이전트 분포</h3>
-                <div className="session-agent-stats">
+              <Card className={`${styles.sessionSidebarCard} ${styles.sessionSidebarCardAgents}`}>
+                <h3 className={styles.sessionSidebarTitle}>에이전트 분포</h3>
+                <div className={styles.sessionAgentStats}>
                   {AGENT_OPTIONS.map(agent => (
-                    <div key={agent.id} className="session-agent-stat-row">
-                      <div className="session-agent-stat-left">
+                    <div key={agent.id} className={styles.sessionAgentStatRow}>
+                      <div className={styles.sessionAgentStatLeft}>
                         <div style={{ width: 28, height: 28, borderRadius: 8, background: agent.accentBg, color: agent.accentColor, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <agent.Icon size={16} />
                         </div>
                         {agent.label}
                       </div>
-                      <div className="session-agent-stat-right" style={{ color: agentStats[agent.id] > 0 ? 'var(--text)' : 'var(--text-muted)' }}>
+                      <div className={styles.sessionAgentStatRight} style={{ color: agentStats[agent.id] > 0 ? 'var(--text)' : 'var(--text-muted)' }}>
                         {agentStats[agent.id]}
                       </div>
                     </div>
@@ -780,23 +781,23 @@ export function SessionDashboard({
               </Card>
             </aside>
 
-            <section className="session-dashboard-main">
-              <div className="session-main-toolbar">
-                <div className="session-search-wrap">
+            <section className={styles.sessionDashboardMain}>
+              <div className={styles.sessionMainToolbar}>
+                <div className={styles.sessionSearchWrap}>
                   <Search size={18} color="var(--text-muted)" />
                   <input
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="프로젝트, 세션 이름 검색..."
-                    className="session-search-input"
+                    className={styles.sessionSearchInput}
                   />
                 </div>
-                <div className="session-sort-wrap">
-                  <span className="session-sort-label">정렬</span>
+                <div className={styles.sessionSortWrap}>
+                  <span className={styles.sessionSortLabel}>정렬</span>
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value as 'recent' | 'name')}
-                    className="session-sort-select"
+                    className={styles.sessionSortSelect}
                   >
                     <option value="recent">최근 활동순</option>
                     <option value="name">이름순</option>
@@ -809,7 +810,7 @@ export function SessionDashboard({
                   검색 결과가 없습니다.
                 </div>
               ) : (
-                <div className="session-grid">
+                <div className={styles.sessionGrid}>
                   {filteredSessions.map((session) => {
                     const agentInfo = getAgentOption(session.agent);
                     const AgentIcon = agentInfo.Icon;
@@ -820,50 +821,58 @@ export function SessionDashboard({
                     return (
                       <div 
                         key={session.id} 
-                        className="session-card"
+                        className={styles.sessionCard}
                         style={{ zIndex: isMenuOpen ? 100 : 1 }}
                       >
                         {isPinned && (
-                          <div className="pin-badge">
+                          <div className={styles.pinBadge}>
                             <Pin size={12} fill="currentColor" />
                           </div>
                         )}
-                        <div className="session-card-header">
+                        <div className={styles.sessionCardHeader}>
                           <div>
-                            <div className="session-card-title" title={session.projectName}>{displayName}</div>
-                            <div className="session-card-id">{session.id.slice(0, 10)}...</div>
+                            <div className={styles.sessionCardTitle} title={session.projectName}>{displayName}</div>
+                            <div className={styles.sessionCardId}>{session.id.slice(0, 10)}...</div>
                           </div>
                           <div style={{ position: 'relative' }} data-session-menu-anchor>
                             <button 
                               type="button"
-                              className="session-menu-btn" 
+                              className={styles.sessionMenuBtn} 
                               onClick={(e) => { e.stopPropagation(); setOpenMenuId(isMenuOpen ? null : session.id); }}
                             >
                               <MoreVertical size={20} />
                             </button>
                             {isMenuOpen && (
-                              <div className="dropdown-menu">
+                              <div className={styles.dropdownMenu}>
                                 <Link 
                                   href={`/sessions/${session.id}`} 
-                                  className="dropdown-item" 
+                                  className={styles.dropdownItem} 
                                   onClick={() => setOpenMenuId(null)}
                                 >
                                   <ArrowUpRight size={16} /> 세션 접속
                                 </Link>
-                                <button type="button" className="dropdown-item" onClick={(e) => openRenameModal(session, e)}>
+                                <button type="button" className={styles.dropdownItem} onClick={(e) => openRenameModal(session, e)}>
                                   <Edit2 size={16} /> 이름 변경
                                 </button>
-                                <button type="button" className="dropdown-item" onClick={(e) => togglePin(session.id, e)}>
+                                <button type="button" className={styles.dropdownItem} onClick={(e) => togglePin(session.id, e)}>
                                   <Pin size={16} /> {isPinned ? '고정 해제' : '상단 고정'}
                                 </button>
                                 <hr style={{ margin: '4px 0', border: 'none', borderTop: '1px solid var(--line)' }} />
-                                <button type="button" className="dropdown-item" onClick={(e) => executeSessionAction(session.id, 'retry', e)}>
+                                <button type="button" className={styles.dropdownItem} onClick={(e) => executeSessionAction(session.id, 'retry', e)}>
                                   <RotateCw size={16} /> 세션 재실행
                                 </button>
-                                <button type="button" className="dropdown-item danger" onClick={(e) => executeSessionAction(session.id, 'abort', e)}>
+                                <button
+                                  type="button"
+                                  className={`${styles.dropdownItem} ${styles.dropdownItemDanger}`}
+                                  onClick={(e) => executeSessionAction(session.id, 'abort', e)}
+                                >
                                   <Square size={16} /> 세션 종료
                                 </button>
-                                <button type="button" className="dropdown-item danger" onClick={(e) => executeSessionAction(session.id, 'kill', e)}>
+                                <button
+                                  type="button"
+                                  className={`${styles.dropdownItem} ${styles.dropdownItemDanger}`}
+                                  onClick={(e) => executeSessionAction(session.id, 'kill', e)}
+                                >
                                   <Trash2 size={16} /> 세션 삭제
                                 </button>
                               </div>
@@ -871,9 +880,9 @@ export function SessionDashboard({
                           </div>
                         </div>
 
-                        <div className="session-card-body">
-                          <div className="session-card-agent" style={{ color: agentInfo.accentColor }}>
-                            <div className="session-card-agent-icon" style={{ backgroundColor: agentInfo.accentBg }}>
+                        <div className={styles.sessionCardBody}>
+                          <div className={styles.sessionCardAgent} style={{ color: agentInfo.accentColor }}>
+                            <div className={styles.sessionCardAgentIcon} style={{ backgroundColor: agentInfo.accentBg }}>
                               <AgentIcon size={18} />
                             </div>
                             {agentInfo.label}
@@ -885,7 +894,7 @@ export function SessionDashboard({
                           </div>
                         </div>
 
-                        <div className="session-card-meta">
+                        <div className={styles.sessionCardMeta}>
                           <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                             <Clock3 size={14} /> {formatHistoryDate(session.lastActivityAt || '')}
                           </span>
