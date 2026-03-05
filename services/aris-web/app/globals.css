@@ -250,22 +250,36 @@ button, input, textarea, select {
   align-items: center;
   justify-content: space-around;
   z-index: 1000;
-  padding: 0 0.75rem;
-  box-shadow:
-    0 8px 32px rgba(15, 23, 42, 0.12),
-    0 2px 8px rgba(15, 23, 42, 0.06),
-    inset 0 1px 1px rgba(255, 255, 255, 0.85);
+  padding: 4px;
+  gap: 4px;
+  box-shadow: none;
   transition: bottom 0.28s ease, opacity 0.2s ease;
   will-change: bottom, opacity;
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
   transform-style: preserve-3d;
+  overflow: hidden;
 }
 
 .bottom-nav-hidden {
   bottom: calc(-62px - 1.75rem - var(--safe-area-inset-bottom));
   opacity: 0;
   pointer-events: none;
+}
+
+.bottom-nav-indicator {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  height: calc(100% - 8px);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  box-shadow:
+    0 4px 15px rgba(37, 99, 235, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  pointer-events: none;
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), width 0.3s ease, opacity 0.2s ease;
+  z-index: 1;
 }
 
 @media (min-width: 768px) {
@@ -282,17 +296,23 @@ button, input, textarea, select {
   color: var(--text-muted);
   cursor: pointer;
   transition: all 0.2s ease;
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 54px;
   padding: 0.4rem 0;
   border-radius: 999px;
+  border: none;
+  background: transparent;
+  position: relative;
+  z-index: 2;
 }
 
 .nav-item.active {
-  color: var(--primary);
+  color: var(--text-on-accent);
 }
 
 .nav-item.active svg {
-  filter: drop-shadow(0 2px 6px rgba(59, 130, 246, 0.35));
+  filter: none;
 }
 
 .nav-item span {
