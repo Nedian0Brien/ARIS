@@ -22,11 +22,13 @@ const AGENT_EXTRA_PATHS = [
 ].join(':');
 const CODEX_APPROVAL_POLICY = (process.env.CODEX_APPROVAL_POLICY || 'on-request').trim();
 const CODEX_SANDBOX_MODE = (process.env.CODEX_SANDBOX_MODE || 'workspace-write').trim();
+const CODEX_RUNTIME_MODE = (process.env.CODEX_RUNTIME_MODE || 'app-server').trim().toLowerCase();
 
 type RuntimeAgent = RuntimeSession['metadata']['flavor'];
 type PermissionState = PermissionRequest['state'];
 type SessionStatusValue = RuntimeSession['state']['status'];
 type PermissionActionType = 'exec' | 'patch';
+type JsonRpcId = string | number | null;
 
 type CodexPermissionRequest = {
   actionType: PermissionActionType;
@@ -420,6 +422,46 @@ function parseJsonLine(line: string): Record<string, unknown> | null {
   }
 }
 
+function toJsonRpcIdKey(value: unknown): string {
+  if (typeof value === 'string' || typeof value === 'number') {
+    return String(value);
+  }
+  if (value === null) {
+    return 'null';
+  }
+  return JSON.stringify(value);
+}
+
+function mapCodexDecisionForCommandApproval(decision: PermissionDecision): string {
+  if (decision === 'allow_session') {
+    return 'acceptForSession';
+  }
+  if (decision === 'deny') {
+    return 'decline';
+  }
+  return 'accept';
+}
+
+function mapCodexDecisionForPatchApproval(decision: PermissionDecision): string {
+  if (decision === 'allow_session') {
+    return 'acceptForSession';
+  }
+  if (decision === 'deny') {
+    return 'decline';
+  }
+  return 'accept';
+}
+
+function mapCodexDecisionForLegacyReview(decision: PermissionDecision): string {
+  if (decision === 'allow_session') {
+    return 'approved_for_session';
+  }
+  if (decision === 'deny') {
+    return 'denied';
+  }
+  return 'approved';
+}
+
 function isAbortFailure(error: unknown): boolean {
   if (!error || typeof error !== 'object') {
     return false;
@@ -600,6 +642,7 @@ export class HappyRuntimeStore {
   private readonly activeRuns = new Map<string, AbortController>();
   private readonly codexThreads = new Map<string, string>();
   private readonly codexPermissionIndex = new Map<string, string>();
+  private readonly codexPermissionResponders = new Map<string, (decision: PermissionDecision) => Promise<void>>();
 
   private readonly serverUrl: string;
   private readonly serverToken: string;
@@ -761,6 +804,571 @@ export class HappyRuntimeStore {
   }
 
   private async runCodexCliWithEvents(
+    session: RuntimeSession,
+    prompt: string,
+    signal?: AbortSignal,
+    threadId?: string,
+  ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; threadId?: string }> {
+    if (CODEX_RUNTIME_MODE === 'exec') {
+      return this.runCodexExecCliWithEvents(session, prompt, signal, threadId);
+    }
+
+    try {
+      return await this.runCodexAppServerWithEvents(session, prompt, signal, threadId);
+    } catch (error) {
+      if (isMissingCodexThreadError(error)) {
+        throw error;
+      }
+      if (CODEX_RUNTIME_MODE === 'app-server-strict') {
+        throw error;
+      }
+
+      const detail = error instanceof Error ? error.message : String(error);
+      console.error(`codex app-server mode failed; falling back to exec mode: ${detail}`);
+      return this.runCodexExecCliWithEvents(session, prompt, signal, threadId);
+    }
+  }
+
+  private async runCodexAppServerWithEvents(
+    session: RuntimeSession,
+    prompt: string,
+    signal?: AbortSignal,
+    threadId?: string,
+  ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; threadId?: string }> {
+    const safeCwd = this.resolveExecutionCwd(session.metadata.path);
+    const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
+    const child = spawn('codex', ['app-server', '--listen', 'stdio://'], {
+      cwd: safeCwd,
+      env: { ...process.env, PATH: mergedPath },
+      stdio: ['pipe', 'pipe', 'pipe'],
+      signal,
+    });
+
+    if (!child.stdin || !child.stdout || !child.stderr) {
+      throw new Error('codex app-server stdio streams are unavailable');
+    }
+
+    const stdoutLines = createInterface({ input: child.stdout });
+    let stderr = '';
+    let appendChain: Promise<void> = Promise.resolve();
+    let permissionChain: Promise<void> = Promise.resolve();
+    let lastAgentMessage = '';
+    let streamedPersisted = false;
+    let resolvedThreadId = typeof threadId === 'string' && threadId.trim().length > 0
+      ? threadId.trim()
+      : '';
+    let activeTurnId = '';
+    let turnCompleted = false;
+    const runtimePermissionIds = new Set<string>();
+
+    const pendingRequests = new Map<string, {
+      method: string;
+      resolve: (result: Record<string, unknown>) => void;
+      reject: (error: Error) => void;
+    }>();
+    let requestSequence = 0;
+
+    let resolveTurnCompletion: ((value: { status: string; errorMessage?: string }) => void) | null = null;
+    const turnCompletion = new Promise<{ status: string; errorMessage?: string }>((resolve) => {
+      resolveTurnCompletion = resolve;
+    });
+
+    const childClosed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', (code, closeSignal) => resolve({ code, signal: closeSignal }));
+    });
+
+    const enqueueAppend = (
+      text: string,
+      meta: Record<string, unknown>,
+      options: { type?: string; title?: string } = {},
+    ) => {
+      appendChain = appendChain
+        .then(() => this.appendAgentMessage(session.id, text, meta, options))
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`failed to persist codex app-server event: ${message}`);
+        });
+    };
+
+    const sendJsonRpc = (payload: Record<string, unknown>): Promise<void> => new Promise((resolve, reject) => {
+      if (!child.stdin || child.stdin.destroyed || !child.stdin.writable) {
+        reject(new Error('codex app-server stdin is not writable'));
+        return;
+      }
+
+      child.stdin.write(`${JSON.stringify(payload)}\n`, (error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+
+    const sendJsonRpcResult = async (id: JsonRpcId | unknown, result: Record<string, unknown>) => {
+      await sendJsonRpc({
+        jsonrpc: '2.0',
+        id,
+        result,
+      });
+    };
+
+    const sendJsonRpcError = async (id: JsonRpcId | unknown, code: number, message: string) => {
+      await sendJsonRpc({
+        jsonrpc: '2.0',
+        id,
+        error: {
+          code,
+          message,
+        },
+      });
+    };
+
+    const sendRequest = <T extends Record<string, unknown> = Record<string, unknown>>(
+      method: string,
+      params: Record<string, unknown>,
+    ): Promise<T> => new Promise((resolve, reject) => {
+      const requestId = `aris-rpc-${requestSequence += 1}`;
+      const requestKey = toJsonRpcIdKey(requestId);
+      pendingRequests.set(requestKey, {
+        method,
+        resolve: (result) => resolve(result as T),
+        reject,
+      });
+
+      void sendJsonRpc({
+        jsonrpc: '2.0',
+        id: requestId,
+        method,
+        params,
+      }).catch((error) => {
+        pendingRequests.delete(requestKey);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      });
+    });
+
+    const registerPermissionResponder = async (
+      key: string,
+      command: string,
+      reason: string,
+      risk: PermissionRisk,
+      responder: (decision: PermissionDecision) => Promise<void>,
+    ) => {
+      const knownPermissionId = this.codexPermissionIndex.get(key);
+      if (knownPermissionId) {
+        const knownPermission = this.permissions.get(knownPermissionId);
+        if (knownPermission?.state === 'pending') {
+          this.codexPermissionResponders.set(knownPermissionId, responder);
+          runtimePermissionIds.add(knownPermissionId);
+          return;
+        }
+        this.codexPermissionIndex.delete(key);
+      }
+
+      const created = await this.createPermission({
+        sessionId: session.id,
+        agent: session.metadata.flavor === 'codex' ? 'codex' : 'unknown',
+        command,
+        reason,
+        risk,
+      });
+
+      this.codexPermissionIndex.set(key, created.id);
+      this.codexPermissionResponders.set(created.id, responder);
+      runtimePermissionIds.add(created.id);
+    };
+
+    const handleServerRequest = async (payload: Record<string, unknown>): Promise<void> => {
+      const method = asString(payload.method, '').trim();
+      const requestId = payload.id;
+      const params = asRecord(payload.params) ?? {};
+      const requestIdKey = toJsonRpcIdKey(requestId);
+
+      if (method === 'item/commandExecution/requestApproval') {
+        const itemId = asString(params.itemId, '').trim();
+        const approvalId = asString(params.approvalId, '').trim();
+        const callId = approvalId || itemId || requestIdKey;
+        const commandRaw = asString(params.command, `command (${callId})`);
+        const reason = asString(params.reason, '명령 실행을 위해 사용자 승인이 필요합니다.').trim();
+        const hasNetworkContext = asRecord(params.networkApprovalContext) !== null;
+        const hasAdditionalPermissions = asRecord(params.additionalPermissions) !== null;
+        const hasNetworkAmendments = Array.isArray(params.proposedNetworkPolicyAmendments)
+          && params.proposedNetworkPolicyAmendments.length > 0;
+        const risk: PermissionRisk = hasNetworkContext || hasAdditionalPermissions || hasNetworkAmendments
+          ? 'high'
+          : 'medium';
+        const key = `${session.id}:cmd:${approvalId || itemId || requestIdKey}`;
+        await registerPermissionResponder(
+          key,
+          unwrapShellCommand(commandRaw),
+          reason,
+          risk,
+          (decision) => sendJsonRpcResult(requestId, { decision: mapCodexDecisionForCommandApproval(decision) }),
+        );
+        return;
+      }
+
+      if (method === 'item/fileChange/requestApproval') {
+        const itemId = asString(params.itemId, '').trim();
+        const grantRoot = asString(params.grantRoot, '').trim();
+        const reason = asString(params.reason, '패치 적용을 위해 사용자 승인이 필요합니다.').trim();
+        const command = grantRoot ? `apply_patch (grant_root: ${grantRoot})` : 'apply_patch';
+        const key = `${session.id}:patch:${itemId || requestIdKey}`;
+        await registerPermissionResponder(
+          key,
+          command,
+          reason,
+          grantRoot ? 'high' : 'medium',
+          (decision) => sendJsonRpcResult(requestId, { decision: mapCodexDecisionForPatchApproval(decision) }),
+        );
+        return;
+      }
+
+      if (method === 'execCommandApproval') {
+        const callId = asString(params.callId, requestIdKey).trim();
+        const approvalId = asString(params.approvalId, '').trim();
+        const commandParts = Array.isArray(params.command)
+          ? params.command.filter((part): part is string => typeof part === 'string')
+          : [];
+        const command = commandParts.length > 0 ? commandParts.join(' ') : `exec command (${callId})`;
+        const reason = asString(params.reason, '명령 실행을 위해 사용자 승인이 필요합니다.').trim();
+        const key = `${session.id}:legacy-exec:${approvalId || callId}`;
+        await registerPermissionResponder(
+          key,
+          unwrapShellCommand(command),
+          reason,
+          'medium',
+          (decision) => sendJsonRpcResult(requestId, { decision: mapCodexDecisionForLegacyReview(decision) }),
+        );
+        return;
+      }
+
+      if (method === 'applyPatchApproval') {
+        const callId = asString(params.callId, requestIdKey).trim();
+        const grantRoot = asString(params.grantRoot, '').trim();
+        const reason = asString(params.reason, '패치 적용을 위해 사용자 승인이 필요합니다.').trim();
+        const command = grantRoot ? `apply_patch (grant_root: ${grantRoot})` : 'apply_patch';
+        const key = `${session.id}:legacy-patch:${callId}`;
+        await registerPermissionResponder(
+          key,
+          command,
+          reason,
+          grantRoot ? 'high' : 'medium',
+          (decision) => sendJsonRpcResult(requestId, { decision: mapCodexDecisionForLegacyReview(decision) }),
+        );
+        return;
+      }
+
+      if (method === 'mcpServer/elicitation/request') {
+        await sendJsonRpcResult(requestId, { action: 'cancel', content: null });
+        return;
+      }
+
+      if (method === 'item/tool/requestUserInput') {
+        await sendJsonRpcResult(requestId, { answers: {} });
+        return;
+      }
+
+      await sendJsonRpcError(requestId, -32601, `Unsupported server request method: ${method}`);
+    };
+
+    const handleServerNotification = (payload: Record<string, unknown>) => {
+      const method = asString(payload.method, '').trim();
+      const params = asRecord(payload.params) ?? {};
+
+      if (method === 'thread/started') {
+        const threadRecord = asRecord(params.thread);
+        const startedThreadId = asString(threadRecord?.id, '').trim();
+        if (startedThreadId) {
+          resolvedThreadId = startedThreadId;
+          this.codexThreads.set(session.id, startedThreadId);
+        }
+        return;
+      }
+
+      if (method === 'item/completed') {
+        const item = asRecord(params.item);
+        if (!item) {
+          return;
+        }
+
+        const itemType = asString(item.type, '');
+        if (itemType === 'agentMessage') {
+          const text = asString(item.text, '').trim();
+          if (!text) {
+            return;
+          }
+          lastAgentMessage = text;
+          streamedPersisted = true;
+          enqueueAppend(
+            text,
+            {
+              requestedPath: session.metadata.path,
+              execCwd: safeCwd,
+              streamEvent: 'agent_message',
+              ...(resolvedThreadId ? { threadId: resolvedThreadId } : {}),
+            },
+            { type: 'message', title: 'Text Reply' },
+          );
+          return;
+        }
+
+        if (itemType !== 'commandExecution') {
+          return;
+        }
+
+        const commandRaw = asString(item.command, '').trim();
+        const command = unwrapShellCommand(commandRaw);
+        const output = stripAnsi(asString(item.aggregatedOutput, '')).trim();
+        const exitCodeValue = item.exitCode;
+        const exitCode = typeof exitCodeValue === 'number' && Number.isFinite(exitCodeValue)
+          ? exitCodeValue
+          : null;
+        const actionType = inferActionTypeFromCommand(command);
+        const title = titleForActionType(actionType);
+        const bodyParts = [`$ ${command || 'command'}`];
+        if (output) {
+          bodyParts.push(output);
+        }
+        if (exitCode !== null) {
+          bodyParts.push(`exit code: ${exitCode}`);
+        }
+        const status = asString(item.status, '').trim();
+        if (status && status !== 'completed' && status !== 'inProgress') {
+          bodyParts.push(`status: ${status}`);
+        }
+        const body = bodyParts.join('\n');
+
+        streamedPersisted = true;
+        enqueueAppend(
+          body,
+          {
+            requestedPath: session.metadata.path,
+            execCwd: safeCwd,
+            actionType,
+            command,
+            exitCode: exitCode ?? undefined,
+            streamEvent: 'command_execution',
+            ...(resolvedThreadId ? { threadId: resolvedThreadId } : {}),
+          },
+          {
+            type: 'tool',
+            title,
+          },
+        );
+        return;
+      }
+
+      if (method === 'turn/completed') {
+        const turn = asRecord(params.turn);
+        const completedTurnId = asString(turn?.id, '').trim();
+        if (activeTurnId && completedTurnId && activeTurnId !== completedTurnId) {
+          return;
+        }
+
+        const status = asString(turn?.status, '').trim() || 'completed';
+        const errorMessage = asString(asRecord(turn?.error)?.message, '').trim() || undefined;
+        turnCompleted = true;
+        resolveTurnCompletion?.({ status, errorMessage });
+      }
+    };
+
+    child.stderr.on('data', (chunk: Buffer | string) => {
+      stderr += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+    });
+
+    stdoutLines.on('line', (line) => {
+      const payload = parseJsonLine(line.trim());
+      if (!payload) {
+        return;
+      }
+
+      const messageMethod = typeof payload.method === 'string' ? payload.method : '';
+      const hasId = Object.prototype.hasOwnProperty.call(payload, 'id');
+
+      if (messageMethod && hasId) {
+        permissionChain = permissionChain
+          .then(() => handleServerRequest(payload))
+          .catch((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`failed to handle codex app-server request: ${message}`);
+          });
+        return;
+      }
+
+      if (messageMethod) {
+        handleServerNotification(payload);
+        return;
+      }
+
+      if (!hasId) {
+        return;
+      }
+
+      const idKey = toJsonRpcIdKey(payload.id);
+      const pending = pendingRequests.get(idKey);
+      if (!pending) {
+        return;
+      }
+      pendingRequests.delete(idKey);
+
+      const errorPayload = asRecord(payload.error);
+      if (errorPayload) {
+        const rpcMessage = asString(errorPayload.message, `JSON-RPC ${pending.method} failed`);
+        pending.reject(new Error(rpcMessage));
+        return;
+      }
+
+      const resultPayload = asRecord(payload.result) ?? {};
+      pending.resolve(resultPayload);
+    });
+
+    const closeChild = async () => {
+      stdoutLines.close();
+      if (child.stdin && !child.stdin.destroyed) {
+        child.stdin.end();
+      }
+      if (!child.killed) {
+        child.kill('SIGTERM');
+      }
+      await Promise.race([
+        childClosed,
+        new Promise<void>((resolve) => setTimeout(resolve, 1_500)),
+      ]).catch(() => undefined);
+    };
+
+    try {
+      await sendRequest('initialize', {
+        clientInfo: {
+          name: 'aris-runtime',
+          title: 'ARIS Runtime',
+          version: '0.1.0',
+        },
+        capabilities: {
+          experimentalApi: true,
+          optOutNotificationMethods: [
+            'item/agentMessage/delta',
+            'item/commandExecution/outputDelta',
+            'item/commandExecution/terminalInteraction',
+          ],
+        },
+      });
+      await sendJsonRpc({
+        jsonrpc: '2.0',
+        method: 'initialized',
+        params: {},
+      });
+
+      if (resolvedThreadId) {
+        const resumed = await sendRequest('thread/resume', {
+          threadId: resolvedThreadId,
+          cwd: safeCwd,
+          approvalPolicy: CODEX_APPROVAL_POLICY,
+          sandbox: CODEX_SANDBOX_MODE,
+          persistExtendedHistory: true,
+        });
+        const resumedThreadId = asString(asRecord(resumed.thread)?.id, '').trim();
+        if (resumedThreadId) {
+          resolvedThreadId = resumedThreadId;
+          this.codexThreads.set(session.id, resumedThreadId);
+        }
+      } else {
+        const started = await sendRequest('thread/start', {
+          cwd: safeCwd,
+          approvalPolicy: CODEX_APPROVAL_POLICY,
+          sandbox: CODEX_SANDBOX_MODE,
+          experimentalRawEvents: false,
+          persistExtendedHistory: true,
+        });
+        const startedThreadId = asString(asRecord(started.thread)?.id, '').trim();
+        if (startedThreadId) {
+          resolvedThreadId = startedThreadId;
+          this.codexThreads.set(session.id, startedThreadId);
+        }
+      }
+
+      if (!resolvedThreadId) {
+        throw new Error('codex app-server did not return a thread id');
+      }
+
+      const turnStarted = await sendRequest('turn/start', {
+        threadId: resolvedThreadId,
+        input: [
+          {
+            type: 'text',
+            text: prompt,
+            text_elements: [],
+          },
+        ],
+        approvalPolicy: CODEX_APPROVAL_POLICY,
+      });
+      activeTurnId = asString(asRecord(turnStarted.turn)?.id, '').trim();
+
+      const completion = await Promise.race([
+        turnCompletion,
+        childClosed.then(({ code }) => {
+          throw new Error(`codex app-server closed before turn completion (exit code ${code ?? 'null'})`);
+        }),
+      ]);
+
+      await appendChain;
+      await permissionChain;
+
+      const finalText = lastAgentMessage.trim();
+      if (signal?.aborted || completion.status === 'interrupted') {
+        return {
+          output: trimOutput(finalText),
+          cwd: safeCwd,
+          streamedPersisted,
+          threadId: resolvedThreadId || undefined,
+        };
+      }
+
+      if (completion.status === 'failed' && !finalText) {
+        const suffix = completion.errorMessage ? `: ${completion.errorMessage}` : '';
+        throw new Error(`codex app-server turn failed${suffix}`);
+      }
+
+      return {
+        output: trimOutput(finalText),
+        cwd: safeCwd,
+        streamedPersisted,
+        threadId: resolvedThreadId || undefined,
+      };
+    } finally {
+      for (const [key, pending] of pendingRequests.entries()) {
+        pending.reject(new Error(`JSON-RPC request cancelled: ${pending.method}`));
+        pendingRequests.delete(key);
+      }
+
+      await permissionChain.catch(() => undefined);
+      await appendChain.catch(() => undefined);
+
+      for (const permissionId of runtimePermissionIds) {
+        this.codexPermissionResponders.delete(permissionId);
+
+        for (const [key, mappedPermissionId] of this.codexPermissionIndex.entries()) {
+          if (mappedPermissionId === permissionId) {
+            this.codexPermissionIndex.delete(key);
+          }
+        }
+
+        const existing = this.permissions.get(permissionId);
+        if (existing?.state === 'pending') {
+          this.permissions.set(permissionId, { ...existing, state: 'denied' });
+        }
+      }
+
+      if (!turnCompleted && !signal?.aborted && stderr.trim()) {
+        console.error(`codex app-server stderr: ${stripAnsi(stderr).slice(0, 800)}`);
+      }
+
+      await closeChild();
+    }
+  }
+
+  private async runCodexExecCliWithEvents(
     session: RuntimeSession,
     prompt: string,
     signal?: AbortSignal,
@@ -1236,7 +1844,23 @@ export class HappyRuntimeStore {
       }
     }
 
-    if (decision === 'deny') {
+    const responder = this.codexPermissionResponders.get(permissionId);
+    this.codexPermissionResponders.delete(permissionId);
+
+    if (responder) {
+      try {
+        await responder(decision);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`failed to send codex permission decision: ${message}`);
+        if (decision === 'deny') {
+          const active = this.activeRuns.get(permission.sessionId);
+          if (active && !active.signal.aborted) {
+            active.abort();
+          }
+        }
+      }
+    } else if (decision === 'deny') {
       const active = this.activeRuns.get(permission.sessionId);
       if (active && !active.signal.aborted) {
         active.abort();
