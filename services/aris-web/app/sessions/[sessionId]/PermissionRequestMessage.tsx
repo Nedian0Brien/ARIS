@@ -9,6 +9,7 @@ type PermissionRequestMessageProps = {
   permission: PermissionRequest;
   disabled: boolean;
   loading: boolean;
+  anchorId?: string;
   onDecide: (permissionId: string, decision: PermissionDecision) => void;
 };
 
@@ -34,10 +35,11 @@ export function PermissionRequestMessage({
   permission,
   disabled,
   loading,
+  anchorId,
   onDecide,
 }: PermissionRequestMessageProps) {
   return (
-    <article className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+    <article id={anchorId} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
       <div className={`${styles.messageBubble} ${styles.permissionMessageBubble}`}>
         <header className={styles.permissionMessageHeader}>
           <span className={styles.permissionMessageTitle}>

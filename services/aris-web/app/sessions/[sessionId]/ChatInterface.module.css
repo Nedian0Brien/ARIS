@@ -286,6 +286,36 @@
   padding: 0.7rem 0.85rem 0;
 }
 
+.permissionNoticeBar {
+  margin: 0.65rem 0.95rem 0;
+  border: 1px solid rgba(251, 146, 60, 0.32);
+  border-radius: 12px;
+  background: rgba(255, 247, 237, 0.92);
+  padding: 0.5rem 0.62rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #9a3412;
+}
+
+.permissionNoticeAction {
+  border: 1px solid rgba(249, 115, 22, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #9a3412;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+
+.permissionNoticeAction:hover {
+  background: rgba(255, 255, 255, 0.98);
+}
+
 .stream {
   flex: 1;
   height: 0;

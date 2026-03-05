@@ -837,6 +837,7 @@ export function ChatInterface({
   );
   const agentReplies = useMemo(() => events.filter((event) => !isUserEvent(event)).length, [events]);
   const streamItems = useMemo(() => buildStreamRenderItems(events, expandedActionRunIds), [events, expandedActionRunIds]);
+  const firstPendingPermissionId = pendingPermissions[0]?.id ?? null;
 
   const toggleResult = useCallback((eventId: string) => {
     setExpandedResultIds((prev) => ({
@@ -904,6 +905,19 @@ export function ChatInterface({
       stream.scrollTop = stream.scrollHeight;
     });
   }, []);
+
+  const jumpToPendingPermission = useCallback(() => {
+    if (!firstPendingPermissionId) {
+      return;
+    }
+
+    const target = document.getElementById(`permission-${firstPendingPermissionId}`);
+    if (!target) {
+      return;
+    }
+
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [firstPendingPermissionId]);
 
   useEffect(() => {
     resizeComposerInput();
@@ -1138,6 +1152,15 @@ export function ChatInterface({
             </div>
           )}
 
+          {pendingPermissions.length > 0 && (
+            <div className={styles.permissionNoticeBar} role="status" aria-live="polite">
+              <span>승인 요청 {pendingPermissions.length}건이 대기 중입니다.</span>
+              <button type="button" className={styles.permissionNoticeAction} onClick={jumpToPendingPermission}>
+                바로 보기
+              </button>
+            </div>
+          )}
+
           <div className={styles.stream} ref={scrollRef} onScroll={handleStreamScroll}>
             {streamItems.map((item) => {
               if (item.type === 'action_overflow') {
@@ -1221,6 +1244,7 @@ export function ChatInterface({
             {pendingPermissions.map((permission) => (
               <PermissionRequestMessage
                 key={permission.id}
+                anchorId={`permission-${permission.id}`}
                 permission={permission}
                 disabled={!isOperator}
                 loading={loadingPermissionId === permission.id}

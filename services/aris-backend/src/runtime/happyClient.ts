@@ -20,10 +20,22 @@ const AGENT_EXTRA_PATHS = [
   '/home/ubuntu/.local/bin',
   '/home/ubuntu/.nvm/versions/node/v22.17.1/bin',
 ].join(':');
+const CODEX_APPROVAL_POLICY = (process.env.CODEX_APPROVAL_POLICY || 'on-request').trim();
+const CODEX_SANDBOX_MODE = (process.env.CODEX_SANDBOX_MODE || 'workspace-write').trim();
 
 type RuntimeAgent = RuntimeSession['metadata']['flavor'];
 type PermissionState = PermissionRequest['state'];
 type SessionStatusValue = RuntimeSession['state']['status'];
+type PermissionActionType = 'exec' | 'patch';
+
+type CodexPermissionRequest = {
+  actionType: PermissionActionType;
+  callId: string;
+  approvalId?: string;
+  command: string;
+  reason: string;
+  risk: PermissionRisk;
+};
 
 type HappyRuntimeCreateInput = {
   path: string;
@@ -496,6 +508,83 @@ function titleForActionType(actionType: 'command_execution' | 'file_list' | 'fil
   return 'Command Execution';
 }
 
+function normalizeCodexApprovalDecision(value: unknown): PermissionRisk {
+  const text = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (text === 'low' || text === 'medium' || text === 'high') {
+    return text;
+  }
+  return 'medium';
+}
+
+function inferCodexApprovalRisk(payload: Record<string, unknown>, fallback: PermissionRisk = 'medium'): PermissionRisk {
+  const directRisk = normalizeCodexApprovalDecision(payload.risk);
+  if (directRisk !== 'medium' || String(payload.risk ?? '').trim().length > 0) {
+    return directRisk;
+  }
+
+  const hasNetworkContext = asRecord(payload.network_approval_context) !== null;
+  const networkPolicyAmendments = payload.proposed_network_policy_amendments;
+  const hasNetworkAmendments = Array.isArray(networkPolicyAmendments) && networkPolicyAmendments.length > 0;
+  const additionalPermissions = asRecord(payload.additional_permissions);
+  const hasAdditionalPermissions = additionalPermissions !== null && Object.keys(additionalPermissions).length > 0;
+  const grantRoot = asString(payload.grant_root, '').trim();
+
+  if (hasNetworkContext || hasNetworkAmendments || hasAdditionalPermissions || grantRoot) {
+    return 'high';
+  }
+
+  return fallback;
+}
+
+function extractCodexPermissionRequest(payload: Record<string, unknown>): CodexPermissionRequest | null {
+  const payloadType = asString(payload.type, '').trim();
+  const item = payloadType === 'item.completed' ? asRecord(payload.item) : payload;
+  if (!item) {
+    return null;
+  }
+
+  const itemType = asString(item.type, '').trim();
+  if (itemType !== 'exec_approval_request' && itemType !== 'apply_patch_approval_request') {
+    return null;
+  }
+
+  const callId = asString(item.call_id, asString(item.item_id, '')).trim();
+  if (!callId) {
+    return null;
+  }
+
+  const approvalId = asString(item.approval_id, '').trim() || undefined;
+  if (itemType === 'exec_approval_request') {
+    const rawCommand = asString(item.command, asString(item.parsed_cmd, asString(item.interaction_input, ''))).trim();
+    const command = unwrapShellCommand(rawCommand || `exec command (${callId})`);
+    const reason = asString(item.reason, '명령 실행을 위해 사용자 승인이 필요합니다.').trim();
+    return {
+      actionType: 'exec',
+      callId,
+      approvalId,
+      command,
+      reason,
+      risk: inferCodexApprovalRisk(item),
+    };
+  }
+
+  const grantRoot = asString(item.grant_root, '').trim();
+  const command = grantRoot ? `apply_patch (grant_root: ${grantRoot})` : 'apply_patch';
+  const reason = asString(item.reason, '패치 적용을 위해 사용자 승인이 필요합니다.').trim();
+  return {
+    actionType: 'patch',
+    callId,
+    approvalId,
+    command,
+    reason,
+    risk: inferCodexApprovalRisk(item),
+  };
+}
+
+function buildCodexPermissionKey(sessionId: string, request: CodexPermissionRequest): string {
+  return `${sessionId}:${request.approvalId || request.callId}`;
+}
+
 function buildAgentCommand(agent: RuntimeAgent, prompt: string): AgentCommand | null {
   if (agent === 'claude') {
     return { command: 'claude', args: ['--dangerously-skip-permissions', '--print', prompt], requiresPty: true };
@@ -510,6 +599,7 @@ export class HappyRuntimeStore {
   private readonly permissions = new Map<string, PermissionRequest>();
   private readonly activeRuns = new Map<string, AbortController>();
   private readonly codexThreads = new Map<string, string>();
+  private readonly codexPermissionIndex = new Map<string, string>();
 
   private readonly serverUrl: string;
   private readonly serverToken: string;
@@ -678,19 +768,21 @@ export class HappyRuntimeStore {
   ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; threadId?: string }> {
     const safeCwd = this.resolveExecutionCwd(session.metadata.path);
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
-    const args = threadId
+    const execArgs = threadId
       ? ['exec', 'resume', threadId, '--json', prompt]
       : ['exec', '--json', prompt];
+    const args = ['-a', CODEX_APPROVAL_POLICY, '-s', CODEX_SANDBOX_MODE, ...execArgs];
     const child = spawn('codex', args, {
       cwd: safeCwd,
       env: { ...process.env, PATH: mergedPath },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
       signal,
     });
 
     const stdoutLines = createInterface({ input: child.stdout });
     let stderr = '';
     let appendChain: Promise<void> = Promise.resolve();
+    let permissionChain: Promise<void> = Promise.resolve();
     let lastAgentMessage = '';
     let streamedPersisted = false;
     let resolvedThreadId = typeof threadId === 'string' && threadId.trim().length > 0
@@ -714,6 +806,35 @@ export class HappyRuntimeStore {
       stderr += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
     });
 
+    const enqueuePermission = (request: CodexPermissionRequest) => {
+      permissionChain = permissionChain
+        .then(async () => {
+          const key = buildCodexPermissionKey(session.id, request);
+          const knownPermissionId = this.codexPermissionIndex.get(key);
+          if (knownPermissionId) {
+            const knownPermission = this.permissions.get(knownPermissionId);
+            if (knownPermission?.state === 'pending') {
+              return;
+            }
+            this.codexPermissionIndex.delete(key);
+          }
+
+          const created = await this.createPermission({
+            sessionId: session.id,
+            agent: session.metadata.flavor === 'codex' ? 'codex' : 'unknown',
+            command: request.command,
+            reason: request.reason,
+            risk: request.risk,
+          });
+
+          this.codexPermissionIndex.set(key, created.id);
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`failed to create codex permission request: ${message}`);
+        });
+    };
+
     stdoutLines.on('line', (line) => {
       const payload = parseJsonLine(line.trim());
       if (!payload) {
@@ -726,6 +847,12 @@ export class HappyRuntimeStore {
           resolvedThreadId = startedThreadId;
           this.codexThreads.set(session.id, startedThreadId);
         }
+        return;
+      }
+
+      const approvalRequest = extractCodexPermissionRequest(payload);
+      if (approvalRequest) {
+        enqueuePermission(approvalRequest);
         return;
       }
 
@@ -805,6 +932,7 @@ export class HappyRuntimeStore {
     });
 
     await appendChain;
+    await permissionChain;
 
     const finalText = lastAgentMessage.trim();
     if (signal?.aborted) {
@@ -1099,7 +1227,34 @@ export class HappyRuntimeStore {
     }
 
     const state: PermissionState = decision === 'deny' ? 'denied' : 'approved';
-    this.permissions.set(permissionId, { ...permission, state });
-    return { ...permission, state };
+    const updated = { ...permission, state };
+    this.permissions.set(permissionId, updated);
+
+    for (const [key, mappedPermissionId] of this.codexPermissionIndex.entries()) {
+      if (mappedPermissionId === permissionId) {
+        this.codexPermissionIndex.delete(key);
+      }
+    }
+
+    if (decision === 'deny') {
+      const active = this.activeRuns.get(permission.sessionId);
+      if (active && !active.signal.aborted) {
+        active.abort();
+      }
+    }
+
+    try {
+      await this.appendAgentMessage(
+        permission.sessionId,
+        `Permission ${permission.command} -> ${state}`,
+        { permissionId, decision, source: 'permission-decision' },
+        { type: 'tool', title: 'Permission Decision' },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`failed to persist permission decision message: ${message}`);
+    }
+
+    return updated;
   }
 }
