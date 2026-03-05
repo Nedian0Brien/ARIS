@@ -77,12 +77,7 @@ html, body {
 }
 
 body {
-  min-height: 100vh;
-  /* 주소창이 보이는 최소 높이 fallback */
-  min-height: 100svh;
-  min-height: -webkit-fill-available;
-  min-height: calc(var(--vh, 1vh) * 100);
-  min-height: var(--app-vh, 100svh);
+  min-height: 100%;
 }
 
 a {
@@ -212,11 +207,8 @@ button, input, textarea, select {
 .app-shell {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
   min-height: 100svh;
-  min-height: -webkit-fill-available;
-  min-height: calc(var(--vh, 1vh) * 100);
-  min-height: var(--app-vh, 100svh);
+  min-height: 100%;
   background-color: var(--bg);
   padding-bottom: calc(96px + var(--safe-area-inset-bottom));
 }
@@ -265,6 +257,9 @@ button, input, textarea, select {
     inset 0 1px 1px rgba(255, 255, 255, 0.85);
   transition: bottom 0.28s ease, opacity 0.2s ease;
   will-change: bottom, opacity;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
 }
 
 .bottom-nav-hidden {

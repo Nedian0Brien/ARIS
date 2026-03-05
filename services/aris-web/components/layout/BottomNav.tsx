@@ -14,6 +14,7 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   const [hidden, setHidden] = useState(false);
   const lastScrollY = useRef(0);
   const hiddenRef = useRef(false);
+  const scrollRafRef = useRef<number | null>(null);
 
   useEffect(() => {
     const getScrollY = () =>
@@ -27,7 +28,7 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
 
     lastScrollY.current = getScrollY();
 
-    const onScroll = () => {
+    const updateVisibility = () => {
       const currentY = getScrollY();
       const delta = currentY - lastScrollY.current;
       const movementThreshold = 8;
@@ -41,10 +42,31 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
       }
 
       lastScrollY.current = currentY;
+      scrollRafRef.current = null;
+    };
+
+    const onScroll = () => {
+      if (scrollRafRef.current !== null) return;
+      scrollRafRef.current = window.requestAnimationFrame(updateVisibility);
+    };
+
+    const onResize = () => {
+      if (window.innerWidth >= 768) {
+        updateHidden(false);
+      }
+      lastScrollY.current = getScrollY();
     };
 
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onResize);
+      if (scrollRafRef.current !== null) {
+        window.cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+    };
   }, []);
 
   const tabs = [
