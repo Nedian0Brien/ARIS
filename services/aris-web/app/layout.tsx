@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { ViewportHeightSync } from '@/components/layout/ViewportHeightSync';
 
 export const metadata: Metadata = {
   title: 'ARIS | Agentic Workspace',
@@ -20,6 +21,7 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body>
+        <ViewportHeightSync />
         {children}
       </body>
     </html>

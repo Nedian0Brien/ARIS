@@ -49,6 +49,7 @@
   --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
   
   --max-width: 1400px;
+  --app-vh: 100vh;
   --safe-area-inset-top: env(safe-area-inset-top, 0px);
   --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -200,6 +201,7 @@ button, input, textarea, select {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-height: var(--app-vh, 100vh);
   padding-bottom: calc(96px + var(--safe-area-inset-bottom));
 }
 
