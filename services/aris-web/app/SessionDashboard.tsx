@@ -872,7 +872,6 @@ export function SessionDashboard({
                             startAngle={90}
                             endAngle={-270}
                             dataKey="value"
-                            isAnimationActive={false}
                             stroke="none"
                             paddingAngle={1}
                             cornerRadius={8}
@@ -903,7 +902,6 @@ export function SessionDashboard({
                             startAngle={90}
                             endAngle={-270}
                             dataKey="value"
-                            isAnimationActive={false}
                             stroke="none"
                             paddingAngle={1}
                             cornerRadius={8}
@@ -1032,7 +1030,6 @@ export function SessionDashboard({
                             startAngle={90}
                             endAngle={-270}
                             dataKey="value"
-                            isAnimationActive={false}
                             stroke="none"
                             paddingAngle={1}
                             cornerRadius={8}
