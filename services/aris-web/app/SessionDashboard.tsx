@@ -760,9 +760,12 @@ export function SessionDashboard({
     ? `${formatBytes(serverMetrics.mem.usedBytes)} / ${formatBytes(serverMetrics.mem.totalBytes)}`
     : 'collecting';
   const sessionOverviewBarData = [
-    { name: '전체', value: sessionStats.total, color: '#64748b' },
-    { name: '실행중', value: sessionStats.running, color: '#10b981' },
-    { name: '대기', value: sessionStats.idle, color: '#f59e0b' },
+    { 
+      name: 'Status', 
+      running: sessionStats.running, 
+      idle: sessionStats.idle,
+      total: sessionStats.total
+    },
   ];
   const activeAgentDistribution = AGENT_OPTIONS.map((agent) => ({
     name: agent.label,
@@ -921,24 +924,35 @@ export function SessionDashboard({
                 </h3>
                 <div className={styles.sessionSummaryBarChart}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={sessionOverviewBarData} margin={{ top: 6, right: 4, left: -16, bottom: 0 }}>
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
-                      <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                        {sessionOverviewBarData.map((entry) => (
-                          <Cell key={`session-bar-${entry.name}`} fill={entry.color} />
-                        ))}
-                      </Bar>
+                    <BarChart
+                      layout="vertical"
+                      data={sessionOverviewBarData}
+                      margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
+                      barSize={12}
+                    >
+                      <XAxis type="number" hide />
+                      <YAxis type="category" dataKey="name" hide />
+                      <Bar dataKey="running" stackId="a" fill="#10b981" radius={[6, 0, 0, 6]} />
+                      <Bar dataKey="idle" stackId="a" fill="#f59e0b" radius={[0, 6, 6, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
                 <div className={styles.sessionSummaryLegend}>
-                  {sessionOverviewBarData.map((entry) => (
-                    <div key={`session-legend-${entry.name}`} className={styles.sessionSummaryLegendItem}>
-                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: entry.color }}></span>
-                      <span>{entry.name}</span>
-                      <strong>{entry.value}</strong>
-                    </div>
-                  ))}
+                  <div className={styles.sessionSummaryLegendItem}>
+                    <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#64748b' }}></span>
+                    <span>전체</span>
+                    <strong>{sessionStats.total}</strong>
+                  </div>
+                  <div className={styles.sessionSummaryLegendItem}>
+                    <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#10b981' }}></span>
+                    <span>실행중</span>
+                    <strong>{sessionStats.running}</strong>
+                  </div>
+                  <div className={styles.sessionSummaryLegendItem}>
+                    <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#f59e0b' }}></span>
+                    <span>대기</span>
+                    <strong>{sessionStats.idle}</strong>
+                  </div>
                 </div>
 
                 <h4 className={styles.sessionSidebarSubTitle}>에이전트 분포</h4>
