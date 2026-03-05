@@ -421,6 +421,21 @@ function isAbortFailure(error: unknown): boolean {
   return typeof candidate.message === 'string' && candidate.message.toLowerCase().includes('aborted');
 }
 
+function isMissingCodexThreadError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  if (!message.includes('thread') && !message.includes('session')) {
+    return false;
+  }
+
+  return (
+    message.includes('not found')
+    || message.includes('unknown')
+    || message.includes('invalid')
+    || message.includes('does not exist')
+    || message.includes('no such')
+  );
+}
+
 function unwrapShellCommand(command: string): string {
   const trimmed = command.trim();
   const shellPrefix = "/bin/bash -lc '";
@@ -494,6 +509,7 @@ function buildAgentCommand(agent: RuntimeAgent, prompt: string): AgentCommand | 
 export class HappyRuntimeStore {
   private readonly permissions = new Map<string, PermissionRequest>();
   private readonly activeRuns = new Map<string, AbortController>();
+  private readonly codexThreads = new Map<string, string>();
 
   private readonly serverUrl: string;
   private readonly serverToken: string;
@@ -658,10 +674,14 @@ export class HappyRuntimeStore {
     session: RuntimeSession,
     prompt: string,
     signal?: AbortSignal,
-  ): Promise<{ output: string; cwd: string; streamedPersisted: boolean }> {
+    threadId?: string,
+  ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; threadId?: string }> {
     const safeCwd = this.resolveExecutionCwd(session.metadata.path);
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
-    const child = spawn('codex', ['exec', '--json', prompt], {
+    const args = threadId
+      ? ['exec', 'resume', threadId, '--json', prompt]
+      : ['exec', '--json', prompt];
+    const child = spawn('codex', args, {
       cwd: safeCwd,
       env: { ...process.env, PATH: mergedPath },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -673,6 +693,9 @@ export class HappyRuntimeStore {
     let appendChain: Promise<void> = Promise.resolve();
     let lastAgentMessage = '';
     let streamedPersisted = false;
+    let resolvedThreadId = typeof threadId === 'string' && threadId.trim().length > 0
+      ? threadId.trim()
+      : '';
 
     const enqueueAppend = (
       text: string,
@@ -697,6 +720,15 @@ export class HappyRuntimeStore {
         return;
       }
 
+      if (payload.type === 'thread.started') {
+        const startedThreadId = asString(payload.thread_id, '').trim();
+        if (startedThreadId) {
+          resolvedThreadId = startedThreadId;
+          this.codexThreads.set(session.id, startedThreadId);
+        }
+        return;
+      }
+
       if (payload.type !== 'item.completed') {
         return;
       }
@@ -718,6 +750,7 @@ export class HappyRuntimeStore {
               requestedPath: session.metadata.path,
               execCwd: safeCwd,
               streamEvent: 'agent_message',
+              ...(resolvedThreadId ? { threadId: resolvedThreadId } : {}),
             },
             { type: 'message', title: 'Text Reply' },
           );
@@ -757,6 +790,7 @@ export class HappyRuntimeStore {
           command,
           exitCode: exitCode ?? undefined,
           streamEvent: 'command_execution',
+          ...(resolvedThreadId ? { threadId: resolvedThreadId } : {}),
         },
         {
           type: 'tool',
@@ -778,6 +812,7 @@ export class HappyRuntimeStore {
         output: trimOutput(finalText),
         cwd: safeCwd,
         streamedPersisted,
+        threadId: resolvedThreadId || undefined,
       };
     }
 
@@ -790,7 +825,35 @@ export class HappyRuntimeStore {
       output: trimOutput(finalText),
       cwd: safeCwd,
       streamedPersisted,
+      threadId: resolvedThreadId || undefined,
     };
+  }
+
+  private async resolveCodexThreadId(sessionId: string): Promise<string | undefined> {
+    const cached = this.codexThreads.get(sessionId);
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      const history = await this.listMessages(sessionId);
+      for (let index = history.length - 1; index >= 0; index -= 1) {
+        const candidate = history[index]?.meta?.threadId;
+        if (typeof candidate !== 'string') {
+          continue;
+        }
+        const trimmed = candidate.trim();
+        if (!trimmed) {
+          continue;
+        }
+        this.codexThreads.set(sessionId, trimmed);
+        return trimmed;
+      }
+    } catch {
+      // Ignore thread recovery failures and start a new Codex thread.
+    }
+
+    return undefined;
   }
 
   private async generateAndPersistAgentReply(session: RuntimeSession, prompt: string): Promise<void> {
@@ -804,17 +867,46 @@ export class HappyRuntimeStore {
 
     try {
       const isCodex = flavor === 'codex';
-      const response = flavor === 'codex'
-        ? await this.runCodexCliWithEvents(session, prompt, controller.signal)
-        : await this.runAgentCli(flavor, prompt, session.metadata.path, controller.signal);
-      const streamedPersisted = 'streamedPersisted' in response ? response.streamedPersisted : false;
+      let response: { output: string; cwd: string; streamedPersisted?: boolean; threadId?: string };
+
+      if (isCodex) {
+        const recoveredThreadId = await this.resolveCodexThreadId(session.id);
+        try {
+          response = await this.runCodexCliWithEvents(session, prompt, controller.signal, recoveredThreadId);
+        } catch (error) {
+          if (!recoveredThreadId || !isMissingCodexThreadError(error)) {
+            throw error;
+          }
+
+          // Stored thread id became invalid; clear and start a fresh Codex thread.
+          this.codexThreads.delete(session.id);
+          response = await this.runCodexCliWithEvents(session, prompt, controller.signal);
+        }
+      } else {
+        const nonCodex = await this.runAgentCli(flavor, prompt, session.metadata.path, controller.signal);
+        response = {
+          output: nonCodex.output,
+          cwd: nonCodex.cwd,
+          streamedPersisted: false,
+        };
+      }
+
+      if (isCodex && response.threadId) {
+        this.codexThreads.set(session.id, response.threadId);
+      }
+
+      const streamedPersisted = Boolean(response.streamedPersisted);
       if (!isCodex || !streamedPersisted) {
         await this.appendAgentMessage(session.id, response.output, {
           requestedPath: session.metadata.path,
           execCwd: response.cwd,
+          ...(response.threadId ? { threadId: response.threadId } : {}),
         });
       }
     } catch (error) {
+      if (flavor === 'codex' && isMissingCodexThreadError(error)) {
+        this.codexThreads.delete(session.id);
+      }
       if (isAbortFailure(error) || controller.signal.aborted) {
         return;
       }
@@ -953,6 +1045,7 @@ export class HappyRuntimeStore {
     }
 
     if (action === 'kill') {
+      this.codexThreads.delete(sessionId);
       try {
         await this.request(`/v1/sessions/${encodeURIComponent(sessionId)}`, {
           method: 'DELETE',
