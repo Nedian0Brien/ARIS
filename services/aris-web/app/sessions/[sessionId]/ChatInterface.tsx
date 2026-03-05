@@ -998,46 +998,54 @@ export function ChatInterface({
               const kindMeta = EVENT_KIND_META[event.kind] ?? EVENT_KIND_META.unknown;
               const KindIcon = kindMeta.Icon;
 
-              return (
-                <article
-                  key={event.id}
-                  className={`${styles.messageRow} ${userEvent ? styles.messageRowUser : styles.messageRowAgent}`}
-                >
-                  {!actionEvent && (
-                    <div className={`${styles.messageMeta} ${userEvent ? styles.messageMetaUser : ''}`}>
-                      <span className={`${styles.rolePill} ${userEvent ? styles.roleUser : styles.roleAgent}`}>
-                        {userEvent ? (
-                          'YOU'
-                        ) : (
-                          <>
-                            <agentMeta.Icon size={12} />
-                            {agentMeta.label}
-                          </>
-                        )}
-                      </span>
-                      <span className={styles.messageTime}>{formatClock(event.timestamp)}</span>
+              // 사용자 메시지 (오른쪽 버블)
+              if (userEvent) {
+                return (
+                  <article key={event.id} className={`${styles.messageRow} ${styles.messageRowUser}`}>
+                    <div className={`${styles.msgHeader} ${styles.msgHeaderUser}`}>
+                      <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
+                      <span className={`${styles.msgSender} ${styles.msgSenderUser}`}>YOU</span>
                     </div>
-                  )}
+                    <div className={`${styles.messageBubble} ${styles.messageBubbleUser}`}>
+                      {renderEventPayload(event, true, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id))}
+                    </div>
+                  </article>
+                );
+              }
 
-                  <div
-                    className={`${styles.messageBubble} ${userEvent ? styles.messageBubbleUser : styles.messageBubbleAgent} ${
-                      actionEvent ? styles.messageBubbleAction : ''
-                    }`}
-                  >
-                    {!userEvent && !actionEvent && (
-                      <div className={styles.messageKindRow}>
-                        <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
-                          <KindIcon size={14} />
-                          {kindMeta.label}
-                        </span>
+              // 에이전트 액션 이벤트 (아바타 없이, 컴팩트 카드)
+              if (actionEvent) {
+                return (
+                  <article key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                    <div className={`${styles.messageBubble} ${styles.messageBubbleAction}`}>
+                      {renderEventPayload(event, false, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id))}
+                    </div>
+                  </article>
+                );
+              }
+
+              // 에이전트 텍스트 메시지 (아바타 + 이름 헤더)
+              return (
+                <article key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                  <div className={styles.messageWithAvatar}>
+                    <div className={`${styles.msgAvatar} ${AGENT_AVATAR_TONE_CLASS[agentMeta.tone]}`}>
+                      <agentMeta.Icon size={14} />
+                    </div>
+                    <div className={styles.msgBody}>
+                      <div className={styles.msgHeader}>
+                        <span className={styles.msgSender}>{agentMeta.label}</span>
+                        <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
                       </div>
-                    )}
-                    {renderEventPayload(
-                      event,
-                      userEvent,
-                      Boolean(expandedResultIds[event.id]),
-                      () => toggleResult(event.id)
-                    )}
+                      <div className={`${styles.messageBubble} ${styles.messageBubbleAgent}`}>
+                        <div className={styles.messageKindRow}>
+                          <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
+                            <KindIcon size={14} />
+                            {kindMeta.label}
+                          </span>
+                        </div>
+                        {renderEventPayload(event, false, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id))}
+                      </div>
+                    </div>
                   </div>
                 </article>
               );
