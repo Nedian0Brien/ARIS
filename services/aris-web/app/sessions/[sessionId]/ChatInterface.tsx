@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
-import { Button } from '@/components/ui';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import {
   Activity,
@@ -19,11 +18,11 @@ import {
   FolderTree,
   MessageSquareText,
   Send,
-  ShieldAlert,
   TerminalSquare,
 } from 'lucide-react';
 import type { PermissionRequest, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
+import { PermissionRequestMessage } from './PermissionRequestMessage';
 import styles from './ChatInterface.module.css';
 
 const AGENT_REPLY_TIMEOUT_MS = 90000;
@@ -1219,54 +1218,18 @@ export function ChatInterface({
                 </article>
               );
             })}
-
+            {pendingPermissions.map((permission) => (
+              <PermissionRequestMessage
+                key={permission.id}
+                permission={permission}
+                disabled={!isOperator}
+                loading={loadingPermissionId === permission.id}
+                onDecide={(permissionId, decision) => {
+                  void decidePermission(permissionId, decision);
+                }}
+              />
+            ))}
           </div>
-
-          {pendingPermissions.length > 0 && (
-            <section className={styles.permissionTray}>
-              <div className={styles.permissionTrayHeader}>
-                <ShieldAlert size={16} />
-                승인 대기 {pendingPermissions.length}건
-              </div>
-
-              <div className={styles.permissionList}>
-                {pendingPermissions.map((permission) => (
-                  <article key={permission.id} className={styles.permissionItem}>
-                    <div className={styles.permissionCommand}>{permission.command}</div>
-                    <div className={styles.permissionReason}>{permission.reason}</div>
-
-                    <div className={styles.permissionActions}>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className={styles.permissionBtn}
-                        onClick={() => void decidePermission(permission.id, 'deny')}
-                        disabled={loadingPermissionId === permission.id}
-                      >
-                        거절
-                      </Button>
-                      <Button
-                        type="button"
-                        className={styles.permissionBtnAllowSession}
-                        onClick={() => void decidePermission(permission.id, 'allow_session')}
-                        disabled={loadingPermissionId === permission.id}
-                      >
-                        세션 허용
-                      </Button>
-                      <Button
-                        type="button"
-                        className={styles.permissionBtnAllowOnce}
-                        onClick={() => void decidePermission(permission.id, 'allow_once')}
-                        disabled={loadingPermissionId === permission.id}
-                      >
-                        1회 허용
-                      </Button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
-          )}
 
           <footer className={styles.composerDock} ref={composerDockRef}>
             <form onSubmit={handleSubmit} className={styles.composerForm}>

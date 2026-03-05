@@ -810,38 +810,70 @@
   }
 }
 
-.permissionTray {
-  margin: 0 0.85rem;
-  border: 1px solid rgba(251, 146, 60, 0.25);
-  border-radius: 14px;
-  background: rgba(255, 247, 237, 0.85);
-  padding: 0.72rem;
+.permissionMessageBubble {
+  width: min(95%, 760px);
+  border-color: rgba(251, 146, 60, 0.35);
+  background: linear-gradient(145deg, rgba(255, 247, 237, 0.98) 0%, rgba(255, 251, 235, 0.95) 100%);
 }
 
-.permissionTrayHeader {
+.permissionMessageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.42rem;
+}
+
+.permissionMessageTitle {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 0.8rem;
+  gap: 0.34rem;
+  font-size: 0.76rem;
   font-weight: 800;
   color: #9a3412;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.permissionList {
-  margin-top: 0.62rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.58rem;
+.permissionTime {
+  font-size: 0.66rem;
+  color: #92400e;
+  font-family: var(--font-mono);
 }
 
-.permissionItem {
-  border: 1px solid rgba(251, 146, 60, 0.22);
-  border-radius: 10px;
-  padding: 0.6rem;
-  background: rgba(255, 255, 255, 0.82);
+.permissionRiskRow {
+  margin-top: 0.45rem;
+}
+
+.permissionRiskChip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.14rem 0.48rem;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.permissionRiskLow {
+  color: #065f46;
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid rgba(16, 185, 129, 0.24);
+}
+
+.permissionRiskMedium {
+  color: #92400e;
+  background: rgba(251, 191, 36, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+}
+
+.permissionRiskHigh {
+  color: #991b1b;
+  background: rgba(248, 113, 113, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.24);
 }
 
 .permissionCommand {
+  margin: 0.5rem 0 0;
   font-family: var(--font-mono);
   font-size: 0.74rem;
   font-weight: 700;
@@ -849,7 +881,7 @@
 }
 
 .permissionReason {
-  margin-top: 0.28rem;
+  margin: 0.34rem 0 0;
   font-size: 0.75rem;
   color: #475569;
 }
@@ -866,6 +898,12 @@
 .permissionBtnAllowOnce {
   min-height: 32px;
   font-size: 0.75rem;
+}
+
+.permissionViewerHint {
+  margin: 0.52rem 0 0;
+  font-size: 0.72rem;
+  color: #92400e;
 }
 
 .composerDock {
