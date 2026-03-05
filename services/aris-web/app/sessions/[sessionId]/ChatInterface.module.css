@@ -72,7 +72,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.12);
+  box-shadow: none;
 }
 
 .agentAvatarLarge {
@@ -81,18 +81,18 @@
 }
 
 .agentAvatarClay {
-  background: radial-gradient(circle at 30% 25%, #fde68a 0%, #f59e0b 78%);
-  color: #78350f;
+  background: rgba(217, 119, 87, 0.15);
+  color: #d97757;
 }
 
 .agentAvatarMint {
-  background: radial-gradient(circle at 30% 25%, #a7f3d0 0%, #10b981 78%);
-  color: #064e3b;
+  background: rgba(16, 163, 127, 0.15);
+  color: #10a37f;
 }
 
 .agentAvatarBlue {
-  background: radial-gradient(circle at 30% 25%, #bfdbfe 0%, #3b82f6 78%);
-  color: #1e3a8a;
+  background: rgba(66, 133, 244, 0.15);
+  color: #4285f4;
 }
 
 .agentProfileText {
@@ -218,12 +218,13 @@
 .agentAvatarHero {
   width: 40px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: 0.7rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+  box-shadow: none;
+  border: 1px solid rgba(148, 163, 184, 0.22);
 }
 
 .centerHeaderInfo {
@@ -395,12 +396,13 @@
 .msgAvatar {
   width: 30px;
   height: 30px;
-  border-radius: 50%;
+  border-radius: 0.55rem;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.14);
+  box-shadow: none;
+  border: 1px solid rgba(148, 163, 184, 0.2);
   align-self: flex-start;
 }
 
@@ -451,6 +453,26 @@
   border-radius: 999px;
   padding: 0.18rem 0.52rem;
   letter-spacing: 0.04em;
+}
+
+.folderLabelList {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.32rem;
+  margin: 0.05rem 0 0.1rem;
+}
+
+.folderLabel {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  border-radius: 999px;
+  padding: 0.12rem 0.36rem;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 
 .toneSky {

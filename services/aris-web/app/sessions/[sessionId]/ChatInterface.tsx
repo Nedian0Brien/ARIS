@@ -61,6 +61,17 @@ const AGENT_AVATAR_TONE_CLASS: Record<AgentMeta['tone'], string> = {
   blue: styles.agentAvatarBlue,
 };
 
+const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
+type FolderLabel = (typeof FOLDER_LABELS)[number];
+
+const FOLDER_LABEL_TONE: Record<FolderLabel, Tone> = {
+  src: 'sky',
+  tools: 'amber',
+  jobs: 'emerald',
+  scripts: 'violet',
+  tests: 'red',
+};
+
 const EVENT_KIND_META: Record<UiEventKind, { label: string; tone: Tone; Icon: React.ComponentType<{ size?: number }> }> = {
   text_reply: { label: 'TEXT', tone: 'sky', Icon: MessageSquareText },
   command_execution: { label: 'COMMAND', tone: 'amber', Icon: TerminalSquare },
@@ -122,6 +133,23 @@ function truncateSingleLine(input: string, max = 68): string {
     return compact;
   }
   return `${compact.slice(0, max).trimEnd()}…`;
+}
+
+function extractFolderLabels(source: string): FolderLabel[] {
+  const normalized = source.replace(/\r\n/g, '\n');
+  const folderSet = new Set<FolderLabel>();
+
+  for (const match of normalized.matchAll(/\[(src|tools|jobs|scripts|tests)\]|\b(src|tools|jobs|scripts|tests)(?=\/)/gi)) {
+    const label = (match[1] || match[2] || '').toLowerCase() as FolderLabel;
+    folderSet.add(label);
+  }
+
+  return Array.from(folderSet);
+}
+
+function extractFolderLabelsFromEvent(event: UiEvent): FolderLabel[] {
+  const source = [event.action?.path, event.body, event.title].filter(Boolean).join('\n');
+  return extractFolderLabels(source);
 }
 
 function buildPreview(text: string): UiEventResult | undefined {
@@ -418,6 +446,22 @@ function renderInlineWithBreaks(text: string, keyPrefix: string): ReactNode[] {
   return result;
 }
 
+function FolderLabelStrip({ labels }: { labels: FolderLabel[] }) {
+  if (labels.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={styles.folderLabelList}>
+      {labels.map((label) => (
+        <span key={label} className={`${styles.folderLabel} ${TONE_CLASS[FOLDER_LABEL_TONE[label]]}`}>
+          [{label}]
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function MarkdownContent({ body }: { body: string }) {
   const blocks = useMemo(() => parseMarkdownBlocks(body), [body]);
 
@@ -496,8 +540,11 @@ function TextReply({ body, isUser }: { body: string; isUser: boolean }) {
     return null;
   }
 
+  const folderLabels = !isUser ? extractFolderLabels(normalized) : [];
+
   return (
     <div className={isUser ? styles.userText : styles.agentText}>
+      <FolderLabelStrip labels={folderLabels} />
       <MarkdownContent body={normalized} />
     </div>
   );
@@ -533,6 +580,7 @@ function ActionEventCard({
   const KindIcon = kindMeta.Icon;
   const fullPrimary = resolveActionPrimary(event).replace(/\s+/g, ' ').trim();
   const compactPrimary = truncateSingleLine(fullPrimary, 88);
+  const folderLabels = extractFolderLabelsFromEvent(event);
 
   if (!expanded) {
     return (
@@ -545,6 +593,7 @@ function ActionEventCard({
             </span>
             <span className={styles.actionCompactPrimary}>{compactPrimary}</span>
           </div>
+          <FolderLabelStrip labels={folderLabels} />
         </div>
         <button
           type="button"
@@ -571,6 +620,7 @@ function ActionEventCard({
             </span>
             <span className={styles.actionPrimary}>{fullPrimary}</span>
           </div>
+          <FolderLabelStrip labels={folderLabels} />
         </div>
         <button
           type="button"
