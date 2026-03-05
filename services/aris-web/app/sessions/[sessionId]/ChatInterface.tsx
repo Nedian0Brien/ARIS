@@ -1089,7 +1089,6 @@ export function ChatInterface({
                   )}
                 </button>
               </div>
-              <span className={styles.composerHint}>행동별 아이콘 · 색상 구분 · 결과 프리뷰 확장</span>
             </form>
           </footer>
         </section>

@@ -12,7 +12,7 @@ import {
 import { Button, Input, Card, Badge } from '@/components/ui';
 import type { SessionSummary } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import styles from './SessionDashboard.module.css';
 
 type AgentFlavor = 'claude' | 'codex' | 'gemini';
@@ -170,6 +170,7 @@ export function SessionDashboard({
 
   // Directory Browser States
   const [isBrowsing, setIsBrowsing] = useState(false);
+  const [pathInputMode, setPathInputMode] = useState<'browse' | 'manual'>('browse');
   const [browserPath, setBrowserPath] = useState('/');
   const [directories, setDirectories] = useState<DirectoryInfo[]>([]);
   const [parentPath, setParentPath] = useState<string | null>(null);
@@ -381,6 +382,13 @@ export function SessionDashboard({
     await createSession(newPath, newAgent);
   }
 
+  function openCreateSessionModal() {
+    setError(null);
+    setPathInputMode('browse');
+    setIsBrowsing(true);
+    setIsCreateModalOpen(true);
+  }
+
   async function handleQuickResume(entry: PathHistoryEntry) {
     if (!isOperator || isCreating) return;
     if (entry.sessionId && sessionsList.some((s) => s.id === entry.sessionId)) {
@@ -574,14 +582,39 @@ export function SessionDashboard({
                     name="projectPath"
                     value={newPath}
                     onChange={(e) => setNewPath(e.target.value)}
-                    placeholder="/home/user/my-project"
+                    onClick={() => {
+                      if (pathInputMode !== 'manual') {
+                        setPathInputMode('manual');
+                        setIsBrowsing(false);
+                      }
+                    }}
+                    onFocus={() => {
+                      if (pathInputMode !== 'manual') {
+                        setPathInputMode('manual');
+                        setIsBrowsing(false);
+                      }
+                    }}
+                    placeholder={
+                      pathInputMode === 'browse'
+                        ? '기본은 클릭 선택 모드입니다. 직접 입력하려면 이 입력창을 클릭하세요.'
+                        : '/workspace/my-project'
+                    }
+                    readOnly={pathInputMode === 'browse'}
                     required
                     disabled={!isOperator || isCreating}
                   />
                   <Button
                     type="button"
                     variant="secondary"
-                    onClick={() => setIsBrowsing(!isBrowsing)}
+                    onClick={() => {
+                      setIsBrowsing((prev) => {
+                        const next = !prev;
+                        if (next) {
+                          setPathInputMode('browse');
+                        }
+                        return next;
+                      });
+                    }}
                     disabled={!isOperator || isCreating}
                     className="browse-btn"
                     title="디렉토리 탐색기 열기/닫기"
@@ -589,6 +622,9 @@ export function SessionDashboard({
                     {isBrowsing ? <ChevronUp size={18} /> : <Search size={18} />}
                   </Button>
                 </div>
+                <p className="text-sm text-muted" style={{ marginTop: '0.5rem' }}>
+                  기본은 클릭으로 경로를 선택합니다. 직접 입력이 필요하면 입력창을 클릭해 편집 모드로 전환하세요.
+                </p>
 
                 {isBrowsing && (
                   <div className="directory-browser animate-in">
@@ -603,6 +639,7 @@ export function SessionDashboard({
                         className="select-current-btn"
                         onClick={() => {
                           setNewPath(`/workspace${browserPath === '/' ? '' : browserPath}`);
+                          setPathInputMode('browse');
                           setIsBrowsing(false);
                         }}
                       >
@@ -754,9 +791,6 @@ export function SessionDashboard({
   const cpuValueText = isLoadingServerMetrics && !serverMetrics ? '--' : `${Math.round(cpuUsagePercent)}%`;
   const ramValueText = isLoadingServerMetrics && !serverMetrics ? '--' : `${Math.round(ramUsagePercent)}%`;
   const storageValueText = isLoadingServerMetrics && !serverMetrics ? '--' : `${Math.round(storageUsagePercent)}%`;
-  const ramDetailText = serverMetrics
-    ? `${formatBytes(serverMetrics.ram.usedBytes)} / ${formatBytes(serverMetrics.ram.totalBytes)}`
-    : 'collecting';
   const storageDetailText = serverMetrics?.storage
     ? `${formatBytes(serverMetrics.storage.usedBytes)} / ${formatBytes(serverMetrics.storage.totalBytes)}`
     : 'collecting';
@@ -786,11 +820,7 @@ export function SessionDashboard({
         {isOperator && (
           <Button
             type="button"
-            onClick={() => {
-              setError(null);
-              setIsBrowsing(false);
-              setIsCreateModalOpen(true);
-            }}
+            onClick={openCreateSessionModal}
             className="btn-primary"
             style={{ borderRadius: '99px', padding: '0.75rem 1.5rem', boxShadow: 'var(--shadow-md)' }}
           >
@@ -811,11 +841,7 @@ export function SessionDashboard({
             </p>
             <Button
               type="button"
-              onClick={() => {
-                setError(null);
-                setIsBrowsing(false);
-                setIsCreateModalOpen(true);
-              }}
+              onClick={openCreateSessionModal}
               disabled={!isOperator}
               className="empty-state-primary-action btn-primary"
               style={{ borderRadius: '99px', marginTop: '2rem' }}
@@ -846,6 +872,7 @@ export function SessionDashboard({
                             startAngle={90}
                             endAngle={-270}
                             dataKey="value"
+                            isAnimationActive={false}
                             stroke="none"
                             paddingAngle={1}
                             cornerRadius={8}
@@ -876,6 +903,7 @@ export function SessionDashboard({
                             startAngle={90}
                             endAngle={-270}
                             dataKey="value"
+                            isAnimationActive={false}
                             stroke="none"
                             paddingAngle={1}
                             cornerRadius={8}
@@ -1004,6 +1032,7 @@ export function SessionDashboard({
                             startAngle={90}
                             endAngle={-270}
                             dataKey="value"
+                            isAnimationActive={false}
                             stroke="none"
                             paddingAngle={1}
                             cornerRadius={8}

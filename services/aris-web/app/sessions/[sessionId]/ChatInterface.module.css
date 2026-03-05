@@ -727,11 +727,6 @@
   box-shadow: none;
 }
 
-.composerHint {
-  font-size: 0.73rem;
-  color: #64748b;
-}
-
 .sendIconButton {
   width: 52px;
   height: 52px;
@@ -895,10 +890,6 @@
   .sendIconButton {
     width: 56px;
     height: 56px;
-  }
-
-  .composerHint {
-    display: none;
   }
 
   .messageBubble {
