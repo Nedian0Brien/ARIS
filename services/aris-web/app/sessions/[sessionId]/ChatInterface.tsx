@@ -529,7 +529,9 @@ function ResourceChip({ resource }: { resource: ResourceLabel }) {
   if (resource.kind === 'folder') {
     return (
       <span className={`${styles.resourceChip} ${styles.resourceChipFolder}`} title={resource.sourcePath}>
-        <FolderTree size={12} className={`${styles.resourceChipIcon} ${styles.resourceIconFolder}`} />
+        <span className={`${styles.resourceChipIcon} ${styles.resourceIconFolder}`}>
+          <FolderTree size={12} />
+        </span>
         <span className={styles.resourceChipText}>{resource.name}</span>
       </span>
     );
@@ -538,7 +540,9 @@ function ResourceChip({ resource }: { resource: ResourceLabel }) {
   const { Icon, iconClassName } = resolveFileIconMeta(resource.extension);
   return (
     <span className={`${styles.resourceChip} ${styles.resourceChipFile}`} title={resource.sourcePath}>
-      <Icon size={12} className={`${styles.resourceChipIcon} ${iconClassName}`} />
+      <span className={`${styles.resourceChipIcon} ${iconClassName}`}>
+        <Icon size={12} />
+      </span>
       <span className={styles.resourceChipText}>{resource.name}</span>
     </span>
   );
