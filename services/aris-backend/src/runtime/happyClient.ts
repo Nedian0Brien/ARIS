@@ -408,6 +408,19 @@ function parseJsonLine(line: string): Record<string, unknown> | null {
   }
 }
 
+function isAbortFailure(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const candidate = error as { name?: string; code?: string; message?: string };
+  if (candidate.name === 'AbortError' || candidate.code === 'ABORT_ERR') {
+    return true;
+  }
+
+  return typeof candidate.message === 'string' && candidate.message.toLowerCase().includes('aborted');
+}
+
 function unwrapShellCommand(command: string): string {
   const trimmed = command.trim();
   const shellPrefix = "/bin/bash -lc '";
@@ -480,6 +493,7 @@ function buildAgentCommand(agent: RuntimeAgent, prompt: string): AgentCommand | 
 
 export class HappyRuntimeStore {
   private readonly permissions = new Map<string, PermissionRequest>();
+  private readonly activeRuns = new Map<string, AbortController>();
 
   private readonly serverUrl: string;
   private readonly serverToken: string;
@@ -556,7 +570,12 @@ export class HappyRuntimeStore {
     throw new Error(`Session project path not found on backend host: ${raw}`);
   }
 
-  private async runAgentCli(agent: RuntimeAgent, prompt: string, cwdHint?: string): Promise<{ output: string; cwd: string }> {
+  private async runAgentCli(
+    agent: RuntimeAgent,
+    prompt: string,
+    cwdHint?: string,
+    signal?: AbortSignal,
+  ): Promise<{ output: string; cwd: string }> {
     const command = buildAgentCommand(agent, prompt);
     if (!command) {
       throw new Error(`Unsupported agent flavor: ${agent}`);
@@ -576,6 +595,7 @@ export class HappyRuntimeStore {
             timeout: AGENT_COMMAND_TIMEOUT_MS,
             maxBuffer: 8 * 1024 * 1024,
             env: { ...process.env, PATH: mergedPath },
+            signal,
           },
         )
         : await execFileAsync(command.command, command.args, {
@@ -583,8 +603,12 @@ export class HappyRuntimeStore {
           timeout: AGENT_COMMAND_TIMEOUT_MS,
           maxBuffer: 8 * 1024 * 1024,
           env: { ...process.env, PATH: mergedPath },
+          signal,
         });
     } catch (error) {
+      if (isAbortFailure(error)) {
+        throw error;
+      }
       const asRecord = error as { stdout?: string; stderr?: string; message?: string };
       const stdout = stripAnsi(asRecord.stdout || '');
       const stderr = stripAnsi(asRecord.stderr || '');
@@ -633,6 +657,7 @@ export class HappyRuntimeStore {
   private async runCodexCliWithEvents(
     session: RuntimeSession,
     prompt: string,
+    signal?: AbortSignal,
   ): Promise<{ output: string; cwd: string; streamedPersisted: boolean }> {
     const safeCwd = this.resolveExecutionCwd(session.metadata.path);
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
@@ -640,6 +665,7 @@ export class HappyRuntimeStore {
       cwd: safeCwd,
       env: { ...process.env, PATH: mergedPath },
       stdio: ['ignore', 'pipe', 'pipe'],
+      signal,
     });
 
     const stdoutLines = createInterface({ input: child.stdout });
@@ -747,6 +773,14 @@ export class HappyRuntimeStore {
     await appendChain;
 
     const finalText = lastAgentMessage.trim();
+    if (signal?.aborted) {
+      return {
+        output: trimOutput(finalText),
+        cwd: safeCwd,
+        streamedPersisted,
+      };
+    }
+
     if (result.code !== 0 && !finalText) {
       const detail = stripAnsi(stderr).slice(0, 800) || `exit code ${result.code}`;
       throw new Error(`codex CLI failed: ${detail}`);
@@ -765,11 +799,14 @@ export class HappyRuntimeStore {
       return;
     }
 
+    const controller = new AbortController();
+    this.activeRuns.set(session.id, controller);
+
     try {
       const isCodex = flavor === 'codex';
       const response = flavor === 'codex'
-        ? await this.runCodexCliWithEvents(session, prompt)
-        : await this.runAgentCli(flavor, prompt, session.metadata.path);
+        ? await this.runCodexCliWithEvents(session, prompt, controller.signal)
+        : await this.runAgentCli(flavor, prompt, session.metadata.path, controller.signal);
       const streamedPersisted = 'streamedPersisted' in response ? response.streamedPersisted : false;
       if (!isCodex || !streamedPersisted) {
         await this.appendAgentMessage(session.id, response.output, {
@@ -778,6 +815,9 @@ export class HappyRuntimeStore {
         });
       }
     } catch (error) {
+      if (isAbortFailure(error) || controller.signal.aborted) {
+        return;
+      }
       const message = error instanceof Error ? error.message : 'Unknown runtime error';
       try {
         await this.appendAgentMessage(session.id, `에이전트 실행 오류: ${message}`, {
@@ -787,6 +827,11 @@ export class HappyRuntimeStore {
       } catch (persistError) {
         const persistMessage = persistError instanceof Error ? persistError.message : 'Unknown persist error';
         console.error(`failed to persist agent error message: ${persistMessage}`);
+      }
+    } finally {
+      const current = this.activeRuns.get(session.id);
+      if (current === controller) {
+        this.activeRuns.delete(session.id);
       }
     }
   }
@@ -897,6 +942,13 @@ export class HappyRuntimeStore {
     const session = await this.getSession(sessionId);
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
+    }
+
+    if (action === 'abort' || action === 'kill') {
+      const active = this.activeRuns.get(sessionId);
+      if (active && !active.signal.aborted) {
+        active.abort();
+      }
     }
 
     return {

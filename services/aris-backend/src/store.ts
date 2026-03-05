@@ -50,6 +50,7 @@ class MockRuntimeStore implements RuntimeStoreBackend {
   private readonly sessions = new Map<string, RuntimeSession>();
   private readonly messages = new Map<string, RuntimeMessage[]>();
   private readonly permissions = new Map<string, PermissionRequest>();
+  private readonly pendingAgentReplies = new Map<string, NodeJS.Timeout>();
 
   constructor(defaultProjectPath: string) {
     // Keep store intentionally empty on startup.
@@ -95,6 +96,15 @@ class MockRuntimeStore implements RuntimeStoreBackend {
       throw new Error('SESSION_NOT_FOUND');
     }
 
+    const isAgentMessage = input.meta?.role === 'agent';
+    const isUserPrompt = input.type === 'message' && !isAgentMessage;
+    if (isUserPrompt) {
+      session.state.status = 'running';
+    }
+    if (isAgentMessage) {
+      session.state.status = 'idle';
+    }
+
     const message: RuntimeMessage = {
       id: randomUUID(),
       sessionId,
@@ -113,8 +123,14 @@ class MockRuntimeStore implements RuntimeStoreBackend {
     this.sessions.set(sessionId, session);
 
     // Mock Agent Response Logic
-    if (input.type === 'message' && (!input.meta || input.meta.role !== 'agent')) {
-      setTimeout(() => {
+    if (isUserPrompt) {
+      const existingTimer = this.pendingAgentReplies.get(sessionId);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+      }
+
+      const timer = setTimeout(() => {
+        this.pendingAgentReplies.delete(sessionId);
         void this.appendMessage(sessionId, {
           type: 'message',
           title: 'Text Reply',
@@ -122,6 +138,7 @@ class MockRuntimeStore implements RuntimeStoreBackend {
           meta: { role: 'agent' },
         });
       }, 1500);
+      this.pendingAgentReplies.set(sessionId, timer);
     }
 
     return message;
@@ -135,7 +152,7 @@ class MockRuntimeStore implements RuntimeStoreBackend {
 
     const at = new Date().toISOString();
     const statusByAction: Record<SessionAction, SessionStatus> = {
-      abort: 'stopped',
+      abort: 'idle',
       retry: 'running',
       kill: 'stopped',
       resume: 'running',
@@ -148,6 +165,14 @@ class MockRuntimeStore implements RuntimeStoreBackend {
       session.riskScore = 85;
     } else if (action === 'retry' || action === 'resume') {
       session.riskScore = Math.max(10, session.riskScore - 15);
+    }
+
+    if (action === 'abort' || action === 'kill') {
+      const pendingReply = this.pendingAgentReplies.get(sessionId);
+      if (pendingReply) {
+        clearTimeout(pendingReply);
+        this.pendingAgentReplies.delete(sessionId);
+      }
     }
 
     this.sessions.set(sessionId, session);

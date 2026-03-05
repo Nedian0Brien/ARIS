@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
-import { Button, Badge } from '@/components/ui';
+import { Button } from '@/components/ui';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import {
   Activity,
@@ -55,10 +55,10 @@ const TONE_CLASS: Record<Tone, string> = {
   red: styles.toneRed,
 };
 
-const AGENT_TONE_CLASS: Record<AgentMeta['tone'], string> = {
-  clay: styles.agentToneClay,
-  mint: styles.agentToneMint,
-  blue: styles.agentToneBlue,
+const AGENT_AVATAR_TONE_CLASS: Record<AgentMeta['tone'], string> = {
+  clay: styles.agentAvatarClay,
+  mint: styles.agentAvatarMint,
+  blue: styles.agentAvatarBlue,
 };
 
 const EVENT_KIND_META: Record<UiEventKind, { label: string; tone: Tone; Icon: React.ComponentType<{ size?: number }> }> = {
@@ -636,6 +636,7 @@ export function ChatInterface({
   const [prompt, setPrompt] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAwaitingReply, setIsAwaitingReply] = useState(false);
+  const [isAborting, setIsAborting] = useState(false);
   const [awaitingReplySince, setAwaitingReplySince] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
@@ -649,8 +650,17 @@ export function ChatInterface({
 
   const agentMeta = resolveAgentMeta(agentFlavor);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? null;
-  const connectionState = runtimeNotice ? 'degraded' : 'connected';
-  const connectionLabel = connectionState === 'connected' ? '정상 연결' : '응답 지연 또는 연결 확인 필요';
+  const isAgentRunning = isSubmitting || isAwaitingReply || isAborting;
+  const connectionState: 'running' | 'connected' | 'degraded' = isAgentRunning
+    ? 'running'
+    : runtimeNotice
+      ? 'degraded'
+      : 'connected';
+  const connectionLabel = connectionState === 'running'
+    ? '실행 중'
+    : connectionState === 'connected'
+      ? '정상 연결'
+      : '응답 지연 또는 연결 확인 필요';
 
   const recentEvents = useMemo(() => [...events].slice(-10).reverse(), [events]);
   const recentPrompts = useMemo(
@@ -802,7 +812,7 @@ export function ChatInterface({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!prompt.trim() || !isOperator || isSubmitting || isAwaitingReply) return;
+    if (!prompt.trim() || !isOperator || isSubmitting || isAwaitingReply || isAborting) return;
 
     setIsSubmitting(true);
     setIsAwaitingReply(true);
@@ -843,6 +853,38 @@ export function ChatInterface({
     }
   }
 
+  async function handleAbortRun() {
+    if (!isOperator || !isAgentRunning || isAborting) {
+      return;
+    }
+
+    setIsAborting(true);
+
+    try {
+      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/actions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'abort' }),
+      });
+      const body = (await response.json().catch(() => ({ error: '중단 응답을 읽을 수 없습니다.' }))) as {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(body.error ?? '에이전트 실행 중단에 실패했습니다.');
+      }
+
+      setIsAwaitingReply(false);
+      setAwaitingReplySince(null);
+      setSubmitError(null);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : '에이전트 실행 중단 중 오류가 발생했습니다.');
+    } finally {
+      setIsAborting(false);
+      setIsSubmitting(false);
+    }
+  }
+
   function handleStreamScroll() {
     const stream = scrollRef.current;
     if (!stream) {
@@ -858,13 +900,13 @@ export function ChatInterface({
           <div className={styles.panelHeading}>Session Profile</div>
           <div className={styles.sessionTitle}>{displayName}</div>
 
-          <div className={styles.agentBadgeRow}>
-            <Badge variant="sky">
-              <agentMeta.Icon size={12} />
-              {agentMeta.label}
-            </Badge>
-            <span className={`${styles.agentTone} ${AGENT_TONE_CLASS[agentMeta.tone]}`}>
-              {agentMeta.tone}
+          <div className={styles.agentProfile}>
+            <span className={`${styles.agentAvatar} ${AGENT_AVATAR_TONE_CLASS[agentMeta.tone]}`}>
+              <agentMeta.Icon size={18} />
+            </span>
+            <span className={styles.agentProfileText}>
+              <span className={styles.agentProfileName}>{agentMeta.label}</span>
+              <span className={styles.agentProfileMeta}>{agentMeta.tone.toUpperCase()} Runtime Agent</span>
             </span>
           </div>
 
@@ -897,14 +939,33 @@ export function ChatInterface({
           <header className={styles.centerHeader}>
             <div className={styles.centerHeaderLeft}>
               <h2 className={styles.centerTitle}>{displayName}</h2>
-              <Badge variant="sky">
-                <agentMeta.Icon size={12} />
-                {agentMeta.label}
-              </Badge>
+              <div className={styles.agentIdentity}>
+                <span className={`${styles.agentAvatar} ${styles.agentAvatarLarge} ${AGENT_AVATAR_TONE_CLASS[agentMeta.tone]}`}>
+                  <agentMeta.Icon size={18} />
+                </span>
+                <span className={styles.agentIdentityText}>
+                  <span className={styles.agentIdentityName}>{agentMeta.label}</span>
+                  <span className={styles.agentIdentityMeta}>Agent Profile</span>
+                </span>
+              </div>
             </div>
             <div className={styles.centerHeaderRight}>
-              <span className={`${styles.connectionPill} ${connectionState === 'connected' ? styles.connectionGood : styles.connectionWarn}`}>
-                {connectionState === 'connected' ? <CheckCircle2 size={14} /> : <CircleAlert size={14} />}
+              <span
+                className={`${styles.connectionPill} ${
+                  connectionState === 'running'
+                    ? styles.connectionRunning
+                    : connectionState === 'connected'
+                      ? styles.connectionGood
+                      : styles.connectionWarn
+                }`}
+              >
+                {connectionState === 'running' ? (
+                  <Activity size={14} className={styles.connectionRunningIcon} />
+                ) : connectionState === 'connected' ? (
+                  <CheckCircle2 size={14} />
+                ) : (
+                  <CircleAlert size={14} />
+                )}
                 {connectionLabel}
               </span>
             </div>
@@ -989,23 +1050,6 @@ export function ChatInterface({
               );
             })}
 
-            {isAwaitingReply && (
-              <article className={`${styles.messageRow} ${styles.messageRowAgent}`}>
-                <div className={styles.messageMeta}>
-                  <span className={`${styles.rolePill} ${styles.roleAgent}`}>
-                    <agentMeta.Icon size={12} />
-                    {agentMeta.label}
-                  </span>
-                  <span className={styles.messageTime}>생성 중...</span>
-                </div>
-                <div className={`${styles.messageBubble} ${styles.messageBubbleAgent}`} role="status" aria-live="polite">
-                  <div className={styles.pendingRow}>
-                    <span className={styles.pendingSpinner} aria-hidden />
-                    <span className={styles.agentText}>응답을 생성하고 있습니다...</span>
-                  </div>
-                </div>
-              </article>
-            )}
           </div>
 
           {pendingPermissions.length > 0 && (
@@ -1056,6 +1100,26 @@ export function ChatInterface({
 
           <footer className={styles.composerDock} ref={composerDockRef}>
             <form onSubmit={handleSubmit} className={styles.composerForm}>
+              {isAgentRunning && (
+                <div className={styles.runningStatusBar} role="status" aria-live="polite">
+                  <span className={styles.runningStatusText}>
+                    <span className={styles.runningDots} aria-hidden>
+                      <span />
+                      <span />
+                      <span />
+                    </span>
+                    에이전트 실행 중...
+                  </span>
+                  <button
+                    type="button"
+                    className={styles.abortButton}
+                    onClick={() => void handleAbortRun()}
+                    disabled={!isOperator || isAborting}
+                  >
+                    {isAborting ? '중단 중...' : 'Abort'}
+                  </button>
+                </div>
+              )}
               <div className={styles.composerDockInner}>
                 <div className={styles.composerFloating}>
                   <textarea
@@ -1071,13 +1135,13 @@ export function ChatInterface({
                       }
                     }}
                     placeholder={isOperator ? '명령을 입력하세요. (Ctrl/Cmd + Enter 전송)' : 'Viewer 권한입니다.'}
-                    disabled={!isOperator || isSubmitting || isAwaitingReply}
+                    disabled={!isOperator || isSubmitting || isAwaitingReply || isAborting}
                     className={styles.composerInput}
                   />
                 </div>
                 <button
                   type="submit"
-                  disabled={!prompt.trim() || !isOperator || isSubmitting || isAwaitingReply}
+                  disabled={!prompt.trim() || !isOperator || isSubmitting || isAwaitingReply || isAborting}
                   className={styles.sendIconButton}
                   title="Send message"
                   aria-label="메시지 전송"
@@ -1098,7 +1162,15 @@ export function ChatInterface({
         <section className={styles.panelCard}>
           <div className={styles.panelHeading}>Runtime Health</div>
           <div className={styles.healthRow}>
-            <span className={`${styles.statusDot} ${connectionState === 'connected' ? styles.statusDotGood : styles.statusDotWarn}`} />
+            <span
+              className={`${styles.statusDot} ${
+                connectionState === 'running'
+                  ? styles.statusDotRunning
+                  : connectionState === 'connected'
+                    ? styles.statusDotGood
+                    : styles.statusDotWarn
+              }`}
+            />
             <span>{connectionLabel}</span>
           </div>
 
