@@ -499,7 +499,6 @@
   }
 
   .sessionSidebarCard {
-    grid-column: 1 / -1;
     padding: 1rem;
     border-radius: 1.2rem;
     min-height: auto;
