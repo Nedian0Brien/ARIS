@@ -298,7 +298,7 @@ button, input, textarea, select {
   gap: 0.2rem;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease;
   flex: 1 1 0;
   min-width: 0;
   min-height: 54px;
@@ -308,6 +308,22 @@ button, input, textarea, select {
   background: transparent;
   position: relative;
   z-index: 2;
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+  touch-action: manipulation;
+  outline: none;
+}
+
+.nav-item:focus,
+.nav-item:focus-visible {
+  outline: none;
+}
+
+.nav-item:active {
+  background: transparent;
 }
 
 .nav-item.active {
