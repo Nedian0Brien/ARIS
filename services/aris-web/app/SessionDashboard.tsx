@@ -6,13 +6,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
   Play, Terminal, FolderOpen, Search, PlusCircle, X, Plus, 
-  Clock3, ArrowUpRight, Folder, ArrowUp, Check, ChevronDown, ChevronUp,
+  Clock3, ArrowUpRight, Folder, ArrowUp, Check, ChevronUp,
   MoreVertical, Activity, Pin, Edit2, RotateCw, Square, Trash2
 } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
 import type { SessionSummary } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from 'recharts';
 import styles from './SessionDashboard.module.css';
 
 type AgentFlavor = 'claude' | 'codex' | 'gemini';
