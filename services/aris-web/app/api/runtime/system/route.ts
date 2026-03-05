@@ -1,5 +1,4 @@
 import os from 'node:os';
-import { readFile } from 'node:fs/promises';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { NextRequest, NextResponse } from 'next/server';

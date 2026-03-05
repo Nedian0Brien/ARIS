@@ -52,7 +52,7 @@ type ServerMetric = {
 type ServerMetrics = {
   cpu: ServerMetric;
   ram: ServerMetric;
-  mem: ServerMetric;
+  storage: ServerMetric;
   capturedAt: string;
 };
 
