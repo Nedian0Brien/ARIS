@@ -48,10 +48,12 @@
   gap: 0.5rem;
 }
 
-.serverResourceGrid {
+/* 서버 리소스 수평 그리드 (CPU, RAM) */
+.serverResourceGridHorizontal {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.65rem;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
 }
 
 .serverDonutCard {
@@ -65,8 +67,8 @@
 .serverDonutChart {
   position: relative;
   width: 100%;
-  height: 176px;
-  min-height: 176px;
+  height: 140px;
+  min-height: 140px;
 }
 
 .serverDonutCenter {
@@ -93,26 +95,12 @@
   text-transform: uppercase;
 }
 
-.serverDonutFoot {
-  margin-top: 0.15rem;
-}
-
-.serverDonutHint {
-  display: block;
-  font-size: 0.62rem;
-  color: var(--text-muted);
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.serverMemCard {
-  margin-top: 0.65rem;
+/* 메모리 카드 (Full Width) */
+.serverMemCardFull {
   border-radius: 1rem;
   background: rgba(255, 255, 255, 0.6);
   border: none;
-  padding: 0.75rem 0.7rem;
+  padding: 1rem;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
@@ -139,7 +127,7 @@
 }
 
 .serverMemBarTrack {
-  margin-top: 0.52rem;
+  margin-top: 0.65rem;
   width: 100%;
   height: 12px;
   border-radius: 999px;
@@ -155,7 +143,7 @@
 }
 
 .serverMemHint {
-  margin-top: 0.4rem;
+  margin-top: 0.5rem;
   font-size: 0.63rem;
   color: var(--text-muted);
 }
@@ -166,6 +154,13 @@
   color: var(--accent-red);
 }
 
+/* 세션 & 에이전트 수평 그리드 */
+.sessionStatsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
 .sessionSummaryBarChart {
   width: 100%;
   height: 32px;
@@ -174,10 +169,12 @@
 }
 
 .sessionSummaryLegend {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
   margin-top: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
 }
 
 .sessionSummaryLegendItem {
@@ -191,7 +188,7 @@
 }
 
 .sessionSummaryLegendItem strong {
-  margin-left: auto;
+  margin-left: 0.2rem;
   color: var(--text);
   font-size: 0.78rem;
 }
@@ -203,11 +200,55 @@
   flex-shrink: 0;
 }
 
-.sessionSidebarSubTitle {
-  font-size: 0.78rem;
+/* 세션 리스트 섹션 */
+.sessionStatusLists {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sessionStatusSubTitle {
+  font-size: 0.75rem;
   font-weight: 700;
   color: var(--text);
-  margin: 1rem 0 0.45rem;
+  margin-bottom: 0.5rem;
+}
+
+.sessionMiniList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.sessionMiniItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sessionMiniStatusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.sessionMiniName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessionEmptyHint {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .agentDonutWrap {
@@ -215,14 +256,14 @@
   background: rgba(255, 255, 255, 0.6);
   border: none;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
-  padding: 0.5rem 0.45rem 0.35rem;
+  padding: 0.5rem;
 }
 
 .agentDonutChart {
   position: relative;
   width: 100%;
-  height: 176px;
-  min-height: 176px;
+  height: 140px;
+  min-height: 140px;
 }
 
 .agentDonutCenter {
@@ -492,160 +533,22 @@
 
   .sessionDashboardSidebar {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.85rem;
-    order: -1;
-    margin-bottom: 0.35rem;
-  }
-
-  .serverResourceGrid {
     grid-template-columns: 1fr;
-    gap: 0.75rem;
+    gap: 1rem;
+    order: -1;
   }
 
-  .sessionSidebarCard {
-    padding: 1rem;
-    border-radius: 1.2rem;
-    min-height: auto;
+  .serverResourceGridHorizontal {
+    grid-template-columns: repeat(2, 1fr);
   }
 
-  .sessionSidebarTitle {
-    margin-bottom: 0.7rem;
-  }
-
-  .sessionMainToolbar {
-    flex-direction: column;
-    align-items: stretch;
+  .sessionStatsGrid {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 767px) {
-  .sessionDashboardLayout {
-    display: flex;
-    flex-direction: column;
-    gap: 0.85rem;
-  }
-
-  .sessionDashboardSidebar {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0.65rem;
-    order: -1;
-    margin: 0 0 0.65rem;
-  }
-
-  .sessionSidebarCard {
-    padding: 0.95rem;
-    border-radius: 1rem;
-  }
-
-  .sessionSidebarTitle {
-    font-size: 0.76rem;
-    margin-bottom: 0.65rem;
-    justify-content: flex-start;
-  }
-
-  .serverResourceGrid {
-    gap: 0.5rem;
-  }
-
-  .serverDonutCard {
-    padding: 0.55rem 0.45rem 0.45rem;
-    border-radius: 0.85rem;
-  }
-
-  .serverDonutChart {
-    height: 156px;
-    min-height: 156px;
-  }
-
-  .serverDonutValue {
-    font-size: 0.92rem;
-  }
-
-  .serverDonutLabel {
-    font-size: 0.58rem;
-  }
-
-  .serverDonutHint {
-    font-size: 0.55rem;
-  }
-
-  .serverMemCard {
-    margin-top: 0.55rem;
-    border-radius: 0.85rem;
-    padding: 0.62rem 0.56rem;
-  }
-
-  .serverMemLabel {
-    font-size: 0.6rem;
-  }
-
-  .serverMemValue {
-    font-size: 0.9rem;
-  }
-
-  .serverMemBarTrack {
-    height: 10px;
-  }
-
-  .serverMemHint {
-    font-size: 0.56rem;
-  }
-
-  .sessionSummaryBarChart {
-    height: 24px;
-    min-height: 24px;
-    margin: 0.35rem 0;
-  }
-
-  .sessionSummaryLegend {
-    gap: 0.42rem;
-  }
-
-  .sessionSummaryLegendItem {
-    font-size: 0.66rem;
-  }
-
-  .sessionSummaryLegendItem strong {
-    font-size: 0.71rem;
-  }
-
-  .sessionSidebarSubTitle {
-    font-size: 0.72rem;
-    margin-top: 0.78rem;
-  }
-
-  .agentDonutWrap {
-    border-radius: 0.85rem;
-    padding: 0.4rem 0.35rem 0.3rem;
-  }
-
-  .agentDonutChart {
-    height: 156px;
-    min-height: 156px;
-  }
-
-  .agentDonutValue {
-    font-size: 0.98rem;
-  }
-
-  .agentDonutLabel {
-    font-size: 0.57rem;
-  }
-
-}
-
-@media (max-width: 560px) {
-  .sessionDashboardSidebar {
-    grid-template-columns: 1fr;
-  }
-
-  .serverResourceGrid {
-    grid-template-columns: 1fr;
-  }
-
-  .sessionSummaryLegend {
+  .serverResourceGridHorizontal {
     grid-template-columns: 1fr;
   }
 }

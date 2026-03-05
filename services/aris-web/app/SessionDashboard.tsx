@@ -498,8 +498,9 @@ export function SessionDashboard({
   const sessionStats = useMemo(() => {
     const total = sessionsList.length;
     const running = sessionsList.filter((s) => s.status === 'running').length;
-    const idle = total - running;
-    return { total, running, idle };
+    const idle = sessionsList.filter((s) => s.status === 'idle').length;
+    const completed = sessionsList.filter((s) => s.status === 'stopped' || s.status === 'error').length;
+    return { total, running, idle, completed };
   }, [sessionsList]);
 
   const agentStats = useMemo(() => {
@@ -764,6 +765,7 @@ export function SessionDashboard({
       name: 'Status', 
       running: sessionStats.running, 
       idle: sessionStats.idle,
+      completed: sessionStats.completed,
       total: sessionStats.total
     },
   ];
@@ -775,6 +777,10 @@ export function SessionDashboard({
   const agentDistributionData = activeAgentDistribution.length > 0
     ? activeAgentDistribution
     : [{ name: '없음', value: 1, color: '#e2e8f0' }];
+
+  // 대기 중인 세션 및 완료된 세션 필터링
+  const waitingSessions = useMemo(() => sessionsList.filter(s => s.status === 'idle'), [sessionsList]);
+  const completedSessions = useMemo(() => sessionsList.filter(s => s.status === 'stopped' || s.status === 'error'), [sessionsList]);
 
   return (
     <div style={{ position: 'relative' }}>
@@ -834,7 +840,7 @@ export function SessionDashboard({
                 <h3 className={styles.sessionSidebarTitle}>
                   <Activity size={16} color="var(--primary)" /> 서버 리소스
                 </h3>
-                <div className={styles.serverResourceGrid}>
+                <div className={styles.serverResourceGridHorizontal}>
                   <div className={styles.serverDonutCard}>
                     <div className={styles.serverDonutChart}>
                       <ResponsiveContainer width="100%" height="100%">
@@ -862,9 +868,6 @@ export function SessionDashboard({
                         <div className={styles.serverDonutValue}>{cpuValueText}</div>
                         <div className={styles.serverDonutLabel}>CPU</div>
                       </div>
-                    </div>
-                    <div className={styles.serverDonutFoot}>
-                      <span className={styles.serverDonutHint}>전체 코어</span>
                     </div>
                   </div>
 
@@ -896,15 +899,12 @@ export function SessionDashboard({
                         <div className={styles.serverDonutLabel}>RAM</div>
                       </div>
                     </div>
-                    <div className={styles.serverDonutFoot}>
-                      <span className={styles.serverDonutHint}>{ramDetailText}</span>
-                    </div>
                   </div>
                 </div>
 
-                <div className={styles.serverMemCard}>
+                <div className={styles.serverMemCardFull}>
                   <div className={styles.serverMemHeader}>
-                    <span className={styles.serverMemLabel}>Mem</span>
+                    <span className={styles.serverMemLabel}>System Mem (RSS)</span>
                     <strong className={styles.serverMemValue}>{memValueText}</strong>
                   </div>
                   <div className={styles.serverMemBarTrack} role="img" aria-label={`메모리 사용률 ${memValueText}`}>
@@ -917,84 +917,121 @@ export function SessionDashboard({
                 )}
               </Card>
 
-              {/* Session Status */}
-              <Card className={styles.sessionSidebarCard}>
-                <h3 className={styles.sessionSidebarTitle}>
-                  <Terminal size={16} color="var(--accent-violet)" /> 세션 현황
-                </h3>
-                <div className={styles.sessionSummaryBarChart}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      layout="vertical"
-                      data={sessionOverviewBarData}
-                      margin={{ top: 0, right: 0, left: -44, bottom: 0 }}
-                      barSize={12}
-                    >
-                      <XAxis type="number" hide />
-                      <YAxis type="category" dataKey="name" hide width={0} />
-                      <Bar dataKey="running" stackId="a" fill="#10b981" radius={[6, 0, 0, 6]} />
-                      <Bar dataKey="idle" stackId="a" fill="#f59e0b" radius={[0, 6, 6, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className={styles.sessionSummaryLegend}>
-                  <div className={styles.sessionSummaryLegendItem}>
-                    <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#64748b' }}></span>
-                    <span>전체</span>
-                    <strong>{sessionStats.total}</strong>
-                  </div>
-                  <div className={styles.sessionSummaryLegendItem}>
-                    <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#10b981' }}></span>
-                    <span>실행중</span>
-                    <strong>{sessionStats.running}</strong>
-                  </div>
-                  <div className={styles.sessionSummaryLegendItem}>
-                    <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#f59e0b' }}></span>
-                    <span>대기</span>
-                    <strong>{sessionStats.idle}</strong>
-                  </div>
-                </div>
-
-                <h4 className={styles.sessionSidebarSubTitle}>에이전트 분포</h4>
-                <div className={styles.agentDonutWrap}>
-                  <div className={styles.agentDonutChart}>
+              {/* Session & Agent Stats Row */}
+              <div className={styles.sessionStatsGrid}>
+                {/* Session Status */}
+                <Card className={styles.sessionSidebarCard}>
+                  <h3 className={styles.sessionSidebarTitle}>
+                    <Terminal size={16} color="var(--accent-violet)" /> 세션 현황
+                  </h3>
+                  <div className={styles.sessionSummaryBarChart}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={agentDistributionData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius="62%"
-                          outerRadius="86%"
-                          startAngle={90}
-                          endAngle={-270}
-                          dataKey="value"
-                          stroke="none"
-                          paddingAngle={1}
-                          cornerRadius={8}
-                        >
-                          {agentDistributionData.map((entry, index) => (
-                            <Cell key={`agent-cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                      </PieChart>
+                      <BarChart
+                        layout="vertical"
+                        data={sessionOverviewBarData}
+                        margin={{ top: 0, right: 0, left: -44, bottom: 0 }}
+                        barSize={12}
+                      >
+                        <XAxis type="number" hide />
+                        <YAxis type="category" dataKey="name" hide width={0} />
+                        <Bar dataKey="running" stackId="a" fill="#10b981" radius={[6, 0, 0, 6]} />
+                        <Bar dataKey="idle" stackId="a" fill="#f59e0b" />
+                        <Bar dataKey="completed" stackId="a" fill="#64748b" radius={[0, 6, 6, 0]} />
+                      </BarChart>
                     </ResponsiveContainer>
-                    <div className={styles.agentDonutCenter}>
-                      <div className={styles.agentDonutValue}>{sessionStats.total}</div>
-                      <div className={styles.agentDonutLabel}>sessions</div>
+                  </div>
+                  <div className={styles.sessionSummaryLegend}>
+                    <div className={styles.sessionSummaryLegendItem}>
+                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#10b981' }}></span>
+                      <span>실행중</span>
+                      <strong>{sessionStats.running}</strong>
+                    </div>
+                    <div className={styles.sessionSummaryLegendItem}>
+                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#f59e0b' }}></span>
+                      <span>대기</span>
+                      <strong>{sessionStats.idle}</strong>
+                    </div>
+                    <div className={styles.sessionSummaryLegendItem}>
+                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#64748b' }}></span>
+                      <span>완료</span>
+                      <strong>{sessionStats.completed}</strong>
                     </div>
                   </div>
-                </div>
-                <div className={styles.sessionSummaryLegend}>
-                  {AGENT_OPTIONS.map((agent) => (
-                    <div key={`agent-legend-${agent.id}`} className={styles.sessionSummaryLegendItem}>
-                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: agent.accentColor }}></span>
-                      <span>{agent.label}</span>
-                      <strong>{agentStats[agent.id]}</strong>
+
+                  {/* 세션 리스트 섹션 */}
+                  <div className={styles.sessionStatusLists}>
+                    <div className={styles.sessionStatusSubSection}>
+                      <h4 className={styles.sessionStatusSubTitle}>대기 중인 세션</h4>
+                      {waitingSessions.length > 0 ? (
+                        <div className={styles.sessionMiniList}>
+                          {waitingSessions.slice(0, 3).map(s => (
+                            <div key={s.id} className={styles.sessionMiniItem}>
+                              <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: '#f59e0b' }}></span>
+                              <span className={styles.sessionMiniName}>{sessionAliases[s.id] || extractLastDirectoryName(s.projectName)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <p className={styles.sessionEmptyHint}>없음</p>}
                     </div>
-                  ))}
-                </div>
-              </Card>
+                    <div className={styles.sessionStatusSubSection}>
+                      <h4 className={styles.sessionStatusSubTitle}>최근 완료</h4>
+                      {completedSessions.length > 0 ? (
+                        <div className={styles.sessionMiniList}>
+                          {completedSessions.slice(0, 3).map(s => (
+                            <div key={s.id} className={styles.sessionMiniItem}>
+                              <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: '#64748b' }}></span>
+                              <span className={styles.sessionMiniName}>{sessionAliases[s.id] || extractLastDirectoryName(s.projectName)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <p className={styles.sessionEmptyHint}>없음</p>}
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Agent Distribution */}
+                <Card className={styles.sessionSidebarCard}>
+                  <h4 className={styles.sessionSidebarTitle}>에이전트 분포</h4>
+                  <div className={styles.agentDonutWrap}>
+                    <div className={styles.agentDonutChart}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={agentDistributionData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius="62%"
+                            outerRadius="86%"
+                            startAngle={90}
+                            endAngle={-270}
+                            dataKey="value"
+                            stroke="none"
+                            paddingAngle={1}
+                            cornerRadius={8}
+                          >
+                            {agentDistributionData.map((entry, index) => (
+                              <Cell key={`agent-cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className={styles.agentDonutCenter}>
+                        <div className={styles.agentDonutValue}>{sessionStats.total}</div>
+                        <div className={styles.agentDonutLabel}>sessions</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className={styles.sessionSummaryLegend}>
+                    {AGENT_OPTIONS.map((agent) => (
+                      <div key={`agent-legend-${agent.id}`} className={styles.sessionSummaryLegendItem}>
+                        <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: agent.accentColor }}></span>
+                        <span>{agent.label}</span>
+                        <strong>{agentStats[agent.id]}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </div>
             </aside>
 
             <section className={styles.sessionDashboardMain}>
