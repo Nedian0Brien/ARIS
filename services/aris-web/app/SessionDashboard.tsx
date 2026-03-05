@@ -1226,8 +1226,10 @@ export function SessionDashboard({
                     variant="secondary"
                     onClick={toggleSelectionMode}
                     className={styles.sessionSelectionModeBtn}
+                    title={isSelectionMode ? '선택 모드 종료' : '선택 모드'}
+                    aria-label={isSelectionMode ? '선택 모드 종료' : '선택 모드'}
                   >
-                    {isSelectionMode ? '선택 모드 종료' : '선택 모드'}
+                    {isSelectionMode ? <X size={18} /> : <Square size={18} />}
                   </Button>
                 </div>
               </div>
