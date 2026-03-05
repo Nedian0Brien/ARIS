@@ -95,6 +95,31 @@ export function buildServer(config: ServerConfig) {
     const { sessionId } = request.params as { sessionId: string };
     try {
       const result = await store.applySessionAction(sessionId, parsed.data.action);
+
+      if (parsed.data.action === 'kill') {
+        const remaining = await store.getSession(sessionId);
+        if (remaining && config.RUNTIME_BACKEND === 'happy') {
+          const happyServerUrl = config.HAPPY_SERVER_URL;
+          if (!happyServerUrl) {
+            throw new Error('HAPPY_SERVER_URL is required for kill fallback');
+          }
+          const deleteResponse = await fetch(
+            `${happyServerUrl.replace(/\/+$/, '')}/v1/sessions/${encodeURIComponent(sessionId)}`,
+            {
+              method: 'DELETE',
+              headers: {
+                Authorization: `Bearer ${config.HAPPY_SERVER_TOKEN}`,
+              },
+            },
+          );
+
+          if (!deleteResponse.ok && deleteResponse.status !== 404) {
+            const body = (await deleteResponse.text().catch(() => '')).trim();
+            throw new Error(`Failed to hard-delete session (${deleteResponse.status}): ${body || deleteResponse.statusText}`);
+          }
+        }
+      }
+
       return { result: { sessionId, action: parsed.data.action, ...result } };
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
