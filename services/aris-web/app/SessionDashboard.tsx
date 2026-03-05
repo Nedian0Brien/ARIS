@@ -760,15 +760,7 @@ export function SessionDashboard({
   const storageDetailText = serverMetrics?.storage
     ? `${formatBytes(serverMetrics.storage.usedBytes)} / ${formatBytes(serverMetrics.storage.totalBytes)}`
     : 'collecting';
-  const sessionOverviewBarData = [
-    { 
-      name: 'Status', 
-      running: sessionStats.running, 
-      idle: sessionStats.idle,
-      completed: sessionStats.completed,
-      total: sessionStats.total
-    },
-  ];
+
   const activeAgentDistribution = AGENT_OPTIONS.map((agent) => ({
     name: agent.label,
     value: agentStats[agent.id],
@@ -927,21 +919,25 @@ export function SessionDashboard({
                   <h3 className={styles.sessionSidebarTitle}>
                     <Terminal size={16} color="var(--accent-violet)" /> 세션 현황
                   </h3>
-                  <div className={styles.sessionSummaryBarChart}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        layout="vertical"
-                        data={sessionOverviewBarData}
-                        margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
-                        barSize={12}
-                      >
-                        <XAxis type="number" hide />
-                        <YAxis type="category" dataKey="name" hide width={0} />
-                        <Bar dataKey="running" stackId="a" fill="#10b981" radius={[6, 0, 0, 6]} />
-                        <Bar dataKey="idle" stackId="a" fill="#f59e0b" />
-                        <Bar dataKey="completed" stackId="a" fill="#64748b" radius={[0, 6, 6, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                  <div className={styles.sessionSummaryBarChart} role="img" aria-label="세션 상태 요약">
+                    {sessionStats.total > 0 ? (
+                      <>
+                        <div 
+                          className={`${styles.sessionBarSegment} ${styles.sessionBarRunning}`} 
+                          style={{ width: `${(sessionStats.running / sessionStats.total) * 100}%` }}
+                        />
+                        <div 
+                          className={`${styles.sessionBarSegment} ${styles.sessionBarIdle}`} 
+                          style={{ width: `${(sessionStats.idle / sessionStats.total) * 100}%` }}
+                        />
+                        <div 
+                          className={`${styles.sessionBarSegment} ${styles.sessionBarCompleted}`} 
+                          style={{ width: `${(sessionStats.completed / sessionStats.total) * 100}%` }}
+                        />
+                      </>
+                    ) : (
+                      <div className={styles.sessionBarSegment} style={{ width: '0%', backgroundColor: 'transparent' }} />
+                    )}
                   </div>
                   <div className={styles.sessionSummaryLegend}>
                     <div className={styles.sessionSummaryLegendItem}>
