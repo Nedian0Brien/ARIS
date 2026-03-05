@@ -710,13 +710,14 @@ export function SessionDashboard({
                         data={pieData}
                         cx="50%"
                         cy="50%"
-                        innerRadius={45}
-                        outerRadius={60}
+                        innerRadius="60%"
+                        outerRadius="86%"
                         startAngle={90}
                         endAngle={-270}
                         dataKey="value"
                         stroke="none"
-                        cornerRadius={10}
+                        paddingAngle={1}
+                        cornerRadius={8}
                       >
                         {pieData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
