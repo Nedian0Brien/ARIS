@@ -232,7 +232,14 @@ button, input, textarea, select {
     0 8px 32px rgba(15, 23, 42, 0.12),
     0 2px 8px rgba(15, 23, 42, 0.06),
     inset 0 1px 1px rgba(255, 255, 255, 0.85);
-  transition: box-shadow 0.2s ease;
+  transition: transform 0.28s ease, opacity 0.2s ease;
+  will-change: transform, opacity;
+}
+
+.bottom-nav-hidden {
+  transform: translateX(-50%) translateY(calc(100% + 1.75rem + var(--safe-area-inset-bottom)));
+  opacity: 0;
+  pointer-events: none;
 }
 
 @media (min-width: 768px) {
