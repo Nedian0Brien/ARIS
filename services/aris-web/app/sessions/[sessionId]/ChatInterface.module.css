@@ -455,29 +455,73 @@
   letter-spacing: 0.04em;
 }
 
-.folderLabelList {
+.resourceLabelList {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.32rem;
-  margin: 0.05rem 0 0.1rem;
+  gap: 0.36rem;
+  margin: 0.08rem 0 0.12rem;
 }
 
-.folderLabel {
+.inlineResourceChipWrap {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.resourceChip {
   display: inline-flex;
   align-items: center;
-  font-size: 0.62rem;
-  font-weight: 700;
-  line-height: 1;
+  gap: 0.28rem;
   border-radius: 999px;
-  padding: 0.12rem 0.36rem;
-  letter-spacing: 0.03em;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  padding: 0.14rem 0.42rem;
   white-space: nowrap;
 }
 
-.folderLabelLink {
-  text-decoration: none;
-  cursor: default;
+.resourceChipFolder {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.resourceChipFile {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.resourceChipIcon {
+  flex-shrink: 0;
+}
+
+.resourceChipText {
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #0f172a;
+}
+
+.resourceIconFolder {
+  color: #1d4ed8;
+}
+
+.resourceIconCode {
+  color: #1d4ed8;
+}
+
+.resourceIconShell {
+  color: #0f766e;
+}
+
+.resourceIconConfig {
+  color: #b45309;
+}
+
+.resourceIconDoc {
+  color: #475569;
+}
+
+.resourceIconOther {
+  color: #6b7280;
 }
 
 .toneSky {

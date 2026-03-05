@@ -45,6 +45,9 @@ type ActionKind = 'command_execution' | 'file_list' | 'file_read' | 'file_write'
 type StreamRenderItem =
   | { type: 'event'; event: UiEvent }
   | { type: 'action_overflow'; runId: string; hiddenCount: number };
+type ResourceLabel =
+  | { kind: 'folder'; name: FolderLabel; sourcePath?: string }
+  | { kind: 'file'; name: string; extension: string; sourcePath?: string };
 
 const TONE_CLASS: Record<Tone, string> = {
   sky: styles.toneSky,
@@ -64,20 +67,60 @@ const AGENT_AVATAR_TONE_CLASS: Record<AgentMeta['tone'], string> = {
 const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
 type FolderLabel = (typeof FOLDER_LABELS)[number];
 
-const FOLDER_LABEL_TONE: Record<FolderLabel, Tone> = {
-  src: 'sky',
-  tools: 'amber',
-  jobs: 'emerald',
-  scripts: 'violet',
-  tests: 'red',
-};
-
 function isFolderLabel(label: string): label is FolderLabel {
   return FOLDER_LABELS.includes(label as FolderLabel);
 }
 
 function isLinkForLabelPath(url: string): boolean {
   return /^https?:\/\//i.test(url) || /^file:\/\//i.test(url) || /^\/?[\w./-]+$/.test(url);
+}
+
+function fileExtension(filename: string): string {
+  const base = filename.trim().split('/').pop() ?? '';
+  const dotIndex = base.lastIndexOf('.');
+  if (dotIndex <= 0 || dotIndex === base.length - 1) {
+    return '';
+  }
+  return base.slice(dotIndex + 1).toLowerCase();
+}
+
+function classifyLabelLink(label: string, rawPath: string): ResourceLabel | null {
+  const normalizedLabel = label.trim();
+  if (!normalizedLabel || !isLinkForLabelPath(rawPath)) {
+    return null;
+  }
+
+  const folderCandidate = normalizedLabel.toLowerCase();
+  if (isFolderLabel(folderCandidate)) {
+    return { kind: 'folder', name: folderCandidate, sourcePath: rawPath };
+  }
+
+  const extension = fileExtension(normalizedLabel);
+  if (extension) {
+    return { kind: 'file', name: normalizedLabel, extension, sourcePath: rawPath };
+  }
+
+  return null;
+}
+
+function classifyPath(pathValue: string): ResourceLabel | null {
+  const normalizedPath = pathValue.trim();
+  if (!normalizedPath) {
+    return null;
+  }
+
+  const basename = normalizedPath.split('/').filter(Boolean).pop() ?? normalizedPath;
+  const extension = fileExtension(basename);
+  if (extension) {
+    return { kind: 'file', name: basename, extension, sourcePath: normalizedPath };
+  }
+
+  const folderCandidate = basename.toLowerCase();
+  if (isFolderLabel(folderCandidate)) {
+    return { kind: 'folder', name: folderCandidate, sourcePath: normalizedPath };
+  }
+
+  return null;
 }
 
 const EVENT_KIND_META: Record<UiEventKind, { label: string; tone: Tone; Icon: React.ComponentType<{ size?: number }> }> = {
@@ -143,21 +186,41 @@ function truncateSingleLine(input: string, max = 68): string {
   return `${compact.slice(0, max).trimEnd()}…`;
 }
 
-function extractFolderLabels(source: string): FolderLabel[] {
+function extractResourceLabels(source: string): ResourceLabel[] {
   const normalized = source.replace(/\r\n/g, '\n');
-  const folderSet = new Set<FolderLabel>();
+  const resources: ResourceLabel[] = [];
+  const seen = new Set<string>();
 
-  for (const match of normalized.matchAll(/\[(src|tools|jobs|scripts|tests)\]|\b(src|tools|jobs|scripts|tests)(?=\/)/gi)) {
-    const label = (match[1] || match[2] || '').toLowerCase() as FolderLabel;
-    folderSet.add(label);
+  for (const match of normalized.matchAll(/\[([^\]]+)\]\(([^)\s]+)\)/g)) {
+    const label = match[1];
+    const rawPath = match[2];
+    const resource = classifyLabelLink(label, rawPath);
+    if (!resource) {
+      continue;
+    }
+    const dedupeKey = `${resource.kind}:${resource.name}:${resource.sourcePath ?? ''}`;
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
+    seen.add(dedupeKey);
+    resources.push(resource);
   }
 
-  return Array.from(folderSet);
+  return resources;
 }
 
-function extractFolderLabelsFromEvent(event: UiEvent): FolderLabel[] {
-  const source = [event.action?.path, event.body, event.title].filter(Boolean).join('\n');
-  return extractFolderLabels(source);
+function extractResourceLabelsFromEvent(event: UiEvent): ResourceLabel[] {
+  const resources = extractResourceLabels([event.body, event.title].filter(Boolean).join('\n'));
+  const pathResource = typeof event.action?.path === 'string' ? classifyPath(event.action.path) : null;
+  if (!pathResource) {
+    return resources;
+  }
+
+  const dedupeKey = `${pathResource.kind}:${pathResource.name}:${pathResource.sourcePath ?? ''}`;
+  if (resources.some((item) => `${item.kind}:${item.name}:${item.sourcePath ?? ''}` === dedupeKey)) {
+    return resources;
+  }
+  return [...resources, pathResource];
 }
 
 function buildPreview(text: string): UiEventResult | undefined {
@@ -394,30 +457,19 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
     }
 
     if (match[2] && match[3]) {
-      const labelCandidate = match[2].trim().toLowerCase();
-      const rawUrl = match[3];
-
-      if (isFolderLabel(labelCandidate) && isLinkForLabelPath(rawUrl)) {
-        const folderClassName = `${styles.folderLabel} ${styles.folderLabelLink} ${TONE_CLASS[FOLDER_LABEL_TONE[labelCandidate]]}`;
-        result.push(
-          <span
-            key={`${keyPrefix}-folder-label-${token}`}
-            className={folderClassName}
-            title={rawUrl}
-          >
-            [{labelCandidate}]
-          </span>
-        );
+      const resource = classifyLabelLink(match[2], match[3]);
+      if (resource) {
+        result.push(<InlineResourceChip key={`${keyPrefix}-resource-${token}`} resource={resource} />);
       } else {
         result.push(
           <a
             key={`${keyPrefix}-link-${token}`}
             className={styles.markdownLink}
-            href={rawUrl}
+            href={match[3]}
             target="_blank"
             rel="noreferrer noopener"
           >
-            {match[2]}
+          {match[2]}
           </a>
         );
       }
@@ -456,6 +508,50 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
   return result;
 }
 
+function resolveFileIconMeta(extension: string): { Icon: React.ComponentType<{ size?: number }>; iconClassName: string } {
+  const ext = extension.toLowerCase();
+  if (ext === 'py' || ext === 'sh' || ext === 'bash' || ext === 'zsh') {
+    return { Icon: TerminalSquare, iconClassName: styles.resourceIconShell };
+  }
+  if (ext === 'ts' || ext === 'tsx' || ext === 'js' || ext === 'jsx') {
+    return { Icon: FilePenLine, iconClassName: styles.resourceIconCode };
+  }
+  if (ext === 'json' || ext === 'yml' || ext === 'yaml' || ext === 'toml') {
+    return { Icon: FileSearch, iconClassName: styles.resourceIconConfig };
+  }
+  if (ext === 'md' || ext === 'txt' || ext === 'rst') {
+    return { Icon: MessageSquareText, iconClassName: styles.resourceIconDoc };
+  }
+  return { Icon: FileSearch, iconClassName: styles.resourceIconOther };
+}
+
+function ResourceChip({ resource }: { resource: ResourceLabel }) {
+  if (resource.kind === 'folder') {
+    return (
+      <span className={`${styles.resourceChip} ${styles.resourceChipFolder}`} title={resource.sourcePath}>
+        <FolderTree size={12} className={`${styles.resourceChipIcon} ${styles.resourceIconFolder}`} />
+        <span className={styles.resourceChipText}>{resource.name}</span>
+      </span>
+    );
+  }
+
+  const { Icon, iconClassName } = resolveFileIconMeta(resource.extension);
+  return (
+    <span className={`${styles.resourceChip} ${styles.resourceChipFile}`} title={resource.sourcePath}>
+      <Icon size={12} className={`${styles.resourceChipIcon} ${iconClassName}`} />
+      <span className={styles.resourceChipText}>{resource.name}</span>
+    </span>
+  );
+}
+
+function InlineResourceChip({ resource }: { resource: ResourceLabel }) {
+  return (
+    <span className={styles.inlineResourceChipWrap}>
+      <ResourceChip resource={resource} />
+    </span>
+  );
+}
+
 function renderInlineWithBreaks(text: string, keyPrefix: string): ReactNode[] {
   const lines = text.split('\n');
   const result: ReactNode[] = [];
@@ -470,17 +566,15 @@ function renderInlineWithBreaks(text: string, keyPrefix: string): ReactNode[] {
   return result;
 }
 
-function FolderLabelStrip({ labels }: { labels: FolderLabel[] }) {
-  if (labels.length === 0) {
+function ResourceLabelStrip({ resources }: { resources: ResourceLabel[] }) {
+  if (resources.length === 0) {
     return null;
   }
 
   return (
-    <div className={styles.folderLabelList}>
-      {labels.map((label) => (
-        <span key={label} className={`${styles.folderLabel} ${TONE_CLASS[FOLDER_LABEL_TONE[label]]}`}>
-          [{label}]
-        </span>
+    <div className={styles.resourceLabelList}>
+      {resources.map((resource, index) => (
+        <ResourceChip key={`${resource.kind}:${resource.name}:${resource.sourcePath ?? index}`} resource={resource} />
       ))}
     </div>
   );
@@ -601,7 +695,7 @@ function ActionEventCard({
   const KindIcon = kindMeta.Icon;
   const fullPrimary = resolveActionPrimary(event).replace(/\s+/g, ' ').trim();
   const compactPrimary = truncateSingleLine(fullPrimary, 88);
-  const folderLabels = extractFolderLabelsFromEvent(event);
+  const resourceLabels = extractResourceLabelsFromEvent(event);
 
   if (!expanded) {
     return (
@@ -614,7 +708,7 @@ function ActionEventCard({
             </span>
             <span className={styles.actionCompactPrimary}>{compactPrimary}</span>
           </div>
-          <FolderLabelStrip labels={folderLabels} />
+          <ResourceLabelStrip resources={resourceLabels} />
         </div>
         <button
           type="button"
@@ -641,7 +735,7 @@ function ActionEventCard({
             </span>
             <span className={styles.actionPrimary}>{fullPrimary}</span>
           </div>
-          <FolderLabelStrip labels={folderLabels} />
+          <ResourceLabelStrip resources={resourceLabels} />
         </div>
         <button
           type="button"
