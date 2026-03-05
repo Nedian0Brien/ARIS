@@ -72,6 +72,14 @@ const FOLDER_LABEL_TONE: Record<FolderLabel, Tone> = {
   tests: 'red',
 };
 
+function isFolderLabel(label: string): label is FolderLabel {
+  return FOLDER_LABELS.includes(label as FolderLabel);
+}
+
+function isLinkForLabelPath(url: string): boolean {
+  return /^https?:\/\//i.test(url) || /^file:\/\//i.test(url) || /^\/?[\w./-]+$/.test(url);
+}
+
 const EVENT_KIND_META: Record<UiEventKind, { label: string; tone: Tone; Icon: React.ComponentType<{ size?: number }> }> = {
   text_reply: { label: 'TEXT', tone: 'sky', Icon: MessageSquareText },
   command_execution: { label: 'COMMAND', tone: 'amber', Icon: TerminalSquare },
@@ -374,7 +382,7 @@ function parseMarkdownBlocks(source: string): MarkdownBlock[] {
 }
 
 function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
-  const pattern = /(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*|_([^_]+)_)/g;
+  const pattern = /(\[([^\]]+)\]\(([^)\s]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*|_([^_]+)_)/g;
   const result: ReactNode[] = [];
   let cursor = 0;
   let token = 0;
@@ -386,17 +394,33 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
     }
 
     if (match[2] && match[3]) {
-      result.push(
-        <a
-          key={`${keyPrefix}-link-${token}`}
-          className={styles.markdownLink}
-          href={match[3]}
-          target="_blank"
-          rel="noreferrer noopener"
-        >
-          {match[2]}
-        </a>
-      );
+      const labelCandidate = match[2].trim().toLowerCase();
+      const rawUrl = match[3];
+
+      if (isFolderLabel(labelCandidate) && isLinkForLabelPath(rawUrl)) {
+        const folderClassName = `${styles.folderLabel} ${styles.folderLabelLink} ${TONE_CLASS[FOLDER_LABEL_TONE[labelCandidate]]}`;
+        result.push(
+          <span
+            key={`${keyPrefix}-folder-label-${token}`}
+            className={folderClassName}
+            title={rawUrl}
+          >
+            [{labelCandidate}]
+          </span>
+        );
+      } else {
+        result.push(
+          <a
+            key={`${keyPrefix}-link-${token}`}
+            className={styles.markdownLink}
+            href={rawUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            {match[2]}
+          </a>
+        );
+      }
     } else if (match[4]) {
       result.push(
         <code key={`${keyPrefix}-code-${token}`} className={styles.markdownInlineCode}>
@@ -540,11 +564,8 @@ function TextReply({ body, isUser }: { body: string; isUser: boolean }) {
     return null;
   }
 
-  const folderLabels = !isUser ? extractFolderLabels(normalized) : [];
-
   return (
     <div className={isUser ? styles.userText : styles.agentText}>
-      <FolderLabelStrip labels={folderLabels} />
       <MarkdownContent body={normalized} />
     </div>
   );
