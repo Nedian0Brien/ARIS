@@ -927,11 +927,11 @@ export function SessionDashboard({
                     <BarChart
                       layout="vertical"
                       data={sessionOverviewBarData}
-                      margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
+                      margin={{ top: 0, right: 0, left: -44, bottom: 0 }}
                       barSize={12}
                     >
                       <XAxis type="number" hide />
-                      <YAxis type="category" dataKey="name" hide />
+                      <YAxis type="category" dataKey="name" hide width={0} />
                       <Bar dataKey="running" stackId="a" fill="#10b981" radius={[6, 0, 0, 6]} />
                       <Bar dataKey="idle" stackId="a" fill="#f59e0b" radius={[0, 6, 6, 0]} />
                     </BarChart>

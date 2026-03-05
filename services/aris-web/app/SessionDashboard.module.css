@@ -498,6 +498,11 @@
     margin-bottom: 0.35rem;
   }
 
+  .serverResourceGrid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
   .sessionSidebarCard {
     padding: 1rem;
     border-radius: 1.2rem;
