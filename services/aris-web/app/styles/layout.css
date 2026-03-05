@@ -1,0 +1,29 @@
+/* Layout Utilities */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  min-height: 100%;
+  background-color: var(--bg);
+  padding-bottom: calc(96px + var(--safe-area-inset-bottom));
+}
+
+.app-shell-immersive {
+  height: 100vh;
+  /* iOS Safari 15.4+ fallback */
+  height: 100dvh;
+  height: calc(var(--vh, 1vh) * 100);
+  height: var(--app-vh, 100dvh);
+  min-height: 100vh;
+  min-height: 100dvh;
+  min-height: calc(var(--vh, 1vh) * 100);
+  min-height: var(--app-vh, 100dvh);
+  padding-bottom: 0;
+}
+
+@media (min-width: 768px) {
+  .app-shell {
+    padding-bottom: 0;
+  }
+}
+

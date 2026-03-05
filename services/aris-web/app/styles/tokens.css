@@ -1,0 +1,57 @@
+:root {
+  /* Color Palette - Premium & Vibrant */
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-subtle: #f1f5f9;
+  --surface-soft: #e2e8f0;
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
+  
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --text-on-accent: #ffffff;
+
+  /* Vibrant Colors */
+  --primary: #3b82f6;
+  --primary-hover: #2563eb;
+  
+  --accent-sky: #0ea5e9;
+  --accent-sky-bg: #e0f2fe;
+  
+  --accent-amber: #f59e0b;
+  --accent-amber-bg: #fef3c7;
+  
+  --accent-violet: #8b5cf6;
+  --accent-violet-bg: #ede9fe;
+  
+  --accent-emerald: #10b981;
+  --accent-emerald-bg: #d1fae5;
+  
+  --accent-red: #ef4444;
+  --accent-red-bg: #fee2e2;
+
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  --gradient-surface: linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.4) 100%);
+
+  /* Typography */
+  --font-sans: "Pretendard", "Inter", "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Layout & Spacing */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-full: 9999px;
+  
+  --shadow-sm: 0 1px 3px 0 rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.05), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+  
+  --max-width: 1400px;
+  --vh: 1vh;
+  --app-vh: 100vh;
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+}
+

@@ -1,0 +1,15 @@
+/* Dashboard Grid for Mobile */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr 380px;
+    gap: 2rem;
+  }
+}
+
