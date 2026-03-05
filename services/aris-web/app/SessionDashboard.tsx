@@ -215,6 +215,7 @@ export function SessionDashboard({
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
   const [pendingDeleteSessionIds, setPendingDeleteSessionIds] = useState<string[] | null>(null);
   const [isDeletingSessions, setIsDeletingSessions] = useState(false);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
 
   // Local mutation state
   const [sessionsList, setSessionsList] = useState<SessionSummary[]>(initialSessions);
@@ -598,6 +599,16 @@ export function SessionDashboard({
 
   const clearSelectedSessions = () => {
     setSelectedSessionIds(new Set());
+  };
+
+  const toggleSelectionMode = () => {
+    setIsSelectionMode((prev) => {
+      const next = !prev;
+      if (!next) {
+        setSelectedSessionIds(new Set());
+      }
+      return next;
+    });
   };
 
   const confirmDeleteSessions = async () => {
@@ -1198,47 +1209,66 @@ export function SessionDashboard({
                     className={styles.sessionSearchInput}
                   />
                 </div>
-                <div className={styles.sessionSortWrap}>
-                  <span className={styles.sessionSortLabel}>정렬</span>
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as 'recent' | 'name')}
-                    className={styles.sessionSortSelect}
+                <div className={styles.sessionToolbarRight}>
+                  <div className={styles.sessionSortWrap}>
+                    <span className={styles.sessionSortLabel}>정렬</span>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as 'recent' | 'name')}
+                      className={styles.sessionSortSelect}
+                    >
+                      <option value="recent">최근 활동순</option>
+                      <option value="name">이름순</option>
+                    </select>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={toggleSelectionMode}
+                    className={styles.sessionSelectionModeBtn}
                   >
-                    <option value="recent">최근 활동순</option>
-                    <option value="name">이름순</option>
-                  </select>
+                    {isSelectionMode ? '선택 모드 종료' : '선택 모드'}
+                  </Button>
                 </div>
-                <div className={styles.sessionBulkActions}>
+              </div>
+
+              {isSelectionMode && (
+                <div className={styles.sessionSelectionToolbar}>
                   <Button
                     type="button"
                     variant="secondary"
                     onClick={toggleSelectAllVisibleSessions}
                     disabled={filteredSessions.length === 0}
-                    className={styles.sessionBulkButton}
+                    className={styles.sessionIconActionBtn}
+                    title={allVisibleSelected ? '전체 선택 해제' : '전체 선택'}
+                    aria-label={allVisibleSelected ? '전체 선택 해제' : '전체 선택'}
                   >
-                    {allVisibleSelected ? '전체 선택 해제' : '전체 선택'}
+                    <Check size={16} />
                   </Button>
                   <Button
                     type="button"
                     variant="ghost"
                     onClick={clearSelectedSessions}
                     disabled={selectedCount === 0}
-                    className={styles.sessionBulkButton}
+                    className={styles.sessionIconActionBtn}
+                    title="선택 해제"
+                    aria-label="선택 해제"
                   >
-                    선택 해제
+                    <X size={16} />
                   </Button>
                   <Button
                     type="button"
                     variant="secondary"
                     onClick={() => requestDeleteSessions(Array.from(selectedSessionIds))}
                     disabled={selectedCount === 0}
-                    className={styles.sessionBulkDeleteButton}
+                    className={`${styles.sessionIconActionBtn} ${styles.sessionIconDeleteBtn}`}
+                    title={`선택 삭제 (${selectedCount})`}
+                    aria-label={`선택 삭제 (${selectedCount})`}
                   >
-                    <Trash2 size={16} /> 선택 삭제 ({selectedCount})
+                    <Trash2 size={16} />
                   </Button>
                 </div>
-              </div>
+              )}
 
               {filteredSessions.length === 0 ? (
                 <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -1260,21 +1290,23 @@ export function SessionDashboard({
                         className={`${styles.sessionCard} ${isSelected ? styles.sessionCardSelected : ''}`}
                         style={{ zIndex: isMenuOpen ? 100 : 1 }}
                       >
-                        <button
-                          type="button"
-                          className={`${styles.sessionSelectToggle} ${isSelected ? styles.sessionSelectToggleActive : ''}`}
-                          onClick={(e) => toggleSessionSelection(session.id, e)}
-                          aria-label={isSelected ? '세션 선택 해제' : '세션 선택'}
-                        >
-                          {isSelected ? <Check size={14} /> : null}
-                        </button>
+                        {isSelectionMode && (
+                          <button
+                            type="button"
+                            className={`${styles.sessionSelectToggle} ${isSelected ? styles.sessionSelectToggleActive : ''}`}
+                            onClick={(e) => toggleSessionSelection(session.id, e)}
+                            aria-label={isSelected ? '세션 선택 해제' : '세션 선택'}
+                          >
+                            {isSelected ? <Check size={14} /> : null}
+                          </button>
+                        )}
                         {isPinned && (
                           <div className={styles.pinBadge}>
                             <Pin size={12} fill="currentColor" />
                           </div>
                         )}
                         <div className={styles.sessionCardHeader}>
-                          <div className={styles.sessionCardHeaderMain}>
+                          <div className={`${styles.sessionCardHeaderMain} ${isSelectionMode ? styles.sessionCardHeaderMainSelectable : ''}`}>
                             <div className={styles.sessionCardTitle} title={session.projectName}>{displayName}</div>
                             <div className={styles.sessionCardId}>{session.id.slice(0, 10)}...</div>
                           </div>
