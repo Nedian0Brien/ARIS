@@ -641,6 +641,7 @@ export function ChatInterface({
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
   const [expandedActionRunIds, setExpandedActionRunIds] = useState<Record<string, boolean>>({});
   const chatShellRef = useRef<HTMLDivElement>(null);
+  const centerPanelRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerDockRef = useRef<HTMLElement>(null);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
@@ -680,6 +681,7 @@ export function ChatInterface({
 
   const syncComposerDockMetrics = useCallback(() => {
     const shell = chatShellRef.current;
+    const centerPanel = centerPanelRef.current;
     const dock = composerDockRef.current;
     if (!shell || !dock) {
       return;
@@ -687,6 +689,19 @@ export function ChatInterface({
 
     const height = Math.ceil(dock.getBoundingClientRect().height);
     shell.style.setProperty('--composer-dock-height', `${height}px`);
+
+    if (!centerPanel) {
+      return;
+    }
+
+    const viewportWidth = window.innerWidth;
+    const rect = centerPanel.getBoundingClientRect();
+    const inset = viewportWidth <= 960 ? 10 : 12;
+    const left = Math.max(inset, Math.round(rect.left) + inset);
+    const maxWidth = Math.max(240, viewportWidth - inset * 2);
+    const nextWidth = Math.max(240, Math.min(maxWidth, Math.round(rect.width) - inset * 2));
+    shell.style.setProperty('--composer-dock-left', `${left}px`);
+    shell.style.setProperty('--composer-dock-width', `${nextWidth}px`);
   }, []);
 
   const resizeComposerInput = useCallback(() => {
@@ -720,11 +735,15 @@ export function ChatInterface({
     syncComposerDockMetrics();
     const handleResize = () => syncComposerDockMetrics();
     window.addEventListener('resize', handleResize, { passive: true });
+    window.addEventListener('scroll', handleResize, { passive: true });
     window.visualViewport?.addEventListener('resize', handleResize);
+    window.visualViewport?.addEventListener('scroll', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleResize);
       window.visualViewport?.removeEventListener('resize', handleResize);
+      window.visualViewport?.removeEventListener('scroll', handleResize);
     };
   }, [syncComposerDockMetrics]);
 
@@ -873,7 +892,7 @@ export function ChatInterface({
         </section>
       </aside>
 
-      <main className={styles.centerPanel}>
+      <main className={styles.centerPanel} ref={centerPanelRef}>
         <section className={styles.centerFrame}>
           <header className={styles.centerHeader}>
             <div className={styles.centerHeaderLeft}>

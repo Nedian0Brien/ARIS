@@ -1,5 +1,7 @@
 .chatShell {
   --composer-dock-height: 98px;
+  --composer-dock-left: 0.75rem;
+  --composer-dock-width: calc(100vw - 1.5rem);
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr) 320px;
   grid-template-rows: minmax(0, 1fr);
@@ -672,9 +674,9 @@
 }
 
 .composerDock {
-  position: absolute;
-  left: 0.75rem;
-  right: 0.75rem;
+  position: fixed;
+  left: var(--composer-dock-left);
+  width: var(--composer-dock-width);
   bottom: calc(0.5rem + env(safe-area-inset-bottom));
   z-index: 220;
   border-top: none;
@@ -877,6 +879,7 @@
   .composerDock {
     left: 0.65rem;
     right: 0.65rem;
+    width: auto;
     bottom: calc(0.45rem + env(safe-area-inset-bottom));
   }
 
