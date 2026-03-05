@@ -576,6 +576,16 @@
 
 @media (max-width: 767px) {
   .serverResourceGridHorizontal {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+  }
+
+  .serverDonutCard {
+    padding: 0.55rem 0.45rem 0.5rem;
+  }
+
+  .serverDonutChart {
+    height: clamp(132px, 42vw, 160px);
+    min-height: 132px;
   }
 }
