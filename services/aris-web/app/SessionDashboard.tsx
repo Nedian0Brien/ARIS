@@ -705,19 +705,19 @@ export function SessionDashboard({
                 </h3>
                 <div className={styles.sessionChartContainer}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
+                    <PieChart margin={{ top: 6, right: 6, bottom: 6, left: 6 }}>
                       <Pie
                         data={pieData}
                         cx="50%"
                         cy="50%"
-                        innerRadius="60%"
-                        outerRadius="86%"
+                        innerRadius="54%"
+                        outerRadius="78%"
                         startAngle={90}
                         endAngle={-270}
                         dataKey="value"
                         stroke="none"
                         paddingAngle={1}
-                        cornerRadius={8}
+                        cornerRadius={4}
                       >
                         {pieData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
