@@ -2,25 +2,6 @@
 
 import { useEffect } from 'react';
 
-function isIOSSafari(): boolean {
-  if (typeof navigator === 'undefined') {
-    return false;
-  }
-  const ua = navigator.userAgent;
-  return /iP(hone|ad|od)/.test(ua) && /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
-}
-
-function withMaximumScaleOne(content: string): string {
-  const tokens = content
-    .split(',')
-    .map((token) => token.trim())
-    .filter(Boolean)
-    .filter((token) => !token.startsWith('maximum-scale='));
-
-  tokens.push('maximum-scale=1');
-  return tokens.join(', ');
-}
-
 export function ViewportHeightSync() {
   useEffect(() => {
     const root = document.documentElement;
@@ -49,29 +30,6 @@ export function ViewportHeightSync() {
       window.removeEventListener('orientationchange', updateViewportHeight);
       window.visualViewport?.removeEventListener('resize', updateViewportHeight);
       window.visualViewport?.removeEventListener('scroll', updateViewportHeight);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isIOSSafari()) {
-      return;
-    }
-
-    const viewportMeta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
-    if (!viewportMeta) {
-      return;
-    }
-
-    const original = viewportMeta.content || 'width=device-width, initial-scale=1, viewport-fit=cover';
-    const next = withMaximumScaleOne(original);
-    if (next !== viewportMeta.content) {
-      viewportMeta.content = next;
-    }
-
-    return () => {
-      if (viewportMeta.content === next) {
-        viewportMeta.content = original;
-      }
     };
   }, []);
 
