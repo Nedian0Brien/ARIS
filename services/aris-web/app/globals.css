@@ -1336,24 +1336,14 @@ button, input, textarea, select {
 
   .session-dashboard-sidebar {
     display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(220px, 78vw);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.65rem;
     order: -1;
-    margin: 0 -0.25rem 0.65rem;
-    padding: 0 0.25rem 0.35rem;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
+    margin: 0 0 0.65rem;
   }
 
-  .session-dashboard-sidebar::-webkit-scrollbar {
-    height: 6px;
-  }
-
-  .session-dashboard-sidebar > * {
-    scroll-snap-align: start;
+  .session-sidebar-card-agents {
+    grid-column: 1 / -1;
   }
 
   .session-sidebar-card {
@@ -1432,6 +1422,16 @@ button, input, textarea, select {
   .session-agent-stat-right {
     font-size: 0.95rem;
     flex-shrink: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .session-dashboard-sidebar {
+    grid-template-columns: 1fr;
+  }
+
+  .session-sidebar-card-agents {
+    grid-column: auto;
   }
 }
 

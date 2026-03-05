@@ -85,6 +85,14 @@ function sanitizePath(path: string): string {
   return path.trim();
 }
 
+function extractLastDirectoryName(path: string): string {
+  const normalized = path.replace(/\\/g, '/').trim().replace(/\/+$/, '');
+  if (!normalized) return 'workspace';
+  if (normalized === '/') return '/';
+  const segments = normalized.split('/').filter(Boolean);
+  return segments[segments.length - 1] ?? normalized;
+}
+
 function normalizeDate(value: unknown): string {
   if (typeof value !== 'string') {
     return FALLBACK_DATE_ISO;
@@ -190,7 +198,13 @@ export function SessionDashboard({
       }
     }
 
-    const handleClickOutside = () => setOpenMenuId(null);
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('[data-session-menu-anchor]')) {
+        return;
+      }
+      setOpenMenuId(null);
+    };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
@@ -402,10 +416,12 @@ export function SessionDashboard({
 
     return [...sessionsList]
       .filter((session) => {
-        const displayName = sessionAliases[session.id] || session.projectName;
+        const alias = sessionAliases[session.id]?.trim() || '';
+        const displayName = alias || extractLastDirectoryName(session.projectName);
         if (!normalizedQuery) return true;
         return (
           displayName.toLowerCase().includes(normalizedQuery) ||
+          session.projectName.toLowerCase().includes(normalizedQuery) ||
           session.id.toLowerCase().includes(normalizedQuery) ||
           String(session.agent).toLowerCase().includes(normalizedQuery)
         );
@@ -416,8 +432,8 @@ export function SessionDashboard({
         if (aPinned !== bPinned) return bPinned - aPinned; // Pinned first
 
         if (sortBy === 'name') {
-          const aName = sessionAliases[a.id] || a.projectName;
-          const bName = sessionAliases[b.id] || b.projectName;
+          const aName = sessionAliases[a.id]?.trim() || extractLastDirectoryName(a.projectName);
+          const bName = sessionAliases[b.id]?.trim() || extractLastDirectoryName(b.projectName);
           return aName.localeCompare(bName);
         }
 
@@ -744,7 +760,7 @@ export function SessionDashboard({
               </Card>
 
               {/* Agents */}
-              <Card className="session-sidebar-card">
+              <Card className="session-sidebar-card session-sidebar-card-agents">
                 <h3 className="session-sidebar-title">에이전트 분포</h3>
                 <div className="session-agent-stats">
                   {AGENT_OPTIONS.map(agent => (
@@ -798,7 +814,7 @@ export function SessionDashboard({
                     const agentInfo = getAgentOption(session.agent);
                     const AgentIcon = agentInfo.Icon;
                     const isPinned = pinnedSessions.has(session.id);
-                    const displayName = sessionAliases[session.id] || session.projectName;
+                    const displayName = sessionAliases[session.id]?.trim() || extractLastDirectoryName(session.projectName);
                     const isMenuOpen = openMenuId === session.id;
 
                     return (
@@ -814,11 +830,12 @@ export function SessionDashboard({
                         )}
                         <div className="session-card-header">
                           <div>
-                            <div className="session-card-title" title={displayName}>{displayName}</div>
+                            <div className="session-card-title" title={session.projectName}>{displayName}</div>
                             <div className="session-card-id">{session.id.slice(0, 10)}...</div>
                           </div>
-                          <div style={{ position: 'relative' }}>
+                          <div style={{ position: 'relative' }} data-session-menu-anchor>
                             <button 
+                              type="button"
                               className="session-menu-btn" 
                               onClick={(e) => { e.stopPropagation(); setOpenMenuId(isMenuOpen ? null : session.id); }}
                             >
@@ -833,20 +850,20 @@ export function SessionDashboard({
                                 >
                                   <ArrowUpRight size={16} /> 세션 접속
                                 </Link>
-                                <button className="dropdown-item" onClick={(e) => openRenameModal(session, e)}>
+                                <button type="button" className="dropdown-item" onClick={(e) => openRenameModal(session, e)}>
                                   <Edit2 size={16} /> 이름 변경
                                 </button>
-                                <button className="dropdown-item" onClick={(e) => togglePin(session.id, e)}>
+                                <button type="button" className="dropdown-item" onClick={(e) => togglePin(session.id, e)}>
                                   <Pin size={16} /> {isPinned ? '고정 해제' : '상단 고정'}
                                 </button>
                                 <hr style={{ margin: '4px 0', border: 'none', borderTop: '1px solid var(--line)' }} />
-                                <button className="dropdown-item" onClick={(e) => executeSessionAction(session.id, 'retry', e)}>
+                                <button type="button" className="dropdown-item" onClick={(e) => executeSessionAction(session.id, 'retry', e)}>
                                   <RotateCw size={16} /> 세션 재실행
                                 </button>
-                                <button className="dropdown-item danger" onClick={(e) => executeSessionAction(session.id, 'abort', e)}>
+                                <button type="button" className="dropdown-item danger" onClick={(e) => executeSessionAction(session.id, 'abort', e)}>
                                   <Square size={16} /> 세션 종료
                                 </button>
-                                <button className="dropdown-item danger" onClick={(e) => executeSessionAction(session.id, 'kill', e)}>
+                                <button type="button" className="dropdown-item danger" onClick={(e) => executeSessionAction(session.id, 'kill', e)}>
                                   <Trash2 size={16} /> 세션 삭제
                                 </button>
                               </div>
