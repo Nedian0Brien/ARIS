@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { 
   Play, Terminal, FolderOpen, Search, PlusCircle, X, Plus, 
   Clock3, ArrowUpRight, Folder, ArrowUp, Check, ChevronUp,
-  MoreVertical, Activity, Pin, Edit2, RotateCw, Square, Trash2
+  MoreVertical, Activity, Pin, Edit2, RotateCw, Square, Trash2, HardDrive
 } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
 import type { SessionSummary } from '@/lib/happy/types';
@@ -741,7 +741,7 @@ export function SessionDashboard({
 
   const cpuUsagePercent = clampPercent(serverMetrics?.cpu.percent ?? 0);
   const ramUsagePercent = clampPercent(serverMetrics?.ram.percent ?? 0);
-  const memUsagePercent = clampPercent(serverMetrics?.mem.percent ?? 0);
+  const storageUsagePercent = clampPercent(serverMetrics?.storage?.percent ?? 0);
 
   const cpuPieData = [
     { name: '사용중', value: cpuUsagePercent, color: '#3b82f6' },
@@ -753,12 +753,12 @@ export function SessionDashboard({
   ];
   const cpuValueText = isLoadingServerMetrics && !serverMetrics ? '--' : `${Math.round(cpuUsagePercent)}%`;
   const ramValueText = isLoadingServerMetrics && !serverMetrics ? '--' : `${Math.round(ramUsagePercent)}%`;
-  const memValueText = isLoadingServerMetrics && !serverMetrics ? '--' : `${Math.round(memUsagePercent)}%`;
+  const storageValueText = isLoadingServerMetrics && !serverMetrics ? '--' : `${Math.round(storageUsagePercent)}%`;
   const ramDetailText = serverMetrics
     ? `${formatBytes(serverMetrics.ram.usedBytes)} / ${formatBytes(serverMetrics.ram.totalBytes)}`
     : 'collecting';
-  const memDetailText = serverMetrics
-    ? `${formatBytes(serverMetrics.mem.usedBytes)} / ${formatBytes(serverMetrics.mem.totalBytes)}`
+  const storageDetailText = serverMetrics?.storage
+    ? `${formatBytes(serverMetrics.storage.usedBytes)} / ${formatBytes(serverMetrics.storage.totalBytes)}`
     : 'collecting';
   const sessionOverviewBarData = [
     { 
@@ -902,15 +902,18 @@ export function SessionDashboard({
                   </div>
                 </div>
 
-                <div className={styles.serverMemCardFull}>
-                  <div className={styles.serverMemHeader}>
-                    <span className={styles.serverMemLabel}>System Mem (RSS)</span>
-                    <strong className={styles.serverMemValue}>{memValueText}</strong>
+                <div className={styles.serverStorageCardFull}>
+                  <div className={styles.serverStorageHeader}>
+                    <div className={styles.serverStorageLabelRow}>
+                      <HardDrive size={14} color="var(--text-muted)" />
+                      <span className={styles.serverStorageLabel}>Storage</span>
+                    </div>
+                    <strong className={styles.serverStorageValue}>{storageValueText}</strong>
                   </div>
-                  <div className={styles.serverMemBarTrack} role="img" aria-label={`메모리 사용률 ${memValueText}`}>
-                    <div className={styles.serverMemBarFill} style={{ width: `${memUsagePercent}%` }} />
+                  <div className={styles.serverStorageBarTrack} role="img" aria-label={`디스크 사용률 ${storageValueText}`}>
+                    <div className={styles.serverStorageBarFill} style={{ width: `${storageUsagePercent}%` }} />
                   </div>
-                  <div className={styles.serverMemHint}>{memDetailText}</div>
+                  <div className={styles.serverStorageHint}>{storageDetailText}</div>
                 </div>
                 {serverMetricsError && (
                   <div className={styles.serverMetricError}>실시간 지표 갱신 실패: {serverMetricsError}</div>

@@ -1,7 +1,11 @@
 import os from 'node:os';
 import { readFile } from 'node:fs/promises';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
+
+const execAsync = promisify(exec);
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -57,52 +61,30 @@ function ratioPercent(used: number, total: number): number {
   return clampPercent((used / total) * 100);
 }
 
-async function readNumericFile(path: string): Promise<number | null> {
+async function readStorageSnapshot(): Promise<{ usedBytes: number; totalBytes: number } | null> {
   try {
-    const raw = (await readFile(path, 'utf8')).trim();
-    if (!raw || raw === 'max') return null;
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed) || parsed <= 0) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
+    // df -P /: root 파티션 정보 (POSIX 형식)
+    const { stdout } = await execAsync('df -P /');
+    const lines = stdout.split('\n');
+    if (lines.length < 2) return null;
+    
+    // 두 번째 줄 파싱 (Filesystem 1024-blocks Used Available Capacity Mounted on)
+    const parts = lines[1].split(/\s+/);
+    if (parts.length < 5) return null;
 
-async function readContainerMemorySnapshot(): Promise<{ usedBytes: number; totalBytes: number } | null> {
-  const candidates = [
-    {
-      usedPath: '/sys/fs/cgroup/memory.current',
-      totalPath: '/sys/fs/cgroup/memory.max',
-    },
-    {
-      usedPath: '/sys/fs/cgroup/memory/memory.usage_in_bytes',
-      totalPath: '/sys/fs/cgroup/memory/memory.limit_in_bytes',
-    },
-  ];
+    const totalK = parseInt(parts[1], 10);
+    const usedK = parseInt(parts[2], 10);
 
-  for (const candidate of candidates) {
-    const [used, total] = await Promise.all([
-      readNumericFile(candidate.usedPath),
-      readNumericFile(candidate.totalPath),
-    ]);
-
-    if (!used || !total) {
-      continue;
-    }
-
-    // Some cgroup v1 environments return extremely large "unlimited" values.
-    if (total >= Number.MAX_SAFE_INTEGER / 16) {
-      continue;
-    }
+    if (isNaN(totalK) || isNaN(usedK)) return null;
 
     return {
-      usedBytes: used,
-      totalBytes: total,
+      usedBytes: usedK * 1024,
+      totalBytes: totalK * 1024,
     };
+  } catch (err) {
+    console.error('Storage info read failed:', err);
+    return null;
   }
-
-  return null;
 }
 
 export async function GET(request: NextRequest) {
@@ -114,10 +96,7 @@ export async function GET(request: NextRequest) {
   const totalMemoryBytes = Math.max(0, os.totalmem());
   const freeMemoryBytes = Math.max(0, os.freemem());
   const ramUsedBytes = Math.max(0, totalMemoryBytes - freeMemoryBytes);
-  const containerMemory = await readContainerMemorySnapshot();
-  const processMemUsedBytes = Math.max(0, process.memoryUsage().rss);
-  const memUsedBytes = containerMemory?.usedBytes ?? processMemUsedBytes;
-  const memTotalBytes = containerMemory?.totalBytes ?? totalMemoryBytes;
+  const storage = await readStorageSnapshot();
   const cpuPercent = readCpuPercent();
 
   return NextResponse.json(
@@ -133,10 +112,10 @@ export async function GET(request: NextRequest) {
           usedBytes: ramUsedBytes,
           totalBytes: totalMemoryBytes,
         },
-        mem: {
-          percent: ratioPercent(memUsedBytes, memTotalBytes),
-          usedBytes: memUsedBytes,
-          totalBytes: memTotalBytes,
+        storage: {
+          percent: storage ? ratioPercent(storage.usedBytes, storage.totalBytes) : 0,
+          usedBytes: storage?.usedBytes ?? 0,
+          totalBytes: storage?.totalBytes ?? 0,
         },
       },
       capturedAt: new Date().toISOString(),
