@@ -351,6 +351,25 @@
   gap: 0.75rem;
 }
 
+.sessionBulkActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.sessionBulkButton {
+  min-height: 40px !important;
+  border-radius: 0.8rem !important;
+}
+
+.sessionBulkDeleteButton {
+  min-height: 40px !important;
+  border-radius: 0.8rem !important;
+  color: var(--accent-red) !important;
+}
+
 .sessionSortLabel {
   font-size: 0.85rem;
   color: var(--text-muted);
@@ -392,9 +411,42 @@
   overflow: visible;
 }
 
+.sessionCardSelected {
+  border-color: rgba(59, 130, 246, 0.45);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.22), 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
 .sessionCard:hover {
   transform: translateY(-4px);
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+}
+
+.sessionSelectToggle {
+  position: absolute;
+  top: 0.7rem;
+  left: 0.7rem;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.92);
+  color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 2;
+}
+
+.sessionSelectToggle:hover {
+  border-color: var(--primary);
+}
+
+.sessionSelectToggleActive {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
 }
 
 .sessionCardHeader {
@@ -407,6 +459,7 @@
 .sessionCardHeaderMain {
   flex: 1;
   min-width: 0;
+  padding-left: 1.6rem;
 }
 
 .sessionCardMenuAnchor {

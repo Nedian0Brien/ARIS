@@ -212,6 +212,9 @@ export function SessionDashboard({
   // Modals
   const [renameModalSession, setRenameModalSession] = useState<{id: string, currentName: string} | null>(null);
   const [newNameInput, setNewNameInput] = useState('');
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+  const [pendingDeleteSessionIds, setPendingDeleteSessionIds] = useState<string[] | null>(null);
+  const [isDeletingSessions, setIsDeletingSessions] = useState(false);
 
   // Local mutation state
   const [sessionsList, setSessionsList] = useState<SessionSummary[]>(initialSessions);
@@ -232,6 +235,20 @@ export function SessionDashboard({
     setPinnedSessions(pins);
     setSessionAliases(aliases);
   }, [initialSessions]);
+
+  useEffect(() => {
+    setSelectedSessionIds((prev) => {
+      if (prev.size === 0) return prev;
+      const activeIds = new Set(sessionsList.map((s) => s.id));
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (activeIds.has(id)) {
+          next.add(id);
+        }
+      });
+      return next;
+    });
+  }, [sessionsList]);
 
   useEffect(() => {
     setMounted(true);
@@ -518,6 +535,11 @@ export function SessionDashboard({
   const executeSessionAction = async (id: string, action: 'retry' | 'abort' | 'kill', e: React.MouseEvent) => {
     e.stopPropagation();
     setOpenMenuId(null);
+    if (action === 'kill') {
+      requestDeleteSessions([id]);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/runtime/sessions/${id}/actions`, {
         method: 'POST',
@@ -525,22 +547,96 @@ export function SessionDashboard({
         body: JSON.stringify({ action }),
       });
       if (!res.ok) throw new Error(`Action ${action} failed`);
-      
-      if (action === 'kill') {
-        setSessionsList(prev => prev.filter(s => s.id !== id));
-      } else {
-        // Optimistic status update (could be refined with real time events)
-        setSessionsList(prev => prev.map(s => {
-          if (s.id === id) {
-            return { ...s, status: action === 'abort' ? 'stopped' : 'running' };
-          }
-          return s;
-        }));
-      }
+
+      setSessionsList(prev => prev.map(s => {
+        if (s.id === id) {
+          return { ...s, status: action === 'abort' ? 'stopped' : 'running' };
+        }
+        return s;
+      }));
     } catch (err) {
       console.error(err);
       alert(`${action} 요청 중 오류가 발생했습니다.`);
     }
+  };
+
+  const requestDeleteSessions = (ids: string[]) => {
+    const uniqueIds = Array.from(new Set(ids));
+    if (uniqueIds.length === 0) return;
+    setPendingDeleteSessionIds(uniqueIds);
+    setOpenMenuId(null);
+  };
+
+  const toggleSessionSelection = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedSessionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisibleSessions = () => {
+    if (filteredSessions.length === 0) return;
+    setSelectedSessionIds((prev) => {
+      const next = new Set(prev);
+      const allVisibleSelected = filteredSessions.every((session) => next.has(session.id));
+      filteredSessions.forEach((session) => {
+        if (allVisibleSelected) {
+          next.delete(session.id);
+        } else {
+          next.add(session.id);
+        }
+      });
+      return next;
+    });
+  };
+
+  const clearSelectedSessions = () => {
+    setSelectedSessionIds(new Set());
+  };
+
+  const confirmDeleteSessions = async () => {
+    if (!pendingDeleteSessionIds || pendingDeleteSessionIds.length === 0) return;
+    setIsDeletingSessions(true);
+
+    const failedIds: string[] = [];
+    for (const sessionId of pendingDeleteSessionIds) {
+      try {
+        const res = await fetch(`/api/runtime/sessions/${sessionId}/actions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'kill' }),
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to delete ${sessionId}`);
+        }
+      } catch (error) {
+        console.error(error);
+        failedIds.push(sessionId);
+      }
+    }
+
+    const removedIds = new Set(pendingDeleteSessionIds.filter((id) => !failedIds.includes(id)));
+    if (removedIds.size > 0) {
+      setSessionsList((prev) => prev.filter((session) => !removedIds.has(session.id)));
+    }
+    setSelectedSessionIds((prev) => {
+      const next = new Set(prev);
+      removedIds.forEach((id) => next.delete(id));
+      return next;
+    });
+
+    if (failedIds.length > 0) {
+      alert(`${failedIds.length}개 세션 삭제에 실패했습니다. 다시 시도해 주세요.`);
+    }
+
+    setIsDeletingSessions(false);
+    setPendingDeleteSessionIds(null);
   };
 
   const sessionStats = useMemo(() => {
@@ -591,6 +687,8 @@ export function SessionDashboard({
         return bTime - aTime;
       });
   }, [sessionsList, searchQuery, sortBy, pinnedSessions, sessionAliases]);
+  const selectedCount = selectedSessionIds.size;
+  const allVisibleSelected = filteredSessions.length > 0 && filteredSessions.every((session) => selectedSessionIds.has(session.id));
 
   const canRenderModal = isCreateModalOpen && typeof document !== 'undefined';
   const createModal = canRenderModal
@@ -1111,6 +1209,35 @@ export function SessionDashboard({
                     <option value="name">이름순</option>
                   </select>
                 </div>
+                <div className={styles.sessionBulkActions}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={toggleSelectAllVisibleSessions}
+                    disabled={filteredSessions.length === 0}
+                    className={styles.sessionBulkButton}
+                  >
+                    {allVisibleSelected ? '전체 선택 해제' : '전체 선택'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={clearSelectedSessions}
+                    disabled={selectedCount === 0}
+                    className={styles.sessionBulkButton}
+                  >
+                    선택 해제
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => requestDeleteSessions(Array.from(selectedSessionIds))}
+                    disabled={selectedCount === 0}
+                    className={styles.sessionBulkDeleteButton}
+                  >
+                    <Trash2 size={16} /> 선택 삭제 ({selectedCount})
+                  </Button>
+                </div>
               </div>
 
               {filteredSessions.length === 0 ? (
@@ -1125,13 +1252,22 @@ export function SessionDashboard({
                     const isPinned = pinnedSessions.has(session.id);
                     const displayName = sessionAliases[session.id]?.trim() || extractLastDirectoryName(session.projectName);
                     const isMenuOpen = openMenuId === session.id;
+                    const isSelected = selectedSessionIds.has(session.id);
 
                     return (
                       <div 
                         key={session.id} 
-                        className={styles.sessionCard}
+                        className={`${styles.sessionCard} ${isSelected ? styles.sessionCardSelected : ''}`}
                         style={{ zIndex: isMenuOpen ? 100 : 1 }}
                       >
+                        <button
+                          type="button"
+                          className={`${styles.sessionSelectToggle} ${isSelected ? styles.sessionSelectToggleActive : ''}`}
+                          onClick={(e) => toggleSessionSelection(session.id, e)}
+                          aria-label={isSelected ? '세션 선택 해제' : '세션 선택'}
+                        >
+                          {isSelected ? <Check size={14} /> : null}
+                        </button>
                         {isPinned && (
                           <div className={styles.pinBadge}>
                             <Pin size={12} fill="currentColor" />
@@ -1221,6 +1357,35 @@ export function SessionDashboard({
       </div>
 
       {createModal}
+
+      {pendingDeleteSessionIds && (
+        <div className="modal-overlay" onClick={() => { if (!isDeletingSessions) setPendingDeleteSessionIds(null); }}>
+          <div className="modal-content new-session-modal rename-modal animate-in" onClick={(e) => e.stopPropagation()}>
+            <header className="modal-header">
+              <h3 className="modal-title" style={{ fontSize: '1rem' }}>세션 삭제 확인</h3>
+            </header>
+            <div className="modal-body" style={{ padding: '1.25rem 1.5rem' }}>
+              <p style={{ marginBottom: '0.5rem', fontWeight: 700 }}>
+                선택한 {pendingDeleteSessionIds.length}개 세션을 삭제하시겠습니까?
+              </p>
+              <p className="text-muted text-sm">삭제된 세션은 복구할 수 없습니다.</p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1.25rem' }}>
+                <Button type="button" variant="ghost" onClick={() => setPendingDeleteSessionIds(null)} disabled={isDeletingSessions}>
+                  취소
+                </Button>
+                <Button
+                  type="button"
+                  isLoading={isDeletingSessions}
+                  onClick={() => void confirmDeleteSessions()}
+                  style={{ background: 'var(--accent-red)', color: '#fff' }}
+                >
+                  삭제
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Rename Modal */}
       {renameModalSession && (
