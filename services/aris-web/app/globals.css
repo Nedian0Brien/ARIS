@@ -48,7 +48,7 @@
   --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.05), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
   --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
   
-  --max-width: 1100px;
+  --max-width: 1400px;
 }
 
 /* Reset & Base Styles */
@@ -84,10 +84,16 @@ button, input, textarea, select {
 .container {
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: 0 1rem;
+  padding: 0 0.75rem;
 }
 
 @media (min-width: 768px) {
+  .container {
+    padding: 0 1rem;
+  }
+}
+
+@media (min-width: 1200px) {
   .container {
     padding: 0 1.5rem;
   }
@@ -978,7 +984,7 @@ button, input, textarea, select {
 
 .session-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 1.25rem;
 }
 
@@ -1274,7 +1280,7 @@ button, input, textarea, select {
 
 @media (max-width: 1199px) {
   .session-dashboard-layout {
-    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-columns: 210px minmax(0, 1fr);
   }
 
   .session-main-toolbar {
