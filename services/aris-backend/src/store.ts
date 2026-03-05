@@ -151,19 +151,18 @@ class MockRuntimeStore implements RuntimeStoreBackend {
     }
 
     const at = new Date().toISOString();
-    const statusByAction: Record<SessionAction, SessionStatus> = {
+    const statusByAction: Record<Exclude<SessionAction, 'kill'>, SessionStatus> = {
       abort: 'idle',
       retry: 'running',
-      kill: 'stopped',
       resume: 'running',
     };
 
-    session.state.status = statusByAction[action];
-    session.updatedAt = at;
+    if (action !== 'kill') {
+      session.state.status = statusByAction[action];
+      session.updatedAt = at;
+    }
 
-    if (action === 'kill') {
-      session.riskScore = 85;
-    } else if (action === 'retry' || action === 'resume') {
+    if (action === 'retry' || action === 'resume') {
       session.riskScore = Math.max(10, session.riskScore - 15);
     }
 
@@ -175,13 +174,23 @@ class MockRuntimeStore implements RuntimeStoreBackend {
       }
     }
 
-    this.sessions.set(sessionId, session);
-    await this.appendMessage(sessionId, {
-      type: 'tool',
-      title: 'Command Execution',
-      text: `$ session ${action}\nexit code: 0`,
-      meta: { system: true, action },
-    });
+    if (action === 'kill') {
+      this.sessions.delete(sessionId);
+      this.messages.delete(sessionId);
+      for (const [permissionId, permission] of this.permissions.entries()) {
+        if (permission.sessionId === sessionId) {
+          this.permissions.delete(permissionId);
+        }
+      }
+    } else {
+      this.sessions.set(sessionId, session);
+      await this.appendMessage(sessionId, {
+        type: 'tool',
+        title: 'Command Execution',
+        text: `$ session ${action}\nexit code: 0`,
+        meta: { system: true, action },
+      });
+    }
 
     return {
       accepted: true,

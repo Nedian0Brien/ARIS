@@ -949,6 +949,21 @@ export class HappyRuntimeStore {
       if (active && !active.signal.aborted) {
         active.abort();
       }
+      this.activeRuns.delete(sessionId);
+    }
+
+    if (action === 'kill') {
+      try {
+        await this.request(`/v1/sessions/${encodeURIComponent(sessionId)}`, {
+          method: 'DELETE',
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes('(404)')) {
+          throw new Error('SESSION_NOT_FOUND');
+        }
+        throw error;
+      }
     }
 
     return {
