@@ -267,7 +267,7 @@ export function SessionDashboard({
           metrics?: {
             cpu?: { percent?: number };
             ram?: { percent?: number; usedBytes?: number; totalBytes?: number };
-            mem?: { percent?: number; usedBytes?: number; totalBytes?: number };
+            storage?: { percent?: number; usedBytes?: number; totalBytes?: number };
           };
           capturedAt?: string;
         };
@@ -288,10 +288,10 @@ export function SessionDashboard({
               usedBytes: Math.max(0, Number(body.metrics.ram?.usedBytes ?? 0)),
               totalBytes: Math.max(0, Number(body.metrics.ram?.totalBytes ?? 0)),
             },
-            mem: {
-              percent: clampPercent(Number(body.metrics.mem?.percent ?? 0)),
-              usedBytes: Math.max(0, Number(body.metrics.mem?.usedBytes ?? 0)),
-              totalBytes: Math.max(0, Number(body.metrics.mem?.totalBytes ?? 0)),
+            storage: {
+              percent: clampPercent(Number(body.metrics.storage?.percent ?? 0)),
+              usedBytes: Math.max(0, Number(body.metrics.storage?.usedBytes ?? 0)),
+              totalBytes: Math.max(0, Number(body.metrics.storage?.totalBytes ?? 0)),
             },
             capturedAt: typeof body.capturedAt === 'string' ? body.capturedAt : new Date().toISOString(),
           });
