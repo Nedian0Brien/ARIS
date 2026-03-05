@@ -23,7 +23,7 @@ export default async function SessionPage({
     return (
       <div className="app-shell app-shell-immersive">
         <Header userEmail={user.email} role={user.role} />
-        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <ChatInterface
             sessionId={sessionId}
             initialEvents={detail.events}
