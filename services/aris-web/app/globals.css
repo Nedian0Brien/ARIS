@@ -978,7 +978,7 @@ button, input, textarea, select {
 
 .session-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 1.25rem;
 }
 
@@ -1274,15 +1274,7 @@ button, input, textarea, select {
 
 @media (max-width: 1199px) {
   .session-dashboard-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .session-dashboard-sidebar {
-    order: 2;
-  }
-
-  .session-dashboard-main {
-    order: 1;
+    grid-template-columns: 240px minmax(0, 1fr);
   }
 
   .session-main-toolbar {
@@ -1303,6 +1295,82 @@ button, input, textarea, select {
     border-radius: 0;
     border-left: 1px solid var(--line);
     border-right: 1px solid var(--line);
+  }
+}
+
+@media (max-width: 767px) {
+  .session-dashboard-layout {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .session-dashboard-sidebar {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    order: -1;
+    margin-bottom: 1rem;
+    flex-direction: row;
+  }
+
+  .session-sidebar-card {
+    padding: 0.75rem;
+    border-radius: 1rem;
+  }
+
+  .session-sidebar-title {
+    font-size: 0.7rem;
+    margin-bottom: 0.5rem;
+    justify-content: center;
+  }
+
+  .session-chart-container {
+    height: 60px !important;
+  }
+
+  .session-chart-center-text {
+    font-size: 0.8rem !important;
+  }
+
+  .session-chart-sub-text {
+    display: none !important;
+  }
+
+  .session-stat-item {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+  }
+
+  .session-stat-value {
+    font-size: 1rem !important;
+  }
+
+  .session-stat-label {
+    font-size: 0.6rem !important;
+  }
+
+  .session-agent-stat-row {
+    padding: 0.25rem 0 !important;
+    font-size: 0.7rem !important;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+  }
+
+  .session-agent-stat-left {
+    flex-direction: column;
+    gap: 0.2rem !important;
+  }
+
+  .session-agent-stat-left div {
+    width: 20px !important;
+    height: 20px !important;
+  }
+
+  .session-agent-stat-left svg {
+    width: 12px !important;
+    height: 12px !important;
   }
 }
 

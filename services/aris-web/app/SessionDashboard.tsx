@@ -686,7 +686,7 @@ export function SessionDashboard({
                 <h3 className="session-sidebar-title">
                   <Activity size={16} color="var(--primary)" /> 서버 리소스
                 </h3>
-                <div style={{ height: '140px', width: '100%', position: 'relative' }}>
+                <div className="session-chart-container" style={{ height: '140px', width: '100%', position: 'relative' }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -708,8 +708,8 @@ export function SessionDashboard({
                     </PieChart>
                   </ResponsiveContainer>
                   <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text)' }}>35%</div>
-                    <div style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--text-muted)' }}>CPU/MEM</div>
+                    <div className="session-chart-center-text" style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text)' }}>35%</div>
+                    <div className="session-chart-sub-text" style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--text-muted)' }}>CPU/MEM</div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '0.5rem', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>
