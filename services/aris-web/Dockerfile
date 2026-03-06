@@ -26,7 +26,7 @@ RUN npm prune --omit=dev
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-RUN apk add --no-cache libc6-compat openssl
+RUN apk add --no-cache libc6-compat openssl bash
 COPY --link --from=builder /app/.next ./.next
 COPY --link --from=builder /app/public ./public
 COPY --link --from=builder /app/node_modules ./node_modules

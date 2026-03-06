@@ -76,8 +76,25 @@ function hasTmuxSession(sessionId) {
 }
 
 // PTY 스폰 (tmux 우선 시도, 실패 시 bash fallback)
+function resolveShell() {
+  const candidates = [
+    process.env.DEFAULT_SHELL,
+    process.env.SHELL,
+    '/bin/bash',
+    '/bin/sh',
+  ];
+  for (const s of candidates) {
+    if (!s) continue;
+    try {
+      execSync(`test -x ${s}`, { stdio: 'ignore' });
+      return s;
+    } catch {}
+  }
+  return '/bin/sh';
+}
+
 function spawnPty(sessionId, cwd) {
-  const shell = process.env.DEFAULT_SHELL || process.env.SHELL || '/bin/bash';
+  const shell = resolveShell();
   const env = { ...process.env, TERM: 'xterm-256color' };
 
   if (sessionId && hasTmuxSession(sessionId)) {
