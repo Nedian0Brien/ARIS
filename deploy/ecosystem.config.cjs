@@ -71,8 +71,7 @@ module.exports = {
   apps: [
     {
       name: 'aris-backend',
-      script: 'npm',
-      args: 'run start',
+      script: './dist/index.js',
       cwd: './services/aris-backend',
       exec_mode: 'cluster',
       instances: resolveBackendInstances(),
