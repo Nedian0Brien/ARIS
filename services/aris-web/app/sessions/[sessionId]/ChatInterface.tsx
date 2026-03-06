@@ -34,7 +34,7 @@ const PREVIEW_MAX_LINES = 12;
 const PREVIEW_MAX_CHARS = 600;
 const COMPOSER_MIN_HEIGHT_PX = 52;
 const COMPOSER_MAX_HEIGHT_PX = 180;
-const MAX_VISIBLE_ACTIONS_PER_RUN = 4;
+const ACTION_COLLAPSE_THRESHOLD = 4;
 
 type AgentMeta = {
   label: string;
@@ -46,7 +46,7 @@ type Tone = 'sky' | 'amber' | 'cyan' | 'emerald' | 'violet' | 'red';
 type ActionKind = 'command_execution' | 'file_list' | 'file_read' | 'file_write';
 type StreamRenderItem =
   | { type: 'event'; event: UiEvent }
-  | { type: 'action_overflow'; runId: string; hiddenCount: number };
+  | { type: 'action_overflow'; id: string; kind: ActionKind; hiddenCount: number };
 type ResourceLabel =
   | { kind: 'folder'; name: FolderLabel; sourcePath?: string }
   | { kind: 'file'; name: string; extension: string; sourcePath?: string };
@@ -357,21 +357,19 @@ function parseCodeChangeSummary(event: UiEvent): {
   };
 }
 
-function buildStreamRenderItems(events: UiEvent[], expandedActionRunIds: Record<string, boolean>): StreamRenderItem[] {
+function buildStreamRenderItems(events: UiEvent[]): StreamRenderItem[] {
   const items: StreamRenderItem[] = [];
   let cursor = 0;
 
   while (cursor < events.length) {
     const current = events[cursor];
-    const canGroup = !isUserEvent(current) && isActionKind(current.kind);
-
-    if (!canGroup) {
+    if (isUserEvent(current) || !isActionKind(current.kind)) {
       items.push({ type: 'event', event: current });
       cursor += 1;
       continue;
     }
 
-    const runKind = current.kind;
+    const runKind: ActionKind = current.kind;
     let end = cursor + 1;
     while (end < events.length) {
       const next = events[end];
@@ -382,24 +380,21 @@ function buildStreamRenderItems(events: UiEvent[], expandedActionRunIds: Record<
     }
 
     const runEvents = events.slice(cursor, end);
-    if (runEvents.length <= MAX_VISIBLE_ACTIONS_PER_RUN) {
+    if (runEvents.length < ACTION_COLLAPSE_THRESHOLD) {
       runEvents.forEach((event) => items.push({ type: 'event', event }));
       cursor = end;
       continue;
     }
-
-    const runId = `${runKind}:${runEvents[0].id}`;
-    const expanded = Boolean(expandedActionRunIds[runId]);
-    if (expanded) {
-      runEvents.forEach((event) => items.push({ type: 'event', event }));
-    } else {
-      runEvents.slice(0, MAX_VISIBLE_ACTIONS_PER_RUN).forEach((event) => items.push({ type: 'event', event }));
-      items.push({
-        type: 'action_overflow',
-        runId,
-        hiddenCount: runEvents.length - MAX_VISIBLE_ACTIONS_PER_RUN,
-      });
-    }
+    const firstEvent = runEvents[0];
+    const lastEvent = runEvents[runEvents.length - 1];
+    items.push({ type: 'event', event: firstEvent });
+    items.push({
+      type: 'action_overflow',
+      id: `${runKind}:${firstEvent.id}:${lastEvent.id}`,
+      kind: runKind,
+      hiddenCount: Math.max(1, runEvents.length - 2),
+    });
+    items.push({ type: 'event', event: lastEvent });
 
     cursor = end;
   }
@@ -1131,7 +1126,6 @@ export function ChatInterface({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
-  const [expandedActionRunIds, setExpandedActionRunIds] = useState<Record<string, boolean>>({});
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
   const [showPermissionQueue, setShowPermissionQueue] = useState(true);
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
@@ -1164,7 +1158,7 @@ export function ChatInterface({
     [events]
   );
   const agentReplies = useMemo(() => events.filter((event) => !isUserEvent(event)).length, [events]);
-  const streamItems = useMemo(() => buildStreamRenderItems(events, expandedActionRunIds), [events, expandedActionRunIds]);
+  const streamItems = useMemo(() => buildStreamRenderItems(events), [events]);
   const firstPendingPermissionId = pendingPermissions[0]?.id ?? null;
 
   useEffect(() => {
@@ -1196,18 +1190,6 @@ export function ChatInterface({
       ...prev,
       [eventId]: !prev[eventId],
     }));
-  }, []);
-
-  const expandActionRun = useCallback((runId: string) => {
-    setExpandedActionRunIds((prev) => {
-      if (prev[runId]) {
-        return prev;
-      }
-      return {
-        ...prev,
-        [runId]: true,
-      };
-    });
   }, []);
 
   const syncComposerDockMetrics = useCallback(() => {
@@ -1663,19 +1645,28 @@ export function ChatInterface({
           <div className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''}`} ref={scrollRef} onScroll={handleStreamScroll}>
             {streamItems.map((item) => {
               if (item.type === 'action_overflow') {
+                const overflowKindMeta = EVENT_KIND_META[item.kind];
+                const OverflowKindIcon = overflowKindMeta.Icon;
                 return (
-                  <article key={`overflow-${item.runId}`} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
-                    <div className={`${styles.messageBubble} ${styles.messageBubbleAgent} ${styles.messageBubbleAction}`}>
-                      <div className={styles.actionOverflow}>
-                        <button
-                          type="button"
-                          className={styles.actionOverflowButton}
-                          onClick={() => expandActionRun(item.runId)}
-                          title={`행동 ${item.hiddenCount}개 더 보기`}
-                          aria-label={`숨겨진 행동 ${item.hiddenCount}개 펼치기`}
+                  <article key={`overflow-${item.id}`} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                    <div className={`${styles.messageBubble} ${styles.messageBubbleAction} ${styles.actionOverflowBubble}`}>
+                      <div className={styles.actionCompact}>
+                        <div className={styles.actionCompactMain}>
+                          <div className={styles.actionCompactTopRow}>
+                            <span className={`${styles.kindChip} ${TONE_CLASS[overflowKindMeta.tone]}`}>
+                              <OverflowKindIcon size={13} />
+                              {overflowKindMeta.label}
+                            </span>
+                            <span className={styles.actionOverflowDots}>...</span>
+                          </div>
+                        </div>
+                        <span
+                          className={styles.actionOverflowCount}
+                          title={`중간 행동 ${item.hiddenCount}개 축약됨`}
+                          aria-label={`중간 행동 ${item.hiddenCount}개 축약됨`}
                         >
-                          ...
-                        </button>
+                          +{item.hiddenCount}
+                        </span>
                       </div>
                     </div>
                   </article>
