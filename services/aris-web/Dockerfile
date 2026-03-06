@@ -34,6 +34,7 @@ COPY --link --from=builder /app/prisma ./prisma
 COPY --link --from=builder /app/scripts ./scripts
 COPY --link --from=builder /app/package.json ./package.json
 COPY --link --from=builder /app/next.config.ts ./next.config.ts
+COPY --link --from=builder /app/server.mjs ./server.mjs
 RUN chmod +x ./scripts/start-web.sh
 EXPOSE 3000
 CMD ["./scripts/start-web.sh"]
