@@ -522,14 +522,19 @@ export function FileExplorer() {
           padding: 1rem 0;
           width: 100%;
           height: calc(var(--app-vh, 100vh) - 140px);
-          max-width: 100% !important; /* Allow full width */
+          max-width: 100vw !important; /* Force full width */
           margin: 0;
+          position: relative;
+          left: 50%;
+          right: 50%;
+          margin-left: -50vw;
+          margin-right: -50vw;
         }
         .explorer-layout {
           display: grid;
           gap: 1rem;
           height: 100%;
-          padding: 0 1.5rem;
+          padding: 0 2rem;
         }
         .layout-grid {
           grid-template-columns: 300px 1fr;
@@ -541,8 +546,9 @@ export function FileExplorer() {
         .sidebar-card {
           display: flex;
           flex-direction: column;
-          height: 100%;
+          height: 100% !important;
           overflow: hidden;
+          background-color: var(--surface) !important;
         }
         .sidebar-header {
           padding: 1.25rem;
@@ -679,11 +685,12 @@ export function FileExplorer() {
         .menu-divider { height: 1px; background-color: var(--line); margin: 0.2rem 0; }
 
         .main-content-card {
-          height: 100%;
+          height: 100% !important;
           display: flex;
           flex-direction: column;
           overflow: hidden;
-          padding: 0;
+          padding: 0 !important;
+          background-color: var(--surface) !important;
         }
 
         /* Editor Styles */
