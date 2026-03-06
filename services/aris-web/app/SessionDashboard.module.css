@@ -187,11 +187,15 @@
 }
 
 .sessionBarIdle {
+  background: #64748b;
+}
+
+.sessionBarPending {
   background: #f59e0b;
 }
 
 .sessionBarCompleted {
-  background: #64748b;
+  background: #3b82f6;
 }
 
 .sessionSummaryLegend {
