@@ -22,6 +22,14 @@ describe('classifyEventKind', () => {
     expect(kind).toBe('file_list');
   });
 
+  it('classifies read-only shell commands as file_read', () => {
+    const kind = classifyEventKind({
+      type: 'command_execution',
+      command: '/bin/bash -lc "sed -n \'1,260p\' services/web-editor/frontend/src/components/App.tsx"',
+    });
+    expect(kind).toBe('file_read');
+  });
+
   it('defaults text to text_reply', () => {
     const kind = classifyEventKind({ text: 'Here is a summary of changes' });
     expect(kind).toBe('text_reply');
@@ -81,5 +89,19 @@ describe('normalizeEvents', () => {
 
     expect(events[0].kind).toBe('file_read');
     expect(events[0].action?.path).toBe('src/app.tsx');
+  });
+
+  it('reclassifies command_execution meta to file_read for read-only command patterns', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e4',
+        type: 'message',
+        text: '$ /bin/bash -lc "sed -n \'1,120p\' services/web-editor/frontend/src/components/App.tsx"',
+        meta: { actionType: 'command_execution' },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('file_read');
+    expect(events[0].action?.path).toBe('services/web-editor/frontend/src/components/App.tsx');
   });
 });

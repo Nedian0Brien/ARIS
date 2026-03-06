@@ -104,7 +104,8 @@ function extractPathFromCommand(command: string): string | undefined {
     return undefined;
   }
 
-  const last = tokens[tokens.length - 1];
+  const rawLast = tokens[tokens.length - 1];
+  const last = rawLast.replace(/^[("'`]+|[)"'`;,]+$/g, '');
   if (last.startsWith('-')) {
     return undefined;
   }
@@ -112,6 +113,94 @@ function extractPathFromCommand(command: string): string | undefined {
     return last;
   }
   return undefined;
+}
+
+function unwrapShellCommand(raw: string): string {
+  let current = raw.trim();
+  if (current.startsWith('$ ')) {
+    current = current.slice(2).trim();
+  }
+
+  const wrappers = [/^(?:\/bin\/)?bash\s+-lc\s+(.+)$/i, /^(?:\/bin\/)?sh\s+-lc\s+(.+)$/i];
+  for (const wrapper of wrappers) {
+    const match = current.match(wrapper);
+    if (!match) {
+      continue;
+    }
+    const inner = match[1]?.trim() ?? '';
+    if (
+      (inner.startsWith('"') && inner.endsWith('"'))
+      || (inner.startsWith("'") && inner.endsWith("'"))
+    ) {
+      current = inner.slice(1, -1).trim();
+    } else {
+      current = inner;
+    }
+  }
+
+  return current;
+}
+
+function classifyShellCommandKind(commandInput: string): UiEventKind | null {
+  const unwrapped = unwrapShellCommand(commandInput);
+  if (!unwrapped) {
+    return null;
+  }
+
+  const segments = unwrapped
+    .split(/&&|\|\||;|\|/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  if (segments.length === 0) {
+    return null;
+  }
+
+  let seenRead = false;
+  let seenList = false;
+
+  const isDangerousSegment = (segment: string): boolean => (
+    /\b(rm|mv|cp|chmod|chown|mkdir|touch|truncate|tee|dd|install)\b/.test(segment)
+    || /\bsed\b(?!\s+-n\b)/.test(segment)
+    || /\bapply_patch\b/.test(segment)
+  );
+
+  for (const rawSegment of segments) {
+    const segment = rawSegment.toLowerCase();
+    if (!segment || /^cd\s+/.test(segment)) {
+      continue;
+    }
+    if (isDangerousSegment(segment)) {
+      return null;
+    }
+
+    if (
+      /^(ls|find|tree)\b/.test(segment)
+      || /^rg\s+--files\b/.test(segment)
+      || /^fd\b/.test(segment)
+    ) {
+      seenList = true;
+      continue;
+    }
+
+    if (
+      /^(cat|head|tail|less|more|grep|rg|awk|cut|sort|uniq|wc|stat)\b/.test(segment)
+      || /^sed\s+-n\b/.test(segment)
+    ) {
+      seenRead = true;
+      continue;
+    }
+
+    return null;
+  }
+
+  if (seenRead) {
+    return 'file_read';
+  }
+  if (seenList) {
+    return 'file_list';
+  }
+  return null;
 }
 
 function extractActionAndResult(
@@ -142,7 +231,7 @@ function extractActionAndResult(
   }
 
   if (kind === 'file_read' || kind === 'file_write') {
-    const path = metaPath || firstLine.trim();
+    const path = metaPath || extractPathFromCommand(command) || firstLine.trim();
     const codePayload = outputFromBody || safeBody.trim();
     return {
       action: { path: path || undefined },
@@ -187,13 +276,18 @@ function normalizeApprovalPolicy(value?: string): ApprovalPolicy {
   return 'on-request';
 }
 
-export function classifyEventKind(input: { type?: string; text?: string }): UiEventKind {
+export function classifyEventKind(input: { type?: string; text?: string; command?: string }): UiEventKind {
   const type = input.type?.toLowerCase() ?? '';
   const text = input.text?.toLowerCase() ?? '';
 
   const kindFromType = pickKindFromMeta(null, type);
-  if (kindFromType) {
+  if (kindFromType && kindFromType !== 'command_execution') {
     return kindFromType;
+  }
+
+  const shellKind = classifyShellCommandKind(input.command ?? '');
+  if (shellKind) {
+    return shellKind;
   }
 
   if (
@@ -212,7 +306,7 @@ export function classifyEventKind(input: { type?: string; text?: string }): UiEv
   if (type.includes('read') || text.includes('opened') || text.includes('file:')) {
     return 'file_read';
   }
-  if (type.includes('tool') || type.includes('command') || text.includes('$ ') || text.includes('exit code')) {
+  if (kindFromType === 'command_execution' || type.includes('tool') || type.includes('command') || text.includes('$ ') || text.includes('exit code')) {
     return 'command_execution';
   }
   if (type.includes('text') || type.includes('message')) {
@@ -270,10 +364,13 @@ export function normalizeEvents(raw: unknown): UiEvent[] {
 
     const body = asString(rec?.body ?? rec?.text ?? content?.text ?? content, '');
     const type = asString(rec?.type ?? content?.type, '');
+    const firstLine = body.replace(/\r\n/g, '\n').split('\n')[0] ?? '';
+    const commandCandidate = asString(meta?.command, '').trim() || extractCommand(firstLine);
     const kindFromMeta = pickKindFromMeta(meta, type.toLowerCase());
     const kind = classifyEventKind({
       type: kindFromMeta ?? type,
       text: body,
+      command: commandCandidate,
     });
     const actionPayload = extractActionAndResult(kind, body, meta);
 
