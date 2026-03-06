@@ -386,7 +386,7 @@ export function SessionDashboard({
     if (isBrowsing && directories.length === 0) {
       fetchDirectory(browserPath);
     }
-  }, [isBrowsing]);
+  }, [isBrowsing, directories.length, browserPath]);
 
   useEffect(() => {
     let isCancelled = false;

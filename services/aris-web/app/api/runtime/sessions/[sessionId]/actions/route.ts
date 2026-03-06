@@ -20,7 +20,7 @@ export async function POST(
     const body = await request.json();
     const result = await runSessionAction(sessionId, body.action);
     return NextResponse.json({ result });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to run session action' }, { status: 500 });
   }
 }

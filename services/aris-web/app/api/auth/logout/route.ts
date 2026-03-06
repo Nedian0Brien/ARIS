@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { AUTH_COOKIE } from '@/lib/auth/constants';
 import { revokeTokenIfPresent } from '@/lib/auth/session';

@@ -60,7 +60,7 @@ export default function LoginPage() {
 
       router.push('/');
       router.refresh();
-    } catch (err) {
+    } catch {
       setError('서버 통신 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -96,7 +96,7 @@ export default function LoginPage() {
 
       router.push('/');
       router.refresh();
-    } catch (err) {
+    } catch {
       setError('인증 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);

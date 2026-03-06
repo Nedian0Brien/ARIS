@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
       parentPath: normalizedPath === '/' ? null : path.dirname(normalizedPath),
       directories 
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to read directory' }, { status: 500 });
   }
 }

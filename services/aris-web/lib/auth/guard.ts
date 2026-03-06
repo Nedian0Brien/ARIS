@@ -6,6 +6,7 @@ import { getAuthenticatedUserFromToken, getCurrentUserFromCookies } from '@/lib/
 import { AUTH_COOKIE } from '@/lib/auth/constants';
 
 export async function requireApiUser(request: NextRequest): Promise<{ user: AuthenticatedUser } | { response: NextResponse }> {
+  void request;
   const cookieStore = await cookies();
   const token = cookieStore.get(AUTH_COOKIE)?.value;
   
