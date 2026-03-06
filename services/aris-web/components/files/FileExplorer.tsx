@@ -4,10 +4,11 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   Folder, FolderOpen, File, ChevronRight, ArrowUpCircle, 
   Loader2, FolderPlus, FilePlus, Trash2, X, Save, AlertCircle,
-  Code
+  Code, Eye, Edit3
 } from 'lucide-react';
 import { Card } from '@/components/ui';
 import Prism from 'prismjs';
+import { marked } from 'marked';
 
 // Import Prism languages
 import 'prismjs/components/prism-typescript';
@@ -41,6 +42,7 @@ export function FileExplorer() {
   // Editor/Modal States
   const [editingFile, setEditingFile] = useState<{ path: string; name: string; content: string } | null>(null);
   const [isEditorSaving, setIsEditorSaving] = useState(false);
+  const [isPreview, setIsPreview] = useState(false);
   const [newPathInput, setNewPathInput] = useState<{ type: 'file' | 'folder'; active: boolean }>({ type: 'file', active: false });
   const [newName, setNewName] = useState('');
 
@@ -113,6 +115,7 @@ export function FileExplorer() {
       if (!res.ok) throw new Error('파일을 읽는 데 실패했습니다.');
       const { content } = await res.json();
       setEditingFile({ path: item.path, name: item.name, content });
+      setIsPreview(false); // Reset preview mode when opening new file
     } catch (err) {
       alert(err instanceof Error ? err.message : '오류 발생');
     }
@@ -250,6 +253,11 @@ export function FileExplorer() {
     return Prism.highlight(editingFile.content, Prism.languages[lang], lang);
   }, [editingFile, getLanguage]);
 
+  const markdownHtml = useMemo(() => {
+    if (!editingFile || !isPreview) return '';
+    return marked.parse(editingFile.content, { breaks: true, gfm: true }) as string;
+  }, [editingFile, isPreview]);
+
   const displayLanguageName = (fileName: string) => {
     const lang = getLanguage(fileName);
     const map: Record<string, string> = {
@@ -267,9 +275,9 @@ export function FileExplorer() {
   };
 
   return (
-    <div className="animate-in" style={{ padding: '2rem 0', maxWidth: '1000px', margin: '0 auto' }}>
-      <Card style={{ padding: '2rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+    <div className="animate-in" style={{ padding: '2rem 0', maxWidth: '1000px', margin: '0 auto', width: '100%', overflowX: 'hidden' }}>
+      <Card style={{ padding: '2rem', width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <FolderOpen size={24} style={{ color: 'var(--accent-sky)' }} />
             <h2 className="title-md" style={{ margin: 0 }}>파일 탐색기</h2>
@@ -324,10 +332,13 @@ export function FileExplorer() {
           display: 'flex',
           alignItems: 'center',
           gap: '0.5rem',
-          border: '1px solid var(--line)'
+          border: '1px solid var(--line)',
+          overflow: 'hidden'
         }}>
-          <span style={{ color: 'var(--text-muted)' }}>위치:</span>
-          <span>{data?.currentPath || currentPath}</span>
+          <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>위치:</span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {data?.currentPath || currentPath}
+          </span>
         </div>
 
         {loading ? (
@@ -385,15 +396,16 @@ export function FileExplorer() {
                   borderRadius: '6px',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
-                  backgroundColor: 'transparent'
+                  backgroundColor: 'transparent',
+                  minWidth: 0
                 }}
                 className="hover-bg group"
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
                   {item.isDirectory ? (
-                    <Folder size={20} style={{ color: 'var(--accent-sky)' }} />
+                    <Folder size={20} style={{ color: 'var(--accent-sky)', flexShrink: 0 }} />
                   ) : (
-                    <File size={20} style={{ color: 'var(--text-muted)' }} />
+                    <File size={20} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                   )}
                   <span style={{ 
                     fontWeight: item.isDirectory ? 500 : 400,
@@ -406,7 +418,7 @@ export function FileExplorer() {
                   </span>
                 </div>
                 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
                   <button 
                     onClick={(e) => handleDelete(e, item)}
                     style={{ 
@@ -445,16 +457,29 @@ export function FileExplorer() {
             <div style={{ 
               padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--line)',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              backgroundColor: 'var(--surface-subtle)'
+              backgroundColor: 'var(--surface-subtle)',
+              flexWrap: 'wrap', gap: '0.5rem'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <Code size={20} style={{ color: 'var(--accent-sky)' }} />
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text)' }}>{editingFile.name}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: 1 }}>
+                <Code size={20} style={{ color: 'var(--accent-sky)', flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                  <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {editingFile.name}
+                  </span>
                   <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{displayLanguageName(editingFile.name)}</span>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '0.6rem' }}>
+              <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                {getLanguage(editingFile.name) === 'markdown' && (
+                  <button 
+                    onClick={() => setIsPreview(!isPreview)}
+                    className="btn-secondary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                  >
+                    {isPreview ? <Edit3 size={16} /> : <Eye size={16} />}
+                    {isPreview ? '편집' : '미리보기'}
+                  </button>
+                )}
                 <button 
                   onClick={saveEditedFile} 
                   disabled={isEditorSaving}
@@ -481,85 +506,102 @@ export function FileExplorer() {
               backgroundColor: 'var(--bg)',
               position: 'relative'
             }}>
-              {/* Line Numbers */}
-              <div 
-                ref={lineNumbersRef}
-                style={{
-                  width: '3.5rem',
-                  padding: '1.5rem 0.5rem',
-                  backgroundColor: 'var(--surface-subtle)',
-                  borderRight: '1px solid var(--line)',
-                  color: 'var(--text-muted)',
-                  fontFamily: 'monospace',
-                  fontSize: '0.85rem',
-                  lineHeight: '1.5',
-                  textAlign: 'right',
-                  userSelect: 'none',
-                  overflow: 'hidden',
-                  whiteSpace: 'pre'
-                }}
-              >
-                {getLineNumbers()}
-              </div>
+              {!isPreview ? (
+                <>
+                  {/* Line Numbers */}
+                  <div 
+                    ref={lineNumbersRef}
+                    style={{
+                      width: '3.5rem',
+                      padding: '1.5rem 0.5rem',
+                      backgroundColor: 'var(--surface-subtle)',
+                      borderRight: '1px solid var(--line)',
+                      color: 'var(--text-muted)',
+                      fontFamily: 'monospace',
+                      fontSize: '0.85rem',
+                      lineHeight: '1.5',
+                      textAlign: 'right',
+                      userSelect: 'none',
+                      overflow: 'hidden',
+                      whiteSpace: 'pre'
+                    }}
+                  >
+                    {getLineNumbers()}
+                  </div>
 
-              {/* Layered Editor Container */}
-              <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
-                {/* Syntax Highlighted Layer */}
-                <pre
-                  ref={preRef}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    margin: 0,
-                    padding: '1.5rem',
-                    fontFamily: 'monospace',
-                    fontSize: '0.85rem',
-                    lineHeight: '1.5',
-                    pointerEvents: 'none',
-                    whiteSpace: 'pre',
-                    overflow: 'hidden',
-                    backgroundColor: 'transparent',
-                    color: 'var(--text)',
-                    tabSize: 2,
-                    zIndex: 1
-                  }}
-                  dangerouslySetInnerHTML={{ __html: highlightedContent + '\n' }}
-                />
+                  {/* Layered Editor Container */}
+                  <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+                    {/* Syntax Highlighted Layer */}
+                    <pre
+                      ref={preRef}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        margin: 0,
+                        padding: '1.5rem',
+                        fontFamily: 'monospace',
+                        fontSize: '0.85rem',
+                        lineHeight: '1.5',
+                        pointerEvents: 'none',
+                        whiteSpace: 'pre',
+                        overflow: 'hidden',
+                        backgroundColor: 'transparent',
+                        color: 'var(--text)',
+                        tabSize: 2,
+                        zIndex: 1
+                      }}
+                      dangerouslySetInnerHTML={{ __html: highlightedContent + '\n' }}
+                    />
 
-                {/* Transparent Textarea Layer */}
-                <textarea
-                  ref={textareaRef}
-                  value={editingFile.content}
-                  onChange={(e) => setEditingFile({ ...editingFile, content: e.target.value })}
-                  onKeyDown={handleEditorKeyDown}
-                  onScroll={handleEditorScroll}
+                    {/* Transparent Textarea Layer */}
+                    <textarea
+                      ref={textareaRef}
+                      value={editingFile.content}
+                      onChange={(e) => setEditingFile({ ...editingFile, content: e.target.value })}
+                      onKeyDown={handleEditorKeyDown}
+                      onScroll={handleEditorScroll}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        border: 'none',
+                        padding: '1.5rem',
+                        fontFamily: 'monospace',
+                        fontSize: '0.85rem',
+                        lineHeight: '1.5',
+                        backgroundColor: 'transparent',
+                        color: 'transparent',
+                        caretColor: 'var(--text)',
+                        resize: 'none',
+                        outline: 'none',
+                        whiteSpace: 'pre',
+                        overflow: 'auto',
+                        tabSize: 2,
+                        zIndex: 2
+                      }}
+                      spellCheck={false}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div 
+                  className="markdown-body"
                   style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    border: 'none',
-                    padding: '1.5rem',
-                    fontFamily: 'monospace',
-                    fontSize: '0.85rem',
-                    lineHeight: '1.5',
-                    backgroundColor: 'transparent',
-                    color: 'transparent',
-                    caretColor: 'var(--text)',
-                    resize: 'none',
-                    outline: 'none',
-                    whiteSpace: 'pre',
+                    flex: 1,
+                    padding: '2rem',
                     overflow: 'auto',
-                    tabSize: 2,
-                    zIndex: 2
+                    backgroundColor: 'var(--bg)',
+                    color: 'var(--text)',
+                    lineHeight: '1.6'
                   }}
-                  spellCheck={false}
+                  dangerouslySetInnerHTML={{ __html: markdownHtml }}
                 />
-              </div>
+              )}
             </div>
             
             <div style={{ 
@@ -608,6 +650,14 @@ export function FileExplorer() {
         textarea::-webkit-scrollbar-thumb:hover {
           background: var(--text-muted);
         }
+
+        /* Markdown Styling */
+        .markdown-body :global(h1), .markdown-body :global(h2) { border-bottom: 1px solid var(--line); padding-bottom: 0.3em; margin-top: 1.5em; margin-bottom: 1rem; }
+        .markdown-body :global(code) { background-color: var(--surface-subtle); padding: 0.2em 0.4em; border-radius: 3px; font-family: monospace; }
+        .markdown-body :global(pre) { background-color: var(--surface-subtle); padding: 1rem; border-radius: 6px; overflow: auto; }
+        .markdown-body :global(blockquote) { border-left: 4px solid var(--line); padding-left: 1rem; color: var(--text-muted); margin: 1rem 0; }
+        .markdown-body :global(table) { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+        .markdown-body :global(th), .markdown-body :global(td) { border: 1px solid var(--line); padding: 0.5rem; }
 
         /* Prism Theme Customization */
         :global(.token.comment),
