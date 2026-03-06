@@ -36,13 +36,16 @@ function asNumber(value: unknown, fallback: number): number {
   return fallback;
 }
 
-function isActionKind(kind: UiEventKind): kind is 'command_execution' | 'file_list' | 'file_read' | 'file_write' {
-  return kind === 'command_execution' || kind === 'file_list' || kind === 'file_read' || kind === 'file_write';
+function isActionKind(kind: UiEventKind): kind is 'run_execution' | 'exec_execution' | 'command_execution' | 'file_list' | 'file_read' | 'file_write' {
+  return kind === 'run_execution' || kind === 'exec_execution' || kind === 'command_execution' || kind === 'file_list' || kind === 'file_read' || kind === 'file_write';
 }
 
 function toUiEventKind(value: string): UiEventKind | null {
-  if (value === 'command_execution' || value === 'file_list' || value === 'file_read' || value === 'file_write') {
+  if (value === 'run_execution' || value === 'exec_execution' || value === 'file_list' || value === 'file_read' || value === 'file_write') {
     return value;
+  }
+  if (value === 'command_execution') {
+    return 'run_execution';
   }
   if (value === 'code_read') {
     return 'file_read';
@@ -159,6 +162,22 @@ function classifyShellCommandKind(commandInput: string): UiEventKind | null {
   let seenRead = false;
   let seenList = false;
 
+  const classifyExecOrRun = (segment: string): UiEventKind | null => {
+    const normalized = segment.trim().replace(/^\$\s+/, '').trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const withoutEnv = normalized.replace(/^([a-z_][a-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s]+)\s+)*/i, '').trim();
+    if (
+      /^(docker\s+exec|docker\s+compose\s+exec|kubectl\s+exec|ssh)\b/.test(withoutEnv)
+    ) {
+      return 'exec_execution';
+    }
+
+    return 'run_execution';
+  };
+
   const isDangerousSegment = (segment: string): boolean => (
     /\b(rm|mv|cp|chmod|chown|mkdir|touch|truncate|tee|dd|install)\b/.test(segment)
     || /\bsed\b(?!\s+-n\b)/.test(segment)
@@ -190,8 +209,7 @@ function classifyShellCommandKind(commandInput: string): UiEventKind | null {
       seenRead = true;
       continue;
     }
-
-    return null;
+    return classifyExecOrRun(segment);
   }
 
   if (seenRead) {
@@ -200,7 +218,7 @@ function classifyShellCommandKind(commandInput: string): UiEventKind | null {
   if (seenList) {
     return 'file_list';
   }
-  return null;
+  return classifyExecOrRun(unwrapped);
 }
 
 function extractActionAndResult(
@@ -219,7 +237,7 @@ function extractActionAndResult(
   const command = extractCommand(metaCommand || firstLine);
   const outputFromBody = restLines.join('\n').trim();
 
-  if (kind === 'command_execution' || kind === 'file_list') {
+  if (kind === 'command_execution' || kind === 'run_execution' || kind === 'exec_execution' || kind === 'file_list') {
     const resultText = outputFromBody || safeBody.trim();
     return {
       action: {
@@ -243,7 +261,7 @@ function extractActionAndResult(
 }
 
 function severityFromKind(kind: UiEventKind): Severity {
-  if (kind === 'command_execution') {
+  if (kind === 'command_execution' || kind === 'run_execution' || kind === 'exec_execution') {
     return 'warning';
   }
   if (kind === 'file_write') {
@@ -281,7 +299,12 @@ export function classifyEventKind(input: { type?: string; text?: string; command
   const text = input.text?.toLowerCase() ?? '';
 
   const kindFromType = pickKindFromMeta(null, type);
-  if (kindFromType && kindFromType !== 'command_execution') {
+  if (
+    kindFromType
+    && kindFromType !== 'command_execution'
+    && kindFromType !== 'run_execution'
+    && kindFromType !== 'exec_execution'
+  ) {
     return kindFromType;
   }
 
@@ -306,8 +329,11 @@ export function classifyEventKind(input: { type?: string; text?: string; command
   if (type.includes('read') || text.includes('opened') || text.includes('file:')) {
     return 'file_read';
   }
-  if (kindFromType === 'command_execution' || type.includes('tool') || type.includes('command') || text.includes('$ ') || text.includes('exit code')) {
-    return 'command_execution';
+  if (kindFromType === 'exec_execution') {
+    return 'exec_execution';
+  }
+  if (kindFromType === 'run_execution' || kindFromType === 'command_execution' || type.includes('tool') || type.includes('command') || text.includes('$ ') || text.includes('exit code')) {
+    return 'run_execution';
   }
   if (type.includes('text') || type.includes('message')) {
     return 'text_reply';
@@ -365,7 +391,8 @@ export function normalizeEvents(raw: unknown): UiEvent[] {
     const body = asString(rec?.body ?? rec?.text ?? content?.text ?? content, '');
     const type = asString(rec?.type ?? content?.type, '');
     const firstLine = body.replace(/\r\n/g, '\n').split('\n')[0] ?? '';
-    const commandCandidate = asString(meta?.command, '').trim() || extractCommand(firstLine);
+    const metaCommand = asString(meta?.command, '').trim();
+    const commandCandidate = metaCommand || (firstLine.trim().startsWith('$ ') ? extractCommand(firstLine) : '');
     const kindFromMeta = pickKindFromMeta(meta, type.toLowerCase());
     const kind = classifyEventKind({
       type: kindFromMeta ?? type,

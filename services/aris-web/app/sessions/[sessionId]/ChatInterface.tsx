@@ -43,7 +43,7 @@ type AgentMeta = {
 };
 
 type Tone = 'sky' | 'amber' | 'cyan' | 'emerald' | 'violet' | 'red';
-type ActionKind = 'command_execution' | 'file_list' | 'file_read' | 'file_write';
+type ActionKind = 'run_execution' | 'exec_execution' | 'command_execution' | 'file_list' | 'file_read' | 'file_write';
 type StreamRenderItem =
   | { type: 'event'; event: UiEvent }
   | { type: 'action_overflow'; id: string; runId: string; kind: ActionKind; hiddenCount: number; expanded: boolean };
@@ -127,7 +127,9 @@ function classifyPath(pathValue: string): ResourceLabel | null {
 
 const EVENT_KIND_META: Record<UiEventKind, { label: string; tone: Tone; Icon: React.ComponentType<{ size?: number }> }> = {
   text_reply: { label: 'TEXT', tone: 'sky', Icon: MessageSquareText },
-  command_execution: { label: 'COMMAND', tone: 'amber', Icon: TerminalSquare },
+  run_execution: { label: 'RUN', tone: 'amber', Icon: TerminalSquare },
+  exec_execution: { label: 'EXEC', tone: 'red', Icon: TerminalSquare },
+  command_execution: { label: 'RUN', tone: 'amber', Icon: TerminalSquare },
   file_list: { label: 'LIST', tone: 'cyan', Icon: FolderTree },
   file_read: { label: 'READ', tone: 'violet', Icon: FileSearch },
   file_write: { label: 'WRITE', tone: 'emerald', Icon: FilePenLine },
@@ -152,7 +154,7 @@ function isUserEvent(event: UiEvent): boolean {
 }
 
 function isActionKind(kind: UiEventKind): kind is ActionKind {
-  return kind === 'command_execution' || kind === 'file_list' || kind === 'file_read' || kind === 'file_write';
+  return kind === 'run_execution' || kind === 'exec_execution' || kind === 'command_execution' || kind === 'file_list' || kind === 'file_read' || kind === 'file_write';
 }
 
 function formatClock(timestamp: string): string {

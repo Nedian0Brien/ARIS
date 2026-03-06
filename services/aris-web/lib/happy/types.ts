@@ -16,6 +16,8 @@ export type SessionSummary = {
 
 export type UiEventKind =
   | 'text_reply'
+  | 'run_execution'
+  | 'exec_execution'
   | 'command_execution'
   | 'file_list'
   | 'file_read'

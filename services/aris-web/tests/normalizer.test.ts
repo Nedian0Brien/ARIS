@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { classifyEventKind, normalizeEvents, normalizeSessions } from '@/lib/happy/normalizer';
 
 describe('classifyEventKind', () => {
-  it('classifies command execution events', () => {
+  it('classifies run execution events', () => {
     const kind = classifyEventKind({ type: 'tool-call', text: '$ npm test\nexit code: 0' });
-    expect(kind).toBe('command_execution');
+    expect(kind).toBe('run_execution');
   });
 
   it('classifies file write events', () => {
@@ -28,6 +28,14 @@ describe('classifyEventKind', () => {
       command: '/bin/bash -lc "sed -n \'1,260p\' services/web-editor/frontend/src/components/App.tsx"',
     });
     expect(kind).toBe('file_read');
+  });
+
+  it('classifies docker exec style commands as exec_execution', () => {
+    const kind = classifyEventKind({
+      type: 'command_execution',
+      command: 'docker exec aris-web sh -lc "node -v"',
+    });
+    expect(kind).toBe('exec_execution');
   });
 
   it('defaults text to text_reply', () => {
