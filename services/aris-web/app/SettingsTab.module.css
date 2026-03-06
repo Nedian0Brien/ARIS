@@ -52,19 +52,98 @@
   border-color: var(--primary);
 }
 
+/* ── 드롭존 ── */
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 2rem 1rem;
+  border: 2px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  text-align: center;
+  min-height: 120px;
+}
+
+.dropzone:hover {
+  border-color: var(--primary);
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.dropzone.dragOver {
+  border-color: var(--primary);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.dropzone.fileLoaded {
+  border-color: var(--accent-emerald);
+  background: rgba(16, 185, 129, 0.04);
+}
+
+.dropzoneIcon {
+  color: var(--text-muted);
+}
+
+.dropzoneText {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.dropzoneText strong {
+  color: var(--primary);
+}
+
+.dropzoneSub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.fileLoaded .dropzoneIcon {
+  color: var(--accent-emerald);
+}
+
+.fileLoaded .dropzoneText {
+  color: var(--accent-emerald);
+}
+
+/* ── 텍스트 직접 입력 토글 ── */
+.textToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.textToggle:hover {
+  color: var(--text);
+}
+
 .textarea {
   composes: input;
   font-family: var(--font-mono);
   font-size: 0.78rem;
-  min-height: 160px;
+  min-height: 140px;
   resize: vertical;
   line-height: 1.5;
+  margin-top: 0.5rem;
 }
 
 .keyHint {
   font-size: 0.75rem;
   color: var(--text-muted);
-  margin-top: 0.35rem;
+  margin-top: 0.5rem;
 }
 
 .keySet {
