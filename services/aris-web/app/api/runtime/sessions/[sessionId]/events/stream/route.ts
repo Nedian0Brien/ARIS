@@ -78,7 +78,8 @@ export async function GET(
             }
           } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to stream events';
-            writeEvent('error', { message });
+            // Avoid colliding with native EventSource "error" events.
+            writeEvent('stream_error', { message });
           }
 
           await sleep(STREAM_POLL_INTERVAL_MS);
@@ -95,6 +96,7 @@ export async function GET(
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
     },
   });
 }

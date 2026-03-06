@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { UiEvent } from '@/lib/happy/types';
 
+const SAFETY_RECONCILE_INTERVAL_MS = 5000;
+
 function mergeEvents(events: UiEvent[]): UiEvent[] {
   const dedup = new Map<string, UiEvent>();
   for (const event of events) {
@@ -75,6 +77,7 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[]) {
     let eventSource: EventSource | null = null;
     let pollTimer: number | null = null;
     let reconnectTimer: number | null = null;
+    let reconcileTimer: number | null = null;
 
     const stopPolling = () => {
       if (pollTimer !== null) {
@@ -106,6 +109,19 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[]) {
         eventSource.close();
         eventSource = null;
       }
+    };
+
+    const startSafetyReconcile = () => {
+      if (reconcileTimer !== null) {
+        return;
+      }
+      reconcileTimer = window.setInterval(() => {
+        void refreshEvents().catch(() => {
+          if (!disposed) {
+            setSyncError('백엔드 이벤트 동기화를 확인하세요.');
+          }
+        });
+      }, SAFETY_RECONCILE_INTERVAL_MS);
     };
 
     const connect = () => {
@@ -142,6 +158,17 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[]) {
         }
       });
 
+      stream.addEventListener('stream_error', () => {
+        if (disposed) {
+          return;
+        }
+        void refreshEvents().catch(() => {
+          if (!disposed) {
+            setSyncError('실시간 스트림 처리 중 일시 오류가 발생했습니다.');
+          }
+        });
+      });
+
       stream.addEventListener('error', () => {
         if (disposed) {
           return;
@@ -162,12 +189,16 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[]) {
       });
     };
 
+    startSafetyReconcile();
     connect();
 
     return () => {
       disposed = true;
       closeStream();
       stopPolling();
+      if (reconcileTimer !== null) {
+        window.clearInterval(reconcileTimer);
+      }
       if (reconnectTimer !== null) {
         window.clearTimeout(reconnectTimer);
       }
