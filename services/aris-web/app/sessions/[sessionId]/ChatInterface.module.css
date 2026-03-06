@@ -631,6 +631,44 @@
   border-radius: 8px;
 }
 
+.markdownTableWrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.markdownTable {
+  width: 100%;
+  min-width: 320px;
+  border-collapse: collapse;
+  font-size: 0.79rem;
+  line-height: 1.45;
+}
+
+.markdownTable th,
+.markdownTable td {
+  padding: 0.4rem 0.56rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.24);
+  vertical-align: top;
+}
+
+.markdownTable th {
+  font-weight: 800;
+  color: #0f172a;
+  background: rgba(241, 245, 249, 0.78);
+}
+
+.markdownTable td {
+  color: #1f2937;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.markdownTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
 .markdownCodeBlock {
   margin: 0;
   padding: 0.56rem;

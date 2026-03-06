@@ -345,7 +345,85 @@ type MarkdownBlock =
   | { type: 'ul'; items: string[] }
   | { type: 'ol'; items: string[] }
   | { type: 'quote'; text: string }
-  | { type: 'code'; language: string; code: string };
+  | { type: 'code'; language: string; code: string }
+  | { type: 'table'; headers: string[]; rows: string[][]; alignments: TableAlign[] };
+
+type TableAlign = 'left' | 'center' | 'right' | null;
+
+function parseMarkdownTableRow(line: string): string[] {
+  const trimmed = line.trim();
+  if (!trimmed.includes('|')) {
+    return [];
+  }
+
+  let normalized = trimmed;
+  if (normalized.startsWith('|')) {
+    normalized = normalized.slice(1);
+  }
+  if (normalized.endsWith('|')) {
+    normalized = normalized.slice(0, -1);
+  }
+
+  return normalized
+    .split('|')
+    .map((cell) => cell.trim().replace(/\\\|/g, '|'));
+}
+
+function isMarkdownTableDelimiterLine(line: string): boolean {
+  const cells = parseMarkdownTableRow(line);
+  if (cells.length === 0) {
+    return false;
+  }
+  return cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function parseMarkdownTableAlignments(delimiterLine: string, columns: number): TableAlign[] {
+  const cells = parseMarkdownTableRow(delimiterLine);
+  const alignments: TableAlign[] = [];
+  for (let index = 0; index < columns; index += 1) {
+    const cell = (cells[index] ?? '').trim();
+    if (/^:-{3,}:$/.test(cell)) {
+      alignments.push('center');
+      continue;
+    }
+    if (/^-{3,}:$/.test(cell)) {
+      alignments.push('right');
+      continue;
+    }
+    if (/^:-{3,}$/.test(cell)) {
+      alignments.push('left');
+      continue;
+    }
+    alignments.push(null);
+  }
+  return alignments;
+}
+
+function normalizeMarkdownTableRow(cells: string[], columns: number): string[] {
+  const normalized = [...cells];
+  if (normalized.length < columns) {
+    for (let index = normalized.length; index < columns; index += 1) {
+      normalized.push('');
+    }
+  }
+  if (normalized.length > columns) {
+    normalized.length = columns;
+  }
+  return normalized;
+}
+
+function isMarkdownTableStart(lines: string[], index: number): boolean {
+  if (index + 1 >= lines.length) {
+    return false;
+  }
+
+  const headerCells = parseMarkdownTableRow(lines[index]);
+  if (headerCells.length === 0 || headerCells.every((cell) => !cell)) {
+    return false;
+  }
+
+  return isMarkdownTableDelimiterLine(lines[index + 1]);
+}
 
 function isMarkdownBoundary(line: string): boolean {
   const trimmed = line.trim();
@@ -398,6 +476,36 @@ function parseMarkdownBlocks(source: string): MarkdownBlock[] {
       continue;
     }
 
+    if (isMarkdownTableStart(lines, i)) {
+      const headerCells = parseMarkdownTableRow(lines[i]);
+      const delimiterCells = parseMarkdownTableRow(lines[i + 1]);
+      const columns = Math.max(headerCells.length, delimiterCells.length);
+      const headers = normalizeMarkdownTableRow(headerCells, columns);
+      const alignments = parseMarkdownTableAlignments(lines[i + 1], columns);
+      i += 2;
+
+      const rows: string[][] = [];
+      while (i < lines.length) {
+        const rowLine = lines[i];
+        if (!rowLine.trim()) {
+          break;
+        }
+        if (isMarkdownBoundary(rowLine)) {
+          break;
+        }
+
+        const rowCells = parseMarkdownTableRow(rowLine);
+        if (rowCells.length === 0) {
+          break;
+        }
+        rows.push(normalizeMarkdownTableRow(rowCells, columns));
+        i += 1;
+      }
+
+      blocks.push({ type: 'table', headers, rows, alignments });
+      continue;
+    }
+
     if (/^>\s?/.test(trimmed)) {
       const quoteLines: string[] = [];
       while (i < lines.length && /^>\s?/.test(lines[i].trim())) {
@@ -430,6 +538,9 @@ function parseMarkdownBlocks(source: string): MarkdownBlock[] {
 
     const paragraphLines: string[] = [];
     while (i < lines.length && lines[i].trim() && !isMarkdownBoundary(lines[i])) {
+      if (isMarkdownTableStart(lines, i)) {
+        break;
+      }
       paragraphLines.push(lines[i]);
       i += 1;
     }
@@ -641,6 +752,41 @@ function MarkdownContent({ body }: { body: string }) {
             <blockquote key={key} className={styles.markdownQuote}>
               {renderInlineWithBreaks(block.text, key)}
             </blockquote>
+          );
+        }
+
+        if (block.type === 'table') {
+          return (
+            <div key={key} className={styles.markdownTableWrap}>
+              <table className={styles.markdownTable}>
+                <thead>
+                  <tr>
+                    {block.headers.map((header, headerIndex) => (
+                      <th
+                        key={`${key}-th-${headerIndex}`}
+                        style={block.alignments[headerIndex] ? { textAlign: block.alignments[headerIndex] } : undefined}
+                      >
+                        {renderInlineWithBreaks(header, `${key}-th-${headerIndex}`)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, rowIndex) => (
+                    <tr key={`${key}-tr-${rowIndex}`}>
+                      {row.map((cell, cellIndex) => (
+                        <td
+                          key={`${key}-td-${rowIndex}-${cellIndex}`}
+                          style={block.alignments[cellIndex] ? { textAlign: block.alignments[cellIndex] } : undefined}
+                        >
+                          {renderInlineWithBreaks(cell, `${key}-td-${rowIndex}-${cellIndex}`)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           );
         }
 
