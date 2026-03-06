@@ -8,6 +8,7 @@ import type {
   SessionAction,
   SessionActionResult,
   SessionDetail,
+  SessionEventsPage,
   SessionSummary,
   UiEvent,
 } from '@/lib/happy/types';
@@ -55,6 +56,85 @@ function findSessionById(list: unknown[], sessionId: string): unknown | null {
   }
 
   return null;
+}
+
+type GetSessionEventsOptions = {
+  userId?: string;
+  before?: string;
+  after?: string;
+  limit?: number;
+};
+
+const DEFAULT_EVENTS_PAGE_LIMIT = 40;
+const MAX_EVENTS_PAGE_LIMIT = 200;
+
+function clampEventsLimit(limit?: number): number {
+  const next = Number.isFinite(limit) ? Math.floor(Number(limit)) : DEFAULT_EVENTS_PAGE_LIMIT;
+  if (next < 1) {
+    return 1;
+  }
+  if (next > MAX_EVENTS_PAGE_LIMIT) {
+    return MAX_EVENTS_PAGE_LIMIT;
+  }
+  return next;
+}
+
+function sortEventsChronologically(events: UiEvent[]): UiEvent[] {
+  return [...events].sort((a, b) => {
+    const timeCompare = a.timestamp.localeCompare(b.timestamp);
+    if (timeCompare !== 0) {
+      return timeCompare;
+    }
+    return a.id.localeCompare(b.id);
+  });
+}
+
+function paginateEvents(events: UiEvent[], options: GetSessionEventsOptions): { events: UiEvent[]; page: SessionEventsPage } {
+  const sorted = sortEventsChronologically(events);
+  const totalCount = sorted.length;
+  const pageLimit = clampEventsLimit(options.limit);
+
+  let startIndex = 0;
+  let endIndex = totalCount;
+
+  if (options.after) {
+    const afterIndex = sorted.findIndex((event) => event.id === options.after);
+    startIndex = afterIndex >= 0 ? afterIndex + 1 : totalCount;
+  }
+  if (options.before) {
+    const beforeIndex = sorted.findIndex((event) => event.id === options.before);
+    endIndex = beforeIndex >= 0 ? beforeIndex : totalCount;
+  }
+  if (startIndex > endIndex) {
+    startIndex = endIndex;
+  }
+
+  const windowEvents = sorted.slice(startIndex, endIndex);
+  let pageEvents = windowEvents;
+  let hasMoreBefore = startIndex > 0;
+  let hasMoreAfter = endIndex < totalCount;
+
+  if (pageEvents.length > pageLimit) {
+    if (options.after) {
+      pageEvents = pageEvents.slice(0, pageLimit);
+      hasMoreAfter = true;
+    } else {
+      pageEvents = pageEvents.slice(pageEvents.length - pageLimit);
+      hasMoreBefore = true;
+    }
+  }
+
+  return {
+    events: pageEvents,
+    page: {
+      hasMoreBefore,
+      hasMoreAfter,
+      oldestEventId: pageEvents[0]?.id ?? null,
+      newestEventId: pageEvents[pageEvents.length - 1]?.id ?? null,
+      returnedCount: pageEvents.length,
+      totalCount,
+    },
+  };
 }
 
 async function fetchHappy(path: string, init?: RequestInit): Promise<unknown> {
@@ -160,7 +240,19 @@ export async function createSession(input: {
   return normalizeSessions([session])[0];
 }
 
-export async function getSessionEvents(sessionId: string, userId?: string): Promise<{ session: SessionDetail; events: UiEvent[] }> {
+export async function getSessionEvents(
+  sessionId: string,
+  options: string | GetSessionEventsOptions = {},
+): Promise<{ session: SessionDetail; events: UiEvent[]; page: SessionEventsPage }> {
+  const resolvedOptions: GetSessionEventsOptions = typeof options === 'string'
+    ? { userId: options }
+    : options;
+  const userId = resolvedOptions.userId;
+
+  if (resolvedOptions.before && resolvedOptions.after) {
+    throw new Error('before와 after를 동시에 사용할 수 없습니다.');
+  }
+
   const sessionRaw = await fetchHappy('/v1/sessions');
   const sessions = extractArrayPayload(sessionRaw, 'sessions');
   const found = findSessionById(sessions, sessionId) ?? sessions[0] ?? { id: sessionId };
@@ -183,7 +275,7 @@ export async function getSessionEvents(sessionId: string, userId?: string): Prom
 
   return {
     session: sessionDetail,
-    events: normalizeEvents(messages),
+    ...paginateEvents(normalizeEvents(messages), resolvedOptions),
   };
 }
 

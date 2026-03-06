@@ -46,7 +46,7 @@ type Tone = 'sky' | 'amber' | 'cyan' | 'emerald' | 'violet' | 'red';
 type ActionKind = 'command_execution' | 'file_list' | 'file_read' | 'file_write';
 type StreamRenderItem =
   | { type: 'event'; event: UiEvent }
-  | { type: 'action_overflow'; id: string; kind: ActionKind; hiddenCount: number };
+  | { type: 'action_overflow'; id: string; runId: string; kind: ActionKind; hiddenCount: number; expanded: boolean };
 type ResourceLabel =
   | { kind: 'folder'; name: FolderLabel; sourcePath?: string }
   | { kind: 'file'; name: string; extension: string; sourcePath?: string };
@@ -357,7 +357,7 @@ function parseCodeChangeSummary(event: UiEvent): {
   };
 }
 
-function buildStreamRenderItems(events: UiEvent[]): StreamRenderItem[] {
+function buildStreamRenderItems(events: UiEvent[], expandedActionRunIds: Record<string, boolean>): StreamRenderItem[] {
   const items: StreamRenderItem[] = [];
   let cursor = 0;
 
@@ -385,14 +385,35 @@ function buildStreamRenderItems(events: UiEvent[]): StreamRenderItem[] {
       cursor = end;
       continue;
     }
+
     const firstEvent = runEvents[0];
     const lastEvent = runEvents[runEvents.length - 1];
+    const runId = `${runKind}:${firstEvent.id}`;
+    const hiddenCount = Math.max(1, runEvents.length - 2);
+    const expanded = Boolean(expandedActionRunIds[runId]);
+
+    if (expanded) {
+      runEvents.forEach((event) => items.push({ type: 'event', event }));
+      items.push({
+        type: 'action_overflow',
+        id: `${runId}:toggle`,
+        runId,
+        kind: runKind,
+        hiddenCount,
+        expanded: true,
+      });
+      cursor = end;
+      continue;
+    }
+
     items.push({ type: 'event', event: firstEvent });
     items.push({
       type: 'action_overflow',
       id: `${runKind}:${firstEvent.id}:${lastEvent.id}`,
+      runId,
       kind: runKind,
-      hiddenCount: Math.max(1, runEvents.length - 2),
+      hiddenCount,
+      expanded: false,
     });
     items.push({ type: 'event', event: lastEvent });
 
@@ -1092,6 +1113,7 @@ function renderEventPayload(
 export function ChatInterface({
   sessionId,
   initialEvents,
+  initialHasMoreBefore,
   initialPermissions,
   isOperator,
   projectName,
@@ -1101,6 +1123,7 @@ export function ChatInterface({
 }: {
   sessionId: string;
   initialEvents: UiEvent[];
+  initialHasMoreBefore: boolean;
   initialPermissions: PermissionRequest[];
   isOperator: boolean;
   projectName: string;
@@ -1109,7 +1132,14 @@ export function ChatInterface({
   approvalPolicy?: ApprovalPolicy;
 }) {
   const displayName = alias || projectName;
-  const { events, addEvent, syncError } = useSessionEvents(sessionId, initialEvents);
+  const {
+    events,
+    addEvent,
+    syncError,
+    loadOlder,
+    hasMoreBefore,
+    isLoadingOlder,
+  } = useSessionEvents(sessionId, initialEvents, initialHasMoreBefore);
   const { isRunning: runtimeRunning, runtimeError } = useSessionRuntime(sessionId);
   const {
     pendingPermissions,
@@ -1126,6 +1156,7 @@ export function ChatInterface({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
+  const [expandedActionRunIds, setExpandedActionRunIds] = useState<Record<string, boolean>>({});
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
   const [showPermissionQueue, setShowPermissionQueue] = useState(true);
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
@@ -1158,8 +1189,13 @@ export function ChatInterface({
     [events]
   );
   const agentReplies = useMemo(() => events.filter((event) => !isUserEvent(event)).length, [events]);
-  const streamItems = useMemo(() => buildStreamRenderItems(events), [events]);
+  const streamItems = useMemo(() => buildStreamRenderItems(events, expandedActionRunIds), [events, expandedActionRunIds]);
   const firstPendingPermissionId = pendingPermissions[0]?.id ?? null;
+
+  useEffect(() => {
+    setExpandedResultIds({});
+    setExpandedActionRunIds({});
+  }, [sessionId]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(`(max-width: ${MOBILE_LAYOUT_MAX_WIDTH_PX}px)`);
@@ -1191,6 +1227,58 @@ export function ChatInterface({
       [eventId]: !prev[eventId],
     }));
   }, []);
+
+  const toggleActionRun = useCallback((runId: string) => {
+    setExpandedActionRunIds((prev) => ({
+      ...prev,
+      [runId]: !prev[runId],
+    }));
+  }, []);
+
+  const loadOlderHistory = useCallback(async () => {
+    if (isLoadingOlder || !hasMoreBefore) {
+      return;
+    }
+
+    if (isMobileLayout) {
+      const previousDocHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      const previousTop = getWindowScrollTop();
+      await loadOlder().catch(() => {
+        // syncError state is managed by the hook.
+      });
+      requestAnimationFrame(() => {
+        const nextDocHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+        const delta = Math.max(0, nextDocHeight - previousDocHeight);
+        if (delta > 0) {
+          window.scrollTo({ top: previousTop + delta, behavior: 'auto' });
+        }
+      });
+      return;
+    }
+
+    const stream = scrollRef.current;
+    if (!stream) {
+      await loadOlder().catch(() => {
+        // syncError state is managed by the hook.
+      });
+      return;
+    }
+
+    const previousHeight = stream.scrollHeight;
+    const previousTop = stream.scrollTop;
+    await loadOlder().catch(() => {
+      // syncError state is managed by the hook.
+    });
+
+    requestAnimationFrame(() => {
+      const nextStream = scrollRef.current;
+      if (!nextStream) {
+        return;
+      }
+      const delta = Math.max(0, nextStream.scrollHeight - previousHeight);
+      nextStream.scrollTop = previousTop + delta;
+    });
+  }, [hasMoreBefore, isLoadingOlder, isMobileLayout, loadOlder]);
 
   const syncComposerDockMetrics = useCallback(() => {
     const shell = chatShellRef.current;
@@ -1363,6 +1451,26 @@ export function ChatInterface({
   }, [isMobileLayout]);
 
   useEffect(() => {
+    if (!isMobileLayout) {
+      return;
+    }
+
+    const onWindowScroll = () => {
+      if (isLoadingOlder || !hasMoreBefore) {
+        return;
+      }
+      if (getWindowScrollTop() <= 96) {
+        void loadOlderHistory();
+      }
+    };
+
+    window.addEventListener('scroll', onWindowScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onWindowScroll);
+    };
+  }, [isMobileLayout, isLoadingOlder, hasMoreBefore, loadOlderHistory]);
+
+  useEffect(() => {
     if (!shouldStickToBottomRef.current) {
       return;
     }
@@ -1497,6 +1605,9 @@ export function ChatInterface({
       return;
     }
     shouldStickToBottomRef.current = isNearBottom(stream);
+    if (!isLoadingOlder && hasMoreBefore && stream.scrollTop <= 96) {
+      void loadOlderHistory();
+    }
   }
 
   return (
@@ -1647,9 +1758,19 @@ export function ChatInterface({
               if (item.type === 'action_overflow') {
                 const overflowKindMeta = EVENT_KIND_META[item.kind];
                 const OverflowKindIcon = overflowKindMeta.Icon;
+                const title = item.expanded
+                  ? '반복 행동 접기'
+                  : `중간 행동 ${item.hiddenCount}개 펼치기`;
                 return (
                   <article key={`overflow-${item.id}`} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
-                    <div className={`${styles.messageBubble} ${styles.messageBubbleAction} ${styles.actionOverflowBubble}`}>
+                    <button
+                      type="button"
+                      className={`${styles.messageBubble} ${styles.messageBubbleAction} ${styles.actionOverflowBubble} ${styles.actionOverflowToggle}`}
+                      onClick={() => toggleActionRun(item.runId)}
+                      title={title}
+                      aria-label={title}
+                      aria-expanded={item.expanded}
+                    >
                       <div className={styles.actionCompact}>
                         <div className={styles.actionCompactMain}>
                           <div className={styles.actionCompactTopRow}>
@@ -1662,13 +1783,13 @@ export function ChatInterface({
                         </div>
                         <span
                           className={styles.actionOverflowCount}
-                          title={`중간 행동 ${item.hiddenCount}개 축약됨`}
-                          aria-label={`중간 행동 ${item.hiddenCount}개 축약됨`}
+                          title={item.expanded ? '접기' : `중간 행동 ${item.hiddenCount}개 축약됨`}
+                          aria-label={item.expanded ? '접기' : `중간 행동 ${item.hiddenCount}개 축약됨`}
                         >
-                          +{item.hiddenCount}
+                          {item.expanded ? '접기' : `+${item.hiddenCount}`}
                         </span>
                       </div>
-                    </div>
+                    </button>
                   </article>
                 );
               }

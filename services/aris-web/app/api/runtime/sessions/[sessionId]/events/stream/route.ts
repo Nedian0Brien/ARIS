@@ -56,16 +56,18 @@ export async function GET(
       void (async () => {
         while (!aborted) {
           try {
-            const { events } = await getSessionEvents(sessionId, auth.user.id);
-            const source = Array.isArray(events) ? events : [];
-
-            if (!cursor && source.length > 0) {
-              // When the stream opens for the first time, start tailing from the latest known event.
-              cursor = source[source.length - 1]?.id ?? null;
-            } else if (cursor) {
-              const index = source.findIndex((event) => event.id === cursor);
-              const nextEvents = index >= 0 ? source.slice(index + 1) : source;
-              for (const event of nextEvents) {
+            if (!cursor) {
+              const { events } = await getSessionEvents(sessionId, {
+                userId: auth.user.id,
+                limit: 1,
+              });
+              cursor = events[events.length - 1]?.id ?? null;
+            } else {
+              const { events } = await getSessionEvents(sessionId, {
+                userId: auth.user.id,
+                after: cursor,
+              });
+              for (const event of events) {
                 writeEvent('event', { event });
                 cursor = event.id;
               }

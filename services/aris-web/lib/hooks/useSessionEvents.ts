@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { UiEvent } from '@/lib/happy/types';
+import type { SessionEventsPage, UiEvent } from '@/lib/happy/types';
 
 const SAFETY_RECONCILE_INTERVAL_MS = 5000;
+const EVENTS_PAGE_LIMIT = 40;
+
+type EventsApiResponse = {
+  events?: UiEvent[];
+  page?: Partial<SessionEventsPage>;
+};
 
 function mergeEvents(events: UiEvent[]): UiEvent[] {
   const dedup = new Map<string, UiEvent>();
@@ -38,37 +44,112 @@ function areEventsEqual(prev: UiEvent[], next: UiEvent[]): boolean {
   return true;
 }
 
-export function useSessionEvents(sessionId: string, initialEvents: UiEvent[]) {
+export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], initialHasMoreBefore = false) {
   const [events, setEvents] = useState<UiEvent[]>(initialEvents);
+  const [hasMoreBefore, setHasMoreBefore] = useState<boolean>(initialHasMoreBefore);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const eventsRef = useRef<UiEvent[]>(initialEvents);
+  const hasMoreBeforeRef = useRef<boolean>(initialHasMoreBefore);
+  const loadingOlderRef = useRef<boolean>(false);
 
   useEffect(() => {
     setEvents(initialEvents);
     eventsRef.current = initialEvents;
+    setHasMoreBefore(initialHasMoreBefore);
+    hasMoreBeforeRef.current = initialHasMoreBefore;
+    loadingOlderRef.current = false;
+    setIsLoadingOlder(false);
     setSyncError(null);
-  }, [sessionId, initialEvents]);
+  }, [sessionId, initialEvents, initialHasMoreBefore]);
 
   useEffect(() => {
     eventsRef.current = events;
   }, [events]);
 
+  useEffect(() => {
+    hasMoreBeforeRef.current = hasMoreBefore;
+  }, [hasMoreBefore]);
+
   const refreshEvents = useCallback(async () => {
-    const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/events`, {
-      cache: 'no-store',
-    });
+    const params = new URLSearchParams();
+    params.set('limit', String(EVENTS_PAGE_LIMIT));
+    const latestId = eventsRef.current[eventsRef.current.length - 1]?.id;
+    if (latestId) {
+      params.set('after', latestId);
+    }
+
+    const query = params.toString();
+    const response = await fetch(
+      `/api/runtime/sessions/${encodeURIComponent(sessionId)}/events${query ? `?${query}` : ''}`,
+      { cache: 'no-store' },
+    );
     if (!response.ok) {
       throw new Error(`백엔드 이벤트 API 응답 오류 (${response.status})`);
     }
 
-    const body = (await response.json()) as { events?: UiEvent[] };
+    const body = (await response.json()) as EventsApiResponse;
     if (Array.isArray(body.events)) {
       const nextEvents = body.events;
       setEvents((prev) => {
         const merged = mergeEvents([...prev, ...nextEvents]);
         return areEventsEqual(prev, merged) ? prev : merged;
       });
+      if (!latestId && typeof body.page?.hasMoreBefore === 'boolean') {
+        setHasMoreBefore(body.page.hasMoreBefore);
+      }
       setSyncError(null);
+    }
+  }, [sessionId]);
+
+  const loadOlder = useCallback(async (): Promise<{ loadedCount: number; hasMoreBefore: boolean }> => {
+    if (loadingOlderRef.current || !hasMoreBeforeRef.current) {
+      return { loadedCount: 0, hasMoreBefore: hasMoreBeforeRef.current };
+    }
+
+    const oldestId = eventsRef.current[0]?.id;
+    if (!oldestId) {
+      setHasMoreBefore(false);
+      return { loadedCount: 0, hasMoreBefore: false };
+    }
+
+    loadingOlderRef.current = true;
+    setIsLoadingOlder(true);
+
+    try {
+      const params = new URLSearchParams();
+      params.set('before', oldestId);
+      params.set('limit', String(EVENTS_PAGE_LIMIT));
+
+      const response = await fetch(
+        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/events?${params.toString()}`,
+        { cache: 'no-store' },
+      );
+      if (!response.ok) {
+        throw new Error(`이전 이벤트 API 응답 오류 (${response.status})`);
+      }
+
+      const body = (await response.json()) as EventsApiResponse;
+      const olderEvents = Array.isArray(body.events) ? body.events : [];
+      const nextHasMoreBefore = typeof body.page?.hasMoreBefore === 'boolean'
+        ? body.page.hasMoreBefore
+        : olderEvents.length >= EVENTS_PAGE_LIMIT;
+
+      setEvents((prev) => {
+        const merged = mergeEvents([...olderEvents, ...prev]);
+        return areEventsEqual(prev, merged) ? prev : merged;
+      });
+      setHasMoreBefore(nextHasMoreBefore);
+      setSyncError(null);
+
+      return { loadedCount: olderEvents.length, hasMoreBefore: nextHasMoreBefore };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '이전 이벤트를 불러오지 못했습니다.';
+      setSyncError(message);
+      throw error;
+    } finally {
+      loadingOlderRef.current = false;
+      setIsLoadingOlder(false);
     }
   }, [sessionId]);
 
@@ -209,5 +290,5 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[]) {
     setEvents((prev) => mergeEvents([...prev, event]));
   };
 
-  return { events, addEvent, syncError };
+  return { events, addEvent, syncError, loadOlder, hasMoreBefore, isLoadingOlder };
 }

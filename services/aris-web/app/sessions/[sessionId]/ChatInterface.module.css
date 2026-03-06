@@ -1071,6 +1071,23 @@
   min-height: 44px;
 }
 
+.actionOverflowToggle {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.actionOverflowToggle:hover {
+  border-color: rgba(59, 130, 246, 0.38);
+  background: rgba(239, 246, 255, 0.55);
+}
+
+.actionOverflowToggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
 .actionOverflowDots {
   display: block;
   flex: 1;

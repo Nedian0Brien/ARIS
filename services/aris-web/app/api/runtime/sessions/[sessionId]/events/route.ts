@@ -12,9 +12,25 @@ export async function GET(
   }
 
   const { sessionId } = await params;
+  const beforeRaw = request.nextUrl.searchParams.get('before');
+  const afterRaw = request.nextUrl.searchParams.get('after');
+  const limitRaw = request.nextUrl.searchParams.get('limit');
+  const before = typeof beforeRaw === 'string' && beforeRaw.trim().length > 0 ? beforeRaw.trim() : undefined;
+  const after = typeof afterRaw === 'string' && afterRaw.trim().length > 0 ? afterRaw.trim() : undefined;
+  const limit = typeof limitRaw === 'string' && limitRaw.trim().length > 0 ? Number(limitRaw) : undefined;
+
+  if (before && after) {
+    return NextResponse.json({ error: 'before와 after를 동시에 사용할 수 없습니다.' }, { status: 400 });
+  }
+
   try {
-    const { events } = await getSessionEvents(sessionId);
-    return NextResponse.json({ events });
+    const { events, page } = await getSessionEvents(sessionId, {
+      userId: auth.user.id,
+      before,
+      after,
+      limit,
+    });
+    return NextResponse.json({ events, page });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch events';
     return NextResponse.json({ error: message }, { status: 500 });

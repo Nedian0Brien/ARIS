@@ -60,6 +60,15 @@ export type UiEvent = {
   severity?: 'info' | 'warning' | 'danger' | 'success';
 };
 
+export type SessionEventsPage = {
+  hasMoreBefore: boolean;
+  hasMoreAfter: boolean;
+  oldestEventId: string | null;
+  newestEventId: string | null;
+  returnedCount: number;
+  totalCount: number;
+};
+
 export type SessionDetail = {
   id: string;
   agent: SessionSummary['agent'];

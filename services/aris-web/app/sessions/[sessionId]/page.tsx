@@ -6,6 +6,8 @@ import { Card } from '@/components/ui';
 import Link from 'next/link';
 import { ChatInterface } from './ChatInterface';
 
+const INITIAL_EVENTS_PAGE_LIMIT = 40;
+
 export default async function SessionPage({
   params,
 }: {
@@ -16,7 +18,10 @@ export default async function SessionPage({
 
   try {
     const [detail, permissions] = await Promise.all([
-      getSessionEvents(sessionId, user.id),
+      getSessionEvents(sessionId, {
+        userId: user.id,
+        limit: INITIAL_EVENTS_PAGE_LIMIT,
+      }),
       listPermissionRequests(sessionId),
     ]);
 
@@ -27,6 +32,7 @@ export default async function SessionPage({
           <ChatInterface
             sessionId={sessionId}
             initialEvents={detail.events}
+            initialHasMoreBefore={detail.page.hasMoreBefore}
             initialPermissions={permissions}
             isOperator={user.role === 'operator'}
             projectName={detail.session.projectName}
