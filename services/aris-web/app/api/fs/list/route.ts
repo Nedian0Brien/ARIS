@@ -42,18 +42,24 @@ export async function GET(request: NextRequest) {
   try {
     const entries = await fs.readdir(fullPath, { withFileTypes: true });
     
-    const directories = entries
-      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+    const items = entries
+      .filter((entry) => !entry.name.startsWith('.'))
       .map((entry) => ({
         name: entry.name,
         path: path.join(normalizedPath, entry.name),
+        isDirectory: entry.isDirectory(),
+        isFile: entry.isFile()
       }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => {
+        if (a.isDirectory && !b.isDirectory) return -1;
+        if (!a.isDirectory && b.isDirectory) return 1;
+        return a.name.localeCompare(b.name);
+      });
 
     return NextResponse.json({ 
       currentPath: normalizedPath, 
       parentPath: normalizedPath === '/' ? null : path.dirname(normalizedPath),
-      directories 
+      directories: items // 유지 호환성 또는 items로 클라이언트에서 처리. 일단 items를 보내지만 하위호환을 위해 items로 대체.
     });
   } catch {
     return NextResponse.json({ error: 'Failed to read directory' }, { status: 500 });

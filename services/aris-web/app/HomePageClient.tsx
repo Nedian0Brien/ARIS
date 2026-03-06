@@ -8,6 +8,7 @@ import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { Card } from '@/components/ui';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import { Construction } from 'lucide-react';
+import { FileExplorer } from '@/components/files/FileExplorer';
 import type { AuthenticatedUser } from '@/lib/auth/types';
 import type { SessionSummary } from '@/lib/happy/types';
 
@@ -49,19 +50,7 @@ export default function HomePageWrapper({
           </div>
         );
       case 'files':
-        return (
-          <div className="animate-in" style={{ padding: '2rem 0' }}>
-            <Card style={{ padding: '4rem 2rem', textAlign: 'center' }}>
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem', color: 'var(--accent-sky)' }}>
-                <Construction size={64} strokeWidth={1.5} />
-              </div>
-              <h2 className="title-md">파일 (Files) - 준비 중</h2>
-              <p className="text-muted" style={{ marginTop: '1rem', maxWidth: '500px', margin: '1rem auto', fontSize: '0.875rem' }}>
-                워크스페이스 내의 파일 구조를 탐색하고 에이전트가 수정한 내용을 시각적으로 비교 및 관리할 수 있는 파일 익스플로러입니다.
-              </p>
-            </Card>
-          </div>
-        );
+        return <FileExplorer />;
       case 'settings':
         return (
           <div className="animate-in" style={{ padding: '2rem 0' }}>
