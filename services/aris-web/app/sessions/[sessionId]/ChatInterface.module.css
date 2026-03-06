@@ -368,6 +368,18 @@
   overflow: visible;
 }
 
+:global(html[data-keyboard-open='true']) .chatShell.chatShellMobileScroll {
+  min-height: 0;
+}
+
+:global(html[data-keyboard-open='true']) .centerFrame.centerFrameMobileScroll {
+  min-height: 0;
+}
+
+:global(html[data-keyboard-open='true']) .stream.streamMobileScroll {
+  min-height: 0;
+}
+
 .messageRow {
   display: flex;
   flex-direction: column;

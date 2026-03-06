@@ -28,7 +28,7 @@ import styles from './ChatInterface.module.css';
 const AGENT_REPLY_TIMEOUT_MS = 90000;
 const AUTO_SCROLL_THRESHOLD_PX = 80;
 const MOBILE_LAYOUT_MAX_WIDTH_PX = 960;
-const HEADER_SCROLL_THRESHOLD_PX = 2;
+const HEADER_SCROLL_THRESHOLD_PX = 1;
 const PREVIEW_MAX_LINES = 12;
 const PREVIEW_MAX_CHARS = 600;
 const COMPOSER_MIN_HEIGHT_PX = 52;
@@ -1089,9 +1089,8 @@ export function ChatInterface({
 
   const scrollConversationToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     if (isMobileLayout) {
-      const scrollContainer = document.querySelector('.app-shell-immersive') as HTMLElement | null;
-      if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
-        scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior });
+      const keyboardOpen = document.documentElement.dataset.keyboardOpen === 'true';
+      if (keyboardOpen) {
         return;
       }
 
@@ -1108,11 +1107,16 @@ export function ChatInterface({
   }, [isMobileLayout]);
 
   const handleComposerFocus = useCallback(() => {
+    if (isMobileLayout) {
+      shouldStickToBottomRef.current = false;
+      return;
+    }
+
     shouldStickToBottomRef.current = true;
     requestAnimationFrame(() => {
       scrollConversationToBottom('auto');
     });
-  }, [scrollConversationToBottom]);
+  }, [isMobileLayout, scrollConversationToBottom]);
 
   const jumpToPendingPermission = useCallback(() => {
     if (!firstPendingPermissionId) {
@@ -1154,18 +1158,9 @@ export function ChatInterface({
       return;
     }
 
-    const scrollContainer = document.querySelector('.app-shell-immersive') as HTMLElement | null;
-    const getCurrentScrollY = () => {
-      const windowScrollY = getWindowScrollTop();
-      const containerScrollY = scrollContainer?.scrollTop ?? 0;
-      return Math.max(windowScrollY, containerScrollY);
-    };
-    const isNearMobileBottom = () => {
-      if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
-        return isNearBottom(scrollContainer);
-      }
-      return isNearWindowBottom();
-    };
+    const getCurrentScrollY = () => getWindowScrollTop();
+    const isNearMobileBottom = () => isNearWindowBottom();
+    let lastTouchY = 0;
 
     mobileScrollYRef.current = getCurrentScrollY();
     shouldStickToBottomRef.current = isNearMobileBottom();
@@ -1175,10 +1170,11 @@ export function ChatInterface({
       scrollRaf = null;
       const currentY = getCurrentScrollY();
       const delta = currentY - mobileScrollYRef.current;
+      const keyboardOpen = document.documentElement.dataset.keyboardOpen === 'true';
 
       if (currentY < 28) {
         setIsCenterHeaderHidden(false);
-      } else if (delta > 4 && currentY > 64) {
+      } else if (!keyboardOpen && delta > 6 && currentY > 84) {
         setIsCenterHeaderHidden(true);
       } else if (delta < -HEADER_SCROLL_THRESHOLD_PX) {
         setIsCenterHeaderHidden(false);
@@ -1195,14 +1191,29 @@ export function ChatInterface({
       scrollRaf = window.requestAnimationFrame(updateFromScroll);
     };
 
+    const handleTouchStart = (event: TouchEvent) => {
+      lastTouchY = event.touches[0]?.clientY ?? 0;
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const nextTouchY = event.touches[0]?.clientY ?? lastTouchY;
+      const touchDelta = nextTouchY - lastTouchY;
+      if (touchDelta > 2) {
+        setIsCenterHeaderHidden(false);
+      }
+      lastTouchY = nextTouchY;
+    };
+
     window.addEventListener('scroll', handleScroll, { passive: true });
-    scrollContainer?.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
     window.visualViewport?.addEventListener('scroll', handleScroll, { passive: true } as EventListenerOptions);
     window.visualViewport?.addEventListener('resize', handleScroll, { passive: true } as EventListenerOptions);
 
     return () => {
       window.removeEventListener('scroll', handleScroll);
-      scrollContainer?.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
       window.visualViewport?.removeEventListener('scroll', handleScroll);
       window.visualViewport?.removeEventListener('resize', handleScroll);
       if (scrollRaf !== null) {

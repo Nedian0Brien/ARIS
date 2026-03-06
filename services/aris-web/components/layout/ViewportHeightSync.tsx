@@ -12,6 +12,7 @@ export function ViewportHeightSync() {
       // visualViewport.height는 iOS Safari 주소창 슬라이드 시 정확한 높이를 반환
       // window.innerHeight는 주소창 변화에 resize 이벤트가 발생하지 않을 수 있음
       const height = window.visualViewport?.height ?? window.innerHeight;
+      const viewportOffsetTop = window.visualViewport?.offsetTop ?? 0;
       const innerWidth = window.innerWidth;
       const orientationChanged = Math.abs(innerWidth - lastInnerWidth) > 120;
       if (orientationChanged) {
@@ -21,12 +22,14 @@ export function ViewportHeightSync() {
       if (height > maxViewportHeight) {
         maxViewportHeight = height;
       }
-      const keyboardInset = Math.max(0, maxViewportHeight - height);
+      const keyboardInset = Math.max(0, maxViewportHeight - height - viewportOffsetTop);
       const keyboardOpen = keyboardInset > 120;
+      const appViewportHeight = keyboardOpen ? height : maxViewportHeight;
       const vh = height * 0.01;
       root.style.setProperty('--vh', `${vh}px`);
-      root.style.setProperty('--app-vh', `${maxViewportHeight}px`);
+      root.style.setProperty('--app-vh', `${appViewportHeight}px`);
       root.style.setProperty('--visual-viewport-height', `${height}px`);
+      root.style.setProperty('--visual-viewport-offset-top', `${viewportOffsetTop}px`);
       root.style.setProperty('--keyboard-inset-height', `${keyboardInset}px`);
       root.dataset.keyboardOpen = keyboardOpen ? 'true' : 'false';
     };
@@ -49,6 +52,7 @@ export function ViewportHeightSync() {
       delete root.dataset.keyboardOpen;
       root.style.removeProperty('--keyboard-inset-height');
       root.style.removeProperty('--visual-viewport-height');
+      root.style.removeProperty('--visual-viewport-offset-top');
     };
   }, []);
 
