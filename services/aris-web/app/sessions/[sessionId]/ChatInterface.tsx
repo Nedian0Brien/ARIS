@@ -1388,7 +1388,7 @@ export function ChatInterface({
   }, [events, isAwaitingReply, scrollConversationToBottom]);
 
   useEffect(() => {
-    if (!isAwaitingReply || !awaitingReplySince) {
+    if (!awaitingReplySince) {
       return;
     }
 
@@ -1410,7 +1410,7 @@ export function ChatInterface({
       setAwaitingReplySince(null);
       setSubmitError(null);
     }
-  }, [events, isAwaitingReply, awaitingReplySince, isRunActive]);
+  }, [events, awaitingReplySince, isRunActive]);
 
   useEffect(() => {
     if (!isAwaitingReply || !awaitingReplySince) {
@@ -1423,7 +1423,6 @@ export function ChatInterface({
 
     const timer = window.setTimeout(() => {
       setIsAwaitingReply(false);
-      setAwaitingReplySince(null);
       setSubmitError('에이전트 응답이 지연되고 있습니다. 런타임 연결 상태를 확인해 주세요.');
     }, remaining);
 
