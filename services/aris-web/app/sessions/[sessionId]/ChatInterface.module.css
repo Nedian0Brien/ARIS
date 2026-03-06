@@ -459,6 +459,7 @@
   flex-direction: column;
   gap: 0.3rem;
   max-width: 100%;
+  min-width: 0;
 }
 
 .messageRowUser {
@@ -511,6 +512,7 @@
   border: 1px solid rgba(148, 163, 184, 0.22);
   padding: 0.7rem 0.85rem;
   max-width: min(92%, 860px);
+  min-width: 0;
   box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
 }
 
@@ -536,6 +538,7 @@
   border-radius: 12px;
   padding: 0.52rem 0.68rem;
   max-width: min(95%, 760px);
+  min-width: 0;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
@@ -549,6 +552,7 @@
   align-items: flex-start;
   gap: 0.55rem;
   max-width: min(92%, 860px);
+  min-width: 0;
 }
 
 .msgAvatar {
@@ -624,6 +628,8 @@
 .inlineResourceChipWrap {
   display: inline-flex;
   vertical-align: middle;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .resourceChip {
@@ -635,6 +641,8 @@
   background: #ffffff;
   padding: 0.14rem 0.42rem;
   white-space: nowrap;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .resourceChipFolder {
@@ -656,6 +664,10 @@
   font-weight: 700;
   line-height: 1;
   color: #0f172a;
+  min-width: 0;
+  max-width: min(52vw, 18rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .resourceIconFolder {
@@ -718,13 +730,23 @@
   font-size: 0.89rem;
   line-height: 1.5;
   color: #0f172a;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .markdownRoot {
   display: flex;
   flex-direction: column;
   gap: 0.42rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.markdownRoot > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .markdownParagraph {
@@ -805,6 +827,7 @@
   color: #e2e8f0;
   font-size: 0.76rem;
   line-height: 1.45;
+  max-width: 100%;
   overflow-x: auto;
   white-space: pre;
 }
@@ -829,6 +852,8 @@
   padding: 0.08rem 0.32rem;
   background: rgba(15, 23, 42, 0.08);
   color: #0f172a;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .markdownLink {
@@ -836,6 +861,8 @@
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .markdownStrong {
@@ -1155,12 +1182,16 @@
   font-size: 0.74rem;
   font-weight: 700;
   color: #0f172a;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .permissionReason {
   margin: 0.34rem 0 0;
   font-size: 0.75rem;
   color: #475569;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .permissionActions {
