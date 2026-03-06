@@ -7,3 +7,4 @@ deploy/.logs/
 deploy/.state/
 services/aris-web/.env
 services/aris-backend/.env
+**/tsconfig.tsbuildinfo
