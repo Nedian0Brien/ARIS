@@ -1,5 +1,53 @@
 name: aris-stack
 
+x-aris-web-common: &aris_web_common
+  image: ${ARIS_WEB_IMAGE:-aris-stack-aris-web:latest}
+  build:
+    context: ./services/aris-web
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+  environment:
+    NODE_ENV: production
+    PORT: 3000
+    NEXT_PUBLIC_APP_NAME: ARIS
+    APP_BASE_URL: ${APP_BASE_URL:?set in deploy/.env}
+    AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?set in deploy/.env}
+    AUTH_TOKEN_TTL_SECONDS: ${AUTH_TOKEN_TTL_SECONDS:-900}
+    AUTH_COOKIE_NAME: aris_session
+    ARIS_ADMIN_EMAIL: ${ARIS_ADMIN_EMAIL:?set in deploy/.env}
+    ARIS_ADMIN_PASSWORD: ${ARIS_ADMIN_PASSWORD:?set in deploy/.env}
+    ARIS_ADMIN_2FA_SECRET: ${ARIS_ADMIN_2FA_SECRET:-}
+    ARIS_ADMIN_2FA_EMAIL: ${ARIS_ADMIN_2FA_EMAIL:-false}
+    SMTP_HOST: ${SMTP_HOST:-}
+    SMTP_PORT: ${SMTP_PORT:-587}
+    SMTP_USER: ${SMTP_USER:-}
+    SMTP_PASS: ${SMTP_PASS:-}
+    SMTP_FROM: ${SMTP_FROM:-noreply@aris.local}
+    DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?set in deploy/.env}@postgres:5432/${POSTGRES_DB:-aris}
+    HAPPY_SERVER_URL: http://host.docker.internal:4080
+    HAPPY_SERVER_TOKEN: ${RUNTIME_API_TOKEN:?set in deploy/.env}
+    SSH_BASE_COMMAND: ${SSH_BASE_COMMAND:-ssh ubuntu@your-server}
+    SSH_LINK_TTL_SECONDS: ${SSH_LINK_TTL_SECONDS:-300}
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  volumes:
+    - ${HOST_PROJECTS_ROOT:-/tmp/aris-workspace}:/workspace
+  expose:
+    - "3000"
+  healthcheck:
+    test:
+      [
+        "CMD-SHELL",
+        "node -e \"fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+      ]
+    interval: 15s
+    timeout: 5s
+    retries: 20
+  networks:
+    - aris_net
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -18,54 +66,22 @@ services:
     networks:
       - aris_net
 
+  # Legacy single-slot service (kept for backward compatibility).
   aris-web:
-    build:
-      context: ./services/aris-web
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      NEXT_PUBLIC_APP_NAME: ARIS
-      APP_BASE_URL: ${APP_BASE_URL:?set in deploy/.env}
-      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?set in deploy/.env}
-      AUTH_TOKEN_TTL_SECONDS: ${AUTH_TOKEN_TTL_SECONDS:-900}
-      AUTH_COOKIE_NAME: aris_session
-      ARIS_ADMIN_EMAIL: ${ARIS_ADMIN_EMAIL:?set in deploy/.env}
-      ARIS_ADMIN_PASSWORD: ${ARIS_ADMIN_PASSWORD:?set in deploy/.env}
-      ARIS_ADMIN_2FA_SECRET: ${ARIS_ADMIN_2FA_SECRET:-}
-      ARIS_ADMIN_2FA_EMAIL: ${ARIS_ADMIN_2FA_EMAIL:-false}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-noreply@aris.local}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?set in deploy/.env}@postgres:5432/${POSTGRES_DB:-aris}
-      HAPPY_SERVER_URL: http://host.docker.internal:4080
-      HAPPY_SERVER_TOKEN: ${RUNTIME_API_TOKEN:?set in deploy/.env}
-      SSH_BASE_COMMAND: ${SSH_BASE_COMMAND:-ssh ubuntu@your-server}
-      SSH_LINK_TTL_SECONDS: ${SSH_LINK_TTL_SECONDS:-300}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    volumes:
-      - ${HOST_PROJECTS_ROOT:-/tmp/aris-workspace}:/workspace
-    expose:
-      - "3000"
+    <<: *aris_web_common
     ports:
-      - "${WEB_PORT:-3000}:3000"
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "node -e \"fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 20
-    networks:
-      - aris_net
+      - "${WEB_PORT:-3300}:3000"
+
+  # Zero-downtime slots.
+  aris-web-blue:
+    <<: *aris_web_common
+    ports:
+      - "127.0.0.1:${WEB_BLUE_PORT:-3301}:3000"
+
+  aris-web-green:
+    <<: *aris_web_common
+    ports:
+      - "127.0.0.1:${WEB_GREEN_PORT:-3302}:3000"
 
   caddy:
     image: caddy:2.8-alpine

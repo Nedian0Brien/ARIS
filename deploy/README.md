@@ -32,8 +32,8 @@ npm run build
 # Start with pm2 (token is read from deploy/services env files automatically)
 pm2 start deploy/ecosystem.config.cjs --env production
 
-# If already running, reload safely after token changes:
-pm2 restart aris-backend --update-env
+# Zero-downtime backend deploy:
+./deploy/deploy_backend_zero_downtime.sh
 ```
 
 ### 2.2 Web & DB (Docker)
@@ -41,28 +41,38 @@ pm2 restart aris-backend --update-env
 ./deploy/deploy_web.sh
 ```
 
-`deploy_web.sh` defaults:
-- Build with BuildKit enabled (`DOCKER_BUILDKIT=1`)
-- Deploy only `aris-web` with `up -d --no-deps` (faster than full stack rebuild)
-- Skip rebuild automatically when `services/aris-web` build context is unchanged (`SKIP_BUILD_IF_UNCHANGED=1`)
-- Cleanup policy: `PRUNE_MODE=light`, but cleanup runs asynchronously (`PRUNE_ASYNC=1`) so deploy returns faster
-- `aris-web` Docker build uses fast mode by default (`DOCKER_FAST_BUILD=1`): Next.js lint/type-check 단계는 CI에서 검증하고 Docker build에서는 생략
-  - `docker image prune -f` (dangling image only)
-  - `docker buildx prune -f --keep-storage 8gb` (build cache 상한 유지, fallback: `docker builder prune`)
+`deploy_web.sh` now runs zero-downtime blue/green deployment:
+- Build `aris-web-blue` / `aris-web-green` slots alternately.
+- Start the inactive slot and wait for container + HTTP health checks.
+- Atomically switch nginx upstream snippet to the new slot port and reload nginx.
+- Drain a short period (`WEB_DRAIN_SECONDS`) and stop the previous slot.
+- Stop legacy single-slot `aris-web` container by default (`STOP_LEGACY_WEB=1`).
 
 Useful overrides:
 ```bash
-PRUNE_MODE=off ./deploy/deploy_web.sh
-PRUNE_MODE=aggressive CACHE_UNTIL=72h ./deploy/deploy_web.sh
+WEB_DRAIN_SECONDS=12 ./deploy/deploy_web.sh
 PULL_BASE=1 ./deploy/deploy_web.sh
 SKIP_BUILD_IF_UNCHANGED=0 ./deploy/deploy_web.sh
-PRUNE_ASYNC=0 ./deploy/deploy_web.sh
-docker compose --env-file deploy/.env build --build-arg DOCKER_FAST_BUILD=0 aris-web
+STOP_LEGACY_WEB=0 ./deploy/deploy_web.sh
 ```
 
 Access web UI:
 
-- `http://localhost:3300` (change `WEB_PORT` in `deploy/.env` if needed)
+- `http://localhost:3300` (legacy single-slot)
+- Blue slot port: `WEB_BLUE_PORT` (default `3301`)
+- Green slot port: `WEB_GREEN_PORT` (default `3302`)
+
+### 2.3 Backend (PM2 zero-downtime reload)
+```bash
+./deploy/deploy_backend_zero_downtime.sh
+```
+
+`deploy/ecosystem.config.cjs` runs `aris-backend` in PM2 cluster mode so `pm2 reload` performs graceful worker replacement.
+
+### 2.4 Full zero-downtime deploy (backend + web)
+```bash
+./deploy/deploy_zero_downtime.sh
+```
 
 ## 3. Start with domain + HTTPS (Caddy)
 
@@ -77,16 +87,17 @@ Caddy will request and renew TLS certificates automatically after DNS points to 
 ## 4. Current production host note
 
 On this host, ports `80/443` are already served by system nginx.  
-`aris.lawdigest.cloud` is connected through nginx reverse proxy to `127.0.0.1:3300` with Let's Encrypt TLS.
+`aris.lawdigest.cloud` is connected through nginx reverse proxy and is switched between blue/green slot ports by deployment script.
 
 ## 5. Useful commands
 
 ```bash
 docker compose --env-file deploy/.env logs -f aris-web
-docker compose --env-file deploy/.env logs -f aris-backend
+docker compose --env-file deploy/.env logs -f aris-web-blue aris-web-green
 docker compose --env-file deploy/.env ps
 docker compose --env-file deploy/.env down
 docker system df -v
+pm2 logs aris-backend --lines 120
 ```
 
 ### Runtime auth check (recommended after token changes)
@@ -106,4 +117,4 @@ This verifies:
 
 1. `deploy/.env`의 `RUNTIME_API_TOKEN`이 실제 PM2 백엔드 프로세스 환경으로 반영됐는지
 2. `services/aris-backend/.env`의 `RUNTIME_API_TOKEN`이 동일한지
-3. 토큰 변경 후 백엔드 재시작이 되었는지
+3. 토큰 변경 후 백엔드 reload가 되었는지 (`./deploy/deploy_backend_zero_downtime.sh`)

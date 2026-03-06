@@ -58,6 +58,15 @@ function resolveRuntimeToken() {
   return resolveEnvValue('RUNTIME_API_TOKEN', 'change-this-runtime-token');
 }
 
+function resolveBackendInstances() {
+  const raw = resolveEnvValue('ARIS_BACKEND_INSTANCES', '1');
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isFinite(value) || value < 1) {
+    return 1;
+  }
+  return value;
+}
+
 module.exports = {
   apps: [
     {
@@ -65,6 +74,10 @@ module.exports = {
       script: 'npm',
       args: 'run start',
       cwd: './services/aris-backend',
+      exec_mode: 'cluster',
+      instances: resolveBackendInstances(),
+      listen_timeout: 10000,
+      kill_timeout: 5000,
       env: {
         NODE_ENV: 'production',
         HOST: '0.0.0.0',

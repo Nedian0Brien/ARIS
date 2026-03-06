@@ -7,7 +7,7 @@
 
 ## 배포 구성도
 - `aris-backend`: 호스트에서 `pm2`로 실행 (기본 포트 `4080`)
-- `aris-web`: `Docker Compose`(`aris-stack-aris-web`)로 실행 (기본 포트 `3300`로 노출)
+- `aris-web`: `Docker Compose` blue/green 슬롯(`aris-web-blue`, `aris-web-green`)으로 무중단 배포
 - `postgres`: Docker Compose 내부 DB
 - 프록시(옵션): `caddy` 프로파일
 
@@ -23,20 +23,12 @@
    - `HOST_PROJECTS_ROOT`는 실제 호스트 프로젝트 경로와 일치해야 한다.
 
 3. 백엔드 토큰 반영 확인
-   - 토큰 변경 시 백엔드는 **반드시 재시작**해야 한다.
+   - 토큰 변경 시 백엔드는 **반드시 reload**해야 한다.
 
 ## 1. 백엔드 배포(필수 선행)
 ```bash
-cd services/aris-backend
-npm install
-npm run build
-pm2 start deploy/ecosystem.config.cjs --env production
-```
-
-이미 실행 중이면 아래로 재시작:
-
-```bash
-pm2 restart aris-backend --update-env
+cd /path/to/web-agentic-coding
+./deploy/deploy_backend_zero_downtime.sh
 ```
 
 ## 2. 웹/DB 배포
@@ -45,35 +37,35 @@ cd /path/to/web-agentic-coding
 ./deploy/deploy_web.sh
 ```
 
-도메인 운영 시:
+통합 배포(백엔드 + 웹):
 
 ```bash
-docker compose --env-file deploy/.env --profile edge up -d --build
+./deploy/deploy_zero_downtime.sh
 ```
 
 `deploy_web.sh` 기본 정책
 - `DOCKER_BUILDKIT=1` + `COMPOSE_DOCKER_CLI_BUILD=1`
-- `docker compose build aris-web` 후 `up -d --no-deps aris-web` (불필요한 의존 재기동 방지)
-- 배포 직후 경량 정리 실행:
-  - dangling image prune
-  - build cache 상한 유지 prune (`keep-storage 8gb`)
+- 비활성 슬롯(`aris-web-blue` 또는 `aris-web-green`) 빌드 후 기동
+- 컨테이너 health + HTTP readiness 확인 후 nginx upstream 스위치
+- 짧은 드레인 후 이전 슬롯 중지
 
 운영 환경별 옵션 예시
 ```bash
-PRUNE_MODE=off ./deploy/deploy_web.sh
-PRUNE_MODE=aggressive CACHE_UNTIL=72h ./deploy/deploy_web.sh
+WEB_DRAIN_SECONDS=12 ./deploy/deploy_web.sh
 PULL_BASE=1 ./deploy/deploy_web.sh
+SKIP_BUILD_IF_UNCHANGED=0 ./deploy/deploy_web.sh
 ```
 
 ## 3. 배포 후 즉시 헬스체크
 ```bash
-docker compose --env-file deploy/.env ps aris-web
-docker compose --env-file deploy/.env logs --tail=120 aris-web
-docker compose --env-file deploy/.env logs --tail=120 aris-backend
+docker compose --env-file deploy/.env ps aris-web-blue aris-web-green
+docker compose --env-file deploy/.env logs --tail=120 aris-web-blue aris-web-green
+pm2 logs aris-backend --lines 120 --nostream
+curl -sS http://127.0.0.1:4080/health
 ```
 
 예상 동작
-- `aris-stack-aris-web-1` 상태가 `healthy`로 전환
+- 활성 슬롯 컨테이너가 `healthy` 상태
 - 웹이 `http://localhost:3300`에서 응답
 - 백엔드가 `POST /v1/sessions` 등 인증된 경로에서 401/200 정책을 준수
 
@@ -95,13 +87,13 @@ docker compose --env-file deploy/.env logs --tail=120 aris-backend
 ### A. `백엔드 응답 오류 (401): Unauthorized`
 원인 우선순위
 1. `deploy/.env`와 `services/aris-backend/.env`의 `RUNTIME_API_TOKEN` 불일치
-2. 백엔드 재시작 누락(`pm2 restart --update-env` 미실행)
+2. 백엔드 reload 누락(`deploy_backend_zero_downtime.sh` 미실행)
 3. 호스트 네트워크/URL 변경(`HAPPY_SERVER_URL`)로 백엔드 URL을 잘못 가리킴
 4. 브라우저/API 캐시로 구 버전 화면이 노출되어 오류 메시지가 오래 보임
 
 해결 순서
 1. 토큰 파일 동기화
-2. 백엔드 재시작
+2. 백엔드 reload
 3. `./deploy/check-runtime-connection.sh` 재실행
 4. 웹 로그에서 실제 응답 코드 확인
 
@@ -111,7 +103,8 @@ docker compose --env-file deploy/.env logs --tail=120 aris-backend
 3. 프록시(Caddy/nginx) 캐시 또는 서비스워커 캐시 존재 여부 확인
 4. 실제 실행 컨테이너가 새 이미지인지 확인
    - `docker image ls | rg aris-stack-aris-web`
-   - `docker ps --filter name=aris-stack-aris-web-1`
+   - `docker ps --filter name=aris-stack-aris-web-blue`
+   - `docker ps --filter name=aris-stack-aris-web-green`
 
 ### C. 세션이 비어 있는데 더미 데이터가 노출되는 것처럼 보임
 - 현재 코드는 백엔드 세션 응답에 의존한다.
@@ -121,10 +114,13 @@ docker compose --env-file deploy/.env logs --tail=120 aris-backend
 ## 6. 일반적인 운영 커맨드
 ```bash
 docker compose --env-file deploy/.env up -d --build            # 전체 서비스 재기동
-./deploy/deploy_web.sh                                          # 웹 서비스 표준 배포(+정리)
+./deploy/deploy_web.sh                                          # 웹 무중단(blue/green) 배포
+./deploy/deploy_backend_zero_downtime.sh                        # 백엔드 무중단 reload 배포
+./deploy/deploy_zero_downtime.sh                                # 백엔드+웹 통합 무중단 배포
 
 docker compose --env-file deploy/.env ps                        # 상태 확인
-docker compose --env-file deploy/.env logs -f aris-web aris-backend # 실시간 로그
+docker compose --env-file deploy/.env logs -f aris-web-blue aris-web-green # 웹 로그
+pm2 logs aris-backend                                            # 백엔드 로그
 docker compose --env-file deploy/.env down                      # 스택 중지
 docker system df -v                                              # 디스크 사용량 점검
 ```
