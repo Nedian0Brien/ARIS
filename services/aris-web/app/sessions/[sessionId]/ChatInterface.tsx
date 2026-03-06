@@ -23,7 +23,7 @@ import {
   TerminalSquare,
 } from 'lucide-react';
 import type { ApprovalPolicy, PermissionRequest, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
-import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
+import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '@/components/ui/AgentIcons';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import styles from './ChatInterface.module.css';
 
@@ -42,8 +42,8 @@ type AgentMeta = {
   Icon: React.ComponentType<{ size?: number }>;
 };
 
-type Tone = 'sky' | 'amber' | 'cyan' | 'emerald' | 'violet' | 'red';
-type ActionKind = 'run_execution' | 'exec_execution' | 'command_execution' | 'file_list' | 'file_read' | 'file_write';
+type Tone = 'sky' | 'amber' | 'cyan' | 'emerald' | 'violet' | 'red' | 'git' | 'docker';
+type ActionKind = 'run_execution' | 'exec_execution' | 'git_execution' | 'docker_execution' | 'command_execution' | 'file_list' | 'file_read' | 'file_write';
 type StreamRenderItem =
   | { type: 'event'; event: UiEvent }
   | { type: 'action_overflow'; id: string; runId: string; kind: ActionKind; hiddenCount: number; expanded: boolean };
@@ -58,6 +58,8 @@ const TONE_CLASS: Record<Tone, string> = {
   emerald: styles.toneEmerald,
   violet: styles.toneViolet,
   red: styles.toneRed,
+  git: styles.toneGit,
+  docker: styles.toneDocker,
 };
 
 const AGENT_AVATAR_TONE_CLASS: Record<AgentMeta['tone'], string> = {
@@ -129,6 +131,8 @@ const EVENT_KIND_META: Record<UiEventKind, { label: string; tone: Tone; Icon: Re
   text_reply: { label: 'TEXT', tone: 'sky', Icon: MessageSquareText },
   run_execution: { label: 'RUN', tone: 'amber', Icon: TerminalSquare },
   exec_execution: { label: 'EXEC', tone: 'red', Icon: TerminalSquare },
+  git_execution: { label: 'GIT', tone: 'git', Icon: GitLogoIcon },
+  docker_execution: { label: 'DOCKER', tone: 'docker', Icon: DockerLogoIcon },
   command_execution: { label: 'RUN', tone: 'amber', Icon: TerminalSquare },
   file_list: { label: 'LIST', tone: 'cyan', Icon: FolderTree },
   file_read: { label: 'READ', tone: 'violet', Icon: FileSearch },
@@ -154,7 +158,14 @@ function isUserEvent(event: UiEvent): boolean {
 }
 
 function isActionKind(kind: UiEventKind): kind is ActionKind {
-  return kind === 'run_execution' || kind === 'exec_execution' || kind === 'command_execution' || kind === 'file_list' || kind === 'file_read' || kind === 'file_write';
+  return kind === 'run_execution'
+    || kind === 'exec_execution'
+    || kind === 'git_execution'
+    || kind === 'docker_execution'
+    || kind === 'command_execution'
+    || kind === 'file_list'
+    || kind === 'file_read'
+    || kind === 'file_write';
 }
 
 function formatClock(timestamp: string): string {

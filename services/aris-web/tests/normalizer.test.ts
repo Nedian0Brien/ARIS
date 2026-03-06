@@ -30,12 +30,20 @@ describe('classifyEventKind', () => {
     expect(kind).toBe('file_read');
   });
 
-  it('classifies docker exec style commands as exec_execution', () => {
+  it('classifies docker commands as docker_execution', () => {
     const kind = classifyEventKind({
       type: 'command_execution',
       command: 'docker exec aris-web sh -lc "node -v"',
     });
-    expect(kind).toBe('exec_execution');
+    expect(kind).toBe('docker_execution');
+  });
+
+  it('classifies git commands as git_execution', () => {
+    const kind = classifyEventKind({
+      type: 'command_execution',
+      command: 'git status --short',
+    });
+    expect(kind).toBe('git_execution');
   });
 
   it('defaults text to text_reply', () => {
@@ -111,5 +119,19 @@ describe('normalizeEvents', () => {
 
     expect(events[0].kind).toBe('file_read');
     expect(events[0].action?.path).toBe('services/web-editor/frontend/src/components/App.tsx');
+  });
+
+  it('classifies command_execution meta to docker_execution for docker commands', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e5',
+        type: 'message',
+        text: '$ docker compose ps',
+        meta: { actionType: 'command_execution' },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('docker_execution');
+    expect(events[0].action?.command).toBe('docker compose ps');
   });
 });

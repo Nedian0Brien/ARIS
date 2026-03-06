@@ -36,12 +36,27 @@ function asNumber(value: unknown, fallback: number): number {
   return fallback;
 }
 
-function isActionKind(kind: UiEventKind): kind is 'run_execution' | 'exec_execution' | 'command_execution' | 'file_list' | 'file_read' | 'file_write' {
-  return kind === 'run_execution' || kind === 'exec_execution' || kind === 'command_execution' || kind === 'file_list' || kind === 'file_read' || kind === 'file_write';
+function isActionKind(kind: UiEventKind): kind is 'run_execution' | 'exec_execution' | 'git_execution' | 'docker_execution' | 'command_execution' | 'file_list' | 'file_read' | 'file_write' {
+  return kind === 'run_execution'
+    || kind === 'exec_execution'
+    || kind === 'git_execution'
+    || kind === 'docker_execution'
+    || kind === 'command_execution'
+    || kind === 'file_list'
+    || kind === 'file_read'
+    || kind === 'file_write';
 }
 
 function toUiEventKind(value: string): UiEventKind | null {
-  if (value === 'run_execution' || value === 'exec_execution' || value === 'file_list' || value === 'file_read' || value === 'file_write') {
+  if (
+    value === 'run_execution'
+    || value === 'exec_execution'
+    || value === 'git_execution'
+    || value === 'docker_execution'
+    || value === 'file_list'
+    || value === 'file_read'
+    || value === 'file_write'
+  ) {
     return value;
   }
   if (value === 'command_execution') {
@@ -169,8 +184,14 @@ function classifyShellCommandKind(commandInput: string): UiEventKind | null {
     }
 
     const withoutEnv = normalized.replace(/^([a-z_][a-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s]+)\s+)*/i, '').trim();
+    if (/^git\b/.test(withoutEnv)) {
+      return 'git_execution';
+    }
+    if (/^(docker\b|docker-compose\b)/.test(withoutEnv)) {
+      return 'docker_execution';
+    }
     if (
-      /^(docker\s+exec|docker\s+compose\s+exec|kubectl\s+exec|ssh)\b/.test(withoutEnv)
+      /^(kubectl\s+exec|ssh)\b/.test(withoutEnv)
     ) {
       return 'exec_execution';
     }
@@ -237,7 +258,7 @@ function extractActionAndResult(
   const command = extractCommand(metaCommand || firstLine);
   const outputFromBody = restLines.join('\n').trim();
 
-  if (kind === 'command_execution' || kind === 'run_execution' || kind === 'exec_execution' || kind === 'file_list') {
+  if (kind === 'command_execution' || kind === 'run_execution' || kind === 'exec_execution' || kind === 'git_execution' || kind === 'docker_execution' || kind === 'file_list') {
     const resultText = outputFromBody || safeBody.trim();
     return {
       action: {
@@ -261,7 +282,7 @@ function extractActionAndResult(
 }
 
 function severityFromKind(kind: UiEventKind): Severity {
-  if (kind === 'command_execution' || kind === 'run_execution' || kind === 'exec_execution') {
+  if (kind === 'command_execution' || kind === 'run_execution' || kind === 'exec_execution' || kind === 'git_execution' || kind === 'docker_execution') {
     return 'warning';
   }
   if (kind === 'file_write') {

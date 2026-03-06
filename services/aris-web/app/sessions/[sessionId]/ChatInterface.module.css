@@ -724,6 +724,16 @@
   background: rgba(252, 165, 165, 0.30);
 }
 
+.toneGit {
+  color: #a0361d;
+  background: rgba(240, 80, 50, 0.20);
+}
+
+.toneDocker {
+  color: #0a4f82;
+  background: rgba(36, 150, 237, 0.20);
+}
+
 .userText,
 .agentText {
   margin: 0;
