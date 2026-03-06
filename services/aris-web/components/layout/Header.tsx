@@ -54,13 +54,12 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
       scrollRaf = null;
       const currentY = getScrollY();
       const delta = currentY - lastScrollY;
-      const movementThreshold = 8;
 
-      if (!mobileQuery.matches || currentY < 24) {
+      if (!mobileQuery.matches || currentY < 8) {
         setHiddenOnScroll(false);
-      } else if (delta > movementThreshold && currentY > 72) {
+      } else if (delta > 6 && currentY > 48) {
         setHiddenOnScroll(true);
-      } else if (delta < -movementThreshold) {
+      } else if (delta < -2) {
         setHiddenOnScroll(false);
       }
 

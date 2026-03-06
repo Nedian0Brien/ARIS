@@ -28,7 +28,7 @@ import styles from './ChatInterface.module.css';
 const AGENT_REPLY_TIMEOUT_MS = 90000;
 const AUTO_SCROLL_THRESHOLD_PX = 80;
 const MOBILE_LAYOUT_MAX_WIDTH_PX = 960;
-const HEADER_SCROLL_THRESHOLD_PX = 8;
+const HEADER_SCROLL_THRESHOLD_PX = 2;
 const PREVIEW_MAX_LINES = 12;
 const PREVIEW_MAX_CHARS = 600;
 const COMPOSER_MIN_HEIGHT_PX = 52;
@@ -1178,7 +1178,7 @@ export function ChatInterface({
 
       if (currentY < 28) {
         setIsCenterHeaderHidden(false);
-      } else if (delta > HEADER_SCROLL_THRESHOLD_PX && currentY > 84) {
+      } else if (delta > 4 && currentY > 64) {
         setIsCenterHeaderHidden(true);
       } else if (delta < -HEADER_SCROLL_THRESHOLD_PX) {
         setIsCenterHeaderHidden(false);

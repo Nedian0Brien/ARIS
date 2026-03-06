@@ -23,7 +23,7 @@ export default async function SessionPage({
     return (
       <div className="app-shell app-shell-immersive">
         <Header userEmail={user.email} role={user.role} autoHideOnScroll />
-        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, paddingTop: '64px' }}>
           <ChatInterface
             sessionId={sessionId}
             initialEvents={detail.events}
@@ -42,7 +42,7 @@ export default async function SessionPage({
     return (
       <div className="app-shell app-shell-immersive">
         <Header userEmail={user.email} role={user.role} autoHideOnScroll />
-        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'auto', padding: '1.5rem', gap: '1rem' }}>
+        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'auto', padding: '1.5rem', paddingTop: 'calc(64px + 1.5rem)', gap: '1rem' }}>
           <BackendNotice message={`백엔드 연결 문제: ${message}`} />
           <Card style={{ padding: '4rem 1.5rem', textAlign: 'center' }}>
             <p className="text-muted">현재 세션을 표시할 수 없습니다. 백엔드 연결을 확인하고 다시 시도해 주세요.</p>
