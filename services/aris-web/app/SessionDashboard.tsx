@@ -4,10 +4,11 @@ import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { 
-  Play, Terminal, FolderOpen, Search, PlusCircle, X, Plus, 
+import {
+  Play, Terminal, FolderOpen, Search, PlusCircle, X, Plus,
   Clock3, ArrowUpRight, Folder, ArrowUp, Check,
-  MoreVertical, Activity, Pin, Edit2, RotateCw, Square, Trash2, HardDrive
+  MoreVertical, Activity, Pin, Edit2, RotateCw, Square, Trash2, HardDrive,
+  ShieldCheck, ShieldAlert, ShieldOff, Zap, CheckCircle2
 } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
 import type { ApprovalPolicy, SessionSummary } from '@/lib/happy/types';
@@ -91,26 +92,36 @@ const APPROVAL_POLICY_OPTIONS: Array<{
   id: SessionApprovalPolicy;
   label: string;
   description: string;
+  Icon: React.ComponentType<{ size?: number }>;
+  color: string;
 }> = [
   {
     id: 'on-request',
-    label: 'On Request',
-    description: '권한이 필요할 때마다 승인 요청',
+    label: '요청 시 승인',
+    description: '권한이 필요할 때마다 확인',
+    Icon: ShieldCheck,
+    color: '#3b82f6',
   },
   {
     id: 'on-failure',
-    label: 'On Failure',
-    description: '실패 시 승인 요청으로 전환',
+    label: '실패 시 승인',
+    description: '실패한 작업만 승인 요청',
+    Icon: ShieldAlert,
+    color: '#f59e0b',
   },
   {
     id: 'never',
-    label: 'Never',
-    description: '승인 요청 없이 가능한 작업만 수행',
+    label: '자동 허용',
+    description: '승인 없이 허용된 작업만 수행',
+    Icon: ShieldOff,
+    color: '#10b981',
   },
   {
     id: 'yolo',
     label: 'YOLO',
-    description: '권한 요청을 자동 허용 (고위험)',
+    description: '모든 권한 요청 자동 허용',
+    Icon: Zap,
+    color: '#ef4444',
   },
 ];
 
@@ -830,7 +841,18 @@ export function SessionDashboard({
 
             <form onSubmit={handleCreateSession} className="modal-body no-scrollbar">
               <div className="form-section">
-                <label className="section-label">Project Path</label>
+                <label className="section-label">프로젝트 경로</label>
+                <div className="selected-path-row">
+                  <span className="selected-path-label">선택됨:</span>
+                  {sanitizePath(newPath) ? (
+                    <span className="selected-path-pill">
+                      <FolderOpen size={11} />
+                      {sanitizePath(newPath)}
+                    </span>
+                  ) : (
+                    <span className="selected-path-empty">경로를 선택하세요</span>
+                  )}
+                </div>
                 <div className="directory-browser animate-in">
                   <div className="browser-header">
                     <div className="current-path-edit-wrap">
@@ -925,7 +947,7 @@ export function SessionDashboard({
               {pathHistory.length > 0 && (
                 <div className="form-section">
                   <div className="section-header">
-                    <label className="section-label">Recent History</label>
+                    <label className="section-label">최근 경로</label>
                     <span className="count-badge">{pathHistory.length}</span>
                   </div>
                   <div className="history-stack">
@@ -968,7 +990,7 @@ export function SessionDashboard({
               )}
 
               <div className="form-section">
-                <label className="section-label">Agent Flavor</label>
+                <label className="section-label">에이전트</label>
                 <div className="agent-selection-grid">
                   {AGENT_OPTIONS.map((agent) => {
                     const AgentIcon = agent.Icon;
@@ -993,6 +1015,7 @@ export function SessionDashboard({
                           <div className="agent-label">{agent.label}</div>
                           <div className="agent-desc">{agent.subtitle}</div>
                         </div>
+                        <CheckCircle2 size={16} className="agent-check" />
                       </button>
                     );
                   })}
@@ -1001,31 +1024,37 @@ export function SessionDashboard({
 
               <div className="form-section">
                 <div className="section-header">
-                  <label className="section-label">Approval Policy</label>
+                  <label className="section-label">승인 정책</label>
                   {newAgent === 'gemini' && <span className="text-muted text-sm">Gemini는 추후 지원</span>}
                 </div>
-                <div className="history-stack">
+                <div className="policy-grid">
                   {APPROVAL_POLICY_OPTIONS.map((policy) => {
+                    const PolicyIcon = policy.Icon;
                     const selected = newApprovalPolicy === policy.id;
                     const disabled = newAgent === 'gemini';
                     return (
                       <button
                         key={policy.id}
                         type="button"
-                        className={`history-info-btn ${selected ? 'selected' : ''}`}
+                        className={`policy-card ${selected ? 'active' : ''}`}
                         onClick={() => setNewApprovalPolicy(policy.id)}
                         disabled={disabled}
-                        style={{ textAlign: 'left' }}
+                        style={{ '--policy-color': policy.color } as React.CSSProperties}
                       >
-                        <span className="path-text">{policy.label}</span>
-                        <span className="text-muted text-sm">{policy.description}</span>
+                        <div className="policy-icon">
+                          <PolicyIcon size={16} />
+                        </div>
+                        <span className="policy-label">{policy.label}</span>
+                        <span className="policy-desc">{policy.description}</span>
+                        <CheckCircle2 size={14} className="policy-check" />
                       </button>
                     );
                   })}
                 </div>
                 {newApprovalPolicy === 'yolo' && newAgent !== 'gemini' && (
-                  <div className="form-error" style={{ marginTop: '0.5rem' }}>
-                    YOLO는 모든 권한 요청을 자동 허용합니다. 신뢰 가능한 프로젝트에서만 사용하세요.
+                  <div className="form-error">
+                    <Zap size={14} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+                    모든 권한 요청을 자동 허용합니다. 신뢰 가능한 프로젝트에서만 사용하세요.
                   </div>
                 )}
               </div>
