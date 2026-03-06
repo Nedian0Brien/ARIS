@@ -22,7 +22,7 @@ export default async function SessionPage({
 
     return (
       <div className="app-shell app-shell-immersive">
-        <Header userEmail={user.email} role={user.role} />
+        <Header userEmail={user.email} role={user.role} autoHideOnScroll />
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <ChatInterface
             sessionId={sessionId}
@@ -41,7 +41,7 @@ export default async function SessionPage({
 
     return (
       <div className="app-shell app-shell-immersive">
-        <Header userEmail={user.email} role={user.role} />
+        <Header userEmail={user.email} role={user.role} autoHideOnScroll />
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'auto', padding: '1.5rem', gap: '1rem' }}>
           <BackendNotice message={`백엔드 연결 문제: ${message}`} />
           <Card style={{ padding: '4rem 1.5rem', textAlign: 'center' }}>

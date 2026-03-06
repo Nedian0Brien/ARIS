@@ -22,6 +22,16 @@
   padding-bottom: 0;
 }
 
+@media (max-width: 960px) {
+  .app-shell-immersive {
+    height: auto;
+    min-height: var(--app-vh, 100dvh);
+    overflow-y: auto;
+    overflow-x: clip;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
 @media (min-width: 768px) {
   .app-shell {
     padding-bottom: 0;

@@ -27,6 +27,8 @@ import styles from './ChatInterface.module.css';
 
 const AGENT_REPLY_TIMEOUT_MS = 90000;
 const AUTO_SCROLL_THRESHOLD_PX = 80;
+const MOBILE_LAYOUT_MAX_WIDTH_PX = 960;
+const HEADER_SCROLL_THRESHOLD_PX = 8;
 const PREVIEW_MAX_LINES = 12;
 const PREVIEW_MAX_CHARS = 600;
 const COMPOSER_MIN_HEIGHT_PX = 52;
@@ -337,6 +339,20 @@ function buildStreamRenderItems(events: UiEvent[], expandedActionRunIds: Record<
 
 function isNearBottom(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= AUTO_SCROLL_THRESHOLD_PX;
+}
+
+function getWindowScrollTop(): number {
+  return Math.max(window.scrollY || 0, document.documentElement.scrollTop || 0, document.body.scrollTop || 0);
+}
+
+function isNearWindowBottom(): boolean {
+  const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+  const scrollTop = getWindowScrollTop();
+  const scrollHeight = Math.max(
+    document.documentElement.scrollHeight,
+    document.body.scrollHeight,
+  );
+  return scrollHeight - (scrollTop + viewportHeight) <= AUTO_SCROLL_THRESHOLD_PX;
 }
 
 type MarkdownBlock =
@@ -953,6 +969,8 @@ export function ChatInterface({
   const [isAborting, setIsAborting] = useState(false);
   const [awaitingReplySince, setAwaitingReplySince] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isMobileLayout, setIsMobileLayout] = useState(false);
+  const [isCenterHeaderHidden, setIsCenterHeaderHidden] = useState(false);
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
   const [expandedActionRunIds, setExpandedActionRunIds] = useState<Record<string, boolean>>({});
   const chatShellRef = useRef<HTMLDivElement>(null);
@@ -961,6 +979,7 @@ export function ChatInterface({
   const composerDockRef = useRef<HTMLElement>(null);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const shouldStickToBottomRef = useRef(true);
+  const mobileScrollYRef = useRef(0);
 
   const agentMeta = resolveAgentMeta(agentFlavor);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? null;
@@ -984,6 +1003,33 @@ export function ChatInterface({
   const agentReplies = useMemo(() => events.filter((event) => !isUserEvent(event)).length, [events]);
   const streamItems = useMemo(() => buildStreamRenderItems(events, expandedActionRunIds), [events, expandedActionRunIds]);
   const firstPendingPermissionId = pendingPermissions[0]?.id ?? null;
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(`(max-width: ${MOBILE_LAYOUT_MAX_WIDTH_PX}px)`);
+
+    const syncLayout = () => {
+      const nextIsMobile = mediaQuery.matches;
+      setIsMobileLayout(nextIsMobile);
+      if (!nextIsMobile) {
+        setIsCenterHeaderHidden(false);
+      }
+    };
+
+    syncLayout();
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', syncLayout);
+    } else {
+      mediaQuery.addListener(syncLayout);
+    }
+
+    return () => {
+      if (typeof mediaQuery.removeEventListener === 'function') {
+        mediaQuery.removeEventListener('change', syncLayout);
+      } else {
+        mediaQuery.removeListener(syncLayout);
+      }
+    };
+  }, []);
 
   const toggleResult = useCallback((eventId: string) => {
     setExpandedResultIds((prev) => ({
@@ -1041,16 +1087,29 @@ export function ChatInterface({
     requestAnimationFrame(syncComposerDockMetrics);
   }, [syncComposerDockMetrics]);
 
-  const handleComposerFocus = useCallback(() => {
+  const scrollConversationToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
+    if (isMobileLayout) {
+      const top = Math.max(
+        document.documentElement.scrollHeight,
+        document.body.scrollHeight,
+      );
+      window.scrollTo({ top, behavior });
+      return;
+    }
+
     const stream = scrollRef.current;
     if (!stream) {
       return;
     }
+    stream.scrollTo({ top: stream.scrollHeight, behavior });
+  }, [isMobileLayout]);
+
+  const handleComposerFocus = useCallback(() => {
     shouldStickToBottomRef.current = true;
     requestAnimationFrame(() => {
-      stream.scrollTop = stream.scrollHeight;
+      scrollConversationToBottom('auto');
     });
-  }, []);
+  }, [scrollConversationToBottom]);
 
   const jumpToPendingPermission = useCallback(() => {
     if (!firstPendingPermissionId) {
@@ -1086,12 +1145,60 @@ export function ChatInterface({
   }, [syncComposerDockMetrics]);
 
   useEffect(() => {
-    const stream = scrollRef.current;
-    if (!stream || !shouldStickToBottomRef.current) {
+    if (!isMobileLayout) {
+      shouldStickToBottomRef.current = true;
+      setIsCenterHeaderHidden(false);
       return;
     }
-    stream.scrollTop = stream.scrollHeight;
-  }, [events, isAwaitingReply]);
+
+    mobileScrollYRef.current = getWindowScrollTop();
+    shouldStickToBottomRef.current = isNearWindowBottom();
+
+    let scrollRaf: number | null = null;
+    const updateFromScroll = () => {
+      scrollRaf = null;
+      const currentY = getWindowScrollTop();
+      const delta = currentY - mobileScrollYRef.current;
+
+      if (currentY < 28) {
+        setIsCenterHeaderHidden(false);
+      } else if (delta > HEADER_SCROLL_THRESHOLD_PX && currentY > 84) {
+        setIsCenterHeaderHidden(true);
+      } else if (delta < -HEADER_SCROLL_THRESHOLD_PX) {
+        setIsCenterHeaderHidden(false);
+      }
+
+      shouldStickToBottomRef.current = isNearWindowBottom();
+      mobileScrollYRef.current = currentY;
+    };
+
+    const handleScroll = () => {
+      if (scrollRaf !== null) {
+        return;
+      }
+      scrollRaf = window.requestAnimationFrame(updateFromScroll);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.visualViewport?.addEventListener('scroll', handleScroll, { passive: true } as EventListenerOptions);
+    window.visualViewport?.addEventListener('resize', handleScroll, { passive: true } as EventListenerOptions);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.visualViewport?.removeEventListener('scroll', handleScroll);
+      window.visualViewport?.removeEventListener('resize', handleScroll);
+      if (scrollRaf !== null) {
+        window.cancelAnimationFrame(scrollRaf);
+      }
+    };
+  }, [isMobileLayout]);
+
+  useEffect(() => {
+    if (!shouldStickToBottomRef.current) {
+      return;
+    }
+    scrollConversationToBottom('auto');
+  }, [events, isAwaitingReply, scrollConversationToBottom]);
 
   useEffect(() => {
     if (!isAwaitingReply || !awaitingReplySince) {
@@ -1214,6 +1321,9 @@ export function ChatInterface({
   }
 
   function handleStreamScroll() {
+    if (isMobileLayout) {
+      return;
+    }
     const stream = scrollRef.current;
     if (!stream) {
       return;
@@ -1222,7 +1332,7 @@ export function ChatInterface({
   }
 
   return (
-    <div className={styles.chatShell} ref={chatShellRef}>
+    <div className={`${styles.chatShell} ${isMobileLayout ? styles.chatShellMobileScroll : ''}`} ref={chatShellRef}>
       <aside className={`${styles.sidePanel} ${styles.leftPanel}`}>
         <section className={styles.panelCard}>
           <div className={styles.panelHeading}>Session Profile</div>
@@ -1262,9 +1372,9 @@ export function ChatInterface({
         </section>
       </aside>
 
-      <main className={styles.centerPanel} ref={centerPanelRef}>
-        <section className={styles.centerFrame}>
-          <header className={styles.centerHeader}>
+      <main className={`${styles.centerPanel} ${isMobileLayout ? styles.centerPanelMobileScroll : ''}`} ref={centerPanelRef}>
+        <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
+          <header className={`${styles.centerHeader} ${isCenterHeaderHidden ? styles.centerHeaderHidden : ''}`}>
             <span className={`${styles.agentAvatarHero} ${AGENT_AVATAR_TONE_CLASS[agentMeta.tone]}`}>
               <agentMeta.Icon size={20} />
             </span>
@@ -1307,7 +1417,7 @@ export function ChatInterface({
             </div>
           )}
 
-          <div className={styles.stream} ref={scrollRef} onScroll={handleStreamScroll}>
+          <div className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''}`} ref={scrollRef} onScroll={handleStreamScroll}>
             {streamItems.map((item) => {
               if (item.type === 'action_overflow') {
                 return (

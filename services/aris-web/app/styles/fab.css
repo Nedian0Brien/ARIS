@@ -39,6 +39,20 @@
   flex-shrink: 0;
 }
 
+.header-autohide {
+  position: sticky;
+  top: 0;
+  z-index: 1200;
+  will-change: transform, opacity;
+  transition: transform 0.24s ease, opacity 0.2s ease;
+}
+
+.header-hidden-on-scroll {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
 @media (min-width: 768px) {
   .header {
     padding: 0 1.5rem;
@@ -55,4 +69,3 @@
     padding: 2rem 0;
   }
 }
-
