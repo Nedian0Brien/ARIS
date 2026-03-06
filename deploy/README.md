@@ -118,3 +118,22 @@ This verifies:
 1. `deploy/.env`의 `RUNTIME_API_TOKEN`이 실제 PM2 백엔드 프로세스 환경으로 반영됐는지
 2. `services/aris-backend/.env`의 `RUNTIME_API_TOKEN`이 동일한지
 3. 토큰 변경 후 백엔드 reload가 되었는지 (`./deploy/deploy_backend_zero_downtime.sh`)
+
+## 6. Scheduled Docker reclaimable cleanup (02:00 daily)
+
+To reclaim Docker image/build cache space automatically every day at 02:00:
+
+```bash
+# one-time setup
+( crontab -l 2>/dev/null; echo "0 2 * * * /home/ubuntu/project/web-agentic-coding/deploy/prune_docker_reclaimable.sh >> /home/ubuntu/project/web-agentic-coding/deploy/.logs/docker-prune-cron.log 2>&1" ) | crontab -
+```
+
+Manual run:
+
+```bash
+./deploy/prune_docker_reclaimable.sh
+```
+
+Notes:
+- Uses `docker system prune -af` (no `--volumes`) to avoid deleting volumes.
+- Logs are appended to `deploy/.logs/docker-prune-cron.log`.
