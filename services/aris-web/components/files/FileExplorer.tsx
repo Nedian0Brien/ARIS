@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   Folder, FolderOpen, File, ChevronRight, ArrowUpCircle, 
   Loader2, FolderPlus, FilePlus, Trash2, X, Save, AlertCircle,
-  Code, Eye, Edit3, Monitor, Tablet, Smartphone
+  Code, Eye, Edit3, MoreVertical, Pencil, Move
 } from 'lucide-react';
 import { Card } from '@/components/ui';
 import Prism from 'prismjs';
@@ -49,17 +49,32 @@ export function FileExplorer() {
     return () => window.removeEventListener('resize', checkScreen);
   }, []);
 
-  // Editor States
+  // UI States
   const [editingFile, setEditingFile] = useState<{ path: string; name: string; content: string } | null>(null);
   const [isEditorSaving, setIsEditorSaving] = useState(false);
   const [isPreview, setIsPreview] = useState(false);
   const [newPathInput, setNewPathInput] = useState<{ type: 'file' | 'folder'; active: boolean }>({ type: 'file', active: false });
   const [newName, setNewName] = useState('');
+  
+  // Context Menu State
+  const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [actionModal, setActionModal] = useState<{ type: 'rename' | 'move'; item: FileItem; value: string } | null>(null);
 
-  // Refs for IDE features
+  // Refs
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setActiveMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchDirectory = useCallback(async (path: string) => {
     setLoading(true);
@@ -82,6 +97,7 @@ export function FileExplorer() {
 
   const handleNavigate = (path: string) => {
     setCurrentPath(path);
+    setActiveMenu(null);
   };
 
   const handleCreate = async () => {
@@ -104,8 +120,8 @@ export function FileExplorer() {
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent, item: FileItem) => {
-    e.stopPropagation();
+  const handleDelete = async (item: FileItem) => {
+    setActiveMenu(null);
     if (!window.confirm(`정말로 '${item.name}'을(를) 삭제하시겠습니까?`)) return;
 
     try {
@@ -118,15 +134,50 @@ export function FileExplorer() {
     }
   };
 
+  const handleFileAction = async () => {
+    if (!actionModal) return;
+    const { type, item, value } = actionModal;
+    if (!value || value === item.name) {
+      setActionModal(null);
+      return;
+    }
+
+    let newPath = '';
+    if (type === 'rename') {
+      const lastSlashIndex = item.path.lastIndexOf('/');
+      const parent = item.path.substring(0, lastSlashIndex);
+      newPath = parent ? `${parent}/${value}` : `/${value}`;
+    } else {
+      newPath = value.startsWith('/') ? value : `/${value}`;
+    }
+
+    try {
+      const res = await fetch('/api/fs/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldPath: item.path, newPath })
+      });
+      if (!res.ok) throw new Error('작업에 실패했습니다.');
+      if (editingFile?.path === item.path) {
+        setEditingFile(prev => prev ? { ...prev, path: newPath, name: value } : null);
+      }
+      setActionModal(null);
+      fetchDirectory(currentPath);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '오류 발생');
+    }
+  };
+
   const handleEditFile = async (item: FileItem) => {
     if (item.isDirectory) return;
+    setActiveMenu(null);
     
     try {
       const res = await fetch(`/api/fs/read?path=${encodeURIComponent(item.path)}`);
       if (!res.ok) throw new Error('파일을 읽는 데 실패했습니다.');
       const { content } = await res.json();
       setEditingFile({ path: item.path, name: item.name, content });
-      setIsPreview(false); // Reset preview mode when opening new file
+      setIsPreview(false);
     } catch (err) {
       alert(err instanceof Error ? err.message : '오류 발생');
     }
@@ -142,7 +193,6 @@ export function FileExplorer() {
         body: JSON.stringify({ path: editingFile.path, content: editingFile.content })
       });
       if (!res.ok) throw new Error('저장에 실패했습니다.');
-      // Keep editor open after saving
       fetchDirectory(currentPath);
     } catch (err) {
       alert(err instanceof Error ? err.message : '오류 발생');
@@ -160,7 +210,7 @@ export function FileExplorer() {
       e.preventDefault();
       const newValue = value.substring(0, selectionStart) + '  ' + value.substring(selectionEnd);
       setEditingFile(prev => prev ? { ...prev, content: newValue } : null);
-      setTimeout(() => { textarea.selectionStart = textarea.selectionEnd = selectionStart + 2; }, 0);
+      setTimeout(() => { if (textarea) { textarea.selectionStart = textarea.selectionEnd = selectionStart + 2; } }, 0);
     }
 
     if (e.key === 'Enter') {
@@ -175,7 +225,7 @@ export function FileExplorer() {
         e.preventDefault();
         const newValue = value.substring(0, selectionStart) + '\n' + indentation + '  \n' + indentation + value.substring(selectionEnd);
         setEditingFile(prev => prev ? { ...prev, content: newValue } : null);
-        setTimeout(() => { textarea.selectionStart = textarea.selectionEnd = selectionStart + 1 + indentation.length + 2; }, 0);
+        setTimeout(() => { if (textarea) { textarea.selectionStart = textarea.selectionEnd = selectionStart + 1 + indentation.length + 2; } }, 0);
         return;
       }
 
@@ -183,7 +233,7 @@ export function FileExplorer() {
         e.preventDefault();
         const newValue = value.substring(0, selectionStart) + '\n' + indentation + value.substring(selectionEnd);
         setEditingFile(prev => prev ? { ...prev, content: newValue } : null);
-        setTimeout(() => { textarea.selectionStart = textarea.selectionEnd = selectionStart + 1 + indentation.length; }, 0);
+        setTimeout(() => { if (textarea) { textarea.selectionStart = textarea.selectionEnd = selectionStart + 1 + indentation.length; } }, 0);
       }
     }
 
@@ -192,7 +242,7 @@ export function FileExplorer() {
       const newValue = value.substring(0, selectionStart) + e.key + pairs[e.key] + value.substring(selectionEnd);
       e.preventDefault();
       setEditingFile(prev => prev ? { ...prev, content: newValue } : null);
-      setTimeout(() => { textarea.selectionStart = textarea.selectionEnd = selectionStart + 1; }, 0);
+      setTimeout(() => { if (textarea) { textarea.selectionStart = textarea.selectionEnd = selectionStart + 1; } }, 0);
     }
   };
 
@@ -248,128 +298,65 @@ export function FileExplorer() {
     return map[lang] || 'Text';
   };
 
-  // Render Editor Fragment (Reused in Modal and Inline)
   const renderEditor = () => {
     if (!editingFile) return null;
     
     return (
-      <div style={{
-        backgroundColor: 'var(--surface)', borderRadius: isLargeScreen ? '0' : '12px',
-        width: '100%', height: '100%',
-        display: 'flex', flexDirection: 'column',
-        overflow: 'hidden', border: isLargeScreen ? 'none' : '1px solid var(--line)',
-        boxShadow: isLargeScreen ? 'none' : '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
-      }}>
-        <div style={{ 
-          padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--line)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          backgroundColor: 'var(--surface-subtle)',
-          flexWrap: 'wrap', gap: '0.5rem'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: 1 }}>
+      <div className="editor-root">
+        <div className="editor-header">
+          <div className="editor-title-box">
             <Code size={20} style={{ color: 'var(--accent-sky)', flexShrink: 0 }} />
-            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {editingFile.name}
-              </span>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{displayLanguageName(editingFile.name)}</span>
+            <div className="editor-title-text">
+              <span className="file-name">{editingFile.name}</span>
+              <span className="file-lang">{displayLanguageName(editingFile.name)}</span>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+          <div className="editor-actions">
             {getLanguage(editingFile.name) === 'markdown' && (
-              <button 
-                onClick={() => setIsPreview(!isPreview)}
-                className="btn-secondary"
-                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
-              >
+              <button onClick={() => setIsPreview(!isPreview)} className="btn-secondary btn-sm">
                 {isPreview ? <Edit3 size={16} /> : <Eye size={16} />}
-                {isPreview ? '편집' : '미리보기'}
+                <span>{isPreview ? '편집' : '미리보기'}</span>
               </button>
             )}
-            <button 
-              onClick={saveEditedFile} 
-              disabled={isEditorSaving}
-              className="btn-primary" 
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 1rem', fontSize: '0.85rem' }}
-            >
+            <button onClick={saveEditedFile} disabled={isEditorSaving} className="btn-primary btn-sm">
               {isEditorSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              저장
+              <span>저장</span>
             </button>
-            <button 
-              onClick={() => setEditingFile(null)} 
-              className="btn-secondary"
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 1rem', fontSize: '0.85rem' }}
-            >
-              <X size={16} /> 닫기
+            <button onClick={() => setEditingFile(null)} className="btn-secondary btn-sm">
+              <X size={16} /> <span>닫기</span>
             </button>
           </div>
         </div>
         
-        <div style={{ 
-          flex: 1, 
-          display: 'flex', 
-          overflow: 'hidden',
-          backgroundColor: 'var(--bg)',
-          position: 'relative'
-        }}>
+        <div className="editor-viewport">
           {!isPreview ? (
             <>
-              <div 
-                ref={lineNumbersRef}
-                style={{
-                  width: '3.5rem', padding: '1.5rem 0.5rem',
-                  backgroundColor: 'var(--surface-subtle)', borderRight: '1px solid var(--line)',
-                  color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: '0.85rem',
-                  lineHeight: '1.5', textAlign: 'right', userSelect: 'none', overflow: 'hidden', whiteSpace: 'pre'
-                }}
-              >
+              <div ref={lineNumbersRef} className="line-numbers">
                 {getLineNumbers()}
               </div>
-
-              <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+              <div className="editor-container">
                 <pre
                   ref={preRef}
-                  style={{
-                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-                    margin: 0, padding: '1.5rem', fontFamily: 'monospace', fontSize: '0.85rem',
-                    lineHeight: '1.5', pointerEvents: 'none', whiteSpace: 'pre', overflow: 'hidden',
-                    backgroundColor: 'transparent', color: 'var(--text)', tabSize: 2, zIndex: 1
-                  }}
+                  className="editor-pre"
                   dangerouslySetInnerHTML={{ __html: highlightedContent + '\n' }}
                 />
                 <textarea
                   ref={textareaRef}
+                  className="editor-textarea"
                   value={editingFile.content}
                   onChange={(e) => setEditingFile({ ...editingFile, content: e.target.value })}
                   onKeyDown={handleEditorKeyDown}
                   onScroll={handleEditorScroll}
-                  style={{
-                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-                    border: 'none', padding: '1.5rem', fontFamily: 'monospace', fontSize: '0.85rem',
-                    lineHeight: '1.5', backgroundColor: 'transparent', color: 'transparent',
-                    caretColor: 'var(--text)', resize: 'none', outline: 'none', whiteSpace: 'pre',
-                    overflow: 'auto', tabSize: 2, zIndex: 2
-                  }}
                   spellCheck={false}
                 />
               </div>
             </>
           ) : (
-            <div 
-              className="markdown-body"
-              style={{
-                flex: 1, padding: '2rem', overflow: 'auto',
-                backgroundColor: 'var(--bg)', color: 'var(--text)', lineHeight: '1.6'
-              }}
-              dangerouslySetInnerHTML={{ __html: markdownHtml }}
-            />
+            <div className="markdown-body" dangerouslySetInnerHTML={{ __html: markdownHtml }} />
           )}
         </div>
         
-        <div style={{ 
-          padding: '0.4rem 1rem', backgroundColor: 'var(--surface-subtle)', borderTop: '1px solid var(--line)',
-          fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'flex-end', gap: '1rem'
-        }}>
+        <div className="editor-footer">
           <span>라인: {editingFile.content.split('\n').length}</span>
           <span>탭: 2 spaces</span>
         </div>
@@ -378,105 +365,98 @@ export function FileExplorer() {
   };
 
   return (
-    <div className="explorer-container animate-in">
+    <div className="explorer-wrapper animate-in">
       <div className={`explorer-layout ${isLargeScreen ? 'layout-grid' : 'layout-stack'}`}>
-        {/* Sidebar / List View */}
-        <Card className="explorer-sidebar" style={{ 
-          padding: '1.5rem', 
-          height: isLargeScreen ? 'calc(100vh - 180px)' : 'auto',
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', gap: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        {/* Sidebar */}
+        <Card className="sidebar-card">
+          <div className="sidebar-header">
+            <div className="sidebar-title">
               <FolderOpen size={20} style={{ color: 'var(--accent-sky)' }} />
-              <h2 className="title-sm" style={{ margin: 0 }}>탐색기</h2>
+              <h2 className="title-sm">탐색기</h2>
             </div>
-            
-            <div style={{ display: 'flex', gap: '0.25rem' }}>
-              <button 
-                onClick={() => setNewPathInput({ type: 'file', active: true })}
-                className="btn-icon-subtle" title="새 파일"
-              >
-                <FilePlus size={18} />
-              </button>
-              <button 
-                onClick={() => setNewPathInput({ type: 'folder', active: true })}
-                className="btn-icon-subtle" title="새 폴더"
-              >
-                <FolderPlus size={18} />
-              </button>
+            <div className="sidebar-tools">
+              <button onClick={() => setNewPathInput({ type: 'file', active: true })} className="btn-tool" title="새 파일"><FilePlus size={18} /></button>
+              <button onClick={() => setNewPathInput({ type: 'folder', active: true })} className="btn-tool" title="새 폴더"><FolderPlus size={18} /></button>
             </div>
           </div>
 
           {newPathInput.active && (
-            <div style={{ 
-              display: 'flex', gap: '0.5rem', marginBottom: '1rem', 
-              padding: '0.75rem', backgroundColor: 'var(--surface-subtle)', borderRadius: '8px',
-              border: '1px solid var(--line)'
-            }}>
+            <div className="new-item-form">
               <input 
-                autoFocus className="input-base" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
+                autoFocus className="input-base sm" 
                 placeholder={newPathInput.type === 'file' ? '파일명...' : '폴더명...'}
                 value={newName} onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
               />
-              <button onClick={handleCreate} className="btn-primary" style={{ padding: '0 0.5rem', fontSize: '0.75rem' }}>생성</button>
-              <button onClick={() => { setNewPathInput({ ...newPathInput, active: false }); setNewName(''); }} className="btn-secondary" style={{ padding: '0 0.5rem', fontSize: '0.75rem' }}>취소</button>
+              <div className="form-btns">
+                <button onClick={handleCreate} className="btn-primary xs">생성</button>
+                <button onClick={() => { setNewPathInput({ ...newPathInput, active: false }); setNewName(''); }} className="btn-secondary xs">취소</button>
+              </div>
             </div>
           )}
 
-          <div className="breadcrumb-bar">
-            <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>위치:</span>
-            <span className="breadcrumb-path">{data?.currentPath || currentPath}</span>
+          <div className="path-bar">
+            <span className="path-text">{data?.currentPath || currentPath}</span>
           </div>
 
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div className="file-list-container">
             {loading ? (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem 0', color: 'var(--text-muted)' }}>
-                <Loader2 size={32} className="animate-spin" />
-              </div>
+              <div className="loader-box"><Loader2 size={32} className="animate-spin" /></div>
             ) : error ? (
               <div className="error-box">
                 <AlertCircle size={24} />
-                <div style={{ fontSize: '0.85rem' }}>{error}</div>
-                <button onClick={() => fetchDirectory(currentPath)} className="btn-secondary" style={{ fontSize: '0.75rem' }}>재시도</button>
+                <span>{error}</span>
+                <button onClick={() => fetchDirectory(currentPath)} className="btn-secondary xs">재시도</button>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+              <div className="file-list">
                 {data?.parentPath && (
                   <div onClick={() => handleNavigate(data.parentPath!)} className="file-item hover-bg">
-                    <ArrowUpCircle size={18} style={{ color: 'var(--text-muted)' }} />
-                    <span style={{ fontWeight: 500, fontSize: '0.9rem' }}>..</span>
+                    <ArrowUpCircle size={18} className="item-icon muted" />
+                    <span className="item-name-text">..</span>
                   </div>
                 )}
                 
-                {data?.directories.length === 0 && !data?.parentPath && (
-                  <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                    비어 있습니다.
-                  </div>
-                )}
-
                 {data?.directories.map((item) => (
                   <div
                     key={item.path}
                     onClick={() => item.isDirectory ? handleNavigate(item.path) : handleEditFile(item)}
-                    className={`file-item hover-bg group ${editingFile?.path === item.path ? 'active-item' : ''}`}
+                    className={`file-item hover-bg group ${editingFile?.path === item.path ? 'active' : ''}`}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: 0 }}>
+                    <div className="item-main">
                       {item.isDirectory ? (
-                        <Folder size={18} style={{ color: 'var(--accent-sky)', flexShrink: 0 }} />
+                        <Folder size={18} className="item-icon accent" />
                       ) : (
-                        <File size={18} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                        <File size={18} className="item-icon muted" />
                       )}
-                      <span className="file-name-text">{item.name}</span>
+                      <span className="item-name-text">{item.name}</span>
                     </div>
                     
                     <div className="item-actions">
-                      <button onClick={(e) => handleDelete(e, item)} className="btn-delete-item">
-                        <Trash2 size={14} />
-                      </button>
-                      {item.isDirectory && <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />}
+                      <div className="menu-anchor">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === item.path ? null : item.path); }}
+                          className={`btn-action ${activeMenu === item.path ? 'active' : ''}`}
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+                        
+                        {activeMenu === item.path && (
+                          <div ref={menuRef} className="dropdown-menu">
+                            <button onClick={(e) => { e.stopPropagation(); setActionModal({ type: 'rename', item, value: item.name }); setActiveMenu(null); }}>
+                              <Pencil size={14} /> 이름 변경
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); setActionModal({ type: 'move', item, value: item.path }); setActiveMenu(null); }}>
+                              <Move size={14} /> 이동
+                            </button>
+                            <div className="menu-divider" />
+                            <button className="danger" onClick={(e) => { e.stopPropagation(); handleDelete(item); }}>
+                              <Trash2 size={14} /> 삭제
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {item.isDirectory && <ChevronRight size={14} className="muted" />}
                     </div>
                   </div>
                 ))}
@@ -485,39 +465,48 @@ export function FileExplorer() {
           </div>
         </Card>
 
-        {/* Main Content Area (Desktop/Tablet) */}
+        {/* Main Content Area */}
         {isLargeScreen && (
-          <Card className="explorer-main" style={{ 
-            height: 'calc(100vh - 180px)',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: editingFile ? 'stretch' : 'center',
-            alignItems: editingFile ? 'stretch' : 'center',
-            padding: editingFile ? '0' : '2rem',
-            overflow: 'hidden',
-            backgroundColor: editingFile ? 'transparent' : 'var(--surface-subtle)'
-          }}>
+          <Card className="main-content-card">
             {editingFile ? (
               renderEditor()
             ) : (
-              <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-                <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
-                  <div style={{ 
-                    padding: '1.5rem', borderRadius: '50%', backgroundColor: 'var(--surface)',
-                    boxShadow: 'var(--shadow-md)', color: 'var(--accent-sky)'
-                  }}>
-                    <File size={48} strokeWidth={1.5} />
-                  </div>
+              <div className="empty-state">
+                <div className="empty-icon-circle">
+                  <File size={48} strokeWidth={1.5} />
                 </div>
-                <h3 className="title-sm" style={{ marginBottom: '0.5rem' }}>파일을 선택하세요</h3>
-                <p style={{ fontSize: '0.85rem', maxWidth: '240px', margin: '0 auto' }}>
-                  사이드바에서 파일을 선택하여 내용을 확인하고 편집할 수 있습니다.
-                </p>
+                <h3 className="title-sm">파일을 선택하세요</h3>
+                <p className="text-muted">사이드바에서 파일을 선택하여 내용을 확인하고 편집할 수 있습니다.</p>
               </div>
             )}
           </Card>
         )}
       </div>
+
+      {/* Action Modal (Rename/Move) */}
+      {actionModal && (
+        <div className="modal-overlay">
+          <Card className="action-modal">
+            <div className="modal-header">
+              <h3 className="title-sm">{actionModal.type === 'rename' ? '이름 변경' : '파일 이동'}</h3>
+              <button onClick={() => setActionModal(null)} className="btn-close"><X size={20} /></button>
+            </div>
+            <div className="modal-body">
+              <p className="modal-label">{actionModal.type === 'rename' ? '새 이름을 입력하세요:' : '이동할 전체 경로를 입력하세요:'}</p>
+              <input 
+                autoFocus className="input-base"
+                value={actionModal.value}
+                onChange={(e) => setActionModal({ ...actionModal, value: e.target.value })}
+                onKeyDown={(e) => e.key === 'Enter' && handleFileAction()}
+              />
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setActionModal(null)} className="btn-secondary">취소</button>
+              <button onClick={handleFileAction} className="btn-primary">확인</button>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* Mobile Editor Modal */}
       {!isLargeScreen && editingFile && (
@@ -529,172 +518,259 @@ export function FileExplorer() {
       )}
 
       <style jsx>{`
-        .explorer-container {
-          padding: 1.5rem 0;
+        .explorer-wrapper {
+          padding: 1rem 0;
           width: 100%;
-          max-width: 1200px;
-          margin: 0 auto;
+          height: calc(var(--app-vh, 100vh) - 140px);
+          max-width: 100% !important; /* Allow full width */
+          margin: 0;
         }
         .explorer-layout {
           display: grid;
-          gap: 1.25rem;
+          gap: 1rem;
+          height: 100%;
+          padding: 0 1.5rem;
         }
         .layout-grid {
-          grid-template-columns: 280px 1fr;
-        }
-        @media (min-width: 1024px) {
-          .layout-grid {
-            grid-template-columns: 320px 1fr;
-          }
+          grid-template-columns: 300px 1fr;
         }
         .layout-stack {
           grid-template-columns: 1fr;
         }
 
-        .breadcrumb-bar {
-          padding: 0.6rem 0.8rem;
-          background-color: var(--bg);
-          border-radius: 6px;
-          margin-bottom: 1rem;
-          font-family: var(--font-mono);
-          font-size: 0.75rem;
+        .sidebar-card {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          overflow: hidden;
+        }
+        .sidebar-header {
+          padding: 1.25rem;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          border-bottom: 1px solid var(--line);
+        }
+        .sidebar-title {
           display: flex;
           align-items: center;
           gap: 0.5rem;
-          border: 1px solid var(--line);
-          overflow: hidden;
         }
-        .breadcrumb-path {
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+        .sidebar-tools {
+          display: flex;
+          gap: 0.25rem;
+        }
+        .btn-tool {
+          padding: 0.4rem;
+          border-radius: 6px;
+          color: var(--text-muted);
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .btn-tool:hover {
+          background-color: var(--surface-subtle);
           color: var(--text);
         }
 
+        .path-bar {
+          padding: 0.5rem 1rem;
+          background-color: var(--bg);
+          font-family: var(--font-mono);
+          font-size: 0.7rem;
+          border-bottom: 1px solid var(--line);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: var(--text-muted);
+        }
+
+        .file-list-container {
+          flex: 1;
+          overflow-y: auto;
+          padding: 0.5rem;
+        }
         .file-item {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 0.6rem 0.75rem;
+          padding: 0.5rem 0.75rem;
           border-radius: 6px;
           cursor: pointer;
-          transition: all 0.15s ease;
+          transition: all 0.1s ease;
+          margin-bottom: 2px;
+        }
+        .file-item:hover { background-color: var(--surface-subtle); }
+        .file-item.active {
+          background-color: var(--accent-sky-bg);
+          color: var(--accent-sky);
+        }
+        .item-main {
+          display: flex;
+          align-items: center;
+          gap: 0.6rem;
           min-width: 0;
+          flex: 1;
         }
-        .file-item:hover {
-          background-color: var(--surface-subtle);
-        }
-        .active-item {
-          background-color: var(--accent-sky-bg) !important;
-          border-left: 3px solid var(--accent-sky);
-          border-radius: 0 6px 6px 0;
-        }
-        .file-name-text {
+        .item-icon.accent { color: var(--accent-sky); }
+        .item-icon.muted { color: var(--text-muted); }
+        .item-name-text {
           font-size: 0.85rem;
-          color: var(--text);
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
-        .active-item .file-name-text {
-          color: var(--accent-sky);
-          font-weight: 600;
-        }
+        .active .item-name-text { font-weight: 600; }
 
         .item-actions {
           display: flex;
           align-items: center;
-          gap: 0.4rem;
-          flex-shrink: 0;
-          opacity: 0.4;
-          transition: opacity 0.2s;
+          gap: 0.2rem;
+          opacity: 0;
         }
-        .file-item:hover .item-actions {
-          opacity: 1;
-        }
-        .btn-delete-item {
-          padding: 0.3rem;
+        .file-item:hover .item-actions, .btn-action.active { opacity: 1; }
+        
+        .menu-anchor { position: relative; }
+        .btn-action {
+          padding: 0.25rem;
           border-radius: 4px;
           color: var(--text-muted);
           background: transparent;
           border: none;
           cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
         }
-        .btn-delete-item:hover {
-          color: var(--accent-red);
-          background-color: var(--accent-red-bg);
-        }
-
-        .btn-icon-subtle {
-          padding: 0.4rem;
-          border-radius: 6px;
-          color: var(--text-muted);
-          background: transparent;
-          border: 1px solid transparent;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: all 0.2s;
-        }
-        .btn-icon-subtle:hover {
-          background-color: var(--surface-subtle);
-          border-color: var(--line);
+        .btn-action:hover, .btn-action.active {
+          background-color: var(--line);
           color: var(--text);
         }
 
-        .error-box {
-          color: var(--accent-red);
-          padding: 1.5rem;
-          text-align: center;
-          background-color: var(--accent-red-bg);
+        .dropdown-menu {
+          position: absolute;
+          top: 100%;
+          right: 0;
+          width: 140px;
+          background-color: var(--surface);
+          border: 1px solid var(--line);
           border-radius: 8px;
+          box-shadow: var(--shadow-lg);
+          z-index: 100;
+          padding: 0.4rem;
           display: flex;
           flex-direction: column;
-          align-items: center;
-          gap: 0.75rem;
-          margin: 1rem 0;
+          gap: 2px;
         }
-
-        .mobile-modal-overlay {
-          position: fixed;
-          top: 0; left: 0; right: 0; bottom: 0;
-          background-color: rgba(0, 0, 0, 0.7);
+        .dropdown-menu button {
           display: flex;
           align-items: center;
-          justify-content: center;
-          z-index: 1000;
-          padding: 1rem;
+          gap: 0.5rem;
+          padding: 0.4rem 0.6rem;
+          font-size: 0.8rem;
+          border: none;
+          background: transparent;
+          cursor: pointer;
+          border-radius: 4px;
+          color: var(--text);
+          text-align: left;
         }
-        .mobile-modal-content {
-          width: 100%;
+        .dropdown-menu button:hover { background-color: var(--surface-subtle); }
+        .dropdown-menu button.danger { color: var(--accent-red); }
+        .dropdown-menu button.danger:hover { background-color: var(--accent-red-bg); }
+        .menu-divider { height: 1px; background-color: var(--line); margin: 0.2rem 0; }
+
+        .main-content-card {
           height: 100%;
-          max-height: 90vh;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          padding: 0;
         }
 
-        .animate-spin {
-          animation: spin 1s linear infinite;
+        /* Editor Styles */
+        .editor-root {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          width: 100%;
         }
+        .editor-header {
+          padding: 0.75rem 1.25rem;
+          border-bottom: 1px solid var(--line);
+          background-color: var(--surface-subtle);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+        }
+        .editor-title-box { display: flex; align-items: center; gap: 0.75rem; min-width: 0; flex: 1; }
+        .editor-title-text { display: flex; flex-direction: column; min-width: 0; }
+        .file-name { font-weight: 600; font-size: 0.95rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .file-lang { font-size: 0.7rem; color: var(--text-muted); }
+        .editor-actions { display: flex; gap: 0.5rem; }
+        .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; border-radius: 6px; }
+        .xs { padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; }
+
+        .editor-viewport {
+          flex: 1;
+          display: flex;
+          overflow: hidden;
+          background-color: var(--bg);
+          position: relative;
+        }
+        .line-numbers {
+          width: 3.5rem; padding: 1.5rem 0.5rem;
+          background-color: var(--surface-subtle); border-right: 1px solid var(--line);
+          color: var(--text-muted); font-family: var(--font-mono); font-size: 0.85rem;
+          line-height: 1.5; text-align: right; user-select: none; overflow: hidden; white-space: pre;
+        }
+        .editor-container { position: relative; flex: 1; overflow: hidden; }
+        .editor-pre {
+          position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+          margin: 0; padding: 1.5rem; font-family: var(--font-mono); font-size: 0.85rem;
+          line-height: 1.5; pointer-events: none; white-space: pre; overflow: hidden;
+          background: transparent; color: var(--text); tab-size: 2; z-index: 1;
+        }
+        .editor-textarea {
+          position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+          border: none; padding: 1.5rem; font-family: var(--font-mono); font-size: 0.85rem;
+          line-height: 1.5; background: transparent; color: transparent;
+          caret-color: var(--text); resize: none; outline: none; white-space: pre;
+          overflow: auto; tab-size: 2; z-index: 2;
+        }
+        .editor-footer {
+          padding: 0.4rem 1rem; border-top: 1px solid var(--line);
+          font-size: 0.7rem; color: var(--text-muted); display: flex; justify-content: flex-end; gap: 1rem;
+          background-color: var(--surface-subtle);
+        }
+
+        .markdown-body { flex: 1; padding: 2rem; overflow: auto; background-color: var(--bg); color: var(--text); line-height: 1.6; }
+
+        .empty-state {
+          flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+          padding: 3rem; text-align: center; color: var(--text-muted); background-color: var(--bg);
+        }
+        .empty-icon-circle {
+          padding: 1.5rem; border-radius: 50%; background-color: var(--surface);
+          box-shadow: var(--shadow-md); color: var(--accent-sky); margin-bottom: 1.5rem;
+        }
+
+        .modal-overlay {
+          position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+          background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 2000;
+        }
+        .action-modal { width: 100%; max-width: 400px; padding: 0 !important; }
+        .modal-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+        .modal-body { padding: 1.25rem; }
+        .modal-label { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem; }
+        .modal-footer { padding: 1rem 1.25rem; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 0.5rem; }
+        .btn-close { background: transparent; border: none; color: var(--text-muted); cursor: pointer; }
+
+        .mobile-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; }
+        .mobile-modal-content { width: 100%; height: 100%; max-height: 90vh; }
+
+        .animate-spin { animation: spin 1s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-
-        /* Markdown Styling */
-        .markdown-body :global(h1), .markdown-body :global(h2) { border-bottom: 1px solid var(--line); padding-bottom: 0.3em; margin-top: 1.5em; margin-bottom: 1rem; }
-        .markdown-body :global(code) { background-color: var(--surface-subtle); padding: 0.2em 0.4em; border-radius: 3px; font-family: monospace; }
-        .markdown-body :global(pre) { background-color: var(--surface-subtle); padding: 1rem; border-radius: 6px; overflow: auto; }
-        .markdown-body :global(blockquote) { border-left: 4px solid var(--line); padding-left: 1rem; color: var(--text-muted); margin: 1rem 0; }
-        .markdown-body :global(table) { border-collapse: collapse; width: 100%; margin: 1rem 0; }
-        .markdown-body :global(th), .markdown-body :global(td) { border: 1px solid var(--line); padding: 0.5rem; }
-
-        /* Prism Theme Customization */
-        :global(.token.comment) { color: #6a737d; font-style: italic; }
-        :global(.token.punctuation) { color: var(--text-muted); }
-        :global(.token.keyword) { color: var(--accent-violet); }
-        :global(.token.string) { color: #9ece6a; }
-        :global(.token.function) { color: #7aa2f7; }
-        :global(.token.operator) { color: var(--accent-sky); }
       `}</style>
     </div>
   );
