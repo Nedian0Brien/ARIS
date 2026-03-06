@@ -1,6 +1,14 @@
 import type { NextConfig } from 'next';
 
+const dockerFastBuild = process.env.DOCKER_FAST_BUILD === '1';
+
 const nextConfig: NextConfig = {
+  eslint: {
+    ignoreDuringBuilds: dockerFastBuild,
+  },
+  typescript: {
+    ignoreBuildErrors: dockerFastBuild,
+  },
   compiler: {
     styledComponents: true, // For general styled-component support
   },

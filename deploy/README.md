@@ -46,6 +46,7 @@ pm2 restart aris-backend --update-env
 - Deploy only `aris-web` with `up -d --no-deps` (faster than full stack rebuild)
 - Skip rebuild automatically when `services/aris-web` build context is unchanged (`SKIP_BUILD_IF_UNCHANGED=1`)
 - Cleanup policy: `PRUNE_MODE=light`, but cleanup runs asynchronously (`PRUNE_ASYNC=1`) so deploy returns faster
+- `aris-web` Docker build uses fast mode by default (`DOCKER_FAST_BUILD=1`): Next.js lint/type-check 단계는 CI에서 검증하고 Docker build에서는 생략
   - `docker image prune -f` (dangling image only)
   - `docker buildx prune -f --keep-storage 8gb` (build cache 상한 유지, fallback: `docker builder prune`)
 
@@ -56,6 +57,7 @@ PRUNE_MODE=aggressive CACHE_UNTIL=72h ./deploy/deploy_web.sh
 PULL_BASE=1 ./deploy/deploy_web.sh
 SKIP_BUILD_IF_UNCHANGED=0 ./deploy/deploy_web.sh
 PRUNE_ASYNC=0 ./deploy/deploy_web.sh
+docker compose --env-file deploy/.env build --build-arg DOCKER_FAST_BUILD=0 aris-web
 ```
 
 Access web UI:
