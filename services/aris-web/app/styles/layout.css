@@ -26,9 +26,8 @@
   .app-shell-immersive {
     height: auto;
     min-height: var(--app-vh, 100dvh);
-    overflow-y: auto;
+    overflow: visible;
     overflow-x: clip;
-    -webkit-overflow-scrolling: touch;
   }
 }
 

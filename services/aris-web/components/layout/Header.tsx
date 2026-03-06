@@ -39,8 +39,12 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
       return;
     }
 
-    const getScrollY = () =>
-      Math.max(window.scrollY || 0, document.documentElement.scrollTop || 0, document.body.scrollTop || 0);
+    const scrollContainer = document.querySelector('.app-shell-immersive') as HTMLElement | null;
+    const getScrollY = () => {
+      const windowScrollY = Math.max(window.scrollY || 0, document.documentElement.scrollTop || 0, document.body.scrollTop || 0);
+      const containerScrollY = scrollContainer?.scrollTop ?? 0;
+      return Math.max(windowScrollY, containerScrollY);
+    };
 
     const mobileQuery = window.matchMedia('(max-width: 960px)');
     let lastScrollY = getScrollY();
@@ -76,7 +80,10 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
     };
 
     window.addEventListener('scroll', onScroll, { passive: true });
+    scrollContainer?.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onViewportChange, { passive: true });
+    window.visualViewport?.addEventListener('scroll', onScroll, { passive: true } as EventListenerOptions);
+    window.visualViewport?.addEventListener('resize', onViewportChange, { passive: true } as EventListenerOptions);
     if (typeof mobileQuery.addEventListener === 'function') {
       mobileQuery.addEventListener('change', onViewportChange);
     } else {
@@ -85,7 +92,10 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
 
     return () => {
       window.removeEventListener('scroll', onScroll);
+      scrollContainer?.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onViewportChange);
+      window.visualViewport?.removeEventListener('scroll', onScroll);
+      window.visualViewport?.removeEventListener('resize', onViewportChange);
       if (typeof mobileQuery.removeEventListener === 'function') {
         mobileQuery.removeEventListener('change', onViewportChange);
       } else {

@@ -1089,10 +1089,13 @@ export function ChatInterface({
 
   const scrollConversationToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     if (isMobileLayout) {
-      const top = Math.max(
-        document.documentElement.scrollHeight,
-        document.body.scrollHeight,
-      );
+      const scrollContainer = document.querySelector('.app-shell-immersive') as HTMLElement | null;
+      if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
+        scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior });
+        return;
+      }
+
+      const top = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
       window.scrollTo({ top, behavior });
       return;
     }
@@ -1151,13 +1154,26 @@ export function ChatInterface({
       return;
     }
 
-    mobileScrollYRef.current = getWindowScrollTop();
-    shouldStickToBottomRef.current = isNearWindowBottom();
+    const scrollContainer = document.querySelector('.app-shell-immersive') as HTMLElement | null;
+    const getCurrentScrollY = () => {
+      const windowScrollY = getWindowScrollTop();
+      const containerScrollY = scrollContainer?.scrollTop ?? 0;
+      return Math.max(windowScrollY, containerScrollY);
+    };
+    const isNearMobileBottom = () => {
+      if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
+        return isNearBottom(scrollContainer);
+      }
+      return isNearWindowBottom();
+    };
+
+    mobileScrollYRef.current = getCurrentScrollY();
+    shouldStickToBottomRef.current = isNearMobileBottom();
 
     let scrollRaf: number | null = null;
     const updateFromScroll = () => {
       scrollRaf = null;
-      const currentY = getWindowScrollTop();
+      const currentY = getCurrentScrollY();
       const delta = currentY - mobileScrollYRef.current;
 
       if (currentY < 28) {
@@ -1168,7 +1184,7 @@ export function ChatInterface({
         setIsCenterHeaderHidden(false);
       }
 
-      shouldStickToBottomRef.current = isNearWindowBottom();
+      shouldStickToBottomRef.current = isNearMobileBottom();
       mobileScrollYRef.current = currentY;
     };
 
@@ -1180,11 +1196,13 @@ export function ChatInterface({
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
+    scrollContainer?.addEventListener('scroll', handleScroll, { passive: true });
     window.visualViewport?.addEventListener('scroll', handleScroll, { passive: true } as EventListenerOptions);
     window.visualViewport?.addEventListener('resize', handleScroll, { passive: true } as EventListenerOptions);
 
     return () => {
       window.removeEventListener('scroll', handleScroll);
+      scrollContainer?.removeEventListener('scroll', handleScroll);
       window.visualViewport?.removeEventListener('scroll', handleScroll);
       window.visualViewport?.removeEventListener('resize', handleScroll);
       if (scrollRaf !== null) {
