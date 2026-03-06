@@ -56,17 +56,23 @@ PULL_BASE=1 ./deploy/deploy_web.sh
 SKIP_BUILD_IF_UNCHANGED=0 ./deploy/deploy_web.sh
 ```
 
+중요 운영 원칙
+- 웹 배포는 `./deploy/deploy_web.sh` 또는 `./deploy/deploy_zero_downtime.sh`만 사용한다.
+- `docker compose ... up -d --build aris-web`는 레거시 단일 슬롯(`3300`)만 갱신하므로, 무중단 슬롯 라우팅 환경에서는 "배포했는데 반영 안 됨" 현상의 원인이 된다.
+
 ## 3. 배포 후 즉시 헬스체크
 ```bash
 docker compose --env-file deploy/.env ps aris-web-blue aris-web-green
 docker compose --env-file deploy/.env logs --tail=120 aris-web-blue aris-web-green
 pm2 logs aris-backend --lines 120 --nostream
 curl -sS http://127.0.0.1:4080/health
+cat deploy/.state/aris-web.active-slot
+sudo cat /etc/nginx/snippets/aris-web-upstream.conf
 ```
 
 예상 동작
 - 활성 슬롯 컨테이너가 `healthy` 상태
-- 웹이 `http://localhost:3300`에서 응답
+- `deploy/.state/aris-web.active-slot` 값과 nginx upstream 포트가 같은 슬롯을 가리킴
 - 백엔드가 `POST /v1/sessions` 등 인증된 경로에서 401/200 정책을 준수
 
 ## 4. 런타임 인증 연동 검증(권장)
@@ -100,11 +106,17 @@ curl -sS http://127.0.0.1:4080/health
 ### B. 배포했는데 반영이 안 된 것처럼 보임
 1. 브라우저에서 강제 새로고침(Ctrl/Cmd + Shift + R)
 2. 시크릿 창에서 재확인
-3. 프록시(Caddy/nginx) 캐시 또는 서비스워커 캐시 존재 여부 확인
-4. 실제 실행 컨테이너가 새 이미지인지 확인
+3. 활성 슬롯과 nginx 업스트림이 일치하는지 확인
+   - `cat deploy/.state/aris-web.active-slot`
+   - `sudo cat /etc/nginx/snippets/aris-web-upstream.conf`
+4. 레거시 `aris-web` 컨테이너가 실행 중인지 확인
+   - `docker compose --env-file deploy/.env ps aris-web`
+5. 실제 실행 컨테이너가 새 이미지인지 확인
    - `docker image ls | rg aris-stack-aris-web`
    - `docker ps --filter name=aris-stack-aris-web-blue`
    - `docker ps --filter name=aris-stack-aris-web-green`
+6. 필요 시 슬롯 재배포로 라우팅/컨테이너 상태를 정렬
+   - `STOP_LEGACY_WEB=1 ./deploy/deploy_web.sh`
 
 ### C. 세션이 비어 있는데 더미 데이터가 노출되는 것처럼 보임
 - 현재 코드는 백엔드 세션 응답에 의존한다.
@@ -129,7 +141,13 @@ docker system df -v                                              # 디스크 사
 - `git` 배포 커밋/브랜치 확정
 - 토큰 동기화 완료
 - `pm2` 백엔드 프로세스 정상
-- `aris-web` 컨테이너 `healthy`
+- 활성 슬롯 컨테이너 `healthy`
+- `active-slot` 파일과 nginx upstream 포트 일치
 - `check-runtime-connection.sh` 통과
 - `http://localhost:3300` 로그인 후 세션 목록/첫 진입 화면 확인
 - 운영자 계정 로그인/권한 동작 확인
+
+## 8. 리소스 영향(무중단 기준)
+- 웹(blue/green): 배포 중 짧은 구간에만 슬롯 2개가 동시에 떠서 웹 메모리 사용량이 일시적으로 증가한다.
+- 백엔드(PM2 cluster): `ARIS_BACKEND_INSTANCES=2` 이상이면 상시 다중 워커 메모리를 사용한다.
+- 권장: 운영 메모리 계획은 "평시 + 웹 배포 중 추가 슬롯 + 백엔드 추가 워커"를 합산해 잡는다.

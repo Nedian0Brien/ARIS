@@ -48,6 +48,10 @@ pm2 start deploy/ecosystem.config.cjs --env production
 - Drain a short period (`WEB_DRAIN_SECONDS`) and stop the previous slot.
 - Stop legacy single-slot `aris-web` container by default (`STOP_LEGACY_WEB=1`).
 
+Important operational rule:
+- Use `./deploy/deploy_web.sh` (or `./deploy/deploy_zero_downtime.sh`) as the only web deploy entrypoint.
+- Do not deploy web with `docker compose ... up -d --build aris-web` in zero-downtime mode. That updates the legacy single-slot service, while nginx may still route to blue/green slot ports.
+
 Useful overrides:
 ```bash
 WEB_DRAIN_SECONDS=12 ./deploy/deploy_web.sh
@@ -62,12 +66,31 @@ Access web UI:
 - Blue slot port: `WEB_BLUE_PORT` (default `3301`)
 - Green slot port: `WEB_GREEN_PORT` (default `3302`)
 
+Route/slot verification after deploy:
+```bash
+cat deploy/.state/aris-web.active-slot
+sudo cat /etc/nginx/snippets/aris-web-upstream.conf
+docker compose --env-file deploy/.env ps aris-web-blue aris-web-green aris-web
+```
+
+If latest code is not reflected:
+```bash
+# Re-run blue/green deploy and stop legacy service
+STOP_LEGACY_WEB=1 ./deploy/deploy_web.sh
+```
+
 ### 2.3 Backend (PM2 zero-downtime reload)
 ```bash
 ./deploy/deploy_backend_zero_downtime.sh
 ```
 
 `deploy/ecosystem.config.cjs` runs `aris-backend` in PM2 cluster mode so `pm2 reload` performs graceful worker replacement.
+For strict no-downtime behavior, run with at least 2 workers:
+```bash
+# deploy/.env
+ARIS_BACKEND_INSTANCES=2
+```
+With `ARIS_BACKEND_INSTANCES=1` (default), reload is graceful but brief connection drops are still possible during process replacement.
 
 ### 2.4 Full zero-downtime deploy (backend + web)
 ```bash
