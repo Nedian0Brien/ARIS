@@ -45,6 +45,7 @@ const PATH_HISTORY_STORAGE_KEY = 'aris:new-session-path-history';
 const MAX_PATH_HISTORY_ITEMS = 8;
 const FALLBACK_DATE_ISO = '1970-01-01T00:00:00.000Z';
 const SERVER_METRICS_POLL_INTERVAL_MS = 10_000;
+const SESSION_STATUS_POLL_INTERVAL_MS = 4_000;
 
 type ServerMetric = {
   percent: number;
@@ -289,6 +290,59 @@ export function SessionDashboard({
       return next;
     });
   }, [sessionsList]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    let inFlight = false;
+
+    const fetchSessionsSnapshot = async () => {
+      if (isCancelled || inFlight) {
+        return;
+      }
+      inFlight = true;
+      try {
+        const response = await fetch('/api/runtime/sessions', { cache: 'no-store' });
+        const body = (await response.json().catch(() => ({}))) as {
+          sessions?: SessionSummary[];
+          error?: string;
+        };
+        if (!response.ok || !Array.isArray(body.sessions)) {
+          throw new Error(body.error ?? 'Failed to refresh sessions');
+        }
+
+        if (!isCancelled) {
+          setSessionsList(body.sessions);
+
+          const pins = new Set<string>();
+          const aliases: Record<string, string> = {};
+          body.sessions.forEach((session) => {
+            if (session.isPinned) {
+              pins.add(session.id);
+            }
+            if (typeof session.alias === 'string' && session.alias.trim()) {
+              aliases[session.id] = session.alias;
+            }
+          });
+          setPinnedSessions(pins);
+          setSessionAliases(aliases);
+        }
+      } catch {
+        // Keep current snapshot when sync fails; a later poll will recover.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void fetchSessionsSnapshot();
+    const timerId = window.setInterval(() => {
+      void fetchSessionsSnapshot();
+    }, SESSION_STATUS_POLL_INTERVAL_MS);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(timerId);
+    };
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -1025,8 +1079,8 @@ export function SessionDashboard({
     ? activeAgentDistribution
     : [{ name: '없음', value: 1, color: '#e2e8f0' }];
 
-  // 대기 중인 세션 및 완료된 세션 필터링
-  const waitingSessions = useMemo(() => sessionsList.filter(s => s.status === 'unknown'), [sessionsList]);
+  // 진행 중인 세션 및 완료된 세션 필터링
+  const runningSessions = useMemo(() => sessionsList.filter(s => s.status === 'running'), [sessionsList]);
   const completedSessions = useMemo(() => sessionsList.filter(s => s.status === 'stopped' || s.status === 'error'), [sessionsList]);
 
   return (
@@ -1179,7 +1233,7 @@ export function SessionDashboard({
                         />
                         <div 
                           className={`${styles.sessionBarSegment} ${styles.sessionBarRunning}`} 
-                          style={{ width: `${(sessionStats.running / sessionStats.total) * 100}%` }}
+                          style={{ width: `${(sessionStats.running / sessionStats.total) * 100}%`, backgroundColor: '#3b82f6' }}
                         />
                         <div 
                           className={`${styles.sessionBarSegment} ${styles.sessionBarPending}`} 
@@ -1187,7 +1241,7 @@ export function SessionDashboard({
                         />
                         <div 
                           className={`${styles.sessionBarSegment} ${styles.sessionBarCompleted}`} 
-                          style={{ width: `${(sessionStats.completed / sessionStats.total) * 100}%` }}
+                          style={{ width: `${(sessionStats.completed / sessionStats.total) * 100}%`, backgroundColor: '#10b981' }}
                         />
                       </>
                     ) : (
@@ -1201,7 +1255,7 @@ export function SessionDashboard({
                       <strong>{sessionStats.idle}</strong>
                     </div>
                     <div className={styles.sessionSummaryLegendItem}>
-                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#10b981' }}></span>
+                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#3b82f6' }}></span>
                       <span>실행중</span>
                       <strong>{sessionStats.running}</strong>
                     </div>
@@ -1211,7 +1265,7 @@ export function SessionDashboard({
                       <strong>{sessionStats.pending}</strong>
                     </div>
                     <div className={styles.sessionSummaryLegendItem}>
-                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#3b82f6' }}></span>
+                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#10b981' }}></span>
                       <span>완료</span>
                       <strong>{sessionStats.completed}</strong>
                     </div>
@@ -1220,12 +1274,12 @@ export function SessionDashboard({
                   {/* 세션 리스트 섹션 */}
                   <div className={styles.sessionStatusLists}>
                     <div className={styles.sessionStatusSubSection}>
-                      <h4 className={styles.sessionStatusSubTitle}>대기 중인 세션</h4>
-                      {waitingSessions.length > 0 ? (
+                      <h4 className={styles.sessionStatusSubTitle}>진행 중인 세션</h4>
+                      {runningSessions.length > 0 ? (
                         <div className={styles.sessionMiniList}>
-                          {waitingSessions.slice(0, 3).map(s => (
+                          {runningSessions.slice(0, 3).map(s => (
                             <div key={s.id} className={styles.sessionMiniItem}>
-                              <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: '#f59e0b' }}></span>
+                              <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: '#3b82f6' }}></span>
                               <span className={styles.sessionMiniName}>{sessionAliases[s.id] || extractLastDirectoryName(s.projectName)}</span>
                             </div>
                           ))}
@@ -1238,7 +1292,7 @@ export function SessionDashboard({
                         <div className={styles.sessionMiniList}>
                           {completedSessions.slice(0, 3).map(s => (
                             <div key={s.id} className={styles.sessionMiniItem}>
-                              <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: '#3b82f6' }}></span>
+                              <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: '#10b981' }}></span>
                               <span className={styles.sessionMiniName}>{sessionAliases[s.id] || extractLastDirectoryName(s.projectName)}</span>
                             </div>
                           ))}
