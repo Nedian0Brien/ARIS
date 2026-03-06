@@ -9,6 +9,7 @@ import { Card } from '@/components/ui';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import { Construction } from 'lucide-react';
 import { FileExplorer } from '@/components/files/FileExplorer';
+import { ConsoleTab } from './ConsoleTab';
 import type { AuthenticatedUser } from '@/lib/auth/types';
 import type { SessionSummary } from '@/lib/happy/types';
 
@@ -36,19 +37,7 @@ export default function HomePageWrapper({
       case 'sessions':
         return <SessionDashboard initialSessions={initialSessions} isOperator={user.role === 'operator'} />;
       case 'console':
-        return (
-          <div className="animate-in" style={{ padding: '2rem 0' }}>
-            <Card style={{ padding: '4rem 2rem', textAlign: 'center' }}>
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem', color: 'var(--accent-amber)' }}>
-                <Construction size={64} strokeWidth={1.5} />
-              </div>
-              <h2 className="title-md">콘솔 (Console) - 준비 중</h2>
-              <p className="text-muted" style={{ marginTop: '1rem', maxWidth: '500px', margin: '1rem auto', fontSize: '0.875rem' }}>
-                에이전트가 실행 중인 런타임의 실시간 로그를 확인하고 직접 명령어를 입력할 수 있는 터미널 인터페이스입니다.
-              </p>
-            </Card>
-          </div>
-        );
+        return <ConsoleTab user={user} initialSessions={initialSessions} />;
       case 'files':
         return <FileExplorer />;
       case 'settings':
