@@ -1,12 +1,23 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   Folder, FolderOpen, File, ChevronRight, ArrowUpCircle, 
   Loader2, FolderPlus, FilePlus, Trash2, X, Save, AlertCircle,
   Code
 } from 'lucide-react';
 import { Card } from '@/components/ui';
+import Prism from 'prismjs';
+
+// Import Prism languages
+import 'prismjs/components/prism-typescript';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-python';
+import 'prismjs/components/prism-bash';
+import 'prismjs/components/prism-markdown';
+import 'prismjs/components/prism-css';
+import 'prismjs/components/prism-markup';
 
 interface FileItem {
   name: string;
@@ -36,6 +47,7 @@ export function FileExplorer() {
   // Refs for IDE features
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
+  const preRef = useRef<HTMLPreElement>(null);
 
   const fetchDirectory = useCallback(async (path: string) => {
     setLoading(true);
@@ -199,6 +211,10 @@ export function FileExplorer() {
     if (lineNumbersRef.current) {
       lineNumbersRef.current.scrollTop = e.currentTarget.scrollTop;
     }
+    if (preRef.current) {
+      preRef.current.scrollTop = e.currentTarget.scrollTop;
+      preRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    }
   };
 
   const getLineNumbers = () => {
@@ -207,19 +223,47 @@ export function FileExplorer() {
     return Array.from({ length: lines }, (_, i) => i + 1).join('\n');
   };
 
-  const getLanguage = (fileName: string) => {
+  const getLanguage = useCallback((fileName: string) => {
     const ext = fileName.split('.').pop()?.toLowerCase();
     switch (ext) {
-      case 'ts': case 'tsx': return 'TypeScript';
-      case 'js': case 'jsx': return 'JavaScript';
-      case 'css': return 'CSS';
-      case 'html': return 'HTML';
-      case 'json': return 'JSON';
-      case 'md': return 'Markdown';
-      case 'py': return 'Python';
-      case 'sh': return 'Shell';
-      default: return 'Text';
+      case 'ts': case 'tsx': return 'typescript';
+      case 'js': case 'jsx': return 'javascript';
+      case 'css': return 'css';
+      case 'html': return 'markup';
+      case 'json': return 'json';
+      case 'md': return 'markdown';
+      case 'py': return 'python';
+      case 'sh': return 'bash';
+      default: return 'text';
     }
+  }, []);
+
+  const highlightedContent = useMemo(() => {
+    if (!editingFile) return '';
+    const lang = getLanguage(editingFile.name);
+    if (lang === 'text' || !Prism.languages[lang]) {
+      return editingFile.content
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+    return Prism.highlight(editingFile.content, Prism.languages[lang], lang);
+  }, [editingFile, getLanguage]);
+
+  const displayLanguageName = (fileName: string) => {
+    const lang = getLanguage(fileName);
+    const map: Record<string, string> = {
+      'typescript': 'TypeScript',
+      'javascript': 'JavaScript',
+      'css': 'CSS',
+      'markup': 'HTML',
+      'json': 'JSON',
+      'markdown': 'Markdown',
+      'python': 'Python',
+      'bash': 'Shell',
+      'text': 'Text'
+    };
+    return map[lang] || 'Text';
   };
 
   return (
@@ -406,7 +450,7 @@ export function FileExplorer() {
                 <Code size={20} style={{ color: 'var(--accent-sky)' }} />
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{editingFile.name}</span>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>{getLanguage(editingFile.name)}</span>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>{displayLanguageName(editingFile.name)}</span>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '0.6rem' }}>
@@ -457,30 +501,64 @@ export function FileExplorer() {
                 {getLineNumbers()}
               </div>
 
-              {/* Textarea Editor */}
-              <textarea
-                ref={textareaRef}
-                value={editingFile.content}
-                onChange={(e) => setEditingFile({ ...editingFile, content: e.target.value })}
-                onKeyDown={handleEditorKeyDown}
-                onScroll={handleEditorScroll}
-                style={{
-                  flex: 1,
-                  border: 'none',
-                  padding: '1.5rem',
-                  fontFamily: 'monospace',
-                  fontSize: '0.85rem',
-                  lineHeight: '1.5',
-                  backgroundColor: 'transparent',
-                  color: 'var(--text-primary)',
-                  resize: 'none',
-                  outline: 'none',
-                  whiteSpace: 'pre',
-                  overflow: 'auto',
-                  tabSize: 2
-                }}
-                spellCheck={false}
-              />
+              {/* Layered Editor Container */}
+              <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+                {/* Syntax Highlighted Layer */}
+                <pre
+                  ref={preRef}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    margin: 0,
+                    padding: '1.5rem',
+                    fontFamily: 'monospace',
+                    fontSize: '0.85rem',
+                    lineHeight: '1.5',
+                    pointerEvents: 'none',
+                    whiteSpace: 'pre',
+                    overflow: 'hidden',
+                    backgroundColor: 'transparent',
+                    color: 'var(--text-primary)',
+                    tabSize: 2,
+                    zIndex: 1
+                  }}
+                  dangerouslySetInnerHTML={{ __html: highlightedContent + '\n' }}
+                />
+
+                {/* Transparent Textarea Layer */}
+                <textarea
+                  ref={textareaRef}
+                  value={editingFile.content}
+                  onChange={(e) => setEditingFile({ ...editingFile, content: e.target.value })}
+                  onKeyDown={handleEditorKeyDown}
+                  onScroll={handleEditorScroll}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    border: 'none',
+                    padding: '1.5rem',
+                    fontFamily: 'monospace',
+                    fontSize: '0.85rem',
+                    lineHeight: '1.5',
+                    backgroundColor: 'transparent',
+                    color: 'transparent',
+                    caretColor: 'var(--text-primary)',
+                    resize: 'none',
+                    outline: 'none',
+                    whiteSpace: 'pre',
+                    overflow: 'auto',
+                    tabSize: 2,
+                    zIndex: 2
+                  }}
+                  spellCheck={false}
+                />
+              </div>
             </div>
             
             <div style={{ 
@@ -529,6 +607,40 @@ export function FileExplorer() {
         textarea::-webkit-scrollbar-thumb:hover {
           background: var(--text-tertiary);
         }
+
+        /* Prism Theme Customization */
+        :global(.token.comment),
+        :global(.token.prolog),
+        :global(.token.doctype),
+        :global(.token.cdata) { color: #6a737d; font-style: italic; }
+        :global(.token.punctuation) { color: var(--text-secondary); }
+        :global(.token.namespace) { opacity: .7; }
+        :global(.token.property),
+        :global(.token.tag),
+        :global(.token.boolean),
+        :global(.token.number),
+        :global(.token.constant),
+        :global(.token.symbol),
+        :global(.token.deleted) { color: var(--accent-amber); }
+        :global(.token.selector),
+        :global(.token.attr-name),
+        :global(.token.string),
+        :global(.token.char),
+        :global(.token.builtin),
+        :global(.token.inserted) { color: #9ece6a; }
+        :global(.token.operator),
+        :global(.token.entity),
+        :global(.token.url),
+        :global(.language-css .token.string),
+        :global(.style .token.string) { color: var(--accent-sky); }
+        :global(.token.atrule),
+        :global(.token.attr-value),
+        :global(.token.keyword) { color: var(--accent-violet); }
+        :global(.token.function),
+        :global(.token.class-name) { color: #7aa2f7; }
+        :global(.token.regex),
+        :global(.token.important),
+        :global(.token.variable) { color: var(--accent-amber); }
       `}</style>
     </div>
   );
