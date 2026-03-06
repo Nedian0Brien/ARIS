@@ -128,7 +128,7 @@ function classifyPath(pathValue: string): ResourceLabel | null {
 }
 
 const EVENT_KIND_META: Record<UiEventKind, { label: string; tone: Tone; Icon: React.ComponentType<{ size?: number }> }> = {
-  text_reply: { label: 'TEXT', tone: 'sky', Icon: MessageSquareText },
+  text_reply: { label: '', tone: 'sky', Icon: MessageSquareText },
   run_execution: { label: 'RUN', tone: 'amber', Icon: TerminalSquare },
   exec_execution: { label: 'EXEC', tone: 'red', Icon: TerminalSquare },
   git_execution: { label: 'GIT', tone: 'git', Icon: GitLogoIcon },
@@ -1852,12 +1852,14 @@ export function ChatInterface({
                         <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
                       </div>
                       <div className={`${styles.messageBubble} ${styles.messageBubbleAgent}`}>
-                        <div className={styles.messageKindRow}>
-                          <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
-                            <KindIcon size={14} />
-                            {kindMeta.label}
-                          </span>
-                        </div>
+                        {kindMeta.label ? (
+                          <div className={styles.messageKindRow}>
+                            <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
+                              <KindIcon size={14} />
+                              {kindMeta.label}
+                            </span>
+                          </div>
+                        ) : null}
                         {renderEventPayload(event, false, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id))}
                       </div>
                     </div>
@@ -1973,14 +1975,17 @@ export function ChatInterface({
               const userEvent = isUserEvent(event);
               const kindMeta = EVENT_KIND_META[event.kind] ?? EVENT_KIND_META.unknown;
               const KindIcon = kindMeta.Icon;
+              const miniKindLabel = userEvent ? 'YOU' : kindMeta.label;
               return (
                 <div key={event.id} className={styles.miniItem}>
                   <span className={styles.miniTime}>{formatClock(event.timestamp)}</span>
                   <span className={styles.miniEventRow}>
-                    <span className={`${styles.miniKindChip} ${TONE_CLASS[kindMeta.tone]}`}>
-                      <KindIcon size={11} />
-                      {userEvent ? 'YOU' : kindMeta.label}
-                    </span>
+                    {miniKindLabel ? (
+                      <span className={`${styles.miniKindChip} ${TONE_CLASS[kindMeta.tone]}`}>
+                        <KindIcon size={11} />
+                        {miniKindLabel}
+                      </span>
+                    ) : null}
                     <span className={styles.miniText}>{resolveRecentSummary(event)}</span>
                   </span>
                 </div>
