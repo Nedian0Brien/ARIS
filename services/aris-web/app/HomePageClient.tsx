@@ -54,7 +54,7 @@ export default function HomePageWrapper({
         activeTab={activeTab} 
         onTabChange={setActiveTab} 
       />
-      <main className="main container">
+      <main className={`main ${activeTab === 'console' ? 'console-main' : 'container'}`}>
         {runtimeError && <BackendNotice message={runtimeError} />}
         {renderContent()}
       </main>

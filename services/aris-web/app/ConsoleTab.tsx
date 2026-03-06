@@ -85,8 +85,11 @@ export function ConsoleTab({ user, initialSessions }: Props) {
     term.loadAddon(webLinksAddon);
     term.open(containerRef.current);
 
-    // 렌더 후 fit
-    requestAnimationFrame(() => fitAddon.fit());
+    // 렌더 후 fit (initial paint + delayed re-fit for desktop layout stabilization)
+    requestAnimationFrame(() => {
+      fitAddon.fit();
+      setTimeout(() => fitAddon.fit(), 60);
+    });
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;
