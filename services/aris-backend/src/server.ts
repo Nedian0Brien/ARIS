@@ -16,6 +16,7 @@ type ServerConfig = {
 const createSessionSchema = z.object({
   path: z.string().min(1),
   flavor: z.enum(['codex', 'claude', 'gemini', 'unknown']),
+  approvalPolicy: z.enum(['on-request', 'on-failure', 'never', 'yolo']).optional(),
   status: z.enum(['running', 'idle', 'stopped', 'error', 'unknown']).optional(),
   riskScore: z.number().int().min(0).max(100).optional(),
 });
@@ -121,6 +122,19 @@ export function buildServer(config: ServerConfig) {
       }
 
       return { result: { sessionId, action: parsed.data.action, ...result } };
+    } catch (error) {
+      if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
+        return reply.code(404).send({ error: 'Session not found' });
+      }
+      throw error;
+    }
+  });
+
+  app.get('/v1/sessions/:sessionId/runtime', async (request, reply) => {
+    const { sessionId } = request.params as { sessionId: string };
+    try {
+      const isRunning = await store.isSessionRunning(sessionId);
+      return { sessionId, isRunning };
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
         return reply.code(404).send({ error: 'Session not found' });

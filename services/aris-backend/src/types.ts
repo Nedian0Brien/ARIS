@@ -1,5 +1,6 @@
 export type AgentFlavor = 'codex' | 'claude' | 'gemini' | 'unknown';
 export type SessionStatus = 'running' | 'idle' | 'stopped' | 'error' | 'unknown';
+export type ApprovalPolicy = 'on-request' | 'on-failure' | 'never' | 'yolo';
 export type PermissionRisk = 'low' | 'medium' | 'high';
 export type PermissionState = 'pending' | 'approved' | 'denied';
 export type PermissionDecision = 'allow_once' | 'allow_session' | 'deny';
@@ -10,6 +11,7 @@ export type RuntimeSession = {
   metadata: {
     flavor: AgentFlavor;
     path: string;
+    approvalPolicy: ApprovalPolicy;
   };
   state: {
     status: SessionStatus;

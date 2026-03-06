@@ -2,6 +2,7 @@ import { env } from '@/lib/config';
 import { prisma } from '@/lib/db/prisma';
 import { normalizeEvents, normalizeSessionDetail, normalizeSessions } from '@/lib/happy/normalizer';
 import type {
+  ApprovalPolicy,
   PermissionDecision,
   PermissionRequest,
   SessionAction,
@@ -128,12 +129,14 @@ export async function listSessions(userId?: string): Promise<SessionSummary[]> {
 export async function createSession(input: {
   path: string;
   agent: SessionSummary['agent'];
+  approvalPolicy?: ApprovalPolicy;
 }): Promise<SessionSummary> {
   const raw = await fetchHappy('/v1/sessions', {
     method: 'POST',
     body: JSON.stringify({
       path: input.path,
       flavor: input.agent,
+      approvalPolicy: input.approvalPolicy ?? 'on-request',
     }),
   });
 
@@ -243,6 +246,15 @@ export async function decidePermissionRequest(input: {
   return {
     id: input.permissionId,
     state: input.decision === 'deny' ? 'denied' : 'approved',
+  };
+}
+
+export async function getSessionRuntimeState(sessionId: string): Promise<{ sessionId: string; isRunning: boolean }> {
+  const raw = await fetchHappy(`/v1/sessions/${encodeURIComponent(sessionId)}/runtime`);
+  const obj = asObject(raw);
+  return {
+    sessionId: String(obj?.sessionId ?? sessionId),
+    isRunning: Boolean(obj?.isRunning),
   };
 }
 

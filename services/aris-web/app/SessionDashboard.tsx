@@ -10,7 +10,7 @@ import {
   MoreVertical, Activity, Pin, Edit2, RotateCw, Square, Trash2, HardDrive
 } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
-import type { SessionSummary } from '@/lib/happy/types';
+import type { ApprovalPolicy, SessionSummary } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import styles from './SessionDashboard.module.css';
@@ -20,9 +20,12 @@ type AgentFlavor = 'claude' | 'codex' | 'gemini';
 type PathHistoryEntry = {
   path: string;
   agent: AgentFlavor;
+  approvalPolicy: ApprovalPolicy;
   lastUsedAt: string;
   sessionId?: string;
 };
+
+type SessionApprovalPolicy = ApprovalPolicy;
 
 type AgentOption = {
   id: AgentFlavor;
@@ -83,12 +86,47 @@ const AGENT_OPTIONS: AgentOption[] = [
   },
 ];
 
+const APPROVAL_POLICY_OPTIONS: Array<{
+  id: SessionApprovalPolicy;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: 'on-request',
+    label: 'On Request',
+    description: '권한이 필요할 때마다 승인 요청',
+  },
+  {
+    id: 'on-failure',
+    label: 'On Failure',
+    description: '실패 시 승인 요청으로 전환',
+  },
+  {
+    id: 'never',
+    label: 'Never',
+    description: '승인 요청 없이 가능한 작업만 수행',
+  },
+  {
+    id: 'yolo',
+    label: 'YOLO',
+    description: '권한 요청을 자동 허용 (고위험)',
+  },
+];
+
 function isAgentFlavor(value: unknown): value is AgentFlavor {
   return value === 'claude' || value === 'codex' || value === 'gemini';
 }
 
 function resolveAgent(value: unknown): AgentFlavor {
   return isAgentFlavor(value) ? value : 'claude';
+}
+
+function isSessionApprovalPolicy(value: unknown): value is SessionApprovalPolicy {
+  return value === 'on-request' || value === 'on-failure' || value === 'never' || value === 'yolo';
+}
+
+function resolveSessionApprovalPolicy(value: unknown): SessionApprovalPolicy {
+  return isSessionApprovalPolicy(value) ? value : 'on-request';
 }
 
 function getAgentOption(value: unknown): AgentOption {
@@ -186,6 +224,7 @@ export function SessionDashboard({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newPath, setNewPath] = useState('');
   const [newAgent, setNewAgent] = useState<AgentFlavor>('claude');
+  const [newApprovalPolicy, setNewApprovalPolicy] = useState<SessionApprovalPolicy>('on-request');
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -262,6 +301,7 @@ export function SessionDashboard({
           setPathHistory(parsed.map(item => ({
             path: String(item.path || ''),
             agent: resolveAgent(item.agent),
+            approvalPolicy: resolveSessionApprovalPolicy(item.approvalPolicy),
             lastUsedAt: normalizeDate(item.lastUsedAt),
             sessionId: item.sessionId ? String(item.sessionId) : undefined,
           })));
@@ -379,19 +419,28 @@ export function SessionDashboard({
     }
   }
 
-  function recordHistory(pathInput: string, agent: AgentFlavor, sessionId?: string) {
+  function recordHistory(
+    pathInput: string,
+    agent: AgentFlavor,
+    approvalPolicy: SessionApprovalPolicy,
+    sessionId?: string,
+  ) {
     const path = sanitizePath(pathInput);
     if (!path) return;
     setPathHistory((prev) => {
       const next = [
-        { path, agent, lastUsedAt: new Date().toISOString(), sessionId },
+        { path, agent, approvalPolicy, lastUsedAt: new Date().toISOString(), sessionId },
         ...prev.filter((item) => item.path !== path),
       ];
       return next.slice(0, MAX_PATH_HISTORY_ITEMS);
     });
   }
 
-  async function createSession(pathInput: string, agentInput: AgentFlavor) {
+  async function createSession(
+    pathInput: string,
+    agentInput: AgentFlavor,
+    approvalPolicyInput: SessionApprovalPolicy,
+  ) {
     if (!isOperator) return;
     const path = sanitizePath(pathInput);
     if (!path) { setError('프로젝트 경로를 입력해 주세요.'); return; }
@@ -402,14 +451,14 @@ export function SessionDashboard({
       const response = await fetch('/api/runtime/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path, agent: agentInput }),
+        body: JSON.stringify({ path, agent: agentInput, approvalPolicy: approvalPolicyInput }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error ?? '세션 생성에 실패했습니다.');
       const sessionId = body.session?.id;
       if (!sessionId) throw new Error('세션 생성 응답이 올바르지 않습니다.');
 
-      recordHistory(path, agentInput, sessionId);
+      recordHistory(path, agentInput, approvalPolicyInput, sessionId);
       router.push(`/sessions/${sessionId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.');
@@ -420,7 +469,7 @@ export function SessionDashboard({
 
   async function handleCreateSession(e: React.FormEvent) {
     e.preventDefault();
-    await createSession(newPath, newAgent);
+    await createSession(newPath, newAgent, newApprovalPolicy);
   }
 
   function openCreateSessionModal() {
@@ -432,6 +481,7 @@ export function SessionDashboard({
     setParentPath(null);
     setIsBrowserPathEditing(false);
     setBrowserPathDraft(WORKSPACE_PATH_ROOT);
+    setNewApprovalPolicy('on-request');
     setIsCreateModalOpen(true);
   }
 
@@ -450,16 +500,17 @@ export function SessionDashboard({
   async function handleQuickResume(entry: PathHistoryEntry) {
     if (!isOperator || isCreating) return;
     if (entry.sessionId && sessionsList.some((s) => s.id === entry.sessionId)) {
-      recordHistory(entry.path, entry.agent, entry.sessionId);
+      recordHistory(entry.path, entry.agent, entry.approvalPolicy, entry.sessionId);
       router.push(`/sessions/${entry.sessionId}`);
       return;
     }
-    await createSession(entry.path, entry.agent);
+    await createSession(entry.path, entry.agent, entry.approvalPolicy);
   }
 
   function applyHistory(entry: PathHistoryEntry) {
     setNewPath(entry.path);
     setNewAgent(entry.agent);
+    setNewApprovalPolicy(entry.approvalPolicy);
     setError(null);
   }
 
@@ -652,10 +703,11 @@ export function SessionDashboard({
 
   const sessionStats = useMemo(() => {
     const total = sessionsList.length;
-    const running = sessionsList.filter((s) => s.status === 'running').length;
     const idle = sessionsList.filter((s) => s.status === 'idle').length;
+    const running = sessionsList.filter((s) => s.status === 'running').length;
+    const pending = sessionsList.filter((s) => s.status === 'unknown').length;
     const completed = sessionsList.filter((s) => s.status === 'stopped' || s.status === 'error').length;
-    return { total, running, idle, completed };
+    return { total, idle, running, pending, completed };
   }, [sessionsList]);
 
   const agentStats = useMemo(() => {
@@ -873,7 +925,12 @@ export function SessionDashboard({
                         key={agent.id}
                         type="button"
                         className={`agent-select-card ${isSelected ? 'active' : ''}`}
-                        onClick={() => setNewAgent(agent.id)}
+                        onClick={() => {
+                          setNewAgent(agent.id);
+                          if (agent.id === 'gemini') {
+                            setNewApprovalPolicy('on-request');
+                          }
+                        }}
                       >
                         <div className="agent-visual" style={{ backgroundColor: agent.accentBg, color: agent.accentColor }}>
                           <AgentIcon size={20} />
@@ -886,6 +943,37 @@ export function SessionDashboard({
                     );
                   })}
                 </div>
+              </div>
+
+              <div className="form-section">
+                <div className="section-header">
+                  <label className="section-label">Approval Policy</label>
+                  {newAgent === 'gemini' && <span className="text-muted text-sm">Gemini는 추후 지원</span>}
+                </div>
+                <div className="history-stack">
+                  {APPROVAL_POLICY_OPTIONS.map((policy) => {
+                    const selected = newApprovalPolicy === policy.id;
+                    const disabled = newAgent === 'gemini';
+                    return (
+                      <button
+                        key={policy.id}
+                        type="button"
+                        className={`history-info-btn ${selected ? 'selected' : ''}`}
+                        onClick={() => setNewApprovalPolicy(policy.id)}
+                        disabled={disabled}
+                        style={{ textAlign: 'left' }}
+                      >
+                        <span className="path-text">{policy.label}</span>
+                        <span className="text-muted text-sm">{policy.description}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {newApprovalPolicy === 'yolo' && newAgent !== 'gemini' && (
+                  <div className="form-error" style={{ marginTop: '0.5rem' }}>
+                    YOLO는 모든 권한 요청을 자동 허용합니다. 신뢰 가능한 프로젝트에서만 사용하세요.
+                  </div>
+                )}
               </div>
 
               {error && (
@@ -938,7 +1026,7 @@ export function SessionDashboard({
     : [{ name: '없음', value: 1, color: '#e2e8f0' }];
 
   // 대기 중인 세션 및 완료된 세션 필터링
-  const waitingSessions = useMemo(() => sessionsList.filter(s => s.status === 'idle'), [sessionsList]);
+  const waitingSessions = useMemo(() => sessionsList.filter(s => s.status === 'unknown'), [sessionsList]);
   const completedSessions = useMemo(() => sessionsList.filter(s => s.status === 'stopped' || s.status === 'error'), [sessionsList]);
 
   return (
@@ -1086,12 +1174,16 @@ export function SessionDashboard({
                     {sessionStats.total > 0 ? (
                       <>
                         <div 
+                          className={`${styles.sessionBarSegment} ${styles.sessionBarIdle}`} 
+                          style={{ width: `${(sessionStats.idle / sessionStats.total) * 100}%` }}
+                        />
+                        <div 
                           className={`${styles.sessionBarSegment} ${styles.sessionBarRunning}`} 
                           style={{ width: `${(sessionStats.running / sessionStats.total) * 100}%` }}
                         />
                         <div 
-                          className={`${styles.sessionBarSegment} ${styles.sessionBarIdle}`} 
-                          style={{ width: `${(sessionStats.idle / sessionStats.total) * 100}%` }}
+                          className={`${styles.sessionBarSegment} ${styles.sessionBarPending}`} 
+                          style={{ width: `${(sessionStats.pending / sessionStats.total) * 100}%` }}
                         />
                         <div 
                           className={`${styles.sessionBarSegment} ${styles.sessionBarCompleted}`} 
@@ -1104,6 +1196,11 @@ export function SessionDashboard({
                   </div>
                   <div className={styles.sessionSummaryLegend}>
                     <div className={styles.sessionSummaryLegendItem}>
+                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#64748b' }}></span>
+                      <span>유휴</span>
+                      <strong>{sessionStats.idle}</strong>
+                    </div>
+                    <div className={styles.sessionSummaryLegendItem}>
                       <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#10b981' }}></span>
                       <span>실행중</span>
                       <strong>{sessionStats.running}</strong>
@@ -1111,10 +1208,10 @@ export function SessionDashboard({
                     <div className={styles.sessionSummaryLegendItem}>
                       <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#f59e0b' }}></span>
                       <span>대기</span>
-                      <strong>{sessionStats.idle}</strong>
+                      <strong>{sessionStats.pending}</strong>
                     </div>
                     <div className={styles.sessionSummaryLegendItem}>
-                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#64748b' }}></span>
+                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#3b82f6' }}></span>
                       <span>완료</span>
                       <strong>{sessionStats.completed}</strong>
                     </div>
@@ -1141,7 +1238,7 @@ export function SessionDashboard({
                         <div className={styles.sessionMiniList}>
                           {completedSessions.slice(0, 3).map(s => (
                             <div key={s.id} className={styles.sessionMiniItem}>
-                              <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: '#64748b' }}></span>
+                              <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: '#3b82f6' }}></span>
                               <span className={styles.sessionMiniName}>{sessionAliases[s.id] || extractLastDirectoryName(s.projectName)}</span>
                             </div>
                           ))}

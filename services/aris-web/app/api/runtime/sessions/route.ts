@@ -52,13 +52,19 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { path, agent } = body;
+    const { path, agent, approvalPolicy } = body;
+    const normalizedPolicy = approvalPolicy === 'on-request'
+      || approvalPolicy === 'on-failure'
+      || approvalPolicy === 'never'
+      || approvalPolicy === 'yolo'
+      ? approvalPolicy
+      : 'on-request';
 
     if (!path || !agent) {
       return NextResponse.json({ error: 'Path and agent are required' }, { status: 400 });
     }
 
-    const session = await createSession({ path, agent });
+    const session = await createSession({ path, agent, approvalPolicy: normalizedPolicy });
     return NextResponse.json({ session });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create session';

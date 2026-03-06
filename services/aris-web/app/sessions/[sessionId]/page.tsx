@@ -32,6 +32,7 @@ export default async function SessionPage({
             projectName={detail.session.projectName}
             alias={detail.session.alias}
             agentFlavor={detail.session.agent}
+            approvalPolicy={detail.session.approvalPolicy}
           />
         </main>
       </div>

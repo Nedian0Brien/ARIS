@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 import type {
+  ApprovalPolicy,
   PermissionDecision,
   PermissionRequest,
   PermissionRisk,
@@ -20,7 +21,7 @@ const AGENT_EXTRA_PATHS = [
   '/home/ubuntu/.local/bin',
   '/home/ubuntu/.nvm/versions/node/v22.17.1/bin',
 ].join(':');
-const CODEX_APPROVAL_POLICY = (process.env.CODEX_APPROVAL_POLICY || 'on-request').trim();
+const DEFAULT_APPROVAL_POLICY = normalizeApprovalPolicy(process.env.CODEX_APPROVAL_POLICY, 'on-request');
 const CODEX_SANDBOX_MODE = (process.env.CODEX_SANDBOX_MODE || 'workspace-write').trim();
 const CODEX_RUNTIME_MODE = (process.env.CODEX_RUNTIME_MODE || 'app-server').trim().toLowerCase();
 
@@ -42,6 +43,7 @@ type CodexPermissionRequest = {
 type HappyRuntimeCreateInput = {
   path: string;
   flavor: RuntimeAgent;
+  approvalPolicy?: ApprovalPolicy;
   status?: SessionStatusValue;
   riskScore?: number;
 };
@@ -168,9 +170,39 @@ function normalizeStatus(raw: unknown, active: unknown): SessionStatusValue {
   return 'unknown';
 }
 
-function normalizeMetadata(raw: unknown): { flavor: RuntimeAgent; path: string; status?: string } {
+function normalizeApprovalPolicy(value: unknown, fallback: ApprovalPolicy = 'on-request'): ApprovalPolicy {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (
+    normalized === 'on-request'
+    || normalized === 'on-failure'
+    || normalized === 'never'
+    || normalized === 'yolo'
+  ) {
+    return normalized;
+  }
+  return fallback;
+}
+
+function normalizeCodexApprovalPolicy(value: ApprovalPolicy): 'on-request' | 'on-failure' | 'never' {
+  if (value === 'on-failure' || value === 'never' || value === 'on-request') {
+    return value;
+  }
+  return 'on-request';
+}
+
+function normalizeClaudePermissionMode(value: ApprovalPolicy): 'default' | 'dontAsk' | 'bypassPermissions' {
+  if (value === 'never') {
+    return 'dontAsk';
+  }
+  if (value === 'yolo') {
+    return 'bypassPermissions';
+  }
+  return 'default';
+}
+
+function normalizeMetadata(raw: unknown): { flavor: RuntimeAgent; path: string; approvalPolicy: ApprovalPolicy; status?: string } {
   if (!raw) {
-    return { flavor: 'unknown', path: 'unknown-project' };
+    return { flavor: 'unknown', path: 'unknown-project', approvalPolicy: DEFAULT_APPROVAL_POLICY };
   }
 
   let parsed: unknown = raw;
@@ -191,6 +223,7 @@ function normalizeMetadata(raw: unknown): { flavor: RuntimeAgent; path: string; 
   return {
     flavor: normalizeAgent(record?.flavor ?? record?.agent),
     path: normalizePath(record?.path ?? record?.projectPath),
+    approvalPolicy: normalizeApprovalPolicy(record?.approvalPolicy, DEFAULT_APPROVAL_POLICY),
     status: asString(record?.status, ''),
   };
 }
@@ -365,6 +398,7 @@ function toRuntimeSession(raw: HappyBackendSession): RuntimeSession {
     metadata: {
       flavor: metadata.flavor,
       path: metadata.path,
+      approvalPolicy: metadata.approvalPolicy,
     },
     state: {
       status: normalizeStatus(metadata.status || asRecord(raw.metadata)?.status, raw.active),
@@ -627,9 +661,19 @@ function buildCodexPermissionKey(sessionId: string, request: CodexPermissionRequ
   return `${sessionId}:${request.approvalId || request.callId}`;
 }
 
-function buildAgentCommand(agent: RuntimeAgent, prompt: string): AgentCommand | null {
+function buildAgentCommand(agent: RuntimeAgent, prompt: string, approvalPolicy: ApprovalPolicy): AgentCommand | null {
   if (agent === 'claude') {
-    return { command: 'claude', args: ['--dangerously-skip-permissions', '--print', prompt], requiresPty: true };
+    const permissionMode = normalizeClaudePermissionMode(approvalPolicy);
+    return {
+      command: 'claude',
+      args: [
+        '--print',
+        '--permission-mode',
+        permissionMode,
+        prompt,
+      ],
+      requiresPty: true,
+    };
   }
   if (agent === 'gemini') {
     return { command: 'gemini', args: ['-p', prompt] };
@@ -654,6 +698,10 @@ export class HappyRuntimeStore {
     this.serverToken = opts.token;
     this.workspaceRoot = (opts.workspaceRoot || '/workspace').replace(/\/+$/, '');
     this.hostProjectsRoot = (opts.hostProjectsRoot || '').replace(/\/+$/, '');
+  }
+
+  private resolveSessionApprovalPolicy(session: RuntimeSession): ApprovalPolicy {
+    return normalizeApprovalPolicy(session.metadata.approvalPolicy, DEFAULT_APPROVAL_POLICY);
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -722,10 +770,11 @@ export class HappyRuntimeStore {
   private async runAgentCli(
     agent: RuntimeAgent,
     prompt: string,
+    approvalPolicy: ApprovalPolicy,
     cwdHint?: string,
     signal?: AbortSignal,
   ): Promise<{ output: string; cwd: string }> {
-    const command = buildAgentCommand(agent, prompt);
+    const command = buildAgentCommand(agent, prompt, approvalPolicy);
     if (!command) {
       throw new Error(`Unsupported agent flavor: ${agent}`);
     }
@@ -836,6 +885,9 @@ export class HappyRuntimeStore {
     threadId?: string,
   ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; threadId?: string }> {
     const safeCwd = this.resolveExecutionCwd(session.metadata.path);
+    const sessionApprovalPolicy = this.resolveSessionApprovalPolicy(session);
+    const codexApprovalPolicy = normalizeCodexApprovalPolicy(sessionApprovalPolicy);
+    const autoApproveAll = sessionApprovalPolicy === 'yolo';
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
     const child = spawn('codex', ['app-server', '--listen', 'stdio://'], {
       cwd: safeCwd,
@@ -961,6 +1013,9 @@ export class HappyRuntimeStore {
         if (knownPermission?.state === 'pending') {
           this.codexPermissionResponders.set(knownPermissionId, responder);
           runtimePermissionIds.add(knownPermissionId);
+          if (autoApproveAll) {
+            await this.decidePermission(knownPermissionId, 'allow_session');
+          }
           return;
         }
         this.codexPermissionIndex.delete(key);
@@ -977,6 +1032,9 @@ export class HappyRuntimeStore {
       this.codexPermissionIndex.set(key, created.id);
       this.codexPermissionResponders.set(created.id, responder);
       runtimePermissionIds.add(created.id);
+      if (autoApproveAll) {
+        await this.decidePermission(created.id, 'allow_session');
+      }
     };
 
     const handleServerRequest = async (payload: Record<string, unknown>): Promise<void> => {
@@ -1264,7 +1322,7 @@ export class HappyRuntimeStore {
         const resumed = await sendRequest('thread/resume', {
           threadId: resolvedThreadId,
           cwd: safeCwd,
-          approvalPolicy: CODEX_APPROVAL_POLICY,
+          approvalPolicy: codexApprovalPolicy,
           sandbox: CODEX_SANDBOX_MODE,
           persistExtendedHistory: true,
         });
@@ -1276,7 +1334,7 @@ export class HappyRuntimeStore {
       } else {
         const started = await sendRequest('thread/start', {
           cwd: safeCwd,
-          approvalPolicy: CODEX_APPROVAL_POLICY,
+          approvalPolicy: codexApprovalPolicy,
           sandbox: CODEX_SANDBOX_MODE,
           experimentalRawEvents: false,
           persistExtendedHistory: true,
@@ -1301,7 +1359,7 @@ export class HappyRuntimeStore {
             text_elements: [],
           },
         ],
-        approvalPolicy: CODEX_APPROVAL_POLICY,
+        approvalPolicy: codexApprovalPolicy,
       });
       activeTurnId = asString(asRecord(turnStarted.turn)?.id, '').trim();
 
@@ -1375,11 +1433,14 @@ export class HappyRuntimeStore {
     threadId?: string,
   ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; threadId?: string }> {
     const safeCwd = this.resolveExecutionCwd(session.metadata.path);
+    const sessionApprovalPolicy = this.resolveSessionApprovalPolicy(session);
+    const codexApprovalPolicy = normalizeCodexApprovalPolicy(sessionApprovalPolicy);
+    const autoApproveAll = sessionApprovalPolicy === 'yolo';
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
     const execArgs = threadId
       ? ['exec', 'resume', threadId, '--json', prompt]
       : ['exec', '--json', prompt];
-    const args = ['-a', CODEX_APPROVAL_POLICY, '-s', CODEX_SANDBOX_MODE, ...execArgs];
+    const args = ['-a', codexApprovalPolicy, '-s', CODEX_SANDBOX_MODE, ...execArgs];
     const child = spawn('codex', args, {
       cwd: safeCwd,
       env: { ...process.env, PATH: mergedPath },
@@ -1422,6 +1483,9 @@ export class HappyRuntimeStore {
           if (knownPermissionId) {
             const knownPermission = this.permissions.get(knownPermissionId);
             if (knownPermission?.state === 'pending') {
+              if (autoApproveAll) {
+                await this.decidePermission(knownPermissionId, 'allow_session');
+              }
               return;
             }
             this.codexPermissionIndex.delete(key);
@@ -1436,6 +1500,9 @@ export class HappyRuntimeStore {
           });
 
           this.codexPermissionIndex.set(key, created.id);
+          if (autoApproveAll) {
+            await this.decidePermission(created.id, 'allow_session');
+          }
         })
         .catch((error) => {
           const message = error instanceof Error ? error.message : String(error);
@@ -1619,7 +1686,13 @@ export class HappyRuntimeStore {
           response = await this.runCodexCliWithEvents(session, prompt, controller.signal);
         }
       } else {
-        const nonCodex = await this.runAgentCli(flavor, prompt, session.metadata.path, controller.signal);
+        const nonCodex = await this.runAgentCli(
+          flavor,
+          prompt,
+          session.metadata.approvalPolicy,
+          session.metadata.path,
+          controller.signal,
+        );
         response = {
           output: nonCodex.output,
           cwd: nonCodex.cwd,
@@ -1680,9 +1753,11 @@ export class HappyRuntimeStore {
   }
 
   async createSession(input: HappyRuntimeCreateInput): Promise<RuntimeSession> {
+    const approvalPolicy = normalizeApprovalPolicy(input.approvalPolicy, DEFAULT_APPROVAL_POLICY);
     const metadata = JSON.stringify({
       flavor: input.flavor,
       path: input.path,
+      approvalPolicy,
       status: input.status ?? 'idle',
     });
 
@@ -1800,6 +1875,14 @@ export class HappyRuntimeStore {
       message: `${action.toUpperCase()} acknowledged`,
       at: new Date().toISOString(),
     };
+  }
+
+  async isSessionRunning(sessionId: string): Promise<boolean> {
+    const session = await this.getSession(sessionId);
+    if (!session) {
+      throw new Error('SESSION_NOT_FOUND');
+    }
+    return this.activeRuns.has(sessionId);
   }
 
   async listPermissions(state?: PermissionState): Promise<PermissionRequest[]> {

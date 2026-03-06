@@ -1,5 +1,6 @@
 export type SessionStatus = 'running' | 'idle' | 'stopped' | 'error' | 'unknown';
 export type SessionAction = 'abort' | 'retry' | 'kill' | 'resume';
+export type ApprovalPolicy = 'on-request' | 'on-failure' | 'never' | 'yolo';
 
 export type SessionSummary = {
   id: string;
@@ -8,6 +9,7 @@ export type SessionSummary = {
   lastActivityAt: string | null;
   riskScore: number;
   projectName: string;
+  approvalPolicy?: ApprovalPolicy;
   alias?: string | null;
   isPinned?: boolean;
 };
@@ -64,6 +66,7 @@ export type SessionDetail = {
   status: SessionStatus;
   projectName: string;
   lastActivityAt: string | null;
+  approvalPolicy?: ApprovalPolicy;
   alias?: string | null;
   isPinned?: boolean;
 };

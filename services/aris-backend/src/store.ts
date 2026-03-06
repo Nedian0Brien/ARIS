@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type {
+  ApprovalPolicy,
   PermissionDecision,
   PermissionRequest,
   PermissionRisk,
@@ -15,6 +16,7 @@ type RuntimeBackend = 'mock' | 'happy';
 type CreateSessionInput = {
   path: string;
   flavor: RuntimeSession['metadata']['flavor'];
+  approvalPolicy?: ApprovalPolicy;
   status?: SessionStatus;
   riskScore?: number;
 };
@@ -41,6 +43,7 @@ interface RuntimeStoreBackend {
   listMessages(sessionId: string): Promise<RuntimeMessage[]>;
   appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage>;
   applySessionAction(sessionId: string, action: SessionAction): Promise<{ accepted: boolean; message: string; at: string }>;
+  isSessionRunning(sessionId: string): Promise<boolean>;
   listPermissions(state?: PermissionRequest['state']): Promise<PermissionRequest[]>;
   createPermission(input: CreatePermissionInput): Promise<PermissionRequest>;
   decidePermission(permissionId: string, decision: PermissionDecision): Promise<PermissionRequest>;
@@ -73,6 +76,7 @@ class MockRuntimeStore implements RuntimeStoreBackend {
       metadata: {
         flavor: input.flavor,
         path: input.path,
+        approvalPolicy: input.approvalPolicy ?? 'on-request',
       },
       state: {
         status: input.status ?? 'idle',
@@ -199,6 +203,15 @@ class MockRuntimeStore implements RuntimeStoreBackend {
     };
   }
 
+  async isSessionRunning(sessionId: string): Promise<boolean> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error('SESSION_NOT_FOUND');
+    }
+
+    return session.state.status === 'running';
+  }
+
   async listPermissions(state?: PermissionRequest['state']): Promise<PermissionRequest[]> {
     const list = [...this.permissions.values()].sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
     return state ? list.filter((item) => item.state === state) : list;
@@ -292,6 +305,10 @@ export class RuntimeStore {
 
   async applySessionAction(sessionId: string, action: SessionAction) {
     return this.delegate.applySessionAction(sessionId, action);
+  }
+
+  async isSessionRunning(sessionId: string) {
+    return this.delegate.isSessionRunning(sessionId);
   }
 
   async listPermissions(state?: PermissionRequest['state']) {

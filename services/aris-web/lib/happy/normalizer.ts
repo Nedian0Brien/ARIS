@@ -1,4 +1,5 @@
 import type {
+  ApprovalPolicy,
   SessionDetail,
   SessionSummary,
   UiEvent,
@@ -179,6 +180,13 @@ function normalizeStatus(value?: string): SessionSummary['status'] {
   return 'unknown';
 }
 
+function normalizeApprovalPolicy(value?: string): ApprovalPolicy {
+  if (value === 'on-request' || value === 'on-failure' || value === 'never' || value === 'yolo') {
+    return value;
+  }
+  return 'on-request';
+}
+
 export function classifyEventKind(input: { type?: string; text?: string }): UiEventKind {
   const type = input.type?.toLowerCase() ?? '';
   const text = input.text?.toLowerCase() ?? '';
@@ -232,6 +240,7 @@ export function normalizeSessions(raw: unknown): SessionSummary[] {
       lastActivityAt: asNullableString(rec?.updatedAt ?? rec?.lastActivityAt),
       riskScore: asNumber(rec?.riskScore, status === 'error' ? 90 : 20),
       projectName: asString(metadata?.path ?? rec?.projectName, 'unknown-project'),
+      approvalPolicy: normalizeApprovalPolicy(asString(metadata?.approvalPolicy ?? rec?.approvalPolicy, 'on-request')),
     };
   });
 }
@@ -247,6 +256,7 @@ export function normalizeSessionDetail(raw: unknown): SessionDetail {
     status: normalizeStatus(asString(state?.status ?? rec?.status, 'unknown')),
     projectName: asString(metadata?.path ?? rec?.projectName, 'unknown-project'),
     lastActivityAt: asNullableString(rec?.updatedAt ?? rec?.lastActivityAt),
+    approvalPolicy: normalizeApprovalPolicy(asString(metadata?.approvalPolicy ?? rec?.approvalPolicy, 'on-request')),
   };
 }
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import {
   Activity,
@@ -17,10 +18,11 @@ import {
   FileSearch,
   FolderTree,
   MessageSquareText,
+  MoreVertical,
   Send,
   TerminalSquare,
 } from 'lucide-react';
-import type { PermissionRequest, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
+import type { ApprovalPolicy, PermissionRequest, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import styles from './ChatInterface.module.css';
@@ -284,6 +286,75 @@ function resolveRecentSummary(event: UiEvent): string {
   }
 
   return truncateSingleLine(event.title || event.kind);
+}
+
+function approvalPolicyLabel(value?: ApprovalPolicy): string {
+  if (value === 'on-failure') {
+    return 'ON FAILURE';
+  }
+  if (value === 'never') {
+    return 'NEVER';
+  }
+  if (value === 'yolo') {
+    return 'YOLO';
+  }
+  return 'ON REQUEST';
+}
+
+function parseCodeChangeSummary(event: UiEvent): {
+  files: string[];
+  additions: number;
+  deletions: number;
+  previewLines: string[];
+  fullText: string;
+} {
+  const fallback = fallbackResult(event);
+  const fullText = (event.result?.full ?? event.result?.preview ?? fallback?.full ?? fallback?.preview ?? event.body ?? '')
+    .replace(/\r\n/g, '\n')
+    .trimEnd();
+  const lines = fullText ? fullText.split('\n') : [];
+  const files = new Set<string>();
+  let additions = 0;
+  let deletions = 0;
+
+  for (const line of lines) {
+    const normalized = line.trim();
+    const gitFileMatch = normalized.match(/^(?:\+\+\+|---)\s+[ab]\/(.+)$/);
+    if (gitFileMatch?.[1]) {
+      files.add(gitFileMatch[1]);
+    }
+    const patchFileMatch = normalized.match(/^\*\*\*\s+(?:Update|Add|Delete)\s+File:\s+(.+)$/);
+    if (patchFileMatch?.[1]) {
+      files.add(patchFileMatch[1]);
+    }
+    if (line.startsWith('+') && !line.startsWith('+++')) {
+      additions += 1;
+    }
+    if (line.startsWith('-') && !line.startsWith('---')) {
+      deletions += 1;
+    }
+  }
+
+  if (files.size === 0 && event.action?.path) {
+    files.add(event.action.path);
+  }
+
+  const previewCandidates = lines.filter((line) => (
+    line.startsWith('+')
+    || line.startsWith('-')
+    || line.startsWith('@@')
+    || line.startsWith('*** ')
+    || line.startsWith('diff --git')
+  ));
+  const previewLines = (previewCandidates.length > 0 ? previewCandidates : lines).slice(0, 12);
+
+  return {
+    files: [...files],
+    additions,
+    deletions,
+    previewLines,
+    fullText,
+  };
 }
 
 function buildStreamRenderItems(events: UiEvent[], expandedActionRunIds: Record<string, boolean>): StreamRenderItem[] {
@@ -842,6 +913,90 @@ function ActionResultDetail({ event }: { event: UiEvent }) {
   );
 }
 
+function CodeChangesEventCard({
+  event,
+  expanded,
+  onToggle,
+}: {
+  event: UiEvent;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const summary = parseCodeChangeSummary(event);
+  const compactPrimary = truncateSingleLine(resolveActionPrimary(event), 78);
+  const previewText = summary.previewLines.join('\n');
+
+  if (!expanded) {
+    return (
+      <div className={styles.codeChangesCompact}>
+        <div className={styles.codeChangesCompactMain}>
+          <div className={styles.actionCompactTopRow}>
+            <span className={`${styles.kindChip} ${TONE_CLASS.emerald}`}>CHANGES</span>
+            <span className={styles.actionCompactPrimary}>{compactPrimary}</span>
+          </div>
+          <div className={styles.codeChangesSummary}>
+            <span>{summary.files.length} files</span>
+            <span className={styles.codeChangesAdd}>+{summary.additions}</span>
+            <span className={styles.codeChangesDel}>-{summary.deletions}</span>
+          </div>
+          {previewText && (
+            <pre className={styles.codeChangesPreview}>{previewText}</pre>
+          )}
+        </div>
+        <button
+          type="button"
+          className={styles.actionExpandButton}
+          onClick={onToggle}
+          aria-expanded={false}
+          aria-controls={`changes-${event.id}`}
+          title="변경사항 펼치기"
+        >
+          <ChevronRight size={15} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.actionCard}>
+      <div className={styles.actionHeader}>
+        <div className={styles.actionHeaderMain}>
+          <div className={styles.actionCompactTopRow}>
+            <span className={`${styles.kindChip} ${TONE_CLASS.emerald}`}>CHANGES</span>
+            <span className={styles.actionPrimary}>{resolveActionPrimary(event)}</span>
+          </div>
+          <div className={styles.codeChangesSummary}>
+            <span>{summary.files.length} files</span>
+            <span className={styles.codeChangesAdd}>+{summary.additions}</span>
+            <span className={styles.codeChangesDel}>-{summary.deletions}</span>
+          </div>
+          {summary.files.length > 0 && (
+            <div className={styles.codeChangesFiles}>
+              {summary.files.slice(0, 3).map((file) => (
+                <span key={file} className={styles.codeChangesFile}>{file}</span>
+              ))}
+              {summary.files.length > 3 && <span className={styles.codeChangesFile}>+{summary.files.length - 3} more</span>}
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          className={styles.actionExpandButton}
+          onClick={onToggle}
+          aria-expanded
+          aria-controls={`changes-${event.id}`}
+          title="변경사항 접기"
+        >
+          <ChevronDown size={15} />
+        </button>
+      </div>
+      <div id={`changes-${event.id}`} className={styles.actionResultWrap}>
+        <pre className={styles.codeChangesFull}>{summary.fullText || '(no diff output)'}</pre>
+      </div>
+    </div>
+  );
+}
+
 function ActionEventCard({
   event,
   expanded,
@@ -930,6 +1085,9 @@ function renderEventPayload(
   }
 
   if (isActionKind(event.kind)) {
+    if (event.kind === 'file_write') {
+      return <CodeChangesEventCard event={event} expanded={expanded} onToggle={onToggleExpand} />;
+    }
     return <ActionEventCard event={event} expanded={expanded} onToggle={onToggleExpand} />;
   }
 
@@ -944,6 +1102,7 @@ export function ChatInterface({
   projectName,
   alias,
   agentFlavor,
+  approvalPolicy,
 }: {
   sessionId: string;
   initialEvents: UiEvent[];
@@ -952,9 +1111,11 @@ export function ChatInterface({
   projectName: string;
   alias?: string | null;
   agentFlavor: string;
+  approvalPolicy?: ApprovalPolicy;
 }) {
   const displayName = alias || projectName;
   const { events, addEvent, syncError } = useSessionEvents(sessionId, initialEvents);
+  const { isRunning: runtimeRunning, runtimeError } = useSessionRuntime(sessionId);
   const {
     pendingPermissions,
     loadingPermissionId,
@@ -971,6 +1132,10 @@ export function ChatInterface({
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
   const [expandedActionRunIds, setExpandedActionRunIds] = useState<Record<string, boolean>>({});
+  const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
+  const [showPermissionQueue, setShowPermissionQueue] = useState(true);
+  const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
   const chatShellRef = useRef<HTMLDivElement>(null);
   const centerPanelRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -979,8 +1144,9 @@ export function ChatInterface({
   const shouldStickToBottomRef = useRef(true);
 
   const agentMeta = resolveAgentMeta(agentFlavor);
-  const runtimeNotice = submitError ?? permissionError ?? syncError ?? null;
-  const isAgentRunning = isSubmitting || isAwaitingReply || isAborting;
+  const runtimeNotice = submitError ?? permissionError ?? syncError ?? runtimeError ?? null;
+  const isRunActive = isSubmitting || runtimeRunning || isAborting;
+  const isAgentRunning = isRunActive || isAwaitingReply;
   const connectionState: 'running' | 'connected' | 'degraded' = isAgentRunning
     ? 'running'
     : runtimeNotice
@@ -1116,14 +1282,61 @@ export function ChatInterface({
     if (!firstPendingPermissionId) {
       return;
     }
+    setShowPermissionQueue(true);
+    requestAnimationFrame(() => {
+      const target = document.getElementById(`permission-${firstPendingPermissionId}`);
+      if (!target) {
+        return;
+      }
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [firstPendingPermissionId]);
 
-    const target = document.getElementById(`permission-${firstPendingPermissionId}`);
+  const jumpToEvent = useCallback((eventId: string) => {
+    const target = document.getElementById(`event-${eventId}`);
     if (!target) {
       return;
     }
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (highlightedEventId === eventId) {
+      setHighlightedEventId(null);
+      requestAnimationFrame(() => setHighlightedEventId(eventId));
+      return;
+    }
+    setHighlightedEventId(eventId);
+  }, [highlightedEventId]);
 
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [firstPendingPermissionId]);
+  useEffect(() => {
+    if (!highlightedEventId) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setHighlightedEventId((current) => (current === highlightedEventId ? null : current));
+    }, 2000);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [highlightedEventId]);
+
+  useEffect(() => {
+    if (!isContextMenuOpen) {
+      return;
+    }
+    const onClickOutside = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      if (contextMenuRef.current?.contains(target)) {
+        return;
+      }
+      setIsContextMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside);
+    };
+  }, [isContextMenuOpen]);
 
   useEffect(() => {
     resizeComposerInput();
@@ -1180,7 +1393,7 @@ export function ChatInterface({
     }
 
     const sinceEpoch = Date.parse(awaitingReplySince);
-    const hasAgentReply = events.some((event) => {
+    const hasAnyAgentEvent = events.some((event) => {
       if (isUserEvent(event) || !event.body.trim()) {
         return false;
       }
@@ -1192,12 +1405,12 @@ export function ChatInterface({
       return eventEpoch >= sinceEpoch;
     });
 
-    if (hasAgentReply) {
+    if (!isRunActive && hasAnyAgentEvent) {
       setIsAwaitingReply(false);
       setAwaitingReplySince(null);
       setSubmitError(null);
     }
-  }, [events, isAwaitingReply, awaitingReplySince]);
+  }, [events, isAwaitingReply, awaitingReplySince, isRunActive]);
 
   useEffect(() => {
     if (!isAwaitingReply || !awaitingReplySince) {
@@ -1221,7 +1434,7 @@ export function ChatInterface({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!prompt.trim() || !isOperator || isSubmitting || isAwaitingReply || isAborting) return;
+    if (!prompt.trim() || !isOperator || isAgentRunning) return;
 
     setIsSubmitting(true);
     setIsAwaitingReply(true);
@@ -1318,7 +1531,7 @@ export function ChatInterface({
             </span>
             <span className={styles.agentProfileText}>
               <span className={styles.agentProfileName}>{agentMeta.label}</span>
-              <span className={styles.agentProfileMeta}>{agentMeta.tone.toUpperCase()} Runtime Agent</span>
+              <span className={styles.agentProfileMeta}>{agentMeta.label} Runtime Agent</span>
             </span>
           </div>
 
@@ -1337,10 +1550,16 @@ export function ChatInterface({
           <div className={styles.miniList}>
             {recentPrompts.length === 0 && <p className={styles.emptyHint}>아직 입력된 메시지가 없습니다.</p>}
             {recentPrompts.map((event) => (
-              <div key={event.id} className={styles.miniItem}>
+              <button
+                key={event.id}
+                type="button"
+                className={`${styles.miniItem} ${styles.miniItemButton}`}
+                onClick={() => jumpToEvent(event.id)}
+                title="해당 사용자 메시지로 이동"
+              >
                 <span className={styles.miniTime}>{formatClock(event.timestamp)}</span>
                 <span className={styles.miniText}>{truncateSingleLine(event.body || event.title)}</span>
-              </div>
+              </button>
             ))}
           </div>
         </section>
@@ -1356,24 +1575,75 @@ export function ChatInterface({
               <h2 className={styles.centerTitle}>{displayName}</h2>
               <span className={styles.centerAgentLabel}>{agentMeta.label} Agent</span>
             </div>
-            <span
-              className={`${styles.connectionPill} ${
-                connectionState === 'running'
-                  ? styles.connectionRunning
-                  : connectionState === 'connected'
-                    ? styles.connectionGood
-                    : styles.connectionWarn
-              }`}
-            >
-              {connectionState === 'running' ? (
-                <Activity size={13} className={styles.connectionRunningIcon} />
-              ) : connectionState === 'connected' ? (
-                <CheckCircle2 size={13} />
-              ) : (
-                <CircleAlert size={13} />
-              )}
-              {connectionLabel}
-            </span>
+            <div className={styles.centerHeaderActions}>
+              <span
+                className={`${styles.connectionPill} ${
+                  connectionState === 'running'
+                    ? styles.connectionRunning
+                    : connectionState === 'connected'
+                      ? styles.connectionGood
+                      : styles.connectionWarn
+                }`}
+              >
+                {connectionState === 'running' ? (
+                  <Activity size={13} className={styles.connectionRunningIcon} />
+                ) : connectionState === 'connected' ? (
+                  <CheckCircle2 size={13} />
+                ) : (
+                  <CircleAlert size={13} />
+                )}
+                {connectionLabel}
+              </span>
+              <div className={styles.contextMenuWrap} ref={contextMenuRef}>
+                <button
+                  type="button"
+                  className={styles.contextMenuButton}
+                  aria-label="세션 컨텍스트 메뉴"
+                  onClick={() => setIsContextMenuOpen((prev) => !prev)}
+                >
+                  <MoreVertical size={16} />
+                </button>
+                {isContextMenuOpen && (
+                  <div className={styles.contextMenuPanel} role="menu">
+                    <div className={styles.contextMenuMeta}>
+                      <span>Policy: {approvalPolicyLabel(approvalPolicy)}</span>
+                      <span>Pending: {pendingPermissions.length}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className={styles.contextMenuItem}
+                      onClick={() => {
+                        setIsContextMenuOpen(false);
+                        void handleAbortRun();
+                      }}
+                      disabled={!isOperator || !isAgentRunning || isAborting}
+                    >
+                      {isAborting ? '중단 중...' : '에이전트 실행 중단'}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.contextMenuItem}
+                      onClick={() => {
+                        setIsContextMenuOpen(false);
+                        jumpToPendingPermission();
+                      }}
+                      disabled={pendingPermissions.length === 0}
+                    >
+                      대기 승인 바로 이동
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.contextMenuItem}
+                      onClick={() => {
+                        setShowPermissionQueue((prev) => !prev);
+                      }}
+                    >
+                      권한 요청 {showPermissionQueue ? '숨기기' : '표시하기'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </header>
 
           {runtimeNotice && (
@@ -1422,12 +1692,12 @@ export function ChatInterface({
               // 사용자 메시지 (오른쪽 버블)
               if (userEvent) {
                 return (
-                  <article key={event.id} className={`${styles.messageRow} ${styles.messageRowUser}`}>
+                  <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowUser}`}>
                     <div className={`${styles.msgHeader} ${styles.msgHeaderUser}`}>
                       <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
                       <span className={`${styles.msgSender} ${styles.msgSenderUser}`}>YOU</span>
                     </div>
-                    <div className={`${styles.messageBubble} ${styles.messageBubbleUser}`}>
+                    <div className={`${styles.messageBubble} ${styles.messageBubbleUser} ${highlightedEventId === event.id ? styles.messageBubbleHighlight : ''}`}>
                       {renderEventPayload(event, true, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id))}
                     </div>
                   </article>
@@ -1471,7 +1741,7 @@ export function ChatInterface({
                 </article>
               );
             })}
-            {pendingPermissions.map((permission) => (
+            {showPermissionQueue && pendingPermissions.map((permission) => (
               <PermissionRequestMessage
                 key={permission.id}
                 anchorId={`permission-${permission.id}`}
@@ -1497,14 +1767,6 @@ export function ChatInterface({
                     </span>
                     에이전트 실행 중...
                   </span>
-                  <button
-                    type="button"
-                    className={styles.abortButton}
-                    onClick={() => void handleAbortRun()}
-                    disabled={!isOperator || isAborting}
-                  >
-                    {isAborting ? '중단 중...' : 'Abort'}
-                  </button>
                 </div>
               )}
               <div className={styles.composerDockInner}>
@@ -1522,18 +1784,18 @@ export function ChatInterface({
                       }
                     }}
                     placeholder={isOperator ? '명령을 입력하세요. (Ctrl/Cmd + Enter 전송)' : 'Viewer 권한입니다.'}
-                    disabled={!isOperator || isSubmitting || isAwaitingReply || isAborting}
+                    disabled={!isOperator || isAgentRunning}
                     className={styles.composerInput}
                   />
                 </div>
                 <button
                   type="submit"
-                  disabled={!prompt.trim() || !isOperator || isSubmitting || isAwaitingReply || isAborting}
+                  disabled={!prompt.trim() || !isOperator || isAgentRunning}
                   className={styles.sendIconButton}
                   title="Send message"
                   aria-label="메시지 전송"
                 >
-                  {isSubmitting || isAwaitingReply ? (
+                  {isAgentRunning ? (
                     <span className={styles.sendSpinner} aria-hidden />
                   ) : (
                     <Send size={20} />
@@ -1606,12 +1868,16 @@ export function ChatInterface({
         <section className={styles.panelCard}>
           <div className={styles.panelHeading}>Session Controls</div>
           <div className={styles.metaLine}>
+            <TerminalSquare size={14} />
+            승인 정책: {approvalPolicyLabel(approvalPolicy)}
+          </div>
+          <div className={styles.metaLine}>
             <Activity size={14} />
             대기 승인: {pendingPermissions.length}건
           </div>
           <div className={styles.metaLine}>
             <MessageSquareText size={14} />
-            연결 채널: runtime/events
+            연결 채널: runtime/events (SSE)
           </div>
         </section>
       </aside>
