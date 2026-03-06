@@ -2,6 +2,8 @@
   --composer-dock-height: 98px;
   --composer-dock-left: 0.75rem;
   --composer-dock-width: calc(100vw - 1.5rem);
+  --center-header-height: 60px;
+  --global-header-offset-effective: var(--global-header-offset, 64px);
   --safe-area-bottom-effective: max(0px, calc(env(safe-area-inset-bottom) - var(--keyboard-inset-height, 0px)));
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr) 320px;
@@ -231,19 +233,6 @@
   border-bottom: 1px solid rgba(148, 163, 184, 0.18);
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.95) 100%);
   flex-shrink: 0;
-  max-height: 96px;
-  opacity: 1;
-  overflow: hidden;
-  transition: max-height 0.22s ease, padding 0.22s ease, border-color 0.22s ease, opacity 0.2s ease;
-}
-
-.centerHeaderHidden {
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  border-bottom-color: transparent;
-  opacity: 0;
-  pointer-events: none;
 }
 
 .agentAvatarHero {
@@ -441,8 +430,8 @@
 }
 
 .messageBubbleUser {
-  background: linear-gradient(145deg, #dbeafe 0%, #bfdbfe 100%);
-  border-color: rgba(96, 165, 250, 0.3);
+  background: linear-gradient(145deg, #eff6ff 0%, #dbeafe 100%);
+  border-color: rgba(147, 197, 253, 0.45);
 }
 
 .messageBubbleAgent {
@@ -1315,14 +1304,20 @@
     border-left: none;
     border-right: none;
     box-shadow: none;
+    padding-top: var(--center-header-height);
   }
 
   .centerHeader {
-    padding: 0.72rem 0.85rem;
+    padding: 0.7rem 0.85rem;
     gap: 0.72rem;
-    position: sticky;
-    top: 0;
-    z-index: 26;
+    position: fixed;
+    top: var(--global-header-offset-effective);
+    left: 0;
+    right: 0;
+    width: 100%;
+    z-index: 1050;
+    min-height: var(--center-header-height);
+    border-bottom-color: rgba(148, 163, 184, 0.22);
   }
 
   .agentAvatarHero {

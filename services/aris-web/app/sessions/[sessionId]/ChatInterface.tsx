@@ -28,7 +28,6 @@ import styles from './ChatInterface.module.css';
 const AGENT_REPLY_TIMEOUT_MS = 90000;
 const AUTO_SCROLL_THRESHOLD_PX = 80;
 const MOBILE_LAYOUT_MAX_WIDTH_PX = 960;
-const HEADER_SCROLL_THRESHOLD_PX = 1;
 const PREVIEW_MAX_LINES = 12;
 const PREVIEW_MAX_CHARS = 600;
 const COMPOSER_MIN_HEIGHT_PX = 52;
@@ -970,7 +969,6 @@ export function ChatInterface({
   const [awaitingReplySince, setAwaitingReplySince] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
-  const [isCenterHeaderHidden, setIsCenterHeaderHidden] = useState(false);
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
   const [expandedActionRunIds, setExpandedActionRunIds] = useState<Record<string, boolean>>({});
   const chatShellRef = useRef<HTMLDivElement>(null);
@@ -979,7 +977,6 @@ export function ChatInterface({
   const composerDockRef = useRef<HTMLElement>(null);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const shouldStickToBottomRef = useRef(true);
-  const mobileScrollYRef = useRef(0);
 
   const agentMeta = resolveAgentMeta(agentFlavor);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? null;
@@ -1010,9 +1007,6 @@ export function ChatInterface({
     const syncLayout = () => {
       const nextIsMobile = mediaQuery.matches;
       setIsMobileLayout(nextIsMobile);
-      if (!nextIsMobile) {
-        setIsCenterHeaderHidden(false);
-      }
     };
 
     syncLayout();
@@ -1154,71 +1148,22 @@ export function ChatInterface({
   useEffect(() => {
     if (!isMobileLayout) {
       shouldStickToBottomRef.current = true;
-      setIsCenterHeaderHidden(false);
       return;
     }
 
-    const getCurrentScrollY = () => getWindowScrollTop();
-    const isNearMobileBottom = () => isNearWindowBottom();
-    let lastTouchY = 0;
-
-    mobileScrollYRef.current = getCurrentScrollY();
-    shouldStickToBottomRef.current = isNearMobileBottom();
-
-    let scrollRaf: number | null = null;
-    const updateFromScroll = () => {
-      scrollRaf = null;
-      const currentY = getCurrentScrollY();
-      const delta = currentY - mobileScrollYRef.current;
-      const keyboardOpen = document.documentElement.dataset.keyboardOpen === 'true';
-
-      if (currentY < 28) {
-        setIsCenterHeaderHidden(false);
-      } else if (!keyboardOpen && delta > 6 && currentY > 84) {
-        setIsCenterHeaderHidden(true);
-      } else if (delta < -HEADER_SCROLL_THRESHOLD_PX) {
-        setIsCenterHeaderHidden(false);
-      }
-
-      shouldStickToBottomRef.current = isNearMobileBottom();
-      mobileScrollYRef.current = currentY;
+    const updateStickState = () => {
+      shouldStickToBottomRef.current = isNearWindowBottom();
     };
 
-    const handleScroll = () => {
-      if (scrollRaf !== null) {
-        return;
-      }
-      scrollRaf = window.requestAnimationFrame(updateFromScroll);
-    };
-
-    const handleTouchStart = (event: TouchEvent) => {
-      lastTouchY = event.touches[0]?.clientY ?? 0;
-    };
-
-    const handleTouchMove = (event: TouchEvent) => {
-      const nextTouchY = event.touches[0]?.clientY ?? lastTouchY;
-      const touchDelta = nextTouchY - lastTouchY;
-      if (touchDelta > 2) {
-        setIsCenterHeaderHidden(false);
-      }
-      lastTouchY = nextTouchY;
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    window.addEventListener('touchstart', handleTouchStart, { passive: true });
-    window.addEventListener('touchmove', handleTouchMove, { passive: true });
-    window.visualViewport?.addEventListener('scroll', handleScroll, { passive: true } as EventListenerOptions);
-    window.visualViewport?.addEventListener('resize', handleScroll, { passive: true } as EventListenerOptions);
+    updateStickState();
+    window.addEventListener('scroll', updateStickState, { passive: true });
+    window.visualViewport?.addEventListener('scroll', updateStickState, { passive: true } as EventListenerOptions);
+    window.visualViewport?.addEventListener('resize', updateStickState, { passive: true } as EventListenerOptions);
 
     return () => {
-      window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('touchstart', handleTouchStart);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.visualViewport?.removeEventListener('scroll', handleScroll);
-      window.visualViewport?.removeEventListener('resize', handleScroll);
-      if (scrollRaf !== null) {
-        window.cancelAnimationFrame(scrollRaf);
-      }
+      window.removeEventListener('scroll', updateStickState);
+      window.visualViewport?.removeEventListener('scroll', updateStickState);
+      window.visualViewport?.removeEventListener('resize', updateStickState);
     };
   }, [isMobileLayout]);
 
@@ -1403,7 +1348,7 @@ export function ChatInterface({
 
       <main className={`${styles.centerPanel} ${isMobileLayout ? styles.centerPanelMobileScroll : ''}`} ref={centerPanelRef}>
         <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
-          <header className={`${styles.centerHeader} ${isCenterHeaderHidden ? styles.centerHeaderHidden : ''}`}>
+          <header className={styles.centerHeader}>
             <span className={`${styles.agentAvatarHero} ${AGENT_AVATAR_TONE_CLASS[agentMeta.tone]}`}>
               <agentMeta.Icon size={20} />
             </span>

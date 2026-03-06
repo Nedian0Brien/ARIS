@@ -106,6 +106,32 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
     };
   }, [autoHideOnScroll]);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    const mobileQuery = window.matchMedia('(max-width: 960px)');
+
+    const syncGlobalHeaderOffset = () => {
+      const offset = autoHideOnScroll && mobileQuery.matches && hiddenOnScroll ? '0px' : '64px';
+      root.style.setProperty('--global-header-offset', offset);
+    };
+
+    syncGlobalHeaderOffset();
+    if (typeof mobileQuery.addEventListener === 'function') {
+      mobileQuery.addEventListener('change', syncGlobalHeaderOffset);
+    } else {
+      mobileQuery.addListener(syncGlobalHeaderOffset);
+    }
+
+    return () => {
+      if (typeof mobileQuery.removeEventListener === 'function') {
+        mobileQuery.removeEventListener('change', syncGlobalHeaderOffset);
+      } else {
+        mobileQuery.removeListener(syncGlobalHeaderOffset);
+      }
+      root.style.removeProperty('--global-header-offset');
+    };
+  }, [autoHideOnScroll, hiddenOnScroll]);
+
   return (
     <header className={`header${autoHideOnScroll ? ' header-autohide' : ''}${hiddenOnScroll ? ' header-hidden-on-scroll' : ''}`}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
