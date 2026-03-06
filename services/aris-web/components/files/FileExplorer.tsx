@@ -297,8 +297,8 @@ export function FileExplorer() {
         {newPathInput.active && (
           <div style={{ 
             display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', 
-            padding: '1rem', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px',
-            border: '1px solid var(--border-subtle)'
+            padding: '1rem', backgroundColor: 'var(--surface-subtle)', borderRadius: '8px',
+            border: '1px solid var(--line)'
           }}>
             <input 
               autoFocus
@@ -316,7 +316,7 @@ export function FileExplorer() {
 
         <div style={{
           padding: '0.75rem 1rem',
-          backgroundColor: 'var(--bg-tertiary)',
+          backgroundColor: 'var(--bg)',
           borderRadius: '8px',
           marginBottom: '1.5rem',
           fontFamily: 'monospace',
@@ -324,14 +324,14 @@ export function FileExplorer() {
           display: 'flex',
           alignItems: 'center',
           gap: '0.5rem',
-          border: '1px solid var(--border-subtle)'
+          border: '1px solid var(--line)'
         }}>
-          <span style={{ color: 'var(--text-secondary)' }}>위치:</span>
+          <span style={{ color: 'var(--text-muted)' }}>위치:</span>
           <span>{data?.currentPath || currentPath}</span>
         </div>
 
         {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '5rem 0', color: 'var(--text-secondary)' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '5rem 0', color: 'var(--text-muted)' }}>
             <Loader2 size={40} className="animate-spin" />
           </div>
         ) : error ? (
@@ -362,13 +362,13 @@ export function FileExplorer() {
                 }}
                 className="hover-bg"
               >
-                <ArrowUpCircle size={20} style={{ color: 'var(--text-secondary)' }} />
+                <ArrowUpCircle size={20} style={{ color: 'var(--text-muted)' }} />
                 <span style={{ fontWeight: 500 }}>.. (상위 폴더)</span>
               </div>
             )}
             
             {data?.directories.length === 0 && !data?.parentPath && (
-              <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                 워크스페이스가 비어 있습니다. 새로운 파일을 만들어보세요.
               </div>
             )}
@@ -393,11 +393,11 @@ export function FileExplorer() {
                   {item.isDirectory ? (
                     <Folder size={20} style={{ color: 'var(--accent-sky)' }} />
                   ) : (
-                    <File size={20} style={{ color: 'var(--text-secondary)' }} />
+                    <File size={20} style={{ color: 'var(--text-muted)' }} />
                   )}
                   <span style={{ 
                     fontWeight: item.isDirectory ? 500 : 400,
-                    color: item.isDirectory ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    color: item.isDirectory ? 'var(--text)' : 'var(--text-muted)',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap'
@@ -410,15 +410,16 @@ export function FileExplorer() {
                   <button 
                     onClick={(e) => handleDelete(e, item)}
                     style={{ 
-                      padding: '0.4rem', borderRadius: '4px', color: 'var(--text-tertiary)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                      padding: '0.4rem', borderRadius: '4px', color: 'var(--text-muted)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: 'transparent', border: 'none', cursor: 'pointer'
                     }}
                     className="hover-danger"
                   >
                     <Trash2 size={16} />
                   </button>
                   {item.isDirectory && (
-                    <ChevronRight size={16} style={{ color: 'var(--text-tertiary)' }} />
+                    <ChevronRight size={16} style={{ color: 'var(--text-muted)' }} />
                   )}
                 </div>
               </div>
@@ -436,21 +437,21 @@ export function FileExplorer() {
           padding: '1rem'
         }}>
           <div style={{
-            backgroundColor: 'var(--bg-primary)', borderRadius: '12px',
+            backgroundColor: 'var(--surface)', borderRadius: '12px',
             width: '100%', maxWidth: '1100px', height: '100%', maxHeight: '90vh',
             display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-            overflow: 'hidden', border: '1px solid var(--border-subtle)'
+            overflow: 'hidden', border: '1px solid var(--line)'
           }}>
             <div style={{ 
-              padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border-subtle)',
+              padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--line)',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              backgroundColor: 'var(--bg-secondary)'
+              backgroundColor: 'var(--surface-subtle)'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <Code size={20} style={{ color: 'var(--accent-sky)' }} />
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{editingFile.name}</span>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>{displayLanguageName(editingFile.name)}</span>
+                  <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text)' }}>{editingFile.name}</span>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{displayLanguageName(editingFile.name)}</span>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '0.6rem' }}>
@@ -477,7 +478,7 @@ export function FileExplorer() {
               flex: 1, 
               display: 'flex', 
               overflow: 'hidden',
-              backgroundColor: 'var(--bg-tertiary)',
+              backgroundColor: 'var(--bg)',
               position: 'relative'
             }}>
               {/* Line Numbers */}
@@ -486,9 +487,9 @@ export function FileExplorer() {
                 style={{
                   width: '3.5rem',
                   padding: '1.5rem 0.5rem',
-                  backgroundColor: 'var(--bg-secondary)',
-                  borderRight: '1px solid var(--border-subtle)',
-                  color: 'var(--text-tertiary)',
+                  backgroundColor: 'var(--surface-subtle)',
+                  borderRight: '1px solid var(--line)',
+                  color: 'var(--text-muted)',
                   fontFamily: 'monospace',
                   fontSize: '0.85rem',
                   lineHeight: '1.5',
@@ -521,7 +522,7 @@ export function FileExplorer() {
                     whiteSpace: 'pre',
                     overflow: 'hidden',
                     backgroundColor: 'transparent',
-                    color: 'var(--text-primary)',
+                    color: 'var(--text)',
                     tabSize: 2,
                     zIndex: 1
                   }}
@@ -548,7 +549,7 @@ export function FileExplorer() {
                     lineHeight: '1.5',
                     backgroundColor: 'transparent',
                     color: 'transparent',
-                    caretColor: 'var(--text-primary)',
+                    caretColor: 'var(--text)',
                     resize: 'none',
                     outline: 'none',
                     whiteSpace: 'pre',
@@ -563,10 +564,10 @@ export function FileExplorer() {
             
             <div style={{ 
               padding: '0.4rem 1rem', 
-              backgroundColor: 'var(--bg-secondary)', 
-              borderTop: '1px solid var(--border-subtle)',
+              backgroundColor: 'var(--surface-subtle)', 
+              borderTop: '1px solid var(--line)',
               fontSize: '0.75rem',
-              color: 'var(--text-tertiary)',
+              color: 'var(--text-muted)',
               display: 'flex',
               justifyContent: 'flex-end',
               gap: '1rem'
@@ -580,7 +581,7 @@ export function FileExplorer() {
 
       <style jsx>{`
         .hover-bg:hover {
-          background-color: var(--bg-secondary) !important;
+          background-color: var(--surface-subtle) !important;
         }
         .hover-danger:hover {
           color: var(--accent-red) !important;
@@ -598,14 +599,14 @@ export function FileExplorer() {
           height: 8px;
         }
         textarea::-webkit-scrollbar-track {
-          background: var(--bg-tertiary);
+          background: var(--bg);
         }
         textarea::-webkit-scrollbar-thumb {
-          background: var(--border-subtle);
+          background: var(--line);
           border-radius: 4px;
         }
         textarea::-webkit-scrollbar-thumb:hover {
-          background: var(--text-tertiary);
+          background: var(--text-muted);
         }
 
         /* Prism Theme Customization */
@@ -613,7 +614,7 @@ export function FileExplorer() {
         :global(.token.prolog),
         :global(.token.doctype),
         :global(.token.cdata) { color: #6a737d; font-style: italic; }
-        :global(.token.punctuation) { color: var(--text-secondary); }
+        :global(.token.punctuation) { color: var(--text-muted); }
         :global(.token.namespace) { opacity: .7; }
         :global(.token.property),
         :global(.token.tag),
