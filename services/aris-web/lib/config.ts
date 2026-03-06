@@ -9,6 +9,7 @@ const envSchema = z.object({
   HAPPY_SERVER_TOKEN: z.string().optional(),
   SSH_BASE_COMMAND: z.string().default('ssh ubuntu@your-server'),
   SSH_LINK_TTL_SECONDS: z.coerce.number().int().positive().default(300),
+  SSH_KEY_ENCRYPTION_SECRET: z.string().min(16).default('dev-only-ssh-enc-secret-change-me'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   
   /* SMTP Configuration for Email 2FA */

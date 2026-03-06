@@ -1,14 +1,19 @@
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { parse } from 'node:url';
-import { execSync } from 'node:child_process';
+import { createDecipheriv, scryptSync, randomUUID } from 'node:crypto';
+import { writeFileSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import next from 'next';
 import { WebSocketServer } from 'ws';
 import { jwtVerify } from 'jose';
 
-// node-pty는 native 모듈이므로 createRequire로 로드
 const require = createRequire(import.meta.url);
 const pty = require('node-pty');
+const { PrismaClient } = require('@prisma/client');
+
+const prisma = new PrismaClient();
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOST || '0.0.0.0';
@@ -18,8 +23,10 @@ const JWT_SECRET = process.env.AUTH_JWT_SECRET || 'dev-only-jwt-secret-dev-only-
 const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'aris_session';
 const HAPPY_SERVER_URL = process.env.HAPPY_SERVER_URL || 'http://localhost:4080';
 const HAPPY_SERVER_TOKEN = process.env.HAPPY_SERVER_TOKEN || '';
+const SSH_KEY_ENCRYPTION_SECRET = process.env.SSH_KEY_ENCRYPTION_SECRET || 'dev-only-ssh-enc-secret-change-me';
+const SSH_HOST = process.env.SSH_HOST || 'host.docker.internal';
 
-// 쿠키 헤더 파싱
+// ── 쿠키 파싱 ──────────────────────────────────────────────────────────────
 function parseCookies(cookieHeader) {
   if (!cookieHeader) return {};
   return Object.fromEntries(
@@ -31,7 +38,7 @@ function parseCookies(cookieHeader) {
   );
 }
 
-// JWT 검증 (서명만 확인)
+// ── JWT 검증 ───────────────────────────────────────────────────────────────
 async function verifyToken(token) {
   try {
     const secret = new TextEncoder().encode(JWT_SECRET);
@@ -42,7 +49,38 @@ async function verifyToken(token) {
   }
 }
 
-// Happy 서버에서 세션 경로 조회
+// ── AES-256-GCM 복호화 ─────────────────────────────────────────────────────
+function decryptSetting(ciphertext) {
+  const parts = ciphertext.split(':');
+  if (parts.length !== 3) throw new Error('Invalid ciphertext');
+  const [ivHex, authTagHex, encHex] = parts;
+  const key = scryptSync(SSH_KEY_ENCRYPTION_SECRET, 'aris-ssh-settings-v1', 32);
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'));
+  decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
+  return Buffer.concat([
+    decipher.update(Buffer.from(encHex, 'hex')),
+    decipher.final(),
+  ]).toString('utf-8');
+}
+
+// ── DB에서 SSH 설정 조회 ────────────────────────────────────────────────────
+async function getSshSettings() {
+  const [userRow, keyRow] = await Promise.all([
+    prisma.systemSetting.findUnique({ where: { key: 'ssh_user' } }),
+    prisma.systemSetting.findUnique({ where: { key: 'ssh_private_key' } }),
+  ]);
+  if (!keyRow) return null;
+  try {
+    return {
+      sshUser: userRow?.value ?? 'ubuntu',
+      sshPrivateKey: decryptSetting(keyRow.value),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ── Happy 서버에서 세션 CWD 조회 ───────────────────────────────────────────
 async function getSessionCwd(sessionId) {
   if (!HAPPY_SERVER_TOKEN) return null;
   try {
@@ -52,7 +90,6 @@ async function getSessionCwd(sessionId) {
     );
     if (!res.ok) return null;
     const data = await res.json();
-    // 다양한 응답 구조 시도
     return (
       data?.session?.path ??
       data?.path ??
@@ -65,70 +102,70 @@ async function getSessionCwd(sessionId) {
   }
 }
 
-// tmux 세션 존재 여부 확인
-function hasTmuxSession(sessionId) {
-  try {
-    execSync(`tmux has-session -t ${sessionId}`, { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
+// ── SSH PTY 스폰 ────────────────────────────────────────────────────────────
+function spawnSshPty(settings, sessionId, sessionCwd) {
+  // Private key를 임시 파일에 기록 (SSH는 파일 경로로만 키를 받음)
+  const tmpKey = join(tmpdir(), `aris_key_${randomUUID()}`);
+  writeFileSync(tmpKey, settings.sshPrivateKey.trim() + '\n', { mode: 0o600 });
 
-// PTY 스폰 (tmux 우선 시도, 실패 시 bash fallback)
-function resolveShell() {
-  const candidates = [
-    process.env.DEFAULT_SHELL,
-    process.env.SHELL,
-    '/bin/bash',
-    '/bin/sh',
+  const sshArgs = [
+    '-i', tmpKey,
+    '-o', 'StrictHostKeyChecking=no',
+    '-o', 'UserKnownHostsFile=/dev/null',
+    '-o', 'LogLevel=ERROR',
+    '-o', 'ServerAliveInterval=30',
   ];
-  for (const s of candidates) {
-    if (!s) continue;
-    try {
-      execSync(`test -x ${s}`, { stdio: 'ignore' });
-      return s;
-    } catch {}
-  }
-  return '/bin/sh';
-}
 
-function spawnPty(sessionId, cwd) {
-  const shell = resolveShell();
-  const env = { ...process.env, TERM: 'xterm-256color' };
-
-  if (sessionId && hasTmuxSession(sessionId)) {
-    try {
-      return pty.spawn('tmux', ['attach-session', '-t', sessionId], {
-        name: 'xterm-256color',
-        cols: 80,
-        rows: 24,
-        cwd: cwd || process.env.HOME || '/',
-        env,
-      });
-    } catch {
-      // tmux attach 실패 시 bash fallback
-    }
+  // 세션 지정 시 tmux attach 우선, 실패 시 세션 경로로 cd
+  if (sessionId) {
+    const cdCmd = sessionCwd ? `cd '${sessionCwd.replace(/'/g, "'\\''")}' && ` : '';
+    sshArgs.push('-t');
+    sshArgs.push(`${settings.sshUser}@${SSH_HOST}`);
+    sshArgs.push(
+      `tmux attach-session -t '${sessionId}' 2>/dev/null || { ${cdCmd}exec $SHELL; }`,
+    );
+  } else {
+    sshArgs.push(`${settings.sshUser}@${SSH_HOST}`);
   }
 
-  return pty.spawn(shell, [], {
+  const ptyProcess = pty.spawn('ssh', sshArgs, {
     name: 'xterm-256color',
     cols: 80,
     rows: 24,
-    cwd: cwd || process.env.HOME || '/',
-    env,
+    env: { ...process.env, TERM: 'xterm-256color' },
   });
+
+  // SSH가 키를 읽은 뒤 임시 파일 제거
+  setTimeout(() => { try { unlinkSync(tmpKey); } catch {} }, 3000);
+
+  return ptyProcess;
 }
 
+// ── WebSocket 서버 ──────────────────────────────────────────────────────────
 const wss = new WebSocketServer({ noServer: true });
 
-wss.on('connection', (ws, _req, { sessionId, cwd }) => {
-  const ptyProcess = spawnPty(sessionId, cwd);
+wss.on('connection', async (ws, _req, { sessionId, sessionCwd }) => {
+  const settings = await getSshSettings();
+
+  if (!settings) {
+    const msg = '\r\n\x1b[33mSSH 설정이 구성되지 않았습니다.\x1b[0m\r\n'
+      + '설정 탭(Settings)에서 SSH 유저와 Private Key를 입력한 뒤 다시 접속하세요.\r\n\r\n';
+    ws.send(Buffer.from(msg, 'utf-8'));
+    ws.close();
+    return;
+  }
+
+  let ptyProcess;
+  try {
+    ptyProcess = spawnSshPty(settings, sessionId, sessionCwd);
+  } catch (err) {
+    ws.send(Buffer.from(`\r\n\x1b[31m오류: ${err.message}\x1b[0m\r\n`, 'utf-8'));
+    ws.close();
+    return;
+  }
 
   ptyProcess.onData((data) => {
-    if (ws.readyState === ws.OPEN) {
-      ws.send(Buffer.from(data, 'utf-8'));
-    }
+    if (ws.readyState === ws.OPEN) ws.send(Buffer.from(data, 'utf-8'));
   });
 
   ptyProcess.onExit(() => {
@@ -137,38 +174,32 @@ wss.on('connection', (ws, _req, { sessionId, cwd }) => {
 
   ws.on('message', (data) => {
     try {
-      const text = Buffer.isBuffer(data) ? data.toString('utf-8') : data;
-      // 리사이즈 메시지 처리
-      if (typeof text === 'string' && text.startsWith('{')) {
+      const text = Buffer.isBuffer(data) ? data.toString('utf-8') : String(data);
+      if (text.startsWith('{')) {
         const msg = JSON.parse(text);
         if (msg.type === 'resize' && msg.cols && msg.rows) {
           ptyProcess.resize(Math.max(2, msg.cols), Math.max(1, msg.rows));
           return;
         }
       }
-      ptyProcess.write(typeof text === 'string' ? text : text.toString());
+      ptyProcess.write(text);
     } catch {
-      // 파싱 실패 시 raw 데이터 전송
-      try {
-        ptyProcess.write(data.toString());
-      } catch {}
+      try { ptyProcess.write(data.toString()); } catch {}
     }
   });
 
   ws.on('close', () => {
-    try {
-      ptyProcess.kill();
-    } catch {}
+    try { ptyProcess.kill(); } catch {}
   });
 });
 
+// ── Next.js + HTTP 서버 ─────────────────────────────────────────────────────
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
   const server = createServer(async (req, res) => {
-    const parsedUrl = parse(req.url, true);
-    await handle(req, res, parsedUrl);
+    await handle(req, res, parse(req.url, true));
   });
 
   server.on('upgrade', async (req, socket, head) => {
@@ -180,7 +211,6 @@ app.prepare().then(() => {
       return;
     }
 
-    // 인증
     const cookies = parseCookies(req.headers.cookie);
     const token = cookies[AUTH_COOKIE_NAME];
     if (!token) {
@@ -196,24 +226,18 @@ app.prepare().then(() => {
       return;
     }
 
-    // operator만 터미널 접근 허용
     if (payload.role !== 'operator') {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       socket.destroy();
       return;
     }
 
-    // 세션 ID 및 CWD 결정
     const sessionMatch = pathname.match(/^\/ws\/terminal\/(.+)$/);
     const sessionId = sessionMatch ? decodeURIComponent(sessionMatch[1]) : null;
-    let cwd = process.env.HOME || '/';
-    if (sessionId) {
-      const sessionPath = await getSessionCwd(sessionId);
-      if (sessionPath) cwd = sessionPath;
-    }
+    const sessionCwd = sessionId ? await getSessionCwd(sessionId) : null;
 
     wss.handleUpgrade(req, socket, head, (ws) => {
-      wss.emit('connection', ws, req, { sessionId, cwd });
+      wss.emit('connection', ws, req, { sessionId, sessionCwd });
     });
   });
 
