@@ -1001,7 +1001,7 @@ export function SessionDashboard({
                         key={agent.id}
                         type="button"
                         className={`agent-select-card ${isSelected ? 'active' : ''}`}
-                        style={{ '--agent-color': agent.accentColor } as React.CSSProperties}
+                        style={{ '--agent-color': agent.accentColor, '--agent-bg': agent.accentBg, '--agent-shadow': agent.accentColor + '26' } as React.CSSProperties}
                         onClick={() => {
                           setNewAgent(agent.id);
                           if (agent.id === 'gemini') {
