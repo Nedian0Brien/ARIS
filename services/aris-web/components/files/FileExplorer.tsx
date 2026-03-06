@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   Folder, FolderOpen, File, ChevronRight, ArrowUpCircle, 
   Loader2, FolderPlus, FilePlus, Trash2, X, Save, AlertCircle,
-  Code, Eye, Edit3
+  Code, Eye, Edit3, Monitor, Tablet, Smartphone
 } from 'lucide-react';
 import { Card } from '@/components/ui';
 import Prism from 'prismjs';
@@ -39,7 +39,17 @@ export function FileExplorer() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Editor/Modal States
+  // Responsive State
+  const [isLargeScreen, setIsLargeScreen] = useState(false);
+
+  useEffect(() => {
+    const checkScreen = () => setIsLargeScreen(window.innerWidth >= 768);
+    checkScreen();
+    window.addEventListener('resize', checkScreen);
+    return () => window.removeEventListener('resize', checkScreen);
+  }, []);
+
+  // Editor States
   const [editingFile, setEditingFile] = useState<{ path: string; name: string; content: string } | null>(null);
   const [isEditorSaving, setIsEditorSaving] = useState(false);
   const [isPreview, setIsPreview] = useState(false);
@@ -101,6 +111,7 @@ export function FileExplorer() {
     try {
       const res = await fetch(`/api/fs/delete?path=${encodeURIComponent(item.path)}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('삭제에 실패했습니다.');
+      if (editingFile?.path === item.path) setEditingFile(null);
       fetchDirectory(currentPath);
     } catch (err) {
       alert(err instanceof Error ? err.message : '오류 발생');
@@ -131,7 +142,7 @@ export function FileExplorer() {
         body: JSON.stringify({ path: editingFile.path, content: editingFile.content })
       });
       if (!res.ok) throw new Error('저장에 실패했습니다.');
-      setEditingFile(null);
+      // Keep editor open after saving
       fetchDirectory(currentPath);
     } catch (err) {
       alert(err instanceof Error ? err.message : '오류 발생');
@@ -145,37 +156,26 @@ export function FileExplorer() {
     const textarea = e.currentTarget;
     const { selectionStart, selectionEnd, value } = textarea;
 
-    // 1. Tab key support (Insert 2 spaces)
     if (e.key === 'Tab') {
       e.preventDefault();
       const newValue = value.substring(0, selectionStart) + '  ' + value.substring(selectionEnd);
       setEditingFile(prev => prev ? { ...prev, content: newValue } : null);
-      
-      // Reset cursor position (need to wait for React state update)
-      setTimeout(() => {
-        textarea.selectionStart = textarea.selectionEnd = selectionStart + 2;
-      }, 0);
+      setTimeout(() => { textarea.selectionStart = textarea.selectionEnd = selectionStart + 2; }, 0);
     }
 
-    // 2. Auto-indentation on Enter
     if (e.key === 'Enter') {
       const lines = value.substring(0, selectionStart).split('\n');
       const currentLine = lines[lines.length - 1];
       const match = currentLine.match(/^\s*/);
       const indentation = match ? match[0] : '';
       
-      // If we are between { and }, or [ and ], or ( and ), add extra level
       const charBefore = value[selectionStart - 1];
       const charAfter = value[selectionStart];
-      let extraIndentation = '';
       if ((charBefore === '{' && charAfter === '}') || (charBefore === '[' && charAfter === ']') || (charBefore === '(' && charAfter === ')')) {
-        extraIndentation = '  ';
         e.preventDefault();
-        const newValue = value.substring(0, selectionStart) + '\n' + indentation + extraIndentation + '\n' + indentation + value.substring(selectionEnd);
+        const newValue = value.substring(0, selectionStart) + '\n' + indentation + '  \n' + indentation + value.substring(selectionEnd);
         setEditingFile(prev => prev ? { ...prev, content: newValue } : null);
-        setTimeout(() => {
-          textarea.selectionStart = textarea.selectionEnd = selectionStart + 1 + indentation.length + extraIndentation.length;
-        }, 0);
+        setTimeout(() => { textarea.selectionStart = textarea.selectionEnd = selectionStart + 1 + indentation.length + 2; }, 0);
         return;
       }
 
@@ -183,37 +183,21 @@ export function FileExplorer() {
         e.preventDefault();
         const newValue = value.substring(0, selectionStart) + '\n' + indentation + value.substring(selectionEnd);
         setEditingFile(prev => prev ? { ...prev, content: newValue } : null);
-        setTimeout(() => {
-          textarea.selectionStart = textarea.selectionEnd = selectionStart + 1 + indentation.length;
-        }, 0);
+        setTimeout(() => { textarea.selectionStart = textarea.selectionEnd = selectionStart + 1 + indentation.length; }, 0);
       }
     }
 
-    // 3. Auto-close brackets and quotes
-    const pairs: Record<string, string> = {
-      '{': '}',
-      '[': ']',
-      '(': ')',
-      '"': '"',
-      "'": "'",
-      '`': '`'
-    };
-
+    const pairs: Record<string, string> = { '{': '}', '[': ']', '(': ')', '"': '"', "'": "'", '`': '`' };
     if (pairs[e.key]) {
-      // If it's a quote, only auto-close if not already inside one or if it's the start
       const newValue = value.substring(0, selectionStart) + e.key + pairs[e.key] + value.substring(selectionEnd);
       e.preventDefault();
       setEditingFile(prev => prev ? { ...prev, content: newValue } : null);
-      setTimeout(() => {
-        textarea.selectionStart = textarea.selectionEnd = selectionStart + 1;
-      }, 0);
+      setTimeout(() => { textarea.selectionStart = textarea.selectionEnd = selectionStart + 1; }, 0);
     }
   };
 
   const handleEditorScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
-    if (lineNumbersRef.current) {
-      lineNumbersRef.current.scrollTop = e.currentTarget.scrollTop;
-    }
+    if (lineNumbersRef.current) lineNumbersRef.current.scrollTop = e.currentTarget.scrollTop;
     if (preRef.current) {
       preRef.current.scrollTop = e.currentTarget.scrollTop;
       preRef.current.scrollLeft = e.currentTarget.scrollLeft;
@@ -245,10 +229,7 @@ export function FileExplorer() {
     if (!editingFile) return '';
     const lang = getLanguage(editingFile.name);
     if (lang === 'text' || !Prism.languages[lang]) {
-      return editingFile.content
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+      return editingFile.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
     return Prism.highlight(editingFile.content, Prism.languages[lang], lang);
   }, [editingFile, getLanguage]);
@@ -261,395 +242,443 @@ export function FileExplorer() {
   const displayLanguageName = (fileName: string) => {
     const lang = getLanguage(fileName);
     const map: Record<string, string> = {
-      'typescript': 'TypeScript',
-      'javascript': 'JavaScript',
-      'css': 'CSS',
-      'markup': 'HTML',
-      'json': 'JSON',
-      'markdown': 'Markdown',
-      'python': 'Python',
-      'bash': 'Shell',
-      'text': 'Text'
+      'typescript': 'TypeScript', 'javascript': 'JavaScript', 'css': 'CSS', 'markup': 'HTML',
+      'json': 'JSON', 'markdown': 'Markdown', 'python': 'Python', 'bash': 'Shell', 'text': 'Text'
     };
     return map[lang] || 'Text';
   };
 
-  return (
-    <div className="animate-in" style={{ padding: '2rem 0', maxWidth: '1000px', margin: '0 auto', width: '100%', overflowX: 'hidden' }}>
-      <Card style={{ padding: '2rem', width: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <FolderOpen size={24} style={{ color: 'var(--accent-sky)' }} />
-            <h2 className="title-md" style={{ margin: 0 }}>파일 탐색기</h2>
+  // Render Editor Fragment (Reused in Modal and Inline)
+  const renderEditor = () => {
+    if (!editingFile) return null;
+    
+    return (
+      <div style={{
+        backgroundColor: 'var(--surface)', borderRadius: isLargeScreen ? '0' : '12px',
+        width: '100%', height: '100%',
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden', border: isLargeScreen ? 'none' : '1px solid var(--line)',
+        boxShadow: isLargeScreen ? 'none' : '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+      }}>
+        <div style={{ 
+          padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--line)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          backgroundColor: 'var(--surface-subtle)',
+          flexWrap: 'wrap', gap: '0.5rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: 1 }}>
+            <Code size={20} style={{ color: 'var(--accent-sky)', flexShrink: 0 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {editingFile.name}
+              </span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{displayLanguageName(editingFile.name)}</span>
+            </div>
           </div>
-          
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+            {getLanguage(editingFile.name) === 'markdown' && (
+              <button 
+                onClick={() => setIsPreview(!isPreview)}
+                className="btn-secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+              >
+                {isPreview ? <Edit3 size={16} /> : <Eye size={16} />}
+                {isPreview ? '편집' : '미리보기'}
+              </button>
+            )}
             <button 
-              onClick={() => setNewPathInput({ type: 'file', active: true })}
-              className="btn-secondary" 
-              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
+              onClick={saveEditedFile} 
+              disabled={isEditorSaving}
+              className="btn-primary" 
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 1rem', fontSize: '0.85rem' }}
             >
-              <FilePlus size={16} /> 새 파일
+              {isEditorSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              저장
             </button>
             <button 
-              onClick={() => setNewPathInput({ type: 'folder', active: true })}
-              className="btn-secondary" 
-              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
+              onClick={() => setEditingFile(null)} 
+              className="btn-secondary"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 1rem', fontSize: '0.85rem' }}
             >
-              <FolderPlus size={16} /> 새 폴더
+              <X size={16} /> 닫기
             </button>
           </div>
         </div>
-
-        {/* Create Input Area */}
-        {newPathInput.active && (
-          <div style={{ 
-            display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', 
-            padding: '1rem', backgroundColor: 'var(--surface-subtle)', borderRadius: '8px',
-            border: '1px solid var(--line)'
-          }}>
-            <input 
-              autoFocus
-              className="input-base"
-              placeholder={`${newPathInput.type === 'file' ? '파일명' : '폴더명'}을 입력하세요...`}
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-              style={{ flex: 1 }}
-            />
-            <button onClick={handleCreate} className="btn-primary" style={{ padding: '0 1rem' }}>생성</button>
-            <button onClick={() => { setNewPathInput({ ...newPathInput, active: false }); setNewName(''); }} className="btn-secondary" style={{ padding: '0 1rem' }}>취소</button>
-          </div>
-        )}
-
-        <div style={{
-          padding: '0.75rem 1rem',
+        
+        <div style={{ 
+          flex: 1, 
+          display: 'flex', 
+          overflow: 'hidden',
           backgroundColor: 'var(--bg)',
-          borderRadius: '8px',
-          marginBottom: '1.5rem',
-          fontFamily: 'monospace',
-          fontSize: '0.875rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          border: '1px solid var(--line)',
-          overflow: 'hidden'
+          position: 'relative'
         }}>
-          <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>위치:</span>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {data?.currentPath || currentPath}
-          </span>
-        </div>
-
-        {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '5rem 0', color: 'var(--text-muted)' }}>
-            <Loader2 size={40} className="animate-spin" />
-          </div>
-        ) : error ? (
-          <div style={{ 
-            color: 'var(--accent-red)', padding: '2rem', textAlign: 'center', 
-            backgroundColor: 'rgba(239, 68, 68, 0.05)', borderRadius: '12px',
-            border: '1px solid rgba(239, 68, 68, 0.2)',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem'
-          }}>
-            <AlertCircle size={32} />
-            <div>{error}</div>
-            <button onClick={() => fetchDirectory(currentPath)} className="btn-secondary" style={{ fontSize: '0.8rem' }}>다시 시도</button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            {data?.parentPath && (
+          {!isPreview ? (
+            <>
               <div 
-                onClick={() => handleNavigate(data.parentPath!)}
+                ref={lineNumbersRef}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.75rem 1rem',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  transition: 'background-color 0.2s',
-                  backgroundColor: 'transparent'
+                  width: '3.5rem', padding: '1.5rem 0.5rem',
+                  backgroundColor: 'var(--surface-subtle)', borderRight: '1px solid var(--line)',
+                  color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: '0.85rem',
+                  lineHeight: '1.5', textAlign: 'right', userSelect: 'none', overflow: 'hidden', whiteSpace: 'pre'
                 }}
-                className="hover-bg"
               >
-                <ArrowUpCircle size={20} style={{ color: 'var(--text-muted)' }} />
-                <span style={{ fontWeight: 500 }}>.. (상위 폴더)</span>
+                {getLineNumbers()}
               </div>
-            )}
-            
-            {data?.directories.length === 0 && !data?.parentPath && (
-              <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                워크스페이스가 비어 있습니다. 새로운 파일을 만들어보세요.
-              </div>
-            )}
 
-            {data?.directories.map((item) => (
-              <div
-                key={item.path}
-                onClick={() => item.isDirectory ? handleNavigate(item.path) : handleEditFile(item)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '0.75rem 1rem',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  backgroundColor: 'transparent',
-                  minWidth: 0
-                }}
-                className="hover-bg group"
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
-                  {item.isDirectory ? (
-                    <Folder size={20} style={{ color: 'var(--accent-sky)', flexShrink: 0 }} />
-                  ) : (
-                    <File size={20} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                  )}
-                  <span style={{ 
-                    fontWeight: item.isDirectory ? 500 : 400,
-                    color: item.isDirectory ? 'var(--text)' : 'var(--text-muted)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    {item.name}
-                  </span>
-                </div>
-                
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
-                  <button 
-                    onClick={(e) => handleDelete(e, item)}
-                    style={{ 
-                      padding: '0.4rem', borderRadius: '4px', color: 'var(--text-muted)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: 'transparent', border: 'none', cursor: 'pointer'
-                    }}
-                    className="hover-danger"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                  {item.isDirectory && (
-                    <ChevronRight size={16} style={{ color: 'var(--text-muted)' }} />
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      {/* Editor Modal */}
-      {editingFile && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.7)', display: 'flex',
-          alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-          padding: '1rem'
-        }}>
-          <div style={{
-            backgroundColor: 'var(--surface)', borderRadius: '12px',
-            width: '100%', maxWidth: '1100px', height: '100%', maxHeight: '90vh',
-            display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-            overflow: 'hidden', border: '1px solid var(--line)'
-          }}>
-            <div style={{ 
-              padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--line)',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              backgroundColor: 'var(--surface-subtle)',
-              flexWrap: 'wrap', gap: '0.5rem'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: 1 }}>
-                <Code size={20} style={{ color: 'var(--accent-sky)', flexShrink: 0 }} />
-                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                  <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {editingFile.name}
-                  </span>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{displayLanguageName(editingFile.name)}</span>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
-                {getLanguage(editingFile.name) === 'markdown' && (
-                  <button 
-                    onClick={() => setIsPreview(!isPreview)}
-                    className="btn-secondary"
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
-                  >
-                    {isPreview ? <Edit3 size={16} /> : <Eye size={16} />}
-                    {isPreview ? '편집' : '미리보기'}
-                  </button>
-                )}
-                <button 
-                  onClick={saveEditedFile} 
-                  disabled={isEditorSaving}
-                  className="btn-primary" 
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 1rem', fontSize: '0.85rem' }}
-                >
-                  {isEditorSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                  저장
-                </button>
-                <button 
-                  onClick={() => setEditingFile(null)} 
-                  className="btn-secondary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 1rem', fontSize: '0.85rem' }}
-                >
-                  <X size={16} /> 닫기
-                </button>
-              </div>
-            </div>
-            
-            <div style={{ 
-              flex: 1, 
-              display: 'flex', 
-              overflow: 'hidden',
-              backgroundColor: 'var(--bg)',
-              position: 'relative'
-            }}>
-              {!isPreview ? (
-                <>
-                  {/* Line Numbers */}
-                  <div 
-                    ref={lineNumbersRef}
-                    style={{
-                      width: '3.5rem',
-                      padding: '1.5rem 0.5rem',
-                      backgroundColor: 'var(--surface-subtle)',
-                      borderRight: '1px solid var(--line)',
-                      color: 'var(--text-muted)',
-                      fontFamily: 'monospace',
-                      fontSize: '0.85rem',
-                      lineHeight: '1.5',
-                      textAlign: 'right',
-                      userSelect: 'none',
-                      overflow: 'hidden',
-                      whiteSpace: 'pre'
-                    }}
-                  >
-                    {getLineNumbers()}
-                  </div>
-
-                  {/* Layered Editor Container */}
-                  <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
-                    {/* Syntax Highlighted Layer */}
-                    <pre
-                      ref={preRef}
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        margin: 0,
-                        padding: '1.5rem',
-                        fontFamily: 'monospace',
-                        fontSize: '0.85rem',
-                        lineHeight: '1.5',
-                        pointerEvents: 'none',
-                        whiteSpace: 'pre',
-                        overflow: 'hidden',
-                        backgroundColor: 'transparent',
-                        color: 'var(--text)',
-                        tabSize: 2,
-                        zIndex: 1
-                      }}
-                      dangerouslySetInnerHTML={{ __html: highlightedContent + '\n' }}
-                    />
-
-                    {/* Transparent Textarea Layer */}
-                    <textarea
-                      ref={textareaRef}
-                      value={editingFile.content}
-                      onChange={(e) => setEditingFile({ ...editingFile, content: e.target.value })}
-                      onKeyDown={handleEditorKeyDown}
-                      onScroll={handleEditorScroll}
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        border: 'none',
-                        padding: '1.5rem',
-                        fontFamily: 'monospace',
-                        fontSize: '0.85rem',
-                        lineHeight: '1.5',
-                        backgroundColor: 'transparent',
-                        color: 'transparent',
-                        caretColor: 'var(--text)',
-                        resize: 'none',
-                        outline: 'none',
-                        whiteSpace: 'pre',
-                        overflow: 'auto',
-                        tabSize: 2,
-                        zIndex: 2
-                      }}
-                      spellCheck={false}
-                    />
-                  </div>
-                </>
-              ) : (
-                <div 
-                  className="markdown-body"
+              <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+                <pre
+                  ref={preRef}
                   style={{
-                    flex: 1,
-                    padding: '2rem',
-                    overflow: 'auto',
-                    backgroundColor: 'var(--bg)',
-                    color: 'var(--text)',
-                    lineHeight: '1.6'
+                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                    margin: 0, padding: '1.5rem', fontFamily: 'monospace', fontSize: '0.85rem',
+                    lineHeight: '1.5', pointerEvents: 'none', whiteSpace: 'pre', overflow: 'hidden',
+                    backgroundColor: 'transparent', color: 'var(--text)', tabSize: 2, zIndex: 1
                   }}
-                  dangerouslySetInnerHTML={{ __html: markdownHtml }}
+                  dangerouslySetInnerHTML={{ __html: highlightedContent + '\n' }}
                 />
-              )}
+                <textarea
+                  ref={textareaRef}
+                  value={editingFile.content}
+                  onChange={(e) => setEditingFile({ ...editingFile, content: e.target.value })}
+                  onKeyDown={handleEditorKeyDown}
+                  onScroll={handleEditorScroll}
+                  style={{
+                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                    border: 'none', padding: '1.5rem', fontFamily: 'monospace', fontSize: '0.85rem',
+                    lineHeight: '1.5', backgroundColor: 'transparent', color: 'transparent',
+                    caretColor: 'var(--text)', resize: 'none', outline: 'none', whiteSpace: 'pre',
+                    overflow: 'auto', tabSize: 2, zIndex: 2
+                  }}
+                  spellCheck={false}
+                />
+              </div>
+            </>
+          ) : (
+            <div 
+              className="markdown-body"
+              style={{
+                flex: 1, padding: '2rem', overflow: 'auto',
+                backgroundColor: 'var(--bg)', color: 'var(--text)', lineHeight: '1.6'
+              }}
+              dangerouslySetInnerHTML={{ __html: markdownHtml }}
+            />
+          )}
+        </div>
+        
+        <div style={{ 
+          padding: '0.4rem 1rem', backgroundColor: 'var(--surface-subtle)', borderTop: '1px solid var(--line)',
+          fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'flex-end', gap: '1rem'
+        }}>
+          <span>라인: {editingFile.content.split('\n').length}</span>
+          <span>탭: 2 spaces</span>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="explorer-container animate-in">
+      <div className={`explorer-layout ${isLargeScreen ? 'layout-grid' : 'layout-stack'}`}>
+        {/* Sidebar / List View */}
+        <Card className="explorer-sidebar" style={{ 
+          padding: '1.5rem', 
+          height: isLargeScreen ? 'calc(100vh - 180px)' : 'auto',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <FolderOpen size={20} style={{ color: 'var(--accent-sky)' }} />
+              <h2 className="title-sm" style={{ margin: 0 }}>탐색기</h2>
             </div>
             
-            <div style={{ 
-              padding: '0.4rem 1rem', 
-              backgroundColor: 'var(--surface-subtle)', 
-              borderTop: '1px solid var(--line)',
-              fontSize: '0.75rem',
-              color: 'var(--text-muted)',
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: '1rem'
-            }}>
-              <span>라인: {editingFile.content.split('\n').length}</span>
-              <span>탭: 2 spaces</span>
+            <div style={{ display: 'flex', gap: '0.25rem' }}>
+              <button 
+                onClick={() => setNewPathInput({ type: 'file', active: true })}
+                className="btn-icon-subtle" title="새 파일"
+              >
+                <FilePlus size={18} />
+              </button>
+              <button 
+                onClick={() => setNewPathInput({ type: 'folder', active: true })}
+                className="btn-icon-subtle" title="새 폴더"
+              >
+                <FolderPlus size={18} />
+              </button>
             </div>
+          </div>
+
+          {newPathInput.active && (
+            <div style={{ 
+              display: 'flex', gap: '0.5rem', marginBottom: '1rem', 
+              padding: '0.75rem', backgroundColor: 'var(--surface-subtle)', borderRadius: '8px',
+              border: '1px solid var(--line)'
+            }}>
+              <input 
+                autoFocus className="input-base" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
+                placeholder={newPathInput.type === 'file' ? '파일명...' : '폴더명...'}
+                value={newName} onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+              />
+              <button onClick={handleCreate} className="btn-primary" style={{ padding: '0 0.5rem', fontSize: '0.75rem' }}>생성</button>
+              <button onClick={() => { setNewPathInput({ ...newPathInput, active: false }); setNewName(''); }} className="btn-secondary" style={{ padding: '0 0.5rem', fontSize: '0.75rem' }}>취소</button>
+            </div>
+          )}
+
+          <div className="breadcrumb-bar">
+            <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>위치:</span>
+            <span className="breadcrumb-path">{data?.currentPath || currentPath}</span>
+          </div>
+
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {loading ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem 0', color: 'var(--text-muted)' }}>
+                <Loader2 size={32} className="animate-spin" />
+              </div>
+            ) : error ? (
+              <div className="error-box">
+                <AlertCircle size={24} />
+                <div style={{ fontSize: '0.85rem' }}>{error}</div>
+                <button onClick={() => fetchDirectory(currentPath)} className="btn-secondary" style={{ fontSize: '0.75rem' }}>재시도</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                {data?.parentPath && (
+                  <div onClick={() => handleNavigate(data.parentPath!)} className="file-item hover-bg">
+                    <ArrowUpCircle size={18} style={{ color: 'var(--text-muted)' }} />
+                    <span style={{ fontWeight: 500, fontSize: '0.9rem' }}>..</span>
+                  </div>
+                )}
+                
+                {data?.directories.length === 0 && !data?.parentPath && (
+                  <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                    비어 있습니다.
+                  </div>
+                )}
+
+                {data?.directories.map((item) => (
+                  <div
+                    key={item.path}
+                    onClick={() => item.isDirectory ? handleNavigate(item.path) : handleEditFile(item)}
+                    className={`file-item hover-bg group ${editingFile?.path === item.path ? 'active-item' : ''}`}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: 0 }}>
+                      {item.isDirectory ? (
+                        <Folder size={18} style={{ color: 'var(--accent-sky)', flexShrink: 0 }} />
+                      ) : (
+                        <File size={18} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                      )}
+                      <span className="file-name-text">{item.name}</span>
+                    </div>
+                    
+                    <div className="item-actions">
+                      <button onClick={(e) => handleDelete(e, item)} className="btn-delete-item">
+                        <Trash2 size={14} />
+                      </button>
+                      {item.isDirectory && <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* Main Content Area (Desktop/Tablet) */}
+        {isLargeScreen && (
+          <Card className="explorer-main" style={{ 
+            height: 'calc(100vh - 180px)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: editingFile ? 'stretch' : 'center',
+            alignItems: editingFile ? 'stretch' : 'center',
+            padding: editingFile ? '0' : '2rem',
+            overflow: 'hidden',
+            backgroundColor: editingFile ? 'transparent' : 'var(--surface-subtle)'
+          }}>
+            {editingFile ? (
+              renderEditor()
+            ) : (
+              <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
+                  <div style={{ 
+                    padding: '1.5rem', borderRadius: '50%', backgroundColor: 'var(--surface)',
+                    boxShadow: 'var(--shadow-md)', color: 'var(--accent-sky)'
+                  }}>
+                    <File size={48} strokeWidth={1.5} />
+                  </div>
+                </div>
+                <h3 className="title-sm" style={{ marginBottom: '0.5rem' }}>파일을 선택하세요</h3>
+                <p style={{ fontSize: '0.85rem', maxWidth: '240px', margin: '0 auto' }}>
+                  사이드바에서 파일을 선택하여 내용을 확인하고 편집할 수 있습니다.
+                </p>
+              </div>
+            )}
+          </Card>
+        )}
+      </div>
+
+      {/* Mobile Editor Modal */}
+      {!isLargeScreen && editingFile && (
+        <div className="mobile-modal-overlay">
+          <div className="mobile-modal-content">
+            {renderEditor()}
           </div>
         </div>
       )}
 
       <style jsx>{`
-        .hover-bg:hover {
-          background-color: var(--surface-subtle) !important;
+        .explorer-container {
+          padding: 1.5rem 0;
+          width: 100%;
+          max-width: 1200px;
+          margin: 0 auto;
         }
-        .hover-danger:hover {
-          color: var(--accent-red) !important;
-          background-color: rgba(239, 68, 68, 0.1) !important;
+        .explorer-layout {
+          display: grid;
+          gap: 1.25rem;
         }
+        .layout-grid {
+          grid-template-columns: 280px 1fr;
+        }
+        @media (min-width: 1024px) {
+          .layout-grid {
+            grid-template-columns: 320px 1fr;
+          }
+        }
+        .layout-stack {
+          grid-template-columns: 1fr;
+        }
+
+        .breadcrumb-bar {
+          padding: 0.6rem 0.8rem;
+          background-color: var(--bg);
+          border-radius: 6px;
+          margin-bottom: 1rem;
+          font-family: var(--font-mono);
+          font-size: 0.75rem;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          border: 1px solid var(--line);
+          overflow: hidden;
+        }
+        .breadcrumb-path {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: var(--text);
+        }
+
+        .file-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0.6rem 0.75rem;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          min-width: 0;
+        }
+        .file-item:hover {
+          background-color: var(--surface-subtle);
+        }
+        .active-item {
+          background-color: var(--accent-sky-bg) !important;
+          border-left: 3px solid var(--accent-sky);
+          border-radius: 0 6px 6px 0;
+        }
+        .file-name-text {
+          font-size: 0.85rem;
+          color: var(--text);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .active-item .file-name-text {
+          color: var(--accent-sky);
+          font-weight: 600;
+        }
+
+        .item-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.4rem;
+          flex-shrink: 0;
+          opacity: 0.4;
+          transition: opacity 0.2s;
+        }
+        .file-item:hover .item-actions {
+          opacity: 1;
+        }
+        .btn-delete-item {
+          padding: 0.3rem;
+          border-radius: 4px;
+          color: var(--text-muted);
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .btn-delete-item:hover {
+          color: var(--accent-red);
+          background-color: var(--accent-red-bg);
+        }
+
+        .btn-icon-subtle {
+          padding: 0.4rem;
+          border-radius: 6px;
+          color: var(--text-muted);
+          background: transparent;
+          border: 1px solid transparent;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s;
+        }
+        .btn-icon-subtle:hover {
+          background-color: var(--surface-subtle);
+          border-color: var(--line);
+          color: var(--text);
+        }
+
+        .error-box {
+          color: var(--accent-red);
+          padding: 1.5rem;
+          text-align: center;
+          background-color: var(--accent-red-bg);
+          border-radius: 8px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.75rem;
+          margin: 1rem 0;
+        }
+
+        .mobile-modal-overlay {
+          position: fixed;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background-color: rgba(0, 0, 0, 0.7);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          padding: 1rem;
+        }
+        .mobile-modal-content {
+          width: 100%;
+          height: 100%;
+          max-height: 90vh;
+        }
+
         .animate-spin {
           animation: spin 1s linear infinite;
         }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        textarea::-webkit-scrollbar {
-          width: 8px;
-          height: 8px;
-        }
-        textarea::-webkit-scrollbar-track {
-          background: var(--bg);
-        }
-        textarea::-webkit-scrollbar-thumb {
-          background: var(--line);
-          border-radius: 4px;
-        }
-        textarea::-webkit-scrollbar-thumb:hover {
-          background: var(--text-muted);
-        }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
         /* Markdown Styling */
         .markdown-body :global(h1), .markdown-body :global(h2) { border-bottom: 1px solid var(--line); padding-bottom: 0.3em; margin-top: 1.5em; margin-bottom: 1rem; }
@@ -660,38 +689,12 @@ export function FileExplorer() {
         .markdown-body :global(th), .markdown-body :global(td) { border: 1px solid var(--line); padding: 0.5rem; }
 
         /* Prism Theme Customization */
-        :global(.token.comment),
-        :global(.token.prolog),
-        :global(.token.doctype),
-        :global(.token.cdata) { color: #6a737d; font-style: italic; }
+        :global(.token.comment) { color: #6a737d; font-style: italic; }
         :global(.token.punctuation) { color: var(--text-muted); }
-        :global(.token.namespace) { opacity: .7; }
-        :global(.token.property),
-        :global(.token.tag),
-        :global(.token.boolean),
-        :global(.token.number),
-        :global(.token.constant),
-        :global(.token.symbol),
-        :global(.token.deleted) { color: var(--accent-amber); }
-        :global(.token.selector),
-        :global(.token.attr-name),
-        :global(.token.string),
-        :global(.token.char),
-        :global(.token.builtin),
-        :global(.token.inserted) { color: #9ece6a; }
-        :global(.token.operator),
-        :global(.token.entity),
-        :global(.token.url),
-        :global(.language-css .token.string),
-        :global(.style .token.string) { color: var(--accent-sky); }
-        :global(.token.atrule),
-        :global(.token.attr-value),
         :global(.token.keyword) { color: var(--accent-violet); }
-        :global(.token.function),
-        :global(.token.class-name) { color: #7aa2f7; }
-        :global(.token.regex),
-        :global(.token.important),
-        :global(.token.variable) { color: var(--accent-amber); }
+        :global(.token.string) { color: #9ece6a; }
+        :global(.token.function) { color: #7aa2f7; }
+        :global(.token.operator) { color: var(--accent-sky); }
       `}</style>
     </div>
   );
