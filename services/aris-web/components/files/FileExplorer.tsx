@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Folder, FolderOpen, File, ChevronRight, ArrowUpCircle, 
-  Loader2, FolderPlus, FilePlus, Trash2, X, Save, AlertCircle
+  Loader2, FolderPlus, FilePlus, Trash2, X, Save, AlertCircle,
+  Code
 } from 'lucide-react';
 import { Card } from '@/components/ui';
 
@@ -31,6 +32,10 @@ export function FileExplorer() {
   const [isEditorSaving, setIsEditorSaving] = useState(false);
   const [newPathInput, setNewPathInput] = useState<{ type: 'file' | 'folder'; active: boolean }>({ type: 'file', active: false });
   const [newName, setNewName] = useState('');
+
+  // Refs for IDE features
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lineNumbersRef = useRef<HTMLDivElement>(null);
 
   const fetchDirectory = useCallback(async (path: string) => {
     setLoading(true);
@@ -120,8 +125,105 @@ export function FileExplorer() {
     }
   };
 
+  // IDE Editor Handlers
+  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const textarea = e.currentTarget;
+    const { selectionStart, selectionEnd, value } = textarea;
+
+    // 1. Tab key support (Insert 2 spaces)
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const newValue = value.substring(0, selectionStart) + '  ' + value.substring(selectionEnd);
+      setEditingFile(prev => prev ? { ...prev, content: newValue } : null);
+      
+      // Reset cursor position (need to wait for React state update)
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = selectionStart + 2;
+      }, 0);
+    }
+
+    // 2. Auto-indentation on Enter
+    if (e.key === 'Enter') {
+      const lines = value.substring(0, selectionStart).split('\n');
+      const currentLine = lines[lines.length - 1];
+      const match = currentLine.match(/^\s*/);
+      const indentation = match ? match[0] : '';
+      
+      // If we are between { and }, or [ and ], or ( and ), add extra level
+      const charBefore = value[selectionStart - 1];
+      const charAfter = value[selectionStart];
+      let extraIndentation = '';
+      if ((charBefore === '{' && charAfter === '}') || (charBefore === '[' && charAfter === ']') || (charBefore === '(' && charAfter === ')')) {
+        extraIndentation = '  ';
+        e.preventDefault();
+        const newValue = value.substring(0, selectionStart) + '\n' + indentation + extraIndentation + '\n' + indentation + value.substring(selectionEnd);
+        setEditingFile(prev => prev ? { ...prev, content: newValue } : null);
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd = selectionStart + 1 + indentation.length + extraIndentation.length;
+        }, 0);
+        return;
+      }
+
+      if (indentation) {
+        e.preventDefault();
+        const newValue = value.substring(0, selectionStart) + '\n' + indentation + value.substring(selectionEnd);
+        setEditingFile(prev => prev ? { ...prev, content: newValue } : null);
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd = selectionStart + 1 + indentation.length;
+        }, 0);
+      }
+    }
+
+    // 3. Auto-close brackets and quotes
+    const pairs: Record<string, string> = {
+      '{': '}',
+      '[': ']',
+      '(': ')',
+      '"': '"',
+      "'": "'",
+      '`': '`'
+    };
+
+    if (pairs[e.key]) {
+      // If it's a quote, only auto-close if not already inside one or if it's the start
+      const newValue = value.substring(0, selectionStart) + e.key + pairs[e.key] + value.substring(selectionEnd);
+      e.preventDefault();
+      setEditingFile(prev => prev ? { ...prev, content: newValue } : null);
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = selectionStart + 1;
+      }, 0);
+    }
+  };
+
+  const handleEditorScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
+    if (lineNumbersRef.current) {
+      lineNumbersRef.current.scrollTop = e.currentTarget.scrollTop;
+    }
+  };
+
+  const getLineNumbers = () => {
+    if (!editingFile) return null;
+    const lines = editingFile.content.split('\n').length;
+    return Array.from({ length: lines }, (_, i) => i + 1).join('\n');
+  };
+
+  const getLanguage = (fileName: string) => {
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    switch (ext) {
+      case 'ts': case 'tsx': return 'TypeScript';
+      case 'js': case 'jsx': return 'JavaScript';
+      case 'css': return 'CSS';
+      case 'html': return 'HTML';
+      case 'json': return 'JSON';
+      case 'md': return 'Markdown';
+      case 'py': return 'Python';
+      case 'sh': return 'Shell';
+      default: return 'Text';
+    }
+  };
+
   return (
-    <div className="animate-in" style={{ padding: '2rem 0', maxWidth: '900px', margin: '0 auto' }}>
+    <div className="animate-in" style={{ padding: '2rem 0', maxWidth: '1000px', margin: '0 auto' }}>
       <Card style={{ padding: '2rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -285,29 +387,34 @@ export function FileExplorer() {
       {editingFile && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex',
+          backgroundColor: 'rgba(0, 0, 0, 0.7)', display: 'flex',
           alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-          padding: '2rem'
+          padding: '1rem'
         }}>
           <div style={{
             backgroundColor: 'var(--bg-primary)', borderRadius: '12px',
-            width: '100%', maxWidth: '1000px', height: '100%', maxHeight: '800px',
-            display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)'
+            width: '100%', maxWidth: '1100px', height: '100%', maxHeight: '90vh',
+            display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+            overflow: 'hidden', border: '1px solid var(--border-subtle)'
           }}>
             <div style={{ 
-              padding: '1rem 1.5rem', borderBottom: '1px solid var(--border-subtle)',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+              padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border-subtle)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              backgroundColor: 'var(--bg-secondary)'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <File size={20} style={{ color: 'var(--text-secondary)' }} />
-                <span style={{ fontWeight: 600 }}>{editingFile.name}</span>
+                <Code size={20} style={{ color: 'var(--accent-sky)' }} />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{editingFile.name}</span>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>{getLanguage(editingFile.name)}</span>
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', gap: '0.6rem' }}>
                 <button 
                   onClick={saveEditedFile} 
                   disabled={isEditorSaving}
                   className="btn-primary" 
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 1rem', fontSize: '0.85rem' }}
                 >
                   {isEditorSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                   저장
@@ -315,24 +422,79 @@ export function FileExplorer() {
                 <button 
                   onClick={() => setEditingFile(null)} 
                   className="btn-secondary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 1rem', fontSize: '0.85rem' }}
                 >
                   <X size={16} /> 닫기
                 </button>
               </div>
             </div>
-            <div style={{ flex: 1, padding: '0', overflow: 'hidden' }}>
+            
+            <div style={{ 
+              flex: 1, 
+              display: 'flex', 
+              overflow: 'hidden',
+              backgroundColor: 'var(--bg-tertiary)',
+              position: 'relative'
+            }}>
+              {/* Line Numbers */}
+              <div 
+                ref={lineNumbersRef}
+                style={{
+                  width: '3.5rem',
+                  padding: '1.5rem 0.5rem',
+                  backgroundColor: 'var(--bg-secondary)',
+                  borderRight: '1px solid var(--border-subtle)',
+                  color: 'var(--text-tertiary)',
+                  fontFamily: 'monospace',
+                  fontSize: '0.85rem',
+                  lineHeight: '1.5',
+                  textAlign: 'right',
+                  userSelect: 'none',
+                  overflow: 'hidden',
+                  whiteSpace: 'pre'
+                }}
+              >
+                {getLineNumbers()}
+              </div>
+
+              {/* Textarea Editor */}
               <textarea
+                ref={textareaRef}
                 value={editingFile.content}
                 onChange={(e) => setEditingFile({ ...editingFile, content: e.target.value })}
+                onKeyDown={handleEditorKeyDown}
+                onScroll={handleEditorScroll}
                 style={{
-                  width: '100%', height: '100%', border: 'none', padding: '1.5rem',
-                  fontFamily: 'monospace', fontSize: '0.9rem', lineHeight: '1.5',
-                  backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)',
-                  resize: 'none', outline: 'none'
+                  flex: 1,
+                  border: 'none',
+                  padding: '1.5rem',
+                  fontFamily: 'monospace',
+                  fontSize: '0.85rem',
+                  lineHeight: '1.5',
+                  backgroundColor: 'transparent',
+                  color: 'var(--text-primary)',
+                  resize: 'none',
+                  outline: 'none',
+                  whiteSpace: 'pre',
+                  overflow: 'auto',
+                  tabSize: 2
                 }}
                 spellCheck={false}
               />
+            </div>
+            
+            <div style={{ 
+              padding: '0.4rem 1rem', 
+              backgroundColor: 'var(--bg-secondary)', 
+              borderTop: '1px solid var(--border-subtle)',
+              fontSize: '0.75rem',
+              color: 'var(--text-tertiary)',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '1rem'
+            }}>
+              <span>라인: {editingFile.content.split('\n').length}</span>
+              <span>탭: 2 spaces</span>
             </div>
           </div>
         </div>
@@ -352,6 +514,20 @@ export function FileExplorer() {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+        textarea::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        textarea::-webkit-scrollbar-track {
+          background: var(--bg-tertiary);
+        }
+        textarea::-webkit-scrollbar-thumb {
+          background: var(--border-subtle);
+          border-radius: 4px;
+        }
+        textarea::-webkit-scrollbar-thumb:hover {
+          background: var(--text-tertiary);
         }
       `}</style>
     </div>
