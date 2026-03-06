@@ -13,6 +13,17 @@ import type {
 } from '@/lib/happy/types';
 
 type JsonObject = Record<string, unknown>;
+class HappyHttpError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'HappyHttpError';
+    this.status = status;
+  }
+}
+
+let runtimeStatusEndpointSupported: boolean | null = null;
 
 function asObject(value: unknown): JsonObject | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -76,7 +87,7 @@ async function fetchHappy(path: string, init?: RequestInit): Promise<unknown> {
       }
     })();
 
-    throw new Error(`백엔드 응답 오류 (${response.status}): ${message}`);
+    throw new HappyHttpError(response.status, `백엔드 응답 오류 (${response.status}): ${message}`);
   }
 
   return response.json();
@@ -250,11 +261,39 @@ export async function decidePermissionRequest(input: {
 }
 
 export async function getSessionRuntimeState(sessionId: string): Promise<{ sessionId: string; isRunning: boolean }> {
-  const raw = await fetchHappy(`/v1/sessions/${encodeURIComponent(sessionId)}/runtime`);
-  const obj = asObject(raw);
+  const deriveFromSessions = async () => {
+    const raw = await fetchHappy('/v1/sessions');
+    const sessions = extractArrayPayload(raw, 'sessions');
+    const found = findSessionById(sessions, sessionId) ?? { id: sessionId };
+    const detail = normalizeSessionDetail(found);
+    return {
+      sessionId,
+      isRunning: detail.status === 'running',
+    };
+  };
+
+  if (runtimeStatusEndpointSupported !== false) {
+    try {
+      const raw = await fetchHappy(`/v1/sessions/${encodeURIComponent(sessionId)}/runtime`);
+      const obj = asObject(raw);
+      runtimeStatusEndpointSupported = true;
+      return {
+        sessionId: String(obj?.sessionId ?? sessionId),
+        isRunning: Boolean(obj?.isRunning),
+      };
+    } catch (error) {
+      if (error instanceof HappyHttpError && error.status === 404) {
+        runtimeStatusEndpointSupported = false;
+        return deriveFromSessions();
+      }
+      throw error;
+    }
+  }
+
+  const obj = await deriveFromSessions();
   return {
-    sessionId: String(obj?.sessionId ?? sessionId),
-    isRunning: Boolean(obj?.isRunning),
+    sessionId: obj.sessionId,
+    isRunning: obj.isRunning,
   };
 }
 
