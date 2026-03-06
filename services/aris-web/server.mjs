@@ -11,7 +11,7 @@ const require = createRequire(import.meta.url);
 const pty = require('node-pty');
 
 const dev = process.env.NODE_ENV !== 'production';
-const hostname = process.env.HOSTNAME || '0.0.0.0';
+const hostname = process.env.HOST || '0.0.0.0';
 const port = parseInt(process.env.PORT || '3000', 10);
 
 const JWT_SECRET = process.env.AUTH_JWT_SECRET || 'dev-only-jwt-secret-dev-only-jwt-secret';

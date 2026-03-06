@@ -40,7 +40,7 @@ x-aris-web-common: &aris_web_common
     test:
       [
         "CMD-SHELL",
-        "node -e \"fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        "node -e \"fetch('http://127.0.0.1:3000/login',{redirect:'manual'}).then(r=>process.exit(r.status>=200&&r.status<400?0:1)).catch(()=>process.exit(1))\"",
       ]
     interval: 15s
     timeout: 5s
