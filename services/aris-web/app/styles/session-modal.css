@@ -248,8 +248,8 @@
 
 .agent-select-card.active {
   border-color: var(--agent-color, var(--primary));
-  background: color-mix(in srgb, var(--agent-color, var(--primary)) 8%, white);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--agent-color, var(--primary)) 15%, transparent);
+  background: var(--agent-bg, var(--accent-sky-bg));
+  box-shadow: 0 0 0 3px var(--agent-shadow, rgba(59, 130, 246, 0.12));
 }
 
 .agent-visual {
