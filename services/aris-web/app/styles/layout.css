@@ -18,6 +18,7 @@
   min-height: 100dvh;
   min-height: calc(var(--vh, 1vh) * 100);
   min-height: var(--app-vh, 100dvh);
+  overflow: hidden;
   padding-bottom: 0;
 }
 
@@ -26,4 +27,3 @@
     padding-bottom: 0;
   }
 }
-
