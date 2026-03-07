@@ -11,6 +11,7 @@ import {
   Activity,
   CheckCircle2,
   ChevronDown,
+  ChevronUp,
   ChevronRight,
   CircleAlert,
   Cpu,
@@ -1410,7 +1411,7 @@ export function ChatInterface({
       const delta = Math.max(0, nextStream.scrollHeight - previousHeight);
       nextStream.scrollTop = previousTop + delta;
     });
-  }, [hasMoreBefore, isLoadingOlder, isMobileLayout, loadOlder]);
+  }, [hasMoreBefore, isLoadingOlder, isMobileLayout, loadOlderHistory]);
 
   const syncComposerDockMetrics = useCallback(() => {
     const shell = chatShellRef.current;
@@ -2069,7 +2070,7 @@ export function ChatInterface({
                       }}
                       title="채팅 메뉴"
                     >
-                      <MoreVertical size={15} />
+                      < MoreVertical size={15} />
                     </button>
                     {chatActionMenuId === chat.id && (
                       <div className={styles.chatListMenuPanel}>
@@ -2222,7 +2223,6 @@ export function ChatInterface({
             {streamItems.map((item) => {
               if (item.type === 'action_overflow') {
                 const overflowKindMeta = EVENT_KIND_META[item.kind];
-                const OverflowKindIcon = overflowKindMeta.Icon;
                 const title = item.expanded
                   ? '반복 행동 접기'
                   : `중간 행동 ${item.hiddenCount}개 펼치기`;
@@ -2236,22 +2236,19 @@ export function ChatInterface({
                       aria-label={title}
                       aria-expanded={item.expanded}
                     >
-                      <div className={styles.actionCompact}>
-                        <div className={styles.actionCompactMain}>
-                          <div className={styles.actionCompactTopRow}>
-                            <span className={`${styles.kindChip} ${TONE_CLASS[overflowKindMeta.tone]}`}>
-                              <OverflowKindIcon size={13} />
-                              {overflowKindMeta.label}
-                            </span>
-                            <span className={styles.actionOverflowDots}>...</span>
-                          </div>
-                        </div>
-                        <span
-                          className={styles.actionOverflowCount}
-                          title={item.expanded ? '접기' : `중간 행동 ${item.hiddenCount}개 축약됨`}
-                          aria-label={item.expanded ? '접기' : `중간 행동 ${item.hiddenCount}개 축약됨`}
-                        >
-                          {item.expanded ? '접기' : `+${item.hiddenCount}`}
+                      <div className={styles.actionOverflowContent}>
+                        <span className={styles.actionOverflowLabel}>
+                          {item.expanded ? (
+                            <>
+                              접기
+                              <ChevronUp size={14} />
+                            </>
+                          ) : (
+                            <>
+                              {item.hiddenCount}개의 행동 더 보기
+                              <ChevronDown size={14} />
+                            </>
+                          )}
                         </span>
                       </div>
                     </button>

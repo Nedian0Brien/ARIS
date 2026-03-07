@@ -1375,9 +1375,10 @@
 
 .actionOverflowToggle {
   width: 100%;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   transition: border-color 0.16s ease, background-color 0.16s ease;
+  padding: 0.6rem 0;
 }
 
 .actionOverflowToggle:hover {
@@ -1385,40 +1386,22 @@
   background: rgba(239, 246, 255, 0.55);
 }
 
-.actionOverflowToggle:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+.actionOverflowContent {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.actionOverflowDots {
-  display: block;
-  flex: 1;
-  min-width: 0;
-  text-align: right;
-  font-size: 0.82rem;
-  font-family: var(--font-mono);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: #64748b;
-  line-height: 1.1;
-}
-
-.actionOverflowCount {
-  min-width: 34px;
-  height: 24px;
-  border-radius: 999px;
-  border: 1px dashed rgba(148, 163, 184, 0.35);
-  background: rgba(255, 255, 255, 0.9);
-  color: #334155;
-  font-size: 0.68rem;
-  font-family: var(--font-mono);
-  font-weight: 700;
-  line-height: 1;
-  padding: 0 0.45rem;
+.actionOverflowLabel {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  gap: 0.4rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #64748b;
+  width: 100%;
 }
 
 .pendingRow {
