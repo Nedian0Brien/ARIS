@@ -90,21 +90,26 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.run_web == 'true' || needs.detect-changes.outputs.run_backend == 'true'
     env:
-      DEPLOY_REPO_DIR: /home/ubuntu/project/web-agentic-coding
+      DEPLOY_REPO_DIR: ${{ github.workspace }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Setup Node.js
         if: needs.detect-changes.outputs.run_backend == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "22"
 
-      - name: Sync deployment repository
+      - name: Verify deployment repository path
         shell: bash
         run: |
           set -euo pipefail
-          git -C "$DEPLOY_REPO_DIR" fetch origin main
-          git -C "$DEPLOY_REPO_DIR" checkout main
-          git -C "$DEPLOY_REPO_DIR" pull --ff-only origin main
+          test -d "$DEPLOY_REPO_DIR"
+          test -f "$DEPLOY_REPO_DIR/deploy/deploy_backend_zero_downtime.sh"
+          test -f "$DEPLOY_REPO_DIR/deploy/deploy_web_zero_downtime.sh"
 
       - name: Install backend dependencies
         if: needs.detect-changes.outputs.run_backend == 'true'
