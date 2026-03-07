@@ -315,7 +315,7 @@ export function SessionDashboard({
 
   useEffect(() => {
     setSessionsList(initialSessions);
-    
+
     // Initialize pinned and aliases from initialSessions (fetched from DB)
     const pins = new Set<string>();
     const aliases: Record<string, string> = {};
@@ -326,6 +326,35 @@ export function SessionDashboard({
     setPinnedSessions(pins);
     setSessionAliases(aliases);
   }, [initialSessions]);
+
+  // 세션 상태(실행 중 등)를 주기적으로 갱신 — 초기 로드 이후 백엔드 상태 변화를 반영
+  useEffect(() => {
+    const POLL_INTERVAL_MS = 4000;
+    let disposed = false;
+    let inFlight = false;
+
+    const refresh = async () => {
+      if (disposed || inFlight) return;
+      inFlight = true;
+      try {
+        const res = await fetch('/api/runtime/sessions', { cache: 'no-store' });
+        if (disposed || !res.ok) return;
+        const data = (await res.json()) as { sessions?: SessionSummary[] };
+        if (disposed || !data.sessions) return;
+        setSessionsList(data.sessions);
+      } catch {
+        // 네트워크 오류는 무시 — 다음 주기에 재시도
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const timer = window.setInterval(() => { void refresh(); }, POLL_INTERVAL_MS);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     setSelectedSessionIds((prev) => {
