@@ -30,6 +30,36 @@ describe('classifyEventKind', () => {
     expect(kind).toBe('file_read');
   });
 
+  it('reclassifies mis-tagged file_read commands with write intent to file_write', () => {
+    const kind = classifyEventKind({
+      type: 'file_read',
+      command: '/bin/bash -lc "cd /tmp/work && sed -n \'1,120p\' a.ts && mkdir -p prisma/migrations && cat > prisma/migrations/001_init.sql <<\'SQL\'"',
+    });
+    expect(kind).toBe('file_write');
+  });
+
+  it('detects echo/printf redirects without spaces as file_write', () => {
+    const echoKind = classifyEventKind({
+      type: 'file_read',
+      command: '/bin/bash -lc "echo hello>out.txt"',
+    });
+    const printfKind = classifyEventKind({
+      type: 'file_read',
+      command: '/bin/bash -lc "printf %s\\\\n hello>>out.txt"',
+    });
+
+    expect(echoKind).toBe('file_write');
+    expect(printfKind).toBe('file_write');
+  });
+
+  it('does not treat quoted greater-than in echo as write intent', () => {
+    const kind = classifyEventKind({
+      type: 'file_read',
+      command: '/bin/bash -lc \'echo "a > b"\'',
+    });
+    expect(kind).toBe('file_read');
+  });
+
   it('classifies docker commands as docker_execution', () => {
     const kind = classifyEventKind({
       type: 'command_execution',
@@ -105,6 +135,32 @@ describe('normalizeEvents', () => {
 
     expect(events[0].kind).toBe('file_read');
     expect(events[0].action?.path).toBe('src/app.tsx');
+  });
+
+  it('overrides file_read meta when command contains explicit write operations', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e3b',
+        type: 'message',
+        text: '$ /bin/bash -lc "cd /tmp/work && sed -n \'1,120p\' a.ts && mkdir -p prisma/migrations && cat > prisma/migrations/001_init.sql <<\'SQL\'"',
+        meta: { actionType: 'file_read' },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('file_write');
+  });
+
+  it('keeps file_read meta when command only contains quoted greater-than', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e3c',
+        type: 'message',
+        text: '$ /bin/bash -lc \'echo "a > b"\'',
+        meta: { actionType: 'file_read' },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('file_read');
   });
 
   it('reclassifies command_execution meta to file_read for read-only command patterns', () => {
