@@ -1041,7 +1041,7 @@ export class HappyRuntimeStore {
 
       const created = await this.createPermission({
         sessionId: session.id,
-        agent: session.metadata.flavor === 'codex' ? 'codex' : 'unknown',
+        agent: 'codex',
         command,
         reason,
         risk,
@@ -1515,7 +1515,7 @@ export class HappyRuntimeStore {
 
           const created = await this.createPermission({
             sessionId: session.id,
-            agent: session.metadata.flavor === 'codex' ? 'codex' : 'unknown',
+            agent: 'codex',
             command: request.command,
             reason: request.reason,
             risk: request.risk,
@@ -1694,9 +1694,10 @@ export class HappyRuntimeStore {
   private async generateAndPersistAgentReply(
     session: RuntimeSession,
     prompt: string,
-    context: { chatId?: string; threadId?: string } = {},
+    context: { chatId?: string; threadId?: string; agent?: RuntimeAgent } = {},
   ): Promise<void> {
-    const flavor = session.metadata.flavor;
+    const requestedFlavor = normalizeAgent(context.agent);
+    const flavor = requestedFlavor === 'unknown' ? session.metadata.flavor : requestedFlavor;
     if (flavor === 'unknown') {
       return;
     }
@@ -1888,7 +1889,9 @@ export class HappyRuntimeStore {
       const threadId = typeof input.meta?.threadId === 'string' && input.meta.threadId.trim().length > 0
         ? input.meta.threadId.trim()
         : undefined;
-      void this.generateAndPersistAgentReply(session, input.text, { chatId, threadId });
+      const requestedAgent = normalizeAgent(input.meta?.agent);
+      const agent = requestedAgent === 'unknown' ? undefined : requestedAgent;
+      void this.generateAndPersistAgentReply(session, input.text, { chatId, threadId, agent });
     }
 
     if (!created.text || !created.title) {

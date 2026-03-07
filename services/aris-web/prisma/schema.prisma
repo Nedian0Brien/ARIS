@@ -47,6 +47,7 @@ model SessionChat {
   id             String   @id @default(cuid())
   sessionId      String
   userId         String
+  agent          String   @default("codex")
   title          String
   isPinned       Boolean  @default(false)
   isDefault      Boolean  @default(false)

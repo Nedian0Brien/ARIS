@@ -1,11 +1,20 @@
 import { prisma } from '@/lib/db/prisma';
-import type { SessionChat } from '@/lib/happy/types';
+import type { ChatAgent, SessionChat } from '@/lib/happy/types';
 
 const DEFAULT_CHAT_TITLE = '새 채팅';
+const DEFAULT_CHAT_AGENT: ChatAgent = 'codex';
+
+export function normalizeChatAgent(input: unknown, fallback: ChatAgent = DEFAULT_CHAT_AGENT): ChatAgent {
+  if (input === 'claude' || input === 'codex' || input === 'gemini') {
+    return input;
+  }
+  return fallback;
+}
 
 function toSessionChat(record: {
   id: string;
   sessionId: string;
+  agent: string;
   title: string;
   isPinned: boolean;
   isDefault: boolean;
@@ -17,6 +26,7 @@ function toSessionChat(record: {
   return {
     id: record.id,
     sessionId: record.sessionId,
+    agent: normalizeChatAgent(record.agent),
     title: record.title,
     isPinned: record.isPinned,
     isDefault: record.isDefault,
@@ -72,7 +82,9 @@ export async function listSessionChats(input: {
   sessionId: string;
   userId: string;
   ensureDefault?: boolean;
+  defaultAgent?: ChatAgent;
 }): Promise<SessionChat[]> {
+  const defaultAgent = normalizeChatAgent(input.defaultAgent, DEFAULT_CHAT_AGENT);
   if (input.ensureDefault ?? true) {
     const hasAny = await prisma.sessionChat.findFirst({
       where: {
@@ -87,6 +99,7 @@ export async function listSessionChats(input: {
         data: {
           sessionId: input.sessionId,
           userId: input.userId,
+          agent: defaultAgent,
           title: DEFAULT_CHAT_TITLE,
           isDefault: true,
         },
@@ -108,6 +121,7 @@ export async function createSessionChat(input: {
   sessionId: string;
   userId: string;
   title?: string;
+  agent?: ChatAgent;
 }): Promise<SessionChat> {
   const existing = await prisma.sessionChat.findMany({
     where: {
@@ -120,11 +134,13 @@ export async function createSessionChat(input: {
   const title = typeof input.title === 'string' && input.title.trim()
     ? normalizeChatTitle(input.title)
     : buildNextChatTitle(existing.map((chat) => chat.title));
+  const agent = normalizeChatAgent(input.agent, DEFAULT_CHAT_AGENT);
 
   const created = await prisma.sessionChat.create({
     data: {
       sessionId: input.sessionId,
       userId: input.userId,
+      agent,
       title,
       isDefault: false,
     },
@@ -138,6 +154,7 @@ export async function updateSessionChat(input: {
   userId: string;
   chatId: string;
   title?: string;
+  agent?: ChatAgent;
   isPinned?: boolean;
   threadId?: string | null;
   touchActivity?: boolean;
@@ -156,6 +173,7 @@ export async function updateSessionChat(input: {
   }
 
   const shouldUpdate = input.title !== undefined
+    || input.agent !== undefined
     || input.isPinned !== undefined
     || input.threadId !== undefined
     || Boolean(input.touchActivity);
@@ -176,6 +194,7 @@ export async function updateSessionChat(input: {
     },
     data: {
       ...(input.title !== undefined && { title: normalizeChatTitle(input.title) }),
+      ...(input.agent !== undefined && { agent: normalizeChatAgent(input.agent, DEFAULT_CHAT_AGENT) }),
       ...(input.isPinned !== undefined && { isPinned: input.isPinned }),
       ...(input.threadId !== undefined && { threadId: input.threadId && input.threadId.trim() ? input.threadId.trim() : null }),
       ...(input.touchActivity && { lastActivityAt: new Date() }),

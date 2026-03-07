@@ -20,7 +20,7 @@ type AgentFlavor = 'claude' | 'codex' | 'gemini';
 
 type PathHistoryEntry = {
   path: string;
-  agent: AgentFlavor;
+  agent?: AgentFlavor;
   approvalPolicy: ApprovalPolicy;
   lastUsedAt: string;
   sessionId?: string;
@@ -100,6 +100,7 @@ const AGENT_OPTIONS: AgentOption[] = [
     accentBg: 'rgba(66, 133, 244, 0.15)',
   },
 ];
+const DEFAULT_SESSION_AGENT: AgentFlavor = 'codex';
 
 const APPROVAL_POLICY_OPTIONS: Array<{
   id: SessionApprovalPolicy;
@@ -273,7 +274,6 @@ export function SessionDashboard({
   const router = useRouter();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newPath, setNewPath] = useState('');
-  const [newAgent, setNewAgent] = useState<AgentFlavor>('claude');
   const [newApprovalPolicy, setNewApprovalPolicy] = useState<SessionApprovalPolicy>('on-request');
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -449,7 +449,7 @@ export function SessionDashboard({
         if (Array.isArray(parsed)) {
           setPathHistory(parsed.map(item => ({
             path: String(item.path || ''),
-            agent: resolveAgent(item.agent),
+            agent: isAgentFlavor(item.agent) ? item.agent : DEFAULT_SESSION_AGENT,
             approvalPolicy: resolveSessionApprovalPolicy(item.approvalPolicy),
             lastUsedAt: normalizeDate(item.lastUsedAt),
             sessionId: item.sessionId ? String(item.sessionId) : undefined,
@@ -570,15 +570,16 @@ export function SessionDashboard({
 
   function recordHistory(
     pathInput: string,
-    agent: AgentFlavor,
+    agent: AgentFlavor | undefined,
     approvalPolicy: SessionApprovalPolicy,
     sessionId?: string,
   ) {
     const path = sanitizePath(pathInput);
     if (!path) return;
+    const resolvedAgent = isAgentFlavor(agent) ? agent : DEFAULT_SESSION_AGENT;
     setPathHistory((prev) => {
       const next = [
-        { path, agent, approvalPolicy, lastUsedAt: new Date().toISOString(), sessionId },
+        { path, agent: resolvedAgent, approvalPolicy, lastUsedAt: new Date().toISOString(), sessionId },
         ...prev.filter((item) => item.path !== path),
       ];
       return next.slice(0, MAX_PATH_HISTORY_ITEMS);
@@ -587,7 +588,6 @@ export function SessionDashboard({
 
   async function createSession(
     pathInput: string,
-    agentInput: AgentFlavor,
     approvalPolicyInput: SessionApprovalPolicy,
   ) {
     if (!isOperator) return;
@@ -600,14 +600,14 @@ export function SessionDashboard({
       const response = await fetch('/api/runtime/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path, agent: agentInput, approvalPolicy: approvalPolicyInput }),
+        body: JSON.stringify({ path, agent: DEFAULT_SESSION_AGENT, approvalPolicy: approvalPolicyInput }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error ?? '세션 생성에 실패했습니다.');
       const sessionId = body.session?.id;
       if (!sessionId) throw new Error('세션 생성 응답이 올바르지 않습니다.');
 
-      recordHistory(path, agentInput, approvalPolicyInput, sessionId);
+      recordHistory(path, DEFAULT_SESSION_AGENT, approvalPolicyInput, sessionId);
       router.push(`/sessions/${sessionId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.');
@@ -618,7 +618,7 @@ export function SessionDashboard({
 
   async function handleCreateSession(e: React.FormEvent) {
     e.preventDefault();
-    await createSession(newPath, newAgent, newApprovalPolicy);
+    await createSession(newPath, newApprovalPolicy);
   }
 
   function openCreateSessionModal() {
@@ -649,16 +649,15 @@ export function SessionDashboard({
   async function handleQuickResume(entry: PathHistoryEntry) {
     if (!isOperator || isCreating) return;
     if (entry.sessionId && sessionsList.some((s) => s.id === entry.sessionId)) {
-      recordHistory(entry.path, entry.agent, entry.approvalPolicy, entry.sessionId);
+      recordHistory(entry.path, entry.agent ?? DEFAULT_SESSION_AGENT, entry.approvalPolicy, entry.sessionId);
       router.push(`/sessions/${entry.sessionId}`);
       return;
     }
-    await createSession(entry.path, entry.agent, entry.approvalPolicy);
+    await createSession(entry.path, entry.approvalPolicy);
   }
 
   function applyHistory(entry: PathHistoryEntry) {
     setNewPath(entry.path);
-    setNewAgent(entry.agent);
     setNewApprovalPolicy(entry.approvalPolicy);
     setError(null);
   }
@@ -931,7 +930,7 @@ export function SessionDashboard({
                 </div>
                 <div>
                   <h3 className="modal-title">새 세션 시작하기</h3>
-                  <p className="modal-subtitle">프로젝트 경로와 에이전트를 선택하여 시작하세요.</p>
+                  <p className="modal-subtitle">프로젝트 경로와 승인 정책을 선택하여 시작하세요.</p>
                 </div>
               </div>
               <Button variant="ghost" onClick={() => setIsCreateModalOpen(false)} className="close-btn">
@@ -1052,7 +1051,7 @@ export function SessionDashboard({
                   </div>
                   <div className="history-stack">
                     {pathHistory.map((entry) => {
-                      const agent = getAgentOption(entry.agent);
+                      const agent = getAgentOption(entry.agent ?? DEFAULT_SESSION_AGENT);
                       const AgentIcon = agent.Icon;
                       const isLive = Boolean(entry.sessionId && sessionsList.some(s => s.id === entry.sessionId));
 
@@ -1090,56 +1089,19 @@ export function SessionDashboard({
               )}
 
               <div className="form-section">
-                <label className="section-label">에이전트</label>
-                <div className="agent-selection-grid">
-                  {AGENT_OPTIONS.map((agent) => {
-                    const AgentIcon = agent.Icon;
-                    const isSelected = newAgent === agent.id;
-
-                    return (
-                      <button
-                        key={agent.id}
-                        type="button"
-                        className={`agent-select-card ${isSelected ? 'active' : ''}`}
-                        style={{ '--agent-color': agent.accentColor, '--agent-bg': agent.accentBg, '--agent-shadow': agent.accentColor + '26' } as React.CSSProperties}
-                        onClick={() => {
-                          setNewAgent(agent.id);
-                          if (agent.id === 'gemini') {
-                            setNewApprovalPolicy('on-request');
-                          }
-                        }}
-                      >
-                        <div className="agent-visual" style={{ backgroundColor: agent.accentBg, color: agent.accentColor }}>
-                          <AgentIcon size={20} />
-                        </div>
-                        <div className="agent-details">
-                          <div className="agent-label">{agent.label}</div>
-                          <div className="agent-desc">{agent.subtitle}</div>
-                        </div>
-                        <CheckCircle2 size={16} className="agent-check" />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="form-section">
                 <div className="section-header">
                   <label className="section-label">승인 정책</label>
-                  {newAgent === 'gemini' && <span className="text-muted text-sm">Gemini는 추후 지원</span>}
                 </div>
                 <div className="policy-grid">
                   {APPROVAL_POLICY_OPTIONS.map((policy) => {
                     const PolicyIcon = policy.Icon;
                     const selected = newApprovalPolicy === policy.id;
-                    const disabled = newAgent === 'gemini';
                     return (
                       <button
                         key={policy.id}
                         type="button"
                         className={`policy-card ${selected ? 'active' : ''}`}
                         onClick={() => setNewApprovalPolicy(policy.id)}
-                        disabled={disabled}
                         style={{ '--policy-color': policy.color } as React.CSSProperties}
                       >
                         <div className="policy-icon">
@@ -1152,7 +1114,7 @@ export function SessionDashboard({
                     );
                   })}
                 </div>
-                {newApprovalPolicy === 'yolo' && newAgent !== 'gemini' && (
+                {newApprovalPolicy === 'yolo' && (
                   <div className="form-error">
                     <Zap size={14} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
                     모든 권한 요청을 자동 허용합니다. 신뢰 가능한 프로젝트에서만 사용하세요.

@@ -13,10 +13,15 @@ export async function GET(
 
   try {
     const { sessionId } = await params;
+    const defaultAgentRaw = request.nextUrl.searchParams.get('defaultAgent');
+    const defaultAgent = defaultAgentRaw === 'claude' || defaultAgentRaw === 'codex' || defaultAgentRaw === 'gemini'
+      ? defaultAgentRaw
+      : undefined;
     const chats = await listSessionChats({
       sessionId,
       userId: auth.user.id,
       ensureDefault: true,
+      defaultAgent,
     });
     return NextResponse.json({ chats });
   } catch (error) {
@@ -36,11 +41,12 @@ export async function POST(
 
   try {
     const { sessionId } = await params;
-    const body = (await request.json().catch(() => ({}))) as { title?: string };
+    const body = (await request.json().catch(() => ({}))) as { title?: string; agent?: string };
     const chat = await createSessionChat({
       sessionId,
       userId: auth.user.id,
       title: body.title,
+      agent: body.agent === 'claude' || body.agent === 'codex' || body.agent === 'gemini' ? body.agent : undefined,
     });
 
     return NextResponse.json({ chat });

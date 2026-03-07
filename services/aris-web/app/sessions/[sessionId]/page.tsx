@@ -24,10 +24,21 @@ export default async function SessionPage({
     : null;
 
   try {
+    const seedDetail = await getSessionEvents(sessionId, {
+      userId: user.id,
+      limit: 1,
+      includeUnassigned: true,
+    });
+    const defaultChatAgent = seedDetail.session.agent === 'claude'
+      || seedDetail.session.agent === 'codex'
+      || seedDetail.session.agent === 'gemini'
+      ? seedDetail.session.agent
+      : 'codex';
     const chats = await listSessionChats({
       sessionId,
       userId: user.id,
       ensureDefault: true,
+      defaultAgent: defaultChatAgent,
     });
     const activeChat = (requestedChatId
       ? chats.find((chat) => chat.id === requestedChatId)

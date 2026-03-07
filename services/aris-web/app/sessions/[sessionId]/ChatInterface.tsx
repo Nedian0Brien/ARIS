@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
@@ -10,6 +11,7 @@ import { BackendNotice } from '@/components/ui/BackendNotice';
 import {
   Activity,
   CheckCircle2,
+  Check,
   ChevronDown,
   ChevronRight,
   CircleAlert,
@@ -27,8 +29,9 @@ import {
   Send,
   TerminalSquare,
   Trash2,
+  X,
 } from 'lucide-react';
-import type { ApprovalPolicy, PermissionRequest, SessionChat, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
+import type { ApprovalPolicy, ChatAgent, PermissionRequest, SessionChat, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '@/components/ui/AgentIcons';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import styles from './ChatInterface.module.css';
@@ -44,6 +47,7 @@ const ACTION_COLLAPSE_THRESHOLD = 4;
 const READ_CURSOR_SYNC_DEBOUNCE_MS = 800;
 
 type AgentMeta = {
+  id: ChatAgent | 'runtime';
   label: string;
   tone: 'clay' | 'mint' | 'blue';
   Icon: React.ComponentType<{ size?: number }>;
@@ -149,16 +153,41 @@ const EVENT_KIND_META: Record<UiEventKind, { label: string; tone: Tone; Icon: Re
 
 function resolveAgentMeta(agentFlavor: string): AgentMeta {
   if (agentFlavor === 'claude') {
-    return { label: 'Claude', tone: 'clay', Icon: ClaudeIcon };
+    return { id: 'claude', label: 'Claude', tone: 'clay', Icon: ClaudeIcon };
   }
   if (agentFlavor === 'codex') {
-    return { label: 'Codex', tone: 'mint', Icon: CodexIcon };
+    return { id: 'codex', label: 'Codex', tone: 'mint', Icon: CodexIcon };
   }
   if (agentFlavor === 'gemini') {
-    return { label: 'Gemini', tone: 'blue', Icon: GeminiIcon };
+    return { id: 'gemini', label: 'Gemini', tone: 'blue', Icon: GeminiIcon };
   }
-  return { label: 'Runtime', tone: 'blue', Icon: Cpu };
+  return { id: 'runtime', label: 'Runtime', tone: 'blue', Icon: Cpu };
 }
+
+function normalizeChatAgentValue(value: unknown, fallback: ChatAgent = 'codex'): ChatAgent {
+  if (value === 'claude' || value === 'codex' || value === 'gemini') {
+    return value;
+  }
+  return fallback;
+}
+
+const CHAT_AGENT_OPTIONS = [
+  {
+    id: 'claude' as const,
+    label: 'Claude',
+    description: '균형 잡힌 코딩 플로우',
+  },
+  {
+    id: 'codex' as const,
+    label: 'Codex',
+    description: '빠른 구현 중심',
+  },
+  {
+    id: 'gemini' as const,
+    label: 'Gemini',
+    description: '넓은 추론 범위',
+  },
+];
 
 function isUserEvent(event: UiEvent): boolean {
   return event.meta?.role === 'user' || event.title === 'User Instruction';
@@ -1180,7 +1209,12 @@ export function ChatInterface({
   );
   const activeChatIdResolved = activeChat?.id ?? null;
   const includeUnassignedEvents = Boolean(activeChat?.isDefault);
-  const displayName = activeChat?.title || alias || projectName;
+  const activeChatTitle = activeChat?.title ?? '새 채팅';
+  const workspaceLabel = alias || projectName;
+  const activeAgentFlavor = normalizeChatAgentValue(
+    activeChat?.agent,
+    normalizeChatAgentValue(agentFlavor),
+  );
   const {
     events,
     addEvent,
@@ -1222,6 +1256,8 @@ export function ChatInterface({
   const [chatMutationLoadingId, setChatMutationLoadingId] = useState<string | null>(null);
   const [chatMutationError, setChatMutationError] = useState<string | null>(null);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
+  const [isCreateChatModalOpen, setIsCreateChatModalOpen] = useState(false);
+  const [newChatAgent, setNewChatAgent] = useState<ChatAgent>(activeAgentFlavor);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const chatSidebarRef = useRef<HTMLDivElement>(null);
   const chatShellRef = useRef<HTMLDivElement>(null);
@@ -1231,7 +1267,7 @@ export function ChatInterface({
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const shouldStickToBottomRef = useRef(true);
 
-  const agentMeta = resolveAgentMeta(agentFlavor);
+  const agentMeta = resolveAgentMeta(activeAgentFlavor);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? runtimeError ?? null;
   const isRunActive = isSubmitting || runtimeRunning || isAborting;
   const isAgentRunning = isRunActive || isAwaitingReply;
@@ -1261,7 +1297,12 @@ export function ChatInterface({
     setRenamingChatId(null);
     setChatTitleDraft('');
     setChatMutationError(null);
+    setIsCreateChatModalOpen(false);
   }, [initialChats, activeChatId]);
+
+  useEffect(() => {
+    setNewChatAgent(activeAgentFlavor);
+  }, [activeAgentFlavor]);
   const markSessionAsRead = useCallback(async () => {
     try {
       await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/metadata`, {
@@ -1724,7 +1765,16 @@ export function ChatInterface({
     }
   }, [router, buildChatUrl, isMobileLayout]);
 
-  const handleCreateChat = useCallback(async () => {
+  const openCreateChatModal = useCallback(() => {
+    if (!isOperator || isCreatingChat) {
+      return;
+    }
+    setNewChatAgent(activeAgentFlavor);
+    setChatMutationError(null);
+    setIsCreateChatModalOpen(true);
+  }, [activeAgentFlavor, isCreatingChat, isOperator]);
+
+  const handleCreateChat = useCallback(async (agent: ChatAgent) => {
     if (isCreatingChat) {
       return;
     }
@@ -1734,12 +1784,14 @@ export function ChatInterface({
       const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent }),
       });
       const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
       if (!response.ok || !body.chat) {
         throw new Error(body.error ?? '새 채팅 생성에 실패했습니다.');
       }
       setChats((prev) => sortSessionChats([body.chat!, ...prev]));
+      setIsCreateChatModalOpen(false);
       goToChat(body.chat.id);
     } catch (error) {
       setChatMutationError(error instanceof Error ? error.message : '새 채팅 생성에 실패했습니다.');
@@ -1864,6 +1916,7 @@ export function ChatInterface({
           meta: {
             role: 'user',
             chatId: activeChatIdResolved,
+            agent: activeAgentFlavor,
             ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
           },
         }),
@@ -1981,8 +2034,8 @@ export function ChatInterface({
           <button
             type="button"
             className={styles.chatSidebarNewButton}
-            onClick={() => void handleCreateChat()}
-            disabled={isCreatingChat}
+            onClick={openCreateChatModal}
+            disabled={isCreatingChat || !isOperator}
             title="새 채팅"
           >
             <MessageSquarePlus size={15} />
@@ -2091,6 +2144,78 @@ export function ChatInterface({
           })}
         </div>
       </aside>
+      {isCreateChatModalOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          className={styles.chatCreateOverlay}
+          onClick={() => {
+            if (!isCreatingChat) {
+              setIsCreateChatModalOpen(false);
+            }
+          }}
+        >
+          <section className={styles.chatCreateModal} onClick={(event) => event.stopPropagation()}>
+            <header className={styles.chatCreateHeader}>
+              <div>
+                <h3 className={styles.chatCreateTitle}>새 채팅 시작</h3>
+                <p className={styles.chatCreateSubtitle}>이 채팅에서 사용할 에이전트를 선택하세요.</p>
+              </div>
+              <button
+                type="button"
+                className={styles.chatCreateCloseButton}
+                onClick={() => setIsCreateChatModalOpen(false)}
+                disabled={isCreatingChat}
+                aria-label="새 채팅 모달 닫기"
+              >
+                <X size={16} />
+              </button>
+            </header>
+            <div className={styles.chatCreateAgentGrid}>
+              {CHAT_AGENT_OPTIONS.map((option) => {
+                const optionMeta = resolveAgentMeta(option.id);
+                const OptionIcon = optionMeta.Icon;
+                const selected = newChatAgent === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`${styles.chatCreateAgentCard} ${selected ? styles.chatCreateAgentCardActive : ''}`}
+                    onClick={() => setNewChatAgent(option.id)}
+                    disabled={isCreatingChat}
+                  >
+                    <span className={`${styles.chatCreateAgentIcon} ${AGENT_AVATAR_TONE_CLASS[optionMeta.tone]}`}>
+                      <OptionIcon size={16} />
+                    </span>
+                    <span className={styles.chatCreateAgentText}>
+                      <strong>{option.label}</strong>
+                      <small>{option.description}</small>
+                    </span>
+                    {selected && <Check size={14} className={styles.chatCreateAgentCheck} />}
+                  </button>
+                );
+              })}
+            </div>
+            <footer className={styles.chatCreateFooter}>
+              <button
+                type="button"
+                className={styles.chatCreateGhost}
+                onClick={() => setIsCreateChatModalOpen(false)}
+                disabled={isCreatingChat}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                className={styles.chatCreatePrimary}
+                onClick={() => void handleCreateChat(newChatAgent)}
+                disabled={isCreatingChat}
+              >
+                {isCreatingChat ? '생성 중...' : `${resolveAgentMeta(newChatAgent).label}로 시작`}
+              </button>
+            </footer>
+          </section>
+        </div>,
+        document.body,
+      )}
 
       <main className={`${styles.centerPanel} ${isMobileLayout ? styles.centerPanelMobileScroll : ''}`} ref={centerPanelRef}>
         <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
@@ -2108,8 +2233,11 @@ export function ChatInterface({
               <agentMeta.Icon size={20} />
             </span>
             <div className={styles.centerHeaderInfo}>
-              <h2 className={styles.centerTitle}>{displayName}</h2>
-              <span className={styles.centerAgentLabel}>{agentMeta.label} Agent · {alias || projectName}</span>
+              <div className={styles.centerHeaderTop}>
+                <h2 className={styles.centerTitle}>{agentMeta.label}</h2>
+                <span className={styles.centerChatTitle}>{activeChatTitle}</span>
+              </div>
+              <span className={styles.centerAgentLabel}>{workspaceLabel}</span>
             </div>
             <div className={styles.centerHeaderActions}>
               <span

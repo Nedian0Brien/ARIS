@@ -1,6 +1,7 @@
 export type SessionStatus = 'running' | 'idle' | 'stopped' | 'error' | 'unknown';
 export type SessionAction = 'abort' | 'retry' | 'kill' | 'resume';
 export type ApprovalPolicy = 'on-request' | 'on-failure' | 'never' | 'yolo';
+export type ChatAgent = 'claude' | 'codex' | 'gemini';
 
 export type SessionSummary = {
   id: string;
@@ -18,6 +19,7 @@ export type SessionSummary = {
 export type SessionChat = {
   id: string;
   sessionId: string;
+  agent: ChatAgent;
   title: string;
   isPinned: boolean;
   isDefault: boolean;

@@ -120,6 +120,162 @@
   padding: 0.36rem 0.46rem;
 }
 
+.chatCreateOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.chatCreateModal {
+  width: min(460px, 100%);
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.26);
+  padding: 1rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.chatCreateHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.chatCreateTitle {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.chatCreateSubtitle {
+  margin: 0.2rem 0 0;
+  font-size: 0.74rem;
+  color: #64748b;
+}
+
+.chatCreateCloseButton {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(248, 250, 252, 0.95);
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.chatCreateCloseButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.chatCreateAgentGrid {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.chatCreateAgentCard {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.82);
+  color: #0f172a;
+  padding: 0.5rem 0.56rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.chatCreateAgentCardActive {
+  border-color: rgba(37, 99, 235, 0.45);
+  background: rgba(239, 246, 255, 0.92);
+}
+
+.chatCreateAgentCard:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.chatCreateAgentIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: 0.6rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.chatCreateAgentText {
+  min-width: 0;
+  display: grid;
+  gap: 0.08rem;
+  flex: 1;
+}
+
+.chatCreateAgentText strong {
+  font-size: 0.76rem;
+  line-height: 1.2;
+}
+
+.chatCreateAgentText small {
+  font-size: 0.67rem;
+  color: #64748b;
+  line-height: 1.2;
+}
+
+.chatCreateAgentCheck {
+  color: #1d4ed8;
+  flex-shrink: 0;
+}
+
+.chatCreateFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.chatCreateGhost,
+.chatCreatePrimary {
+  border-radius: 10px;
+  padding: 0.42rem 0.7rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.chatCreateGhost {
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  background: rgba(248, 250, 252, 0.9);
+  color: #334155;
+}
+
+.chatCreatePrimary {
+  border: 1px solid rgba(37, 99, 235, 0.38);
+  background: rgba(37, 99, 235, 0.92);
+  color: #ffffff;
+}
+
+.chatCreateGhost:disabled,
+.chatCreatePrimary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .chatList {
   flex: 1;
   min-height: 0;
@@ -522,7 +678,14 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.12rem;
+}
+
+.centerHeaderTop {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.48rem;
 }
 
 .centerTitle {
@@ -534,6 +697,22 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.2;
+  flex-shrink: 0;
+}
+
+.centerChatTitle {
+  min-width: 0;
+  max-width: min(42vw, 22rem);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #475569;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  background: rgba(248, 250, 252, 0.9);
+  padding: 0.12rem 0.48rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .centerAgentLabel {
@@ -1840,6 +2019,25 @@
 
   .centerAgentLabel {
     display: none;
+  }
+
+  .centerHeaderTop {
+    gap: 0.36rem;
+  }
+
+  .centerChatTitle {
+    max-width: min(50vw, 10rem);
+    font-size: 0.72rem;
+  }
+
+  .chatCreateOverlay {
+    align-items: flex-end;
+    padding: 0.65rem;
+  }
+
+  .chatCreateModal {
+    width: 100%;
+    border-radius: 14px;
   }
 
   .stream {

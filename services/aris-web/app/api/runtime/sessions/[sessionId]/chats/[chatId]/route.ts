@@ -14,6 +14,7 @@ export async function PATCH(
   const { sessionId, chatId } = await params;
   const body = (await request.json().catch(() => ({}))) as {
     title?: string;
+    agent?: string;
     isPinned?: boolean;
     threadId?: string | null;
     touchActivity?: boolean;
@@ -25,6 +26,7 @@ export async function PATCH(
       userId: auth.user.id,
       chatId,
       title: body.title,
+      agent: body.agent === 'claude' || body.agent === 'codex' || body.agent === 'gemini' ? body.agent : undefined,
       isPinned: body.isPinned,
       threadId: body.threadId,
       touchActivity: body.touchActivity,
