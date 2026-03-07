@@ -9,6 +9,8 @@ import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import {
   Activity,
+  AlignLeft,
+  ArrowUp,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -23,11 +25,14 @@ import {
   MoreVertical,
   PanelLeftClose,
   PanelLeftOpen,
+  Paperclip,
   Pencil,
   Pin,
-  Send,
+  Plus,
+  Square,
   TerminalSquare,
   Trash2,
+  X,
 } from 'lucide-react';
 import type { ApprovalPolicy, PermissionRequest, SessionChat, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '@/components/ui/AgentIcons';
@@ -39,10 +44,25 @@ const AUTO_SCROLL_THRESHOLD_PX = 80;
 const MOBILE_LAYOUT_MAX_WIDTH_PX = 960;
 const PREVIEW_MAX_LINES = 12;
 const PREVIEW_MAX_CHARS = 600;
-const COMPOSER_MIN_HEIGHT_PX = 52;
+const COMPOSER_MIN_HEIGHT_PX = 36;
 const COMPOSER_MAX_HEIGHT_PX = 180;
 const ACTION_COLLAPSE_THRESHOLD = 4;
 const READ_CURSOR_SYNC_DEBOUNCE_MS = 800;
+
+type ContextItem =
+  | { id: string; type: 'file'; path: string; content: string; name: string }
+  | { id: string; type: 'text'; text: string };
+
+const COMPOSER_MODELS = [
+  { id: 'claude-sonnet-4-6', shortLabel: 'Sonnet 4.6', badge: '권장' },
+  { id: 'claude-opus-4-6', shortLabel: 'Opus 4.6', badge: '최고 성능' },
+  { id: 'claude-haiku-4-5', shortLabel: 'Haiku 4.5', badge: '빠름' },
+] as const;
+type ComposerModelId = (typeof COMPOSER_MODELS)[number]['id'];
+
+function genId(): string {
+  return Math.random().toString(36).slice(2, 9);
+}
 
 type AgentMeta = {
   label: string;
@@ -1246,6 +1266,14 @@ export function ChatInterface({
   const [chatMutationLoadingId, setChatMutationLoadingId] = useState<string | null>(null);
   const [chatMutationError, setChatMutationError] = useState<string | null>(null);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
+  const [contextItems, setContextItems] = useState<ContextItem[]>([]);
+  const [plusMenuMode, setPlusMenuMode] = useState<'closed' | 'menu' | 'file' | 'text'>('closed');
+  const [filePathInput, setFilePathInput] = useState('');
+  const [textContextInput, setTextContextInput] = useState('');
+  const [isLoadingFile, setIsLoadingFile] = useState(false);
+  const [fileInputError, setFileInputError] = useState<string | null>(null);
+  const [selectedModelId, setSelectedModelId] = useState<ComposerModelId>('claude-sonnet-4-6');
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const chatSidebarRef = useRef<HTMLDivElement>(null);
   const chatShellRef = useRef<HTMLDivElement>(null);
@@ -1253,6 +1281,8 @@ export function ChatInterface({
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerDockRef = useRef<HTMLElement>(null);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
+  const plusMenuRef = useRef<HTMLDivElement>(null);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
   const shouldStickToBottomRef = useRef(true);
 
   const agentMeta = resolveAgentMeta(agentFlavor);
@@ -1286,6 +1316,54 @@ export function ChatInterface({
     setChatTitleDraft('');
     setChatMutationError(null);
   }, [initialChats, activeChatId]);
+  // ── Composer: outside-click handler for menus ─────────────────────────────
+  useEffect(() => {
+    if (plusMenuMode === 'closed' && !isModelDropdownOpen) return;
+    function handleOutsideClick(e: MouseEvent) {
+      if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
+        setPlusMenuMode('closed');
+        setFileInputError(null);
+      }
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
+        setIsModelDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [plusMenuMode, isModelDropdownOpen]);
+
+  const removeContextItem = useCallback((id: string) => {
+    setContextItems((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
+  const handleAddFileContext = useCallback(async () => {
+    const filePath = filePathInput.trim();
+    if (!filePath) return;
+    setIsLoadingFile(true);
+    setFileInputError(null);
+    try {
+      const res = await fetch(`/api/fs/read?path=${encodeURIComponent(filePath)}`);
+      const data = (await res.json().catch(() => ({ error: '응답을 읽을 수 없습니다.' }))) as { content?: string; error?: string };
+      if (!res.ok || data.error) throw new Error(data.error ?? '파일을 읽을 수 없습니다.');
+      const name = filePath.split('/').filter(Boolean).pop() ?? filePath;
+      setContextItems((prev) => [...prev, { id: genId(), type: 'file', path: filePath, content: data.content ?? '', name }]);
+      setFilePathInput('');
+      setPlusMenuMode('closed');
+    } catch (err) {
+      setFileInputError(err instanceof Error ? err.message : '파일 읽기 실패');
+    } finally {
+      setIsLoadingFile(false);
+    }
+  }, [filePathInput]);
+
+  const handleAddTextContext = useCallback(() => {
+    const text = textContextInput.trim();
+    if (!text) return;
+    setContextItems((prev) => [...prev, { id: genId(), type: 'text', text }]);
+    setTextContextInput('');
+    setPlusMenuMode('closed');
+  }, [textContextInput]);
+
   const markSessionAsRead = useCallback(async () => {
     try {
       await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/metadata`, {
@@ -1872,6 +1950,15 @@ export function ChatInterface({
     e.preventDefault();
     if (!prompt.trim() || !isOperator || isAgentRunning || !activeChatIdResolved) return;
 
+    const contextPrefix = contextItems.length > 0
+      ? contextItems.map((item) => (
+        item.type === 'file'
+          ? `<file path="${item.path}">\n${item.content}\n</file>`
+          : `<context>\n${item.text}\n</context>`
+      )).join('\n') + '\n\n'
+      : '';
+    const finalText = contextPrefix + prompt;
+
     setIsSubmitting(true);
     setIsAwaitingReply(true);
     setAwaitingReplySince(new Date().toISOString());
@@ -1884,7 +1971,7 @@ export function ChatInterface({
         body: JSON.stringify({
           type: 'message',
           title: 'User Instruction',
-          text: prompt,
+          text: finalText,
           meta: {
             role: 'user',
             chatId: activeChatIdResolved,
@@ -1921,6 +2008,7 @@ export function ChatInterface({
         // Best-effort activity sync.
       });
       setPrompt('');
+      setContextItems([]);
     } catch (error) {
       setIsAwaitingReply(false);
       setAwaitingReplySince(null);
@@ -2341,20 +2429,142 @@ export function ChatInterface({
 
           <footer className={styles.composerDock} ref={composerDockRef}>
             <form onSubmit={handleSubmit} className={styles.composerForm}>
-              {isAgentRunning && (
-                <div className={styles.runningStatusBar} role="status" aria-live="polite">
-                  <span className={styles.runningStatusText}>
-                    <span className={styles.runningDots} aria-hidden>
-                      <span />
-                      <span />
-                      <span />
-                    </span>
-                    에이전트 실행 중...
-                  </span>
+              <div className={styles.composerCard}>
+
+                {/* ── Toolbar: 모델 선택기 + 실행 중 표시 ── */}
+                <div className={styles.composerToolbar}>
+                  <div className={styles.modelSelectorWrap} ref={modelDropdownRef}>
+                    <button
+                      type="button"
+                      className={styles.modelSelectorBtn}
+                      onClick={() => setIsModelDropdownOpen((v) => !v)}
+                      aria-haspopup="listbox"
+                      aria-expanded={isModelDropdownOpen}
+                    >
+                      <ClaudeIcon size={13} />
+                      <span>{COMPOSER_MODELS.find((m) => m.id === selectedModelId)?.shortLabel ?? 'Sonnet 4.6'}</span>
+                      <ChevronDown size={11} />
+                    </button>
+                    {isModelDropdownOpen && (
+                      <div className={styles.modelDropdown} role="listbox">
+                        {COMPOSER_MODELS.map((model) => (
+                          <button
+                            key={model.id}
+                            type="button"
+                            role="option"
+                            aria-selected={selectedModelId === model.id}
+                            className={`${styles.modelOption} ${selectedModelId === model.id ? styles.modelOptionActive : ''}`}
+                            onClick={() => { setSelectedModelId(model.id); setIsModelDropdownOpen(false); }}
+                          >
+                            <span>{model.shortLabel}</span>
+                            <span className={styles.modelOptionBadge}>{model.badge}</span>
+                          </button>
+                        ))}
+                        <div className={styles.modelDropdownNote}>모델 변경은 추후 지원 예정</div>
+                      </div>
+                    )}
+                  </div>
+                  {isAgentRunning && (
+                    <div className={styles.composerRunningBadge} role="status" aria-live="polite">
+                      <span className={styles.runningDots} aria-hidden>
+                        <span /><span /><span />
+                      </span>
+                      실행 중
+                    </div>
+                  )}
                 </div>
-              )}
-              <div className={styles.composerDockInner}>
-                <div className={styles.composerFloating}>
+
+                {/* ── 컨텍스트 칩 ── */}
+                {contextItems.length > 0 && (
+                  <div className={styles.composerChips}>
+                    {contextItems.map((item) => (
+                      <span key={item.id} className={styles.contextChip}>
+                        {item.type === 'file' ? <Paperclip size={11} /> : <AlignLeft size={11} />}
+                        <span className={styles.contextChipLabel}>
+                          {item.type === 'file' ? item.name : '텍스트'}
+                        </span>
+                        <button
+                          type="button"
+                          className={styles.contextChipRemove}
+                          onClick={() => removeContextItem(item.id)}
+                          aria-label="컨텍스트 제거"
+                        >
+                          <X size={10} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* ── 입력 행 ── */}
+                <div className={styles.composerInputRow}>
+                  {/* + 컨텍스트 버튼 */}
+                  <div className={styles.plusMenuWrap} ref={plusMenuRef}>
+                    <button
+                      type="button"
+                      className={`${styles.composerPlusBtn} ${plusMenuMode !== 'closed' ? styles.composerPlusBtnActive : ''}`}
+                      onClick={() => { setPlusMenuMode((m) => m === 'closed' ? 'menu' : 'closed'); setFileInputError(null); }}
+                      aria-label="컨텍스트 추가"
+                      title="컨텍스트 추가"
+                      disabled={!isOperator}
+                    >
+                      <Plus size={16} />
+                    </button>
+                    {plusMenuMode !== 'closed' && (
+                      <div className={styles.plusMenu}>
+                        {plusMenuMode === 'menu' && (
+                          <>
+                            <button type="button" className={styles.plusMenuItem} onClick={() => { setPlusMenuMode('file'); setFilePathInput(''); setFileInputError(null); }}>
+                              <Paperclip size={14} /> 파일 첨부
+                            </button>
+                            <button type="button" className={styles.plusMenuItem} onClick={() => { setPlusMenuMode('text'); setTextContextInput(''); }}>
+                              <AlignLeft size={14} /> 텍스트 추가
+                            </button>
+                          </>
+                        )}
+                        {plusMenuMode === 'file' && (
+                          <div className={styles.plusMenuInputArea}>
+                            <div className={styles.plusMenuInputLabel}>파일 경로 입력</div>
+                            <input
+                              className={styles.plusMenuFileInput}
+                              type="text"
+                              value={filePathInput}
+                              onChange={(e) => setFilePathInput(e.target.value)}
+                              placeholder="/workspace/src/index.ts"
+                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleAddFileContext(); } }}
+                              autoFocus
+                            />
+                            {fileInputError && <div className={styles.plusMenuError}>{fileInputError}</div>}
+                            <div className={styles.plusMenuActions}>
+                              <button type="button" className={styles.plusMenuCancelBtn} onClick={() => setPlusMenuMode('menu')}>취소</button>
+                              <button type="button" className={styles.plusMenuConfirmBtn} onClick={() => void handleAddFileContext()} disabled={isLoadingFile || !filePathInput.trim()}>
+                                {isLoadingFile ? '로딩...' : '추가'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {plusMenuMode === 'text' && (
+                          <div className={styles.plusMenuInputArea}>
+                            <div className={styles.plusMenuInputLabel}>텍스트 입력</div>
+                            <textarea
+                              className={styles.plusMenuTextInput}
+                              value={textContextInput}
+                              onChange={(e) => setTextContextInput(e.target.value)}
+                              placeholder="에이전트에게 전달할 추가 맥락 정보..."
+                              rows={4}
+                              autoFocus
+                            />
+                            <div className={styles.plusMenuActions}>
+                              <button type="button" className={styles.plusMenuCancelBtn} onClick={() => setPlusMenuMode('menu')}>취소</button>
+                              <button type="button" className={styles.plusMenuConfirmBtn} onClick={handleAddTextContext} disabled={!textContextInput.trim()}>추가</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 텍스트 입력창 */}
                   <textarea
                     ref={composerInputRef}
                     value={prompt}
@@ -2371,26 +2581,42 @@ export function ChatInterface({
                       !activeChatIdResolved
                         ? '사용할 채팅을 선택하세요.'
                         : isOperator
-                          ? '명령을 입력하세요. (Ctrl/Cmd + Enter 전송)'
+                          ? '메시지를 입력하세요...'
                           : 'Viewer 권한입니다.'
                     }
                     disabled={!activeChatIdResolved || !isOperator || isAgentRunning}
                     className={styles.composerInput}
                   />
-                </div>
-                <button
-                  type="submit"
-                  disabled={!activeChatIdResolved || !prompt.trim() || !isOperator || isAgentRunning}
-                  className={styles.sendIconButton}
-                  title="Send message"
-                  aria-label="메시지 전송"
-                >
+
+                  {/* 전송 / 정지 버튼 */}
                   {isAgentRunning ? (
-                    <span className={styles.sendSpinner} aria-hidden />
+                    <button
+                      type="button"
+                      className={styles.composerStopBtn}
+                      onClick={handleAbortRun}
+                      disabled={isAborting}
+                      aria-label="실행 중단"
+                      title="실행 중단"
+                    >
+                      <Square size={13} fill="currentColor" />
+                    </button>
                   ) : (
-                    <Send size={20} />
+                    <button
+                      type="submit"
+                      disabled={!activeChatIdResolved || !prompt.trim() || !isOperator}
+                      className={styles.composerSendBtn}
+                      aria-label="메시지 전송"
+                      title="메시지 전송 (Ctrl/Cmd + Enter)"
+                    >
+                      <ArrowUp size={17} />
+                    </button>
                   )}
-                </button>
+                </div>
+
+                {/* ── 하단 힌트 ── */}
+                <div className={styles.composerHint}>
+                  Ctrl + Enter로 전송
+                </div>
               </div>
             </form>
           </footer>
