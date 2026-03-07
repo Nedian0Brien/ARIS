@@ -1453,45 +1453,49 @@ export function SessionDashboard({
                 {/* Agent Distribution */}
                 <Card className={styles.sessionSidebarCard}>
                   <h4 className={styles.sessionSidebarTitle}>에이전트 분포</h4>
-                  <div className={styles.agentDonutWrap}>
-                    <div className={styles.agentDonutChart}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={agentDistributionData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius="62%"
-                            outerRadius="86%"
-                            startAngle={90}
-                            endAngle={-270}
-                            dataKey="value"
-                            animationBegin={0}
-                            animationDuration={800}
-                            stroke="none"
-                            paddingAngle={1}
-                            cornerRadius={8}
-                          >
-                            {agentDistributionData.map((entry, index) => (
-                              <Cell key={`agent-cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                        </PieChart>
-                      </ResponsiveContainer>
-                      <div className={styles.agentDonutCenter}>
-                        <div className={styles.agentDonutValue}>{sessionStats.total}</div>
-                        <div className={styles.agentDonutLabel}>sessions</div>
+                  <div className={styles.agentStatsContent}>
+                    <div className={styles.agentDonutWrap}>
+                      <div className={styles.agentDonutChart}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={agentDistributionData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius="62%"
+                              outerRadius="86%"
+                              startAngle={90}
+                              endAngle={-270}
+                              dataKey="value"
+                              animationBegin={0}
+                              animationDuration={800}
+                              stroke="none"
+                              paddingAngle={1}
+                              cornerRadius={8}
+                            >
+                              {agentDistributionData.map((entry, index) => (
+                                <Cell key={`agent-cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className={styles.agentDonutCenter}>
+                          <div className={styles.agentDonutValue}>{sessionStats.total}</div>
+                          <div className={styles.agentDonutLabel}>sessions</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className={styles.sessionSummaryLegend}>
-                    {AGENT_OPTIONS.map((agent) => (
-                      <div key={`agent-legend-${agent.id}`} className={styles.sessionSummaryLegendItem}>
-                        <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: agent.accentColor }}></span>
-                        <span>{agent.label}</span>
-                        <strong>{agentStats[agent.id]}</strong>
-                      </div>
-                    ))}
+                    <div className={styles.agentSummaryLegend}>
+                      {AGENT_OPTIONS.map((agent) => (
+                        <div key={`agent-legend-${agent.id}`} className={styles.agentSummaryLegendItem}>
+                          <div className={styles.agentSummaryLegendInfo}>
+                            <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: agent.accentColor }}></span>
+                            <span>{agent.label}</span>
+                          </div>
+                          <strong>{agentStats[agent.id]}</strong>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </Card>
               </div>
