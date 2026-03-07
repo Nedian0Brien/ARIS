@@ -1069,18 +1069,28 @@ function ActionEventCard({
   const compactPrimary = truncateSingleLine(fullPrimary, 88);
   const resourceLabels = extractResourceLabelsFromEvent(event);
 
+  // 첫 번째 줄에 표시할 텍스트 결정 (파일 라벨이 없으면 명령어를 보여줌)
+  const hasResource = resourceLabels.length > 0;
+
   if (!expanded) {
     return (
       <div className={styles.actionCompact}>
         <div className={styles.actionCompactMain}>
           <div className={styles.actionCompactTopRow}>
             <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
-              <KindIcon size={13} />
+              <KindIcon size={12} />
               {kindMeta.label}
             </span>
+            <span className={styles.actionFileLabelSeparator}>-</span>
+            {hasResource ? (
+              <ResourceLabelStrip resources={resourceLabels} />
+            ) : (
+              <span className={styles.actionCompactPrimaryInline}>{compactPrimary}</span>
+            )}
+          </div>
+          <div className={styles.actionPrimaryRow}>
             <span className={styles.actionCompactPrimary}>{compactPrimary}</span>
           </div>
-          <ResourceLabelStrip resources={resourceLabels} />
         </div>
         <button
           type="button"
@@ -1102,12 +1112,19 @@ function ActionEventCard({
         <div className={styles.actionHeaderMain}>
           <div className={styles.actionCompactTopRow}>
             <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
-              <KindIcon size={14} />
+              <KindIcon size={13} />
               {kindMeta.label}
             </span>
+            <span className={styles.actionFileLabelSeparator}>-</span>
+            {hasResource ? (
+              <ResourceLabelStrip resources={resourceLabels} />
+            ) : (
+              <span className={styles.actionCompactPrimaryInline}>{fullPrimary}</span>
+            )}
+          </div>
+          <div className={styles.actionPrimaryRow}>
             <span className={styles.actionPrimary}>{fullPrimary}</span>
           </div>
-          <ResourceLabelStrip resources={resourceLabels} />
         </div>
         <button
           type="button"
