@@ -148,7 +148,7 @@ To reclaim Docker image/build cache space automatically every day at 02:00:
 
 ```bash
 # one-time setup
-( crontab -l 2>/dev/null; echo "0 2 * * * /home/ubuntu/project/web-agentic-coding/deploy/prune_docker_reclaimable.sh >> /home/ubuntu/project/web-agentic-coding/deploy/.logs/docker-prune-cron.log 2>&1" ) | crontab -
+( crontab -l 2>/dev/null; echo "0 2 * * * /home/ubuntu/project/ARIS/deploy/prune_docker_reclaimable.sh >> /home/ubuntu/project/ARIS/deploy/.logs/docker-prune-cron.log 2>&1" ) | crontab -
 ```
 
 Manual run:

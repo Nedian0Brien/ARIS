@@ -27,13 +27,13 @@
 
 ## 1. 백엔드 배포(필수 선행)
 ```bash
-cd /path/to/web-agentic-coding
+cd /path/to/ARIS
 ./deploy/deploy_backend_zero_downtime.sh
 ```
 
 ## 2. 웹/DB 배포
 ```bash
-cd /path/to/web-agentic-coding
+cd /path/to/ARIS
 ./deploy/deploy_web.sh
 ```
 
