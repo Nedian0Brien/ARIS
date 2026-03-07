@@ -62,6 +62,40 @@ const SIDEBAR_RECENTS_LIMIT = 7;
 const SIDEBAR_FILES_LIMIT = 12;
 
 const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
+const CODE_FILE_EXTENSIONS = new Set([
+  'c',
+  'cpp',
+  'cs',
+  'css',
+  'go',
+  'h',
+  'hpp',
+  'html',
+  'java',
+  'js',
+  'jsx',
+  'kt',
+  'less',
+  'php',
+  'py',
+  'rb',
+  'rs',
+  'sass',
+  'scala',
+  'scss',
+  'sh',
+  'sql',
+  'swift',
+  'ts',
+  'tsx',
+  'vue',
+  'xml',
+  'zsh',
+]);
+const DOC_FILE_EXTENSIONS = new Set(['doc', 'docx', 'md', 'mdx', 'pdf', 'rst', 'txt']);
+const CONFIG_FILE_EXTENSIONS = new Set(['conf', 'config', 'env', 'ini', 'json', 'lock', 'toml', 'yaml', 'yml']);
+const DATA_FILE_EXTENSIONS = new Set(['avro', 'csv', 'jsonl', 'parquet', 'tsv', 'xls', 'xlsx']);
+const MEDIA_FILE_EXTENSIONS = new Set(['gif', 'ico', 'jpeg', 'jpg', 'mp3', 'mp4', 'png', 'svg', 'wav', 'webm', 'webp']);
 
 const COMPOSER_MODELS = [
   { id: 'claude-sonnet-4-6', shortLabel: 'Sonnet 4.6', badge: '권장' },
@@ -299,6 +333,36 @@ function extractPathLeaf(pathValue: string): string {
   }
   const segments = normalized.split('/').filter(Boolean);
   return segments[segments.length - 1] ?? normalized;
+}
+
+function resolveSidebarFileType(extension: string): string {
+  if (!extension) {
+    return 'Path';
+  }
+  if (CODE_FILE_EXTENSIONS.has(extension)) {
+    return 'Code';
+  }
+  if (DOC_FILE_EXTENSIONS.has(extension)) {
+    return 'Doc';
+  }
+  if (CONFIG_FILE_EXTENSIONS.has(extension)) {
+    return 'Config';
+  }
+  if (DATA_FILE_EXTENSIONS.has(extension)) {
+    return 'Data';
+  }
+  if (MEDIA_FILE_EXTENSIONS.has(extension)) {
+    return 'Media';
+  }
+  return 'File';
+}
+
+function resolveSidebarFileBadges(pathValue: string): { extensionBadge: string; typeBadge: string } {
+  const extension = fileExtension(extractPathLeaf(pathValue));
+  return {
+    extensionBadge: extension ? extension.toUpperCase().slice(0, 7) : 'PATH',
+    typeBadge: resolveSidebarFileType(extension),
+  };
 }
 
 function extractResourceLabels(source: string): ResourceLabel[] {
@@ -1343,6 +1407,7 @@ export function ChatInterface({
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
   const [showPermissionQueue, setShowPermissionQueue] = useState(true);
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
+  const [activeRecentEventId, setActiveRecentEventId] = useState<string | null>(null);
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(true);
   const [isChatsSectionOpen, setIsChatsSectionOpen] = useState(true);
   const [isFilesSectionOpen, setIsFilesSectionOpen] = useState(false);
@@ -1397,7 +1462,13 @@ export function ChatInterface({
   );
   const recentFiles = useMemo(() => {
     const dedup = new Set<string>();
-    const files: Array<{ path: string; eventId: string; label: string }> = [];
+    const files: Array<{
+      path: string;
+      eventId: string;
+      label: string;
+      extensionBadge: string;
+      typeBadge: string;
+    }> = [];
 
     for (let index = events.length - 1; index >= 0; index -= 1) {
       const event = events[index];
@@ -1414,10 +1485,13 @@ export function ChatInterface({
           continue;
         }
         dedup.add(pathValue);
+        const badgeMeta = resolveSidebarFileBadges(pathValue);
         files.push({
           path: pathValue,
           eventId: event.id,
           label: extractPathLeaf(pathValue),
+          extensionBadge: badgeMeta.extensionBadge,
+          typeBadge: badgeMeta.typeBadge,
         });
         if (files.length >= SIDEBAR_FILES_LIMIT) {
           return files;
@@ -1436,6 +1510,15 @@ export function ChatInterface({
   const handleLoadMoreChats = useCallback(() => {
     setChatVisibleCount((prev) => Math.min(prev + SIDEBAR_CHAT_PAGE_SIZE, chats.length));
   }, [chats.length]);
+
+  useEffect(() => {
+    setActiveRecentEventId((current) => {
+      if (current && recentUserEvents.some((event) => event.id === current)) {
+        return current;
+      }
+      return recentUserEvents[0]?.id ?? null;
+    });
+  }, [recentUserEvents]);
 
   useEffect(() => {
     setChats(sortSessionChats(initialChats));
@@ -1735,6 +1818,7 @@ export function ChatInterface({
     if (!target) {
       return;
     }
+    setActiveRecentEventId(eventId);
     target.scrollIntoView({ behavior: 'smooth', block: 'center' });
     if (highlightedEventId === eventId) {
       setHighlightedEventId(null);
@@ -1755,6 +1839,62 @@ export function ChatInterface({
       window.clearTimeout(timer);
     };
   }, [highlightedEventId]);
+
+  const syncActiveRecentFromViewport = useCallback(() => {
+    const stream = scrollRef.current;
+    if (!stream || recentUserEvents.length === 0) {
+      return;
+    }
+
+    const streamRect = stream.getBoundingClientRect();
+    const anchorY = streamRect.top + Math.min(streamRect.height * 0.3, 180);
+    let nearestVisibleId: string | null = null;
+    let nearestVisibleDistance = Number.POSITIVE_INFINITY;
+    let nearestAboveId: string | null = null;
+    let nearestAboveDistance = Number.POSITIVE_INFINITY;
+
+    for (const event of recentUserEvents) {
+      const target = document.getElementById(`event-${event.id}`);
+      if (!target) {
+        continue;
+      }
+
+      const rect = target.getBoundingClientRect();
+      const centerY = rect.top + rect.height / 2;
+      const distance = Math.abs(centerY - anchorY);
+
+      if (rect.bottom >= streamRect.top && rect.top <= streamRect.bottom) {
+        if (distance < nearestVisibleDistance) {
+          nearestVisibleDistance = distance;
+          nearestVisibleId = event.id;
+        }
+        continue;
+      }
+
+      if (centerY < anchorY) {
+        const aboveDistance = anchorY - centerY;
+        if (aboveDistance < nearestAboveDistance) {
+          nearestAboveDistance = aboveDistance;
+          nearestAboveId = event.id;
+        }
+      }
+    }
+
+    const nextActiveId = nearestVisibleId ?? nearestAboveId ?? recentUserEvents[0]?.id ?? null;
+    if (!nextActiveId) {
+      return;
+    }
+    setActiveRecentEventId((current) => (current === nextActiveId ? current : nextActiveId));
+  }, [recentUserEvents]);
+
+  useEffect(() => {
+    const rafId = window.requestAnimationFrame(() => {
+      syncActiveRecentFromViewport();
+    });
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [syncActiveRecentFromViewport, events.length, isMobileLayout]);
 
   useEffect(() => {
     if (!isContextMenuOpen) {
@@ -2202,11 +2342,12 @@ export function ChatInterface({
   }
 
   function handleStreamScroll() {
-    if (isMobileLayout) {
-      return;
-    }
     const stream = scrollRef.current;
     if (!stream) {
+      return;
+    }
+    syncActiveRecentFromViewport();
+    if (isMobileLayout) {
       return;
     }
     shouldStickToBottomRef.current = isNearBottom(stream);
@@ -2412,7 +2553,13 @@ export function ChatInterface({
                         onClick={() => jumpToEvent(item.eventId)}
                         title={item.path}
                       >
-                        <span className={styles.sidebarMiniTitle}>{item.label}</span>
+                        <span className={styles.sidebarMiniTitleRow}>
+                          <span className={styles.sidebarMiniTitle}>{item.label}</span>
+                          <span className={styles.sidebarFileBadges}>
+                            <span className={`${styles.sidebarFileBadge} ${styles.sidebarFileBadgeExt}`}>{item.extensionBadge}</span>
+                            <span className={`${styles.sidebarFileBadge} ${styles.sidebarFileBadgeType}`}>{item.typeBadge}</span>
+                          </span>
+                        </span>
                         <span className={styles.sidebarMiniMeta}>{item.path}</span>
                       </button>
                     ))}
@@ -2441,18 +2588,22 @@ export function ChatInterface({
                   <p className={styles.emptyHint}>최근 사용자 메시지가 없습니다.</p>
                 ) : (
                   <div className={styles.sidebarMiniList}>
-                    {recentUserEvents.map((event) => (
+                    {recentUserEvents.map((event) => {
+                      const isActiveRecent = activeRecentEventId === event.id;
+                      return (
                       <button
                         key={event.id}
                         type="button"
-                        className={styles.sidebarMiniItemButton}
+                        className={`${styles.sidebarMiniItemButton} ${isActiveRecent ? styles.sidebarMiniItemButtonActive : ''}`}
                         onClick={() => jumpToEvent(event.id)}
                         title="해당 메시지로 이동"
+                        aria-current={isActiveRecent ? 'true' : undefined}
                       >
                         <RelativeTime timestamp={event.timestamp} className={styles.sidebarMiniTime} />
                         <span className={styles.sidebarMiniText}>{resolveRecentSummary(event)}</span>
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
