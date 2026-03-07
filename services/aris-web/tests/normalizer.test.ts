@@ -120,6 +120,14 @@ describe('classifyEventKind', () => {
     });
     expect(kind).toBe('text_reply');
   });
+
+  it('keeps plain tool-type status text as text_reply when no action signals exist', () => {
+    const kind = classifyEventKind({
+      type: 'tool',
+      text: '완료했습니다.',
+    });
+    expect(kind).toBe('text_reply');
+  });
 });
 
 describe('normalizeSessions', () => {
@@ -268,5 +276,17 @@ describe('normalizeEvents', () => {
     ]);
 
     expect(events[0].kind).toBe('file_write');
+  });
+
+  it('normalizes tool-type plain status text to text_reply', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e7',
+        type: 'tool',
+        text: '완료했습니다.',
+      },
+    ]);
+
+    expect(events[0].kind).toBe('text_reply');
   });
 });
