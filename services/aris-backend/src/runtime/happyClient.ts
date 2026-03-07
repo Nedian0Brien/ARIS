@@ -650,6 +650,68 @@ function buildCodexPermissionKey(sessionId: string, request: CodexPermissionRequ
   return `${sessionId}:${request.approvalId || request.callId}`;
 }
 
+function inferCodexFileWriteItem(item: Record<string, unknown>): {
+  command: string;
+  path?: string;
+  detail?: string;
+  status?: string;
+} | null {
+  const itemType = asString(item.type, '').trim().toLowerCase();
+  if (!itemType || itemType.includes('approval')) {
+    return null;
+  }
+  if (itemType === 'agentmessage' || itemType === 'agent_message') {
+    return null;
+  }
+  if (itemType === 'commandexecution' || itemType === 'command_execution') {
+    return null;
+  }
+
+  const isFileWriteType = (
+    itemType.includes('filechange')
+    || itemType.includes('file_change')
+    || itemType.includes('apply_patch')
+    || itemType.includes('applypatch')
+    || itemType === 'patch'
+  );
+
+  if (!isFileWriteType) {
+    return null;
+  }
+
+  const path = asString(
+    item.path,
+    asString(
+      item.file_path,
+      asString(
+        item.filePath,
+        asString(
+          item.target_path,
+          asString(item.targetPath, asString(item.relative_path, asString(item.relativePath, ''))),
+        ),
+      ),
+    ),
+  ).trim() || undefined;
+  const commandRaw = asString(item.command, '').trim();
+  const command = unwrapShellCommand(commandRaw || 'apply_patch');
+  const detail = stripAnsi(asString(
+    item.diff,
+    asString(
+      item.patch,
+      asString(
+        item.unified_diff,
+        asString(
+          item.unifiedDiff,
+          asString(item.output, asString(item.text, asString(item.result, ''))),
+        ),
+      ),
+    ),
+  )).trim() || undefined;
+  const status = asString(item.status, '').trim() || undefined;
+
+  return { command, path, detail, status };
+}
+
 function buildCodexThreadCacheKey(sessionId: string, chatId?: string): string {
   if (chatId && chatId.trim().length > 0) {
     return `${sessionId}:${chatId.trim()}`;
@@ -1202,6 +1264,37 @@ export class HappyRuntimeStore {
           return;
         }
 
+        const fileWrite = inferCodexFileWriteItem(item);
+        if (fileWrite) {
+          const bodyParts = [`$ ${fileWrite.command || 'apply_patch'}`];
+          if (fileWrite.path) {
+            bodyParts.push(`path: ${fileWrite.path}`);
+          }
+          if (fileWrite.detail) {
+            bodyParts.push(fileWrite.detail);
+          }
+          if (fileWrite.status && fileWrite.status !== 'completed' && fileWrite.status !== 'inProgress') {
+            bodyParts.push(`status: ${fileWrite.status}`);
+          }
+
+          streamedPersisted = true;
+          enqueueAppend(
+            bodyParts.join('\n'),
+            {
+              ...(chatId ? { chatId } : {}),
+              requestedPath: session.metadata.path,
+              execCwd: safeCwd,
+              actionType: 'file_write',
+              command: fileWrite.command,
+              path: fileWrite.path,
+              streamEvent: 'file_change',
+              ...(resolvedThreadId ? { threadId: resolvedThreadId } : {}),
+            },
+            { type: 'tool', title: 'File Write' },
+          );
+          return;
+        }
+
         if (itemType !== 'commandExecution') {
           return;
         }
@@ -1599,6 +1692,37 @@ export class HappyRuntimeStore {
             { type: 'message', title: 'Text Reply' },
           );
         }
+        return;
+      }
+
+      const fileWrite = inferCodexFileWriteItem(item);
+      if (fileWrite) {
+        const bodyParts = [`$ ${fileWrite.command || 'apply_patch'}`];
+        if (fileWrite.path) {
+          bodyParts.push(`path: ${fileWrite.path}`);
+        }
+        if (fileWrite.detail) {
+          bodyParts.push(fileWrite.detail);
+        }
+        if (fileWrite.status && fileWrite.status !== 'completed' && fileWrite.status !== 'inProgress') {
+          bodyParts.push(`status: ${fileWrite.status}`);
+        }
+
+        streamedPersisted = true;
+        enqueueAppend(
+          bodyParts.join('\n'),
+          {
+            ...(chatId ? { chatId } : {}),
+            requestedPath: session.metadata.path,
+            execCwd: safeCwd,
+            actionType: 'file_write',
+            command: fileWrite.command,
+            path: fileWrite.path,
+            streamEvent: 'file_change',
+            ...(resolvedThreadId ? { threadId: resolvedThreadId } : {}),
+          },
+          { type: 'tool', title: 'File Write' },
+        );
         return;
       }
 
