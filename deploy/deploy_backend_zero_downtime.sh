@@ -7,6 +7,8 @@ ECOSYSTEM_FILE="${ROOT_DIR}/deploy/ecosystem.config.cjs"
 BACKEND_PORT="${BACKEND_PORT:-4080}"
 HEALTH_TIMEOUT_SECONDS="${BACKEND_HEALTH_TIMEOUT_SECONDS:-60}"
 
+cd "$ROOT_DIR"
+
 current_exec_mode() {
   pm2 jlist | node -e "
     let raw = '';

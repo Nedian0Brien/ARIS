@@ -18,6 +18,8 @@ ARIS_WEB_IMAGE="${ARIS_WEB_IMAGE:-aris-stack-aris-web:latest}"
 NGINX_SITE="${ARIS_NGINX_SITE:-/etc/nginx/sites-available/aris.lawdigest.cloud}"
 NGINX_SNIPPET="${ARIS_WEB_UPSTREAM_SNIPPET:-/etc/nginx/snippets/aris-web-upstream.conf}"
 
+cd "$ROOT_DIR"
+
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "[deploy:web-zd] env file not found: $ENV_FILE" >&2
   exit 1
