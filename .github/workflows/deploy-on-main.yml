@@ -86,10 +86,7 @@ jobs:
           echo "run_backend=$run_backend" >> "$GITHUB_OUTPUT"
 
   deploy:
-    runs-on:
-      - self-hosted
-      - linux
-      - x64
+    runs-on: self-hosted
     needs: detect-changes
     if: needs.detect-changes.outputs.run_web == 'true' || needs.detect-changes.outputs.run_backend == 'true'
     steps:
