@@ -47,6 +47,15 @@ else
   export APP_BASE_URL="http://127.0.0.1:${WEB_DEV_PORT}"
 fi
 
+# Route web runtime calls through aris-backend by default in dev mode.
+# This keeps API surface consistent (e.g. /v1/permissions) while backend proxies to happy runtime.
+export HAPPY_SERVER_URL="${DEV_HAPPY_SERVER_URL:-http://127.0.0.1:4080}"
+if [[ -n "${DEV_HAPPY_SERVER_TOKEN:-}" ]]; then
+  export HAPPY_SERVER_TOKEN="${DEV_HAPPY_SERVER_TOKEN}"
+elif [[ -n "${RUNTIME_API_TOKEN:-}" ]]; then
+  export HAPPY_SERVER_TOKEN="${RUNTIME_API_TOKEN}"
+fi
+
 # Host dev mode does not receive Docker Compose's DATABASE_URL injection.
 # Build it from deploy env and point to the running postgres container IP.
 if [[ -z "${DATABASE_URL:-}" ]]; then
@@ -86,5 +95,6 @@ fi
 
 echo "[web-dev] starting Next.js dev server on http://${WEB_DEV_HOST}:${WEB_DEV_PORT}"
 echo "[web-dev] APP_BASE_URL=${APP_BASE_URL}"
+echo "[web-dev] HAPPY_SERVER_URL=${HAPPY_SERVER_URL}"
 echo "[web-dev] save files to see immediate reload in browser"
 exec npm run dev
