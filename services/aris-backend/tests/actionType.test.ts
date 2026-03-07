@@ -17,6 +17,16 @@ describe('inferActionTypeFromCommand', () => {
     expect(inferActionTypeFromCommand('/bin/bash -lc "printf %s\\\\n hello>>out.txt"')).toBe('file_write');
   });
 
+  it('classifies redirects with spaces as file_write', () => {
+    expect(inferActionTypeFromCommand('/bin/bash -lc "sed -n \'1,120p\' src/app.ts > out.txt"')).toBe('file_write');
+    expect(inferActionTypeFromCommand('/bin/bash -lc "awk \'{print $1}\' src/app.ts > out.txt"')).toBe('file_write');
+  });
+
+  it('unwraps multiline bash -lc commands before classification', () => {
+    const command = '/bin/bash -lc "echo hello > out.txt\\ncat out.txt"';
+    expect(inferActionTypeFromCommand(command)).toBe('file_write');
+  });
+
   it('does not treat quoted greater-than as redirect', () => {
     const command = "/bin/bash -lc 'echo \"a > b\"'";
     expect(inferActionTypeFromCommand(command)).toBe('command_execution');

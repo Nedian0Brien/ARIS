@@ -23,7 +23,7 @@ const FILE_WRITE_PATTERNS: RegExp[] = [
   /\binstall\b/,
   /\bcat\b[\s\S]*>>?/,
   /\b(?:echo|printf)\b[\s\S]*>>?/,
-  /(?:^|[\s;|&()])(?:\d+)?>>?(?=\S)/,
+  /(?:^|[\s;|&()])(?:\d+)?>>?\s*(?=\S)/,
 ];
 
 const FILE_READ_PATTERNS: RegExp[] = [
@@ -39,7 +39,7 @@ function unwrapShellCommand(raw: string): string {
     current = current.slice(2).trim();
   }
 
-  const wrappers = [/^(?:\/bin\/)?bash\s+-lc\s+(.+)$/i, /^(?:\/bin\/)?sh\s+-lc\s+(.+)$/i];
+  const wrappers = [/^(?:\/bin\/)?bash\s+-lc\s+([\s\S]+)$/i, /^(?:\/bin\/)?sh\s+-lc\s+([\s\S]+)$/i];
   for (const wrapper of wrappers) {
     const match = current.match(wrapper);
     if (!match) {

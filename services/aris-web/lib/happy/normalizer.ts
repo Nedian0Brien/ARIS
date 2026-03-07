@@ -139,7 +139,7 @@ function unwrapShellCommand(raw: string): string {
     current = current.slice(2).trim();
   }
 
-  const wrappers = [/^(?:\/bin\/)?bash\s+-lc\s+(.+)$/i, /^(?:\/bin\/)?sh\s+-lc\s+(.+)$/i];
+  const wrappers = [/^(?:\/bin\/)?bash\s+-lc\s+([\s\S]+)$/i, /^(?:\/bin\/)?sh\s+-lc\s+([\s\S]+)$/i];
   for (const wrapper of wrappers) {
     const match = current.match(wrapper);
     if (!match) {
@@ -305,7 +305,7 @@ function hasWriteShellIntent(commandInput: string): boolean {
     || /\binstall\b/.test(unquoted)
     || /\bcat\b[\s\S]*>>?/.test(unquoted)
     || /\b(?:echo|printf)\b[\s\S]*>>?/.test(unquoted)
-    || /(?:^|[\s;|&()])(?:\d+)?>>?(?=\S)/.test(unquoted)
+    || /(?:^|[\s;|&()])(?:\d+)?>>?\s*(?=\S)/.test(unquoted)
   );
 }
 
@@ -388,7 +388,16 @@ export function classifyEventKind(input: { type?: string; text?: string; command
   const command = input.command ?? '';
 
   const kindFromType = pickKindFromMeta(null, type);
-  if (kindFromType === 'file_read' && hasWriteShellIntent(command)) {
+  if (
+    hasWriteShellIntent(command)
+    && (
+      kindFromType === null
+      || kindFromType === 'file_read'
+      || kindFromType === 'command_execution'
+      || kindFromType === 'run_execution'
+      || kindFromType === 'exec_execution'
+    )
+  ) {
     return 'file_write';
   }
   if (
