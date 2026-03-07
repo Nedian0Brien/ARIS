@@ -38,7 +38,34 @@ done < "${ENV_FILE}"
 export NODE_ENV=development
 export HOST="${WEB_DEV_HOST}"
 export PORT="${WEB_DEV_PORT}"
-export APP_BASE_URL="${DEV_APP_BASE_URL:-http://127.0.0.1:${WEB_DEV_PORT}}"
+
+if [[ -n "${DEV_APP_BASE_URL:-}" ]]; then
+  export APP_BASE_URL="${DEV_APP_BASE_URL}"
+elif [[ -n "${ARIS_DOMAIN:-}" ]]; then
+  export APP_BASE_URL="https://${ARIS_DOMAIN}"
+else
+  export APP_BASE_URL="http://127.0.0.1:${WEB_DEV_PORT}"
+fi
+
+# Host dev mode does not receive Docker Compose's DATABASE_URL injection.
+# Build it from deploy env and point to the running postgres container IP.
+if [[ -z "${DATABASE_URL:-}" ]]; then
+  pg_user="${POSTGRES_USER:-postgres}"
+  pg_pass="${POSTGRES_PASSWORD:-postgres}"
+  pg_db="${POSTGRES_DB:-aris}"
+  pg_port="${POSTGRES_PORT:-5432}"
+  pg_host="${POSTGRES_HOST:-}"
+
+  if [[ -z "$pg_host" ]]; then
+    pg_host="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' aris-stack-postgres-1 2>/dev/null || true)"
+  fi
+  if [[ -z "$pg_host" ]]; then
+    pg_host="127.0.0.1"
+  fi
+
+  export DATABASE_URL="postgresql://${pg_user}:${pg_pass}@${pg_host}:${pg_port}/${pg_db}"
+  echo "[web-dev] DATABASE_URL was not set, using ${pg_host}:${pg_port}/${pg_db}"
+fi
 
 cd "${ROOT_DIR}/services/aris-web"
 
