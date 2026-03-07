@@ -28,7 +28,8 @@ export async function GET(request: NextRequest) {
       return {
         ...s,
         alias: meta?.alias || null,
-        isPinned: meta?.isPinned ?? false
+        isPinned: meta?.isPinned ?? false,
+        lastReadAt: meta?.lastReadAt?.toISOString() ?? null,
       };
     });
 

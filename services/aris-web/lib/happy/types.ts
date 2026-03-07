@@ -7,6 +7,7 @@ export type SessionSummary = {
   agent: 'claude' | 'codex' | 'gemini' | 'unknown';
   status: SessionStatus;
   lastActivityAt: string | null;
+  lastReadAt?: string | null;
   riskScore: number;
   projectName: string;
   approvalPolicy?: ApprovalPolicy;
@@ -79,6 +80,7 @@ export type SessionDetail = {
   status: SessionStatus;
   projectName: string;
   lastActivityAt: string | null;
+  lastReadAt?: string | null;
   approvalPolicy?: ApprovalPolicy;
   alias?: string | null;
   isPinned?: boolean;

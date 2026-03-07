@@ -35,6 +35,7 @@ const PREVIEW_MAX_CHARS = 600;
 const COMPOSER_MIN_HEIGHT_PX = 52;
 const COMPOSER_MAX_HEIGHT_PX = 180;
 const ACTION_COLLAPSE_THRESHOLD = 4;
+const READ_CURSOR_SYNC_DEBOUNCE_MS = 800;
 
 type AgentMeta = {
   label: string;
@@ -1204,11 +1205,50 @@ export function ChatInterface({
   const agentReplies = useMemo(() => events.filter((event) => !isUserEvent(event)).length, [events]);
   const streamItems = useMemo(() => buildStreamRenderItems(events, expandedActionRunIds), [events, expandedActionRunIds]);
   const firstPendingPermissionId = pendingPermissions[0]?.id ?? null;
+  const markSessionAsRead = useCallback(async () => {
+    try {
+      await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/metadata`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lastReadAt: new Date().toISOString() }),
+      });
+    } catch {
+      // Best-effort cursor sync.
+    }
+  }, [sessionId]);
 
   useEffect(() => {
     setExpandedResultIds({});
     setExpandedActionRunIds({});
   }, [sessionId]);
+
+  useEffect(() => {
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void markSessionAsRead();
+    }, READ_CURSOR_SYNC_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [sessionId, events.length, pendingPermissions.length, markSessionAsRead]);
+
+  useEffect(() => {
+    const syncWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void markSessionAsRead();
+      }
+    };
+
+    document.addEventListener('visibilitychange', syncWhenVisible);
+    window.addEventListener('focus', syncWhenVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', syncWhenVisible);
+      window.removeEventListener('focus', syncWhenVisible);
+    };
+  }, [markSessionAsRead]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(`(max-width: ${MOBILE_LAYOUT_MAX_WIDTH_PX}px)`);

@@ -43,7 +43,7 @@ export const Card = ({
   return <div className={`card ${className}`} style={style} {...props}>{children}</div>;
 };
 
-export const Badge = ({ children, variant = 'sky' }: { children: React.ReactNode; variant?: 'sky' | 'amber' | 'emerald' | 'violet' | 'red' }) => {
+export const Badge = ({ children, variant = 'sky' }: { children: React.ReactNode; variant?: 'sky' | 'amber' | 'emerald' | 'violet' | 'red' | 'slate' }) => {
   const style = {
     backgroundColor: `var(--accent-${variant}-bg)`,
     color: `var(--accent-${variant})`,

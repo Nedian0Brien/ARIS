@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db/prisma';
 
 /**
  * POST /api/runtime/sessions/[sessionId]/metadata
- * 세션의 이름(alias) 및 상단 고정(isPinned) 상태를 DB에 저장합니다.
+ * 세션의 이름(alias), 상단 고정(isPinned), 읽음 커서(lastReadAt)를 DB에 저장합니다.
  */
 export async function POST(
   request: NextRequest,
@@ -21,7 +21,20 @@ export async function POST(
   
   try {
     const body = await request.json();
-    const { alias, isPinned } = body;
+    const { alias, isPinned, lastReadAt } = body as {
+      alias?: string | null;
+      isPinned?: boolean;
+      lastReadAt?: string | null;
+    };
+
+    const parsedLastReadAt = (() => {
+      if (lastReadAt === undefined) return undefined;
+      if (lastReadAt === null) return null;
+      if (typeof lastReadAt !== 'string') return undefined;
+      const date = new Date(lastReadAt);
+      if (Number.isNaN(date.getTime())) return undefined;
+      return date;
+    })();
 
     const metadata = await prisma.sessionMetadata.upsert({
       where: {
@@ -30,12 +43,14 @@ export async function POST(
       update: {
         ...(alias !== undefined && { alias }),
         ...(isPinned !== undefined && { isPinned }),
+        ...(parsedLastReadAt !== undefined && { lastReadAt: parsedLastReadAt }),
       },
       create: {
         sessionId,
         userId: auth.user.id,
-        alias: alias || null,
-        isPinned: isPinned || false,
+        alias: alias ?? null,
+        isPinned: isPinned ?? false,
+        lastReadAt: parsedLastReadAt ?? null,
       },
     });
 

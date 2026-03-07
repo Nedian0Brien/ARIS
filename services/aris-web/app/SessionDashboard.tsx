@@ -47,6 +47,9 @@ const MAX_PATH_HISTORY_ITEMS = 8;
 const FALLBACK_DATE_ISO = '1970-01-01T00:00:00.000Z';
 const SERVER_METRICS_POLL_INTERVAL_MS = 10_000;
 const SESSION_STATUS_POLL_INTERVAL_MS = 4_000;
+const PERMISSION_POLL_INTERVAL_MS = 5_000;
+
+type SessionUiStatus = 'running' | 'pending' | 'completed' | 'idle';
 
 type ServerMetric = {
   percent: number;
@@ -59,6 +62,16 @@ type ServerMetrics = {
   ram: ServerMetric;
   storage: ServerMetric;
   capturedAt: string;
+};
+
+const SESSION_UI_STATUS_META: Record<
+  SessionUiStatus,
+  { label: string; color: string; variant: 'sky' | 'amber' | 'emerald' | 'slate' }
+> = {
+  running: { label: '실행 중', color: '#3b82f6', variant: 'sky' },
+  pending: { label: '대기', color: '#f59e0b', variant: 'amber' },
+  completed: { label: '완료', color: '#10b981', variant: 'emerald' },
+  idle: { label: '유휴', color: '#64748b', variant: 'slate' },
 };
 
 const AGENT_OPTIONS: AgentOption[] = [
@@ -190,6 +203,31 @@ function formatHistoryDate(dateStr: string): string {
   }
 }
 
+function parseIsoEpoch(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const epoch = Date.parse(value);
+  if (!Number.isFinite(epoch)) return null;
+  return epoch;
+}
+
+function resolveSessionUiStatus(
+  session: SessionSummary,
+  pendingPermissionSessionIds: Set<string>,
+): SessionUiStatus {
+  if (pendingPermissionSessionIds.has(session.id)) {
+    return 'pending';
+  }
+
+  if (session.status === 'running') {
+    return 'running';
+  }
+
+  const lastActivityEpoch = parseIsoEpoch(session.lastActivityAt);
+  const lastReadEpoch = parseIsoEpoch(session.lastReadAt ?? null);
+  const isUnreadAfterCompletion = lastActivityEpoch !== null && (lastReadEpoch === null || lastReadEpoch < lastActivityEpoch);
+  return isUnreadAfterCompletion ? 'completed' : 'idle';
+}
+
 function clampPercent(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.min(100, Math.max(0, value));
@@ -270,6 +308,7 @@ export function SessionDashboard({
 
   // Local mutation state
   const [sessionsList, setSessionsList] = useState<SessionSummary[]>(initialSessions);
+  const [pendingPermissionSessionIds, setPendingPermissionSessionIds] = useState<Set<string>>(new Set());
   const [serverMetrics, setServerMetrics] = useState<ServerMetrics | null>(null);
   const [isLoadingServerMetrics, setIsLoadingServerMetrics] = useState(true);
   const [serverMetricsError, setServerMetricsError] = useState<string | null>(null);
@@ -348,6 +387,51 @@ export function SessionDashboard({
     const timerId = window.setInterval(() => {
       void fetchSessionsSnapshot();
     }, SESSION_STATUS_POLL_INTERVAL_MS);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(timerId);
+    };
+  }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+    let inFlight = false;
+
+    const fetchPendingPermissions = async () => {
+      if (isCancelled || inFlight) {
+        return;
+      }
+      inFlight = true;
+      try {
+        const response = await fetch('/api/runtime/permissions', { cache: 'no-store' });
+        const body = (await response.json().catch(() => ({}))) as {
+          permissions?: Array<{ sessionId?: string }>;
+        };
+        if (!response.ok || !Array.isArray(body.permissions)) {
+          throw new Error('Failed to refresh pending permissions');
+        }
+
+        if (!isCancelled) {
+          const next = new Set<string>();
+          body.permissions.forEach((permission) => {
+            if (typeof permission?.sessionId === 'string' && permission.sessionId.trim()) {
+              next.add(permission.sessionId);
+            }
+          });
+          setPendingPermissionSessionIds(next);
+        }
+      } catch {
+        // Keep last known pending set when sync fails.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void fetchPendingPermissions();
+    const timerId = window.setInterval(() => {
+      void fetchPendingPermissions();
+    }, PERMISSION_POLL_INTERVAL_MS);
 
     return () => {
       isCancelled = true;
@@ -766,14 +850,30 @@ export function SessionDashboard({
     setPendingDeleteSessionIds(null);
   };
 
+  const sessionUiStatusById = useMemo(() => {
+    const next = new Map<string, SessionUiStatus>();
+    sessionsList.forEach((session) => {
+      next.set(session.id, resolveSessionUiStatus(session, pendingPermissionSessionIds));
+    });
+    return next;
+  }, [sessionsList, pendingPermissionSessionIds]);
+
   const sessionStats = useMemo(() => {
-    const total = sessionsList.length;
-    const idle = sessionsList.filter((s) => s.status === 'idle').length;
-    const running = sessionsList.filter((s) => s.status === 'running').length;
-    const pending = sessionsList.filter((s) => s.status === 'unknown').length;
-    const completed = sessionsList.filter((s) => s.status === 'stopped' || s.status === 'error').length;
-    return { total, idle, running, pending, completed };
-  }, [sessionsList]);
+    let running = 0;
+    let pending = 0;
+    let completed = 0;
+    let idle = 0;
+
+    sessionsList.forEach((session) => {
+      const status = sessionUiStatusById.get(session.id);
+      if (status === 'running') running += 1;
+      else if (status === 'pending') pending += 1;
+      else if (status === 'completed') completed += 1;
+      else idle += 1;
+    });
+
+    return { total: sessionsList.length, idle, running, pending, completed };
+  }, [sessionsList, sessionUiStatusById]);
 
   const agentStats = useMemo(() => {
     const stats = { claude: 0, codex: 0, gemini: 0 };
@@ -1109,9 +1209,18 @@ export function SessionDashboard({
     ? activeAgentDistribution
     : [{ name: '없음', value: 1, color: '#e2e8f0' }];
 
-  // 진행 중인 세션 및 완료된 세션 필터링
-  const runningSessions = useMemo(() => sessionsList.filter(s => s.status === 'running'), [sessionsList]);
-  const completedSessions = useMemo(() => sessionsList.filter(s => s.status === 'stopped' || s.status === 'error'), [sessionsList]);
+  // 진행 중인 세션 및 미확인 완료 세션 필터링
+  const runningSessions = useMemo(
+    () => sessionsList.filter((session) => sessionUiStatusById.get(session.id) === 'running'),
+    [sessionsList, sessionUiStatusById],
+  );
+  const completedSessions = useMemo(
+    () =>
+      sessionsList
+        .filter((session) => sessionUiStatusById.get(session.id) === 'completed')
+        .sort((a, b) => Date.parse(b.lastActivityAt || FALLBACK_DATE_ISO) - Date.parse(a.lastActivityAt || FALLBACK_DATE_ISO)),
+    [sessionsList, sessionUiStatusById],
+  );
 
   return (
     <div style={{ position: 'relative' }}>
@@ -1258,20 +1367,20 @@ export function SessionDashboard({
                     {sessionStats.total > 0 ? (
                       <>
                         <div 
-                          className={`${styles.sessionBarSegment} ${styles.sessionBarIdle}`} 
-                          style={{ width: `${(sessionStats.idle / sessionStats.total) * 100}%` }}
-                        />
-                        <div 
                           className={`${styles.sessionBarSegment} ${styles.sessionBarRunning}`} 
-                          style={{ width: `${(sessionStats.running / sessionStats.total) * 100}%`, backgroundColor: '#3b82f6' }}
+                          style={{ width: `${(sessionStats.running / sessionStats.total) * 100}%`, backgroundColor: SESSION_UI_STATUS_META.running.color }}
                         />
                         <div 
                           className={`${styles.sessionBarSegment} ${styles.sessionBarPending}`} 
-                          style={{ width: `${(sessionStats.pending / sessionStats.total) * 100}%` }}
+                          style={{ width: `${(sessionStats.pending / sessionStats.total) * 100}%`, backgroundColor: SESSION_UI_STATUS_META.pending.color }}
                         />
                         <div 
                           className={`${styles.sessionBarSegment} ${styles.sessionBarCompleted}`} 
-                          style={{ width: `${(sessionStats.completed / sessionStats.total) * 100}%`, backgroundColor: '#10b981' }}
+                          style={{ width: `${(sessionStats.completed / sessionStats.total) * 100}%`, backgroundColor: SESSION_UI_STATUS_META.completed.color }}
+                        />
+                        <div 
+                          className={`${styles.sessionBarSegment} ${styles.sessionBarIdle}`} 
+                          style={{ width: `${(sessionStats.idle / sessionStats.total) * 100}%`, backgroundColor: SESSION_UI_STATUS_META.idle.color }}
                         />
                       </>
                     ) : (
@@ -1280,24 +1389,24 @@ export function SessionDashboard({
                   </div>
                   <div className={styles.sessionSummaryLegend}>
                     <div className={styles.sessionSummaryLegendItem}>
-                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#64748b' }}></span>
-                      <span>유휴</span>
-                      <strong>{sessionStats.idle}</strong>
-                    </div>
-                    <div className={styles.sessionSummaryLegendItem}>
-                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#3b82f6' }}></span>
-                      <span>실행중</span>
+                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: SESSION_UI_STATUS_META.running.color }}></span>
+                      <span>{SESSION_UI_STATUS_META.running.label}</span>
                       <strong>{sessionStats.running}</strong>
                     </div>
                     <div className={styles.sessionSummaryLegendItem}>
-                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#f59e0b' }}></span>
-                      <span>대기</span>
+                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: SESSION_UI_STATUS_META.pending.color }}></span>
+                      <span>{SESSION_UI_STATUS_META.pending.label}</span>
                       <strong>{sessionStats.pending}</strong>
                     </div>
                     <div className={styles.sessionSummaryLegendItem}>
-                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: '#10b981' }}></span>
-                      <span>완료</span>
+                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: SESSION_UI_STATUS_META.completed.color }}></span>
+                      <span>{SESSION_UI_STATUS_META.completed.label}</span>
                       <strong>{sessionStats.completed}</strong>
+                    </div>
+                    <div className={styles.sessionSummaryLegendItem}>
+                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: SESSION_UI_STATUS_META.idle.color }}></span>
+                      <span>{SESSION_UI_STATUS_META.idle.label}</span>
+                      <strong>{sessionStats.idle}</strong>
                     </div>
                   </div>
 
@@ -1462,6 +1571,8 @@ export function SessionDashboard({
                   {filteredSessions.map((session) => {
                     const agentInfo = getAgentOption(session.agent);
                     const AgentIcon = agentInfo.Icon;
+                    const sessionUiStatus = sessionUiStatusById.get(session.id) ?? 'idle';
+                    const sessionUiStatusMeta = SESSION_UI_STATUS_META[sessionUiStatus];
                     const isPinned = pinnedSessions.has(session.id);
                     const displayName = sessionAliases[session.id]?.trim() || extractLastDirectoryName(session.projectName);
                     const isMenuOpen = openMenuId === session.id;
@@ -1547,8 +1658,8 @@ export function SessionDashboard({
                             {agentInfo.label}
                           </div>
                           <div>
-                            <Badge variant={session.status === 'running' ? 'emerald' : 'amber'}>
-                              {session.status}
+                            <Badge variant={sessionUiStatusMeta.variant}>
+                              {sessionUiStatusMeta.label}
                             </Badge>
                           </div>
                         </div>

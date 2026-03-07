@@ -213,6 +213,7 @@ export async function listSessions(userId?: string): Promise<SessionSummary[]> {
       ...s,
       alias: meta?.alias || null,
       isPinned: meta?.isPinned ?? false,
+      lastReadAt: meta?.lastReadAt?.toISOString() ?? null,
     };
   });
 }
@@ -270,6 +271,7 @@ export async function getSessionEvents(
     if (meta) {
       sessionDetail.alias = meta.alias || null;
       sessionDetail.isPinned = meta.isPinned;
+      sessionDetail.lastReadAt = meta.lastReadAt?.toISOString() ?? null;
     }
   }
 
