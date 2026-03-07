@@ -13,10 +13,27 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   exit 1
 fi
 
-set -a
-# shellcheck disable=SC1090
-source "${ENV_FILE}"
-set +a
+# Load .env without executing shell code so values with spaces are handled safely.
+while IFS= read -r line || [[ -n "$line" ]]; do
+  [[ "$line" =~ ^[[:space:]]*# ]] && continue
+  [[ -z "${line//[[:space:]]/}" ]] && continue
+  [[ "$line" != *"="* ]] && continue
+
+  key="${line%%=*}"
+  value="${line#*=}"
+
+  # trim key/value outer spaces
+  key="${key#"${key%%[![:space:]]*}"}"
+  key="${key%"${key##*[![:space:]]}"}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+
+  if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+    value="${value:1:${#value}-2}"
+  fi
+
+  export "${key}=${value}"
+done < "${ENV_FILE}"
 
 export NODE_ENV=development
 export HOST="${WEB_DEV_HOST}"
