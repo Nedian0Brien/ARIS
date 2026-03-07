@@ -242,29 +242,70 @@ function classifyShellCommandKind(commandInput: string): UiEventKind | null {
   return classifyExecOrRun(unwrapped);
 }
 
+function stripQuotedSegments(input: string): string {
+  let result = '';
+  let quote: "'" | '"' | '`' | null = null;
+  let escaped = false;
+
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+
+    if (escaped) {
+      result += quote ? ' ' : char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      escaped = true;
+      result += quote ? ' ' : char;
+      continue;
+    }
+
+    if (quote) {
+      if (char === quote) {
+        quote = null;
+      }
+      result += ' ';
+      continue;
+    }
+
+    if (char === '\'' || char === '"' || char === '`') {
+      quote = char as "'" | '"' | '`';
+      result += ' ';
+      continue;
+    }
+
+    result += char;
+  }
+
+  return result;
+}
+
 function hasWriteShellIntent(commandInput: string): boolean {
   const unwrapped = unwrapShellCommand(commandInput).toLowerCase();
   if (!unwrapped) {
     return false;
   }
+  const unquoted = stripQuotedSegments(unwrapped);
 
   return (
-    /\bapply_patch\b/.test(unwrapped)
-    || /\btee\b/.test(unwrapped)
-    || /\bsed\s+-i\b/.test(unwrapped)
-    || /\bperl\s+-pi\b/.test(unwrapped)
-    || /\bmkdir\b/.test(unwrapped)
-    || /\btouch\b/.test(unwrapped)
-    || /\bmv\b/.test(unwrapped)
-    || /\bcp\b/.test(unwrapped)
-    || /\brm\b/.test(unwrapped)
-    || /\bchmod\b/.test(unwrapped)
-    || /\bchown\b/.test(unwrapped)
-    || /\btruncate\b/.test(unwrapped)
-    || /\binstall\b/.test(unwrapped)
-    || /\bcat\b[\s\S]*>>?/.test(unwrapped)
-    || /\s>>\s?/.test(unwrapped)
-    || /\s>\s/.test(unwrapped)
+    /\bapply_patch\b/.test(unquoted)
+    || /\btee\b/.test(unquoted)
+    || /\bsed\s+-i\b/.test(unquoted)
+    || /\bperl\s+-pi\b/.test(unquoted)
+    || /\bmkdir\b/.test(unquoted)
+    || /\btouch\b/.test(unquoted)
+    || /\bmv\b/.test(unquoted)
+    || /\bcp\b/.test(unquoted)
+    || /\brm\b/.test(unquoted)
+    || /\bchmod\b/.test(unquoted)
+    || /\bchown\b/.test(unquoted)
+    || /\btruncate\b/.test(unquoted)
+    || /\binstall\b/.test(unquoted)
+    || /\bcat\b[\s\S]*>>?/.test(unquoted)
+    || /\b(?:echo|printf)\b[\s\S]*>>?/.test(unquoted)
+    || /(?:^|[\s;|&()])(?:\d+)?>>?(?=\S)/.test(unquoted)
   );
 }
 

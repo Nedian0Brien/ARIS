@@ -22,8 +22,8 @@ const FILE_WRITE_PATTERNS: RegExp[] = [
   /\btruncate\b/,
   /\binstall\b/,
   /\bcat\b[\s\S]*>>?/,
-  /\s>>\s?/,
-  /\s>\s/,
+  /\b(?:echo|printf)\b[\s\S]*>>?/,
+  /(?:^|[\s;|&()])(?:\d+)?>>?(?=\S)/,
 ];
 
 const FILE_READ_PATTERNS: RegExp[] = [
@@ -33,8 +33,75 @@ const FILE_READ_PATTERNS: RegExp[] = [
   /(^|[\s'"])tail\s+/,
 ];
 
+function unwrapShellCommand(raw: string): string {
+  let current = raw.trim();
+  if (current.startsWith('$ ')) {
+    current = current.slice(2).trim();
+  }
+
+  const wrappers = [/^(?:\/bin\/)?bash\s+-lc\s+(.+)$/i, /^(?:\/bin\/)?sh\s+-lc\s+(.+)$/i];
+  for (const wrapper of wrappers) {
+    const match = current.match(wrapper);
+    if (!match) {
+      continue;
+    }
+    const inner = match[1]?.trim() ?? '';
+    if (
+      (inner.startsWith('"') && inner.endsWith('"'))
+      || (inner.startsWith("'") && inner.endsWith("'"))
+    ) {
+      current = inner.slice(1, -1).trim();
+    } else {
+      current = inner;
+    }
+  }
+
+  return current;
+}
+
+function stripQuotedSegments(input: string): string {
+  let result = '';
+  let quote: "'" | '"' | '`' | null = null;
+  let escaped = false;
+
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+
+    if (escaped) {
+      result += quote ? ' ' : char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      escaped = true;
+      result += quote ? ' ' : char;
+      continue;
+    }
+
+    if (quote) {
+      if (char === quote) {
+        quote = null;
+      }
+      result += ' ';
+      continue;
+    }
+
+    if (char === '\'' || char === '"' || char === '`') {
+      quote = char as "'" | '"' | '`';
+      result += ' ';
+      continue;
+    }
+
+    result += char;
+  }
+
+  return result;
+}
+
 export function inferActionTypeFromCommand(command: string): ActionType {
-  const normalized = command.toLowerCase();
+  const normalized = unwrapShellCommand(command).toLowerCase();
+  const unquoted = stripQuotedSegments(normalized);
 
   if (FILE_LIST_PATTERNS.some((pattern) => pattern.test(normalized))) {
     return 'file_list';
@@ -42,11 +109,11 @@ export function inferActionTypeFromCommand(command: string): ActionType {
 
   // Evaluate write intent before read intent to prevent mixed commands
   // like "sed -n ... && mkdir -p ... && cat > file" from being mislabeled.
-  if (FILE_WRITE_PATTERNS.some((pattern) => pattern.test(normalized))) {
+  if (FILE_WRITE_PATTERNS.some((pattern) => pattern.test(unquoted))) {
     return 'file_write';
   }
 
-  if (FILE_READ_PATTERNS.some((pattern) => pattern.test(normalized))) {
+  if (FILE_READ_PATTERNS.some((pattern) => pattern.test(unquoted))) {
     return 'file_read';
   }
 
