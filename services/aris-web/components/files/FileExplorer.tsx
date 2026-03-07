@@ -1,14 +1,15 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { 
-  Folder, FolderOpen, File, ChevronRight, ArrowUpCircle, 
+import {
+  Folder, FolderOpen, File, ChevronRight, ArrowUpCircle,
   Loader2, FolderPlus, FilePlus, Trash2, X, Save, AlertCircle,
   Code, Eye, Edit3, MoreVertical, Pencil, Move
 } from 'lucide-react';
 import { Card } from '@/components/ui';
 import Prism from 'prismjs';
 import { marked } from 'marked';
+import styles from './FileExplorer.module.css';
 
 // Import Prism languages
 import 'prismjs/components/prism-typescript';
@@ -20,6 +21,9 @@ import 'prismjs/components/prism-markdown';
 import 'prismjs/components/prism-css';
 import 'prismjs/components/prism-markup';
 
+// Prism theme
+import 'prismjs/themes/prism.css';
+
 interface FileItem {
   name: string;
   path: string;
@@ -30,7 +34,7 @@ interface FileItem {
 interface DirectoryData {
   currentPath: string;
   parentPath: string | null;
-  directories: FileItem[]; 
+  directories: FileItem[];
 }
 
 export function FileExplorer() {
@@ -55,7 +59,7 @@ export function FileExplorer() {
   const [isPreview, setIsPreview] = useState(false);
   const [newPathInput, setNewPathInput] = useState<{ type: 'file' | 'folder'; active: boolean }>({ type: 'file', active: false });
   const [newName, setNewName] = useState('');
-  
+
   // Context Menu State
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [actionModal, setActionModal] = useState<{ type: 'rename' | 'move'; item: FileItem; value: string } | null>(null);
@@ -104,7 +108,7 @@ export function FileExplorer() {
     if (!newName) return;
     const fullPath = currentPath === '/' ? `/${newName}` : `${currentPath}/${newName}`;
     const endpoint = newPathInput.type === 'folder' ? '/api/fs/mkdir' : '/api/fs/write';
-    
+
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -171,7 +175,7 @@ export function FileExplorer() {
   const handleEditFile = async (item: FileItem) => {
     if (item.isDirectory) return;
     setActiveMenu(null);
-    
+
     try {
       const res = await fetch(`/api/fs/read?path=${encodeURIComponent(item.path)}`);
       if (!res.ok) throw new Error('파일을 읽는 데 실패했습니다.');
@@ -218,7 +222,7 @@ export function FileExplorer() {
       const currentLine = lines[lines.length - 1];
       const match = currentLine.match(/^\s*/);
       const indentation = match ? match[0] : '';
-      
+
       const charBefore = value[selectionStart - 1];
       const charAfter = value[selectionStart];
       if ((charBefore === '{' && charAfter === '}') || (charBefore === '[' && charAfter === ']') || (charBefore === '(' && charAfter === ')')) {
@@ -300,49 +304,49 @@ export function FileExplorer() {
 
   const renderEditor = () => {
     if (!editingFile) return null;
-    
+
     return (
-      <div className="editor-root">
-        <div className="editor-header">
-          <div className="editor-title-box">
+      <div className={styles.editorRoot}>
+        <div className={styles.editorHeader}>
+          <div className={styles.editorTitleBox}>
             <Code size={20} style={{ color: 'var(--accent-sky)', flexShrink: 0 }} />
-            <div className="editor-title-text">
-              <span className="file-name">{editingFile.name}</span>
-              <span className="file-lang">{displayLanguageName(editingFile.name)}</span>
+            <div className={styles.editorTitleText}>
+              <span className={styles.fileName}>{editingFile.name}</span>
+              <span className={styles.fileLang}>{displayLanguageName(editingFile.name)}</span>
             </div>
           </div>
-          <div className="editor-actions">
+          <div className={styles.editorActions}>
             {getLanguage(editingFile.name) === 'markdown' && (
-              <button onClick={() => setIsPreview(!isPreview)} className="btn-secondary btn-sm">
+              <button onClick={() => setIsPreview(!isPreview)} className={`btn-secondary ${styles.btnSm}`}>
                 {isPreview ? <Edit3 size={16} /> : <Eye size={16} />}
                 <span>{isPreview ? '편집' : '미리보기'}</span>
               </button>
             )}
-            <button onClick={saveEditedFile} disabled={isEditorSaving} className="btn-primary btn-sm">
-              {isEditorSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+            <button onClick={saveEditedFile} disabled={isEditorSaving} className={`btn-primary ${styles.btnSm}`}>
+              {isEditorSaving ? <Loader2 size={16} className={styles.animateSpin} /> : <Save size={16} />}
               <span>저장</span>
             </button>
-            <button onClick={() => setEditingFile(null)} className="btn-secondary btn-sm">
+            <button onClick={() => setEditingFile(null)} className={`btn-secondary ${styles.btnSm}`}>
               <X size={16} /> <span>닫기</span>
             </button>
           </div>
         </div>
-        
-        <div className="editor-viewport">
+
+        <div className={styles.editorViewport}>
           {!isPreview ? (
             <>
-              <div ref={lineNumbersRef} className="line-numbers">
+              <div ref={lineNumbersRef} className={styles.lineNumbers}>
                 {getLineNumbers()}
               </div>
-              <div className="editor-container">
+              <div className={styles.editorContainer}>
                 <pre
                   ref={preRef}
-                  className="editor-pre"
+                  className={styles.editorPre}
                   dangerouslySetInnerHTML={{ __html: highlightedContent + '\n' }}
                 />
                 <textarea
                   ref={textareaRef}
-                  className="editor-textarea"
+                  className={styles.editorTextarea}
                   value={editingFile.content}
                   onChange={(e) => setEditingFile({ ...editingFile, content: e.target.value })}
                   onKeyDown={handleEditorKeyDown}
@@ -352,11 +356,11 @@ export function FileExplorer() {
               </div>
             </>
           ) : (
-            <div className="markdown-body" dangerouslySetInnerHTML={{ __html: markdownHtml }} />
+            <div className={styles.markdownBody} dangerouslySetInnerHTML={{ __html: markdownHtml }} />
           )}
         </div>
-        
-        <div className="editor-footer">
+
+        <div className={styles.editorFooter}>
           <span>라인: {editingFile.content.split('\n').length}</span>
           <span>탭: 2 spaces</span>
         </div>
@@ -365,98 +369,101 @@ export function FileExplorer() {
   };
 
   return (
-    <div className="explorer-wrapper animate-in">
-      <div className={`explorer-layout ${isLargeScreen ? 'layout-grid' : 'layout-stack'}`}>
+    <div className={styles.explorerWrapper}>
+      <div className={`${styles.explorerLayout} ${isLargeScreen ? styles.layoutGrid : styles.layoutStack}`}>
         {/* Sidebar */}
-        <Card className="sidebar-card">
-          <div className="sidebar-header">
-            <div className="sidebar-title">
+        <Card className={styles.sidebarCard}>
+          <div className={styles.sidebarHeader}>
+            <div className={styles.sidebarTitle}>
               <FolderOpen size={20} style={{ color: 'var(--accent-sky)' }} />
               <h2 className="title-sm">탐색기</h2>
             </div>
-            <div className="sidebar-tools">
-              <button onClick={() => setNewPathInput({ type: 'file', active: true })} className="btn-tool" title="새 파일"><FilePlus size={18} /></button>
-              <button onClick={() => setNewPathInput({ type: 'folder', active: true })} className="btn-tool" title="새 폴더"><FolderPlus size={18} /></button>
+            <div className={styles.sidebarTools}>
+              <button onClick={() => setNewPathInput({ type: 'file', active: true })} className={styles.btnTool} title="새 파일"><FilePlus size={18} /></button>
+              <button onClick={() => setNewPathInput({ type: 'folder', active: true })} className={styles.btnTool} title="새 폴더"><FolderPlus size={18} /></button>
             </div>
           </div>
 
           {newPathInput.active && (
-            <div className="new-item-form">
-              <input 
-                autoFocus className="input-base sm" 
+            <div className={styles.newItemForm}>
+              <input
+                autoFocus
+                className={styles.inputBase}
                 placeholder={newPathInput.type === 'file' ? '파일명...' : '폴더명...'}
                 value={newName} onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
               />
-              <div className="form-btns">
-                <button onClick={handleCreate} className="btn-primary xs">생성</button>
-                <button onClick={() => { setNewPathInput({ ...newPathInput, active: false }); setNewName(''); }} className="btn-secondary xs">취소</button>
+              <div className={styles.formBtns}>
+                <button onClick={handleCreate} className={`btn-primary ${styles.xs}`}>생성</button>
+                <button onClick={() => { setNewPathInput({ ...newPathInput, active: false }); setNewName(''); }} className={`btn-secondary ${styles.xs}`}>취소</button>
               </div>
             </div>
           )}
 
-          <div className="path-bar">
-            <span className="path-text">{data?.currentPath || currentPath}</span>
+          <div className={styles.pathBar}>
+            <span>{data?.currentPath || currentPath}</span>
           </div>
 
-          <div className="file-list-container">
+          <div className={styles.fileListContainer}>
             {loading ? (
-              <div className="loader-box"><Loader2 size={32} className="animate-spin" /></div>
+              <div className={styles.loaderBox}><Loader2 size={32} className={styles.animateSpin} /></div>
             ) : error ? (
-              <div className="error-box">
+              <div className={styles.errorBox}>
                 <AlertCircle size={24} />
                 <span>{error}</span>
-                <button onClick={() => fetchDirectory(currentPath)} className="btn-secondary xs">재시도</button>
+                <button onClick={() => fetchDirectory(currentPath)} className={`btn-secondary ${styles.xs}`}>재시도</button>
               </div>
             ) : (
-              <div className="file-list">
+              <div>
                 {data?.parentPath && (
-                  <div onClick={() => handleNavigate(data.parentPath!)} className="file-item hover-bg">
-                    <ArrowUpCircle size={18} className="item-icon muted" />
-                    <span className="item-name-text">..</span>
+                  <div onClick={() => handleNavigate(data.parentPath!)} className={styles.fileItem}>
+                    <div className={styles.itemMain}>
+                      <ArrowUpCircle size={18} className={styles.muted} />
+                      <span className={styles.itemNameText}>..</span>
+                    </div>
                   </div>
                 )}
-                
+
                 {data?.directories.map((item) => (
                   <div
                     key={item.path}
                     onClick={() => item.isDirectory ? handleNavigate(item.path) : handleEditFile(item)}
-                    className={`file-item hover-bg group ${editingFile?.path === item.path ? 'active' : ''}`}
+                    className={`${styles.fileItem} ${editingFile?.path === item.path ? styles.active : ''}`}
                   >
-                    <div className="item-main">
+                    <div className={styles.itemMain}>
                       {item.isDirectory ? (
-                        <Folder size={18} className="item-icon accent" />
+                        <Folder size={18} className={styles.accent} />
                       ) : (
-                        <File size={18} className="item-icon muted" />
+                        <File size={18} className={styles.muted} />
                       )}
-                      <span className="item-name-text">{item.name}</span>
+                      <span className={styles.itemNameText}>{item.name}</span>
                     </div>
-                    
-                    <div className="item-actions">
-                      <div className="menu-anchor">
-                        <button 
+
+                    <div className={styles.itemActions}>
+                      <div className={styles.menuAnchor}>
+                        <button
                           onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === item.path ? null : item.path); }}
-                          className={`btn-action ${activeMenu === item.path ? 'active' : ''}`}
+                          className={`${styles.btnAction} ${activeMenu === item.path ? styles.active : ''}`}
                         >
                           <MoreVertical size={16} />
                         </button>
-                        
+
                         {activeMenu === item.path && (
-                          <div ref={menuRef} className="dropdown-menu">
-                            <button onClick={(e) => { e.stopPropagation(); setActionModal({ type: 'rename', item, value: item.name }); setActiveMenu(null); }}>
+                          <div ref={menuRef} className={styles.dropdownMenu}>
+                            <button className={styles.menuBtn} onClick={(e) => { e.stopPropagation(); setActionModal({ type: 'rename', item, value: item.name }); setActiveMenu(null); }}>
                               <Pencil size={14} /> 이름 변경
                             </button>
-                            <button onClick={(e) => { e.stopPropagation(); setActionModal({ type: 'move', item, value: item.path }); setActiveMenu(null); }}>
+                            <button className={styles.menuBtn} onClick={(e) => { e.stopPropagation(); setActionModal({ type: 'move', item, value: item.path }); setActiveMenu(null); }}>
                               <Move size={14} /> 이동
                             </button>
-                            <div className="menu-divider" />
-                            <button className="danger" onClick={(e) => { e.stopPropagation(); handleDelete(item); }}>
+                            <div className={styles.menuDivider} />
+                            <button className={`${styles.menuBtn} ${styles.menuBtnDanger}`} onClick={(e) => { e.stopPropagation(); handleDelete(item); }}>
                               <Trash2 size={14} /> 삭제
                             </button>
                           </div>
                         )}
                       </div>
-                      {item.isDirectory && <ChevronRight size={14} className="muted" />}
+                      {item.isDirectory && <ChevronRight size={14} className={styles.muted} />}
                     </div>
                   </div>
                 ))}
@@ -467,12 +474,12 @@ export function FileExplorer() {
 
         {/* Main Content Area */}
         {isLargeScreen && (
-          <Card className="main-content-card">
+          <Card className={styles.mainContentCard}>
             {editingFile ? (
               renderEditor()
             ) : (
-              <div className="empty-state">
-                <div className="empty-icon-circle">
+              <div className={styles.emptyState}>
+                <div className={styles.emptyIconCircle}>
                   <File size={48} strokeWidth={1.5} />
                 </div>
                 <h3 className="title-sm">파일을 선택하세요</h3>
@@ -485,22 +492,23 @@ export function FileExplorer() {
 
       {/* Action Modal (Rename/Move) */}
       {actionModal && (
-        <div className="modal-overlay">
-          <Card className="action-modal">
-            <div className="modal-header">
+        <div className={styles.modalOverlay}>
+          <Card className={styles.actionModal}>
+            <div className={styles.modalHeader}>
               <h3 className="title-sm">{actionModal.type === 'rename' ? '이름 변경' : '파일 이동'}</h3>
-              <button onClick={() => setActionModal(null)} className="btn-close"><X size={20} /></button>
+              <button onClick={() => setActionModal(null)} className={styles.btnClose}><X size={20} /></button>
             </div>
-            <div className="modal-body">
-              <p className="modal-label">{actionModal.type === 'rename' ? '새 이름을 입력하세요:' : '이동할 전체 경로를 입력하세요:'}</p>
-              <input 
-                autoFocus className="input-base"
+            <div className={styles.modalBody}>
+              <p className={styles.modalLabel}>{actionModal.type === 'rename' ? '새 이름을 입력하세요:' : '이동할 전체 경로를 입력하세요:'}</p>
+              <input
+                autoFocus
+                className={styles.inputBase}
                 value={actionModal.value}
                 onChange={(e) => setActionModal({ ...actionModal, value: e.target.value })}
                 onKeyDown={(e) => e.key === 'Enter' && handleFileAction()}
               />
             </div>
-            <div className="modal-footer">
+            <div className={styles.modalFooter}>
               <button onClick={() => setActionModal(null)} className="btn-secondary">취소</button>
               <button onClick={handleFileAction} className="btn-primary">확인</button>
             </div>
@@ -510,270 +518,12 @@ export function FileExplorer() {
 
       {/* Mobile Editor Modal */}
       {!isLargeScreen && editingFile && (
-        <div className="mobile-modal-overlay">
-          <div className="mobile-modal-content">
+        <div className={styles.mobileModalOverlay}>
+          <div className={styles.mobileModalContent}>
             {renderEditor()}
           </div>
         </div>
       )}
-
-      <style jsx>{`
-        .explorer-wrapper {
-          padding: 1rem 0;
-          width: 100%;
-          height: calc(var(--app-vh, 100vh) - 140px);
-          max-width: 100% !important;
-          margin: 0;
-        }
-        .explorer-layout {
-          display: grid;
-          gap: 1rem;
-          height: 100%;
-          padding: 0 1rem;
-        }
-        .layout-grid {
-          grid-template-columns: 280px 1fr;
-        }
-        .layout-stack {
-          grid-template-columns: 1fr;
-        }
-
-        .sidebar-card {
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-          overflow: hidden;
-          background-color: var(--surface) !important;
-        }
-        .sidebar-header {
-          padding: 1.25rem;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          border-bottom: 1px solid var(--line);
-        }
-        .sidebar-title {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-        }
-        .sidebar-tools {
-          display: flex;
-          gap: 0.25rem;
-        }
-        .btn-tool {
-          padding: 0.4rem;
-          border-radius: 6px;
-          color: var(--text-muted);
-          background: transparent;
-          border: none;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-        .btn-tool:hover {
-          background-color: var(--surface-subtle);
-          color: var(--text);
-        }
-
-        .path-bar {
-          padding: 0.5rem 1rem;
-          background-color: var(--bg);
-          font-family: var(--font-mono);
-          font-size: 0.7rem;
-          border-bottom: 1px solid var(--line);
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          color: var(--text-muted);
-        }
-
-        .file-list-container {
-          flex: 1;
-          overflow-y: auto;
-          padding: 0.5rem;
-        }
-        .file-item {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 0.5rem 0.75rem;
-          border-radius: 6px;
-          cursor: pointer;
-          transition: all 0.1s ease;
-          margin-bottom: 2px;
-        }
-        .file-item:hover { background-color: var(--surface-subtle); }
-        .file-item.active {
-          background-color: var(--accent-sky-bg);
-          color: var(--accent-sky);
-        }
-        .item-main {
-          display: flex;
-          align-items: center;
-          gap: 0.6rem;
-          min-width: 0;
-          flex: 1;
-        }
-        .item-icon.accent { color: var(--accent-sky); }
-        .item-icon.muted { color: var(--text-muted); }
-        .item-name-text {
-          font-size: 0.85rem;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .active .item-name-text { font-weight: 600; }
-
-        .item-actions {
-          display: flex;
-          align-items: center;
-          gap: 0.2rem;
-          opacity: 0;
-        }
-        .file-item:hover .item-actions, .btn-action.active { opacity: 1; }
-        
-        .menu-anchor { position: relative; }
-        .btn-action {
-          padding: 0.25rem;
-          border-radius: 4px;
-          color: var(--text-muted);
-          background: transparent;
-          border: none;
-          cursor: pointer;
-        }
-        .btn-action:hover, .btn-action.active {
-          background-color: var(--line);
-          color: var(--text);
-        }
-
-        .dropdown-menu {
-          position: absolute;
-          top: 100%;
-          right: 0;
-          width: 140px;
-          background-color: var(--surface);
-          border: 1px solid var(--line);
-          border-radius: 8px;
-          box-shadow: var(--shadow-lg);
-          z-index: 100;
-          padding: 0.4rem;
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-        .dropdown-menu button {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.4rem 0.6rem;
-          font-size: 0.8rem;
-          border: none;
-          background: transparent;
-          cursor: pointer;
-          border-radius: 4px;
-          color: var(--text);
-          text-align: left;
-        }
-        .dropdown-menu button:hover { background-color: var(--surface-subtle); }
-        .dropdown-menu button.danger { color: var(--accent-red); }
-        .dropdown-menu button.danger:hover { background-color: var(--accent-red-bg); }
-        .menu-divider { height: 1px; background-color: var(--line); margin: 0.2rem 0; }
-
-        .main-content-card {
-          height: 100%;
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-          padding: 0;
-          background-color: var(--surface) !important;
-        }
-
-        /* Editor Styles */
-        .editor-root {
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-          width: 100%;
-        }
-        .editor-header {
-          padding: 0.75rem 1.25rem;
-          border-bottom: 1px solid var(--line);
-          background-color: var(--surface-subtle);
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          flex-wrap: wrap;
-          gap: 0.5rem;
-        }
-        .editor-title-box { display: flex; align-items: center; gap: 0.75rem; min-width: 0; flex: 1; }
-        .editor-title-text { display: flex; flex-direction: column; min-width: 0; }
-        .file-name { font-weight: 600; font-size: 0.95rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .file-lang { font-size: 0.7rem; color: var(--text-muted); }
-        .editor-actions { display: flex; gap: 0.5rem; }
-        .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; border-radius: 6px; }
-        .xs { padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; }
-
-        .editor-viewport {
-          flex: 1;
-          display: flex;
-          overflow: hidden;
-          background-color: var(--bg);
-          position: relative;
-        }
-        .line-numbers {
-          width: 3.5rem; padding: 1.5rem 0.5rem;
-          background-color: var(--surface-subtle); border-right: 1px solid var(--line);
-          color: var(--text-muted); font-family: var(--font-mono); font-size: 0.85rem;
-          line-height: 1.5; text-align: right; user-select: none; overflow: hidden; white-space: pre;
-        }
-        .editor-container { position: relative; flex: 1; overflow: hidden; }
-        .editor-pre {
-          position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-          margin: 0; padding: 1.5rem; font-family: var(--font-mono); font-size: 0.85rem;
-          line-height: 1.5; pointer-events: none; white-space: pre; overflow: hidden;
-          background: transparent; color: var(--text); tab-size: 2; z-index: 1;
-        }
-        .editor-textarea {
-          position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-          border: none; padding: 1.5rem; font-family: var(--font-mono); font-size: 0.85rem;
-          line-height: 1.5; background: transparent; color: transparent;
-          caret-color: var(--text); resize: none; outline: none; white-space: pre;
-          overflow: auto; tab-size: 2; z-index: 2;
-        }
-        .editor-footer {
-          padding: 0.4rem 1rem; border-top: 1px solid var(--line);
-          font-size: 0.7rem; color: var(--text-muted); display: flex; justify-content: flex-end; gap: 1rem;
-          background-color: var(--surface-subtle);
-        }
-
-        .markdown-body { flex: 1; padding: 2rem; overflow: auto; background-color: var(--bg); color: var(--text); line-height: 1.6; }
-
-        .empty-state {
-          flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-          padding: 3rem; text-align: center; color: var(--text-muted); background-color: var(--bg);
-        }
-        .empty-icon-circle {
-          padding: 1.5rem; border-radius: 50%; background-color: var(--surface);
-          box-shadow: var(--shadow-md); color: var(--accent-sky); margin-bottom: 1.5rem;
-        }
-
-        .modal-overlay {
-          position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-          background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 2000;
-        }
-        .action-modal { width: 100%; max-width: 400px; padding: 0 !important; }
-        .modal-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
-        .modal-body { padding: 1.25rem; }
-        .modal-label { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem; }
-        .modal-footer { padding: 1rem 1.25rem; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 0.5rem; }
-        .btn-close { background: transparent; border: none; color: var(--text-muted); cursor: pointer; }
-
-        .mobile-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; }
-        .mobile-modal-content { width: 100%; height: 100%; max-height: 90vh; }
-
-        .animate-spin { animation: spin 1s linear infinite; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
     </div>
   );
 }
