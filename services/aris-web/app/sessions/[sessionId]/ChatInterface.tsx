@@ -34,7 +34,7 @@ import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import styles from './ChatInterface.module.css';
 
-// --- 상수 및 설정 (파일 최상단에서 관리하여 TDZ 에러 방지) ---
+// --- 상수 및 설정 ---
 
 const AGENT_REPLY_TIMEOUT_MS = 90000;
 const AUTO_SCROLL_THRESHOLD_PX = 80;
@@ -66,7 +66,66 @@ type ResourceLabel =
   | { kind: 'file'; name: string; extension: string; sourcePath?: string };
 type FolderLabel = (typeof FOLDER_LABELS)[number];
 
-// --- 유틸리티 함수 (호이스팅을 위해 function 키워드 사용 권장) ---
+// --- 런타임 초기화 안전 장치 (TDZ 에러 방지) ---
+// styles 객체를 즉시 참조하지 않고 함수 호출 시점에 참조하도록 변경
+
+function getToneClass(tone: Tone): string {
+  const map: Record<Tone, string> = {
+    sky: styles.toneSky,
+    amber: styles.toneAmber,
+    cyan: styles.toneCyan,
+    emerald: styles.toneEmerald,
+    violet: styles.toneViolet,
+    red: styles.toneRed,
+    git: styles.toneGit,
+    docker: styles.toneDocker,
+  };
+  return map[tone] || '';
+}
+
+function getAgentAvatarToneClass(tone: AgentMeta['tone']): string {
+  const map: Record<AgentMeta['tone'], string> = {
+    clay: styles.agentAvatarClay,
+    mint: styles.agentAvatarMint,
+    blue: styles.agentAvatarBlue,
+  };
+  return map[tone] || '';
+}
+
+function getEventKindMeta(kind: UiEventKind): { label: string; tone: Tone; Icon: React.ComponentType<{ size?: number }> } {
+  const map: Record<UiEventKind, { label: string; tone: Tone; Icon: React.ComponentType<{ size?: number }> }> = {
+    text_reply: { label: '', tone: 'sky', Icon: MessageSquareText },
+    run_execution: { label: 'RUN', tone: 'amber', Icon: TerminalSquare },
+    exec_execution: { label: 'EXEC', tone: 'red', Icon: TerminalSquare },
+    git_execution: { label: 'GIT', tone: 'git', Icon: GitLogoIcon },
+    docker_execution: { label: 'DOCKER', tone: 'docker', Icon: DockerLogoIcon },
+    command_execution: { label: 'RUN', tone: 'amber', Icon: TerminalSquare },
+    file_list: { label: 'LIST', tone: 'cyan', Icon: FolderTree },
+    file_read: { label: 'READ', tone: 'violet', Icon: FileSearch },
+    file_write: { label: 'WRITE', tone: 'emerald', Icon: FilePenLine },
+    unknown: { label: 'EVENT', tone: 'red', Icon: CircleAlert },
+  };
+  return map[kind] || map.unknown;
+}
+
+// --- Hydration 안전 컴포넌트 ---
+
+function RelativeTime({ timestamp, className }: { timestamp: string; className?: string }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    // 서버 사이드 또는 마운트 전에는 정적인 시간 표시 (Hydration 불일치 방지)
+    const date = new Date(timestamp);
+    return <span className={className}>{Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>;
+  }
+
+  return <span className={className}>{formatRelative(timestamp)}</span>;
+}
+
+// --- 유틸리티 함수 ---
 
 function isFolderLabel(label: string): label is FolderLabel {
   return (FOLDER_LABELS as readonly string[]).includes(label);
@@ -456,38 +515,6 @@ function isNearWindowBottom(): boolean {
   );
   return scrollHeight - (scrollTop + viewportHeight) <= AUTO_SCROLL_THRESHOLD_PX;
 }
-
-// --- UI 맵핑 상수 (정의 시 styles를 사용하지 않고 동적으로 참조하도록 변경 가능하나, 일단 순서 조정으로 해결 시도) ---
-
-const TONE_CLASS: Record<Tone, string> = {
-  sky: styles.toneSky,
-  amber: styles.toneAmber,
-  cyan: styles.toneCyan,
-  emerald: styles.toneEmerald,
-  violet: styles.toneViolet,
-  red: styles.toneRed,
-  git: styles.toneGit,
-  docker: styles.toneDocker,
-};
-
-const AGENT_AVATAR_TONE_CLASS: Record<AgentMeta['tone'], string> = {
-  clay: styles.agentAvatarClay,
-  mint: styles.agentAvatarMint,
-  blue: styles.agentAvatarBlue,
-};
-
-const EVENT_KIND_META: Record<UiEventKind, { label: string; tone: Tone; Icon: React.ComponentType<{ size?: number }> }> = {
-  text_reply: { label: '', tone: 'sky', Icon: MessageSquareText },
-  run_execution: { label: 'RUN', tone: 'amber', Icon: TerminalSquare },
-  exec_execution: { label: 'EXEC', tone: 'red', Icon: TerminalSquare },
-  git_execution: { label: 'GIT', tone: 'git', Icon: GitLogoIcon },
-  docker_execution: { label: 'DOCKER', tone: 'docker', Icon: DockerLogoIcon },
-  command_execution: { label: 'RUN', tone: 'amber', Icon: TerminalSquare },
-  file_list: { label: 'LIST', tone: 'cyan', Icon: FolderTree },
-  file_read: { label: 'READ', tone: 'violet', Icon: FileSearch },
-  file_write: { label: 'WRITE', tone: 'emerald', Icon: FilePenLine },
-  unknown: { label: 'EVENT', tone: 'red', Icon: CircleAlert },
-};
 
 // --- 컴포넌트 내부 헬퍼 함수 ---
 
@@ -997,7 +1024,7 @@ function CodeChangesEventCard({
       <div className={styles.codeChangesCompact}>
         <div className={styles.codeChangesCompactMain}>
           <div className={styles.actionCompactTopRow}>
-            <span className={`${styles.kindChip} ${TONE_CLASS.emerald}`}>CHANGES</span>
+            <span className={`${styles.kindChip} ${getToneClass('emerald')}`}>CHANGES</span>
             <span className={styles.actionCompactPrimary}>{compactPrimary}</span>
           </div>
           <div className={styles.codeChangesSummary}>
@@ -1028,7 +1055,7 @@ function CodeChangesEventCard({
       <div className={styles.actionHeader}>
         <div className={styles.actionHeaderMain}>
           <div className={styles.actionCompactTopRow}>
-            <span className={`${styles.kindChip} ${TONE_CLASS.emerald}`}>CHANGES</span>
+            <span className={`${styles.kindChip} ${getToneClass('emerald')}`}>CHANGES</span>
             <span className={styles.actionPrimary}>{resolveActionPrimary(event)}</span>
           </div>
           <div className={styles.codeChangesSummary}>
@@ -1076,7 +1103,7 @@ function ActionEventCard({
     return <TextReply body={event.body || event.title} isUser={false} />;
   }
 
-  const kindMeta = EVENT_KIND_META[event.kind] || EVENT_KIND_META.unknown;
+  const kindMeta = getEventKindMeta(event.kind);
   const KindIcon = kindMeta.Icon;
   const fullPrimary = resolveActionPrimary(event).replace(/\s+/g, ' ').trim();
   const compactPrimary = truncateSingleLine(fullPrimary, 88);
@@ -1090,7 +1117,7 @@ function ActionEventCard({
       <div className={styles.actionCompact}>
         <div className={styles.actionCompactMain}>
           <div className={styles.actionCompactTopRow}>
-            <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
+            <span className={`${styles.kindChip} ${getToneClass(kindMeta.tone)}`}>
               <KindIcon size={12} />
               {kindMeta.label}
             </span>
@@ -1126,7 +1153,7 @@ function ActionEventCard({
       <div className={styles.actionHeader}>
         <div className={styles.actionHeaderMain}>
           <div className={styles.actionCompactTopRow}>
-            <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
+            <span className={`${styles.kindChip} ${getToneClass(kindMeta.tone)}`}>
               <KindIcon size={13} />
               {kindMeta.label}
             </span>
@@ -2071,7 +2098,7 @@ export function ChatInterface({
                       <span className={styles.chatListTitle}>{chat.title}</span>
                     )}
                   </span>
-                  <span className={styles.chatListTime}>{formatRelative(chat.lastActivityAt)}</span>
+                  <RelativeTime timestamp={chat.lastActivityAt || chat.createdAt} className={styles.chatListTime} />
                 </button>
                 {!isRenaming && (
                   <div className={styles.chatListMenuWrap}>
@@ -2140,7 +2167,7 @@ export function ChatInterface({
             >
               {isChatSidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
             </button>
-            <span className={`${styles.agentAvatarHero} ${AGENT_AVATAR_TONE_CLASS[agentMeta.tone]}`}>
+            <span className={`${styles.agentAvatarHero} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
               <agentMeta.Icon size={20} />
             </span>
             <div className={styles.centerHeaderInfo}>
@@ -2243,7 +2270,7 @@ export function ChatInterface({
           <div className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''}`} ref={scrollRef} onScroll={handleStreamScroll}>
             {streamItems.map((item) => {
               if (item.type === 'action_overflow') {
-                const overflowKindMeta = EVENT_KIND_META[item.kind] || EVENT_KIND_META.unknown;
+                const overflowKindMeta = getEventKindMeta(item.kind);
                 const title = item.expanded
                   ? '반복 행동 접기'
                   : `중간 행동 ${item.hiddenCount}개 펼치기`;
@@ -2280,7 +2307,7 @@ export function ChatInterface({
               const event = item.event;
               const userEvent = isUserEvent(event);
               const actionEvent = !userEvent && isActionKind(event.kind);
-              const kindMeta = EVENT_KIND_META[event.kind] ?? EVENT_KIND_META.unknown;
+              const kindMeta = getEventKindMeta(event.kind);
               const KindIcon = kindMeta.Icon;
 
               // 사용자 메시지 (오른쪽 버블)
@@ -2313,7 +2340,7 @@ export function ChatInterface({
               return (
                 <article key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
                   <div className={styles.messageWithAvatar}>
-                    <div className={`${styles.msgAvatar} ${AGENT_AVATAR_TONE_CLASS[agentMeta.tone]}`}>
+                    <div className={`${styles.msgAvatar} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
                       <agentMeta.Icon size={14} />
                     </div>
                     <div className={styles.msgBody}>
@@ -2324,7 +2351,7 @@ export function ChatInterface({
                       <div className={`${styles.messageBubble} ${styles.messageBubbleAgent}`}>
                         {kindMeta.label ? (
                           <div className={styles.messageKindRow}>
-                            <span className={`${styles.kindChip} ${TONE_CLASS[kindMeta.tone]}`}>
+                            <span className={`${styles.kindChip} ${getToneClass(kindMeta.tone)}`}>
                               <KindIcon size={14} />
                               {kindMeta.label}
                             </span>
@@ -2449,7 +2476,7 @@ export function ChatInterface({
             {recentEvents.length === 0 && <p className={styles.emptyHint}>표시할 이벤트가 없습니다.</p>}
             {recentEvents.map((event) => {
               const userEvent = isUserEvent(event);
-              const kindMeta = EVENT_KIND_META[event.kind] ?? EVENT_KIND_META.unknown;
+              const kindMeta = getEventKindMeta(event.kind);
               const KindIcon = kindMeta.Icon;
               const miniKindLabel = userEvent ? 'YOU' : kindMeta.label;
               return (
@@ -2460,10 +2487,10 @@ export function ChatInterface({
                   onClick={() => jumpToEvent(event.id)}
                   title="해당 이벤트로 이동"
                 >
-                  <span className={styles.miniTime}>{formatClock(event.timestamp)}</span>
+                  <RelativeTime timestamp={event.timestamp} className={styles.miniTime} />
                   <span className={styles.miniEventRow}>
                     {miniKindLabel ? (
-                      <span className={`${styles.miniKindChip} ${TONE_CLASS[kindMeta.tone]}`}>
+                      <span className={`${styles.miniKindChip} ${getToneClass(kindMeta.tone)}`}>
                         <KindIcon size={11} />
                         {miniKindLabel}
                       </span>
