@@ -60,6 +60,14 @@ describe('classifyEventKind', () => {
     expect(kind).toBe('file_write');
   });
 
+  it('overrides file_list type when command has write intent', () => {
+    const kind = classifyEventKind({
+      type: 'file_list',
+      command: '/bin/bash -lc "ls -la && echo hello > out.txt"',
+    });
+    expect(kind).toBe('file_write');
+  });
+
   it('detects multiline bash -lc writes as file_write', () => {
     const kind = classifyEventKind({
       type: 'command_execution',
@@ -173,6 +181,19 @@ describe('normalizeEvents', () => {
         type: 'message',
         text: '$ /bin/bash -lc "sed -n \'1,120p\' src/app.ts > out.txt"',
         meta: { actionType: 'command_execution' },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('file_write');
+  });
+
+  it('overrides file_list meta when command contains write operations', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e3e',
+        type: 'message',
+        text: '$ /bin/bash -lc "ls -la && echo hello > out.txt"',
+        meta: { actionType: 'file_list' },
       },
     ]);
 

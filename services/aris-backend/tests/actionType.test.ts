@@ -27,6 +27,11 @@ describe('inferActionTypeFromCommand', () => {
     expect(inferActionTypeFromCommand(command)).toBe('file_write');
   });
 
+  it('prioritizes file_write over file_list for mixed commands', () => {
+    const command = '/bin/bash -lc "ls -la && echo hello > out.txt"';
+    expect(inferActionTypeFromCommand(command)).toBe('file_write');
+  });
+
   it('does not treat quoted greater-than as redirect', () => {
     const command = "/bin/bash -lc 'echo \"a > b\"'";
     expect(inferActionTypeFromCommand(command)).toBe('command_execution');

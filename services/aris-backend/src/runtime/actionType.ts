@@ -103,14 +103,14 @@ export function inferActionTypeFromCommand(command: string): ActionType {
   const normalized = unwrapShellCommand(command).toLowerCase();
   const unquoted = stripQuotedSegments(normalized);
 
-  if (FILE_LIST_PATTERNS.some((pattern) => pattern.test(normalized))) {
-    return 'file_list';
-  }
-
   // Evaluate write intent before read intent to prevent mixed commands
-  // like "sed -n ... && mkdir -p ... && cat > file" from being mislabeled.
+  // like "ls && mkdir -p ... && cat > file" from being mislabeled.
   if (FILE_WRITE_PATTERNS.some((pattern) => pattern.test(unquoted))) {
     return 'file_write';
+  }
+
+  if (FILE_LIST_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return 'file_list';
   }
 
   if (FILE_READ_PATTERNS.some((pattern) => pattern.test(unquoted))) {
