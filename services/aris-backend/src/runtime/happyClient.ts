@@ -548,12 +548,29 @@ function isMissingCodexThreadError(error: unknown): boolean {
 }
 
 function unwrapShellCommand(command: string): string {
-  const trimmed = command.trim();
-  const shellPrefix = "/bin/bash -lc '";
-  if (trimmed.startsWith(shellPrefix) && trimmed.endsWith("'")) {
-    return trimmed.slice(shellPrefix.length, -1);
+  let current = command.trim();
+  if (current.startsWith('$ ')) {
+    current = current.slice(2).trim();
   }
-  return trimmed;
+
+  const wrappers = [/^(?:\/bin\/)?bash\s+-lc\s+([\s\S]+)$/i, /^(?:\/bin\/)?sh\s+-lc\s+([\s\S]+)$/i];
+  for (const wrapper of wrappers) {
+    const match = current.match(wrapper);
+    if (!match) {
+      continue;
+    }
+    const inner = match[1]?.trim() ?? '';
+    if (
+      (inner.startsWith('"') && inner.endsWith('"'))
+      || (inner.startsWith("'") && inner.endsWith("'"))
+    ) {
+      current = inner.slice(1, -1).trim();
+    } else {
+      current = inner;
+    }
+  }
+
+  return current;
 }
 
 function normalizeCodexApprovalDecision(value: unknown): PermissionRisk {

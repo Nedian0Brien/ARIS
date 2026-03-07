@@ -52,6 +52,22 @@ describe('classifyEventKind', () => {
     expect(printfKind).toBe('file_write');
   });
 
+  it('detects redirects with spaces as file_write', () => {
+    const kind = classifyEventKind({
+      type: 'command_execution',
+      command: '/bin/bash -lc "sed -n \'1,120p\' src/app.ts > out.txt"',
+    });
+    expect(kind).toBe('file_write');
+  });
+
+  it('detects multiline bash -lc writes as file_write', () => {
+    const kind = classifyEventKind({
+      type: 'command_execution',
+      command: '/bin/bash -lc "echo hello > out.txt\\ncat out.txt"',
+    });
+    expect(kind).toBe('file_write');
+  });
+
   it('does not treat quoted greater-than in echo as write intent', () => {
     const kind = classifyEventKind({
       type: 'file_read',
@@ -144,6 +160,19 @@ describe('normalizeEvents', () => {
         type: 'message',
         text: '$ /bin/bash -lc "cd /tmp/work && sed -n \'1,120p\' a.ts && mkdir -p prisma/migrations && cat > prisma/migrations/001_init.sql <<\'SQL\'"',
         meta: { actionType: 'file_read' },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('file_write');
+  });
+
+  it('overrides command_execution meta when command contains redirect with spaces', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e3d',
+        type: 'message',
+        text: '$ /bin/bash -lc "sed -n \'1,120p\' src/app.ts > out.txt"',
+        meta: { actionType: 'command_execution' },
       },
     ]);
 
