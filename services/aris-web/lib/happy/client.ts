@@ -224,7 +224,7 @@ async function listAllSessionMessages(sessionId: string): Promise<unknown[]> {
 
     allMessages.push(...batch);
 
-    const maxSeq = batch.reduce((max, item) => {
+    const maxSeq = batch.reduce((max: number, item) => {
       const seq = toMessageSeq(item);
       if (seq === null || seq <= max) {
         return max;

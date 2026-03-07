@@ -78,6 +78,15 @@ export function buildServer(config: ServerConfig) {
     sessions: await store.listSessions(),
   }));
 
+  app.get('/v1/sessions/:sessionId', async (request, reply) => {
+    const { sessionId } = request.params as { sessionId: string };
+    const session = await store.getSession(sessionId);
+    if (!session) {
+      return reply.code(404).send({ error: 'Session not found' });
+    }
+    return { session };
+  });
+
   app.post('/v1/sessions', async (request, reply) => {
     const parsed = createSessionSchema.safeParse(request.body);
     if (!parsed.success) {

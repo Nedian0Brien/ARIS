@@ -91,6 +91,7 @@ async function getSessionCwd(sessionId) {
     if (!res.ok) return null;
     const data = await res.json();
     return (
+      data?.session?.metadata?.path ??
       data?.session?.path ??
       data?.path ??
       data?.metadata?.path ??

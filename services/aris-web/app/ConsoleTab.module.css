@@ -14,19 +14,27 @@
 .consoleHeader {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
   background: #1e293b;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
-  flex-wrap: wrap;
   min-height: 48px;
 }
 
+.selectorWrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+}
+
 .sessionSelector {
-  flex: 1 1 220px;
-  min-width: 140px;
-  max-width: none;
+  flex: 1;
+  min-width: 100px;
+  max-width: 400px;
   background: #0f172a;
   color: #e2e8f0;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -36,10 +44,20 @@
   font-family: var(--font-mono);
   cursor: pointer;
   outline: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sessionSelector:focus {
   border-color: var(--primary, #3b82f6);
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
 }
 
 .fontControls {
@@ -52,8 +70,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-sm, 0.5rem);
@@ -128,6 +146,7 @@
   background: #1e293b;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
+  padding-bottom: calc(82px + var(--safe-area-inset-bottom, 0px)); /* 플로팅 내비게이션 높이 고려 */
 }
 
 .quickDirScroll {

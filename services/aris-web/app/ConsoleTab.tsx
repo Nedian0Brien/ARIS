@@ -34,7 +34,6 @@ export function ConsoleTab({ user, initialSessions }: Props) {
   const fitAddonRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const fontSizeRef = useRef(14);
-  const [fontSize, setFontSize] = useState(14);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -148,7 +147,6 @@ export function ConsoleTab({ user, initialSessions }: Props) {
   const changeFontSize = (delta: number) => {
     const newSize = Math.max(10, Math.min(24, fontSizeRef.current + delta));
     fontSizeRef.current = newSize;
-    setFontSize(newSize);
     if (termRef.current) {
       termRef.current.options.fontSize = newSize;
       fitAddonRef.current?.fit();
@@ -181,45 +179,57 @@ export function ConsoleTab({ user, initialSessions }: Props) {
     (s) => s.status === 'running' || s.status === 'idle',
   );
 
+  const formatPath = (path: string) => {
+    if (!path || path === '/' || path === 'unknown-project') return path;
+    const cleanPath = path.replace(/\/+$/, '');
+    const parts = cleanPath.split('/');
+    return parts[parts.length - 1] || '/';
+  };
+
   return (
     <div className={styles.consoleShell}>
       {/* Header */}
       <div className={styles.consoleHeader}>
-        <select
-          className={styles.sessionSelector}
-          value={selectedSessionId ?? ''}
-          onChange={(e) => setSelectedSessionId(e.target.value || null)}
-        >
-          <option value="">새 터미널</option>
-          {activeSessions.map((s) => (
-            <option key={s.id} value={s.id}>
-              [{s.agent}] {s.alias ?? s.projectName ?? s.id.slice(0, 8)}
-            </option>
-          ))}
-        </select>
-
-        <div className={styles.fontControls}>
-          <button
-            className={styles.iconBtn}
-            onClick={() => changeFontSize(-1)}
-            title="폰트 축소"
+        <div className={styles.selectorWrapper}>
+          <select
+            className={styles.sessionSelector}
+            value={selectedSessionId ?? ''}
+            onChange={(e) => setSelectedSessionId(e.target.value || null)}
           >
-            <Minus size={12} />
-          </button>
-          <button
-            className={styles.iconBtn}
-            onClick={() => changeFontSize(1)}
-            title="폰트 확대"
-          >
-            <Plus size={12} />
-          </button>
+            <option value="">새 터미널</option>
+            {activeSessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                [{s.agent}] {s.alias ?? formatPath(s.projectName) ?? s.id.slice(0, 8)}
+              </option>
+            ))}
+          </select>
+          <span
+            className={`${styles.statusDot} ${connected ? styles.connected : styles.disconnected}`}
+            title={connected ? '연결됨' : '연결 끊김'}
+          />
         </div>
 
-        <span
-          className={`${styles.statusDot} ${connected ? styles.connected : styles.disconnected}`}
-          title={connected ? '연결됨' : '연결 끊김'}
-        />
-        <span className={styles.statusLabel}>{connected ? '연결됨' : '연결 끊김'}</span>
+        <div className={styles.headerRight}>
+          <div className={styles.fontControls}>
+            <button
+              className={styles.iconBtn}
+              onClick={() => changeFontSize(-1)}
+              title="폰트 축소"
+            >
+              <Minus size={12} />
+            </button>
+            <button
+              className={styles.iconBtn}
+              onClick={() => changeFontSize(1)}
+              title="폰트 확대"
+            >
+              <Plus size={12} />
+            </button>
+          </div>
+          {!isMobile && (
+            <span className={styles.statusLabel}>{connected ? '연결됨' : '연결 끊김'}</span>
+          )}
+        </div>
       </div>
 
       {/* xterm 컨테이너 */}
@@ -232,7 +242,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
           {activeSessions.length > 0 && (
             <div className={styles.quickDirScroll}>
               {activeSessions.map((s) => {
-                const label = s.alias ?? s.projectName ?? s.id.slice(0, 8);
+                const label = s.alias ?? formatPath(s.projectName) ?? s.id.slice(0, 8);
                 return (
                   <button
                     key={s.id}
