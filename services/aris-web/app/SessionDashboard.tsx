@@ -46,7 +46,6 @@ const PATH_HISTORY_STORAGE_KEY = 'aris:new-session-path-history';
 const MAX_PATH_HISTORY_ITEMS = 8;
 const FALLBACK_DATE_ISO = '1970-01-01T00:00:00.000Z';
 const SERVER_METRICS_POLL_INTERVAL_MS = 10_000;
-const SESSION_STATUS_POLL_INTERVAL_MS = 4_000;
 const PERMISSION_POLL_INTERVAL_MS = 5_000;
 
 type SessionUiStatus = 'running' | 'pending' | 'completed' | 'idle';
@@ -371,55 +370,36 @@ export function SessionDashboard({
   }, [sessionsList]);
 
   useEffect(() => {
-    let isCancelled = false;
-    let inFlight = false;
+    const es = new EventSource('/api/runtime/sessions/stream');
 
-    const fetchSessionsSnapshot = async () => {
-      if (isCancelled || inFlight) {
-        return;
-      }
-      inFlight = true;
+    es.onmessage = (event) => {
       try {
-        const response = await fetch('/api/runtime/sessions', { cache: 'no-store' });
-        const body = (await response.json().catch(() => ({}))) as {
-          sessions?: SessionSummary[];
-          error?: string;
-        };
-        if (!response.ok || !Array.isArray(body.sessions)) {
-          throw new Error(body.error ?? 'Failed to refresh sessions');
-        }
+        const data = JSON.parse(event.data as string) as { sessions?: SessionSummary[] };
+        if (!Array.isArray(data.sessions)) return;
 
-        if (!isCancelled) {
-          setSessionsList(body.sessions);
+        setSessionsList(data.sessions);
 
-          const pins = new Set<string>();
-          const aliases: Record<string, string> = {};
-          body.sessions.forEach((session) => {
-            if (session.isPinned) {
-              pins.add(session.id);
-            }
-            if (typeof session.alias === 'string' && session.alias.trim()) {
-              aliases[session.id] = session.alias;
-            }
-          });
-          setPinnedSessions(pins);
-          setSessionAliases(aliases);
-        }
+        const pins = new Set<string>();
+        const aliases: Record<string, string> = {};
+        data.sessions.forEach((session) => {
+          if (session.isPinned) pins.add(session.id);
+          if (typeof session.alias === 'string' && session.alias.trim()) {
+            aliases[session.id] = session.alias;
+          }
+        });
+        setPinnedSessions(pins);
+        setSessionAliases(aliases);
       } catch {
-        // Keep current snapshot when sync fails; a later poll will recover.
-      } finally {
-        inFlight = false;
+        // JSON parse 실패 무시
       }
     };
 
-    void fetchSessionsSnapshot();
-    const timerId = window.setInterval(() => {
-      void fetchSessionsSnapshot();
-    }, SESSION_STATUS_POLL_INTERVAL_MS);
+    es.onerror = () => {
+      // EventSource가 자동으로 재연결을 시도함
+    };
 
     return () => {
-      isCancelled = true;
-      window.clearInterval(timerId);
+      es.close();
     };
   }, []);
 
