@@ -38,6 +38,13 @@ import type { ApprovalPolicy, PermissionRequest, SessionChat, UiEvent, UiEventKi
 import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '@/components/ui/AgentIcons';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import styles from './ChatInterface.module.css';
+import dynamic from 'next/dynamic';
+
+// SSR을 비활성화해 react-syntax-highlighter의 window 참조 오류 방지
+const SyntaxHighlighter = dynamic(
+  () => import('./CodeHighlighter').then((m) => m.CodeHighlighter),
+  { ssr: false, loading: () => null }
+);
 
 // --- 1. 기본 상수 및 설정 (TDZ 방지를 위해 최상단에 배치) ---
 
@@ -894,6 +901,13 @@ function ResourceLabelStrip({ resources }: { resources: ResourceLabel[] }) {
 
 function MarkdownContent({ body }: { body: string }) {
   const blocks = useMemo(() => parseMarkdownBlocks(body), [body]);
+  const [copiedCodeKey, setCopiedCodeKey] = useState<string | null>(null);
+  const copyCodeToClipboard = useCallback((code: string, key: string) => {
+    void navigator.clipboard.writeText(code).then(() => {
+      setCopiedCodeKey(key);
+      setTimeout(() => setCopiedCodeKey((prev) => (prev === key ? null : prev)), 2000);
+    });
+  }, []);
 
   return (
     <div className={styles.markdownRoot}>
@@ -988,12 +1002,33 @@ function MarkdownContent({ body }: { body: string }) {
           );
         }
 
-        return (
-          <pre key={key} className={styles.markdownCodeBlock}>
+        <div key={key} className={styles.markdownCodeBlock}>
+          <div className={styles.markdownCodeHeader}>
             {block.language && <span className={styles.markdownCodeLang}>{block.language}</span>}
-            <code>{block.code}</code>
-          </pre>
-        );
+            <button
+              type="button"
+              className={styles.copyCodeBtn}
+              onClick={() => copyCodeToClipboard(block.code, key)}
+              aria-label="코드 복사"
+            >
+              {copiedCodeKey === key ? '✓ 복사됨' : '복사'}
+            </button>
+          </div>
+          <SyntaxHighlighter
+            language={block.language?.toLowerCase() || 'text'}
+            customStyle={{
+              margin: 0,
+              padding: '0.4rem 0.56rem 0.56rem',
+              background: 'transparent',
+              fontSize: '0.76rem',
+              lineHeight: 1.45,
+            }}
+            wrapLongLines={false}
+            PreTag="div"
+          >
+            {block.code}
+          </SyntaxHighlighter>
+        </div>
       })}
     </div>
   );
@@ -1305,12 +1340,14 @@ export function ChatInterface({
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [contextItems, setContextItems] = useState<ContextItem[]>([]);
   const [plusMenuMode, setPlusMenuMode] = useState<'closed' | 'menu' | 'file' | 'text'>('closed');
-  const [filePathInput, setFilePathInput] = useState('');
   const [textContextInput, setTextContextInput] = useState('');
-  const [isLoadingFile, setIsLoadingFile] = useState(false);
-  const [fileInputError, setFileInputError] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<ComposerModelId>('claude-sonnet-4-6');
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const [fileBrowserPath, setFileBrowserPath] = useState('/');
+  const [fileBrowserItems, setFileBrowserItems] = useState<Array<{ name: string; path: string; isDirectory: boolean; isFile: boolean }>>([]);
+  const [fileBrowserParentPath, setFileBrowserParentPath] = useState<string | null>(null);
+  const [fileBrowserLoading, setFileBrowserLoading] = useState(false);
+  const [fileBrowserError, setFileBrowserError] = useState<string | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const chatSidebarRef = useRef<HTMLDivElement>(null);
   const chatShellRef = useRef<HTMLDivElement>(null);
@@ -1359,7 +1396,6 @@ export function ChatInterface({
     function handleOutsideClick(e: MouseEvent) {
       if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
         setPlusMenuMode('closed');
-        setFileInputError(null);
       }
       if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
         setIsModelDropdownOpen(false);
@@ -1373,26 +1409,6 @@ export function ChatInterface({
     setContextItems((prev) => prev.filter((item) => item.id !== id));
   }, []);
 
-  const handleAddFileContext = useCallback(async () => {
-    const filePath = filePathInput.trim();
-    if (!filePath) return;
-    setIsLoadingFile(true);
-    setFileInputError(null);
-    try {
-      const res = await fetch(`/api/fs/read?path=${encodeURIComponent(filePath)}`);
-      const data = (await res.json().catch(() => ({}))) as { content?: string; error?: string };
-      if (!res.ok || data.error) throw new Error(data.error ?? '파일을 읽을 수 없습니다.');
-      const name = filePath.split('/').filter(Boolean).pop() ?? filePath;
-      setContextItems((prev) => [...prev, { id: genId(), type: 'file', path: filePath, content: data.content ?? '', name }]);
-      setFilePathInput('');
-      setPlusMenuMode('closed');
-    } catch (err) {
-      setFileInputError(err instanceof Error ? err.message : '파일 읽기 실패');
-    } finally {
-      setIsLoadingFile(false);
-    }
-  }, [filePathInput]);
-
   const handleAddTextContext = useCallback(() => {
     const text = textContextInput.trim();
     if (!text) return;
@@ -1400,6 +1416,49 @@ export function ChatInterface({
     setTextContextInput('');
     setPlusMenuMode('closed');
   }, [textContextInput]);
+
+  const fetchFileBrowserDir = useCallback(async (dirPath: string) => {
+    setFileBrowserLoading(true);
+    setFileBrowserError(null);
+    try {
+      const res = await fetch(`/api/fs/list?path=${encodeURIComponent(dirPath)}`);
+      const data = (await res.json().catch(() => ({}))) as {
+        directories?: Array<{ name: string; path: string; isDirectory: boolean; isFile: boolean }>;
+        parentPath?: string | null;
+        error?: string;
+      };
+      if (!res.ok || data.error) throw new Error(data.error ?? '디렉토리를 읽을 수 없습니다.');
+      setFileBrowserPath(dirPath);
+      setFileBrowserItems(data.directories ?? []);
+      setFileBrowserParentPath(data.parentPath ?? null);
+    } catch (err) {
+      setFileBrowserError(err instanceof Error ? err.message : '디렉토리 읽기 실패');
+    } finally {
+      setFileBrowserLoading(false);
+    }
+  }, []);
+
+  const handleFileBrowserOpen = useCallback(() => {
+    setPlusMenuMode('file');
+    void fetchFileBrowserDir('/');
+  }, [fetchFileBrowserDir]);
+
+  const handleFileBrowserSelect = useCallback(async (filePath: string) => {
+    setFileBrowserLoading(true);
+    setFileBrowserError(null);
+    try {
+      const res = await fetch(`/api/fs/read?path=${encodeURIComponent(filePath)}`);
+      const data = (await res.json().catch(() => ({}))) as { content?: string; error?: string };
+      if (!res.ok || data.error) throw new Error(data.error ?? '파일을 읽을 수 없습니다.');
+      const name = filePath.split('/').filter(Boolean).pop() ?? filePath;
+      setContextItems((prev) => [...prev, { id: genId(), type: 'file', path: filePath, content: data.content ?? '', name }]);
+      setPlusMenuMode('closed');
+    } catch (err) {
+      setFileBrowserError(err instanceof Error ? err.message : '파일 읽기 실패');
+    } finally {
+      setFileBrowserLoading(false);
+    }
+  }, []);
 
   const markSessionAsRead = useCallback(async () => {
     try {
@@ -1561,6 +1620,7 @@ export function ChatInterface({
     input.style.height = '0px';
     const nextHeight = Math.min(COMPOSER_MAX_HEIGHT_PX, Math.max(COMPOSER_MIN_HEIGHT_PX, input.scrollHeight));
     input.style.height = `${nextHeight}px`;
+    input.style.overflowY = nextHeight >= COMPOSER_MAX_HEIGHT_PX ? 'auto' : 'hidden';
     requestAnimationFrame(syncComposerDockMetrics);
   }, [syncComposerDockMetrics]);
 
@@ -2097,6 +2157,7 @@ export function ChatInterface({
   const activeModel = COMPOSER_MODELS.find((m) => m.id === selectedModelId) || COMPOSER_MODELS[0];
 
   return (
+    <>
     <div
       className={`${styles.chatShell} ${
         isChatSidebarOpen ? styles.chatShellSidebarOpen : styles.chatShellSidebarClosed
@@ -2537,7 +2598,7 @@ export function ChatInterface({
                     <button
                       type="button"
                       className={`${styles.composerPlusBtn} ${plusMenuMode !== 'closed' ? styles.composerPlusBtnActive : ''}`}
-                      onClick={() => { setPlusMenuMode((m) => m === 'closed' ? 'menu' : 'closed'); setFileInputError(null); }}
+                      onClick={() => { setPlusMenuMode((m) => m === 'closed' ? 'menu' : 'closed'); }}
                       aria-label="컨텍스트 추가"
                       title="컨텍스트 추가"
                       disabled={!isOperator}
@@ -2548,7 +2609,7 @@ export function ChatInterface({
                       <div className={styles.plusMenu}>
                         {plusMenuMode === 'menu' && (
                           <>
-                            <button type="button" className={styles.plusMenuItem} onClick={() => { setPlusMenuMode('file'); setFilePathInput(''); setFileInputError(null); }}>
+                            <button type="button" className={styles.plusMenuItem} onClick={() => { handleFileBrowserOpen(); }}>
                               <Paperclip size={14} /> 파일 첨부
                             </button>
                             <button type="button" className={styles.plusMenuItem} onClick={() => { setPlusMenuMode('text'); setTextContextInput(''); }}>
@@ -2556,27 +2617,7 @@ export function ChatInterface({
                             </button>
                           </>
                         )}
-                        {plusMenuMode === 'file' && (
-                          <div className={styles.plusMenuInputArea}>
-                            <div className={styles.plusMenuInputLabel}>파일 경로 입력</div>
-                            <input
-                              className={styles.plusMenuFileInput}
-                              type="text"
-                              value={filePathInput}
-                              onChange={(e) => setFilePathInput(e.target.value)}
-                              placeholder="/workspace/src/index.ts"
-                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleAddFileContext(); } }}
-                              autoFocus
-                            />
-                            {fileInputError && <div className={styles.plusMenuError}>{fileInputError}</div>}
-                            <div className={styles.plusMenuActions}>
-                              <button type="button" className={styles.plusMenuCancelBtn} onClick={() => setPlusMenuMode('menu')}>취소</button>
-                              <button type="button" className={styles.plusMenuConfirmBtn} onClick={() => void handleAddFileContext()} disabled={isLoadingFile || !filePathInput.trim()}>
-                                {isLoadingFile ? '로딩...' : '추가'}
-                              </button>
-                            </div>
-                          </div>
-                        )}
+                        {/* file 모드는 모달로 처리 — 아래 fileBrowserModal 참고 */}
                         {plusMenuMode === 'text' && (
                           <div className={styles.plusMenuInputArea}>
                             <div className={styles.plusMenuInputLabel}>텍스트 입력</div>
@@ -2738,5 +2779,64 @@ export function ChatInterface({
         </section>
       </aside>
     </div>
+
+    {/* ── 파일 탐색기 모달 ── */}
+    {plusMenuMode === 'file' && (
+      <div className={styles.modalOverlay} onClick={() => setPlusMenuMode('closed')}>
+        <div className={styles.fileBrowserModal} onClick={(e) => e.stopPropagation()}>
+          <div className={styles.fileBrowserHeader}>
+            <div className={styles.fileBrowserTitle}>파일 선택</div>
+            <button type="button" className={styles.btnClose} onClick={() => setPlusMenuMode('closed')}>
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className={styles.fileBrowserPath}>
+            {fileBrowserParentPath !== null && (
+              <button
+                type="button"
+                className={styles.fileBrowserBackBtn}
+                onClick={() => { void fetchFileBrowserDir(fileBrowserParentPath!); }}
+              >
+                ← 상위 폴더
+              </button>
+            )}
+            <span className={styles.fileBrowserCurrentPath}>{fileBrowserPath}</span>
+          </div>
+
+          <div className={styles.fileBrowserList}>
+            {fileBrowserLoading && (
+              <div className={styles.fileBrowserLoader}>불러오는 중...</div>
+            )}
+            {fileBrowserError && (
+              <div className={styles.fileBrowserError}>{fileBrowserError}</div>
+            )}
+            {!fileBrowserLoading && !fileBrowserError && fileBrowserItems.map((item) => (
+              <button
+                key={item.path}
+                type="button"
+                className={`${styles.fileBrowserItem} ${item.isDirectory ? styles.fileBrowserDir : styles.fileBrowserFile}`}
+                onClick={() => {
+                  if (item.isDirectory) {
+                    void fetchFileBrowserDir(item.path);
+                  } else {
+                    void handleFileBrowserSelect(item.path);
+                  }
+                }}
+              >
+                <span className={styles.fileBrowserItemIcon}>
+                  {item.isDirectory ? '📁' : '📄'}
+                </span>
+                <span className={styles.fileBrowserItemName}>{item.name}</span>
+              </button>
+            ))}
+            {!fileBrowserLoading && !fileBrowserError && fileBrowserItems.length === 0 && (
+              <div className={styles.fileBrowserEmpty}>비어있는 디렉토리</div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
