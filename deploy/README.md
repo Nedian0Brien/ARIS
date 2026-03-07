@@ -74,6 +74,29 @@ Access web UI:
 ./deploy/deploy_zero_downtime.sh
 ```
 
+### 2.5 Web Hot Reload mode (no deploy)
+
+Use this when you want to verify frontend/backend web changes immediately without running deploy scripts.
+
+```bash
+./deploy/run_web_dev_hot_reload.sh
+```
+
+Then open:
+
+- `http://<server-ip>:${WEB_DEV_PORT}` (default: `3305`)
+- local-only check: `http://127.0.0.1:3305`
+
+Notes:
+- This runs `services/aris-web` in `NODE_ENV=development` with Next.js hot reload.
+- It does **not** switch nginx production upstream or blue/green slots.
+- Stop with `Ctrl+C`.
+- If DB is already prepared and you want faster restarts, skip DB prep:
+
+```bash
+SKIP_DB_PREPARE=1 ./deploy/run_web_dev_hot_reload.sh
+```
+
 ## 3. Start with domain + HTTPS (Caddy)
 
 Set `ARIS_DOMAIN` and `APP_BASE_URL` in `deploy/.env`, then:
