@@ -84,6 +84,23 @@ describe('classifyEventKind', () => {
     expect(kind).toBe('file_read');
   });
 
+  it('detects write intent from boundary-quoted multiline scripts', () => {
+    const kind = classifyEventKind({
+      type: 'file_list',
+      command: `'set -e
+WT_PATH=/tmp/aris-temp-doc-check-20260308
+BRANCH=codex/temp-doc-check-20260308
+git worktree add -b "$BRANCH" "$WT_PATH" main
+cd "$WT_PATH"
+mkdir -p docs
+echo "# temp" > docs/__temp_doc_check.md
+ls -l docs/__temp_doc_check.md
+rm -f docs/__temp_doc_check.md
+git status --short"`,
+    });
+    expect(kind).toBe('file_write');
+  });
+
   it('classifies docker commands as docker_execution', () => {
     const kind = classifyEventKind({
       type: 'command_execution',
@@ -284,6 +301,19 @@ describe('normalizeEvents', () => {
         id: 'e7',
         type: 'tool',
         text: '완료했습니다.',
+      },
+    ]);
+
+    expect(events[0].kind).toBe('text_reply');
+  });
+
+  it('forces agent_message stream events to text_reply even with noisy actionType', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e8',
+        type: 'message',
+        text: '완료했습니다.\n- 임시 파일 생성 후 삭제',
+        meta: { streamEvent: 'agent_message', actionType: 'file_list' },
       },
     ]);
 

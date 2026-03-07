@@ -282,12 +282,55 @@ function stripQuotedSegments(input: string): string {
   return result;
 }
 
+function trimBoundaryQuotes(input: string): string {
+  let result = input.trim();
+  if (!result) {
+    return result;
+  }
+
+  const hasScriptLikeShape = /[\n;&|]/.test(result);
+  while (result.length > 1) {
+    const first = result[0];
+    if (first !== '\'' && first !== '"' && first !== '`') {
+      break;
+    }
+    if (result.endsWith(first)) {
+      result = result.slice(1, -1).trim();
+      continue;
+    }
+    if (hasScriptLikeShape) {
+      result = result.slice(1).trim();
+      continue;
+    }
+    break;
+  }
+
+  while (result.length > 1) {
+    const last = result[result.length - 1];
+    if (last !== '\'' && last !== '"' && last !== '`') {
+      break;
+    }
+    if (result.startsWith(last)) {
+      result = result.slice(1, -1).trim();
+      continue;
+    }
+    if (hasScriptLikeShape) {
+      result = result.slice(0, -1).trim();
+      continue;
+    }
+    break;
+  }
+
+  return result;
+}
+
 function hasWriteShellIntent(commandInput: string): boolean {
   const unwrapped = unwrapShellCommand(commandInput).toLowerCase();
   if (!unwrapped) {
     return false;
   }
   const unquoted = stripQuotedSegments(unwrapped);
+  const relaxed = stripQuotedSegments(trimBoundaryQuotes(unwrapped));
 
   return (
     /\bapply_patch\b/.test(unquoted)
@@ -306,6 +349,22 @@ function hasWriteShellIntent(commandInput: string): boolean {
     || /\bcat\b[\s\S]*>>?/.test(unquoted)
     || /\b(?:echo|printf)\b[\s\S]*>>?/.test(unquoted)
     || /(?:^|[\s;|&()])(?:\d+)?>>?\s*(?=\S)/.test(unquoted)
+    || /\bapply_patch\b/.test(relaxed)
+    || /\btee\b/.test(relaxed)
+    || /\bsed\s+-i\b/.test(relaxed)
+    || /\bperl\s+-pi\b/.test(relaxed)
+    || /\bmkdir\b/.test(relaxed)
+    || /\btouch\b/.test(relaxed)
+    || /\bmv\b/.test(relaxed)
+    || /\bcp\b/.test(relaxed)
+    || /\brm\b/.test(relaxed)
+    || /\bchmod\b/.test(relaxed)
+    || /\bchown\b/.test(relaxed)
+    || /\btruncate\b/.test(relaxed)
+    || /\binstall\b/.test(relaxed)
+    || /\bcat\b[\s\S]*>>?/.test(relaxed)
+    || /\b(?:echo|printf)\b[\s\S]*>>?/.test(relaxed)
+    || /(?:^|[\s;|&()])(?:\d+)?>>?\s*(?=\S)/.test(relaxed)
   );
 }
 
@@ -540,6 +599,7 @@ export function normalizeEvents(raw: unknown): UiEvent[] {
     const rec = asRecord(item);
     const content = asRecord(rec?.content);
     const meta = asRecord(rec?.meta);
+    const streamEvent = asString(meta?.streamEvent, '').toLowerCase();
 
     const body = asString(rec?.body ?? rec?.text ?? content?.text ?? content, '');
     const type = asString(rec?.type ?? content?.type, '');
@@ -547,11 +607,13 @@ export function normalizeEvents(raw: unknown): UiEvent[] {
     const metaCommand = asString(meta?.command, '').trim();
     const commandCandidate = metaCommand || (firstLine.trim().startsWith('$ ') ? extractCommand(firstLine) : '');
     const kindFromMeta = pickKindFromMeta(meta, type.toLowerCase());
-    const kind = classifyEventKind({
-      type: kindFromMeta ?? type,
-      text: body,
-      command: commandCandidate,
-    });
+    const kind = streamEvent === 'agent_message' || streamEvent === 'agent_message_recovered'
+      ? 'text_reply'
+      : classifyEventKind({
+        type: kindFromMeta ?? type,
+        text: body,
+        command: commandCandidate,
+      });
     const actionPayload = extractActionAndResult(kind, body, meta);
 
     return {

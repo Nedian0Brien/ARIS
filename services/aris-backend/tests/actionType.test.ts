@@ -32,6 +32,20 @@ describe('inferActionTypeFromCommand', () => {
     expect(inferActionTypeFromCommand(command)).toBe('file_write');
   });
 
+  it('detects write intent from boundary-quoted multiline scripts', () => {
+    const command = `'set -e
+WT_PATH=/tmp/aris-temp-doc-check-20260308
+BRANCH=codex/temp-doc-check-20260308
+git worktree add -b "$BRANCH" "$WT_PATH" main
+cd "$WT_PATH"
+mkdir -p docs
+echo "# temp" > docs/__temp_doc_check.md
+ls -l docs/__temp_doc_check.md
+rm -f docs/__temp_doc_check.md
+git status --short"`;
+    expect(inferActionTypeFromCommand(command)).toBe('file_write');
+  });
+
   it('does not treat quoted greater-than as redirect', () => {
     const command = "/bin/bash -lc 'echo \"a > b\"'";
     expect(inferActionTypeFromCommand(command)).toBe('command_execution');
