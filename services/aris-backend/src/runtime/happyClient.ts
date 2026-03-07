@@ -939,7 +939,7 @@ export class HappyRuntimeStore {
     signal?: AbortSignal,
     threadId?: string,
     chatId?: string,
-  ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; threadId?: string }> {
+  ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; agentMessagePersisted: boolean; threadId?: string }> {
     if (CODEX_RUNTIME_MODE === 'exec') {
       return this.runCodexExecCliWithEvents(session, prompt, signal, threadId, chatId);
     }
@@ -966,7 +966,7 @@ export class HappyRuntimeStore {
     signal?: AbortSignal,
     threadId?: string,
     chatId?: string,
-  ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; threadId?: string }> {
+  ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; agentMessagePersisted: boolean; threadId?: string }> {
     const safeCwd = this.resolveExecutionCwd(session.metadata.path);
     const threadCacheKey = buildCodexThreadCacheKey(session.id, chatId);
     const sessionApprovalPolicy = this.resolveSessionApprovalPolicy(session);
@@ -996,7 +996,9 @@ export class HappyRuntimeStore {
     let appendChain: Promise<void> = Promise.resolve();
     let permissionChain: Promise<void> = Promise.resolve();
     let lastAgentMessage = '';
+    let pendingAgentMessage = '';
     let streamedPersisted = false;
+    let agentMessagePersisted = false;
     let resolvedThreadId = typeof threadId === 'string' && threadId.trim().length > 0
       ? threadId.trim()
       : '';
@@ -1236,6 +1238,19 @@ export class HappyRuntimeStore {
         return;
       }
 
+      if (method === 'item/agentMessage/delta') {
+        const deltaRecord = asRecord(params.delta);
+        const deltaText = asString(
+          params.text,
+          asString(params.delta, asString(deltaRecord?.text, asString(deltaRecord?.delta, ''))),
+        );
+        if (deltaText) {
+          pendingAgentMessage += deltaText;
+          lastAgentMessage = pendingAgentMessage.trim();
+        }
+        return;
+      }
+
       if (method === 'item/completed') {
         const item = asRecord(params.item);
         if (!item) {
@@ -1248,8 +1263,10 @@ export class HappyRuntimeStore {
           if (!text) {
             return;
           }
+          pendingAgentMessage = text;
           lastAgentMessage = text;
           streamedPersisted = true;
+          agentMessagePersisted = true;
           enqueueAppend(
             text,
             {
@@ -1343,6 +1360,26 @@ export class HappyRuntimeStore {
       }
 
       if (method === 'turn/completed') {
+        if (!agentMessagePersisted) {
+          const recoveredText = pendingAgentMessage.trim();
+          if (recoveredText) {
+            lastAgentMessage = recoveredText;
+            streamedPersisted = true;
+            agentMessagePersisted = true;
+            enqueueAppend(
+              recoveredText,
+              {
+                ...(chatId ? { chatId } : {}),
+                requestedPath: session.metadata.path,
+                execCwd: safeCwd,
+                streamEvent: 'agent_message_recovered',
+                ...(resolvedThreadId ? { threadId: resolvedThreadId } : {}),
+              },
+              { type: 'message', title: 'Text Reply' },
+            );
+          }
+        }
+
         const turn = asRecord(params.turn);
         const completedTurnId = asString(turn?.id, '').trim();
         if (activeTurnId && completedTurnId && activeTurnId !== completedTurnId) {
@@ -1430,7 +1467,6 @@ export class HappyRuntimeStore {
         capabilities: {
           experimentalApi: true,
           optOutNotificationMethods: [
-            'item/agentMessage/delta',
             'item/commandExecution/outputDelta',
             'item/commandExecution/terminalInteraction',
           ],
@@ -1503,6 +1539,7 @@ export class HappyRuntimeStore {
           output: trimOutput(finalText),
           cwd: safeCwd,
           streamedPersisted,
+          agentMessagePersisted,
           threadId: resolvedThreadId || undefined,
         };
       }
@@ -1516,6 +1553,7 @@ export class HappyRuntimeStore {
         output: trimOutput(finalText),
         cwd: safeCwd,
         streamedPersisted,
+        agentMessagePersisted,
         threadId: resolvedThreadId || undefined,
       };
     } finally {
@@ -1556,7 +1594,7 @@ export class HappyRuntimeStore {
     signal?: AbortSignal,
     threadId?: string,
     chatId?: string,
-  ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; threadId?: string }> {
+  ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; agentMessagePersisted: boolean; threadId?: string }> {
     const safeCwd = this.resolveExecutionCwd(session.metadata.path);
     const threadCacheKey = buildCodexThreadCacheKey(session.id, chatId);
     const sessionApprovalPolicy = this.resolveSessionApprovalPolicy(session);
@@ -1588,6 +1626,7 @@ export class HappyRuntimeStore {
     let permissionChain: Promise<void> = Promise.resolve();
     let lastAgentMessage = '';
     let streamedPersisted = false;
+    let agentMessagePersisted = false;
     let resolvedThreadId = typeof threadId === 'string' && threadId.trim().length > 0
       ? threadId.trim()
       : '';
@@ -1680,6 +1719,7 @@ export class HappyRuntimeStore {
         if (text) {
           lastAgentMessage = text;
           streamedPersisted = true;
+          agentMessagePersisted = true;
           enqueueAppend(
             text,
             {
@@ -1782,6 +1822,7 @@ export class HappyRuntimeStore {
         output: trimOutput(finalText),
         cwd: safeCwd,
         streamedPersisted,
+        agentMessagePersisted,
         threadId: resolvedThreadId || undefined,
       };
     }
@@ -1795,6 +1836,7 @@ export class HappyRuntimeStore {
       output: trimOutput(finalText),
       cwd: safeCwd,
       streamedPersisted,
+      agentMessagePersisted,
       threadId: resolvedThreadId || undefined,
     };
   }
@@ -1856,7 +1898,13 @@ export class HappyRuntimeStore {
         ? context.threadId.trim()
         : undefined;
       const threadCacheKey = buildCodexThreadCacheKey(session.id, scopedChatId);
-      let response: { output: string; cwd: string; streamedPersisted?: boolean; threadId?: string };
+      let response: {
+        output: string;
+        cwd: string;
+        streamedPersisted?: boolean;
+        agentMessagePersisted?: boolean;
+        threadId?: string;
+      };
 
       if (isCodex) {
         const recoveredThreadId = preferredThreadId ?? await this.resolveCodexThreadId(session.id, scopedChatId);
@@ -1890,6 +1938,7 @@ export class HappyRuntimeStore {
           output: nonCodex.output,
           cwd: nonCodex.cwd,
           streamedPersisted: false,
+          agentMessagePersisted: false,
         };
       }
 
@@ -1898,7 +1947,8 @@ export class HappyRuntimeStore {
       }
 
       const streamedPersisted = Boolean(response.streamedPersisted);
-      if (!isCodex || !streamedPersisted) {
+      const agentMessagePersisted = Boolean(response.agentMessagePersisted);
+      if (!isCodex || !streamedPersisted || (!agentMessagePersisted && response.output.trim().length > 0)) {
         await this.appendAgentMessage(session.id, response.output, {
           ...(scopedChatId ? { chatId: scopedChatId } : {}),
           requestedPath: session.metadata.path,
