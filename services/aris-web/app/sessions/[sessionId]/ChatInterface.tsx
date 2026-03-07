@@ -1348,6 +1348,9 @@ export function ChatInterface({
   const [fileBrowserParentPath, setFileBrowserParentPath] = useState<string | null>(null);
   const [fileBrowserLoading, setFileBrowserLoading] = useState(false);
   const [fileBrowserError, setFileBrowserError] = useState<string | null>(null);
+  const [fileBrowserQuery, setFileBrowserQuery] = useState('');
+  const [fileBrowserSearchResults, setFileBrowserSearchResults] = useState<Array<{ name: string; path: string; isDirectory: boolean }> | null>(null);
+  const [fileBrowserSearchLoading, setFileBrowserSearchLoading] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const chatSidebarRef = useRef<HTMLDivElement>(null);
   const chatShellRef = useRef<HTMLDivElement>(null);
@@ -1440,8 +1443,32 @@ export function ChatInterface({
 
   const handleFileBrowserOpen = useCallback(() => {
     setPlusMenuMode('file');
+    setFileBrowserQuery('');
+    setFileBrowserSearchResults(null);
     void fetchFileBrowserDir('/');
   }, [fetchFileBrowserDir]);
+
+  const handleFileBrowserSearch = useCallback(async (query: string) => {
+    setFileBrowserQuery(query);
+    if (!query.trim()) {
+      setFileBrowserSearchResults(null);
+      return;
+    }
+    setFileBrowserSearchLoading(true);
+    try {
+      const res = await fetch(`/api/fs/search?q=${encodeURIComponent(query.trim())}`);
+      const data = (await res.json().catch(() => ({}))) as {
+        results?: Array<{ name: string; path: string; isDirectory: boolean }>;
+        error?: string;
+      };
+      if (!res.ok || data.error) throw new Error(data.error ?? '검색 실패');
+      setFileBrowserSearchResults(data.results ?? []);
+    } catch {
+      setFileBrowserSearchResults([]);
+    } finally {
+      setFileBrowserSearchLoading(false);
+    }
+  }, []);
 
   const handleFileBrowserSelect = useCallback(async (filePath: string) => {
     setFileBrowserLoading(true);
@@ -2791,49 +2818,107 @@ export function ChatInterface({
             </button>
           </div>
 
-          <div className={styles.fileBrowserPath}>
-            {fileBrowserParentPath !== null && (
+          {/* 검색창 */}
+          <div className={styles.fileBrowserSearchBar}>
+            <input
+              type="text"
+              className={styles.fileBrowserSearchInput}
+              placeholder="파일명 검색..."
+              value={fileBrowserQuery}
+              onChange={(e) => { void handleFileBrowserSearch(e.target.value); }}
+              autoFocus
+            />
+            {fileBrowserQuery && (
               <button
                 type="button"
-                className={styles.fileBrowserBackBtn}
-                onClick={() => { void fetchFileBrowserDir(fileBrowserParentPath!); }}
+                className={styles.fileBrowserSearchClear}
+                onClick={() => { setFileBrowserQuery(''); setFileBrowserSearchResults(null); }}
+                aria-label="검색 초기화"
               >
-                ← 상위 폴더
+                <X size={13} />
               </button>
             )}
-            <span className={styles.fileBrowserCurrentPath}>{fileBrowserPath}</span>
           </div>
 
-          <div className={styles.fileBrowserList}>
-            {fileBrowserLoading && (
-              <div className={styles.fileBrowserLoader}>불러오는 중...</div>
-            )}
-            {fileBrowserError && (
-              <div className={styles.fileBrowserError}>{fileBrowserError}</div>
-            )}
-            {!fileBrowserLoading && !fileBrowserError && fileBrowserItems.map((item) => (
-              <button
-                key={item.path}
-                type="button"
-                className={`${styles.fileBrowserItem} ${item.isDirectory ? styles.fileBrowserDir : styles.fileBrowserFile}`}
-                onClick={() => {
-                  if (item.isDirectory) {
-                    void fetchFileBrowserDir(item.path);
-                  } else {
-                    void handleFileBrowserSelect(item.path);
-                  }
-                }}
-              >
-                <span className={styles.fileBrowserItemIcon}>
-                  {item.isDirectory ? '📁' : '📄'}
-                </span>
-                <span className={styles.fileBrowserItemName}>{item.name}</span>
-              </button>
-            ))}
-            {!fileBrowserLoading && !fileBrowserError && fileBrowserItems.length === 0 && (
-              <div className={styles.fileBrowserEmpty}>비어있는 디렉토리</div>
-            )}
-          </div>
+          {/* 검색 결과 또는 디렉토리 탐색 */}
+          {fileBrowserSearchResults !== null ? (
+            <div className={styles.fileBrowserList}>
+              {fileBrowserSearchLoading && (
+                <div className={styles.fileBrowserLoader}>검색 중...</div>
+              )}
+              {!fileBrowserSearchLoading && fileBrowserSearchResults.length === 0 && (
+                <div className={styles.fileBrowserEmpty}>검색 결과가 없습니다</div>
+              )}
+              {!fileBrowserSearchLoading && fileBrowserSearchResults.map((item) => (
+                <button
+                  key={item.path}
+                  type="button"
+                  className={`${styles.fileBrowserItem} ${item.isDirectory ? styles.fileBrowserDir : styles.fileBrowserFile}`}
+                  onClick={() => {
+                    if (item.isDirectory) {
+                      setFileBrowserQuery('');
+                      setFileBrowserSearchResults(null);
+                      void fetchFileBrowserDir(item.path);
+                    } else {
+                      void handleFileBrowserSelect(item.path);
+                    }
+                  }}
+                >
+                  <span className={styles.fileBrowserItemIcon}>
+                    {item.isDirectory ? '📁' : '📄'}
+                  </span>
+                  <span className={styles.fileBrowserItemName}>{item.name}</span>
+                  <span className={styles.fileBrowserItemPath}>{item.path}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className={styles.fileBrowserPath}>
+                {fileBrowserParentPath !== null && (
+                  <button
+                    type="button"
+                    className={styles.fileBrowserBackBtn}
+                    onClick={() => { void fetchFileBrowserDir(fileBrowserParentPath!); }}
+                  >
+                    ← 상위 폴더
+                  </button>
+                )}
+                <span className={styles.fileBrowserCurrentPath}>{fileBrowserPath}</span>
+              </div>
+
+              <div className={styles.fileBrowserList}>
+                {fileBrowserLoading && (
+                  <div className={styles.fileBrowserLoader}>불러오는 중...</div>
+                )}
+                {fileBrowserError && (
+                  <div className={styles.fileBrowserError}>{fileBrowserError}</div>
+                )}
+                {!fileBrowserLoading && !fileBrowserError && fileBrowserItems.map((item) => (
+                  <button
+                    key={item.path}
+                    type="button"
+                    className={`${styles.fileBrowserItem} ${item.isDirectory ? styles.fileBrowserDir : styles.fileBrowserFile}`}
+                    onClick={() => {
+                      if (item.isDirectory) {
+                        void fetchFileBrowserDir(item.path);
+                      } else {
+                        void handleFileBrowserSelect(item.path);
+                      }
+                    }}
+                  >
+                    <span className={styles.fileBrowserItemIcon}>
+                      {item.isDirectory ? '📁' : '📄'}
+                    </span>
+                    <span className={styles.fileBrowserItemName}>{item.name}</span>
+                  </button>
+                ))}
+                {!fileBrowserLoading && !fileBrowserError && fileBrowserItems.length === 0 && (
+                  <div className={styles.fileBrowserEmpty}>비어있는 디렉토리</div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
     )}

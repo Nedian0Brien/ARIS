@@ -2574,3 +2574,63 @@
   color: var(--accent-red);
   font-size: 0.82rem;
 }
+
+/* ── 파일 탐색기 검색창 ── */
+.fileBrowserSearchBar {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.fileBrowserSearchInput {
+  flex: 1;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm, 6px);
+  padding: 0.38rem 0.65rem;
+  font-size: 0.83rem;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.fileBrowserSearchInput:focus {
+  border-color: var(--primary, #3b82f6);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.fileBrowserSearchInput::placeholder {
+  color: var(--text-muted);
+}
+
+.fileBrowserSearchClear {
+  flex-shrink: 0;
+  padding: 0.25rem;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 0;
+  transition: background 0.1s, color 0.1s;
+}
+
+.fileBrowserSearchClear:hover {
+  background: var(--surface-subtle);
+  color: var(--text);
+}
+
+.fileBrowserItemPath {
+  margin-left: auto;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+  flex-shrink: 0;
+}
