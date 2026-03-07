@@ -1088,9 +1088,11 @@ function ActionEventCard({
               <span className={styles.actionCompactPrimaryInline}>{compactPrimary}</span>
             )}
           </div>
-          <div className={styles.actionPrimaryRow}>
-            <span className={styles.actionCompactPrimary}>{compactPrimary}</span>
-          </div>
+          {hasResource && (
+            <div className={styles.actionPrimaryRow}>
+              <span className={styles.actionCompactPrimary}>{compactPrimary}</span>
+            </div>
+          )}
         </div>
         <button
           type="button"
@@ -1122,9 +1124,11 @@ function ActionEventCard({
               <span className={styles.actionCompactPrimaryInline}>{fullPrimary}</span>
             )}
           </div>
-          <div className={styles.actionPrimaryRow}>
-            <span className={styles.actionPrimary}>{fullPrimary}</span>
-          </div>
+          {hasResource && (
+            <div className={styles.actionPrimaryRow}>
+              <span className={styles.actionPrimary}>{fullPrimary}</span>
+            </div>
+          )}
         </div>
         <button
           type="button"
