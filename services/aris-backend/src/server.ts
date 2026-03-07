@@ -84,7 +84,21 @@ export function buildServer(config: ServerConfig) {
     if (!session) {
       return reply.code(404).send({ error: 'Session not found' });
     }
-    return { session };
+    
+    // Resolve host-side path for terminal access
+    let hostPath = session.metadata.path;
+    try {
+      hostPath = store.resolveExecutionCwd(session.metadata.path);
+    } catch {
+      // Keep original path as fallback
+    }
+
+    return { 
+      session: {
+        ...session,
+        hostPath
+      } 
+    };
   });
 
   app.post('/v1/sessions', async (request, reply) => {

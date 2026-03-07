@@ -336,4 +336,11 @@ export class RuntimeStore {
   async decidePermission(permissionId: string, decision: PermissionDecision) {
     return this.delegate.decidePermission(permissionId, decision);
   }
+
+  resolveExecutionCwd(cwdHint?: string): string {
+    if ('resolveExecutionCwd' in this.delegate && typeof this.delegate.resolveExecutionCwd === 'function') {
+      return (this.delegate as any).resolveExecutionCwd(cwdHint);
+    }
+    return cwdHint || '';
+  }
 }
