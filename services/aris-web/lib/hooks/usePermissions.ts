@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { PermissionRequest, PermissionDecision } from '@/lib/happy/types';
+import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
 function arePermissionsEqual(prev: PermissionRequest[], next: PermissionRequest[]): boolean {
   if (prev.length !== next.length) {
@@ -41,6 +42,15 @@ export function usePermissions(sessionId: string, initialPermissions: Permission
       const response = await fetch(`/api/runtime/permissions?sessionId=${encodeURIComponent(sessionId)}`, {
         cache: 'no-store',
       });
+
+      if (response.status === 401) {
+        redirectToLoginWithNext();
+        return;
+      }
+      if (response.status === 404) {
+        setError('세션이 종료되었거나 삭제되었습니다.');
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(`Permission sync failed (${response.status})`);
@@ -112,6 +122,11 @@ export function usePermissions(sessionId: string, initialPermissions: Permission
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ permissionId, decision }),
       });
+
+      if (response.status === 401) {
+        redirectToLoginWithNext();
+        return { success: false, error: 'Unauthorized' };
+      }
       
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { error?: string };

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SessionEventsPage, UiEvent } from '@/lib/happy/types';
+import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
 const SAFETY_RECONCILE_INTERVAL_MS = 5000;
 const EVENTS_PAGE_LIMIT = 40;
@@ -8,6 +9,16 @@ type EventsApiResponse = {
   events?: UiEvent[];
   page?: Partial<SessionEventsPage>;
 };
+
+class SessionEventsHttpError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'SessionEventsHttpError';
+    this.status = status;
+  }
+}
 
 function mergeEvents(events: UiEvent[]): UiEvent[] {
   const dedup = new Map<string, UiEvent>();
@@ -52,6 +63,7 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], in
   const eventsRef = useRef<UiEvent[]>(initialEvents);
   const hasMoreBeforeRef = useRef<boolean>(initialHasMoreBefore);
   const loadingOlderRef = useRef<boolean>(false);
+  const terminalStatusRef = useRef<number | null>(null);
 
   useEffect(() => {
     setEvents(initialEvents);
@@ -59,6 +71,7 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], in
     setHasMoreBefore(initialHasMoreBefore);
     hasMoreBeforeRef.current = initialHasMoreBefore;
     loadingOlderRef.current = false;
+    terminalStatusRef.current = null;
     setIsLoadingOlder(false);
     setSyncError(null);
   }, [sessionId, initialEvents, initialHasMoreBefore]);
@@ -72,6 +85,10 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], in
   }, [hasMoreBefore]);
 
   const refreshEvents = useCallback(async () => {
+    if (terminalStatusRef.current === 404) {
+      return;
+    }
+
     const params = new URLSearchParams();
     params.set('limit', String(EVENTS_PAGE_LIMIT));
     const latestId = eventsRef.current[eventsRef.current.length - 1]?.id;
@@ -84,8 +101,16 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], in
       `/api/runtime/sessions/${encodeURIComponent(sessionId)}/events${query ? `?${query}` : ''}`,
       { cache: 'no-store' },
     );
+    if (response.status === 401) {
+      redirectToLoginWithNext();
+      throw new SessionEventsHttpError(401, '로그인이 만료되었습니다.');
+    }
+    if (response.status === 404) {
+      terminalStatusRef.current = 404;
+      throw new SessionEventsHttpError(404, '세션이 종료되었거나 삭제되었습니다.');
+    }
     if (!response.ok) {
-      throw new Error(`백엔드 이벤트 API 응답 오류 (${response.status})`);
+      throw new SessionEventsHttpError(response.status, `백엔드 이벤트 API 응답 오류 (${response.status})`);
     }
 
     const body = (await response.json()) as EventsApiResponse;
@@ -125,8 +150,16 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], in
         `/api/runtime/sessions/${encodeURIComponent(sessionId)}/events?${params.toString()}`,
         { cache: 'no-store' },
       );
+      if (response.status === 401) {
+        redirectToLoginWithNext();
+        throw new SessionEventsHttpError(401, '로그인이 만료되었습니다.');
+      }
+      if (response.status === 404) {
+        terminalStatusRef.current = 404;
+        throw new SessionEventsHttpError(404, '세션이 종료되었거나 삭제되었습니다.');
+      }
       if (!response.ok) {
-        throw new Error(`이전 이벤트 API 응답 오류 (${response.status})`);
+        throw new SessionEventsHttpError(response.status, `이전 이벤트 API 응답 오류 (${response.status})`);
       }
 
       const body = (await response.json()) as EventsApiResponse;
@@ -168,18 +201,33 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], in
     };
 
     const startPolling = () => {
+      if (terminalStatusRef.current === 404) {
+        return;
+      }
       if (pollTimer !== null) {
         return;
       }
       pollTimer = window.setInterval(() => {
-        void refreshEvents().catch(() => {
+        void refreshEvents().catch((error) => {
           if (!disposed) {
+            if (error instanceof SessionEventsHttpError && error.status === 404) {
+              setSyncError(error.message);
+              stopPolling();
+              closeStream();
+              return;
+            }
             setSyncError('백엔드 이벤트 동기화를 확인하세요.');
           }
         });
       }, 2000);
-      void refreshEvents().catch(() => {
+      void refreshEvents().catch((error) => {
         if (!disposed) {
+          if (error instanceof SessionEventsHttpError && error.status === 404) {
+            setSyncError(error.message);
+            stopPolling();
+            closeStream();
+            return;
+          }
           setSyncError('백엔드 이벤트 동기화를 확인하세요.');
         }
       });
@@ -197,8 +245,14 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], in
         return;
       }
       reconcileTimer = window.setInterval(() => {
-        void refreshEvents().catch(() => {
+        void refreshEvents().catch((error) => {
           if (!disposed) {
+            if (error instanceof SessionEventsHttpError && error.status === 404) {
+              setSyncError(error.message);
+              stopPolling();
+              closeStream();
+              return;
+            }
             setSyncError('백엔드 이벤트 동기화를 확인하세요.');
           }
         });
@@ -206,7 +260,7 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], in
     };
 
     const connect = () => {
-      if (disposed) {
+      if (disposed || terminalStatusRef.current === 404) {
         return;
       }
 
@@ -239,12 +293,34 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], in
         }
       });
 
-      stream.addEventListener('stream_error', () => {
+      stream.addEventListener('stream_error', (raw) => {
         if (disposed) {
           return;
         }
-        void refreshEvents().catch(() => {
+        try {
+          const payload = JSON.parse((raw as MessageEvent).data) as { status?: number; message?: string };
+          if (payload.status === 401) {
+            redirectToLoginWithNext();
+            return;
+          }
+          if (payload.status === 404) {
+            terminalStatusRef.current = 404;
+            setSyncError(payload.message ?? '세션이 종료되었거나 삭제되었습니다.');
+            stopPolling();
+            closeStream();
+            return;
+          }
+        } catch {
+          // Fall through to the regular sync fallback.
+        }
+        void refreshEvents().catch((error) => {
           if (!disposed) {
+            if (error instanceof SessionEventsHttpError && error.status === 404) {
+              setSyncError(error.message);
+              stopPolling();
+              closeStream();
+              return;
+            }
             setSyncError('실시간 스트림 처리 중 일시 오류가 발생했습니다.');
           }
         });
@@ -252,6 +328,11 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], in
 
       stream.addEventListener('error', () => {
         if (disposed) {
+          return;
+        }
+        if (terminalStatusRef.current === 404) {
+          stopPolling();
+          closeStream();
           return;
         }
         closeStream();

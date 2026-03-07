@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
 const RUNTIME_POLL_INTERVAL_MS = 1500;
 
@@ -9,9 +10,10 @@ export function useSessionRuntime(sessionId: string) {
   useEffect(() => {
     let disposed = false;
     let inFlight = false;
+    let stopped = false;
 
     const refresh = async () => {
-      if (disposed || inFlight) {
+      if (disposed || inFlight || stopped) {
         return;
       }
       inFlight = true;
@@ -19,6 +21,18 @@ export function useSessionRuntime(sessionId: string) {
         const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/runtime`, {
           cache: 'no-store',
         });
+        if (response.status === 401) {
+          redirectToLoginWithNext();
+          return;
+        }
+        if (response.status === 404) {
+          if (!disposed) {
+            setIsRunning(false);
+            setRuntimeError('세션이 종료되었거나 삭제되었습니다.');
+          }
+          stopped = true;
+          return;
+        }
         if (!response.ok) {
           throw new Error(`Runtime status sync failed (${response.status})`);
         }

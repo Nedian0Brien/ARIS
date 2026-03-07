@@ -14,7 +14,7 @@ import type {
 } from '@/lib/happy/types';
 
 type JsonObject = Record<string, unknown>;
-class HappyHttpError extends Error {
+export class HappyHttpError extends Error {
   readonly status: number;
 
   constructor(status: number, message: string) {

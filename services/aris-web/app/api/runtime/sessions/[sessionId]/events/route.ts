@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
-import { getSessionEvents, appendSessionMessage } from '@/lib/happy/client';
+import { getSessionEvents, appendSessionMessage, HappyHttpError } from '@/lib/happy/client';
 
 export async function GET(
   request: NextRequest,
@@ -32,6 +32,9 @@ export async function GET(
     });
     return NextResponse.json({ events, page });
   } catch (error) {
+    if (error instanceof HappyHttpError && [401, 403, 404].includes(error.status)) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : 'Failed to fetch events';
     return NextResponse.json({ error: message }, { status: 500 });
   }
@@ -62,6 +65,9 @@ export async function POST(
     });
     return NextResponse.json({ event });
   } catch (error) {
+    if (error instanceof HappyHttpError && [401, 403, 404].includes(error.status)) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : 'Failed to send message';
     return NextResponse.json({ error: message }, { status: 500 });
   }

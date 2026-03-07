@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
-import { getSessionEvents } from '@/lib/happy/client';
+import { getSessionEvents, HappyHttpError } from '@/lib/happy/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -81,6 +81,11 @@ export async function GET(
           } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to stream events';
             // Avoid colliding with native EventSource "error" events.
+            if (error instanceof HappyHttpError && [401, 403, 404].includes(error.status)) {
+              writeEvent('stream_error', { message, status: error.status });
+              closeSafely();
+              return;
+            }
             writeEvent('stream_error', { message });
           }
 
