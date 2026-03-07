@@ -242,6 +242,32 @@ function classifyShellCommandKind(commandInput: string): UiEventKind | null {
   return classifyExecOrRun(unwrapped);
 }
 
+function hasWriteShellIntent(commandInput: string): boolean {
+  const unwrapped = unwrapShellCommand(commandInput).toLowerCase();
+  if (!unwrapped) {
+    return false;
+  }
+
+  return (
+    /\bapply_patch\b/.test(unwrapped)
+    || /\btee\b/.test(unwrapped)
+    || /\bsed\s+-i\b/.test(unwrapped)
+    || /\bperl\s+-pi\b/.test(unwrapped)
+    || /\bmkdir\b/.test(unwrapped)
+    || /\btouch\b/.test(unwrapped)
+    || /\bmv\b/.test(unwrapped)
+    || /\bcp\b/.test(unwrapped)
+    || /\brm\b/.test(unwrapped)
+    || /\bchmod\b/.test(unwrapped)
+    || /\bchown\b/.test(unwrapped)
+    || /\btruncate\b/.test(unwrapped)
+    || /\binstall\b/.test(unwrapped)
+    || /\bcat\b[\s\S]*>>?/.test(unwrapped)
+    || /\s>>\s?/.test(unwrapped)
+    || /\s>\s/.test(unwrapped)
+  );
+}
+
 function extractActionAndResult(
   kind: UiEventKind,
   body: string,
@@ -318,8 +344,12 @@ function normalizeApprovalPolicy(value?: string): ApprovalPolicy {
 export function classifyEventKind(input: { type?: string; text?: string; command?: string }): UiEventKind {
   const type = input.type?.toLowerCase() ?? '';
   const text = input.text?.toLowerCase() ?? '';
+  const command = input.command ?? '';
 
   const kindFromType = pickKindFromMeta(null, type);
+  if (kindFromType === 'file_read' && hasWriteShellIntent(command)) {
+    return 'file_write';
+  }
   if (
     kindFromType
     && kindFromType !== 'command_execution'
@@ -329,7 +359,7 @@ export function classifyEventKind(input: { type?: string; text?: string; command
     return kindFromType;
   }
 
-  const shellKind = classifyShellCommandKind(input.command ?? '');
+  const shellKind = classifyShellCommandKind(command);
   if (shellKind) {
     return shellKind;
   }

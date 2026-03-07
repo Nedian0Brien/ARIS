@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
+import { inferActionTypeFromCommand, titleForActionType } from './actionType.js';
 import type {
   ApprovalPolicy,
   PermissionDecision,
@@ -553,57 +554,6 @@ function unwrapShellCommand(command: string): string {
     return trimmed.slice(shellPrefix.length, -1);
   }
   return trimmed;
-}
-
-function inferActionTypeFromCommand(command: string): 'command_execution' | 'file_list' | 'file_read' | 'file_write' {
-  const normalized = command.toLowerCase();
-  if (
-    normalized.includes('rg --files') ||
-    normalized.includes(' ls ') ||
-    normalized.startsWith('ls ') ||
-    normalized.includes(' find ') ||
-    normalized.startsWith('find ') ||
-    normalized.includes(' tree ') ||
-    normalized.startsWith('tree ')
-  ) {
-    return 'file_list';
-  }
-  if (
-    normalized.includes(' cat ') ||
-    normalized.startsWith('cat ') ||
-    normalized.includes(' sed ') ||
-    normalized.startsWith('sed ') ||
-    normalized.includes(' head ') ||
-    normalized.startsWith('head ') ||
-    normalized.includes(' tail ') ||
-    normalized.startsWith('tail ')
-  ) {
-    return 'file_read';
-  }
-  if (
-    normalized.includes('apply_patch') ||
-    normalized.includes(' tee ') ||
-    normalized.includes(' > ') ||
-    normalized.includes('>>') ||
-    normalized.includes(' perl -pi') ||
-    normalized.includes(' sed -i')
-  ) {
-    return 'file_write';
-  }
-  return 'command_execution';
-}
-
-function titleForActionType(actionType: 'command_execution' | 'file_list' | 'file_read' | 'file_write'): string {
-  if (actionType === 'file_list') {
-    return 'File Listing';
-  }
-  if (actionType === 'file_read') {
-    return 'File Read';
-  }
-  if (actionType === 'file_write') {
-    return 'File Write';
-  }
-  return 'Command Execution';
 }
 
 function normalizeCodexApprovalDecision(value: unknown): PermissionRisk {

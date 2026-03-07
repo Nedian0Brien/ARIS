@@ -30,6 +30,14 @@ describe('classifyEventKind', () => {
     expect(kind).toBe('file_read');
   });
 
+  it('reclassifies mis-tagged file_read commands with write intent to file_write', () => {
+    const kind = classifyEventKind({
+      type: 'file_read',
+      command: '/bin/bash -lc "cd /tmp/work && sed -n \'1,120p\' a.ts && mkdir -p prisma/migrations && cat > prisma/migrations/001_init.sql <<\'SQL\'"',
+    });
+    expect(kind).toBe('file_write');
+  });
+
   it('classifies docker commands as docker_execution', () => {
     const kind = classifyEventKind({
       type: 'command_execution',
@@ -105,6 +113,19 @@ describe('normalizeEvents', () => {
 
     expect(events[0].kind).toBe('file_read');
     expect(events[0].action?.path).toBe('src/app.tsx');
+  });
+
+  it('overrides file_read meta when command contains explicit write operations', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e3b',
+        type: 'message',
+        text: '$ /bin/bash -lc "cd /tmp/work && sed -n \'1,120p\' a.ts && mkdir -p prisma/migrations && cat > prisma/migrations/001_init.sql <<\'SQL\'"',
+        meta: { actionType: 'file_read' },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('file_write');
   });
 
   it('reclassifies command_execution meta to file_read for read-only command patterns', () => {
