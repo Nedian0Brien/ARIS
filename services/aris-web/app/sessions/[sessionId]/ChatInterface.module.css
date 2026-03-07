@@ -1173,6 +1173,8 @@
   border-radius: 0;
   background: transparent;
   padding: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .actionCompact {
@@ -2398,6 +2400,13 @@
 
   .messageBubble {
     max-width: 100%;
+  }
+
+  .actionPrimary {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+    text-overflow: clip;
   }
 }
 
