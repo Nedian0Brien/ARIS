@@ -1033,6 +1033,16 @@
   gap: 0.24rem;
 }
 
+.markdownOrderedList {
+  margin: 0;
+  padding-left: 1.15rem;
+  list-style-type: decimal;
+}
+
+.markdownOrderedList > .markdownListItem + .markdownListItem {
+  margin-top: 0.24rem;
+}
+
 .markdownListItem {
   margin: 0;
 }

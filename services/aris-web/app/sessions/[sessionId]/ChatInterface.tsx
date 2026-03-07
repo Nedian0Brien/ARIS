@@ -876,7 +876,7 @@ function MarkdownContent({ body }: { body: string }) {
 
         if (block.type === 'ol') {
           return (
-            <ol key={key} className={styles.markdownList}>
+            <ol key={key} className={styles.markdownOrderedList}>
               {block.items.map((item, itemIndex) => (
                 <li key={`${key}-oi-${itemIndex}`} className={styles.markdownListItem}>
                   {renderInlineWithBreaks(item, `${key}-oi-${itemIndex}`)}
