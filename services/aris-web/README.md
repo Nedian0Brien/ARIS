@@ -1,45 +1,58 @@
 # ARIS Web
 
-Next.js 15 App Router implementation for ARIS phase-1.
+Next.js 15 App Router frontend for ARIS.
 
-## Features included
+## Core Features
 
-- JWT login/logout and role-aware session guards
-- Chat-first agent workspace (session sidebar + timeline + composer)
-- Response type renderer (`text_reply`, `command_execution`, `code_read`, `code_write`)
-- Intent composer, permission center, and operator session actions (`abort/retry/kill/resume`)
-- Mobile quick actions for permission and session controls
-- Operator-only SSH fallback command link issuance with audit logs
-- Prisma models for users, sessions, and audit logs
+- JWT-based auth with role-aware access (`operator`, `viewer`)
+- Chat-first session workspace with per-session chat threads
+- Runtime event timeline with typed rendering:
+  - `text_reply`
+  - `run_execution`, `exec_execution`, `git_execution`, `docker_execution`
+  - `file_list`, `file_read`, `file_write`
+- Permission center and operator actions (`abort`, `retry`, `kill`, `resume`)
+- Session metadata (alias, pin, last-read cursor)
+- Optional SSH fallback link issuance with audit logging
+- Prisma-backed user/auth/audit/chat metadata persistence
 
-## Quick start
+## Environment
 
-1. Copy environment file.
+Create env file:
 
 ```bash
 cp .env.example .env
 ```
 
-2. Install dependencies.
+Important values to set:
+- `DATABASE_URL` (PostgreSQL)
+- `AUTH_JWT_SECRET`
+- `ARIS_ADMIN_EMAIL`
+- `ARIS_ADMIN_PASSWORD`
+- `HAPPY_SERVER_URL`
+- `HAPPY_SERVER_TOKEN`
+
+## Quick Start
 
 ```bash
 npm install
-```
-
-3. Run database migration and seed admin user.
-
-```bash
 npm run prisma:migrate
 npm run seed
-```
-
-4. Start dev server.
-
-```bash
 npm run dev
 ```
 
-If you are using the local runtime backend, start `services/aris-backend` and set matching values for
-`HAPPY_SERVER_URL` and `HAPPY_SERVER_TOKEN`.
+If runtime backend is local, run `services/aris-backend` and keep token/url aligned.
 
-Default login credentials come from `.env` (`ARIS_ADMIN_EMAIL`, `ARIS_ADMIN_PASSWORD`).
+Default login credentials are loaded from `.env`:
+- `ARIS_ADMIN_EMAIL`
+- `ARIS_ADMIN_PASSWORD`
+
+## Scripts
+
+- `npm run dev`: start dev server (`node server.mjs`)
+- `npm run build`: production build
+- `npm run start`: production start
+- `npm run test`: run Vitest
+- `npm run lint`: run Next.js ESLint checks
+- `npm run prisma:migrate`: run Prisma dev migrations
+- `npm run prisma:deploy`: run Prisma deploy migrations
+- `npm run seed`: seed admin user
