@@ -34,6 +34,8 @@ import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import styles from './ChatInterface.module.css';
 
+// --- 상수 및 설정 (파일 최상단에서 관리하여 TDZ 에러 방지) ---
+
 const AGENT_REPLY_TIMEOUT_MS = 90000;
 const AUTO_SCROLL_THRESHOLD_PX = 80;
 const MOBILE_LAYOUT_MAX_WIDTH_PX = 960;
@@ -43,6 +45,10 @@ const COMPOSER_MIN_HEIGHT_PX = 52;
 const COMPOSER_MAX_HEIGHT_PX = 180;
 const ACTION_COLLAPSE_THRESHOLD = 4;
 const READ_CURSOR_SYNC_DEBOUNCE_MS = 800;
+
+const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
+
+// --- 타입 정의 ---
 
 type AgentMeta = {
   label: string;
@@ -58,29 +64,12 @@ type StreamRenderItem =
 type ResourceLabel =
   | { kind: 'folder'; name: FolderLabel; sourcePath?: string }
   | { kind: 'file'; name: string; extension: string; sourcePath?: string };
-
-const TONE_CLASS: Record<Tone, string> = {
-  sky: styles.toneSky,
-  amber: styles.toneAmber,
-  cyan: styles.toneCyan,
-  emerald: styles.toneEmerald,
-  violet: styles.toneViolet,
-  red: styles.toneRed,
-  git: styles.toneGit,
-  docker: styles.toneDocker,
-};
-
-const AGENT_AVATAR_TONE_CLASS: Record<AgentMeta['tone'], string> = {
-  clay: styles.agentAvatarClay,
-  mint: styles.agentAvatarMint,
-  blue: styles.agentAvatarBlue,
-};
-
-const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
 type FolderLabel = (typeof FOLDER_LABELS)[number];
 
+// --- 유틸리티 함수 (호이스팅을 위해 function 키워드 사용 권장) ---
+
 function isFolderLabel(label: string): label is FolderLabel {
-  return FOLDER_LABELS.includes(label as FolderLabel);
+  return (FOLDER_LABELS as readonly string[]).includes(label);
 }
 
 function isLinkForLabelPath(url: string): boolean {
@@ -104,7 +93,7 @@ function classifyLabelLink(label: string, rawPath: string): ResourceLabel | null
 
   const folderCandidate = normalizedLabel.toLowerCase();
   if (isFolderLabel(folderCandidate)) {
-    return { kind: 'folder', name: folderCandidate, sourcePath: rawPath };
+    return { kind: 'folder', name: folderCandidate as FolderLabel, sourcePath: rawPath };
   }
 
   const extension = fileExtension(normalizedLabel);
@@ -129,24 +118,11 @@ function classifyPath(pathValue: string): ResourceLabel | null {
 
   const folderCandidate = basename.toLowerCase();
   if (isFolderLabel(folderCandidate)) {
-    return { kind: 'folder', name: folderCandidate, sourcePath: normalizedPath };
+    return { kind: 'folder', name: folderCandidate as FolderLabel, sourcePath: normalizedPath };
   }
 
   return null;
 }
-
-const EVENT_KIND_META: Record<UiEventKind, { label: string; tone: Tone; Icon: React.ComponentType<{ size?: number }> }> = {
-  text_reply: { label: '', tone: 'sky', Icon: MessageSquareText },
-  run_execution: { label: 'RUN', tone: 'amber', Icon: TerminalSquare },
-  exec_execution: { label: 'EXEC', tone: 'red', Icon: TerminalSquare },
-  git_execution: { label: 'GIT', tone: 'git', Icon: GitLogoIcon },
-  docker_execution: { label: 'DOCKER', tone: 'docker', Icon: DockerLogoIcon },
-  command_execution: { label: 'RUN', tone: 'amber', Icon: TerminalSquare },
-  file_list: { label: 'LIST', tone: 'cyan', Icon: FolderTree },
-  file_read: { label: 'READ', tone: 'violet', Icon: FileSearch },
-  file_write: { label: 'WRITE', tone: 'emerald', Icon: FilePenLine },
-  unknown: { label: 'EVENT', tone: 'red', Icon: CircleAlert },
-};
 
 function resolveAgentMeta(agentFlavor: string): AgentMeta {
   if (agentFlavor === 'claude') {
@@ -206,7 +182,9 @@ function sortSessionChats(chats: SessionChat[]): SessionChat[] {
     if (a.isPinned !== b.isPinned) {
       return a.isPinned ? -1 : 1;
     }
-    const activityDiff = Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt);
+    const activityAt = b.lastActivityAt || b.createdAt;
+    const aActivityAt = a.lastActivityAt || a.createdAt;
+    const activityDiff = Date.parse(activityAt) - Date.parse(aActivityAt);
     if (Number.isFinite(activityDiff) && activityDiff !== 0) {
       return activityDiff;
     }
@@ -479,16 +457,39 @@ function isNearWindowBottom(): boolean {
   return scrollHeight - (scrollTop + viewportHeight) <= AUTO_SCROLL_THRESHOLD_PX;
 }
 
-type MarkdownBlock =
-  | { type: 'heading'; level: 1 | 2 | 3 | 4; text: string }
-  | { type: 'paragraph'; text: string }
-  | { type: 'ul'; items: string[] }
-  | { type: 'ol'; items: string[] }
-  | { type: 'quote'; text: string }
-  | { type: 'code'; language: string; code: string }
-  | { type: 'table'; headers: string[]; rows: string[][]; alignments: TableAlign[] };
+// --- UI 맵핑 상수 (정의 시 styles를 사용하지 않고 동적으로 참조하도록 변경 가능하나, 일단 순서 조정으로 해결 시도) ---
 
-type TableAlign = 'left' | 'center' | 'right' | null;
+const TONE_CLASS: Record<Tone, string> = {
+  sky: styles.toneSky,
+  amber: styles.toneAmber,
+  cyan: styles.toneCyan,
+  emerald: styles.toneEmerald,
+  violet: styles.toneViolet,
+  red: styles.toneRed,
+  git: styles.toneGit,
+  docker: styles.toneDocker,
+};
+
+const AGENT_AVATAR_TONE_CLASS: Record<AgentMeta['tone'], string> = {
+  clay: styles.agentAvatarClay,
+  mint: styles.agentAvatarMint,
+  blue: styles.agentAvatarBlue,
+};
+
+const EVENT_KIND_META: Record<UiEventKind, { label: string; tone: Tone; Icon: React.ComponentType<{ size?: number }> }> = {
+  text_reply: { label: '', tone: 'sky', Icon: MessageSquareText },
+  run_execution: { label: 'RUN', tone: 'amber', Icon: TerminalSquare },
+  exec_execution: { label: 'EXEC', tone: 'red', Icon: TerminalSquare },
+  git_execution: { label: 'GIT', tone: 'git', Icon: GitLogoIcon },
+  docker_execution: { label: 'DOCKER', tone: 'docker', Icon: DockerLogoIcon },
+  command_execution: { label: 'RUN', tone: 'amber', Icon: TerminalSquare },
+  file_list: { label: 'LIST', tone: 'cyan', Icon: FolderTree },
+  file_read: { label: 'READ', tone: 'violet', Icon: FileSearch },
+  file_write: { label: 'WRITE', tone: 'emerald', Icon: FilePenLine },
+  unknown: { label: 'EVENT', tone: 'red', Icon: CircleAlert },
+};
+
+// --- 컴포넌트 내부 헬퍼 함수 ---
 
 function parseMarkdownTableRow(line: string): string[] {
   const trimmed = line.trim();
@@ -516,6 +517,8 @@ function isMarkdownTableDelimiterLine(line: string): boolean {
   }
   return cells.every((cell) => /^:?-{3,}:?$/.test(cell));
 }
+
+type TableAlign = 'left' | 'center' | 'right' | null;
 
 function parseMarkdownTableAlignments(delimiterLine: string, columns: number): TableAlign[] {
   const cells = parseMarkdownTableRow(delimiterLine);
@@ -578,6 +581,15 @@ function isMarkdownBoundary(line: string): boolean {
     /^\d+\.\s+/.test(trimmed)
   );
 }
+
+type MarkdownBlock =
+  | { type: 'heading'; level: 1 | 2 | 3 | 4; text: string }
+  | { type: 'paragraph'; text: string }
+  | { type: 'ul'; items: string[] }
+  | { type: 'ol'; items: string[] }
+  | { type: 'quote'; text: string }
+  | { type: 'code'; language: string; code: string }
+  | { type: 'table'; headers: string[]; rows: string[][]; alignments: TableAlign[] };
 
 function parseMarkdownBlocks(source: string): MarkdownBlock[] {
   const lines = source.replace(/\r\n/g, '\n').split('\n');
@@ -1064,7 +1076,7 @@ function ActionEventCard({
     return <TextReply body={event.body || event.title} isUser={false} />;
   }
 
-  const kindMeta = EVENT_KIND_META[event.kind];
+  const kindMeta = EVENT_KIND_META[event.kind] || EVENT_KIND_META.unknown;
   const KindIcon = kindMeta.Icon;
   const fullPrimary = resolveActionPrimary(event).replace(/\s+/g, ' ').trim();
   const compactPrimary = truncateSingleLine(fullPrimary, 88);
@@ -2072,7 +2084,7 @@ export function ChatInterface({
                       }}
                       title="채팅 메뉴"
                     >
-                      < MoreVertical size={15} />
+                      <MoreVertical size={15} />
                     </button>
                     {chatActionMenuId === chat.id && (
                       <div className={styles.chatListMenuPanel}>
@@ -2231,7 +2243,7 @@ export function ChatInterface({
           <div className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''}`} ref={scrollRef} onScroll={handleStreamScroll}>
             {streamItems.map((item) => {
               if (item.type === 'action_overflow') {
-                const overflowKindMeta = EVENT_KIND_META[item.kind];
+                const overflowKindMeta = EVENT_KIND_META[item.kind] || EVENT_KIND_META.unknown;
                 const title = item.expanded
                   ? '반복 행동 접기'
                   : `중간 행동 ${item.hiddenCount}개 펼치기`;
