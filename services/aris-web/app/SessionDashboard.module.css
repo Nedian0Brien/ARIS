@@ -287,13 +287,21 @@
   border: none;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
   padding: 0.5rem;
+  flex: 1;
+}
+
+.agentStatsContent {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  margin-top: 0.5rem;
 }
 
 .agentDonutChart {
   position: relative;
   width: 100%;
-  height: 140px;
-  min-height: 140px;
+  height: 120px;
+  min-height: 120px;
 }
 
 .agentDonutCenter {
@@ -313,10 +321,46 @@
 
 .agentDonutLabel {
   margin-top: 0.2rem;
-  font-size: 0.62rem;
+  font-size: 0.6rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--text-muted);
+}
+
+.agentSummaryLegend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  flex: 1.2;
+}
+
+.agentSummaryLegendItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: 0.45rem 0.65rem;
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 0.65rem;
+  transition: background 0.2s;
+}
+
+.agentSummaryLegendItem:hover {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.agentSummaryLegendInfo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.agentSummaryLegendItem strong {
+  color: var(--text);
+  font-size: 0.85rem;
 }
 
 .sessionMainToolbar {
