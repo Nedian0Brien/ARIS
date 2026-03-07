@@ -57,6 +57,9 @@ const COMPOSER_MIN_HEIGHT_PX = 36;
 const COMPOSER_MAX_HEIGHT_PX = 180;
 const ACTION_COLLAPSE_THRESHOLD = 4;
 const READ_CURSOR_SYNC_DEBOUNCE_MS = 800;
+const SIDEBAR_CHAT_PAGE_SIZE = 7;
+const SIDEBAR_RECENTS_LIMIT = 7;
+const SIDEBAR_FILES_LIMIT = 12;
 
 const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
 
@@ -287,6 +290,15 @@ function truncateSingleLine(input: string, max = 68): string {
     return compact;
   }
   return `${compact.slice(0, max).trimEnd()}…`;
+}
+
+function extractPathLeaf(pathValue: string): string {
+  const normalized = pathValue.trim().replace(/\\/g, '/').replace(/\/+$/, '');
+  if (!normalized) {
+    return 'unknown';
+  }
+  const segments = normalized.split('/').filter(Boolean);
+  return segments[segments.length - 1] ?? normalized;
 }
 
 function extractResourceLabels(source: string): ResourceLabel[] {
@@ -1332,6 +1344,10 @@ export function ChatInterface({
   const [showPermissionQueue, setShowPermissionQueue] = useState(true);
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(true);
+  const [isChatsSectionOpen, setIsChatsSectionOpen] = useState(true);
+  const [isFilesSectionOpen, setIsFilesSectionOpen] = useState(false);
+  const [isRecentsSectionOpen, setIsRecentsSectionOpen] = useState(true);
+  const [chatVisibleCount, setChatVisibleCount] = useState(SIDEBAR_CHAT_PAGE_SIZE);
   const [chatActionMenuId, setChatActionMenuId] = useState<string | null>(null);
   const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
   const [chatTitleDraft, setChatTitleDraft] = useState('');
@@ -1375,13 +1391,51 @@ export function ChatInterface({
       : '응답 지연 또는 연결 확인 필요';
 
   const recentEvents = useMemo(() => [...events].slice(-10).reverse(), [events]);
-  const recentPrompts = useMemo(
-    () => events.filter((event) => isUserEvent(event)).slice(-6).reverse(),
+  const recentUserEvents = useMemo(
+    () => events.filter((event) => isUserEvent(event)).slice(-SIDEBAR_RECENTS_LIMIT).reverse(),
     [events]
   );
+  const recentFiles = useMemo(() => {
+    const dedup = new Set<string>();
+    const files: Array<{ path: string; eventId: string; label: string }> = [];
+
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      const candidates = [
+        typeof event.action?.path === 'string' ? event.action.path : '',
+        typeof event.action?.target === 'string' ? event.action.target : '',
+        typeof event.meta?.path === 'string' ? event.meta.path : '',
+      ]
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+      for (const pathValue of candidates) {
+        if (dedup.has(pathValue)) {
+          continue;
+        }
+        dedup.add(pathValue);
+        files.push({
+          path: pathValue,
+          eventId: event.id,
+          label: extractPathLeaf(pathValue),
+        });
+        if (files.length >= SIDEBAR_FILES_LIMIT) {
+          return files;
+        }
+      }
+    }
+
+    return files;
+  }, [events]);
   const agentReplies = useMemo(() => events.filter((event) => !isUserEvent(event)).length, [events]);
   const streamItems = useMemo(() => buildStreamRenderItems(events, expandedActionRunIds), [events, expandedActionRunIds]);
   const firstPendingPermissionId = pendingPermissions[0]?.id ?? null;
+  const visibleChats = useMemo(() => chats.slice(0, chatVisibleCount), [chats, chatVisibleCount]);
+  const hasMoreChats = chats.length > chatVisibleCount;
+
+  const handleLoadMoreChats = useCallback(() => {
+    setChatVisibleCount((prev) => Math.min(prev + SIDEBAR_CHAT_PAGE_SIZE, chats.length));
+  }, [chats.length]);
 
   useEffect(() => {
     setChats(sortSessionChats(initialChats));
@@ -1390,6 +1444,13 @@ export function ChatInterface({
     setChatTitleDraft('');
     setChatMutationError(null);
   }, [initialChats, activeChatId]);
+
+  useEffect(() => {
+    setChatVisibleCount((prev) => {
+      const nextMax = Math.max(SIDEBAR_CHAT_PAGE_SIZE, chats.length);
+      return Math.min(prev, nextMax);
+    });
+  }, [chats.length]);
 
   useEffect(() => {
     if (plusMenuMode === 'closed' && !isModelDropdownOpen) return;
@@ -2197,103 +2258,206 @@ export function ChatInterface({
 
         {chatMutationError && <div className={styles.chatSidebarError}>{chatMutationError}</div>}
 
-        <div className={styles.chatList}>
-          {chats.map((chat) => {
-            const isActive = chat.id === activeChatIdResolved;
-            const isRenaming = renamingChatId === chat.id;
-            return (
-              <div
-                key={chat.id}
-                className={`${styles.chatListItem} ${isActive ? styles.chatListItemActive : ''}`}
-              >
-                <button
-                  type="button"
-                  className={styles.chatListMainButton}
-                  onClick={() => goToChat(chat.id)}
-                  title={chat.title}
-                >
-                  <span className={styles.chatListTitleWrap}>
-                    {chat.isPinned && <Pin size={12} className={styles.chatListPinIcon} />}
-                    {isRenaming ? (
-                      <input
-                        value={chatTitleDraft}
-                        onChange={(event) => setChatTitleDraft(event.target.value)}
-                        onClick={(event) => event.stopPropagation()}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault();
-                            void handleRenameChat(chat.id, chatTitleDraft);
-                          } else if (event.key === 'Escape') {
-                            setRenamingChatId(null);
-                            setChatTitleDraft('');
-                          }
-                        }}
-                        onBlur={() => {
-                          if (renamingChatId === chat.id) {
-                            void handleRenameChat(chat.id, chatTitleDraft);
-                          }
-                        }}
-                        className={styles.chatListRenameInput}
-                        autoFocus
-                      />
-                    ) : (
-                      <span className={styles.chatListTitle}>{chat.title}</span>
-                    )}
-                  </span>
-                  <RelativeTime timestamp={chat.lastActivityAt || chat.createdAt} className={styles.chatListTime} />
-                </button>
-                {!isRenaming && (
-                  <div className={styles.chatListMenuWrap}>
-                    <button
-                      type="button"
-                      className={styles.chatListMenuButton}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setChatActionMenuId((prev) => (prev === chat.id ? null : chat.id));
-                      }}
-                      title="채팅 메뉴"
-                    >
-                      <MoreVertical size={15} />
-                    </button>
-                    {chatActionMenuId === chat.id && (
-                      <div className={styles.chatListMenuPanel}>
+        <div className={styles.chatSidebarSections}>
+          <section className={styles.sidebarSection}>
+            <button
+              type="button"
+              className={styles.sidebarSectionToggle}
+              onClick={() => setIsChatsSectionOpen((prev) => !prev)}
+              aria-expanded={isChatsSectionOpen}
+            >
+              <span className={styles.sidebarSectionHeading}>
+                <MessageSquareText size={13} />
+                Chats
+              </span>
+              {isChatsSectionOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+            {isChatsSectionOpen && (
+              <div className={styles.sidebarSectionBody}>
+                <div className={`${styles.chatList} ${styles.chatSectionList}`}>
+                  {visibleChats.map((chat) => {
+                    const isActive = chat.id === activeChatIdResolved;
+                    const isRenaming = renamingChatId === chat.id;
+                    return (
+                      <div
+                        key={chat.id}
+                        className={`${styles.chatListItem} ${isActive ? styles.chatListItemActive : ''}`}
+                      >
                         <button
                           type="button"
-                          className={styles.chatListMenuItem}
-                          onClick={() => {
-                            setRenamingChatId(chat.id);
-                            setChatTitleDraft(chat.title);
-                            setChatActionMenuId(null);
-                          }}
+                          className={styles.chatListMainButton}
+                          onClick={() => goToChat(chat.id)}
+                          title={chat.title}
                         >
-                          <Pencil size={14} />
-                          이름 변경
+                          <span className={styles.chatListTitleWrap}>
+                            {chat.isPinned && <Pin size={12} className={styles.chatListPinIcon} />}
+                            {isRenaming ? (
+                              <input
+                                value={chatTitleDraft}
+                                onChange={(event) => setChatTitleDraft(event.target.value)}
+                                onClick={(event) => event.stopPropagation()}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') {
+                                    event.preventDefault();
+                                    void handleRenameChat(chat.id, chatTitleDraft);
+                                  } else if (event.key === 'Escape') {
+                                    setRenamingChatId(null);
+                                    setChatTitleDraft('');
+                                  }
+                                }}
+                                onBlur={() => {
+                                  if (renamingChatId === chat.id) {
+                                    void handleRenameChat(chat.id, chatTitleDraft);
+                                  }
+                                }}
+                                className={styles.chatListRenameInput}
+                                autoFocus
+                              />
+                            ) : (
+                              <span className={styles.chatListTitle}>{chat.title}</span>
+                            )}
+                          </span>
+                          <RelativeTime timestamp={chat.lastActivityAt || chat.createdAt} className={styles.chatListTime} />
                         </button>
-                        <button
-                          type="button"
-                          className={styles.chatListMenuItem}
-                          onClick={() => void handleToggleChatPin(chat)}
-                          disabled={chatMutationLoadingId === chat.id}
-                        >
-                          <Pin size={14} />
-                          {chat.isPinned ? '고정 해제' : '고정'}
-                        </button>
-                        <button
-                          type="button"
-                          className={`${styles.chatListMenuItem} ${styles.chatListMenuDelete}`}
-                          onClick={() => void handleDeleteChat(chat)}
-                          disabled={chatMutationLoadingId === chat.id}
-                        >
-                          <Trash2 size={14} />
-                          삭제
-                        </button>
+                        {!isRenaming && (
+                          <div className={styles.chatListMenuWrap}>
+                            <button
+                              type="button"
+                              className={styles.chatListMenuButton}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setChatActionMenuId((prev) => (prev === chat.id ? null : chat.id));
+                              }}
+                              title="채팅 메뉴"
+                            >
+                              <MoreVertical size={15} />
+                            </button>
+                            {chatActionMenuId === chat.id && (
+                              <div className={styles.chatListMenuPanel}>
+                                <button
+                                  type="button"
+                                  className={styles.chatListMenuItem}
+                                  onClick={() => {
+                                    setRenamingChatId(chat.id);
+                                    setChatTitleDraft(chat.title);
+                                    setChatActionMenuId(null);
+                                  }}
+                                >
+                                  <Pencil size={14} />
+                                  이름 변경
+                                </button>
+                                <button
+                                  type="button"
+                                  className={styles.chatListMenuItem}
+                                  onClick={() => void handleToggleChatPin(chat)}
+                                  disabled={chatMutationLoadingId === chat.id}
+                                >
+                                  <Pin size={14} />
+                                  {chat.isPinned ? '고정 해제' : '고정'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`${styles.chatListMenuItem} ${styles.chatListMenuDelete}`}
+                                  onClick={() => void handleDeleteChat(chat)}
+                                  disabled={chatMutationLoadingId === chat.id}
+                                >
+                                  <Trash2 size={14} />
+                                  삭제
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    )}
+                    );
+                  })}
+                </div>
+                {hasMoreChats && (
+                  <button
+                    type="button"
+                    className={styles.chatSidebarLoadMoreButton}
+                    onClick={handleLoadMoreChats}
+                  >
+                    추가 로드
+                  </button>
+                )}
+              </div>
+            )}
+          </section>
+
+          <section className={styles.sidebarSection}>
+            <button
+              type="button"
+              className={styles.sidebarSectionToggle}
+              onClick={() => setIsFilesSectionOpen((prev) => !prev)}
+              aria-expanded={isFilesSectionOpen}
+            >
+              <span className={styles.sidebarSectionHeading}>
+                <FileSearch size={13} />
+                Files
+              </span>
+              {isFilesSectionOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+            {isFilesSectionOpen && (
+              <div className={styles.sidebarSectionBody}>
+                {recentFiles.length === 0 ? (
+                  <p className={styles.emptyHint}>최근 파일 기록이 없습니다.</p>
+                ) : (
+                  <div className={styles.sidebarMiniList}>
+                    {recentFiles.map((item) => (
+                      <button
+                        key={`${item.path}:${item.eventId}`}
+                        type="button"
+                        className={styles.sidebarMiniItemButton}
+                        onClick={() => jumpToEvent(item.eventId)}
+                        title={item.path}
+                      >
+                        <span className={styles.sidebarMiniTitle}>{item.label}</span>
+                        <span className={styles.sidebarMiniMeta}>{item.path}</span>
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
-            );
-          })}
+            )}
+          </section>
+
+          <section className={styles.sidebarSection}>
+            <button
+              type="button"
+              className={styles.sidebarSectionToggle}
+              onClick={() => setIsRecentsSectionOpen((prev) => !prev)}
+              aria-expanded={isRecentsSectionOpen}
+            >
+              <span className={styles.sidebarSectionHeading}>
+                <AlignLeft size={13} />
+                Recents
+              </span>
+              {isRecentsSectionOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+            {isRecentsSectionOpen && (
+              <div className={styles.sidebarSectionBody}>
+                {recentUserEvents.length === 0 ? (
+                  <p className={styles.emptyHint}>최근 사용자 메시지가 없습니다.</p>
+                ) : (
+                  <div className={styles.sidebarMiniList}>
+                    {recentUserEvents.map((event) => (
+                      <button
+                        key={event.id}
+                        type="button"
+                        className={styles.sidebarMiniItemButton}
+                        onClick={() => jumpToEvent(event.id)}
+                        title="해당 메시지로 이동"
+                      >
+                        <RelativeTime timestamp={event.timestamp} className={styles.sidebarMiniTime} />
+                        <span className={styles.sidebarMiniText}>{resolveRecentSummary(event)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
         </div>
       </aside>
 
@@ -2478,7 +2642,7 @@ export function ChatInterface({
 
               if (actionEvent) {
                 return (
-                  <article key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                  <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
                     <div className={`${styles.messageBubble} ${styles.messageBubbleAction}`}>
                       {renderEventPayload(event, false, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id))}
                     </div>
@@ -2487,7 +2651,7 @@ export function ChatInterface({
               }
 
               return (
-                <article key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
                   <div className={styles.messageWithAvatar}>
                     <div className={`${styles.msgAvatar} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
                       <agentMeta.Icon size={14} />
@@ -2717,7 +2881,7 @@ export function ChatInterface({
               <span className={styles.statLabel}>전체 이벤트</span>
             </div>
             <div className={styles.statBox}>
-              <span className={styles.statValue}>{recentPrompts.length}</span>
+              <span className={styles.statValue}>{recentUserEvents.length}</span>
               <span className={styles.statLabel}>최근 입력</span>
             </div>
             <div className={styles.statBox}>
