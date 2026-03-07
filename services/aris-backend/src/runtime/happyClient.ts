@@ -661,6 +661,13 @@ function buildCodexPermissionKey(sessionId: string, request: CodexPermissionRequ
   return `${sessionId}:${request.approvalId || request.callId}`;
 }
 
+function buildCodexThreadCacheKey(sessionId: string, chatId?: string): string {
+  if (chatId && chatId.trim().length > 0) {
+    return `${sessionId}:${chatId.trim()}`;
+  }
+  return sessionId;
+}
+
 function buildAgentCommand(agent: RuntimeAgent, prompt: string, approvalPolicy: ApprovalPolicy): AgentCommand | null {
   if (agent === 'claude') {
     const permissionMode = normalizeClaudePermissionMode(approvalPolicy);
@@ -702,6 +709,14 @@ export class HappyRuntimeStore {
 
   private resolveSessionApprovalPolicy(session: RuntimeSession): ApprovalPolicy {
     return normalizeApprovalPolicy(session.metadata.approvalPolicy, DEFAULT_APPROVAL_POLICY);
+  }
+
+  private clearCodexThreadsForSession(sessionId: string): void {
+    for (const key of this.codexThreads.keys()) {
+      if (key === sessionId || key.startsWith(`${sessionId}:`)) {
+        this.codexThreads.delete(key);
+      }
+    }
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -857,13 +872,14 @@ export class HappyRuntimeStore {
     prompt: string,
     signal?: AbortSignal,
     threadId?: string,
+    chatId?: string,
   ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; threadId?: string }> {
     if (CODEX_RUNTIME_MODE === 'exec') {
-      return this.runCodexExecCliWithEvents(session, prompt, signal, threadId);
+      return this.runCodexExecCliWithEvents(session, prompt, signal, threadId, chatId);
     }
 
     try {
-      return await this.runCodexAppServerWithEvents(session, prompt, signal, threadId);
+      return await this.runCodexAppServerWithEvents(session, prompt, signal, threadId, chatId);
     } catch (error) {
       if (isMissingCodexThreadError(error)) {
         throw error;
@@ -874,7 +890,7 @@ export class HappyRuntimeStore {
 
       const detail = error instanceof Error ? error.message : String(error);
       console.error(`codex app-server mode failed; falling back to exec mode: ${detail}`);
-      return this.runCodexExecCliWithEvents(session, prompt, signal, threadId);
+      return this.runCodexExecCliWithEvents(session, prompt, signal, threadId, chatId);
     }
   }
 
@@ -883,8 +899,10 @@ export class HappyRuntimeStore {
     prompt: string,
     signal?: AbortSignal,
     threadId?: string,
+    chatId?: string,
   ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; threadId?: string }> {
     const safeCwd = this.resolveExecutionCwd(session.metadata.path);
+    const threadCacheKey = buildCodexThreadCacheKey(session.id, chatId);
     const sessionApprovalPolicy = this.resolveSessionApprovalPolicy(session);
     const codexApprovalPolicy = normalizeCodexApprovalPolicy(sessionApprovalPolicy);
     const autoApproveAll = sessionApprovalPolicy === 'yolo';
@@ -1140,7 +1158,7 @@ export class HappyRuntimeStore {
         const startedThreadId = asString(threadRecord?.id, '').trim();
         if (startedThreadId) {
           resolvedThreadId = startedThreadId;
-          this.codexThreads.set(session.id, startedThreadId);
+          this.codexThreads.set(threadCacheKey, startedThreadId);
         }
         return;
       }
@@ -1162,6 +1180,7 @@ export class HappyRuntimeStore {
           enqueueAppend(
             text,
             {
+              ...(chatId ? { chatId } : {}),
               requestedPath: session.metadata.path,
               execCwd: safeCwd,
               streamEvent: 'agent_message',
@@ -1202,6 +1221,7 @@ export class HappyRuntimeStore {
         enqueueAppend(
           body,
           {
+            ...(chatId ? { chatId } : {}),
             requestedPath: session.metadata.path,
             execCwd: safeCwd,
             actionType,
@@ -1329,7 +1349,7 @@ export class HappyRuntimeStore {
         const resumedThreadId = asString(asRecord(resumed.thread)?.id, '').trim();
         if (resumedThreadId) {
           resolvedThreadId = resumedThreadId;
-          this.codexThreads.set(session.id, resumedThreadId);
+          this.codexThreads.set(threadCacheKey, resumedThreadId);
         }
       } else {
         const started = await sendRequest('thread/start', {
@@ -1342,7 +1362,7 @@ export class HappyRuntimeStore {
         const startedThreadId = asString(asRecord(started.thread)?.id, '').trim();
         if (startedThreadId) {
           resolvedThreadId = startedThreadId;
-          this.codexThreads.set(session.id, startedThreadId);
+          this.codexThreads.set(threadCacheKey, startedThreadId);
         }
       }
 
@@ -1431,8 +1451,10 @@ export class HappyRuntimeStore {
     prompt: string,
     signal?: AbortSignal,
     threadId?: string,
+    chatId?: string,
   ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; threadId?: string }> {
     const safeCwd = this.resolveExecutionCwd(session.metadata.path);
+    const threadCacheKey = buildCodexThreadCacheKey(session.id, chatId);
     const sessionApprovalPolicy = this.resolveSessionApprovalPolicy(session);
     const codexApprovalPolicy = normalizeCodexApprovalPolicy(sessionApprovalPolicy);
     const autoApproveAll = sessionApprovalPolicy === 'yolo';
@@ -1520,7 +1542,7 @@ export class HappyRuntimeStore {
         const startedThreadId = asString(payload.thread_id, '').trim();
         if (startedThreadId) {
           resolvedThreadId = startedThreadId;
-          this.codexThreads.set(session.id, startedThreadId);
+          this.codexThreads.set(threadCacheKey, startedThreadId);
         }
         return;
       }
@@ -1549,6 +1571,7 @@ export class HappyRuntimeStore {
           enqueueAppend(
             text,
             {
+              ...(chatId ? { chatId } : {}),
               requestedPath: session.metadata.path,
               execCwd: safeCwd,
               streamEvent: 'agent_message',
@@ -1586,6 +1609,7 @@ export class HappyRuntimeStore {
       enqueueAppend(
         body,
         {
+          ...(chatId ? { chatId } : {}),
           requestedPath: session.metadata.path,
           execCwd: safeCwd,
           actionType,
@@ -1632,8 +1656,9 @@ export class HappyRuntimeStore {
     };
   }
 
-  private async resolveCodexThreadId(sessionId: string): Promise<string | undefined> {
-    const cached = this.codexThreads.get(sessionId);
+  private async resolveCodexThreadId(sessionId: string, chatId?: string): Promise<string | undefined> {
+    const cacheKey = buildCodexThreadCacheKey(sessionId, chatId);
+    const cached = this.codexThreads.get(cacheKey);
     if (cached) {
       return cached;
     }
@@ -1641,6 +1666,13 @@ export class HappyRuntimeStore {
     try {
       const history = await this.listMessages(sessionId);
       for (let index = history.length - 1; index >= 0; index -= 1) {
+        if (chatId) {
+          const rawChatId = history[index]?.meta?.chatId;
+          const messageChatId = typeof rawChatId === 'string' ? rawChatId.trim() : '';
+          if (messageChatId !== chatId) {
+            continue;
+          }
+        }
         const candidate = history[index]?.meta?.threadId;
         if (typeof candidate !== 'string') {
           continue;
@@ -1649,7 +1681,7 @@ export class HappyRuntimeStore {
         if (!trimmed) {
           continue;
         }
-        this.codexThreads.set(sessionId, trimmed);
+        this.codexThreads.set(cacheKey, trimmed);
         return trimmed;
       }
     } catch {
@@ -1659,7 +1691,11 @@ export class HappyRuntimeStore {
     return undefined;
   }
 
-  private async generateAndPersistAgentReply(session: RuntimeSession, prompt: string): Promise<void> {
+  private async generateAndPersistAgentReply(
+    session: RuntimeSession,
+    prompt: string,
+    context: { chatId?: string; threadId?: string } = {},
+  ): Promise<void> {
     const flavor = session.metadata.flavor;
     if (flavor === 'unknown') {
       return;
@@ -1670,20 +1706,33 @@ export class HappyRuntimeStore {
 
     try {
       const isCodex = flavor === 'codex';
+      const scopedChatId = typeof context.chatId === 'string' && context.chatId.trim().length > 0
+        ? context.chatId.trim()
+        : undefined;
+      const preferredThreadId = typeof context.threadId === 'string' && context.threadId.trim().length > 0
+        ? context.threadId.trim()
+        : undefined;
+      const threadCacheKey = buildCodexThreadCacheKey(session.id, scopedChatId);
       let response: { output: string; cwd: string; streamedPersisted?: boolean; threadId?: string };
 
       if (isCodex) {
-        const recoveredThreadId = await this.resolveCodexThreadId(session.id);
+        const recoveredThreadId = preferredThreadId ?? await this.resolveCodexThreadId(session.id, scopedChatId);
         try {
-          response = await this.runCodexCliWithEvents(session, prompt, controller.signal, recoveredThreadId);
+          response = await this.runCodexCliWithEvents(
+            session,
+            prompt,
+            controller.signal,
+            recoveredThreadId,
+            scopedChatId,
+          );
         } catch (error) {
           if (!recoveredThreadId || !isMissingCodexThreadError(error)) {
             throw error;
           }
 
           // Stored thread id became invalid; clear and start a fresh Codex thread.
-          this.codexThreads.delete(session.id);
-          response = await this.runCodexCliWithEvents(session, prompt, controller.signal);
+          this.codexThreads.delete(threadCacheKey);
+          response = await this.runCodexCliWithEvents(session, prompt, controller.signal, undefined, scopedChatId);
         }
       } else {
         const nonCodex = await this.runAgentCli(
@@ -1701,20 +1750,24 @@ export class HappyRuntimeStore {
       }
 
       if (isCodex && response.threadId) {
-        this.codexThreads.set(session.id, response.threadId);
+        this.codexThreads.set(threadCacheKey, response.threadId);
       }
 
       const streamedPersisted = Boolean(response.streamedPersisted);
       if (!isCodex || !streamedPersisted) {
         await this.appendAgentMessage(session.id, response.output, {
+          ...(scopedChatId ? { chatId: scopedChatId } : {}),
           requestedPath: session.metadata.path,
           execCwd: response.cwd,
           ...(response.threadId ? { threadId: response.threadId } : {}),
         });
       }
     } catch (error) {
+      const scopedChatId = typeof context.chatId === 'string' && context.chatId.trim().length > 0
+        ? context.chatId.trim()
+        : undefined;
       if (flavor === 'codex' && isMissingCodexThreadError(error)) {
-        this.codexThreads.delete(session.id);
+        this.codexThreads.delete(buildCodexThreadCacheKey(session.id, scopedChatId));
       }
       if (isAbortFailure(error) || controller.signal.aborted) {
         return;
@@ -1722,6 +1775,7 @@ export class HappyRuntimeStore {
       const message = error instanceof Error ? error.message : 'Unknown runtime error';
       try {
         await this.appendAgentMessage(session.id, `에이전트 실행 오류: ${message}`, {
+          ...(scopedChatId ? { chatId: scopedChatId } : {}),
           requestedPath: session.metadata.path,
           error: true,
         });
@@ -1828,7 +1882,13 @@ export class HappyRuntimeStore {
 
     const isUserPrompt = input.meta?.role !== 'agent';
     if (isUserPrompt) {
-      void this.generateAndPersistAgentReply(session, input.text);
+      const chatId = typeof input.meta?.chatId === 'string' && input.meta.chatId.trim().length > 0
+        ? input.meta.chatId.trim()
+        : undefined;
+      const threadId = typeof input.meta?.threadId === 'string' && input.meta.threadId.trim().length > 0
+        ? input.meta.threadId.trim()
+        : undefined;
+      void this.generateAndPersistAgentReply(session, input.text, { chatId, threadId });
     }
 
     if (!created.text || !created.title) {
@@ -1856,7 +1916,7 @@ export class HappyRuntimeStore {
     }
 
     if (action === 'kill') {
-      this.codexThreads.delete(sessionId);
+      this.clearCodexThreadsForSession(sessionId);
       try {
         await this.request(`/v1/sessions/${encodeURIComponent(sessionId)}`, {
           method: 'DELETE',

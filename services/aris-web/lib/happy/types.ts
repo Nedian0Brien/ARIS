@@ -15,6 +15,18 @@ export type SessionSummary = {
   isPinned?: boolean;
 };
 
+export type SessionChat = {
+  id: string;
+  sessionId: string;
+  title: string;
+  isPinned: boolean;
+  isDefault: boolean;
+  threadId: string | null;
+  lastActivityAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type UiEventKind =
   | 'text_reply'
   | 'run_execution'

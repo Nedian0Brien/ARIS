@@ -63,6 +63,8 @@ type GetSessionEventsOptions = {
   before?: string;
   after?: string;
   limit?: number;
+  chatId?: string;
+  includeUnassigned?: boolean;
 };
 
 const DEFAULT_EVENTS_PAGE_LIMIT = 40;
@@ -135,6 +137,22 @@ function paginateEvents(events: UiEvent[], options: GetSessionEventsOptions): { 
       totalCount,
     },
   };
+}
+
+function filterEventsByChat(events: UiEvent[], options: GetSessionEventsOptions): UiEvent[] {
+  const chatId = typeof options.chatId === 'string' ? options.chatId.trim() : '';
+  if (!chatId) {
+    return events;
+  }
+
+  const includeUnassigned = options.includeUnassigned === true;
+  return events.filter((event) => {
+    const eventChatId = typeof event.meta?.chatId === 'string' ? event.meta.chatId.trim() : '';
+    if (eventChatId) {
+      return eventChatId === chatId;
+    }
+    return includeUnassigned;
+  });
 }
 
 async function fetchHappy(path: string, init?: RequestInit): Promise<unknown> {
@@ -277,7 +295,7 @@ export async function getSessionEvents(
 
   return {
     session: sessionDetail,
-    ...paginateEvents(normalizeEvents(messages), resolvedOptions),
+    ...paginateEvents(filterEventsByChat(normalizeEvents(messages), resolvedOptions), resolvedOptions),
   };
 }
 

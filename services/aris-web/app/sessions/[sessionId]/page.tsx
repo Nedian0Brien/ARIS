@@ -1,4 +1,5 @@
 import { requirePageUser } from '@/lib/auth/guard';
+import { listSessionChats } from '@/lib/happy/chats';
 import { getSessionEvents, listPermissionRequests } from '@/lib/happy/client';
 import { Header } from '@/components/layout/Header';
 import { BackendNotice } from '@/components/ui/BackendNotice';
@@ -10,17 +11,34 @@ const INITIAL_EVENTS_PAGE_LIMIT = 40;
 
 export default async function SessionPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ sessionId: string }>;
+  searchParams: Promise<{ chat?: string }>;
 }) {
   const user = await requirePageUser();
   const { sessionId } = await params;
+  const resolvedSearchParams = await searchParams;
+  const requestedChatId = typeof resolvedSearchParams?.chat === 'string' && resolvedSearchParams.chat.trim()
+    ? resolvedSearchParams.chat.trim()
+    : null;
 
   try {
+    const chats = await listSessionChats({
+      sessionId,
+      userId: user.id,
+      ensureDefault: true,
+    });
+    const activeChat = (requestedChatId
+      ? chats.find((chat) => chat.id === requestedChatId)
+      : null) ?? chats[0];
+
     const [detail, permissions] = await Promise.all([
       getSessionEvents(sessionId, {
         userId: user.id,
         limit: INITIAL_EVENTS_PAGE_LIMIT,
+        chatId: activeChat?.id,
+        includeUnassigned: activeChat?.isDefault ?? false,
       }),
       listPermissionRequests(sessionId),
     ]);
@@ -39,6 +57,8 @@ export default async function SessionPage({
             alias={detail.session.alias}
             agentFlavor={detail.session.agent}
             approvalPolicy={detail.session.approvalPolicy}
+            initialChats={chats}
+            activeChatId={activeChat?.id ?? null}
           />
         </main>
       </div>

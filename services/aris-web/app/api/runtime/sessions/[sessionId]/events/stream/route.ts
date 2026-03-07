@@ -25,6 +25,10 @@ export async function GET(
 
   const { sessionId } = await params;
   const after = request.nextUrl.searchParams.get('after');
+  const chatIdRaw = request.nextUrl.searchParams.get('chatId');
+  const includeUnassignedRaw = request.nextUrl.searchParams.get('includeUnassigned');
+  const chatId = typeof chatIdRaw === 'string' && chatIdRaw.trim().length > 0 ? chatIdRaw.trim() : undefined;
+  const includeUnassigned = includeUnassignedRaw === '1' || includeUnassignedRaw === 'true';
   let cursor = typeof after === 'string' && after.trim().length > 0 ? after.trim() : null;
 
   const encoder = new TextEncoder();
@@ -60,12 +64,16 @@ export async function GET(
               const { events } = await getSessionEvents(sessionId, {
                 userId: auth.user.id,
                 limit: 1,
+                chatId,
+                includeUnassigned,
               });
               cursor = events[events.length - 1]?.id ?? null;
             } else {
               const { events } = await getSessionEvents(sessionId, {
                 userId: auth.user.id,
                 after: cursor,
+                chatId,
+                includeUnassigned,
               });
               for (const event of events) {
                 writeEvent('event', { event });

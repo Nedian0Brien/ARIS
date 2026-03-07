@@ -25,6 +25,7 @@ model User {
   auditLogs    AuditLog[]
   preferences  UiPreference?
   sessionMetadata SessionMetadata[]
+  sessionChats SessionChat[]
   trustedDevices TrustedDevice[]
   emailTokens    EmailVerificationToken[]
 }
@@ -40,6 +41,23 @@ model SessionMetadata {
 
   @@id([sessionId, userId])
   @@index([userId])
+}
+
+model SessionChat {
+  id             String   @id @default(cuid())
+  sessionId      String
+  userId         String
+  title          String
+  isPinned       Boolean  @default(false)
+  isDefault      Boolean  @default(false)
+  threadId       String?
+  lastActivityAt DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, userId, isPinned, lastActivityAt])
+  @@index([userId, updatedAt])
 }
 
 model EmailVerificationToken {

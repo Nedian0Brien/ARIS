@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
@@ -12,17 +13,22 @@ import {
   ChevronDown,
   ChevronRight,
   CircleAlert,
-  Clock3,
   Cpu,
   FilePenLine,
   FileSearch,
   FolderTree,
+  MessageSquarePlus,
   MessageSquareText,
   MoreVertical,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Pencil,
+  Pin,
   Send,
   TerminalSquare,
+  Trash2,
 } from 'lucide-react';
-import type { ApprovalPolicy, PermissionRequest, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
+import type { ApprovalPolicy, PermissionRequest, SessionChat, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '@/components/ui/AgentIcons';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import styles from './ChatInterface.module.css';
@@ -192,6 +198,23 @@ function formatRelative(timestamp: string): string {
   if (diffHours < 24) return `${diffHours}시간 전`;
 
   return date.toLocaleDateString();
+}
+
+function sortSessionChats(chats: SessionChat[]): SessionChat[] {
+  return [...chats].sort((a, b) => {
+    if (a.isPinned !== b.isPinned) {
+      return a.isPinned ? -1 : 1;
+    }
+    const activityDiff = Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt);
+    if (Number.isFinite(activityDiff) && activityDiff !== 0) {
+      return activityDiff;
+    }
+    const createdDiff = Date.parse(b.createdAt) - Date.parse(a.createdAt);
+    if (Number.isFinite(createdDiff) && createdDiff !== 0) {
+      return createdDiff;
+    }
+    return a.id.localeCompare(b.id);
+  });
 }
 
 function truncateSingleLine(input: string, max = 68): string {
@@ -1129,6 +1152,8 @@ export function ChatInterface({
   initialEvents,
   initialHasMoreBefore,
   initialPermissions,
+  initialChats,
+  activeChatId,
   isOperator,
   projectName,
   alias,
@@ -1139,13 +1164,23 @@ export function ChatInterface({
   initialEvents: UiEvent[];
   initialHasMoreBefore: boolean;
   initialPermissions: PermissionRequest[];
+  initialChats: SessionChat[];
+  activeChatId: string | null;
   isOperator: boolean;
   projectName: string;
   alias?: string | null;
   agentFlavor: string;
   approvalPolicy?: ApprovalPolicy;
 }) {
-  const displayName = alias || projectName;
+  const router = useRouter();
+  const [chats, setChats] = useState<SessionChat[]>(() => sortSessionChats(initialChats));
+  const activeChat = useMemo(
+    () => chats.find((chat) => chat.id === activeChatId) ?? chats[0] ?? null,
+    [chats, activeChatId],
+  );
+  const activeChatIdResolved = activeChat?.id ?? null;
+  const includeUnassignedEvents = Boolean(activeChat?.isDefault);
+  const displayName = activeChat?.title || alias || projectName;
   const {
     events,
     addEvent,
@@ -1153,7 +1188,13 @@ export function ChatInterface({
     loadOlder,
     hasMoreBefore,
     isLoadingOlder,
-  } = useSessionEvents(sessionId, initialEvents, initialHasMoreBefore);
+  } = useSessionEvents(
+    sessionId,
+    activeChatIdResolved,
+    includeUnassignedEvents,
+    initialEvents,
+    initialHasMoreBefore,
+  );
   const { isRunning: runtimeRunning, runtimeError } = useSessionRuntime(sessionId);
   const {
     pendingPermissions,
@@ -1174,7 +1215,15 @@ export function ChatInterface({
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
   const [showPermissionQueue, setShowPermissionQueue] = useState(true);
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
+  const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(true);
+  const [chatActionMenuId, setChatActionMenuId] = useState<string | null>(null);
+  const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
+  const [chatTitleDraft, setChatTitleDraft] = useState('');
+  const [chatMutationLoadingId, setChatMutationLoadingId] = useState<string | null>(null);
+  const [chatMutationError, setChatMutationError] = useState<string | null>(null);
+  const [isCreatingChat, setIsCreatingChat] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const chatSidebarRef = useRef<HTMLDivElement>(null);
   const chatShellRef = useRef<HTMLDivElement>(null);
   const centerPanelRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1205,6 +1254,14 @@ export function ChatInterface({
   const agentReplies = useMemo(() => events.filter((event) => !isUserEvent(event)).length, [events]);
   const streamItems = useMemo(() => buildStreamRenderItems(events, expandedActionRunIds), [events, expandedActionRunIds]);
   const firstPendingPermissionId = pendingPermissions[0]?.id ?? null;
+
+  useEffect(() => {
+    setChats(sortSessionChats(initialChats));
+    setChatActionMenuId(null);
+    setRenamingChatId(null);
+    setChatTitleDraft('');
+    setChatMutationError(null);
+  }, [initialChats, activeChatId]);
   const markSessionAsRead = useCallback(async () => {
     try {
       await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/metadata`, {
@@ -1256,6 +1313,7 @@ export function ChatInterface({
     const syncLayout = () => {
       const nextIsMobile = mediaQuery.matches;
       setIsMobileLayout(nextIsMobile);
+      setIsChatSidebarOpen(!nextIsMobile);
     };
 
     syncLayout();
@@ -1462,6 +1520,26 @@ export function ChatInterface({
   }, [isContextMenuOpen]);
 
   useEffect(() => {
+    if (!chatActionMenuId) {
+      return;
+    }
+    const onClickOutside = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      if (chatSidebarRef.current?.contains(target)) {
+        return;
+      }
+      setChatActionMenuId(null);
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside);
+    };
+  }, [chatActionMenuId]);
+
+  useEffect(() => {
     resizeComposerInput();
   }, [prompt, resizeComposerInput]);
 
@@ -1593,9 +1671,182 @@ export function ChatInterface({
     };
   }, [isAwaitingReply, awaitingReplySince]);
 
+  useEffect(() => {
+    if (!activeChatIdResolved) {
+      return;
+    }
+    const latestThreadId = [...events]
+      .reverse()
+      .map((event) => (typeof event.meta?.threadId === 'string' ? event.meta.threadId.trim() : ''))
+      .find((value) => value.length > 0);
+    if (!latestThreadId || latestThreadId === activeChat?.threadId) {
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ threadId: latestThreadId }),
+          },
+        );
+        if (!response.ok || cancelled) {
+          return;
+        }
+        setChats((prev) => sortSessionChats(prev.map((chat) => (
+          chat.id === activeChatIdResolved ? { ...chat, threadId: latestThreadId } : chat
+        ))));
+      } catch {
+        // Best effort: thread id cache sync for chat continuity.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [events, sessionId, activeChatIdResolved, activeChat?.threadId]);
+
+  const buildChatUrl = useCallback((chatId: string) => {
+    return `/sessions/${encodeURIComponent(sessionId)}?chat=${encodeURIComponent(chatId)}`;
+  }, [sessionId]);
+
+  const goToChat = useCallback((chatId: string) => {
+    setChatActionMenuId(null);
+    setRenamingChatId(null);
+    setChatTitleDraft('');
+    router.push(buildChatUrl(chatId));
+    if (isMobileLayout) {
+      setIsChatSidebarOpen(false);
+    }
+  }, [router, buildChatUrl, isMobileLayout]);
+
+  const handleCreateChat = useCallback(async () => {
+    if (isCreatingChat) {
+      return;
+    }
+    setIsCreatingChat(true);
+    setChatMutationError(null);
+    try {
+      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
+      if (!response.ok || !body.chat) {
+        throw new Error(body.error ?? '새 채팅 생성에 실패했습니다.');
+      }
+      setChats((prev) => sortSessionChats([body.chat!, ...prev]));
+      goToChat(body.chat.id);
+    } catch (error) {
+      setChatMutationError(error instanceof Error ? error.message : '새 채팅 생성에 실패했습니다.');
+    } finally {
+      setIsCreatingChat(false);
+    }
+  }, [sessionId, goToChat, isCreatingChat]);
+
+  const handleToggleChatPin = useCallback(async (chat: SessionChat) => {
+    setChatMutationLoadingId(chat.id);
+    setChatMutationError(null);
+    const nextPinned = !chat.isPinned;
+    setChats((prev) => sortSessionChats(prev.map((item) => (
+      item.id === chat.id ? { ...item, isPinned: nextPinned } : item
+    ))));
+    try {
+      const response = await fetch(
+        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chat.id)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isPinned: nextPinned }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error('채팅 고정 상태 변경에 실패했습니다.');
+      }
+    } catch (error) {
+      setChats((prev) => sortSessionChats(prev.map((item) => (
+        item.id === chat.id ? { ...item, isPinned: chat.isPinned } : item
+      ))));
+      setChatMutationError(error instanceof Error ? error.message : '채팅 고정 상태 변경에 실패했습니다.');
+    } finally {
+      setChatMutationLoadingId(null);
+      setChatActionMenuId(null);
+    }
+  }, [sessionId]);
+
+  const handleRenameChat = useCallback(async (chatId: string, nextTitle: string) => {
+    const normalized = nextTitle.trim();
+    if (!normalized) {
+      setRenamingChatId(null);
+      setChatTitleDraft('');
+      return;
+    }
+    setChatMutationLoadingId(chatId);
+    setChatMutationError(null);
+    try {
+      const response = await fetch(
+        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chatId)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: normalized }),
+        },
+      );
+      const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
+      if (!response.ok || !body.chat) {
+        throw new Error(body.error ?? '채팅 이름 변경에 실패했습니다.');
+      }
+      setChats((prev) => sortSessionChats(prev.map((chat) => (
+        chat.id === chatId ? { ...chat, title: body.chat!.title } : chat
+      ))));
+      setRenamingChatId(null);
+      setChatTitleDraft('');
+    } catch (error) {
+      setChatMutationError(error instanceof Error ? error.message : '채팅 이름 변경에 실패했습니다.');
+    } finally {
+      setChatMutationLoadingId(null);
+    }
+  }, [sessionId]);
+
+  const handleDeleteChat = useCallback(async (chat: SessionChat) => {
+    if (chatMutationLoadingId) {
+      return;
+    }
+    const confirmed = window.confirm(`'${chat.title}' 채팅을 삭제할까요?`);
+    if (!confirmed) {
+      return;
+    }
+    setChatMutationLoadingId(chat.id);
+    setChatMutationError(null);
+    try {
+      const response = await fetch(
+        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chat.id)}`,
+        { method: 'DELETE' },
+      );
+      const body = (await response.json().catch(() => ({}))) as { chats?: SessionChat[]; error?: string };
+      if (!response.ok || !Array.isArray(body.chats)) {
+        throw new Error(body.error ?? '채팅 삭제에 실패했습니다.');
+      }
+      const nextChats = sortSessionChats(body.chats);
+      setChats(nextChats);
+      setChatActionMenuId(null);
+      if (chat.id === activeChatIdResolved && nextChats[0]) {
+        goToChat(nextChats[0].id);
+      }
+    } catch (error) {
+      setChatMutationError(error instanceof Error ? error.message : '채팅 삭제에 실패했습니다.');
+    } finally {
+      setChatMutationLoadingId(null);
+    }
+  }, [activeChatIdResolved, chatMutationLoadingId, goToChat, sessionId]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!prompt.trim() || !isOperator || isAgentRunning) return;
+    if (!prompt.trim() || !isOperator || isAgentRunning || !activeChatIdResolved) return;
 
     setIsSubmitting(true);
     setIsAwaitingReply(true);
@@ -1610,7 +1861,11 @@ export function ChatInterface({
           type: 'message',
           title: 'User Instruction',
           text: prompt,
-          meta: { role: 'user' },
+          meta: {
+            role: 'user',
+            chatId: activeChatIdResolved,
+            ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
+          },
         }),
       });
 
@@ -1626,6 +1881,21 @@ export function ChatInterface({
       if (body.event) {
         addEvent(body.event);
       }
+      setChats((prev) => sortSessionChats(prev.map((chat) => (
+        chat.id === activeChatIdResolved
+          ? { ...chat, lastActivityAt: new Date().toISOString() }
+          : chat
+      ))));
+      void fetch(
+        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ touchActivity: true }),
+        },
+      ).catch(() => {
+        // Best-effort activity sync.
+      });
       setPrompt('');
     } catch (error) {
       setIsAwaitingReply(false);
@@ -1683,61 +1953,163 @@ export function ChatInterface({
   }
 
   return (
-    <div className={`${styles.chatShell} ${isMobileLayout ? styles.chatShellMobileScroll : ''}`} ref={chatShellRef}>
-      <aside className={`${styles.sidePanel} ${styles.leftPanel}`}>
-        <section className={styles.panelCard}>
-          <div className={styles.panelHeading}>Session Profile</div>
-          <div className={styles.sessionTitle}>{displayName}</div>
-
-          <div className={styles.agentProfile}>
-            <span className={`${styles.agentAvatar} ${AGENT_AVATAR_TONE_CLASS[agentMeta.tone]}`}>
-              <agentMeta.Icon size={18} />
-            </span>
-            <span className={styles.agentProfileText}>
-              <span className={styles.agentProfileName}>{agentMeta.label}</span>
-              <span className={styles.agentProfileMeta}>{agentMeta.label} Runtime Agent</span>
-            </span>
+    <div
+      className={`${styles.chatShell} ${
+        isChatSidebarOpen ? styles.chatShellSidebarOpen : styles.chatShellSidebarClosed
+      } ${isMobileLayout ? styles.chatShellMobileScroll : ''}`}
+      ref={chatShellRef}
+    >
+      {isMobileLayout && isChatSidebarOpen && (
+        <button
+          type="button"
+          className={styles.chatSidebarBackdrop}
+          onClick={() => setIsChatSidebarOpen(false)}
+          aria-label="채팅 사이드바 닫기"
+        />
+      )}
+      <aside
+        ref={chatSidebarRef}
+        className={`${styles.chatSidebar} ${
+          isChatSidebarOpen ? styles.chatSidebarOpen : styles.chatSidebarClosed
+        } ${isMobileLayout ? styles.chatSidebarMobile : ''}`}
+      >
+        <div className={styles.chatSidebarHeader}>
+          <div>
+            <div className={styles.chatSidebarTitle}>채팅</div>
+            <div className={styles.chatSidebarSubTitle}>{projectName}</div>
           </div>
+          <button
+            type="button"
+            className={styles.chatSidebarNewButton}
+            onClick={() => void handleCreateChat()}
+            disabled={isCreatingChat}
+            title="새 채팅"
+          >
+            <MessageSquarePlus size={15} />
+            새 채팅
+          </button>
+        </div>
 
-          <div className={styles.metaLine}>
-            <Cpu size={14} />
-            ID: {sessionId}
-          </div>
-          <div className={styles.metaLine}>
-            <Clock3 size={14} />
-            마지막 이벤트: {events.length > 0 ? formatRelative(events[events.length - 1].timestamp) : '없음'}
-          </div>
-        </section>
+        {chatMutationError && <div className={styles.chatSidebarError}>{chatMutationError}</div>}
 
-        <section className={styles.panelCard}>
-          <div className={styles.panelHeading}>최근 사용자 입력</div>
-          <div className={styles.miniList}>
-            {recentPrompts.length === 0 && <p className={styles.emptyHint}>아직 입력된 메시지가 없습니다.</p>}
-            {recentPrompts.map((event) => (
-              <button
-                key={event.id}
-                type="button"
-                className={`${styles.miniItem} ${styles.miniItemButton}`}
-                onClick={() => jumpToEvent(event.id)}
-                title="해당 사용자 메시지로 이동"
+        <div className={styles.chatList}>
+          {chats.map((chat) => {
+            const isActive = chat.id === activeChatIdResolved;
+            const isRenaming = renamingChatId === chat.id;
+            return (
+              <div
+                key={chat.id}
+                className={`${styles.chatListItem} ${isActive ? styles.chatListItemActive : ''}`}
               >
-                <span className={styles.miniTime}>{formatClock(event.timestamp)}</span>
-                <span className={styles.miniText}>{truncateSingleLine(event.body || event.title)}</span>
-              </button>
-            ))}
-          </div>
-        </section>
+                <button
+                  type="button"
+                  className={styles.chatListMainButton}
+                  onClick={() => goToChat(chat.id)}
+                  title={chat.title}
+                >
+                  <span className={styles.chatListTitleWrap}>
+                    {chat.isPinned && <Pin size={12} className={styles.chatListPinIcon} />}
+                    {isRenaming ? (
+                      <input
+                        value={chatTitleDraft}
+                        onChange={(event) => setChatTitleDraft(event.target.value)}
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            void handleRenameChat(chat.id, chatTitleDraft);
+                          } else if (event.key === 'Escape') {
+                            setRenamingChatId(null);
+                            setChatTitleDraft('');
+                          }
+                        }}
+                        onBlur={() => {
+                          if (renamingChatId === chat.id) {
+                            void handleRenameChat(chat.id, chatTitleDraft);
+                          }
+                        }}
+                        className={styles.chatListRenameInput}
+                        autoFocus
+                      />
+                    ) : (
+                      <span className={styles.chatListTitle}>{chat.title}</span>
+                    )}
+                  </span>
+                  <span className={styles.chatListTime}>{formatRelative(chat.lastActivityAt)}</span>
+                </button>
+                {!isRenaming && (
+                  <div className={styles.chatListMenuWrap}>
+                    <button
+                      type="button"
+                      className={styles.chatListMenuButton}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setChatActionMenuId((prev) => (prev === chat.id ? null : chat.id));
+                      }}
+                      title="채팅 메뉴"
+                    >
+                      <MoreVertical size={15} />
+                    </button>
+                    {chatActionMenuId === chat.id && (
+                      <div className={styles.chatListMenuPanel}>
+                        <button
+                          type="button"
+                          className={styles.chatListMenuItem}
+                          onClick={() => {
+                            setRenamingChatId(chat.id);
+                            setChatTitleDraft(chat.title);
+                            setChatActionMenuId(null);
+                          }}
+                        >
+                          <Pencil size={14} />
+                          이름 변경
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.chatListMenuItem}
+                          onClick={() => void handleToggleChatPin(chat)}
+                          disabled={chatMutationLoadingId === chat.id}
+                        >
+                          <Pin size={14} />
+                          {chat.isPinned ? '고정 해제' : '고정'}
+                        </button>
+                        <button
+                          type="button"
+                          className={`${styles.chatListMenuItem} ${styles.chatListMenuDelete}`}
+                          onClick={() => void handleDeleteChat(chat)}
+                          disabled={chatMutationLoadingId === chat.id}
+                        >
+                          <Trash2 size={14} />
+                          삭제
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </aside>
 
       <main className={`${styles.centerPanel} ${isMobileLayout ? styles.centerPanelMobileScroll : ''}`} ref={centerPanelRef}>
         <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
           <header className={styles.centerHeader}>
+            <button
+              type="button"
+              className={styles.sidebarToggleButton}
+              onClick={() => setIsChatSidebarOpen((prev) => !prev)}
+              aria-label={isChatSidebarOpen ? '채팅 사이드바 닫기' : '채팅 사이드바 열기'}
+              title={isChatSidebarOpen ? '채팅 사이드바 닫기' : '채팅 사이드바 열기'}
+            >
+              {isChatSidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+            </button>
             <span className={`${styles.agentAvatarHero} ${AGENT_AVATAR_TONE_CLASS[agentMeta.tone]}`}>
               <agentMeta.Icon size={20} />
             </span>
             <div className={styles.centerHeaderInfo}>
               <h2 className={styles.centerTitle}>{displayName}</h2>
-              <span className={styles.centerAgentLabel}>{agentMeta.label} Agent</span>
+              <span className={styles.centerAgentLabel}>{agentMeta.label} Agent · {alias || projectName}</span>
             </div>
             <div className={styles.centerHeaderActions}>
               <span
@@ -1968,14 +2340,20 @@ export function ChatInterface({
                         handleSubmit(e);
                       }
                     }}
-                    placeholder={isOperator ? '명령을 입력하세요. (Ctrl/Cmd + Enter 전송)' : 'Viewer 권한입니다.'}
-                    disabled={!isOperator || isAgentRunning}
+                    placeholder={
+                      !activeChatIdResolved
+                        ? '사용할 채팅을 선택하세요.'
+                        : isOperator
+                          ? '명령을 입력하세요. (Ctrl/Cmd + Enter 전송)'
+                          : 'Viewer 권한입니다.'
+                    }
+                    disabled={!activeChatIdResolved || !isOperator || isAgentRunning}
                     className={styles.composerInput}
                   />
                 </div>
                 <button
                   type="submit"
-                  disabled={!prompt.trim() || !isOperator || isAgentRunning}
+                  disabled={!activeChatIdResolved || !prompt.trim() || !isOperator || isAgentRunning}
                   className={styles.sendIconButton}
                   title="Send message"
                   aria-label="메시지 전송"
@@ -2036,7 +2414,13 @@ export function ChatInterface({
               const KindIcon = kindMeta.Icon;
               const miniKindLabel = userEvent ? 'YOU' : kindMeta.label;
               return (
-                <div key={event.id} className={styles.miniItem}>
+                <button
+                  key={event.id}
+                  type="button"
+                  className={`${styles.miniItem} ${styles.miniItemButton}`}
+                  onClick={() => jumpToEvent(event.id)}
+                  title="해당 이벤트로 이동"
+                >
                   <span className={styles.miniTime}>{formatClock(event.timestamp)}</span>
                   <span className={styles.miniEventRow}>
                     {miniKindLabel ? (
@@ -2047,7 +2431,7 @@ export function ChatInterface({
                     ) : null}
                     <span className={styles.miniText}>{resolveRecentSummary(event)}</span>
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>

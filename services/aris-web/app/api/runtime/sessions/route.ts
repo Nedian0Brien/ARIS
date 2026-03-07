@@ -3,6 +3,17 @@ import { requireApiUser } from '@/lib/auth/guard';
 import { listSessions, createSession } from '@/lib/happy/client';
 import { prisma } from '@/lib/db/prisma';
 
+function normalizeProjectPath(input: string): string {
+  const normalized = input.replace(/\\/g, '/').trim();
+  if (!normalized) {
+    return '';
+  }
+  if (normalized === '/') {
+    return '/';
+  }
+  return normalized.replace(/\/+$/, '');
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireApiUser(request);
   if ('response' in auth) {
@@ -53,20 +64,33 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { path, agent, approvalPolicy } = body;
+    const { path, agent, approvalPolicy } = body as {
+      path?: string;
+      agent?: string;
+      approvalPolicy?: string;
+    };
     const normalizedPolicy = approvalPolicy === 'on-request'
       || approvalPolicy === 'on-failure'
       || approvalPolicy === 'never'
       || approvalPolicy === 'yolo'
       ? approvalPolicy
       : 'on-request';
+    const normalizedPath = typeof path === 'string' ? normalizeProjectPath(path) : '';
 
-    if (!path || !agent) {
+    const normalizedAgent = agent === 'claude' || agent === 'codex' || agent === 'gemini' ? agent : null;
+
+    if (!normalizedPath || !normalizedAgent) {
       return NextResponse.json({ error: 'Path and agent are required' }, { status: 400 });
     }
 
-    const session = await createSession({ path, agent, approvalPolicy: normalizedPolicy });
-    return NextResponse.json({ session });
+    const existingSessions = await listSessions();
+    const existing = existingSessions.find((session) => normalizeProjectPath(session.projectName) === normalizedPath);
+    if (existing) {
+      return NextResponse.json({ session: existing, reused: true });
+    }
+
+    const session = await createSession({ path: normalizedPath, agent: normalizedAgent, approvalPolicy: normalizedPolicy });
+    return NextResponse.json({ session, reused: false });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create session';
     return NextResponse.json({ error: message }, { status: 500 });

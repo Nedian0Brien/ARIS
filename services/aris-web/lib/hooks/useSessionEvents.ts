@@ -55,7 +55,27 @@ function areEventsEqual(prev: UiEvent[], next: UiEvent[]): boolean {
   return true;
 }
 
-export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], initialHasMoreBefore = false) {
+function appendChatFilters(
+  params: URLSearchParams,
+  chatId: string | null,
+  includeUnassigned: boolean,
+) {
+  if (!chatId) {
+    return;
+  }
+  params.set('chatId', chatId);
+  if (includeUnassigned) {
+    params.set('includeUnassigned', '1');
+  }
+}
+
+export function useSessionEvents(
+  sessionId: string,
+  chatId: string | null,
+  includeUnassigned: boolean,
+  initialEvents: UiEvent[],
+  initialHasMoreBefore = false,
+) {
   const [events, setEvents] = useState<UiEvent[]>(initialEvents);
   const [hasMoreBefore, setHasMoreBefore] = useState<boolean>(initialHasMoreBefore);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
@@ -74,7 +94,7 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], in
     terminalStatusRef.current = null;
     setIsLoadingOlder(false);
     setSyncError(null);
-  }, [sessionId, initialEvents, initialHasMoreBefore]);
+  }, [sessionId, chatId, includeUnassigned, initialEvents, initialHasMoreBefore]);
 
   useEffect(() => {
     eventsRef.current = events;
@@ -91,6 +111,7 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], in
 
     const params = new URLSearchParams();
     params.set('limit', String(EVENTS_PAGE_LIMIT));
+    appendChatFilters(params, chatId, includeUnassigned);
     const latestId = eventsRef.current[eventsRef.current.length - 1]?.id;
     if (latestId) {
       params.set('after', latestId);
@@ -125,7 +146,7 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], in
       }
       setSyncError(null);
     }
-  }, [sessionId]);
+  }, [sessionId, chatId, includeUnassigned]);
 
   const loadOlder = useCallback(async (): Promise<{ loadedCount: number; hasMoreBefore: boolean }> => {
     if (loadingOlderRef.current || !hasMoreBeforeRef.current) {
@@ -145,6 +166,7 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], in
       const params = new URLSearchParams();
       params.set('before', oldestId);
       params.set('limit', String(EVENTS_PAGE_LIMIT));
+      appendChatFilters(params, chatId, includeUnassigned);
 
       const response = await fetch(
         `/api/runtime/sessions/${encodeURIComponent(sessionId)}/events?${params.toString()}`,
@@ -184,7 +206,7 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], in
       loadingOlderRef.current = false;
       setIsLoadingOlder(false);
     }
-  }, [sessionId]);
+  }, [sessionId, chatId, includeUnassigned]);
 
   useEffect(() => {
     let disposed = false;
@@ -266,8 +288,15 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], in
 
       closeStream();
       const latestId = eventsRef.current[eventsRef.current.length - 1]?.id;
-      const query = latestId ? `?after=${encodeURIComponent(latestId)}` : '';
-      const stream = new EventSource(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/events/stream${query}`);
+      const params = new URLSearchParams();
+      appendChatFilters(params, chatId, includeUnassigned);
+      if (latestId) {
+        params.set('after', latestId);
+      }
+      const query = params.toString();
+      const stream = new EventSource(
+        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/events/stream${query ? `?${query}` : ''}`,
+      );
       eventSource = stream;
       let opened = false;
 
@@ -365,7 +394,7 @@ export function useSessionEvents(sessionId: string, initialEvents: UiEvent[], in
         window.clearTimeout(reconnectTimer);
       }
     };
-  }, [sessionId, refreshEvents]);
+  }, [sessionId, chatId, includeUnassigned, refreshEvents]);
 
   const addEvent = (event: UiEvent) => {
     setEvents((prev) => mergeEvents([...prev, event]));
