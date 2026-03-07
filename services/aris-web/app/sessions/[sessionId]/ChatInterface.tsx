@@ -2352,6 +2352,7 @@ export function ChatInterface({
             {streamItems.map((item) => {
               if (item.type === 'action_overflow') {
                 const overflowKindMeta = getEventKindMeta(item.kind);
+                const OverflowKindIcon = overflowKindMeta.Icon;
                 const title = item.expanded
                   ? '반복 행동 접기'
                   : `중간 행동 ${item.hiddenCount}개 펼치기`;
@@ -2366,19 +2367,28 @@ export function ChatInterface({
                       aria-expanded={item.expanded}
                     >
                       <div className={styles.actionOverflowContent}>
-                        <span className={styles.actionOverflowLabel}>
-                          {item.expanded ? (
-                            <>
-                              접기
-                              <ChevronUp size={14} />
-                            </>
-                          ) : (
-                            <>
+                        {item.expanded ? (
+                          <span className={styles.actionOverflowLabel}>
+                            접기
+                            <ChevronUp size={14} />
+                          </span>
+                        ) : (
+                          <>
+                            <div className={styles.actionOverflowLeft}>
+                              <span className={`${styles.kindChip} ${getToneClass(overflowKindMeta.tone)}`}>
+                                <OverflowKindIcon size={12} />
+                                {overflowKindMeta.label}
+                              </span>
+                            </div>
+                            <span className={styles.actionOverflowLabel}>
                               {item.hiddenCount}개의 행동 더 보기
                               <ChevronDown size={14} />
-                            </>
-                          )}
-                        </span>
+                            </span>
+                            <div className={styles.actionOverflowRight}>
+                              <span className={styles.actionOverflowCount}>+{item.hiddenCount}</span>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </button>
                   </article>
