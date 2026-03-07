@@ -1713,6 +1713,438 @@
   animation: spin 0.8s linear infinite;
 }
 
+/* ═══════════════════════════════════════════
+   New Composer Card (redesigned)
+═══════════════════════════════════════════ */
+
+.composerCard {
+  background: rgba(255, 255, 255, 0.99);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 18px;
+  box-shadow:
+    0 4px 24px rgba(15, 23, 42, 0.1),
+    0 1px 4px rgba(15, 23, 42, 0.06),
+    0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+  overflow: visible;
+}
+
+/* ── Toolbar ── */
+.composerToolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.42rem 0.6rem 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  min-height: 34px;
+}
+
+.modelSelectorWrap {
+  position: relative;
+}
+
+.modelSelectorBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.18rem 0.42rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #475569;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.14s, border-color 0.14s;
+  line-height: 1;
+}
+
+.modelSelectorBtn:hover {
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.32);
+}
+
+.modelDropdown {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  background: rgba(255, 255, 255, 0.99);
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.13);
+  padding: 0.3rem;
+  min-width: 210px;
+  z-index: 350;
+}
+
+.modelOption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.46rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #334155;
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.modelOption:hover {
+  background: rgba(239, 246, 255, 0.8);
+}
+
+.modelOptionActive {
+  background: rgba(239, 246, 255, 0.9);
+  color: #1d4ed8;
+}
+
+.modelOptionBadge {
+  font-size: 0.64rem;
+  font-weight: 600;
+  color: #64748b;
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 4px;
+  padding: 0.1rem 0.32rem;
+}
+
+.modelDropdownNote {
+  font-size: 0.67rem;
+  color: #94a3b8;
+  padding: 0.3rem 0.6rem 0.2rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  margin-top: 0.2rem;
+}
+
+.composerRunningBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #1e40af;
+  margin-left: auto;
+}
+
+/* ── Context chips ── */
+.composerChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.32rem;
+  padding: 0.4rem 0.6rem 0;
+}
+
+.contextChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.26rem;
+  padding: 0.18rem 0.38rem 0.18rem 0.42rem;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: rgba(239, 246, 255, 0.9);
+  border: 1px solid rgba(147, 197, 253, 0.42);
+  color: #1d4ed8;
+  max-width: 220px;
+}
+
+.contextChipLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contextChipRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  line-height: 1;
+  transition: color 0.12s;
+}
+
+.contextChipRemove:hover {
+  color: #b91c1c;
+}
+
+/* ── Input row ── */
+.composerInputRow {
+  display: flex;
+  align-items: flex-end;
+  padding: 0.4rem 0.44rem;
+  gap: 0.32rem;
+}
+
+/* ── + button & menu ── */
+.plusMenuWrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.composerPlusBtn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  background: transparent;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+  flex-shrink: 0;
+}
+
+.composerPlusBtn:hover:not(:disabled) {
+  background: rgba(148, 163, 184, 0.1);
+  color: #0f172a;
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
+.composerPlusBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.composerPlusBtnActive {
+  background: rgba(239, 246, 255, 0.85);
+  color: #1d4ed8;
+  border-color: rgba(147, 197, 253, 0.5);
+}
+
+.plusMenu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  background: rgba(255, 255, 255, 0.99);
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 12px;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.13);
+  padding: 0.3rem;
+  min-width: 180px;
+  z-index: 350;
+}
+
+.plusMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 0.48rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #334155;
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.plusMenuItem:hover {
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.plusMenuInputArea {
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+  padding: 0.4rem;
+}
+
+.plusMenuInputLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.plusMenuFileInput {
+  font-size: 0.78rem;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  padding: 0.36rem 0.52rem;
+  color: #0f172a;
+  background: #f8fafc;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.14s;
+}
+
+.plusMenuFileInput:focus {
+  border-color: rgba(59, 130, 246, 0.45);
+  background: #fff;
+}
+
+.plusMenuTextInput {
+  font-size: 0.78rem;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  padding: 0.36rem 0.52rem;
+  color: #0f172a;
+  background: #f8fafc;
+  outline: none;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.45;
+  transition: border-color 0.14s;
+}
+
+.plusMenuTextInput:focus {
+  border-color: rgba(59, 130, 246, 0.45);
+  background: #fff;
+}
+
+.plusMenuError {
+  font-size: 0.72rem;
+  color: #b91c1c;
+}
+
+.plusMenuActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.32rem;
+}
+
+.plusMenuCancelBtn {
+  padding: 0.28rem 0.65rem;
+  border-radius: 7px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #64748b;
+  background: transparent;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.plusMenuCancelBtn:hover {
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.plusMenuConfirmBtn {
+  padding: 0.28rem 0.65rem;
+  border-radius: 7px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #fff;
+  background: #2563eb;
+  border: none;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.plusMenuConfirmBtn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.plusMenuConfirmBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Textarea (inside card) ── */
+.composerInput {
+  flex: 1;
+  resize: none;
+  overflow-y: auto;
+  min-height: 36px;
+  max-height: 180px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0.45rem 0.2rem;
+  font-size: 15px;
+  line-height: 1.5;
+  outline: none;
+  color: #0f172a;
+}
+
+.composerInput:focus {
+  border: none;
+  box-shadow: none;
+}
+
+/* ── Send button ── */
+.composerSendBtn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.composerSendBtn:hover:not(:disabled) {
+  background: #1d4ed8;
+  transform: scale(1.05);
+}
+
+.composerSendBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(191, 219, 254, 0.95);
+}
+
+.composerSendBtn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Stop button ── */
+.composerStopBtn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(254, 242, 242, 0.92);
+  color: #b91c1c;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.14s;
+}
+
+.composerStopBtn:hover:not(:disabled) {
+  background: rgba(254, 226, 226, 0.98);
+}
+
+.composerStopBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(252, 165, 165, 0.5);
+}
+
+.composerStopBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Bottom hint ── */
+.composerHint {
+  padding: 0 0.72rem 0.38rem;
+  font-size: 0.64rem;
+  color: #94a3b8;
+  text-align: right;
+  user-select: none;
+}
+
 .healthRow {
   display: inline-flex;
   align-items: center;
@@ -1913,21 +2345,19 @@
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.16), 0 0 0 1px rgba(255, 255, 255, 0.45);
   }
 
-  .runningStatusBar {
-    padding: 0.38rem 0.46rem;
-  }
-
-  .runningStatusText {
-    font-size: 0.77rem;
+  .composerCard {
+    border-radius: 16px;
   }
 
   .composerInput {
     font-size: 16px;
   }
 
-  .sendIconButton {
-    width: 56px;
-    height: 56px;
+  .composerSendBtn,
+  .composerStopBtn,
+  .composerPlusBtn {
+    width: 38px;
+    height: 38px;
   }
 
   .messageBubble {
