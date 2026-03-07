@@ -290,7 +290,18 @@ export function FileExplorer() {
 
   const markdownHtml = useMemo(() => {
     if (!editingFile || !isPreview) return '';
-    return marked.parse(editingFile.content, { breaks: true, gfm: true }) as string;
+    const renderer = new marked.Renderer();
+    renderer.code = ({ text, lang }) => {
+      const validLang = lang && Prism.languages[lang] ? lang : null;
+      const highlighted = validLang
+        ? Prism.highlight(text, Prism.languages[validLang], validLang)
+        : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const langBadge = validLang
+        ? `<span class="md-code-lang">${validLang}</span>`
+        : '';
+      return `<div class="md-code-block"><div class="md-code-header">${langBadge}</div><pre class="md-code-pre"><code>${highlighted}</code></pre></div>`;
+    };
+    return marked.parse(editingFile.content, { breaks: true, gfm: true, renderer }) as string;
   }, [editingFile, isPreview]);
 
   const displayLanguageName = (fileName: string) => {

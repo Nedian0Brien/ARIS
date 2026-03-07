@@ -582,3 +582,84 @@
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ── 마크다운 미리보기 코드 블록 구문 강조 ── */
+.markdownBody :global(.md-code-block) {
+  margin: 0.75rem 0;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.95);
+  overflow: hidden;
+}
+
+.markdownBody :global(.md-code-header) {
+  display: flex;
+  align-items: center;
+  padding: 0.3rem 0.6rem 0;
+  min-height: 1.4rem;
+}
+
+.markdownBody :global(.md-code-lang) {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.15);
+  padding: 0.06rem 0.4rem;
+  border-radius: 999px;
+}
+
+.markdownBody :global(.md-code-pre) {
+  margin: 0;
+  padding: 0.4rem 0.6rem 0.6rem;
+  overflow-x: auto;
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.markdownBody :global(.md-code-pre code) {
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* Prism 토큰 색상 */
+.markdownBody :global(.token.comment),
+.markdownBody :global(.token.prolog),
+.markdownBody :global(.token.doctype),
+.markdownBody :global(.token.cdata) { color: #64748b; font-style: italic; }
+
+.markdownBody :global(.token.punctuation) { color: #94a3b8; }
+
+.markdownBody :global(.token.property),
+.markdownBody :global(.token.tag),
+.markdownBody :global(.token.boolean),
+.markdownBody :global(.token.number),
+.markdownBody :global(.token.constant),
+.markdownBody :global(.token.symbol) { color: #f472b6; }
+
+.markdownBody :global(.token.selector),
+.markdownBody :global(.token.attr-name),
+.markdownBody :global(.token.string),
+.markdownBody :global(.token.char),
+.markdownBody :global(.token.builtin) { color: #86efac; }
+
+.markdownBody :global(.token.operator),
+.markdownBody :global(.token.entity),
+.markdownBody :global(.token.url) { color: #67e8f9; }
+
+.markdownBody :global(.token.atrule),
+.markdownBody :global(.token.attr-value),
+.markdownBody :global(.token.keyword) { color: #c4b5fd; }
+
+.markdownBody :global(.token.function),
+.markdownBody :global(.token.class-name) { color: #93c5fd; }
+
+.markdownBody :global(.token.regex),
+.markdownBody :global(.token.important),
+.markdownBody :global(.token.variable) { color: #fde68a; }
