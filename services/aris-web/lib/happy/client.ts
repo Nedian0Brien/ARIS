@@ -69,6 +69,8 @@ type GetSessionEventsOptions = {
 
 const DEFAULT_EVENTS_PAGE_LIMIT = 40;
 const MAX_EVENTS_PAGE_LIMIT = 200;
+const HAPPY_MESSAGES_BATCH_LIMIT = 500;
+const HAPPY_MESSAGES_MAX_PAGES = 1000;
 
 function clampEventsLimit(limit?: number): number {
   const next = Number.isFinite(limit) ? Math.floor(Number(limit)) : DEFAULT_EVENTS_PAGE_LIMIT;
@@ -155,6 +157,20 @@ function filterEventsByChat(events: UiEvent[], options: GetSessionEventsOptions)
   });
 }
 
+function toMessageSeq(value: unknown): number | null {
+  const rec = asObject(value);
+  if (!rec) {
+    return null;
+  }
+
+  const raw = rec.seq;
+  const parsed = typeof raw === 'number' ? raw : Number.parseInt(String(raw ?? ''), 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+  return parsed;
+}
+
 async function fetchHappy(path: string, init?: RequestInit): Promise<unknown> {
   if (!env.HAPPY_SERVER_TOKEN) {
     throw new Error('HAPPY_SERVER_TOKEN이 설정되어 있지 않습니다.');
@@ -189,6 +205,42 @@ async function fetchHappy(path: string, init?: RequestInit): Promise<unknown> {
   }
 
   return response.json();
+}
+
+async function listAllSessionMessages(sessionId: string): Promise<unknown[]> {
+  let afterSeq = 0;
+  const allMessages: unknown[] = [];
+
+  for (let page = 0; page < HAPPY_MESSAGES_MAX_PAGES; page += 1) {
+    const query = new URLSearchParams({
+      after_seq: String(afterSeq),
+      limit: String(HAPPY_MESSAGES_BATCH_LIMIT),
+    });
+    const raw = await fetchHappy(`/v3/sessions/${encodeURIComponent(sessionId)}/messages?${query.toString()}`);
+    const batch = extractArrayPayload(raw, 'messages');
+    if (batch.length === 0) {
+      break;
+    }
+
+    allMessages.push(...batch);
+
+    const maxSeq = batch.reduce((max, item) => {
+      const seq = toMessageSeq(item);
+      if (seq === null || seq <= max) {
+        return max;
+      }
+      return seq;
+    }, afterSeq);
+
+    const response = asObject(raw);
+    const hasMore = response?.hasMore === true;
+    if (!hasMore || maxSeq <= afterSeq) {
+      break;
+    }
+    afterSeq = maxSeq;
+  }
+
+  return allMessages;
 }
 
 export async function getRuntimeHealth(): Promise<{ api: 'up' | 'down'; happy: 'up' | 'down'; lastSyncAt: string | null }> {
@@ -276,8 +328,7 @@ export async function getSessionEvents(
   const sessions = extractArrayPayload(sessionRaw, 'sessions');
   const found = findSessionById(sessions, sessionId) ?? sessions[0] ?? { id: sessionId };
 
-  const messageRaw = await fetchHappy(`/v3/sessions/${encodeURIComponent(sessionId)}/messages`);
-  const messages = extractArrayPayload(messageRaw, 'messages');
+  const messages = await listAllSessionMessages(sessionId);
 
   const sessionDetail = normalizeSessionDetail(found);
 

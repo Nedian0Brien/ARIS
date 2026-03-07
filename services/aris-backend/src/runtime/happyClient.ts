@@ -24,6 +24,8 @@ const AGENT_EXTRA_PATHS = [
 const DEFAULT_APPROVAL_POLICY = normalizeApprovalPolicy(process.env.CODEX_APPROVAL_POLICY, 'on-request');
 const CODEX_SANDBOX_MODE = (process.env.CODEX_SANDBOX_MODE || 'workspace-write').trim();
 const CODEX_RUNTIME_MODE = (process.env.CODEX_RUNTIME_MODE || 'app-server').trim().toLowerCase();
+const HAPPY_MESSAGES_BATCH_LIMIT = 500;
+const HAPPY_MESSAGES_MAX_PAGES = 1000;
 
 type RuntimeAgent = RuntimeSession['metadata']['flavor'];
 type PermissionState = PermissionRequest['state'];
@@ -1837,11 +1839,46 @@ export class HappyRuntimeStore {
       throw new Error('SESSION_NOT_FOUND');
     }
 
-    const response = await this.request<HappyMessageResponse>(`/v3/sessions/${encodeURIComponent(sessionId)}/messages`);
-    return response.messages
+    const messages = await this.listAllMessages(sessionId);
+    return messages
       .filter((message) => typeof message.id === 'string')
       .map((message) => toRuntimeMessage(sessionId, message))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  private async listAllMessages(sessionId: string): Promise<HappyBackendMessage[]> {
+    let afterSeq = 0;
+    const allMessages: HappyBackendMessage[] = [];
+
+    for (let page = 0; page < HAPPY_MESSAGES_MAX_PAGES; page += 1) {
+      const query = new URLSearchParams({
+        after_seq: String(afterSeq),
+        limit: String(HAPPY_MESSAGES_BATCH_LIMIT),
+      });
+      const response = await this.request<HappyMessageResponse>(
+        `/v3/sessions/${encodeURIComponent(sessionId)}/messages?${query.toString()}`,
+      );
+      const batch = Array.isArray(response.messages) ? response.messages : [];
+      if (batch.length === 0) {
+        break;
+      }
+
+      allMessages.push(...batch);
+
+      const maxSeq = batch.reduce((max, message) => {
+        if (!Number.isFinite(message.seq) || message.seq <= max) {
+          return max;
+        }
+        return message.seq;
+      }, afterSeq);
+
+      if (response.hasMore !== true || maxSeq <= afterSeq) {
+        break;
+      }
+      afterSeq = maxSeq;
+    }
+
+    return allMessages;
   }
 
   async appendMessage(sessionId: string, input: HappyRuntimeAppendInput): Promise<RuntimeMessage> {
