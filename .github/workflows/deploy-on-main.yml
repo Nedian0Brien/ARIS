@@ -89,35 +89,40 @@ jobs:
     runs-on: self-hosted
     needs: detect-changes
     if: needs.detect-changes.outputs.run_web == 'true' || needs.detect-changes.outputs.run_backend == 'true'
+    env:
+      DEPLOY_REPO_DIR: /home/ubuntu/project/web-agentic-coding
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Setup Node.js
         if: needs.detect-changes.outputs.run_backend == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
-          cache-dependency-path: services/aris-backend/package-lock.json
+
+      - name: Sync deployment repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C "$DEPLOY_REPO_DIR" fetch origin main
+          git -C "$DEPLOY_REPO_DIR" checkout main
+          git -C "$DEPLOY_REPO_DIR" pull --ff-only origin main
 
       - name: Install backend dependencies
         if: needs.detect-changes.outputs.run_backend == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          npm --prefix services/aris-backend ci
+          npm --prefix "$DEPLOY_REPO_DIR/services/aris-backend" ci
 
       - name: Deploy backend (PM2 zero-downtime)
         if: needs.detect-changes.outputs.run_backend == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          ./deploy/deploy_backend_zero_downtime.sh
+          "$DEPLOY_REPO_DIR/deploy/deploy_backend_zero_downtime.sh"
 
       - name: Deploy web (blue/green zero-downtime)
         if: needs.detect-changes.outputs.run_web == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          ./deploy/deploy_web_zero_downtime.sh
+          "$DEPLOY_REPO_DIR/deploy/deploy_web_zero_downtime.sh"
