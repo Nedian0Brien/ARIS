@@ -16,9 +16,15 @@ import {
   ChevronUp,
   ChevronRight,
   CircleAlert,
+  Clock,
   Cpu,
+  File,
+  FileCode,
   FilePenLine,
   FileSearch,
+  FileText,
+  Folder,
+  FolderOpen,
   FolderTree,
   MessageSquarePlus,
   MessageSquareText,
@@ -34,6 +40,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import type { ApprovalPolicy, PermissionRequest, SessionChat, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '@/components/ui/AgentIcons';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
@@ -54,6 +61,33 @@ const MOBILE_LAYOUT_MAX_WIDTH_PX = 960;
 const PREVIEW_MAX_LINES = 12;
 const PREVIEW_MAX_CHARS = 600;
 const COMPOSER_MIN_HEIGHT_PX = 36;
+const RECENT_FILES_STORAGE_KEY = 'aris:recent-file-attachments';
+const RECENT_FILES_MAX = 5;
+
+function getRecentFiles(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_FILES_STORAGE_KEY) ?? '[]') as string[];
+  } catch { return []; }
+}
+
+function saveRecentFile(filePath: string): void {
+  try {
+    const prev = getRecentFiles().filter((p) => p !== filePath);
+    localStorage.setItem(RECENT_FILES_STORAGE_KEY, JSON.stringify([filePath, ...prev].slice(0, RECENT_FILES_MAX)));
+  } catch { /* localStorage 사용 불가 시 무시 */ }
+}
+
+function getFileIcon(name: string, isDirectory: boolean): React.ReactNode {
+  if (isDirectory) return <Folder size={14} />;
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
+  if (['ts', 'tsx', 'js', 'jsx', 'py', 'go', 'rs', 'java', 'c', 'cpp', 'cs'].includes(ext)) {
+    return <FileCode size={14} />;
+  }
+  if (['md', 'txt', 'yaml', 'yml', 'toml', 'json'].includes(ext)) {
+    return <FileText size={14} />;
+  }
+  return <File size={14} />;
+}
 const COMPOSER_MAX_HEIGHT_PX = 180;
 const ACTION_COLLAPSE_THRESHOLD = 4;
 const READ_CURSOR_SYNC_DEBOUNCE_MS = 800;
@@ -1432,6 +1466,8 @@ export function ChatInterface({
   const [fileBrowserQuery, setFileBrowserQuery] = useState('');
   const [fileBrowserSearchResults, setFileBrowserSearchResults] = useState<Array<{ name: string; path: string; isDirectory: boolean }> | null>(null);
   const [fileBrowserSearchLoading, setFileBrowserSearchLoading] = useState(false);
+  const [recentAttachments, setRecentAttachments] = useState<string[]>([]);
+  const [isMounted, setIsMounted] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const chatSidebarRef = useRef<HTMLDivElement>(null);
   const chatShellRef = useRef<HTMLDivElement>(null);
@@ -1514,6 +1550,8 @@ export function ChatInterface({
     setChatVisibleCount((prev) => Math.min(prev + SIDEBAR_CHAT_PAGE_SIZE, chats.length));
   }, [chats.length]);
 
+  useEffect(() => { setIsMounted(true); }, []);
+
   useEffect(() => {
     setActiveRecentEventId((current) => {
       if (current && recentUserEvents.some((event) => event.id === current)) {
@@ -1589,6 +1627,7 @@ export function ChatInterface({
     setPlusMenuMode('file');
     setFileBrowserQuery('');
     setFileBrowserSearchResults(null);
+    setRecentAttachments(getRecentFiles());
     void fetchFileBrowserDir('/');
   }, [fetchFileBrowserDir]);
 
@@ -1623,6 +1662,7 @@ export function ChatInterface({
       if (!res.ok || data.error) throw new Error(data.error ?? '파일을 읽을 수 없습니다.');
       const name = filePath.split('/').filter(Boolean).pop() ?? filePath;
       setContextItems((prev) => [...prev, { id: genId(), type: 'file', path: filePath, content: data.content ?? '', name }]);
+      saveRecentFile(filePath);
       setPlusMenuMode('closed');
     } catch (err) {
       setFileBrowserError(err instanceof Error ? err.message : '파일 읽기 실패');
@@ -3123,7 +3163,7 @@ export function ChatInterface({
     </div>
 
     {/* ── 파일 탐색기 모달 ── */}
-    {plusMenuMode === 'file' && (
+    {isMounted && plusMenuMode === 'file' && createPortal(
       <div className={styles.modalOverlay} onClick={() => setPlusMenuMode('closed')}>
         <div className={styles.fileBrowserModal} onClick={(e) => e.stopPropagation()}>
           <div className={styles.fileBrowserHeader}>
@@ -3179,9 +3219,7 @@ export function ChatInterface({
                     }
                   }}
                 >
-                  <span className={styles.fileBrowserItemIcon}>
-                    {item.isDirectory ? '📁' : '📄'}
-                  </span>
+                  <span className={styles.fileBrowserItemIcon}>{getFileIcon(item.name, item.isDirectory)}</span>
                   <span className={styles.fileBrowserItemName}>{item.name}</span>
                   <span className={styles.fileBrowserItemPath}>{item.path}</span>
                 </button>
@@ -3189,6 +3227,30 @@ export function ChatInterface({
             </div>
           ) : (
             <>
+              {/* 최근 파일 */}
+              {recentAttachments.length > 0 && (
+                <div className={styles.fileBrowserRecent}>
+                  <div className={styles.fileBrowserSectionLabel}>
+                    <Clock size={11} /> 최근 파일
+                  </div>
+                  {recentAttachments.map((filePath) => {
+                    const name = filePath.split('/').filter(Boolean).pop() ?? filePath;
+                    return (
+                      <button
+                        key={filePath}
+                        type="button"
+                        className={`${styles.fileBrowserItem} ${styles.fileBrowserFile}`}
+                        onClick={() => { void handleFileBrowserSelect(filePath); }}
+                      >
+                        <span className={styles.fileBrowserItemIcon}>{getFileIcon(name, false)}</span>
+                        <span className={styles.fileBrowserItemName}>{name}</span>
+                        <span className={styles.fileBrowserItemPath}>{filePath}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               <div className={styles.fileBrowserPath}>
                 {fileBrowserParentPath !== null && (
                   <button
@@ -3222,9 +3284,7 @@ export function ChatInterface({
                       }
                     }}
                   >
-                    <span className={styles.fileBrowserItemIcon}>
-                      {item.isDirectory ? '📁' : '📄'}
-                    </span>
+                    <span className={styles.fileBrowserItemIcon}>{getFileIcon(item.name, item.isDirectory)}</span>
                     <span className={styles.fileBrowserItemName}>{item.name}</span>
                   </button>
                 ))}
@@ -3235,7 +3295,8 @@ export function ChatInterface({
             </>
           )}
         </div>
-      </div>
+      </div>,
+      document.body
     )}
     </>
   );
