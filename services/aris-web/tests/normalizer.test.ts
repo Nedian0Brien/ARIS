@@ -104,6 +104,14 @@ describe('classifyEventKind', () => {
     const kind = classifyEventKind({ text: 'Here is a summary of changes' });
     expect(kind).toBe('text_reply');
   });
+
+  it('classifies apply_patch text hints as file_write even without command field', () => {
+    const kind = classifyEventKind({
+      type: 'command_execution',
+      text: 'apply_patch completed successfully',
+    });
+    expect(kind).toBe('file_write');
+  });
 });
 
 describe('normalizeSessions', () => {
@@ -239,5 +247,18 @@ describe('normalizeEvents', () => {
 
     expect(events[0].kind).toBe('docker_execution');
     expect(events[0].action?.command).toBe('docker compose ps');
+  });
+
+  it('classifies apply_patch text as file_write when command extraction is unavailable', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e6',
+        type: 'message',
+        text: 'apply_patch completed successfully',
+        meta: { actionType: 'command_execution' },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('file_write');
   });
 });
