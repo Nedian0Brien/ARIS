@@ -93,6 +93,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        if: needs.detect-changes.outputs.run_backend == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: services/aris-backend/package-lock.json
+
+      - name: Install backend dependencies
+        if: needs.detect-changes.outputs.run_backend == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --prefix services/aris-backend ci
+
       - name: Deploy backend (PM2 zero-downtime)
         if: needs.detect-changes.outputs.run_backend == 'true'
         shell: bash
