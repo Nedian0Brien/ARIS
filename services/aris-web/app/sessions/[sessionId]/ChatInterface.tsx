@@ -1202,6 +1202,8 @@ export function ChatInterface({
   );
   const activeChatIdResolved = activeChat?.id ?? null;
   const includeUnassignedEvents = Boolean(activeChat?.isDefault);
+  const sessionTitle = alias || projectName;
+  const currentChatTitle = activeChat?.title || '새 채팅';
   const displayName = activeChat?.title || alias || projectName;
   const {
     events,
@@ -2130,8 +2132,15 @@ export function ChatInterface({
               <agentMeta.Icon size={20} />
             </span>
             <div className={styles.centerHeaderInfo}>
-              <h2 className={styles.centerTitle}>{displayName}</h2>
-              <span className={styles.centerAgentLabel}>{agentMeta.label} Agent · {alias || projectName}</span>
+              <h2 className={styles.centerTitle}>{isMobileLayout ? sessionTitle : displayName}</h2>
+              {isMobileLayout ? (
+                <div className={styles.centerMetaRow}>
+                  <span className={styles.centerAgentLabel}>{agentMeta.label}</span>
+                  <span className={styles.centerChatLabel}>{currentChatTitle}</span>
+                </div>
+              ) : (
+                <span className={styles.centerAgentLabel}>{agentMeta.label} Agent · {sessionTitle}</span>
+              )}
             </div>
             <div className={styles.centerHeaderActions}>
               <span

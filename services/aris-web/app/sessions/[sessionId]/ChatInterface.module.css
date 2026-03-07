@@ -543,6 +543,26 @@
   letter-spacing: 0.01em;
 }
 
+.centerMetaRow {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.centerChatLabel {
+  margin-left: auto;
+  min-width: 0;
+  max-width: 60%;
+  font-size: 0.69rem;
+  font-weight: 600;
+  color: #64748b;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .connectionPill {
   display: inline-flex;
   align-items: center;
@@ -1860,8 +1880,20 @@
     height: 36px;
   }
 
+  .centerTitle {
+    font-size: 1.04rem;
+  }
+
+  .centerMetaRow {
+    gap: 0.38rem;
+  }
+
   .centerAgentLabel {
-    display: none;
+    font-size: 0.66rem;
+  }
+
+  .centerChatLabel {
+    font-size: 0.64rem;
   }
 
   .stream {
