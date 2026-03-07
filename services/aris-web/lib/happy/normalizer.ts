@@ -425,7 +425,15 @@ export function classifyEventKind(input: { type?: string; text?: string; command
   ) {
     return 'file_list';
   }
-  if (type.includes('diff') || type.includes('write') || text.includes('patched') || text.includes('modified')) {
+  if (
+    type.includes('diff')
+    || type.includes('write')
+    || text.includes('patched')
+    || text.includes('modified')
+    || text.includes('apply_patch')
+    || text.includes('file_change')
+    || text.includes('filechange')
+  ) {
     return 'file_write';
   }
   if (type.includes('read') || text.includes('opened') || text.includes('file:')) {

@@ -679,6 +679,34 @@ function inferCodexFileWriteItem(item: Record<string, unknown>): {
     return null;
   }
 
+  const pickPathFromArray = (value: unknown): string => {
+    if (!Array.isArray(value)) {
+      return '';
+    }
+    for (const entry of value) {
+      if (typeof entry === 'string' && entry.trim()) {
+        return entry.trim();
+      }
+      const rec = asRecord(entry);
+      const candidate = asString(
+        rec?.path,
+        asString(
+          rec?.file_path,
+          asString(rec?.filePath, asString(rec?.target_path, asString(rec?.targetPath, ''))),
+        ),
+      ).trim();
+      if (candidate) {
+        return candidate;
+      }
+    }
+    return '';
+  };
+
+  const arrayPath = pickPathFromArray(item.paths)
+    || pickPathFromArray(item.files)
+    || pickPathFromArray(item.changed_files)
+    || pickPathFromArray(item.changedFiles);
+
   const path = asString(
     item.path,
     asString(
@@ -687,14 +715,14 @@ function inferCodexFileWriteItem(item: Record<string, unknown>): {
         item.filePath,
         asString(
           item.target_path,
-          asString(item.targetPath, asString(item.relative_path, asString(item.relativePath, ''))),
+          asString(item.targetPath, asString(item.relative_path, asString(item.relativePath, arrayPath))),
         ),
       ),
     ),
   ).trim() || undefined;
   const commandRaw = asString(item.command, '').trim();
   const command = unwrapShellCommand(commandRaw || 'apply_patch');
-  const detail = stripAnsi(asString(
+  const detailRaw = stripAnsi(asString(
     item.diff,
     asString(
       item.patch,
@@ -706,8 +734,13 @@ function inferCodexFileWriteItem(item: Record<string, unknown>): {
         ),
       ),
     ),
-  )).trim() || undefined;
+  )).trim();
+  const detail = detailRaw && detailRaw.toLowerCase() !== 'apply_patch' ? detailRaw : undefined;
   const status = asString(item.status, '').trim() || undefined;
+
+  if (!path && !detail) {
+    return null;
+  }
 
   return { command, path, detail, status };
 }
