@@ -388,16 +388,22 @@ export function classifyEventKind(input: { type?: string; text?: string; command
   const command = input.command ?? '';
 
   const kindFromType = pickKindFromMeta(null, type);
+  const isActionContext = (
+    command.trim().length > 0
+    || kindFromType === 'file_read'
+    || kindFromType === 'file_list'
+    || kindFromType === 'file_write'
+    || kindFromType === 'command_execution'
+    || kindFromType === 'run_execution'
+    || kindFromType === 'exec_execution'
+    || type.includes('tool')
+    || type.includes('command')
+    || text.includes('$ ')
+    || text.includes('exit code')
+  );
   if (
-    hasWriteShellIntent(command)
-    && (
-      kindFromType === null
-      || kindFromType === 'file_read'
-      || kindFromType === 'file_list'
-      || kindFromType === 'command_execution'
-      || kindFromType === 'run_execution'
-      || kindFromType === 'exec_execution'
-    )
+    isActionContext
+    && hasWriteShellIntent(command)
   ) {
     return 'file_write';
   }
@@ -425,14 +431,18 @@ export function classifyEventKind(input: { type?: string; text?: string; command
   ) {
     return 'file_list';
   }
+  if (type.includes('diff') || type.includes('write')) {
+    return 'file_write';
+  }
   if (
-    type.includes('diff')
-    || type.includes('write')
-    || text.includes('patched')
-    || text.includes('modified')
-    || text.includes('apply_patch')
-    || text.includes('file_change')
-    || text.includes('filechange')
+    isActionContext
+    && (
+      text.includes('patched')
+      || text.includes('modified')
+      || text.includes('apply_patch')
+      || text.includes('file_change')
+      || text.includes('filechange')
+    )
   ) {
     return 'file_write';
   }

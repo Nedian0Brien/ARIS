@@ -112,6 +112,14 @@ describe('classifyEventKind', () => {
     });
     expect(kind).toBe('file_write');
   });
+
+  it('keeps plain text mentions of apply_patch as text_reply', () => {
+    const kind = classifyEventKind({
+      type: 'message',
+      text: '다음에는 apply_patch 대신 다른 방법을 써보겠습니다.',
+    });
+    expect(kind).toBe('text_reply');
+  });
 });
 
 describe('normalizeSessions', () => {
