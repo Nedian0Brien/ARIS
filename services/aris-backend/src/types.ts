@@ -12,6 +12,7 @@ export type RuntimeSession = {
     flavor: AgentFlavor;
     path: string;
     approvalPolicy: ApprovalPolicy;
+    model?: string;
   };
   state: {
     status: SessionStatus;

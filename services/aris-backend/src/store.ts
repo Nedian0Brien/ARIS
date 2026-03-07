@@ -17,9 +17,21 @@ type CreateSessionInput = {
   path: string;
   flavor: RuntimeSession['metadata']['flavor'];
   approvalPolicy?: ApprovalPolicy;
+  model?: string;
   status?: SessionStatus;
   riskScore?: number;
 };
+
+function normalizeModel(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return trimmed.slice(0, 120);
+}
 
 type AppendMessageInput = {
   type: string;
@@ -71,12 +83,14 @@ class MockRuntimeStore implements RuntimeStoreBackend {
 
   async createSession(input: CreateSessionInput): Promise<RuntimeSession> {
     const now = new Date().toISOString();
+    const model = normalizeModel(input.model);
     const session: RuntimeSession = {
       id: randomUUID(),
       metadata: {
         flavor: input.flavor,
         path: input.path,
         approvalPolicy: input.approvalPolicy ?? 'on-request',
+        ...(model ? { model } : {}),
       },
       state: {
         status: input.status ?? 'idle',

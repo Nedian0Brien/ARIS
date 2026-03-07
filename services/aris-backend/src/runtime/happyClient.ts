@@ -46,6 +46,7 @@ type HappyRuntimeCreateInput = {
   path: string;
   flavor: RuntimeAgent;
   approvalPolicy?: ApprovalPolicy;
+  model?: string;
   status?: SessionStatusValue;
   riskScore?: number;
 };
@@ -157,6 +158,17 @@ function normalizePath(value: unknown): string {
   return typeof value === 'string' && value.trim().length > 0 ? value : 'unknown-project';
 }
 
+function normalizeModel(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return trimmed.slice(0, 120);
+}
+
 function normalizeStatus(raw: unknown, active: unknown): SessionStatusValue {
   const value = asRecord(raw) ? String((raw as { status?: unknown }).status ?? raw) : raw;
   if (value === 'running' || value === 'idle' || value === 'stopped' || value === 'error') {
@@ -202,7 +214,13 @@ function normalizeClaudePermissionMode(value: ApprovalPolicy): 'default' | 'dont
   return 'default';
 }
 
-function normalizeMetadata(raw: unknown): { flavor: RuntimeAgent; path: string; approvalPolicy: ApprovalPolicy; status?: string } {
+function normalizeMetadata(raw: unknown): {
+  flavor: RuntimeAgent;
+  path: string;
+  approvalPolicy: ApprovalPolicy;
+  model?: string;
+  status?: string;
+} {
   if (!raw) {
     return { flavor: 'unknown', path: 'unknown-project', approvalPolicy: DEFAULT_APPROVAL_POLICY };
   }
@@ -226,6 +244,7 @@ function normalizeMetadata(raw: unknown): { flavor: RuntimeAgent; path: string; 
     flavor: normalizeAgent(record?.flavor ?? record?.agent),
     path: normalizePath(record?.path ?? record?.projectPath),
     approvalPolicy: normalizeApprovalPolicy(record?.approvalPolicy, DEFAULT_APPROVAL_POLICY),
+    model: normalizeModel(record?.model ?? record?.modelName),
     status: asString(record?.status, ''),
   };
 }
@@ -401,6 +420,7 @@ function toRuntimeSession(raw: HappyBackendSession): RuntimeSession {
       flavor: metadata.flavor,
       path: metadata.path,
       approvalPolicy: metadata.approvalPolicy,
+      ...(metadata.model ? { model: metadata.model } : {}),
     },
     state: {
       status: normalizeStatus(metadata.status || asRecord(raw.metadata)?.status, raw.active),
@@ -670,7 +690,13 @@ function buildCodexThreadCacheKey(sessionId: string, chatId?: string): string {
   return sessionId;
 }
 
-function buildAgentCommand(agent: RuntimeAgent, prompt: string, approvalPolicy: ApprovalPolicy): AgentCommand | null {
+function buildAgentCommand(
+  agent: RuntimeAgent,
+  prompt: string,
+  approvalPolicy: ApprovalPolicy,
+  model?: string,
+): AgentCommand | null {
+  const selectedModel = normalizeModel(model);
   if (agent === 'claude') {
     const permissionMode = normalizeClaudePermissionMode(approvalPolicy);
     return {
@@ -679,13 +705,21 @@ function buildAgentCommand(agent: RuntimeAgent, prompt: string, approvalPolicy: 
         '--print',
         '--permission-mode',
         permissionMode,
+        ...(selectedModel ? ['--model', selectedModel] : []),
         prompt,
       ],
       requiresPty: true,
     };
   }
   if (agent === 'gemini') {
-    return { command: 'gemini', args: ['-p', prompt] };
+    return {
+      command: 'gemini',
+      args: [
+        ...(selectedModel ? ['-m', selectedModel] : []),
+        '-p',
+        prompt,
+      ],
+    };
   }
   return null;
 }
@@ -788,10 +822,11 @@ export class HappyRuntimeStore {
     agent: RuntimeAgent,
     prompt: string,
     approvalPolicy: ApprovalPolicy,
+    model?: string,
     cwdHint?: string,
     signal?: AbortSignal,
   ): Promise<{ output: string; cwd: string }> {
-    const command = buildAgentCommand(agent, prompt, approvalPolicy);
+    const command = buildAgentCommand(agent, prompt, approvalPolicy, model);
     if (!command) {
       throw new Error(`Unsupported agent flavor: ${agent}`);
     }
@@ -907,9 +942,16 @@ export class HappyRuntimeStore {
     const threadCacheKey = buildCodexThreadCacheKey(session.id, chatId);
     const sessionApprovalPolicy = this.resolveSessionApprovalPolicy(session);
     const codexApprovalPolicy = normalizeCodexApprovalPolicy(sessionApprovalPolicy);
+    const selectedModel = normalizeModel(session.metadata.model);
     const autoApproveAll = sessionApprovalPolicy === 'yolo';
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
-    const child = spawn('codex', ['app-server', '--listen', 'stdio://'], {
+    const args = [
+      ...(selectedModel ? ['-c', `model=${JSON.stringify(selectedModel)}`] : []),
+      'app-server',
+      '--listen',
+      'stdio://',
+    ];
+    const child = spawn('codex', args, {
       cwd: safeCwd,
       env: { ...process.env, PATH: mergedPath },
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -1459,12 +1501,20 @@ export class HappyRuntimeStore {
     const threadCacheKey = buildCodexThreadCacheKey(session.id, chatId);
     const sessionApprovalPolicy = this.resolveSessionApprovalPolicy(session);
     const codexApprovalPolicy = normalizeCodexApprovalPolicy(sessionApprovalPolicy);
+    const selectedModel = normalizeModel(session.metadata.model);
     const autoApproveAll = sessionApprovalPolicy === 'yolo';
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
     const execArgs = threadId
       ? ['exec', 'resume', threadId, '--json', prompt]
       : ['exec', '--json', prompt];
-    const args = ['-a', codexApprovalPolicy, '-s', CODEX_SANDBOX_MODE, ...execArgs];
+    const args = [
+      '-a',
+      codexApprovalPolicy,
+      '-s',
+      CODEX_SANDBOX_MODE,
+      ...(selectedModel ? ['-m', selectedModel] : []),
+      ...execArgs,
+    ];
     const child = spawn('codex', args, {
       cwd: safeCwd,
       env: { ...process.env, PATH: mergedPath },
@@ -1741,6 +1791,7 @@ export class HappyRuntimeStore {
           flavor,
           prompt,
           session.metadata.approvalPolicy,
+          session.metadata.model,
           session.metadata.path,
           controller.signal,
         );
@@ -1810,10 +1861,12 @@ export class HappyRuntimeStore {
 
   async createSession(input: HappyRuntimeCreateInput): Promise<RuntimeSession> {
     const approvalPolicy = normalizeApprovalPolicy(input.approvalPolicy, DEFAULT_APPROVAL_POLICY);
+    const model = normalizeModel(input.model);
     const metadata = JSON.stringify({
       flavor: input.flavor,
       path: input.path,
       approvalPolicy,
+      ...(model ? { model } : {}),
       status: input.status ?? 'idle',
     });
 
