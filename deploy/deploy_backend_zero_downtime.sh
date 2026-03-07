@@ -26,6 +26,23 @@ current_exec_mode() {
   "
 }
 
+current_exec_path() {
+  pm2 jlist | node -e "
+    let raw = '';
+    process.stdin.on('data', (chunk) => { raw += chunk; });
+    process.stdin.on('end', () => {
+      try {
+        const apps = JSON.parse(raw);
+        const app = apps.find((item) => item.name === 'aris-backend');
+        if (!app) return;
+        process.stdout.write(String(app.pm2_env?.pm_exec_path || ''));
+      } catch {
+        process.exit(0);
+      }
+    });
+  "
+}
+
 wait_for_backend_health() {
   local timeout="$1"
   local i code
@@ -43,8 +60,11 @@ echo "[deploy:backend-zd] building backend"
 npm --prefix "$BACKEND_DIR" run build
 
 mode="$(current_exec_mode || true)"
-if [[ "$mode" != "cluster_mode" ]]; then
-  echo "[deploy:backend-zd] migrating aris-backend to PM2 cluster mode (one-time cutover)"
+exec_path="$(current_exec_path || true)"
+expected_exec_path="${BACKEND_DIR}/dist/index.js"
+
+if [[ "$mode" != "cluster_mode" || "$exec_path" != "$expected_exec_path" ]]; then
+  echo "[deploy:backend-zd] reconciling aris-backend PM2 app definition"
   pm2 delete aris-backend >/dev/null 2>&1 || true
   pm2 start "$ECOSYSTEM_FILE" --only aris-backend --env production --update-env
 else
