@@ -386,6 +386,39 @@ export function classifyEventKind(input: { type?: string; text?: string; command
   const type = input.type?.toLowerCase() ?? '';
   const text = input.text?.toLowerCase() ?? '';
   const command = input.command ?? '';
+  const trimmedText = input.text?.trim() ?? '';
+  const hasActionishTextSignals = (
+    text.includes('$ ')
+    || text.includes('exit code')
+    || text.includes('directory listing')
+    || text.includes('rg --files')
+    || text.includes('tree ')
+    || text.includes('opened')
+    || text.includes('file:')
+    || text.includes('patched')
+    || text.includes('modified')
+    || text.includes('apply_patch')
+    || text.includes('file_change')
+    || text.includes('filechange')
+    || text.includes('diff --git')
+    || text.includes('*** update file:')
+    || text.includes('*** add file:')
+    || text.includes('*** delete file:')
+  );
+
+  // Guardrail: natural-language status messages should remain text replies
+  // even if upstream type metadata is noisy.
+  if (
+    command.trim().length === 0
+    && trimmedText.length > 0
+    && !hasActionishTextSignals
+    && !type.includes('diff')
+    && !type.includes('read')
+    && !type.includes('write')
+    && !type.includes('list')
+  ) {
+    return 'text_reply';
+  }
 
   const kindFromType = pickKindFromMeta(null, type);
   const isActionContext = (
