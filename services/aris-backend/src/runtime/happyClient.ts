@@ -731,7 +731,7 @@ export class HappyRuntimeStore {
     return response.json() as Promise<T>;
   }
 
-  private mapHappyResponse(response: HappySessionResponse): HappyBackendSession[] {
+  mapHappyResponse(response: HappySessionResponse): HappyBackendSession[] {
     if (Array.isArray(response.sessions)) {
       return response.sessions as HappyBackendSession[];
     }
@@ -741,7 +741,7 @@ export class HappyRuntimeStore {
     return [];
   }
 
-  private resolveExecutionCwd(cwdHint?: string): string {
+  resolveExecutionCwd(cwdHint?: string): string {
     const raw = typeof cwdHint === 'string' ? cwdHint.trim() : '';
     if (!raw) {
       throw new Error('Session project path is empty. Create the session again with a valid path.');

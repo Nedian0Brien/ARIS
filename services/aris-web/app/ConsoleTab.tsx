@@ -34,9 +34,35 @@ export function ConsoleTab({ user, initialSessions }: Props) {
   const fitAddonRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const fontSizeRef = useRef(14);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [reconnectCount, setReconnectCount] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
+
+  // VisualViewport 대응 (가상 키보드 높이 감지)
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const updateHeight = () => {
+      const height = vv.height;
+      // CSS 변수를 통해 레이아웃 높이 동적 조절
+      document.documentElement.style.setProperty('--app-vh', `${height}px`);
+      // 터미널 리사이즈 트리거
+      fitAddonRef.current?.fit();
+    };
+
+    vv.addEventListener('resize', updateHeight);
+    vv.addEventListener('scroll', updateHeight);
+    updateHeight();
+
+    return () => {
+      vv.removeEventListener('resize', updateHeight);
+      vv.removeEventListener('scroll', updateHeight);
+    };
+  }, []);
 
   useEffect(() => {
     setIsMobile(window.matchMedia('(max-width: 767px)').matches);
@@ -46,7 +72,19 @@ export function ConsoleTab({ user, initialSessions }: Props) {
     return () => mq.removeEventListener('change', handler);
   }, []);
 
-  const connect = useCallback(async (sessionId: string | null) => {
+  const connect = useCallback(async (sessionId: string | null, isRetry = false) => {
+    // 기존 타이머 취소
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    // 초기 연결 시도 시 상태 리셋
+    if (!isRetry) {
+      setReconnectCount(0);
+      setIsReconnecting(false);
+    }
+
     // 기존 연결 종료
     if (wsRef.current) {
       wsRef.current.close();
@@ -58,7 +96,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
     }
     if (!containerRef.current) return;
 
-    // xterm 동적 로드
+    // xterm 동적 로드 (생략된 기존 로직 ...)
     const { Terminal } = await import('@xterm/xterm');
     const { FitAddon } = await import('@xterm/addon-fit');
     const { WebLinksAddon } = await import('@xterm/addon-web-links');
@@ -84,7 +122,6 @@ export function ConsoleTab({ user, initialSessions }: Props) {
     term.loadAddon(webLinksAddon);
     term.open(containerRef.current);
 
-    // 렌더 후 fit (initial paint + delayed re-fit for desktop layout stabilization)
     requestAnimationFrame(() => {
       fitAddon.fit();
       setTimeout(() => fitAddon.fit(), 60);
@@ -102,12 +139,32 @@ export function ConsoleTab({ user, initialSessions }: Props) {
 
     ws.onopen = () => {
       setConnected(true);
-      // 초기 크기 전송
+      setIsReconnecting(false);
+      setReconnectCount(0);
       const { cols, rows } = term;
       ws.send(JSON.stringify({ type: 'resize', cols, rows }));
     };
 
-    ws.onclose = () => setConnected(false);
+    ws.onclose = () => {
+      setConnected(false);
+      
+      // 재연결 로직 (최대 5회)
+      if (sessionId) { // 세션이 지정된 경우만 자동 재연결 시도
+        setReconnectCount(prev => {
+          const next = prev + 1;
+          if (next <= 5) {
+            setIsReconnecting(true);
+            const delay = Math.min(1000 * Math.pow(2, next - 1), 10000); // 지수 백오프 (1s, 2s, 4s, 8s, 10s)
+            reconnectTimeoutRef.current = setTimeout(() => {
+              connect(sessionId, true);
+            }, delay);
+          } else {
+            setIsReconnecting(false);
+          }
+          return next;
+        });
+      }
+    };
 
     ws.onmessage = (e) => {
       term.write(new Uint8Array(e.data as ArrayBuffer));
@@ -123,6 +180,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
     if (user.role !== 'operator') return;
     connect(selectedSessionId);
     return () => {
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
       wsRef.current?.close();
       termRef.current?.dispose();
     };
@@ -204,8 +262,10 @@ export function ConsoleTab({ user, initialSessions }: Props) {
             ))}
           </select>
           <span
-            className={`${styles.statusDot} ${connected ? styles.connected : styles.disconnected}`}
-            title={connected ? '연결됨' : '연결 끊김'}
+            className={`${styles.statusDot} ${
+              connected ? styles.connected : isReconnecting ? styles.reconnecting : styles.disconnected
+            }`}
+            title={connected ? '연결됨' : isReconnecting ? `재연결 중 (${reconnectCount}/5)` : '연결 끊김'}
           />
         </div>
 
@@ -227,7 +287,9 @@ export function ConsoleTab({ user, initialSessions }: Props) {
             </button>
           </div>
           {!isMobile && (
-            <span className={styles.statusLabel}>{connected ? '연결됨' : '연결 끊김'}</span>
+            <span className={styles.statusLabel}>
+              {connected ? '연결됨' : isReconnecting ? `재연결 중 (${reconnectCount}/5)` : '연결 끊김'}
+            </span>
           )}
         </div>
       </div>
@@ -238,6 +300,13 @@ export function ConsoleTab({ user, initialSessions }: Props) {
       {/* 모바일 툴바 */}
       {isMobile && (
         <div className={styles.mobileToolbar}>
+          {/* 재연결 알림 */}
+          {isReconnecting && (
+            <div className={styles.reconnectBanner}>
+              연결 끊김. 재연결 시도 중 ({reconnectCount}/5)...
+            </div>
+          )}
+
           {/* QuickDir 버튼 */}
           {activeSessions.length > 0 && (
             <div className={styles.quickDirScroll}>
