@@ -1491,12 +1491,14 @@ export function ChatInterface({
       shouldStickToBottomRef.current = isNearWindowBottom();
     };
 
-    updateStickState();
+    // Defer initial stick-state measurement so first-entry auto-scroll can anchor to latest chat.
+    const rafId = window.requestAnimationFrame(updateStickState);
     window.addEventListener('scroll', updateStickState, { passive: true });
     window.visualViewport?.addEventListener('scroll', updateStickState, { passive: true } as EventListenerOptions);
     window.visualViewport?.addEventListener('resize', updateStickState, { passive: true } as EventListenerOptions);
 
     return () => {
+      window.cancelAnimationFrame(rafId);
       window.removeEventListener('scroll', updateStickState);
       window.visualViewport?.removeEventListener('scroll', updateStickState);
       window.visualViewport?.removeEventListener('resize', updateStickState);
@@ -1528,7 +1530,24 @@ export function ChatInterface({
       return;
     }
     scrollConversationToBottom('auto');
-  }, [events, isAwaitingReply, scrollConversationToBottom]);
+
+    // Run follow-up syncs for layout shifts (composer/header metrics) right after mount/update.
+    const rafId = window.requestAnimationFrame(() => {
+      if (shouldStickToBottomRef.current) {
+        scrollConversationToBottom('auto');
+      }
+    });
+    const timeoutId = window.setTimeout(() => {
+      if (shouldStickToBottomRef.current) {
+        scrollConversationToBottom('auto');
+      }
+    }, 140);
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [events, isAwaitingReply, pendingPermissions.length, scrollConversationToBottom]);
 
   useEffect(() => {
     if (!awaitingReplySince) {
