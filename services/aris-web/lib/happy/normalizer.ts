@@ -393,6 +393,7 @@ export function classifyEventKind(input: { type?: string; text?: string; command
     && (
       kindFromType === null
       || kindFromType === 'file_read'
+      || kindFromType === 'file_list'
       || kindFromType === 'command_execution'
       || kindFromType === 'run_execution'
       || kindFromType === 'exec_execution'
