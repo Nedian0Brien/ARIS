@@ -36,10 +36,15 @@ describe('aris-backend API', () => {
       payload: JSON.stringify({
         path: '/tmp/project',
         flavor: 'claude',
+        model: 'claude-sonnet-4-6',
       }),
     });
 
     expect(createResponse.statusCode).toBe(201);
+    const createPayload = createResponse.json() as {
+      session: { metadata?: { model?: string } };
+    };
+    expect(createPayload.session.metadata?.model).toBe('claude-sonnet-4-6');
 
     const sessionsResponse = await app.inject({
       method: 'GET',
@@ -48,8 +53,11 @@ describe('aris-backend API', () => {
     });
 
     expect(sessionsResponse.statusCode).toBe(200);
-    const payload = sessionsResponse.json() as { sessions: Array<{ id: string }> };
+    const payload = sessionsResponse.json() as {
+      sessions: Array<{ id: string; metadata?: { model?: string } }>;
+    };
     expect(payload.sessions.length).toBe(1);
+    expect(payload.sessions[0].metadata?.model).toBe('claude-sonnet-4-6');
 
     const messagesResponse = await app.inject({
       method: 'GET',

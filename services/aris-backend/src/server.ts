@@ -17,6 +17,7 @@ const createSessionSchema = z.object({
   path: z.string().min(1),
   flavor: z.enum(['codex', 'claude', 'gemini', 'unknown']),
   approvalPolicy: z.enum(['on-request', 'on-failure', 'never', 'yolo']).optional(),
+  model: z.string().trim().min(1).max(120).optional(),
   status: z.enum(['running', 'idle', 'stopped', 'error', 'unknown']).optional(),
   riskScore: z.number().int().min(0).max(100).optional(),
 });
