@@ -36,6 +36,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
   const fontSizeRef = useRef(14);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectCountRef = useRef(0);
+  const connectionIdRef = useRef(0);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -74,6 +75,8 @@ export function ConsoleTab({ user, initialSessions }: Props) {
   }, []);
 
   const connect = useCallback(async (sessionId: string | null, isRetry = false) => {
+    const currentConnId = ++connectionIdRef.current;
+
     // 기존 타이머 취소
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
@@ -89,6 +92,8 @@ export function ConsoleTab({ user, initialSessions }: Props) {
 
     // 기존 연결 종료
     if (wsRef.current) {
+      wsRef.current.onclose = null; // 중요: 의도적인 종료 시 재연결 방지
+      wsRef.current.onerror = null;
       wsRef.current.close();
       wsRef.current = null;
     }
@@ -98,10 +103,15 @@ export function ConsoleTab({ user, initialSessions }: Props) {
     }
     if (!containerRef.current) return;
 
-    // xterm 동적 로드 (생략된 기존 로직 ...)
+    // xterm 동적 로드 (비동기 가드 포함)
     const { Terminal } = await import('@xterm/xterm');
+    if (connectionIdRef.current !== currentConnId) return;
+
     const { FitAddon } = await import('@xterm/addon-fit');
+    if (connectionIdRef.current !== currentConnId) return;
+
     const { WebLinksAddon } = await import('@xterm/addon-web-links');
+    if (connectionIdRef.current !== currentConnId) return;
 
     const term = new Terminal({
       fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
@@ -140,6 +150,11 @@ export function ConsoleTab({ user, initialSessions }: Props) {
     wsRef.current = ws;
 
     ws.onopen = () => {
+      if (connectionIdRef.current !== currentConnId) {
+        ws.onclose = null;
+        ws.close();
+        return;
+      }
       setConnected(true);
       setIsReconnecting(false);
       reconnectCountRef.current = 0;
@@ -149,6 +164,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
     };
 
     ws.onclose = () => {
+      if (connectionIdRef.current !== currentConnId) return;
       setConnected(false);
       
       // 재연결 로직 (최대 5회)
@@ -172,6 +188,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
     };
 
     ws.onmessage = (e) => {
+      if (connectionIdRef.current !== currentConnId) return;
       term.write(new Uint8Array(e.data as ArrayBuffer));
     };
 
