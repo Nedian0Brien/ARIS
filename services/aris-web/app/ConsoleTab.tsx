@@ -35,6 +35,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
   const wsRef = useRef<WebSocket | null>(null);
   const fontSizeRef = useRef(14);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectCountRef = useRef(0);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -81,6 +82,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
 
     // 초기 연결 시도 시 상태 리셋
     if (!isRetry) {
+      reconnectCountRef.current = 0;
       setReconnectCount(0);
       setIsReconnecting(false);
     }
@@ -140,6 +142,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
     ws.onopen = () => {
       setConnected(true);
       setIsReconnecting(false);
+      reconnectCountRef.current = 0;
       setReconnectCount(0);
       const { cols, rows } = term;
       ws.send(JSON.stringify({ type: 'resize', cols, rows }));
@@ -150,19 +153,21 @@ export function ConsoleTab({ user, initialSessions }: Props) {
       
       // 재연결 로직 (최대 5회)
       if (sessionId) { // 세션이 지정된 경우만 자동 재연결 시도
-        setReconnectCount(prev => {
-          const next = prev + 1;
-          if (next <= 5) {
-            setIsReconnecting(true);
-            const delay = Math.min(1000 * Math.pow(2, next - 1), 10000); // 지수 백오프 (1s, 2s, 4s, 8s, 10s)
-            reconnectTimeoutRef.current = setTimeout(() => {
-              connect(sessionId, true);
-            }, delay);
-          } else {
-            setIsReconnecting(false);
-          }
-          return next;
-        });
+        reconnectCountRef.current++;
+        const nextCount = reconnectCountRef.current;
+
+        if (nextCount <= 5) {
+          setIsReconnecting(true);
+          setReconnectCount(nextCount); // UI용 상태 업데이트
+          const delay = Math.min(1000 * Math.pow(2, nextCount - 1), 10000); // 지수 백오프 (1s, 2s, 4s, 8s, 10s)
+          
+          if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = setTimeout(() => {
+            connect(sessionId, true);
+          }, delay);
+        } else {
+          setIsReconnecting(false);
+        }
       }
     };
 
