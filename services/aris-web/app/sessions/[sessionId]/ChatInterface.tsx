@@ -39,7 +39,7 @@ import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import styles from './ChatInterface.module.css';
 
-// --- 상수 및 설정 ---
+// --- 1. 기본 상수 및 설정 (TDZ 방지를 위해 최상단에 배치) ---
 
 const AGENT_REPLY_TIMEOUT_MS = 90000;
 const AUTO_SCROLL_THRESHOLD_PX = 80;
@@ -53,22 +53,13 @@ const READ_CURSOR_SYNC_DEBOUNCE_MS = 800;
 
 const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
 
-type ContextItem =
-  | { id: string; type: 'file'; path: string; content: string; name: string }
-  | { id: string; type: 'text'; text: string };
-
 const COMPOSER_MODELS = [
   { id: 'claude-sonnet-4-6', shortLabel: 'Sonnet 4.6', badge: '권장' },
   { id: 'claude-opus-4-6', shortLabel: 'Opus 4.6', badge: '최고 성능' },
   { id: 'claude-haiku-4-5', shortLabel: 'Haiku 4.5', badge: '빠름' },
 ] as const;
-type ComposerModelId = (typeof COMPOSER_MODELS)[number]['id'];
 
-function genId(): string {
-  return Math.random().toString(36).slice(2, 9);
-}
-
-// --- 타입 정의 ---
+// --- 2. 타입 정의 ---
 
 type AgentMeta = {
   label: string;
@@ -85,9 +76,14 @@ type ResourceLabel =
   | { kind: 'folder'; name: FolderLabel; sourcePath?: string }
   | { kind: 'file'; name: string; extension: string; sourcePath?: string };
 type FolderLabel = (typeof FOLDER_LABELS)[number];
+type ComposerModelId = (typeof COMPOSER_MODELS)[number]['id'];
 
-// --- 런타임 초기화 안전 장치 (TDZ 에러 방지) ---
-// styles 객체를 즉시 참조하지 않고 함수 호출 시점에 참조하도록 변경
+type ContextItem =
+  | { id: string; type: 'file'; path: string; content: string; name: string }
+  | { id: string; type: 'text'; text: string };
+
+// --- 3. 런타임 초기화 안전 장치 (TDZ 에러 방지) ---
+// styles 객체 및 복잡한 객체 참조를 함수 호출 시점으로 지연시킴
 
 function getToneClass(tone: Tone): string {
   const map: Record<Tone, string> = {
@@ -128,7 +124,7 @@ function getEventKindMeta(kind: UiEventKind): { label: string; tone: Tone; Icon:
   return map[kind] || map.unknown;
 }
 
-// --- Hydration 안전 컴포넌트 ---
+// --- 4. Hydration 안전 컴포넌트 ---
 
 function RelativeTime({ timestamp, className }: { timestamp: string; className?: string }) {
   const [mounted, setMounted] = useState(false);
@@ -137,7 +133,6 @@ function RelativeTime({ timestamp, className }: { timestamp: string; className?:
   }, []);
 
   if (!mounted) {
-    // 서버 사이드 또는 마운트 전에는 정적인 시간 표시 (Hydration 불일치 방지)
     const date = new Date(timestamp);
     return <span className={className}>{Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>;
   }
@@ -145,7 +140,11 @@ function RelativeTime({ timestamp, className }: { timestamp: string; className?:
   return <span className={className}>{formatRelative(timestamp)}</span>;
 }
 
-// --- 유틸리티 함수 ---
+// --- 5. 유틸리티 함수 ---
+
+function genId(): string {
+  return Math.random().toString(36).slice(2, 9);
+}
 
 function isFolderLabel(label: string): label is FolderLabel {
   return (FOLDER_LABELS as readonly string[]).includes(label);
@@ -536,7 +535,7 @@ function isNearWindowBottom(): boolean {
   return scrollHeight - (scrollTop + viewportHeight) <= AUTO_SCROLL_THRESHOLD_PX;
 }
 
-// --- 컴포넌트 내부 헬퍼 함수 ---
+// --- 6. 컴포넌트 내부 헬퍼 함수 ---
 
 function parseMarkdownTableRow(line: string): string[] {
   const trimmed = line.trim();
@@ -1129,7 +1128,6 @@ function ActionEventCard({
   const compactPrimary = truncateSingleLine(fullPrimary, 88);
   const resourceLabels = extractResourceLabelsFromEvent(event);
 
-  // 첫 번째 줄에 표시할 텍스트 결정 (파일 라벨이 없으면 명령어를 보여줌)
   const hasResource = resourceLabels.length > 0;
 
   if (!expanded) {
@@ -1355,7 +1353,7 @@ export function ChatInterface({
     setChatTitleDraft('');
     setChatMutationError(null);
   }, [initialChats, activeChatId]);
-  // ── Composer: outside-click handler for menus ─────────────────────────────
+
   useEffect(() => {
     if (plusMenuMode === 'closed' && !isModelDropdownOpen) return;
     function handleOutsideClick(e: MouseEvent) {
@@ -1382,7 +1380,7 @@ export function ChatInterface({
     setFileInputError(null);
     try {
       const res = await fetch(`/api/fs/read?path=${encodeURIComponent(filePath)}`);
-      const data = (await res.json().catch(() => ({ error: '응답을 읽을 수 없습니다.' }))) as { content?: string; error?: string };
+      const data = (await res.json().catch(() => ({}))) as { content?: string; error?: string };
       if (!res.ok || data.error) throw new Error(data.error ?? '파일을 읽을 수 없습니다.');
       const name = filePath.split('/').filter(Boolean).pop() ?? filePath;
       setContextItems((prev) => [...prev, { id: genId(), type: 'file', path: filePath, content: data.content ?? '', name }]);
@@ -1496,7 +1494,6 @@ export function ChatInterface({
       const previousDocHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
       const previousTop = getWindowScrollTop();
       await loadOlder().catch(() => {
-        // syncError state is managed by the hook.
       });
       requestAnimationFrame(() => {
         const nextDocHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
@@ -1511,7 +1508,6 @@ export function ChatInterface({
     const stream = scrollRef.current;
     if (!stream) {
       await loadOlder().catch(() => {
-        // syncError state is managed by the hook.
       });
       return;
     }
@@ -1519,7 +1515,6 @@ export function ChatInterface({
     const previousHeight = stream.scrollHeight;
     const previousTop = stream.scrollTop;
     await loadOlder().catch(() => {
-      // syncError state is managed by the hook.
     });
 
     requestAnimationFrame(() => {
@@ -1530,7 +1525,7 @@ export function ChatInterface({
       const delta = Math.max(0, nextStream.scrollHeight - previousHeight);
       nextStream.scrollTop = previousTop + delta;
     });
-  }, [hasMoreBefore, isLoadingOlder, isMobileLayout, loadOlderHistory]);
+  }, [hasMoreBefore, isLoadingOlder, isMobileLayout, loadOlder]);
 
   const syncComposerDockMetrics = useCallback(() => {
     const shell = chatShellRef.current;
@@ -1710,7 +1705,6 @@ export function ChatInterface({
       shouldStickToBottomRef.current = isNearWindowBottom();
     };
 
-    // Defer initial stick-state measurement so first-entry auto-scroll can anchor to latest chat.
     const rafId = window.requestAnimationFrame(updateStickState);
     window.addEventListener('scroll', updateStickState, { passive: true });
     window.visualViewport?.addEventListener('scroll', updateStickState, { passive: true } as EventListenerOptions);
@@ -1750,7 +1744,6 @@ export function ChatInterface({
     }
     scrollConversationToBottom('auto');
 
-    // Run follow-up syncs for layout shifts (composer/header metrics) right after mount/update.
     const rafId = window.requestAnimationFrame(() => {
       if (shouldStickToBottomRef.current) {
         scrollConversationToBottom('auto');
@@ -1842,7 +1835,6 @@ export function ChatInterface({
           chat.id === activeChatIdResolved ? { ...chat, threadId: latestThreadId } : chat
         ))));
       } catch {
-        // Best effort: thread id cache sync for chat continuity.
       }
     })();
 
@@ -2044,7 +2036,6 @@ export function ChatInterface({
           body: JSON.stringify({ touchActivity: true }),
         },
       ).catch(() => {
-        // Best-effort activity sync.
       });
       setPrompt('');
       setContextItems([]);
@@ -2102,6 +2093,8 @@ export function ChatInterface({
       void loadOlderHistory();
     }
   }
+
+  const activeModel = COMPOSER_MODELS.find((m) => m.id === selectedModelId) || COMPOSER_MODELS[0];
 
   return (
     <div
@@ -2398,7 +2391,6 @@ export function ChatInterface({
               const kindMeta = getEventKindMeta(event.kind);
               const KindIcon = kindMeta.Icon;
 
-              // 사용자 메시지 (오른쪽 버블)
               if (userEvent) {
                 return (
                   <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowUser}`}>
@@ -2413,7 +2405,6 @@ export function ChatInterface({
                 );
               }
 
-              // 에이전트 액션 이벤트 (아바타 없이, 컴팩트 카드)
               if (actionEvent) {
                 return (
                   <article key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
@@ -2424,7 +2415,6 @@ export function ChatInterface({
                 );
               }
 
-              // 에이전트 텍스트 메시지 (아바타 + 이름 헤더)
               return (
                 <article key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
                   <div className={styles.messageWithAvatar}>
@@ -2469,8 +2459,6 @@ export function ChatInterface({
           <footer className={styles.composerDock} ref={composerDockRef}>
             <form onSubmit={handleSubmit} className={styles.composerForm}>
               <div className={styles.composerCard}>
-
-                {/* ── Toolbar: 모델 선택기 + 실행 중 표시 ── */}
                 <div className={styles.composerToolbar}>
                   <div className={styles.modelSelectorWrap} ref={modelDropdownRef}>
                     <button
@@ -2481,7 +2469,7 @@ export function ChatInterface({
                       aria-expanded={isModelDropdownOpen}
                     >
                       <ClaudeIcon size={13} />
-                      <span>{COMPOSER_MODELS.find((m) => m.id === selectedModelId)?.shortLabel ?? 'Sonnet 4.6'}</span>
+                      <span>{activeModel.shortLabel}</span>
                       <ChevronDown size={11} />
                     </button>
                     {isModelDropdownOpen && (
@@ -2513,7 +2501,6 @@ export function ChatInterface({
                   )}
                 </div>
 
-                {/* ── 컨텍스트 칩 ── */}
                 {contextItems.length > 0 && (
                   <div className={styles.composerChips}>
                     {contextItems.map((item) => (
@@ -2535,9 +2522,7 @@ export function ChatInterface({
                   </div>
                 )}
 
-                {/* ── 입력 행 ── */}
                 <div className={styles.composerInputRow}>
-                  {/* + 컨텍스트 버튼 */}
                   <div className={styles.plusMenuWrap} ref={plusMenuRef}>
                     <button
                       type="button"
@@ -2603,7 +2588,6 @@ export function ChatInterface({
                     )}
                   </div>
 
-                  {/* 텍스트 입력창 */}
                   <textarea
                     ref={composerInputRef}
                     value={prompt}
@@ -2627,7 +2611,6 @@ export function ChatInterface({
                     className={styles.composerInput}
                   />
 
-                  {/* 전송 / 정지 버튼 */}
                   {isAgentRunning ? (
                     <button
                       type="button"
@@ -2652,7 +2635,6 @@ export function ChatInterface({
                   )}
                 </div>
 
-                {/* ── 하단 힌트 ── */}
                 <div className={styles.composerHint}>
                   Ctrl + Enter로 전송
                 </div>
