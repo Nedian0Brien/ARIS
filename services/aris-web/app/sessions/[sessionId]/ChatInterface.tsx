@@ -56,6 +56,7 @@ const SyntaxHighlighter = dynamic(
 // --- 1. 기본 상수 및 설정 (TDZ 방지를 위해 최상단에 배치) ---
 
 const AGENT_REPLY_TIMEOUT_MS = 90000;
+const RUNTIME_DISCONNECT_GRACE_MS = 4000;
 const AUTO_SCROLL_THRESHOLD_PX = 80;
 const MOBILE_LAYOUT_MAX_WIDTH_PX = 960;
 const PREVIEW_MAX_LINES = 12;
@@ -1543,6 +1544,12 @@ export function ChatInterface({
   const [isAwaitingReply, setIsAwaitingReply] = useState(false);
   const [isAborting, setIsAborting] = useState(false);
   const [awaitingReplySince, setAwaitingReplySince] = useState<string | null>(null);
+  const [showDisconnectRetry, setShowDisconnectRetry] = useState(false);
+  const [lastSubmittedPayload, setLastSubmittedPayload] = useState<{
+    text: string;
+    chatId: string;
+    threadId?: string;
+  } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
@@ -1587,6 +1594,7 @@ export function ChatInterface({
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const shouldStickToBottomRef = useRef(true);
+  const disconnectNoticeAwaitingRef = useRef<string | null>(null);
 
   const agentMeta = resolveAgentMeta(agentFlavor);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? runtimeError ?? null;
@@ -2198,13 +2206,12 @@ export function ChatInterface({
     };
   }, [events, isAwaitingReply, pendingPermissions.length, scrollConversationToBottom]);
 
-  useEffect(() => {
-    if (!awaitingReplySince) {
-      return;
+  const hasAgentEventSince = useCallback((since: string | null): boolean => {
+    if (!since) {
+      return false;
     }
-
-    const sinceEpoch = Date.parse(awaitingReplySince);
-    const hasAnyAgentEvent = events.some((event) => {
+    const sinceEpoch = Date.parse(since);
+    return events.some((event) => {
       if (isUserEvent(event) || !event.body.trim()) {
         return false;
       }
@@ -2215,13 +2222,65 @@ export function ChatInterface({
       }
       return eventEpoch >= sinceEpoch;
     });
+  }, [events]);
+
+  useEffect(() => {
+    if (!awaitingReplySince) {
+      return;
+    }
+    const hasAnyAgentEvent = hasAgentEventSince(awaitingReplySince);
 
     if (!isRunActive && hasAnyAgentEvent) {
       setIsAwaitingReply(false);
       setAwaitingReplySince(null);
       setSubmitError(null);
+      setShowDisconnectRetry(false);
+      disconnectNoticeAwaitingRef.current = null;
     }
-  }, [events, awaitingReplySince, isRunActive]);
+  }, [awaitingReplySince, hasAgentEventSince, isRunActive]);
+
+  useEffect(() => {
+    if (!isAwaitingReply || !awaitingReplySince || isRunActive) {
+      return;
+    }
+
+    const sinceEpoch = Date.parse(awaitingReplySince);
+    const elapsed = Date.now() - (Number.isFinite(sinceEpoch) ? sinceEpoch : Date.now());
+    const remainingGrace = Math.max(0, RUNTIME_DISCONNECT_GRACE_MS - elapsed);
+
+    const timer = window.setTimeout(() => {
+      if (disconnectNoticeAwaitingRef.current === awaitingReplySince) {
+        return;
+      }
+      if (hasAgentEventSince(awaitingReplySince)) {
+        return;
+      }
+
+      const now = new Date().toISOString();
+      disconnectNoticeAwaitingRef.current = awaitingReplySince;
+      setShowDisconnectRetry(true);
+      setSubmitError('에이전트 연결 중단됨');
+      setIsAwaitingReply(false);
+      setAwaitingReplySince(null);
+      addEvent({
+        id: `runtime-disconnected-${now}`,
+        timestamp: now,
+        kind: 'unknown',
+        title: 'Runtime Notice',
+        body: '에이전트 연결이 중단되었습니다. 아래 버튼으로 다시 시도할 수 있습니다.',
+        meta: {
+          role: 'agent',
+          system: true,
+          streamEvent: 'runtime_disconnected',
+        },
+        severity: 'warning',
+      });
+    }, remainingGrace);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [addEvent, awaitingReplySince, hasAgentEventSince, isAwaitingReply, isRunActive]);
 
   useEffect(() => {
     if (!isAwaitingReply || !awaitingReplySince) {
@@ -2442,6 +2501,13 @@ export function ChatInterface({
     setIsAwaitingReply(true);
     setAwaitingReplySince(new Date().toISOString());
     setSubmitError(null);
+    setShowDisconnectRetry(false);
+    disconnectNoticeAwaitingRef.current = null;
+    setLastSubmittedPayload({
+      text: finalText,
+      chatId: activeChatIdResolved,
+      ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
+    });
 
     try {
       const response = await fetch(`/api/runtime/sessions/${sessionId}/events`, {
@@ -2523,6 +2589,56 @@ export function ChatInterface({
     }
   }
 
+  async function handleRetryDisconnected() {
+    if (!isOperator || isAgentRunning || !lastSubmittedPayload) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setIsAwaitingReply(true);
+    setAwaitingReplySince(new Date().toISOString());
+    setSubmitError(null);
+    setShowDisconnectRetry(false);
+    disconnectNoticeAwaitingRef.current = null;
+
+    try {
+      const response = await fetch(`/api/runtime/sessions/${sessionId}/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'message',
+          title: 'User Instruction',
+          text: lastSubmittedPayload.text,
+          meta: {
+            role: 'user',
+            chatId: lastSubmittedPayload.chatId,
+            ...(lastSubmittedPayload.threadId ? { threadId: lastSubmittedPayload.threadId } : {}),
+          },
+        }),
+      });
+
+      const body = (await response.json().catch(() => ({ error: '백엔드 응답을 읽을 수 없습니다.' }))) as {
+        event?: UiEvent;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(body.error ?? '재시도 전송에 실패했습니다.');
+      }
+
+      if (body.event) {
+        addEvent(body.event);
+      }
+    } catch (error) {
+      setIsAwaitingReply(false);
+      setAwaitingReplySince(null);
+      setSubmitError(error instanceof Error ? error.message : '재시도 중 오류가 발생했습니다.');
+      setShowDisconnectRetry(true);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   async function handleAbortRun() {
     if (!isOperator || !isAgentRunning || isAborting) {
       return;
@@ -2547,6 +2663,8 @@ export function ChatInterface({
       setIsAwaitingReply(false);
       setAwaitingReplySince(null);
       setSubmitError(null);
+      setShowDisconnectRetry(false);
+      disconnectNoticeAwaitingRef.current = null;
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : '에이전트 실행 중단 중 오류가 발생했습니다.');
     } finally {
@@ -2926,6 +3044,22 @@ export function ChatInterface({
           {runtimeNotice && (
             <div className={styles.noticeWrap}>
               <BackendNotice message={`백엔드 연결 상태: ${runtimeNotice}`} />
+            </div>
+          )}
+
+          {showDisconnectRetry && (
+            <div className={styles.disconnectNoticeBar} role="status" aria-live="polite">
+              <span>에이전트 연결이 중단되었습니다.</span>
+              <button
+                type="button"
+                className={styles.disconnectNoticeAction}
+                onClick={() => {
+                  void handleRetryDisconnected();
+                }}
+                disabled={!isOperator || isAgentRunning || isSubmitting || !lastSubmittedPayload}
+              >
+                {isSubmitting ? '재시도 중...' : '재시도'}
+              </button>
             </div>
           )}
 
