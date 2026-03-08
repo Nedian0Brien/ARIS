@@ -532,6 +532,8 @@ function parseCodeChangeSummary(event: UiEvent): {
   files: string[];
   additions: number;
   deletions: number;
+  hunkFile: string | null;
+  hunkLine: number | null;
   previewLines: string[];
   fullText: string;
   hasDiffSignal: boolean;
@@ -545,6 +547,9 @@ function parseCodeChangeSummary(event: UiEvent): {
   let computedAdditions = 0;
   let computedDeletions = 0;
   let hasStructuralDiffSignal = false;
+  let currentDiffFile: string | null = null;
+  let firstHunkFile: string | null = null;
+  let firstHunkLine: number | null = null;
 
   for (const line of lines) {
     const normalized = line.trim();
@@ -562,12 +567,28 @@ function parseCodeChangeSummary(event: UiEvent): {
     const gitFileMatch = normalized.match(/^(?:\+\+\+|---)\s+[ab]\/(.+)$/);
     if (gitFileMatch?.[1]) {
       files.add(gitFileMatch[1]);
+      if (normalized.startsWith('+++ ')) {
+        currentDiffFile = gitFileMatch[1];
+      }
+      hasStructuralDiffSignal = true;
+    }
+    const diffFileMatch = normalized.match(/^diff --git\s+a\/(.+)\s+b\/(.+)$/);
+    if (diffFileMatch?.[2]) {
+      currentDiffFile = diffFileMatch[2];
+      files.add(diffFileMatch[2]);
       hasStructuralDiffSignal = true;
     }
     const patchFileMatch = normalized.match(/^\*\*\*\s+(?:Update|Add|Delete)\s+File:\s+(.+)$/);
     if (patchFileMatch?.[1]) {
       files.add(patchFileMatch[1]);
+      currentDiffFile = patchFileMatch[1];
       hasStructuralDiffSignal = true;
+    }
+    const hunkMatch = normalized.match(/^@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
+    if (hunkMatch && firstHunkLine === null) {
+      const parsed = Number.parseInt(hunkMatch[1], 10);
+      firstHunkLine = Number.isFinite(parsed) ? parsed : null;
+      firstHunkFile = currentDiffFile;
     }
     if (line.startsWith('+') && !line.startsWith('+++')) {
       computedAdditions += 1;
@@ -595,6 +616,7 @@ function parseCodeChangeSummary(event: UiEvent): {
   const additions = metaAdditions ?? computedAdditions;
   const deletions = metaDeletions ?? computedDeletions;
   const hasDiffSignal = metaHasDiffSignal ?? hasStructuralDiffSignal;
+  const firstResolvedFile = firstHunkFile ?? [...files][0] ?? event.action?.path ?? null;
 
   if (files.size === 0 && event.action?.path) {
     files.add(event.action.path);
@@ -613,6 +635,8 @@ function parseCodeChangeSummary(event: UiEvent): {
     files: [...files],
     additions,
     deletions,
+    hunkFile: firstResolvedFile,
+    hunkLine: firstHunkLine,
     previewLines,
     fullText,
     hasDiffSignal,
@@ -1305,6 +1329,9 @@ function CodeChangesEventCard({
   const fullPrimary = resolveActionPrimary(event).replace(/\s+/g, ' ').trim();
   const resourceLabels = extractResourceLabelsFromEvent(event);
   const hasResource = resourceLabels.length > 0;
+  const hunkDescriptor = summary.hunkFile && summary.hunkLine !== null
+    ? `${summary.hunkFile} | line ${summary.hunkLine} | +${summary.additions} -${summary.deletions}`
+    : null;
 
   if (!expanded) {
     return (
@@ -1329,6 +1356,9 @@ function CodeChangesEventCard({
             <span className={styles.codeChangesAdd}>+{summary.additions}</span>
             <span className={styles.codeChangesDel}>-{summary.deletions}</span>
           </div>
+          {hunkDescriptor && (
+            <div className={styles.codeChangesHunkInfo}>{hunkDescriptor}</div>
+          )}
           {previewText && (
             <DiffCodeBlock text={previewText} className={styles.codeChangesPreview} />
           )}
@@ -1370,6 +1400,9 @@ function CodeChangesEventCard({
             <span className={styles.codeChangesAdd}>+{summary.additions}</span>
             <span className={styles.codeChangesDel}>-{summary.deletions}</span>
           </div>
+          {hunkDescriptor && (
+            <div className={styles.codeChangesHunkInfo}>{hunkDescriptor}</div>
+          )}
           {summary.files.length > 0 && (
             <div className={styles.codeChangesFiles}>
               {summary.files.slice(0, 3).map((file) => (
