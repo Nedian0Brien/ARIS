@@ -1272,7 +1272,7 @@ function renderDiffLineContent(
   if (hunk) {
     return (
       <>
-        {hunk.file || '(unknown)'}
+        <span className={styles.diffHunkFileBadge}>{hunk.file || '(unknown)'}</span>
         {' | '}
         line {hunk.line}
         {' | '}

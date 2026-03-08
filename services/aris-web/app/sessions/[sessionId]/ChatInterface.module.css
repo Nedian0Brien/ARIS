@@ -1802,6 +1802,24 @@
   font-weight: 700;
 }
 
+.diffHunkFileBadge {
+  display: inline-flex;
+  align-items: center;
+  max-width: min(100%, 18rem);
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(248, 250, 252, 0.95);
+  color: #0f172a;
+  padding: 0.08rem 0.38rem;
+  font-size: 0.64rem;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: baseline;
+}
+
 .diffLineMeta {
   color: #4338ca;
   background: rgba(99, 102, 241, 0.14);
