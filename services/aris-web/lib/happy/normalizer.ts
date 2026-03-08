@@ -29,11 +29,89 @@ function asNullableString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
+function asNonNegativeInteger(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    return Math.floor(value);
+  }
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
 function asNumber(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
   }
   return fallback;
+}
+
+function hashFNV1a(input: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16);
+}
+
+function resolveEventId(
+  rec: RecordValue | null,
+  meta: RecordValue | null,
+  idx: number,
+  input: {
+    timestamp: string;
+    type: string;
+    title: string;
+    body: string;
+  },
+): string {
+  const explicitId = asString(rec?.id, '').trim();
+  if (explicitId) {
+    return explicitId;
+  }
+
+  const localId = asString(rec?.localId, '').trim();
+  if (localId) {
+    return localId;
+  }
+
+  const seqCandidates: unknown[] = [
+    rec?.seq,
+    rec?.messageSeq,
+    rec?.eventSeq,
+    rec?.index,
+    meta?.seq,
+    meta?.messageSeq,
+    meta?.eventSeq,
+  ];
+  for (const candidate of seqCandidates) {
+    const parsed = asNonNegativeInteger(candidate);
+    if (parsed !== null) {
+      return `seq-${parsed}`;
+    }
+  }
+
+  const chatId = asString(meta?.chatId, '').trim();
+  const role = asString(meta?.role, '').trim();
+  const streamEvent = asString(meta?.streamEvent, '').trim();
+  const seed = [
+    input.timestamp.trim(),
+    input.type.trim(),
+    input.title.trim(),
+    input.body.trim(),
+    chatId,
+    role,
+    streamEvent,
+  ].join('|');
+  if (seed.replace(/\|/g, '').length > 0) {
+    return `evt-${hashFNV1a(seed)}`;
+  }
+
+  return `evt-${idx}`;
 }
 
 function isActionKind(kind: UiEventKind): kind is 'run_execution' | 'exec_execution' | 'git_execution' | 'docker_execution' | 'command_execution' | 'file_list' | 'file_read' | 'file_write' {
@@ -603,6 +681,14 @@ export function normalizeEvents(raw: unknown): UiEvent[] {
 
     const body = asString(rec?.body ?? rec?.text ?? content?.text ?? content, '');
     const type = asString(rec?.type ?? content?.type, '');
+    const timestamp = asString(rec?.createdAt ?? rec?.timestamp, new Date().toISOString());
+    const title = asString(rec?.title, '');
+    const resolvedId = resolveEventId(rec, meta, idx, {
+      timestamp,
+      type,
+      title,
+      body,
+    });
     const firstLine = body.replace(/\r\n/g, '\n').split('\n')[0] ?? '';
     const metaCommand = asString(meta?.command, '').trim();
     const commandCandidate = metaCommand || (firstLine.trim().startsWith('$ ') ? extractCommand(firstLine) : '');
@@ -617,10 +703,10 @@ export function normalizeEvents(raw: unknown): UiEvent[] {
     const actionPayload = extractActionAndResult(kind, body, meta);
 
     return {
-      id: asString(rec?.id ?? rec?.localId, `evt-${idx}`),
-      timestamp: asString(rec?.createdAt ?? rec?.timestamp, new Date().toISOString()),
+      id: resolvedId,
+      timestamp,
       kind,
-      title: asString(rec?.title, kind.replace('_', ' ')),
+      title: title || kind.replace('_', ' '),
       body,
       meta: meta ?? undefined,
       action: actionPayload.action,

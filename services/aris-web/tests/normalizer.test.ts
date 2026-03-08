@@ -319,4 +319,56 @@ describe('normalizeEvents', () => {
 
     expect(events[0].kind).toBe('text_reply');
   });
+
+  it('uses stable seq-based ids when backend id is missing', () => {
+    const single = normalizeEvents([
+      {
+        seq: 42,
+        type: 'message',
+        text: 'hello world',
+        createdAt: '2026-03-09T00:00:00.000Z',
+      },
+    ]);
+    const paged = normalizeEvents([
+      {
+        seq: 41,
+        type: 'message',
+        text: 'older',
+        createdAt: '2026-03-08T23:59:00.000Z',
+      },
+      {
+        seq: 42,
+        type: 'message',
+        text: 'hello world',
+        createdAt: '2026-03-09T00:00:00.000Z',
+      },
+    ]);
+
+    expect(single[0].id).toBe('seq-42');
+    expect(paged[1].id).toBe('seq-42');
+  });
+
+  it('falls back to deterministic hash id when seq and id are missing', () => {
+    const first = normalizeEvents([
+      {
+        type: 'message',
+        title: 'User Instruction',
+        text: 'duplicate candidate',
+        createdAt: '2026-03-09T01:00:00.000Z',
+        meta: { chatId: 'c1', role: 'user' },
+      },
+    ]);
+    const second = normalizeEvents([
+      {
+        type: 'message',
+        title: 'User Instruction',
+        text: 'duplicate candidate',
+        createdAt: '2026-03-09T01:00:00.000Z',
+        meta: { chatId: 'c1', role: 'user' },
+      },
+    ]);
+
+    expect(first[0].id).toMatch(/^evt-[0-9a-f]+$/);
+    expect(first[0].id).toBe(second[0].id);
+  });
 });
