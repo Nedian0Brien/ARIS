@@ -1308,7 +1308,7 @@ function diffLineToneClass(line: string): string {
     return styles.diffLineDel;
   }
   if (line.startsWith('@@ ')) {
-    return styles.diffLineHunk;
+    return styles.diffLineContext;
   }
   if (
     line.startsWith('diff --git ')
@@ -1321,13 +1321,34 @@ function diffLineToneClass(line: string): string {
   return styles.diffLineContext;
 }
 
+function renderDiffLineContent(line: string): ReactNode {
+  if (!line.startsWith('@@ ')) {
+    return line.length > 0 ? line : ' ';
+  }
+  const match = line.match(/^@@\s+-(\d+(?:,\d+)?)\s+\+(\d+(?:,\d+)?)\s+@@(.*)$/);
+  if (!match) {
+    return line;
+  }
+  const [, oldRange, newRange, tail] = match;
+  return (
+    <>
+      {'@@ '}
+      <span className={styles.diffHunkMinus}>-{oldRange}</span>
+      {' '}
+      <span className={styles.diffHunkPlus}>+{newRange}</span>
+      {' @@'}
+      {tail}
+    </>
+  );
+}
+
 function DiffCodeBlock({ text, className }: { text: string; className: string }) {
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   return (
     <pre className={className}>
       {lines.map((line, index) => (
         <span key={`${index}-${line.length}`} className={`${styles.diffLine} ${diffLineToneClass(line)}`}>
-          {line.length > 0 ? line : ' '}
+          {renderDiffLineContent(line)}
         </span>
       ))}
     </pre>

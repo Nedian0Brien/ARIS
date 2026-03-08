@@ -1708,6 +1708,16 @@
   background: rgba(59, 130, 246, 0.14);
 }
 
+.diffHunkMinus {
+  color: #991b1b;
+  font-weight: 700;
+}
+
+.diffHunkPlus {
+  color: #166534;
+  font-weight: 700;
+}
+
 .diffLineMeta {
   color: #4338ca;
   background: rgba(99, 102, 241, 0.14);
