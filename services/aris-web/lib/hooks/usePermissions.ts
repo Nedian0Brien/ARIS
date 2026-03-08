@@ -11,12 +11,12 @@ function arePermissionsEqual(prev: PermissionRequest[], next: PermissionRequest[
     const before = prev[i];
     const after = next[i];
     if (
-      before.id !== after.id ||
-      before.state !== after.state ||
-      before.command !== after.command ||
-      before.reason !== after.reason ||
-      before.risk !== after.risk ||
-      before.requestedAt !== after.requestedAt
+      before.id !== after.id
+      || before.state !== after.state
+      || before.command !== after.command
+      || before.reason !== after.reason
+      || before.risk !== after.risk
+      || before.requestedAt !== after.requestedAt
     ) {
       return false;
     }
@@ -27,13 +27,13 @@ function arePermissionsEqual(prev: PermissionRequest[], next: PermissionRequest[
 
 export function usePermissions(sessionId: string, initialPermissions: PermissionRequest[]) {
   const [permissions, setPermissions] = useState<PermissionRequest[]>(initialPermissions);
+  const [resolvedPermissions, setResolvedPermissions] = useState<PermissionRequest[]>([]);
   const [loadingPermissionId, setLoadingPermissionId] = useState<string | null>(null);
-  const [ignoredPendingIds, setIgnoredPendingIds] = useState<Record<string, true>>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setPermissions(initialPermissions);
-    setIgnoredPendingIds({});
+    setResolvedPermissions([]);
     setError(null);
   }, [sessionId, initialPermissions]);
 
@@ -64,23 +64,10 @@ export function usePermissions(sessionId: string, initialPermissions: Permission
         return arePermissionsEqual(prev, merged) ? prev : merged;
       });
 
-      const nextPendingIds = new Set(nextPermissions.map((item) => item.id));
-      setIgnoredPendingIds((prev) => {
-        const keys = Object.keys(prev);
-        if (keys.length === 0) {
-          return prev;
-        }
-
-        let changed = false;
-        const filtered: Record<string, true> = {};
-        for (const key of keys) {
-          if (nextPendingIds.has(key)) {
-            filtered[key] = true;
-          } else {
-            changed = true;
-          }
-        }
-        return changed ? filtered : prev;
+      setResolvedPermissions((prev) => {
+        const pendingIds = new Set(nextPermissions.map((item) => item.id));
+        const next = prev.filter((item) => !pendingIds.has(item.id));
+        return arePermissionsEqual(prev, next) ? prev : next;
       });
 
       setError(null);
@@ -109,11 +96,47 @@ export function usePermissions(sessionId: string, initialPermissions: Permission
   }, [refreshPermissions]);
 
   const pendingPermissions = useMemo(
-    () => permissions.filter((item) => item.state === 'pending' && !ignoredPendingIds[item.id]),
-    [permissions, ignoredPendingIds]
+    () => permissions.filter((item) => item.state === 'pending'),
+    [permissions],
   );
 
-  const decidePermission = async (permissionId: string, decision: PermissionDecision) => {
+  const displayPermissions = useMemo(() => {
+    const pendingIds = new Set(pendingPermissions.map((item) => item.id));
+    return [...pendingPermissions, ...resolvedPermissions.filter((item) => !pendingIds.has(item.id))]
+      .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
+  }, [pendingPermissions, resolvedPermissions]);
+
+  const permissionById = useMemo(() => {
+    const map = new Map<string, PermissionRequest>();
+    for (const item of permissions) {
+      map.set(item.id, item);
+    }
+    for (const item of resolvedPermissions) {
+      if (!map.has(item.id)) {
+        map.set(item.id, item);
+      }
+    }
+    return map;
+  }, [permissions, resolvedPermissions]);
+
+  const decidePermission = useCallback(async (permissionId: string, decision: PermissionDecision) => {
+    const current = permissionById.get(permissionId);
+    if (!current) {
+      return { success: false, error: 'Permission not found' };
+    }
+
+    const nextState = decision === 'deny' ? 'denied' : 'approved';
+    const resolved = { ...current, state: nextState };
+
+    setPermissions((prev) =>
+      prev.map((item) => (item.id === permissionId ? resolved : item)),
+    );
+    setResolvedPermissions((prev) => {
+      const next = [...prev.filter((item) => item.id !== permissionId), resolved]
+        .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
+      return arePermissionsEqual(prev, next) ? prev : next;
+    });
+
     setLoadingPermissionId(permissionId);
     setError(null);
     try {
@@ -127,34 +150,31 @@ export function usePermissions(sessionId: string, initialPermissions: Permission
         redirectToLoginWithNext();
         return { success: false, error: 'Unauthorized' };
       }
-      
+
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error ?? 'Failed to decide permission');
       }
 
-      setPermissions((prev) =>
-        prev.map((item) =>
-          item.id === permissionId
-            ? { ...item, state: decision === 'deny' ? 'denied' : 'approved' }
-            : item
-        )
-      );
-      setIgnoredPendingIds((prev) => ({ ...prev, [permissionId]: true }));
       void refreshPermissions();
       return { success: true };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to process permission';
       setError(msg);
+      setPermissions((prev) =>
+        prev.map((item) => (item.id === permissionId ? current : item)),
+      );
+      setResolvedPermissions((prev) => prev.filter((item) => item.id !== permissionId));
       return { success: false, error: msg };
     } finally {
       setLoadingPermissionId(null);
     }
-  };
+  }, [permissionById, refreshPermissions]);
 
   return {
     permissions,
     pendingPermissions,
+    displayPermissions,
     loadingPermissionId,
     decidePermission,
     error,

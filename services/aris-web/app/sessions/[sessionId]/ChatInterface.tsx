@@ -1217,6 +1217,40 @@ function ActionResultDetail({ event }: { event: UiEvent }) {
   );
 }
 
+function diffLineToneClass(line: string): string {
+  if (line.startsWith('+') && !line.startsWith('+++')) {
+    return styles.diffLineAdd;
+  }
+  if (line.startsWith('-') && !line.startsWith('---')) {
+    return styles.diffLineDel;
+  }
+  if (line.startsWith('@@ ')) {
+    return styles.diffLineHunk;
+  }
+  if (
+    line.startsWith('diff --git ')
+    || line.startsWith('+++ ')
+    || line.startsWith('--- ')
+    || line.startsWith('*** ')
+  ) {
+    return styles.diffLineMeta;
+  }
+  return styles.diffLineContext;
+}
+
+function DiffCodeBlock({ text, className }: { text: string; className: string }) {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  return (
+    <pre className={className}>
+      {lines.map((line, index) => (
+        <span key={`${index}-${line.length}`} className={`${styles.diffLine} ${diffLineToneClass(line)}`}>
+          {line.length > 0 ? line : ' '}
+        </span>
+      ))}
+    </pre>
+  );
+}
+
 function CodeChangesEventCard({
   event,
   expanded,
@@ -1229,6 +1263,9 @@ function CodeChangesEventCard({
   const summary = parseCodeChangeSummary(event);
   const compactPrimary = truncateSingleLine(resolveActionPrimary(event), 78);
   const previewText = summary.previewLines.join('\n');
+  const fullPrimary = resolveActionPrimary(event).replace(/\s+/g, ' ').trim();
+  const resourceLabels = extractResourceLabelsFromEvent(event);
+  const hasResource = resourceLabels.length > 0;
 
   if (!expanded) {
     return (
@@ -1236,15 +1273,25 @@ function CodeChangesEventCard({
         <div className={styles.codeChangesCompactMain}>
           <div className={styles.actionCompactTopRow}>
             <span className={`${styles.kindChip} ${getToneClass('emerald')}`}>CHANGES</span>
-            <span className={styles.actionCompactPrimary}>{compactPrimary}</span>
+            <span className={styles.actionFileLabelSeparator}>-</span>
+            {hasResource ? (
+              <ResourceLabelStrip resources={resourceLabels} />
+            ) : (
+              <span className={styles.actionCompactPrimaryInline}>{compactPrimary}</span>
+            )}
           </div>
+          {hasResource && (
+            <div className={styles.actionPrimaryRow}>
+              <span className={styles.actionCompactPrimary}>{compactPrimary}</span>
+            </div>
+          )}
           <div className={styles.codeChangesSummary}>
             <span>{summary.files.length} files</span>
             <span className={styles.codeChangesAdd}>+{summary.additions}</span>
             <span className={styles.codeChangesDel}>-{summary.deletions}</span>
           </div>
           {previewText && (
-            <pre className={styles.codeChangesPreview}>{previewText}</pre>
+            <DiffCodeBlock text={previewText} className={styles.codeChangesPreview} />
           )}
         </div>
         <button
@@ -1267,8 +1314,18 @@ function CodeChangesEventCard({
         <div className={styles.actionHeaderMain}>
           <div className={styles.actionCompactTopRow}>
             <span className={`${styles.kindChip} ${getToneClass('emerald')}`}>CHANGES</span>
-            <span className={styles.actionPrimary}>{resolveActionPrimary(event)}</span>
+            <span className={styles.actionFileLabelSeparator}>-</span>
+            {hasResource ? (
+              <ResourceLabelStrip resources={resourceLabels} />
+            ) : (
+              <span className={styles.actionCompactPrimaryInline}>{fullPrimary}</span>
+            )}
           </div>
+          {hasResource && (
+            <div className={styles.actionPrimaryRow}>
+              <span className={styles.actionPrimary}>{fullPrimary}</span>
+            </div>
+          )}
           <div className={styles.codeChangesSummary}>
             <span>{summary.files.length} files</span>
             <span className={styles.codeChangesAdd}>+{summary.additions}</span>
@@ -1295,7 +1352,7 @@ function CodeChangesEventCard({
         </button>
       </div>
       <div id={`changes-${event.id}`} className={styles.actionResultWrap}>
-        <pre className={styles.codeChangesFull}>{summary.fullText || '(no diff output)'}</pre>
+        <DiffCodeBlock text={summary.fullText || '(no diff output)'} className={styles.codeChangesFull} />
       </div>
     </div>
   );
@@ -1474,6 +1531,7 @@ export function ChatInterface({
   );
   const { isRunning: runtimeRunning, runtimeError } = useSessionRuntime(sessionId);
   const {
+    displayPermissions,
     pendingPermissions,
     loadingPermissionId,
     decidePermission,
@@ -2984,7 +3042,7 @@ export function ChatInterface({
                 </article>
               );
             })}
-            {showPermissionQueue && pendingPermissions.map((permission) => (
+            {showPermissionQueue && displayPermissions.map((permission) => (
               <PermissionRequestMessage
                 key={permission.id}
                 anchorId={`permission-${permission.id}`}

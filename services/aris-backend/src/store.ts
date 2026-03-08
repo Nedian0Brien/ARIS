@@ -260,13 +260,6 @@ class MockRuntimeStore implements RuntimeStoreBackend {
     permission.state = decision === 'deny' ? 'denied' : 'approved';
     this.permissions.set(permission.id, permission);
 
-    await this.appendMessage(permission.sessionId, {
-      type: 'message',
-      title: 'Text Reply',
-      text: `Permission ${permission.command} -> ${permission.state}`,
-      meta: { permissionId, decision },
-    });
-
     return permission;
   }
 }

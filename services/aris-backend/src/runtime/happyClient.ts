@@ -2443,18 +2443,6 @@ export class HappyRuntimeStore {
       }
     }
 
-    try {
-      await this.appendAgentMessage(
-        permission.sessionId,
-        `Permission ${permission.command} -> ${state}`,
-        { permissionId, decision, source: 'permission-decision' },
-        { type: 'tool', title: 'Permission Decision' },
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`failed to persist permission decision message: ${message}`);
-    }
-
     return updated;
   }
 }

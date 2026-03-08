@@ -1589,14 +1589,46 @@
   padding: 0.48rem;
   border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(15, 23, 42, 0.95);
-  color: #e2e8f0;
+  background: rgba(248, 250, 252, 0.98);
+  color: #0f172a;
   font-size: 0.71rem;
   line-height: 1.42;
   max-height: 320px;
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.diffLine {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: 4px;
+  padding: 0 0.14rem;
+}
+
+.diffLineContext {
+  color: #334155;
+}
+
+.diffLineAdd {
+  color: #166534;
+  background: rgba(34, 197, 94, 0.16);
+}
+
+.diffLineDel {
+  color: #991b1b;
+  background: rgba(239, 68, 68, 0.16);
+}
+
+.diffLineHunk {
+  color: #1d4ed8;
+  background: rgba(59, 130, 246, 0.14);
+}
+
+.diffLineMeta {
+  color: #4338ca;
+  background: rgba(99, 102, 241, 0.14);
 }
 
 .actionOverflowBubble {
@@ -1697,11 +1729,27 @@
   background: linear-gradient(145deg, rgba(255, 247, 237, 0.98) 0%, rgba(255, 251, 235, 0.95) 100%);
 }
 
+.permissionMessageBubbleApproved {
+  border-color: rgba(16, 185, 129, 0.42);
+  background: linear-gradient(145deg, rgba(236, 253, 245, 0.98) 0%, rgba(240, 253, 244, 0.95) 100%);
+}
+
+.permissionMessageBubbleDenied {
+  border-color: rgba(248, 113, 113, 0.42);
+  background: linear-gradient(145deg, rgba(254, 242, 242, 0.98) 0%, rgba(255, 241, 242, 0.95) 100%);
+}
+
 .permissionMessageHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.42rem;
+}
+
+.permissionHeaderMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .permissionMessageTitle {
@@ -1723,6 +1771,34 @@
 
 .permissionRiskRow {
   margin-top: 0.45rem;
+}
+
+.permissionStateChip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.12rem 0.48rem;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.permissionStatePending {
+  color: #92400e;
+  border: 1px solid rgba(245, 158, 11, 0.32);
+  background: rgba(255, 237, 213, 0.95);
+}
+
+.permissionStateApproved {
+  color: #065f46;
+  border: 1px solid rgba(16, 185, 129, 0.36);
+  background: rgba(209, 250, 229, 0.95);
+}
+
+.permissionStateDenied {
+  color: #991b1b;
+  border: 1px solid rgba(239, 68, 68, 0.36);
+  background: rgba(254, 226, 226, 0.95);
 }
 
 .permissionRiskChip {
@@ -1776,6 +1852,29 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+}
+
+.permissionDecisionState {
+  margin-top: 0.55rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.56rem;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.permissionDecisionApproved {
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  background: rgba(209, 250, 229, 0.9);
+  color: #065f46;
+}
+
+.permissionDecisionDenied {
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: rgba(254, 226, 226, 0.9);
+  color: #991b1b;
 }
 
 .permissionBtn,
