@@ -1510,6 +1510,7 @@
   background: transparent;
   padding: 0;
   max-width: 100%;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -1553,12 +1554,15 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.45rem;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .actionHeaderMain {
   min-width: 0;
   display: block;
   flex: 1;
+  max-width: 100%;
 }
 
 .actionCompactPrimary {
@@ -1645,6 +1649,7 @@
   box-sizing: border-box;
   max-height: 280px;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
@@ -1724,6 +1729,7 @@
   display: inline-flex;
   align-items: center;
   max-width: 100%;
+  min-width: 0;
   border-radius: 999px;
   border: 1px solid rgba(148, 163, 184, 0.28);
   background: rgba(248, 250, 252, 0.95);
@@ -1731,6 +1737,9 @@
   padding: 0.1rem 0.4rem;
   font-size: 0.66rem;
   font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .codeChangesFull {
@@ -2897,11 +2906,52 @@
     max-width: 100%;
   }
 
+  .actionCard .actionCompactTopRow {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .actionCard .actionCompactPrimaryInline {
+    flex-basis: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    text-overflow: clip;
+  }
+
+  .actionCard .resourceLabelList {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .actionCard .resourceChip {
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .actionCard .resourceChipText {
+    max-width: 100%;
+  }
+
+  .actionCard .codeChangesFiles {
+    max-width: 100%;
+  }
+
+  .actionCard .codeChangesFile {
+    max-width: 100%;
+  }
+
   .actionPrimary {
     white-space: normal;
     overflow-wrap: anywhere;
     word-break: break-all;
     text-overflow: clip;
+  }
+
+  .actionResult,
+  .codeChangesPreview,
+  .codeChangesFull {
+    overflow-wrap: anywhere;
   }
 
   .scrollBottomButton {
