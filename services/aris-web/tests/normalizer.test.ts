@@ -202,6 +202,20 @@ describe('normalizeEvents', () => {
     expect(events[0].action?.path).toBe('src/app.tsx');
   });
 
+  it('prioritizes normalizedActionKind contract over text heuristics', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e3a',
+        type: 'message',
+        text: '완료했습니다.',
+        meta: { normalizedActionKind: 'file_write', path: 'services/aris-web/app/page.tsx' },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('file_write');
+    expect(events[0].action?.path).toBe('services/aris-web/app/page.tsx');
+  });
+
   it('overrides file_read meta when command contains explicit write operations', () => {
     const events = normalizeEvents([
       {

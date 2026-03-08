@@ -153,6 +153,10 @@ function toUiEventKind(value: string): UiEventKind | null {
 }
 
 function pickKindFromMeta(meta: RecordValue | null, type: string): UiEventKind | null {
+  const fromNormalizedKind = toUiEventKind(asString(meta?.normalizedActionKind, '').toLowerCase());
+  if (fromNormalizedKind) {
+    return fromNormalizedKind;
+  }
   const fromMeta = toUiEventKind(asString(meta?.actionType, '').toLowerCase());
   if (fromMeta) {
     return fromMeta;

@@ -71,3 +71,32 @@ Use the same token in both services:
 
 - `mock` mode is in-memory; restarting clears runtime state.
 - `happy` mode should point at a reachable Happy server and valid token.
+
+## Stream-JSON Action Mapping (Contract)
+
+To keep action cards consistent across Codex, Claude, and Gemini, runtime tool messages use a common metadata contract:
+
+- `normalizedActionKind`: `command_execution | file_list | file_read | file_write`
+- `actionType`: legacy-compatible copy of the same action kind
+- optional: `command`, `path`, `additions`, `deletions`, `hasDiffSignal`
+
+Web normalizer priority:
+1. `meta.normalizedActionKind`
+2. `meta.actionType`
+3. text heuristics
+
+### Provider Mapping Table
+
+| Provider | Source stream shape | Mapping rule | Stored action kind |
+| --- | --- | --- | --- |
+| Codex (`app-server`) | `item/completed` + `commandExecution` | `inferActionTypeFromCommand(command)` | `command_execution/file_list/file_read/file_write` |
+| Codex (`app-server`) | `file_change/apply_patch`-like items | fixed write classification | `file_write` |
+| Codex (`exec`) | `item.completed` JSON lines (`command_execution`) | `inferActionTypeFromCommand(command)` | `command_execution/file_list/file_read/file_write` |
+| Claude (`--output-format stream-json`) | JSON line payloads with command/path hints | command-first inference, fallback path/read-write keywords | `command_execution/file_list/file_read/file_write` |
+| Gemini (`--output-format stream-json`) | JSON line payloads with command/path hints | command-first inference, fallback path/read-write keywords | `command_execution/file_list/file_read/file_write` |
+
+### Why This Exists
+
+- Codex emits rich structured tool events natively.
+- Claude/Gemini can emit stream JSON, but schema can differ by version/tooling.
+- The contract above decouples UI cards from provider-specific raw event shapes.
