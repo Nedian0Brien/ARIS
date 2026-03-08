@@ -111,6 +111,36 @@ curl -sS http://127.0.0.1:4080/health
 - 세션이 없다면 UI는 빈 상태 메시지를 출력해야 하며, 임의 더미 데이터가 표시되지 않음.
 - 이 동작은 서버/클라이언트에서 모두 동일해야 하므로, 배포 직후 빈 상태 화면을 직접 확인한다.
 
+### D. `백엔드 응답 오류 (502): fetch failed` (`RUNTIME_BACKEND=happy`)
+원인 우선순위
+1. `HAPPY_SERVER_URL` 대상 서비스 중지(예: `127.0.0.1:3005` 미기동)
+2. `happy-server`/`happy-postgres` 컨테이너 중지
+3. `HAPPY_SERVER_URL` 오타 또는 방화벽/네트워크 차단
+
+즉시 점검
+```bash
+ss -tulpn | rg ':3005\\b|:4080\\b'
+docker ps -a --filter name=happy
+curl -sS http://127.0.0.1:3005/health
+./deploy/check-runtime-connection.sh
+```
+
+해결 순서
+1. Happy 런타임 컨테이너 기동
+```bash
+docker start happy-postgres happy-server
+```
+2. 재부팅/장애 후 자동 복구를 위해 restart 정책 고정
+```bash
+docker update --restart unless-stopped happy-server happy-postgres
+```
+3. `deploy/.env`, `services/aris-backend/.env`의 `RUNTIME_BACKEND=happy` 및 `HAPPY_SERVER_URL` 확인
+4. 백엔드 reload 후 재검증
+```bash
+./deploy/deploy_backend_zero_downtime.sh
+./deploy/check-runtime-connection.sh
+```
+
 ## 6. 일반적인 운영 커맨드
 ```bash
 docker compose --env-file deploy/.env up -d --build            # 전체 서비스 재기동
