@@ -33,6 +33,10 @@
   
   --accent-red: #ef4444;
   --accent-red-bg: #fee2e2;
+  --accent-git: #a0361d;
+  --accent-git-bg: rgba(240, 80, 50, 0.2);
+  --accent-docker: #0a4f82;
+  --accent-docker-bg: rgba(36, 150, 237, 0.2);
 
   --chart-track: #e2e8f0;
   --chart-status-running: #3b82f6;
@@ -121,6 +125,10 @@ html[data-theme='dark'] {
 
   --accent-red: #f87171;
   --accent-red-bg: rgba(239, 68, 68, 0.22);
+  --accent-git: #ff8d6c;
+  --accent-git-bg: rgba(240, 80, 50, 0.26);
+  --accent-docker: #7cc5ff;
+  --accent-docker-bg: rgba(36, 150, 237, 0.26);
 
   --chart-track: #334155;
   --chart-status-running: #60a5fa;
@@ -183,6 +191,10 @@ html[data-theme='dark'] {
     --accent-slate-bg: rgba(148, 163, 184, 0.22);
     --accent-red: #f87171;
     --accent-red-bg: rgba(239, 68, 68, 0.22);
+    --accent-git: #ff8d6c;
+    --accent-git-bg: rgba(240, 80, 50, 0.26);
+    --accent-docker: #7cc5ff;
+    --accent-docker-bg: rgba(36, 150, 237, 0.26);
     --chart-track: #334155;
     --chart-status-running: #60a5fa;
     --chart-status-pending: #fbbf24;

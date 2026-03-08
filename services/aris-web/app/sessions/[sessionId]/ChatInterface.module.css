@@ -952,18 +952,18 @@
 }
 
 .connectionGood {
-  color: #065f46;
-  background: rgba(16, 185, 129, 0.14);
+  color: var(--accent-emerald);
+  background: var(--accent-emerald-bg);
 }
 
 .connectionWarn {
-  color: #9a3412;
-  background: rgba(251, 146, 60, 0.16);
+  color: var(--accent-amber);
+  background: var(--accent-amber-bg);
 }
 
 .connectionRunning {
-  color: #1e3a8a;
-  background: rgba(59, 130, 246, 0.16);
+  color: var(--accent-sky);
+  background: var(--accent-sky-bg);
 }
 
 .connectionRunningIcon {
@@ -1368,49 +1368,49 @@
 }
 
 .resourceIconShell {
-  color: #0f766e;
+  color: var(--accent-emerald);
 }
 
 .resourceIconConfig {
-  color: #b45309;
+  color: var(--accent-amber);
 }
 
 .resourceIconDoc {
-  color: #475569;
+  color: var(--accent-slate);
 }
 
 .resourceIconOther {
-  color: #6b7280;
+  color: var(--chat-text-muted);
 }
 
 .toneSky {
-  color: #1e3a8a;
-  background: rgba(96, 165, 250, 0.28);
+  color: var(--accent-sky);
+  background: var(--accent-sky-bg);
 }
 
 .toneAmber {
-  color: #78350f;
-  background: rgba(251, 191, 36, 0.35);
+  color: var(--accent-amber);
+  background: var(--accent-amber-bg);
 }
 
 .toneCyan {
-  color: #0e4a5c;
-  background: rgba(34, 211, 238, 0.28);
+  color: var(--accent-sky);
+  background: color-mix(in srgb, var(--accent-sky-bg) 78%, var(--surface) 22%);
 }
 
 .toneEmerald {
-  color: #064e3b;
-  background: rgba(52, 211, 153, 0.28);
+  color: var(--accent-emerald);
+  background: var(--accent-emerald-bg);
 }
 
 .toneViolet {
-  color: #4c1d95;
-  background: rgba(167, 139, 250, 0.30);
+  color: var(--accent-violet);
+  background: var(--accent-violet-bg);
 }
 
 .toneRed {
-  color: #7f1d1d;
-  background: rgba(252, 165, 165, 0.30);
+  color: var(--accent-red);
+  background: var(--accent-red-bg);
 }
 
 .toneGit {
