@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 import { inferActionTypeFromCommand, titleForActionType } from './actionType.js';
+import { summarizeDiffText } from './diffStats.js';
 import { HappyEventLogger } from './happyEventLogger.js';
 import type {
   ApprovalPolicy,
@@ -664,6 +665,9 @@ function inferCodexFileWriteItem(item: Record<string, unknown>): {
   path?: string;
   detail?: string;
   status?: string;
+  additions: number;
+  deletions: number;
+  hasDiffSignal: boolean;
 } | null {
   const itemType = asString(item.type, '').trim().toLowerCase();
   if (!itemType || itemType.includes('approval')) {
@@ -711,8 +715,35 @@ function inferCodexFileWriteItem(item: Record<string, unknown>): {
     return '';
   };
 
+  const pickDiffFromArray = (value: unknown): string => {
+    if (!Array.isArray(value)) {
+      return '';
+    }
+
+    const details: string[] = [];
+    for (const entry of value) {
+      const rec = asRecord(entry);
+      if (!rec) {
+        continue;
+      }
+      const candidate = asString(
+        rec.diff,
+        asString(
+          rec.patch,
+          asString(rec.unified_diff, asString(rec.unifiedDiff, asString(rec.text, asString(rec.result, '')))),
+        ),
+      ).trim();
+      if (candidate) {
+        details.push(candidate);
+      }
+    }
+
+    return details.join('\n').trim();
+  };
+
   const arrayPath = pickPathFromArray(item.paths)
     || pickPathFromArray(item.files)
+    || pickPathFromArray(item.changes)
     || pickPathFromArray(item.changed_files)
     || pickPathFromArray(item.changedFiles);
 
@@ -731,6 +762,7 @@ function inferCodexFileWriteItem(item: Record<string, unknown>): {
   ).trim() || undefined;
   const commandRaw = asString(item.command, '').trim();
   const command = unwrapShellCommand(commandRaw || 'apply_patch');
+  const arrayDiff = pickDiffFromArray(item.changes);
   const detailRaw = stripAnsi(asString(
     item.diff,
     asString(
@@ -739,19 +771,20 @@ function inferCodexFileWriteItem(item: Record<string, unknown>): {
         item.unified_diff,
         asString(
           item.unifiedDiff,
-          asString(item.output, asString(item.text, asString(item.result, ''))),
+          asString(item.output, asString(item.text, asString(item.result, arrayDiff))),
         ),
       ),
     ),
   )).trim();
   const detail = detailRaw && detailRaw.toLowerCase() !== 'apply_patch' ? detailRaw : undefined;
   const status = asString(item.status, '').trim() || undefined;
+  const diffStats = summarizeDiffText(detailRaw);
 
   if (!path && !detail) {
     return null;
   }
 
-  return { command, path, detail, status };
+  return { command, path, detail, status, ...diffStats };
 }
 
 function buildCodexThreadCacheKey(sessionId: string, chatId?: string): string {
@@ -1360,6 +1393,9 @@ export class HappyRuntimeStore {
               actionType: 'file_write',
               command: fileWrite.command,
               path: fileWrite.path,
+              additions: fileWrite.additions,
+              deletions: fileWrite.deletions,
+              hasDiffSignal: fileWrite.hasDiffSignal,
               streamEvent: 'file_change',
               ...(resolvedThreadId ? { threadId: resolvedThreadId } : {}),
             },
@@ -1380,6 +1416,9 @@ export class HappyRuntimeStore {
           ? exitCodeValue
           : null;
         const actionType = inferActionTypeFromCommand(command);
+        const diffStats = actionType === 'file_write'
+          ? summarizeDiffText(output)
+          : { additions: 0, deletions: 0, hasDiffSignal: false };
         const title = titleForActionType(actionType);
         const bodyParts = [`$ ${command || 'command'}`];
         if (output) {
@@ -1404,6 +1443,9 @@ export class HappyRuntimeStore {
             actionType,
             command,
             exitCode: exitCode ?? undefined,
+            additions: diffStats.additions,
+            deletions: diffStats.deletions,
+            hasDiffSignal: diffStats.hasDiffSignal,
             streamEvent: 'command_execution',
             ...(resolvedThreadId ? { threadId: resolvedThreadId } : {}),
           },
@@ -1867,6 +1909,9 @@ export class HappyRuntimeStore {
             actionType: 'file_write',
             command: fileWrite.command,
             path: fileWrite.path,
+            additions: fileWrite.additions,
+            deletions: fileWrite.deletions,
+            hasDiffSignal: fileWrite.hasDiffSignal,
             streamEvent: 'file_change',
             ...(resolvedThreadId ? { threadId: resolvedThreadId } : {}),
           },
@@ -1887,6 +1932,9 @@ export class HappyRuntimeStore {
         ? exitCodeValue
         : null;
       const actionType = inferActionTypeFromCommand(command);
+      const diffStats = actionType === 'file_write'
+        ? summarizeDiffText(output)
+        : { additions: 0, deletions: 0, hasDiffSignal: false };
       const title = titleForActionType(actionType);
       const bodyParts = [`$ ${command || 'command'}`];
       if (output) {
@@ -1907,6 +1955,9 @@ export class HappyRuntimeStore {
           actionType,
           command,
           exitCode: exitCode ?? undefined,
+          additions: diffStats.additions,
+          deletions: diffStats.deletions,
+          hasDiffSignal: diffStats.hasDiffSignal,
           streamEvent: 'command_execution',
           ...(resolvedThreadId ? { threadId: resolvedThreadId } : {}),
         },

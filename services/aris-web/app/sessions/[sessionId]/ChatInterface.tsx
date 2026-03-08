@@ -530,6 +530,7 @@ function parseCodeChangeSummary(event: UiEvent): {
   deletions: number;
   previewLines: string[];
   fullText: string;
+  hasDiffSignal: boolean;
 } {
   const fallback = fallbackResult(event);
   const fullText = (event.result?.full ?? event.result?.preview ?? fallback?.full ?? fallback?.preview ?? event.body ?? '')
@@ -537,26 +538,59 @@ function parseCodeChangeSummary(event: UiEvent): {
     .trimEnd();
   const lines = fullText ? fullText.split('\n') : [];
   const files = new Set<string>();
-  let additions = 0;
-  let deletions = 0;
+  let computedAdditions = 0;
+  let computedDeletions = 0;
+  let hasStructuralDiffSignal = false;
 
   for (const line of lines) {
     const normalized = line.trim();
+    const lowered = normalized.toLowerCase();
+    if (
+      normalized.startsWith('diff --git ')
+      || normalized.startsWith('@@ ')
+      || lowered.startsWith('*** begin patch')
+      || lowered.startsWith('*** update file:')
+      || lowered.startsWith('*** add file:')
+      || lowered.startsWith('*** delete file:')
+    ) {
+      hasStructuralDiffSignal = true;
+    }
     const gitFileMatch = normalized.match(/^(?:\+\+\+|---)\s+[ab]\/(.+)$/);
     if (gitFileMatch?.[1]) {
       files.add(gitFileMatch[1]);
+      hasStructuralDiffSignal = true;
     }
     const patchFileMatch = normalized.match(/^\*\*\*\s+(?:Update|Add|Delete)\s+File:\s+(.+)$/);
     if (patchFileMatch?.[1]) {
       files.add(patchFileMatch[1]);
+      hasStructuralDiffSignal = true;
     }
     if (line.startsWith('+') && !line.startsWith('+++')) {
-      additions += 1;
+      computedAdditions += 1;
     }
     if (line.startsWith('-') && !line.startsWith('---')) {
-      deletions += 1;
+      computedDeletions += 1;
     }
   }
+
+  const meta = event.meta ?? {};
+  const metaAdditionsValue = meta.additions;
+  const metaDeletionsValue = meta.deletions;
+  const metaHasDiffSignalValue = meta.hasDiffSignal;
+
+  const metaAdditions = typeof metaAdditionsValue === 'number' && Number.isFinite(metaAdditionsValue)
+    ? metaAdditionsValue
+    : null;
+  const metaDeletions = typeof metaDeletionsValue === 'number' && Number.isFinite(metaDeletionsValue)
+    ? metaDeletionsValue
+    : null;
+  const metaHasDiffSignal = typeof metaHasDiffSignalValue === 'boolean'
+    ? metaHasDiffSignalValue
+    : null;
+
+  const additions = metaAdditions ?? computedAdditions;
+  const deletions = metaDeletions ?? computedDeletions;
+  const hasDiffSignal = metaHasDiffSignal ?? hasStructuralDiffSignal;
 
   if (files.size === 0 && event.action?.path) {
     files.add(event.action.path);
@@ -577,6 +611,7 @@ function parseCodeChangeSummary(event: UiEvent): {
     deletions,
     previewLines,
     fullText,
+    hasDiffSignal,
   };
 }
 
@@ -1375,7 +1410,11 @@ function renderEventPayload(
 
   if (isActionKind(event.kind)) {
     if (event.kind === 'file_write') {
-      return <CodeChangesEventCard event={event} expanded={expanded} onToggle={onToggleExpand} />;
+      const summary = parseCodeChangeSummary(event);
+      if (summary.hasDiffSignal) {
+        return <CodeChangesEventCard event={event} expanded={expanded} onToggle={onToggleExpand} />;
+      }
+      return <ActionEventCard event={event} expanded={expanded} onToggle={onToggleExpand} />;
     }
     return <ActionEventCard event={event} expanded={expanded} onToggle={onToggleExpand} />;
   }
