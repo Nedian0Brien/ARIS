@@ -634,6 +634,110 @@ export function classifyEventKind(input: { type?: string; text?: string; command
   return 'unknown';
 }
 
+function extractShellCommandFromBody(body: string): string {
+  const normalized = body.replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('$ ')) {
+      continue;
+    }
+    const command = extractCommand(trimmed);
+    if (command) {
+      return command;
+    }
+  }
+
+  const fenceMatch = normalized.match(/```(?:bash|sh|shell|zsh)?\n([\s\S]*?)```/i);
+  if (!fenceMatch || typeof fenceMatch[1] !== 'string') {
+    return '';
+  }
+  const commandLine = fenceMatch[1]
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line && !line.startsWith('#'));
+  return commandLine ? extractCommand(commandLine) : '';
+}
+
+function extractPathFromBody(body: string): string {
+  const backtickPathMatch = body.match(/`((?:\.{1,2}\/)?[^\s`]*[\\/][^\s`]+|(?:\.{1,2}\/)?[^\s`]+\.[a-z0-9]{1,12})`/i);
+  if (backtickPathMatch?.[1]) {
+    return backtickPathMatch[1].trim();
+  }
+
+  const rawPathMatch = body.match(/(?:^|[\s"'(])((?:\.{1,2}\/)?[a-z0-9._-]+(?:[\\/][a-z0-9._-]+)+\.[a-z0-9]{1,12})(?:$|[\s"'.,)])?/i);
+  if (rawPathMatch?.[1]) {
+    return rawPathMatch[1].trim();
+  }
+
+  return '';
+}
+
+function inferCliAgentActionKind(input: {
+  type: string;
+  text: string;
+  meta: RecordValue | null;
+}): UiEventKind | null {
+  const source = asString(input.meta?.source, '').trim().toLowerCase();
+  const agent = asString(input.meta?.agent, '').trim().toLowerCase();
+  const streamEvent = asString(input.meta?.streamEvent, '').trim().toLowerCase();
+  const actionType = asString(input.meta?.actionType, '').trim();
+  if (!input.type.includes('message')) {
+    return null;
+  }
+  if (source !== 'cli-agent') {
+    return null;
+  }
+  if (agent !== 'claude' && agent !== 'gemini') {
+    return null;
+  }
+  if (streamEvent || actionType) {
+    return null;
+  }
+
+  const text = input.text.replace(/\r\n/g, '\n');
+  const lower = text.toLowerCase();
+  const command = extractShellCommandFromBody(text);
+  const path = extractPathFromBody(text);
+
+  if (
+    lower.includes('diff --git')
+    || lower.includes('*** update file:')
+    || lower.includes('*** add file:')
+    || lower.includes('*** delete file:')
+    || lower.includes('@@ ')
+  ) {
+    return 'file_write';
+  }
+
+  if (command) {
+    const shellKind = classifyShellCommandKind(command);
+    if (shellKind) {
+      return shellKind;
+    }
+  }
+
+  if (
+    path
+    && /(수정|변경|추가|삭제|작성|패치|updated|modified|created|deleted|patched|rewrote|renamed)/i.test(text)
+  ) {
+    return 'file_write';
+  }
+  if (
+    path
+    && /(확인|검토|읽|조회|열람|opened|read|checked|inspected|reviewed)/i.test(text)
+  ) {
+    return 'file_read';
+  }
+  if (
+    /(파일 목록|디렉터리|directory listing|file list|listed files|listed|ls\s|tree\s|rg --files)/i.test(text)
+  ) {
+    return 'file_list';
+  }
+
+  return null;
+}
+
 export function normalizeSessions(raw: unknown): SessionSummary[] {
   const list = Array.isArray(raw) ? raw : [];
 
@@ -693,14 +797,35 @@ export function normalizeEvents(raw: unknown): UiEvent[] {
     const metaCommand = asString(meta?.command, '').trim();
     const commandCandidate = metaCommand || (firstLine.trim().startsWith('$ ') ? extractCommand(firstLine) : '');
     const kindFromMeta = pickKindFromMeta(meta, type.toLowerCase());
-    const kind = streamEvent === 'agent_message' || streamEvent === 'agent_message_recovered'
+    const classifiedKind = streamEvent === 'agent_message' || streamEvent === 'agent_message_recovered'
       ? 'text_reply'
       : classifyEventKind({
         type: kindFromMeta ?? type,
         text: body,
         command: commandCandidate,
       });
-    const actionPayload = extractActionAndResult(kind, body, meta);
+    const inferredKind = classifiedKind === 'text_reply'
+      ? inferCliAgentActionKind({
+        type: type.toLowerCase(),
+        text: body,
+        meta,
+      })
+      : null;
+    const kind = inferredKind ?? classifiedKind;
+    const inferredCommand = commandCandidate || extractShellCommandFromBody(body);
+    const inferredPath = asString(meta?.path, '').trim() || extractPathFromBody(body);
+    const actionMeta = (
+      kind !== classifiedKind
+      && meta
+      && (inferredCommand || inferredPath)
+    )
+      ? {
+        ...meta,
+        ...(inferredCommand ? { command: inferredCommand } : {}),
+        ...(inferredPath ? { path: inferredPath } : {}),
+      }
+      : meta;
+    const actionPayload = extractActionAndResult(kind, body, actionMeta);
 
     return {
       id: resolvedId,

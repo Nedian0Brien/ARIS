@@ -320,6 +320,34 @@ describe('normalizeEvents', () => {
     expect(events[0].kind).toBe('text_reply');
   });
 
+  it('infers file_read action for claude cli-agent summary messages with file paths', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e9',
+        type: 'message',
+        text: 'services/aris-web/package.json 파일을 확인했고 의존성을 요약했습니다.',
+        meta: { source: 'cli-agent', role: 'agent', agent: 'claude' },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('file_read');
+    expect(events[0].action?.path).toBe('services/aris-web/package.json');
+  });
+
+  it('infers file_list action for gemini cli-agent messages that include shell commands', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e10',
+        type: 'message',
+        text: '$ ls src\nindex.ts\napp.tsx',
+        meta: { source: 'cli-agent', role: 'agent', agent: 'gemini' },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('file_list');
+    expect(events[0].action?.command).toBe('ls src');
+  });
+
   it('uses stable seq-based ids when backend id is missing', () => {
     const single = normalizeEvents([
       {

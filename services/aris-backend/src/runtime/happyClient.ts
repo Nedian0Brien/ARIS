@@ -464,7 +464,24 @@ function trimOutput(value: string): string {
   return normalized.slice(0, AGENT_MAX_OUTPUT_CHARS);
 }
 
-type AgentCommand = { command: string; args: string[]; requiresPty?: boolean };
+type AgentCommand = {
+  command: string;
+  args: string[];
+  requiresPty?: boolean;
+  streamJson?: boolean;
+  fallbackArgs?: string[];
+};
+
+type ParsedAgentActionEvent = {
+  actionType: 'command_execution' | 'file_list' | 'file_read' | 'file_write';
+  title: string;
+  command?: string;
+  path?: string;
+  output?: string;
+  additions: number;
+  deletions: number;
+  hasDiffSignal: boolean;
+};
 
 function shellEscapeSingle(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
@@ -478,6 +495,165 @@ function stripAnsi(value: string): string {
     .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, '')
     .replace(/\n?\d+;\s*$/g, '')
     .trim();
+}
+
+function collectNestedRecords(root: Record<string, unknown>): Record<string, unknown>[] {
+  const stack: unknown[] = [root];
+  const records: Record<string, unknown>[] = [];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    const record = asRecord(current);
+    if (!record) {
+      continue;
+    }
+    records.push(record);
+    for (const value of Object.values(record)) {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          stack.push(item);
+        }
+      } else if (value && typeof value === 'object') {
+        stack.push(value);
+      }
+    }
+  }
+  return records;
+}
+
+function extractFirstStringByKeys(records: Record<string, unknown>[], keys: string[]): string {
+  for (const key of keys) {
+    for (const record of records) {
+      const value = record[key];
+      if (typeof value !== 'string') {
+        continue;
+      }
+      const trimmed = value.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+  }
+  return '';
+}
+
+function extractPathFromCommand(command: string): string {
+  const tokens = command.split(/\s+/).filter(Boolean);
+  if (tokens.length < 2) {
+    return '';
+  }
+
+  const rawLast = tokens[tokens.length - 1] ?? '';
+  const last = rawLast.replace(/^[("'`]+|[)"'`;,]+$/g, '');
+  if (!last || last.startsWith('-')) {
+    return '';
+  }
+  if (last.includes('/') || last.includes('.') || last.startsWith('~')) {
+    return last;
+  }
+  return '';
+}
+
+function looksLikeShellCommand(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 500 || trimmed.includes('\n')) {
+    return false;
+  }
+  return /^(?:\$ )?[a-z0-9._/-]+(?:\s+.+)?$/i.test(trimmed);
+}
+
+function parseAgentStreamOutput(stdout: string): { output: string; actions: ParsedAgentActionEvent[] } {
+  const lines = stdout
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const actionByKey = new Map<string, ParsedAgentActionEvent>();
+  let latestAssistantText = '';
+
+  for (const line of lines) {
+    const payload = parseJsonLine(line);
+    if (!payload) {
+      continue;
+    }
+    const payloadType = asString(payload.type, '').trim().toLowerCase();
+    const payloadSubtype = asString(payload.subtype, '').trim().toLowerCase();
+    const lineLower = line.toLowerCase();
+    const records = collectNestedRecords(payload);
+    const commandRaw = extractFirstStringByKeys(records, [
+      'command',
+      'cmd',
+      'parsed_cmd',
+      'shellCommand',
+      'shell_command',
+    ]);
+    const command = commandRaw ? unwrapShellCommand(commandRaw) : '';
+    const path = extractFirstStringByKeys(records, [
+      'path',
+      'filePath',
+      'file_path',
+      'targetPath',
+      'target_path',
+      'name',
+    ]);
+    const outputCandidate = extractFirstStringByKeys(records, [
+      'aggregatedOutput',
+      'aggregated_output',
+      'output',
+      'stdout',
+      'result',
+      'text',
+    ]);
+    const diffStats = summarizeDiffText(outputCandidate);
+    const normalizedPath = path && (path.includes('/') || path.includes('.') || path.startsWith('~')) ? path : '';
+
+    let actionType: ParsedAgentActionEvent['actionType'] | null = null;
+    if (command && looksLikeShellCommand(command)) {
+      actionType = inferActionTypeFromCommand(command);
+    } else if (normalizedPath && /(write|patch|modify|edit|create|delete|update|changed)/i.test(lineLower)) {
+      actionType = 'file_write';
+    } else if (normalizedPath && /(read|open|inspect|view|cat|grep|sed -n)/i.test(lineLower)) {
+      actionType = 'file_read';
+    } else if (/(directory listing|file list|\bls\b|\btree\b|rg --files)/i.test(lineLower)) {
+      actionType = 'file_list';
+    }
+
+    if (actionType) {
+      const resolvedPath = normalizedPath || extractPathFromCommand(command);
+      const key = `${actionType}|${command}|${resolvedPath}`;
+      if (!actionByKey.has(key)) {
+        actionByKey.set(key, {
+          actionType,
+          title: titleForActionType(actionType),
+          command: command || undefined,
+          path: resolvedPath || undefined,
+          output: outputCandidate || undefined,
+          additions: diffStats.additions,
+          deletions: diffStats.deletions,
+          hasDiffSignal: diffStats.hasDiffSignal,
+        });
+      }
+    }
+
+    const isSystem = payloadType === 'system' || payloadSubtype === 'init';
+    const seemsToolEvent = (
+      lineLower.includes('commandexecution')
+      || lineLower.includes('exec_command')
+      || lineLower.includes('tool')
+      || lineLower.includes('file_change')
+      || lineLower.includes('filechange')
+    );
+    if (!isSystem && !seemsToolEvent) {
+      const assistantText = extractFirstStringByKeys(records, ['text', 'message', 'content', 'output']);
+      if (assistantText && !looksLikeShellCommand(assistantText) && assistantText.length >= latestAssistantText.length) {
+        latestAssistantText = assistantText;
+      }
+    }
+  }
+
+  return {
+    output: latestAssistantText,
+    actions: [...actionByKey.values()],
+  };
 }
 
 function parseJsonLine(line: string): Record<string, unknown> | null {
@@ -849,12 +1025,23 @@ function buildAgentCommand(
       command: 'claude',
       args: [
         '--print',
+        '--output-format',
+        'stream-json',
+        '--verbose',
+        '--permission-mode',
+        permissionMode,
+        ...(selectedModel ? ['--model', selectedModel] : []),
+        prompt,
+      ],
+      fallbackArgs: [
+        '--print',
         '--permission-mode',
         permissionMode,
         ...(selectedModel ? ['--model', selectedModel] : []),
         prompt,
       ],
       requiresPty: true,
+      streamJson: true,
     };
   }
   if (agent === 'gemini') {
@@ -862,9 +1049,17 @@ function buildAgentCommand(
       command: 'gemini',
       args: [
         ...(selectedModel ? ['-m', selectedModel] : []),
+        '--output-format',
+        'stream-json',
         '-p',
         prompt,
       ],
+      fallbackArgs: [
+        ...(selectedModel ? ['-m', selectedModel] : []),
+        '-p',
+        prompt,
+      ],
+      streamJson: true,
     };
   }
   return null;
@@ -997,7 +1192,7 @@ export class HappyRuntimeStore {
     model?: string,
     cwdHint?: string,
     signal?: AbortSignal,
-  ): Promise<{ output: string; cwd: string }> {
+  ): Promise<{ output: string; cwd: string; inferredActions: ParsedAgentActionEvent[] }> {
     const command = buildAgentCommand(agent, prompt, approvalPolicy, model);
     if (!command) {
       throw new Error(`Unsupported agent flavor: ${agent}`);
@@ -1005,13 +1200,11 @@ export class HappyRuntimeStore {
 
     const safeCwd = this.resolveExecutionCwd(cwdHint);
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
-
-    let result: { stdout: string; stderr: string };
-    try {
-      result = command.requiresPty
-        ? await execFileAsync(
+    const runCommand = async (args: string[]): Promise<{ stdout: string; stderr: string }> => (
+      command.requiresPty
+        ? execFileAsync(
           'script',
-          ['-q', '-c', `${shellEscapeSingle(command.command)} ${command.args.map(shellEscapeSingle).join(' ')}`, '/dev/null'],
+          ['-q', '-c', `${shellEscapeSingle(command.command)} ${args.map(shellEscapeSingle).join(' ')}`, '/dev/null'],
           {
             cwd: safeCwd,
             timeout: AGENT_COMMAND_TIMEOUT_MS,
@@ -1020,13 +1213,18 @@ export class HappyRuntimeStore {
             signal,
           },
         )
-        : await execFileAsync(command.command, command.args, {
+        : execFileAsync(command.command, args, {
           cwd: safeCwd,
           timeout: AGENT_COMMAND_TIMEOUT_MS,
           maxBuffer: 8 * 1024 * 1024,
           env: { ...process.env, PATH: mergedPath },
           signal,
-        });
+        })
+    );
+
+    let result: { stdout: string; stderr: string };
+    try {
+      result = await runCommand(command.args);
     } catch (error) {
       if (isAbortFailure(error)) {
         throw error;
@@ -1040,11 +1238,39 @@ export class HappyRuntimeStore {
 
     const cleanedStdout = stripAnsi(result.stdout || '');
     const cleanedStderr = stripAnsi(result.stderr || '');
-    const output = trimOutput(cleanedStdout || cleanedStderr || '');
+    let inferredActions: ParsedAgentActionEvent[] = [];
+    let output = '';
+    if (command.streamJson) {
+      const parsed = parseAgentStreamOutput(cleanedStdout);
+      inferredActions = parsed.actions;
+      output = trimOutput(parsed.output || '');
+      if (!output && command.fallbackArgs && command.fallbackArgs.length > 0) {
+        try {
+          const fallback = await runCommand(command.fallbackArgs);
+          const fallbackStdout = stripAnsi(fallback.stdout || '');
+          const fallbackStderr = stripAnsi(fallback.stderr || '');
+          output = trimOutput(fallbackStdout || fallbackStderr || '');
+        } catch (fallbackError) {
+          if (isAbortFailure(fallbackError)) {
+            throw fallbackError;
+          }
+        }
+      }
+      if (!output) {
+        const nonJsonStdout = cleanedStdout
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line && !parseJsonLine(line))
+          .join('\n');
+        output = trimOutput(nonJsonStdout || cleanedStderr || '');
+      }
+    } else {
+      output = trimOutput(cleanedStdout || cleanedStderr || '');
+    }
     if (!output) {
       throw new Error(`${agent} returned an empty response`);
     }
-    return { output, cwd: safeCwd };
+    return { output, cwd: safeCwd, inferredActions };
   }
 
   private async appendAgentMessage(
@@ -2136,6 +2362,7 @@ export class HappyRuntimeStore {
         streamedPersisted?: boolean;
         agentMessagePersisted?: boolean;
         threadId?: string;
+        inferredActions?: ParsedAgentActionEvent[];
       };
 
       if (isCodex) {
@@ -2171,11 +2398,44 @@ export class HappyRuntimeStore {
           cwd: nonCodex.cwd,
           streamedPersisted: false,
           agentMessagePersisted: false,
+          inferredActions: nonCodex.inferredActions,
         };
       }
 
       if (isCodex && response.threadId) {
         this.codexThreads.set(threadCacheKey, response.threadId);
+      }
+
+      if (!isCodex && Array.isArray(response.inferredActions) && response.inferredActions.length > 0) {
+        for (const action of response.inferredActions.slice(0, 10)) {
+          const outputPreview = action.output ? trimOutput(action.output) : '';
+          const bodyParts = [
+            action.command ? `$ ${action.command}` : '',
+            action.path ? `path: ${action.path}` : '',
+            outputPreview,
+          ].filter(Boolean);
+          const body = bodyParts.join('\n').trim();
+          if (!body) {
+            continue;
+          }
+
+          await this.appendAgentMessage(session.id, body, {
+            ...(scopedChatId ? { chatId: scopedChatId } : {}),
+            requestedPath: session.metadata.path,
+            execCwd: response.cwd,
+            actionType: action.actionType,
+            command: action.command,
+            path: action.path,
+            additions: action.additions,
+            deletions: action.deletions,
+            hasDiffSignal: action.hasDiffSignal,
+            streamEvent: 'agent_stream_action',
+            agent: flavor,
+          }, {
+            type: 'tool',
+            title: action.title,
+          });
+        }
       }
 
       const streamedPersisted = Boolean(response.streamedPersisted);
@@ -2185,6 +2445,7 @@ export class HappyRuntimeStore {
           ...(scopedChatId ? { chatId: scopedChatId } : {}),
           requestedPath: session.metadata.path,
           execCwd: response.cwd,
+          agent: flavor,
           ...(response.threadId ? { threadId: response.threadId } : {}),
         });
       }
