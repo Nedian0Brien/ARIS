@@ -4,6 +4,17 @@ export type DiffStats = {
   hasDiffSignal: boolean;
 };
 
+const ADD_KINDS = new Set(['add', 'create', 'new']);
+const DELETE_KINDS = new Set(['delete', 'remove', 'removed']);
+
+function countChangedLines(raw: string): number {
+  const normalized = raw.replace(/\r\n/g, '\n').trimEnd();
+  if (!normalized.trim()) {
+    return 0;
+  }
+  return normalized.split('\n').length;
+}
+
 export function summarizeDiffText(raw: string): DiffStats {
   const normalized = raw.replace(/\r\n/g, '\n').trim();
   if (!normalized) {
@@ -56,4 +67,35 @@ export function summarizeDiffText(raw: string): DiffStats {
     deletions,
     hasDiffSignal,
   };
+}
+
+export function summarizeFileChangeDiff(raw: string, kind?: string): DiffStats {
+  const base = summarizeDiffText(raw);
+  if (base.hasDiffSignal) {
+    return base;
+  }
+
+  const normalizedKind = typeof kind === 'string' ? kind.trim().toLowerCase() : '';
+  const lineCount = countChangedLines(raw);
+  if (lineCount <= 0) {
+    return base;
+  }
+
+  if (ADD_KINDS.has(normalizedKind)) {
+    return {
+      additions: lineCount,
+      deletions: 0,
+      hasDiffSignal: true,
+    };
+  }
+
+  if (DELETE_KINDS.has(normalizedKind)) {
+    return {
+      additions: 0,
+      deletions: lineCount,
+      hasDiffSignal: true,
+    };
+  }
+
+  return base;
 }

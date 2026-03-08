@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 import { inferActionTypeFromCommand, titleForActionType } from './actionType.js';
-import { summarizeDiffText } from './diffStats.js';
+import { summarizeDiffText, summarizeFileChangeDiff } from './diffStats.js';
 import { HappyEventLogger } from './happyEventLogger.js';
 import type {
   ApprovalPolicy,
@@ -741,6 +741,42 @@ function inferCodexFileWriteItem(item: Record<string, unknown>): {
     return details.join('\n').trim();
   };
 
+  const pickDiffStatsFromArray = (value: unknown): { additions: number; deletions: number; hasDiffSignal: boolean } => {
+    if (!Array.isArray(value)) {
+      return { additions: 0, deletions: 0, hasDiffSignal: false };
+    }
+
+    let additions = 0;
+    let deletions = 0;
+    let hasDiffSignal = false;
+
+    for (const entry of value) {
+      const rec = asRecord(entry);
+      if (!rec) {
+        continue;
+      }
+
+      const kind = asString(asRecord(rec.kind)?.type, asString(rec.kind, '')).trim();
+      const candidate = asString(
+        rec.diff,
+        asString(
+          rec.patch,
+          asString(rec.unified_diff, asString(rec.unifiedDiff, asString(rec.text, asString(rec.result, '')))),
+        ),
+      ).trim();
+      if (!candidate) {
+        continue;
+      }
+
+      const stats = summarizeFileChangeDiff(candidate, kind);
+      additions += stats.additions;
+      deletions += stats.deletions;
+      hasDiffSignal = hasDiffSignal || stats.hasDiffSignal;
+    }
+
+    return { additions, deletions, hasDiffSignal };
+  };
+
   const arrayPath = pickPathFromArray(item.paths)
     || pickPathFromArray(item.files)
     || pickPathFromArray(item.changes)
@@ -778,7 +814,13 @@ function inferCodexFileWriteItem(item: Record<string, unknown>): {
   )).trim();
   const detail = detailRaw && detailRaw.toLowerCase() !== 'apply_patch' ? detailRaw : undefined;
   const status = asString(item.status, '').trim() || undefined;
-  const diffStats = summarizeDiffText(detailRaw);
+  const directDiffStats = summarizeDiffText(detailRaw);
+  const arrayDiffStats = pickDiffStatsFromArray(item.changes);
+  const diffStats = directDiffStats.hasDiffSignal
+    ? directDiffStats
+    : arrayDiffStats.hasDiffSignal
+      ? arrayDiffStats
+      : directDiffStats;
 
   if (!path && !detail) {
     return null;
