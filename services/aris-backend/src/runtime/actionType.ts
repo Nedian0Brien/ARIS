@@ -99,21 +99,74 @@ function stripQuotedSegments(input: string): string {
   return result;
 }
 
+function trimBoundaryQuotes(input: string): string {
+  let result = input.trim();
+  if (!result) {
+    return result;
+  }
+
+  const hasScriptLikeShape = /[\n;&|]/.test(result);
+  while (result.length > 1) {
+    const first = result[0];
+    if (first !== '\'' && first !== '"' && first !== '`') {
+      break;
+    }
+    if (result.endsWith(first)) {
+      result = result.slice(1, -1).trim();
+      continue;
+    }
+    if (hasScriptLikeShape) {
+      result = result.slice(1).trim();
+      continue;
+    }
+    break;
+  }
+
+  while (result.length > 1) {
+    const last = result[result.length - 1];
+    if (last !== '\'' && last !== '"' && last !== '`') {
+      break;
+    }
+    if (result.startsWith(last)) {
+      result = result.slice(1, -1).trim();
+      continue;
+    }
+    if (hasScriptLikeShape) {
+      result = result.slice(0, -1).trim();
+      continue;
+    }
+    break;
+  }
+
+  return result;
+}
+
 export function inferActionTypeFromCommand(command: string): ActionType {
   const normalized = unwrapShellCommand(command).toLowerCase();
   const unquoted = stripQuotedSegments(normalized);
+  const relaxed = stripQuotedSegments(trimBoundaryQuotes(normalized));
 
   // Evaluate write intent before read intent to prevent mixed commands
   // like "ls && mkdir -p ... && cat > file" from being mislabeled.
-  if (FILE_WRITE_PATTERNS.some((pattern) => pattern.test(unquoted))) {
+  if (
+    FILE_WRITE_PATTERNS.some((pattern) => pattern.test(unquoted))
+    || FILE_WRITE_PATTERNS.some((pattern) => pattern.test(relaxed))
+  ) {
     return 'file_write';
   }
 
-  if (FILE_LIST_PATTERNS.some((pattern) => pattern.test(normalized))) {
+  if (
+    FILE_LIST_PATTERNS.some((pattern) => pattern.test(unquoted))
+    || FILE_LIST_PATTERNS.some((pattern) => pattern.test(relaxed))
+    || FILE_LIST_PATTERNS.some((pattern) => pattern.test(normalized))
+  ) {
     return 'file_list';
   }
 
-  if (FILE_READ_PATTERNS.some((pattern) => pattern.test(unquoted))) {
+  if (
+    FILE_READ_PATTERNS.some((pattern) => pattern.test(unquoted))
+    || FILE_READ_PATTERNS.some((pattern) => pattern.test(relaxed))
+  ) {
     return 'file_read';
   }
 
