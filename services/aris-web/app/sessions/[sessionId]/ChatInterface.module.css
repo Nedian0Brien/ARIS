@@ -1591,6 +1591,11 @@
   overflow-wrap: anywhere;
 }
 
+.codeChangesHunkList {
+  display: grid;
+  gap: 0.2rem;
+}
+
 .codeChangesAdd {
   color: #166534;
 }

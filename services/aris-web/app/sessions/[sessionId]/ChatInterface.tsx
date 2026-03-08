@@ -532,8 +532,7 @@ function parseCodeChangeSummary(event: UiEvent): {
   files: string[];
   additions: number;
   deletions: number;
-  hunkFile: string | null;
-  hunkLine: number | null;
+  hunks: Array<{ file: string; line: number; additions: number; deletions: number }>;
   previewLines: string[];
   fullText: string;
   hasDiffSignal: boolean;
@@ -548,8 +547,8 @@ function parseCodeChangeSummary(event: UiEvent): {
   let computedDeletions = 0;
   let hasStructuralDiffSignal = false;
   let currentDiffFile: string | null = null;
-  let firstHunkFile: string | null = null;
-  let firstHunkLine: number | null = null;
+  const parsedHunks: Array<{ file: string; line: number; additions: number; deletions: number }> = [];
+  let activeHunkIndex = -1;
 
   for (const line of lines) {
     const normalized = line.trim();
@@ -569,6 +568,7 @@ function parseCodeChangeSummary(event: UiEvent): {
       files.add(gitFileMatch[1]);
       if (normalized.startsWith('+++ ')) {
         currentDiffFile = gitFileMatch[1];
+        activeHunkIndex = -1;
       }
       hasStructuralDiffSignal = true;
     }
@@ -577,24 +577,41 @@ function parseCodeChangeSummary(event: UiEvent): {
       currentDiffFile = diffFileMatch[2];
       files.add(diffFileMatch[2]);
       hasStructuralDiffSignal = true;
+      activeHunkIndex = -1;
     }
     const patchFileMatch = normalized.match(/^\*\*\*\s+(?:Update|Add|Delete)\s+File:\s+(.+)$/);
     if (patchFileMatch?.[1]) {
       files.add(patchFileMatch[1]);
       currentDiffFile = patchFileMatch[1];
       hasStructuralDiffSignal = true;
+      activeHunkIndex = -1;
     }
     const hunkMatch = normalized.match(/^@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
-    if (hunkMatch && firstHunkLine === null) {
+    if (hunkMatch) {
       const parsed = Number.parseInt(hunkMatch[1], 10);
-      firstHunkLine = Number.isFinite(parsed) ? parsed : null;
-      firstHunkFile = currentDiffFile;
+      if (Number.isFinite(parsed)) {
+        parsedHunks.push({
+          file: currentDiffFile ?? event.action?.path ?? '',
+          line: parsed,
+          additions: 0,
+          deletions: 0,
+        });
+        activeHunkIndex = parsedHunks.length - 1;
+      } else {
+        activeHunkIndex = -1;
+      }
     }
     if (line.startsWith('+') && !line.startsWith('+++')) {
       computedAdditions += 1;
+      if (activeHunkIndex >= 0) {
+        parsedHunks[activeHunkIndex].additions += 1;
+      }
     }
     if (line.startsWith('-') && !line.startsWith('---')) {
       computedDeletions += 1;
+      if (activeHunkIndex >= 0) {
+        parsedHunks[activeHunkIndex].deletions += 1;
+      }
     }
   }
 
@@ -616,11 +633,15 @@ function parseCodeChangeSummary(event: UiEvent): {
   const additions = metaAdditions ?? computedAdditions;
   const deletions = metaDeletions ?? computedDeletions;
   const hasDiffSignal = metaHasDiffSignal ?? hasStructuralDiffSignal;
-  const firstResolvedFile = firstHunkFile ?? [...files][0] ?? event.action?.path ?? null;
 
   if (files.size === 0 && event.action?.path) {
     files.add(event.action.path);
   }
+  const fallbackFile = [...files][0] ?? event.action?.path ?? '';
+  const hunks = parsedHunks.map((hunk) => ({
+    ...hunk,
+    file: hunk.file || fallbackFile,
+  }));
 
   const previewCandidates = lines.filter((line) => (
     line.startsWith('+')
@@ -635,8 +656,7 @@ function parseCodeChangeSummary(event: UiEvent): {
     files: [...files],
     additions,
     deletions,
-    hunkFile: firstResolvedFile,
-    hunkLine: firstHunkLine,
+    hunks,
     previewLines,
     fullText,
     hasDiffSignal,
@@ -1329,9 +1349,8 @@ function CodeChangesEventCard({
   const fullPrimary = resolveActionPrimary(event).replace(/\s+/g, ' ').trim();
   const resourceLabels = extractResourceLabelsFromEvent(event);
   const hasResource = resourceLabels.length > 0;
-  const hunkDescriptor = summary.hunkFile && summary.hunkLine !== null
-    ? `${summary.hunkFile} | line ${summary.hunkLine} | +${summary.additions} -${summary.deletions}`
-    : null;
+  const compactHunks = summary.hunks.slice(0, 3);
+  const hiddenHunkCount = Math.max(0, summary.hunks.length - compactHunks.length);
 
   if (!expanded) {
     return (
@@ -1356,8 +1375,17 @@ function CodeChangesEventCard({
             <span className={styles.codeChangesAdd}>+{summary.additions}</span>
             <span className={styles.codeChangesDel}>-{summary.deletions}</span>
           </div>
-          {hunkDescriptor && (
-            <div className={styles.codeChangesHunkInfo}>{hunkDescriptor}</div>
+          {compactHunks.length > 0 && (
+            <div className={styles.codeChangesHunkList}>
+              {compactHunks.map((hunk, index) => (
+                <div key={`${hunk.file}:${hunk.line}:${index}`} className={styles.codeChangesHunkInfo}>
+                  {hunk.file} | line {hunk.line} | +{hunk.additions} -{hunk.deletions}
+                </div>
+              ))}
+              {hiddenHunkCount > 0 && (
+                <div className={styles.codeChangesHunkInfo}>+{hiddenHunkCount} more (확장 시 전체)</div>
+              )}
+            </div>
           )}
           {previewText && (
             <DiffCodeBlock text={previewText} className={styles.codeChangesPreview} />
@@ -1400,8 +1428,14 @@ function CodeChangesEventCard({
             <span className={styles.codeChangesAdd}>+{summary.additions}</span>
             <span className={styles.codeChangesDel}>-{summary.deletions}</span>
           </div>
-          {hunkDescriptor && (
-            <div className={styles.codeChangesHunkInfo}>{hunkDescriptor}</div>
+          {summary.hunks.length > 0 && (
+            <div className={styles.codeChangesHunkList}>
+              {summary.hunks.map((hunk, index) => (
+                <div key={`${hunk.file}:${hunk.line}:${index}`} className={styles.codeChangesHunkInfo}>
+                  {hunk.file} | line {hunk.line} | +{hunk.additions} -{hunk.deletions}
+                </div>
+              ))}
+            </div>
           )}
           {summary.files.length > 0 && (
             <div className={styles.codeChangesFiles}>
