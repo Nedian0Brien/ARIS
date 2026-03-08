@@ -191,6 +191,7 @@
   transition: border-color 0.15s ease, background-color 0.15s ease;
   display: flex;
   align-items: stretch;
+  min-width: 0;
 }
 
 .chatListItem:hover {
@@ -218,14 +219,17 @@
   line-height: 1.25;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  overflow: hidden;
   cursor: pointer;
 }
 
 .chatListTitleWrap {
+  flex: 1;
   min-width: 0;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 0.25rem;
+  overflow: hidden;
 }
 
 .chatListPinIcon {
@@ -234,6 +238,8 @@
 }
 
 .chatListTitle {
+  display: block;
+  min-width: 0;
   font-size: inherit;
   font-weight: 700;
   color: #0f172a;
@@ -261,12 +267,17 @@
   color: #64748b;
   white-space: nowrap;
   flex-shrink: 0;
+  max-width: 5.2rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chatListMenuWrap {
   position: relative;
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
+  min-width: 30px;
   padding-right: 0.3rem;
 }
 
