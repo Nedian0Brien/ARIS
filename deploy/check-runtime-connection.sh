@@ -56,6 +56,16 @@ mask_value() {
   printf '%s...%s' "${value:0:4}" "${value: -4}"
 }
 
+normalize_http_code() {
+  local raw="$1"
+  raw="$(printf '%s' "$raw" | tr -cd '0-9')"
+  if (( ${#raw} < 3 )); then
+    printf '000'
+    return
+  fi
+  printf '%s' "${raw: -3}"
+}
+
 request_status() {
   local token="$1"
   local path="$2"
@@ -66,7 +76,8 @@ request_status() {
   local status
   status="$(curl -sS -o "$tmp_body" -w '%{http_code}' \
     -H "Authorization: Bearer ${token}" \
-    "$url" || echo '000')"
+    "$url" || true)"
+  status="$(normalize_http_code "$status")"
 
   local body
   body="$(cat "$tmp_body" | tr -d '\n' | sed 's/[[:space:]]\\+/ /g')"
@@ -91,7 +102,8 @@ pick_runtime_url() {
   local candidate status
 
   for candidate in "${candidates[@]}"; do
-    status="$(curl -sS -o /tmp/runtime-health.$$ -w '%{http_code}' "$candidate/health" 2>/dev/null || echo '000')"
+    status="$(curl -sS -o /tmp/runtime-health.$$ -w '%{http_code}' "$candidate/health" 2>/dev/null || true)"
+    status="$(normalize_http_code "$status")"
     rm -f "/tmp/runtime-health.$$"
     if [[ "$status" == "200" ]]; then
       printf '%s\n' "$candidate"
@@ -105,6 +117,23 @@ pick_runtime_url() {
 
 log_section() {
   printf '\n[ %s ]\n' "$1"
+}
+
+extract_origin() {
+  local url="$1"
+  printf '%s' "$url" | sed -E 's#^(https?://[^/]+).*$#\1#'
+}
+
+is_local_backend_origin() {
+  local origin="$1"
+  case "$origin" in
+    http://127.0.0.1:4080|http://localhost:4080|http://host.docker.internal:4080|http://172.17.0.1:4080|http://172.18.0.1:4080|http://172.19.0.1:4080)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 main() {
@@ -122,16 +151,30 @@ main() {
   local web_token=''
   local backend_token=''
   local deploy_token=''
+  local runtime_backend=''
+  local happy_server_url=''
   local mismatch=0
 
   deploy_token="$(read_env_value "$DEPLOY_ENV" "RUNTIME_API_TOKEN" || true)"
   backend_token="$(read_env_value "$BACKEND_ENV" "RUNTIME_API_TOKEN" || true)"
   web_token="$(read_env_value "$WEB_ENV" "HAPPY_SERVER_TOKEN" || true)"
+  runtime_backend="$(read_env_value "$DEPLOY_ENV" "RUNTIME_BACKEND" || true)"
+  if [[ -z "$runtime_backend" ]]; then
+    runtime_backend="$(read_env_value "$BACKEND_ENV" "RUNTIME_BACKEND" || true)"
+  fi
+  happy_server_url="$(read_env_value "$DEPLOY_ENV" "HAPPY_SERVER_URL" || true)"
+  if [[ -z "$happy_server_url" ]]; then
+    happy_server_url="$(read_env_value "$BACKEND_ENV" "HAPPY_SERVER_URL" || true)"
+  fi
 
   log_section "env validation"
   echo "deploy env      : $DEPLOY_ENV"
   echo "backend env     : $BACKEND_ENV"
   echo "runtime url     : $runtime_url"
+  echo "runtime backend : ${runtime_backend:-unset}"
+  if [[ "$runtime_backend" == "happy" ]]; then
+    echo "happy server url: ${happy_server_url:-unset}"
+  fi
   echo "deploy token    : $(mask_value "$deploy_token")"
   echo "backend token   : $(mask_value "$backend_token")"
   if [[ -f "$WEB_ENV" ]]; then
@@ -159,9 +202,37 @@ main() {
     echo "✅ token values are aligned between deploy and backend env"
   fi
 
+  if [[ "$runtime_backend" == "happy" ]]; then
+    if [[ -z "$happy_server_url" ]]; then
+      echo "❌ RUNTIME_BACKEND=happy 인데 HAPPY_SERVER_URL이 비어 있습니다."
+      exit 1
+    fi
+
+    local runtime_origin happy_origin
+    runtime_origin="$(extract_origin "$runtime_url")"
+    happy_origin="$(extract_origin "$happy_server_url")"
+
+    if [[ "$happy_origin" == "$runtime_origin" ]] || is_local_backend_origin "$happy_origin"; then
+      echo "❌ HAPPY_SERVER_URL이 aris-backend 자체 주소로 설정되어 있습니다: $happy_server_url"
+      echo "   외부 Happy 런타임 URL로 변경하거나 RUNTIME_BACKEND=mock으로 전환하세요."
+      exit 1
+    fi
+
+    local happy_health_status
+    happy_health_status="$(curl -sS -o /tmp/happy-health-status.$$ -w '%{http_code}' --max-time 4 "$happy_server_url/health" 2>/dev/null || true)"
+    happy_health_status="$(normalize_http_code "$happy_health_status")"
+    rm -f "/tmp/happy-health-status.$$"
+    if [[ "$happy_health_status" == "000" ]]; then
+      echo "❌ HAPPY_SERVER_URL에 연결할 수 없습니다: $happy_server_url"
+      echo "   외부 Happy 런타임이 내려가 있으면 RUNTIME_BACKEND=mock으로 전환 후 backend reload를 권장합니다."
+      exit 1
+    fi
+  fi
+
   log_section "runtime connectivity"
   local health_status
-  health_status="$(curl -sS -o /tmp/runtime-health-status.$$ -w '%{http_code}' "$runtime_url/health" || echo '000')"
+  health_status="$(curl -sS -o /tmp/runtime-health-status.$$ -w '%{http_code}' "$runtime_url/health" || true)"
+  health_status="$(normalize_http_code "$health_status")"
   echo "/health status : $health_status"
   if [[ "$health_status" != "200" ]]; then
     echo "❌ runtime /health is not reachable (requires backend up)"
@@ -182,7 +253,8 @@ main() {
   fi
 
   local no_auth_status no_auth_body good_auth
-  no_auth_status="$(curl -sS -o /tmp/noauth_body.$$ -w '%{http_code}' "$runtime_url/v1/sessions" || echo '000')"
+  no_auth_status="$(curl -sS -o /tmp/noauth_body.$$ -w '%{http_code}' "$runtime_url/v1/sessions" || true)"
+  no_auth_status="$(normalize_http_code "$no_auth_status")"
   no_auth_body="$(cat /tmp/noauth_body.$$ | tr -d '\n' | sed 's/[[:space:]]\\+/ /g' || true)"
   rm -f "/tmp/noauth_body.$$"
   echo "/v1/sessions without token: $no_auth_status (${no_auth_body:-empty})"
