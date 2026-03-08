@@ -1272,7 +1272,7 @@ function renderDiffLineContent(
   if (hunk) {
     return (
       <>
-        <span className={styles.diffHunkFileBadge}>{hunk.file || '(unknown)'}</span>
+        <span className={`${styles.fileBadgeBase} ${styles.diffHunkFileBadge}`}>{hunk.file || '(unknown)'}</span>
         {' | '}
         line {hunk.line}
         {' | '}
@@ -1407,9 +1407,9 @@ function CodeChangesEventCard({
           {summary.files.length > 0 && (
             <div className={styles.codeChangesFiles}>
               {summary.files.slice(0, 3).map((file) => (
-                <span key={file} className={styles.codeChangesFile}>{fileNameOnly(file)}</span>
+                <span key={file} className={`${styles.fileBadgeBase} ${styles.codeChangesFile}`}>{fileNameOnly(file)}</span>
               ))}
-              {summary.files.length > 3 && <span className={styles.codeChangesFile}>+{summary.files.length - 3} more</span>}
+              {summary.files.length > 3 && <span className={`${styles.fileBadgeBase} ${styles.codeChangesFile}`}>+{summary.files.length - 3} more</span>}
             </div>
           )}
         </div>

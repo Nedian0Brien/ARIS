@@ -1708,7 +1708,7 @@
   gap: 0.28rem;
 }
 
-.codeChangesFile {
+.fileBadgeBase {
   display: inline-flex;
   align-items: center;
   max-width: 100%;
@@ -1717,12 +1717,16 @@
   border: 1px solid rgba(148, 163, 184, 0.28);
   background: rgba(248, 250, 252, 0.95);
   color: #0f172a;
-  padding: 0.1rem 0.4rem;
-  font-size: 0.66rem;
-  font-family: var(--font-mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.codeChangesFile {
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.66rem;
+  font-family: var(--font-mono);
 }
 
 .codeChangesFull {
@@ -1803,20 +1807,11 @@
 }
 
 .diffHunkFileBadge {
-  display: inline-flex;
-  align-items: center;
   max-width: min(100%, 18rem);
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  background: rgba(248, 250, 252, 0.95);
-  color: #0f172a;
   padding: 0.08rem 0.38rem;
   font-size: 0.64rem;
   font-weight: 700;
   line-height: 1.1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   vertical-align: baseline;
 }
 
