@@ -45,6 +45,19 @@ const decidePermissionSchema = z.object({
   decision: z.enum(['allow_once', 'allow_session', 'deny']),
 });
 
+const HAPPY_BRIDGE_HEADER = 'x-aris-happy-bridge';
+const HAPPY_SELF_REFERENCE_ERROR = 'HAPPY_SERVER_URL이 현재 aris-backend 자신을 가리켜 요청 루프가 발생했습니다. 외부 Happy 런타임 URL로 변경하거나 RUNTIME_BACKEND=mock으로 전환하세요.';
+
+function toErrorMessage(error: unknown, fallback = 'Internal Server Error'): string {
+  if (error instanceof Error) {
+    const trimmed = error.message.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+  return fallback;
+}
+
 export function buildServer(config: ServerConfig) {
   const app = Fastify({ logger: { level: config.LOG_LEVEL } });
   const store = new RuntimeStore(
@@ -58,6 +71,16 @@ export function buildServer(config: ServerConfig) {
   app.addHook('onRequest', async (request, reply) => {
     if (request.url.startsWith('/health')) {
       return;
+    }
+
+    if (config.RUNTIME_BACKEND === 'happy') {
+      const bridgeHeader = request.headers[HAPPY_BRIDGE_HEADER];
+      const isBridgeCall = Array.isArray(bridgeHeader)
+        ? bridgeHeader.includes('1')
+        : bridgeHeader === '1';
+      if (isBridgeCall) {
+        return reply.code(502).send({ error: HAPPY_SELF_REFERENCE_ERROR });
+      }
     }
 
     if (request.url.startsWith('/v1/') || request.url.startsWith('/v3/')) {
@@ -74,31 +97,43 @@ export function buildServer(config: ServerConfig) {
     now: new Date().toISOString(),
   }));
 
-  app.get('/v1/sessions', async () => ({
-    sessions: await store.listSessions(),
-  }));
+  app.get('/v1/sessions', async (_request, reply) => {
+    try {
+      return {
+        sessions: await store.listSessions(),
+      };
+    } catch (error) {
+      const message = toErrorMessage(error, 'Failed to list sessions');
+      return reply.code(502).send({ error: message });
+    }
+  });
 
   app.get('/v1/sessions/:sessionId', async (request, reply) => {
-    const { sessionId } = request.params as { sessionId: string };
-    const session = await store.getSession(sessionId);
-    if (!session) {
-      return reply.code(404).send({ error: 'Session not found' });
-    }
-    
-    // Resolve host-side path for terminal access
-    let hostPath = session.metadata.path;
     try {
-      hostPath = store.resolveExecutionCwd(session.metadata.path);
-    } catch {
-      // Keep original path as fallback
-    }
+      const { sessionId } = request.params as { sessionId: string };
+      const session = await store.getSession(sessionId);
+      if (!session) {
+        return reply.code(404).send({ error: 'Session not found' });
+      }
 
-    return { 
-      session: {
-        ...session,
-        hostPath
-      } 
-    };
+      // Resolve host-side path for terminal access
+      let hostPath = session.metadata.path;
+      try {
+        hostPath = store.resolveExecutionCwd(session.metadata.path);
+      } catch {
+        // Keep original path as fallback
+      }
+
+      return {
+        session: {
+          ...session,
+          hostPath,
+        },
+      };
+    } catch (error) {
+      const message = toErrorMessage(error, 'Failed to load session');
+      return reply.code(502).send({ error: message });
+    }
   });
 
   app.post('/v1/sessions', async (request, reply) => {
@@ -107,8 +142,13 @@ export function buildServer(config: ServerConfig) {
       return reply.code(400).send({ error: 'Invalid request body' });
     }
 
-    const session = await store.createSession(parsed.data);
-    return reply.code(201).send({ session });
+    try {
+      const session = await store.createSession(parsed.data);
+      return reply.code(201).send({ session });
+    } catch (error) {
+      const message = toErrorMessage(error, 'Failed to create session');
+      return reply.code(502).send({ error: message });
+    }
   });
 
   app.post('/v1/sessions/:sessionId/actions', async (request, reply) => {
@@ -150,7 +190,8 @@ export function buildServer(config: ServerConfig) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
         return reply.code(404).send({ error: 'Session not found' });
       }
-      throw error;
+      const message = toErrorMessage(error, 'Failed to apply session action');
+      return reply.code(502).send({ error: message });
     }
   });
 
@@ -163,19 +204,25 @@ export function buildServer(config: ServerConfig) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
         return reply.code(404).send({ error: 'Session not found' });
       }
-      throw error;
+      const message = toErrorMessage(error, 'Failed to read session runtime');
+      return reply.code(502).send({ error: message });
     }
   });
 
   app.get('/v3/sessions/:sessionId/messages', async (request, reply) => {
-    const { sessionId } = request.params as { sessionId: string };
-    const session = await store.getSession(sessionId);
-    if (!session) {
-      return reply.code(404).send({ error: 'Session not found' });
-    }
+    try {
+      const { sessionId } = request.params as { sessionId: string };
+      const session = await store.getSession(sessionId);
+      if (!session) {
+        return reply.code(404).send({ error: 'Session not found' });
+      }
 
-    const messages = await store.listMessages(sessionId);
-    return { messages };
+      const messages = await store.listMessages(sessionId);
+      return { messages };
+    } catch (error) {
+      const message = toErrorMessage(error, 'Failed to list session messages');
+      return reply.code(502).send({ error: message });
+    }
   });
 
   app.post('/v3/sessions/:sessionId/messages', async (request, reply) => {
@@ -193,7 +240,8 @@ export function buildServer(config: ServerConfig) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
         return reply.code(404).send({ error: 'Session not found' });
       }
-      throw error;
+      const message = toErrorMessage(error, 'Failed to append session message');
+      return reply.code(502).send({ error: message });
     }
   });
 
@@ -217,7 +265,8 @@ export function buildServer(config: ServerConfig) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
         return reply.code(404).send({ error: 'Session not found' });
       }
-      throw error;
+      const message = toErrorMessage(error, 'Failed to create permission request');
+      return reply.code(502).send({ error: message });
     }
   });
 
@@ -236,7 +285,8 @@ export function buildServer(config: ServerConfig) {
       if (error instanceof Error && error.message === 'PERMISSION_NOT_FOUND') {
         return reply.code(404).send({ error: 'Permission not found' });
       }
-      throw error;
+      const message = toErrorMessage(error, 'Failed to process permission decision');
+      return reply.code(502).send({ error: message });
     }
   });
 

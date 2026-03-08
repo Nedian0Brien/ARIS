@@ -150,4 +150,51 @@ describe('aris-backend API', () => {
     expect(decisionResponse.statusCode).toBe(200);
     await app.close();
   });
+
+  it('blocks self-referential happy bridge requests with actionable error', async () => {
+    const app = buildServer({
+      RUNTIME_API_TOKEN: TOKEN,
+      DEFAULT_PROJECT_PATH: '/tmp/project',
+      LOG_LEVEL: 'silent',
+      RUNTIME_BACKEND: 'happy',
+      HAPPY_SERVER_URL: 'http://127.0.0.1:8088',
+      HAPPY_SERVER_TOKEN: 'happy-runtime-token',
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/sessions',
+      headers: {
+        ...authHeader(),
+        'x-aris-happy-bridge': '1',
+      },
+    });
+
+    expect(response.statusCode).toBe(502);
+    const payload = response.json() as { error?: string };
+    expect(payload.error).toContain('HAPPY_SERVER_URL');
+    await app.close();
+  });
+
+  it('returns 502 with error details when happy runtime credentials are missing', async () => {
+    const app = buildServer({
+      RUNTIME_API_TOKEN: TOKEN,
+      DEFAULT_PROJECT_PATH: '/tmp/project',
+      LOG_LEVEL: 'silent',
+      RUNTIME_BACKEND: 'happy',
+      HAPPY_SERVER_URL: 'http://127.0.0.1:8088',
+      HAPPY_SERVER_TOKEN: '',
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/sessions',
+      headers: authHeader(),
+    });
+
+    expect(response.statusCode).toBe(502);
+    const payload = response.json() as { error?: string };
+    expect(payload.error).toContain('HAPPY_SERVER_TOKEN');
+    await app.close();
+  });
 });

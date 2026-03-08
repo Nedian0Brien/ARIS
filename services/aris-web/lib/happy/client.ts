@@ -194,8 +194,21 @@ async function fetchHappy(path: string, init?: RequestInit): Promise<unknown> {
       }
 
       try {
-        const parsed = JSON.parse(body) as { error?: string };
-        return parsed.error ?? body;
+        const parsed = JSON.parse(body) as { error?: string; message?: string; detail?: string };
+        const detail = typeof parsed.detail === 'string' ? parsed.detail.trim() : '';
+        const message = typeof parsed.message === 'string' ? parsed.message.trim() : '';
+        const error = typeof parsed.error === 'string' ? parsed.error.trim() : '';
+
+        if (detail) {
+          return detail;
+        }
+        if (message) {
+          return message;
+        }
+        if (error) {
+          return error;
+        }
+        return body;
       } catch {
         return body;
       }

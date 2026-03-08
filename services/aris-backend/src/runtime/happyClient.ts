@@ -825,6 +825,7 @@ export class HappyRuntimeStore {
     const response = await fetch(`${this.serverUrl}${path}`, {
       ...init,
       headers: {
+        'X-Aris-Happy-Bridge': '1',
         Authorization: `Bearer ${this.serverToken}`,
         'Content-Type': 'application/json',
         ...(init.headers ?? {}),
