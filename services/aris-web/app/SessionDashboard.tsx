@@ -67,10 +67,10 @@ const SESSION_UI_STATUS_META: Record<
   SessionUiStatus,
   { label: string; color: string; variant: 'sky' | 'amber' | 'emerald' | 'slate' }
 > = {
-  running: { label: '실행 중', color: '#3b82f6', variant: 'sky' },
-  pending: { label: '대기', color: '#f59e0b', variant: 'amber' },
-  completed: { label: '완료', color: '#10b981', variant: 'emerald' },
-  idle: { label: '유휴', color: '#64748b', variant: 'slate' },
+  running: { label: '실행 중', color: 'var(--chart-status-running)', variant: 'sky' },
+  pending: { label: '대기', color: 'var(--chart-status-pending)', variant: 'amber' },
+  completed: { label: '완료', color: 'var(--chart-status-completed)', variant: 'emerald' },
+  idle: { label: '유휴', color: 'var(--chart-status-idle)', variant: 'slate' },
 };
 
 const AGENT_OPTIONS: AgentOption[] = [
@@ -79,24 +79,24 @@ const AGENT_OPTIONS: AgentOption[] = [
     label: 'Claude',
     subtitle: 'Balanced coding flow',
     Icon: ClaudeIcon,
-    accentColor: '#D97757',
-    accentBg: 'rgba(217, 119, 87, 0.15)',
+    accentColor: 'var(--agent-claude-accent)',
+    accentBg: 'var(--agent-claude-bg)',
   },
   {
     id: 'codex',
     label: 'Codex',
     subtitle: 'Fast implementation',
     Icon: CodexIcon,
-    accentColor: '#10a37f',
-    accentBg: 'rgba(16, 163, 127, 0.15)',
+    accentColor: 'var(--agent-codex-accent)',
+    accentBg: 'var(--agent-codex-bg)',
   },
   {
     id: 'gemini',
     label: 'Gemini',
     subtitle: 'Broad reasoning',
     Icon: GeminiIcon,
-    accentColor: '#4285F4',
-    accentBg: 'rgba(66, 133, 244, 0.15)',
+    accentColor: 'var(--agent-gemini-accent)',
+    accentBg: 'var(--agent-gemini-bg)',
   },
 ];
 
@@ -112,28 +112,28 @@ const APPROVAL_POLICY_OPTIONS: Array<{
     label: '요청 시 승인',
     description: '권한이 필요할 때마다 확인',
     Icon: ShieldCheck,
-    color: '#3b82f6',
+    color: 'var(--approval-on-request-color)',
   },
   {
     id: 'on-failure',
     label: '실패 시 승인',
     description: '실패한 작업만 승인 요청',
     Icon: ShieldAlert,
-    color: '#f59e0b',
+    color: 'var(--approval-on-failure-color)',
   },
   {
     id: 'never',
     label: '자동 허용',
     description: '승인 없이 허용된 작업만 수행',
     Icon: ShieldOff,
-    color: '#10b981',
+    color: 'var(--approval-never-color)',
   },
   {
     id: 'yolo',
     label: 'YOLO',
     description: '모든 권한 요청 자동 허용',
     Icon: Zap,
-    color: '#ef4444',
+    color: 'var(--approval-yolo-color)',
   },
 ];
 
@@ -1195,12 +1195,12 @@ export function SessionDashboard({
   const storageUsagePercent = clampPercent(serverMetrics?.storage?.percent ?? 0);
 
   const cpuPieData = [
-    { name: '사용중', value: cpuUsagePercent, color: '#3b82f6' },
-    { name: '여유', value: Math.max(0, 100 - cpuUsagePercent), color: '#e2e8f0' },
+    { name: '사용중', value: cpuUsagePercent, color: 'var(--chart-status-running)' },
+    { name: '여유', value: Math.max(0, 100 - cpuUsagePercent), color: 'var(--chart-track)' },
   ];
   const ramPieData = [
-    { name: '사용중', value: ramUsagePercent, color: '#10b981' },
-    { name: '여유', value: Math.max(0, 100 - ramUsagePercent), color: '#e2e8f0' },
+    { name: '사용중', value: ramUsagePercent, color: 'var(--chart-status-completed)' },
+    { name: '여유', value: Math.max(0, 100 - ramUsagePercent), color: 'var(--chart-track)' },
   ];
   const cpuValueText = isLoadingServerMetrics && !serverMetrics ? '--' : `${Math.round(cpuUsagePercent)}%`;
   const ramValueText = isLoadingServerMetrics && !serverMetrics ? '--' : `${Math.round(ramUsagePercent)}%`;
@@ -1216,7 +1216,7 @@ export function SessionDashboard({
   })).filter((entry) => entry.value > 0);
   const agentDistributionData = activeAgentDistribution.length > 0
     ? activeAgentDistribution
-    : [{ name: '없음', value: 1, color: '#e2e8f0' }];
+    : [{ name: '없음', value: 1, color: 'var(--chart-track)' }];
 
   // 진행 중인 세션 및 미확인 완료 세션 필터링
   const runningSessions = useMemo(
@@ -1427,7 +1427,7 @@ export function SessionDashboard({
                         <div className={styles.sessionMiniList}>
                           {runningSessions.slice(0, 3).map(s => (
                             <div key={s.id} className={styles.sessionMiniItem}>
-                              <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: '#3b82f6' }}></span>
+                              <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: 'var(--chart-status-running)' }}></span>
                               <span className={styles.sessionMiniName}>{sessionAliases[s.id] || extractLastDirectoryName(s.projectName)}</span>
                             </div>
                           ))}
@@ -1440,7 +1440,7 @@ export function SessionDashboard({
                         <div className={styles.sessionMiniList}>
                           {completedSessions.slice(0, 3).map(s => (
                             <div key={s.id} className={styles.sessionMiniItem}>
-                              <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: '#10b981' }}></span>
+                              <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: 'var(--chart-status-completed)' }}></span>
                               <span className={styles.sessionMiniName}>{sessionAliases[s.id] || extractLastDirectoryName(s.projectName)}</span>
                             </div>
                           ))}
@@ -1716,7 +1716,7 @@ export function SessionDashboard({
                   type="button"
                   isLoading={isDeletingSessions}
                   onClick={() => void confirmDeleteSessions()}
-                  style={{ background: 'var(--accent-red)', color: '#fff' }}
+                  style={{ background: 'var(--accent-red)', color: 'var(--text-on-accent)' }}
                 >
                   삭제
                 </Button>

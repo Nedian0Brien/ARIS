@@ -203,7 +203,7 @@
 .serverStorageBarFill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #6366f1, #a855f7);
+  background: var(--gradient-primary);
   transition: width 0.8s ease;
 }
 
@@ -242,19 +242,19 @@
 }
 
 .sessionBarRunning {
-  background: #10b981;
+  background: var(--chart-status-running);
 }
 
 .sessionBarIdle {
-  background: #64748b;
+  background: var(--chart-status-idle);
 }
 
 .sessionBarPending {
-  background: #f59e0b;
+  background: var(--chart-status-pending);
 }
 
 .sessionBarCompleted {
-  background: #3b82f6;
+  background: var(--chart-status-completed);
 }
 
 .sessionSummaryLegend {

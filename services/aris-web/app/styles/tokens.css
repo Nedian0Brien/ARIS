@@ -34,6 +34,30 @@
   --accent-red: #ef4444;
   --accent-red-bg: #fee2e2;
 
+  --chart-track: #e2e8f0;
+  --chart-status-running: #3b82f6;
+  --chart-status-pending: #f59e0b;
+  --chart-status-completed: #10b981;
+  --chart-status-idle: #64748b;
+  --agent-claude-accent: #d97757;
+  --agent-claude-bg: rgba(217, 119, 87, 0.15);
+  --agent-codex-accent: #10a37f;
+  --agent-codex-bg: rgba(16, 163, 127, 0.15);
+  --agent-gemini-accent: #4285f4;
+  --agent-gemini-bg: rgba(66, 133, 244, 0.15);
+  --approval-on-request-color: #3b82f6;
+  --approval-on-failure-color: #f59e0b;
+  --approval-never-color: #10b981;
+  --approval-yolo-color: #ef4444;
+
+  --bottom-nav-bg: rgba(255, 255, 255, 0.68);
+  --bottom-nav-border: rgba(255, 255, 255, 0.55);
+  --bottom-nav-inset-border: rgba(255, 255, 255, 0.38);
+  --bottom-nav-shadow: 0 0 8px rgba(15, 23, 42, 0.08);
+  --bottom-nav-indicator-bg: #ffffff;
+  --bottom-nav-indicator-border: rgba(226, 232, 240, 0.95);
+  --bottom-nav-indicator-shadow: 0 2px 8px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.05);
+
   /* Gradients */
   --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
   --gradient-surface: linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.4) 100%);
@@ -98,6 +122,30 @@ html[data-theme='dark'] {
   --accent-red: #f87171;
   --accent-red-bg: rgba(239, 68, 68, 0.22);
 
+  --chart-track: #334155;
+  --chart-status-running: #60a5fa;
+  --chart-status-pending: #fbbf24;
+  --chart-status-completed: #34d399;
+  --chart-status-idle: #94a3b8;
+  --agent-claude-accent: #f59e73;
+  --agent-claude-bg: rgba(245, 158, 115, 0.22);
+  --agent-codex-accent: #34d399;
+  --agent-codex-bg: rgba(52, 211, 153, 0.22);
+  --agent-gemini-accent: #60a5fa;
+  --agent-gemini-bg: rgba(96, 165, 250, 0.22);
+  --approval-on-request-color: #60a5fa;
+  --approval-on-failure-color: #fbbf24;
+  --approval-never-color: #34d399;
+  --approval-yolo-color: #f87171;
+
+  --bottom-nav-bg: rgba(15, 23, 42, 0.72);
+  --bottom-nav-border: rgba(71, 85, 105, 0.55);
+  --bottom-nav-inset-border: rgba(148, 163, 184, 0.12);
+  --bottom-nav-shadow: 0 6px 14px rgba(2, 6, 23, 0.38);
+  --bottom-nav-indicator-bg: rgba(30, 41, 59, 0.96);
+  --bottom-nav-indicator-border: rgba(96, 165, 250, 0.42);
+  --bottom-nav-indicator-shadow: 0 4px 12px rgba(2, 6, 23, 0.45), 0 1px 2px rgba(2, 6, 23, 0.35);
+
   --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
   --gradient-surface: linear-gradient(180deg, rgba(17, 26, 42, 0.95) 0%, rgba(17, 26, 42, 0.78) 100%);
   --modal-header-bg: linear-gradient(135deg, rgba(23, 37, 84, 0.55) 0%, rgba(30, 41, 59, 0.9) 100%);
@@ -135,6 +183,28 @@ html[data-theme='dark'] {
     --accent-slate-bg: rgba(148, 163, 184, 0.22);
     --accent-red: #f87171;
     --accent-red-bg: rgba(239, 68, 68, 0.22);
+    --chart-track: #334155;
+    --chart-status-running: #60a5fa;
+    --chart-status-pending: #fbbf24;
+    --chart-status-completed: #34d399;
+    --chart-status-idle: #94a3b8;
+    --agent-claude-accent: #f59e73;
+    --agent-claude-bg: rgba(245, 158, 115, 0.22);
+    --agent-codex-accent: #34d399;
+    --agent-codex-bg: rgba(52, 211, 153, 0.22);
+    --agent-gemini-accent: #60a5fa;
+    --agent-gemini-bg: rgba(96, 165, 250, 0.22);
+    --approval-on-request-color: #60a5fa;
+    --approval-on-failure-color: #fbbf24;
+    --approval-never-color: #34d399;
+    --approval-yolo-color: #f87171;
+    --bottom-nav-bg: rgba(15, 23, 42, 0.72);
+    --bottom-nav-border: rgba(71, 85, 105, 0.55);
+    --bottom-nav-inset-border: rgba(148, 163, 184, 0.12);
+    --bottom-nav-shadow: 0 6px 14px rgba(2, 6, 23, 0.38);
+    --bottom-nav-indicator-bg: rgba(30, 41, 59, 0.96);
+    --bottom-nav-indicator-border: rgba(96, 165, 250, 0.42);
+    --bottom-nav-indicator-shadow: 0 4px 12px rgba(2, 6, 23, 0.45), 0 1px 2px rgba(2, 6, 23, 0.35);
     --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
     --gradient-surface: linear-gradient(180deg, rgba(17, 26, 42, 0.95) 0%, rgba(17, 26, 42, 0.78) 100%);
     --modal-header-bg: linear-gradient(135deg, rgba(23, 37, 84, 0.55) 0%, rgba(30, 41, 59, 0.9) 100%);
