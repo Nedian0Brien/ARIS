@@ -561,6 +561,23 @@ function looksLikeShellCommand(value: string): boolean {
   return /^(?:\$ )?[a-z0-9._/-]+(?:\s+.+)?$/i.test(trimmed);
 }
 
+function looksLikeActionTranscript(value: string): boolean {
+  const text = value.trim().toLowerCase();
+  if (!text) {
+    return false;
+  }
+  return (
+    text.startsWith('$ ')
+    || text.includes('\n$ ')
+    || text.includes('exit code:')
+    || text.includes('diff --git')
+    || text.includes('*** update file:')
+    || text.includes('*** add file:')
+    || text.includes('*** delete file:')
+    || text.includes('@@ ')
+  );
+}
+
 function parseAgentStreamOutput(stdout: string): { output: string; actions: ParsedAgentActionEvent[] } {
   const lines = stdout
     .replace(/\r\n/g, '\n')
@@ -642,9 +659,21 @@ function parseAgentStreamOutput(stdout: string): { output: string; actions: Pars
       || lineLower.includes('file_change')
       || lineLower.includes('filechange')
     );
-    if (!isSystem && !seemsToolEvent) {
+    const seemsAssistantEvent = (
+      payloadType.includes('assistant')
+      || payloadSubtype.includes('assistant')
+      || payloadSubtype.includes('final')
+      || payloadType === 'result'
+      || lineLower.includes('"agent_message"')
+    );
+    if (!isSystem && !seemsToolEvent && seemsAssistantEvent) {
       const assistantText = extractFirstStringByKeys(records, ['text', 'message', 'content', 'output']);
-      if (assistantText && !looksLikeShellCommand(assistantText) && assistantText.length >= latestAssistantText.length) {
+      if (
+        assistantText
+        && !looksLikeShellCommand(assistantText)
+        && !looksLikeActionTranscript(assistantText)
+        && assistantText.length >= latestAssistantText.length
+      ) {
         latestAssistantText = assistantText;
       }
     }
@@ -1244,12 +1273,16 @@ export class HappyRuntimeStore {
       const parsed = parseAgentStreamOutput(cleanedStdout);
       inferredActions = parsed.actions;
       output = trimOutput(parsed.output || '');
-      if (!output && command.fallbackArgs && command.fallbackArgs.length > 0) {
+      const needsFallback = !output || looksLikeActionTranscript(output);
+      if (needsFallback && command.fallbackArgs && command.fallbackArgs.length > 0) {
         try {
           const fallback = await runCommand(command.fallbackArgs);
           const fallbackStdout = stripAnsi(fallback.stdout || '');
           const fallbackStderr = stripAnsi(fallback.stderr || '');
-          output = trimOutput(fallbackStdout || fallbackStderr || '');
+          const fallbackOutput = trimOutput(fallbackStdout || fallbackStderr || '');
+          if (fallbackOutput) {
+            output = fallbackOutput;
+          }
         } catch (fallbackError) {
           if (isAbortFailure(fallbackError)) {
             throw fallbackError;
