@@ -3,11 +3,16 @@ worktrees/
 .vscode/
 
 .env
+**/.env.bak-*
 deploy/.env
+deploy/.env.bak-*
 deploy/.logs/
 deploy/.state/
 services/aris-web/.env
+services/aris-web/.env.bak-*
 services/aris-backend/.env
+services/aris-backend/.env.bak-*
 **/tsconfig.tsbuildinfo
 
+**/logs/
 services/aris-backend/logs/
