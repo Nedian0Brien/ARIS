@@ -903,6 +903,29 @@ export class HappyRuntimeStore {
     }
   }
 
+  private buildRunKey(sessionId: string, chatId?: string): string {
+    if (chatId && chatId.trim().length > 0) {
+      return `${sessionId}:${chatId.trim()}`;
+    }
+    return `${sessionId}:__default__`;
+  }
+
+  private isSessionRunKey(runKey: string, sessionId: string): boolean {
+    return runKey === `${sessionId}:__default__` || runKey.startsWith(`${sessionId}:`);
+  }
+
+  private abortSessionRuns(sessionId: string): void {
+    for (const [runKey, controller] of this.activeRuns.entries()) {
+      if (!this.isSessionRunKey(runKey, sessionId)) {
+        continue;
+      }
+      if (!controller.signal.aborted) {
+        controller.abort();
+      }
+      this.activeRuns.delete(runKey);
+    }
+  }
+
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (!this.serverToken) {
       throw new Error('HAPPY_SERVER_TOKEN is required to connect to happy runtime');
@@ -2081,21 +2104,28 @@ export class HappyRuntimeStore {
   private async generateAndPersistAgentReply(
     session: RuntimeSession,
     prompt: string,
-    context: { chatId?: string; threadId?: string } = {},
+    context: { chatId?: string; threadId?: string; agent?: RuntimeAgent } = {},
   ): Promise<void> {
-    const flavor = session.metadata.flavor;
+    const flavor = context.agent && context.agent !== 'unknown'
+      ? context.agent
+      : session.metadata.flavor;
     if (flavor === 'unknown') {
       return;
     }
 
+    const scopedChatId = typeof context.chatId === 'string' && context.chatId.trim().length > 0
+      ? context.chatId.trim()
+      : undefined;
+    const runKey = this.buildRunKey(session.id, scopedChatId);
     const controller = new AbortController();
-    this.activeRuns.set(session.id, controller);
+    const existing = this.activeRuns.get(runKey);
+    if (existing && !existing.signal.aborted) {
+      existing.abort();
+    }
+    this.activeRuns.set(runKey, controller);
 
     try {
       const isCodex = flavor === 'codex';
-      const scopedChatId = typeof context.chatId === 'string' && context.chatId.trim().length > 0
-        ? context.chatId.trim()
-        : undefined;
       const preferredThreadId = typeof context.threadId === 'string' && context.threadId.trim().length > 0
         ? context.threadId.trim()
         : undefined;
@@ -2180,9 +2210,9 @@ export class HappyRuntimeStore {
         console.error(`failed to persist agent error message: ${persistMessage}`);
       }
     } finally {
-      const current = this.activeRuns.get(session.id);
+      const current = this.activeRuns.get(runKey);
       if (current === controller) {
-        this.activeRuns.delete(session.id);
+        this.activeRuns.delete(runKey);
       }
     }
   }
@@ -2321,7 +2351,12 @@ export class HappyRuntimeStore {
       const threadId = typeof input.meta?.threadId === 'string' && input.meta.threadId.trim().length > 0
         ? input.meta.threadId.trim()
         : undefined;
-      void this.generateAndPersistAgentReply(session, input.text, { chatId, threadId });
+      const requestedAgent = normalizeAgent(input.meta?.agent);
+      void this.generateAndPersistAgentReply(session, input.text, {
+        chatId,
+        threadId,
+        ...(requestedAgent !== 'unknown' ? { agent: requestedAgent } : {}),
+      });
     }
 
     if (!created.text || !created.title) {
@@ -2341,11 +2376,7 @@ export class HappyRuntimeStore {
     }
 
     if (action === 'abort' || action === 'kill') {
-      const active = this.activeRuns.get(sessionId);
-      if (active && !active.signal.aborted) {
-        active.abort();
-      }
-      this.activeRuns.delete(sessionId);
+      this.abortSessionRuns(sessionId);
     }
 
     if (action === 'kill') {
@@ -2370,12 +2401,20 @@ export class HappyRuntimeStore {
     };
   }
 
-  async isSessionRunning(sessionId: string): Promise<boolean> {
+  async isSessionRunning(sessionId: string, chatId?: string): Promise<boolean> {
     const session = await this.getSession(sessionId);
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
     }
-    return this.activeRuns.has(sessionId);
+    if (chatId && chatId.trim().length > 0) {
+      return this.activeRuns.has(this.buildRunKey(sessionId, chatId));
+    }
+    for (const runKey of this.activeRuns.keys()) {
+      if (this.isSessionRunKey(runKey, sessionId)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   async listPermissions(state?: PermissionState): Promise<PermissionRequest[]> {
@@ -2430,17 +2469,11 @@ export class HappyRuntimeStore {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`failed to send codex permission decision: ${message}`);
         if (decision === 'deny') {
-          const active = this.activeRuns.get(permission.sessionId);
-          if (active && !active.signal.aborted) {
-            active.abort();
-          }
+          this.abortSessionRuns(permission.sessionId);
         }
       }
     } else if (decision === 'deny') {
-      const active = this.activeRuns.get(permission.sessionId);
-      if (active && !active.signal.aborted) {
-        active.abort();
-      }
+      this.abortSessionRuns(permission.sessionId);
     }
 
     return updated;

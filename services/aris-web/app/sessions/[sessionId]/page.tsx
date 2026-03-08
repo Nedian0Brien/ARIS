@@ -64,7 +64,7 @@ export default async function SessionPage({
       </div>
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : '세션 정보를 불러올 수 없습니다.';
+    const message = error instanceof Error ? error.message : '워크스페이스 정보를 불러올 수 없습니다.';
 
     return (
       <div className="app-shell app-shell-immersive">
@@ -72,7 +72,7 @@ export default async function SessionPage({
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'auto', padding: '1.5rem', paddingTop: 'calc(64px + 1.5rem)', gap: '1rem' }}>
           <BackendNotice message={`백엔드 연결 문제: ${message}`} />
           <Card style={{ padding: '4rem 1.5rem', textAlign: 'center' }}>
-            <p className="text-muted">현재 세션을 표시할 수 없습니다. 백엔드 연결을 확인하고 다시 시도해 주세요.</p>
+            <p className="text-muted">현재 워크스페이스를 표시할 수 없습니다. 백엔드 연결을 확인하고 다시 시도해 주세요.</p>
             <Link href="/" style={{ marginTop: '1rem', display: 'inline-block', color: 'var(--primary)', fontWeight: 700 }}>
               홈으로 돌아가기
             </Link>

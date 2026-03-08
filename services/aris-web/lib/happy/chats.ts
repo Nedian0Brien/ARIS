@@ -1,11 +1,12 @@
 import { prisma } from '@/lib/db/prisma';
-import type { SessionChat } from '@/lib/happy/types';
+import type { AgentFlavor, SessionChat } from '@/lib/happy/types';
 
 const DEFAULT_CHAT_TITLE = '새 채팅';
 
 function toSessionChat(record: {
   id: string;
   sessionId: string;
+  agent: string;
   title: string;
   isPinned: boolean;
   isDefault: boolean;
@@ -17,6 +18,7 @@ function toSessionChat(record: {
   return {
     id: record.id,
     sessionId: record.sessionId,
+    agent: resolveAgentFlavor(record.agent),
     title: record.title,
     isPinned: record.isPinned,
     isDefault: record.isDefault,
@@ -25,6 +27,13 @@ function toSessionChat(record: {
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
+}
+
+function resolveAgentFlavor(input: unknown): AgentFlavor {
+  if (input === 'claude' || input === 'codex' || input === 'gemini') {
+    return input;
+  }
+  return 'unknown';
 }
 
 function sortChats(chats: SessionChat[]): SessionChat[] {
@@ -107,6 +116,7 @@ export async function listSessionChats(input: {
 export async function createSessionChat(input: {
   sessionId: string;
   userId: string;
+  agent?: AgentFlavor;
   title?: string;
 }): Promise<SessionChat> {
   const existing = await prisma.sessionChat.findMany({
@@ -125,6 +135,7 @@ export async function createSessionChat(input: {
     data: {
       sessionId: input.sessionId,
       userId: input.userId,
+      agent: input.agent && input.agent !== 'unknown' ? input.agent : 'codex',
       title,
       isDefault: false,
     },
@@ -137,6 +148,7 @@ export async function updateSessionChat(input: {
   sessionId: string;
   userId: string;
   chatId: string;
+  agent?: AgentFlavor;
   title?: string;
   isPinned?: boolean;
   threadId?: string | null;
@@ -156,6 +168,7 @@ export async function updateSessionChat(input: {
   }
 
   const shouldUpdate = input.title !== undefined
+    || input.agent !== undefined
     || input.isPinned !== undefined
     || input.threadId !== undefined
     || Boolean(input.touchActivity);
@@ -176,6 +189,7 @@ export async function updateSessionChat(input: {
     },
     data: {
       ...(input.title !== undefined && { title: normalizeChatTitle(input.title) }),
+      ...(input.agent !== undefined && { agent: input.agent !== 'unknown' ? input.agent : 'codex' }),
       ...(input.isPinned !== undefined && { isPinned: input.isPinned }),
       ...(input.threadId !== undefined && { threadId: input.threadId && input.threadId.trim() ? input.threadId.trim() : null }),
       ...(input.touchActivity && { lastActivityAt: new Date() }),

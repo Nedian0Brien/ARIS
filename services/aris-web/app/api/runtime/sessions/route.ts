@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
 import { listSessions, createSession } from '@/lib/happy/client';
-import { prisma } from '@/lib/db/prisma';
+import { syncWorkspacesForUser } from '@/lib/happy/workspaces';
 
 function normalizeProjectPath(input: string): string {
   const normalized = input.replace(/\\/g, '/').trim();
@@ -22,25 +22,15 @@ export async function GET(request: NextRequest) {
 
   try {
     const sessions = await listSessions();
-
-    // Fetch metadata for these sessions for this user
-    const sessionIds = sessions.map(s => s.id);
-    const metadatas = await prisma.sessionMetadata.findMany({
-      where: {
-        sessionId: { in: sessionIds },
-        userId: auth.user.id
-      }
-    });
-
-    const metadataMap = new Map(metadatas.map(m => [m.sessionId, m]));
+    const workspaceMap = await syncWorkspacesForUser(auth.user.id, sessions);
 
     const mergedSessions = sessions.map(s => {
-      const meta = metadataMap.get(s.id);
+      const workspace = workspaceMap.get(s.id);
       return {
         ...s,
-        alias: meta?.alias || null,
-        isPinned: meta?.isPinned ?? false,
-        lastReadAt: meta?.lastReadAt?.toISOString() ?? null,
+        alias: workspace?.alias || null,
+        isPinned: workspace?.isPinned ?? false,
+        lastReadAt: workspace?.lastReadAt?.toISOString() ?? null,
       };
     });
 
@@ -86,10 +76,12 @@ export async function POST(request: NextRequest) {
     const existingSessions = await listSessions();
     const existing = existingSessions.find((session) => normalizeProjectPath(session.projectName) === normalizedPath);
     if (existing) {
+      await syncWorkspacesForUser(auth.user.id, [existing]);
       return NextResponse.json({ session: existing, reused: true });
     }
 
     const session = await createSession({ path: normalizedPath, agent: normalizedAgent, approvalPolicy: normalizedPolicy });
+    await syncWorkspacesForUser(auth.user.id, [session]);
     return NextResponse.json({ session, reused: false });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create session';

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
-import { prisma } from '@/lib/db/prisma';
+import { upsertWorkspaceMetadata } from '@/lib/happy/workspaces';
 
 /**
  * POST /api/runtime/sessions/[sessionId]/metadata
@@ -36,26 +36,27 @@ export async function POST(
       return date;
     })();
 
-    const metadata = await prisma.sessionMetadata.upsert({
-      where: {
-        sessionId_userId: { sessionId, userId: auth.user.id },
-      },
-      update: {
-        ...(alias !== undefined && { alias }),
-        ...(isPinned !== undefined && { isPinned }),
-        ...(parsedLastReadAt !== undefined && { lastReadAt: parsedLastReadAt }),
-      },
-      create: {
-        sessionId,
-        userId: auth.user.id,
-        alias: alias ?? null,
-        isPinned: isPinned ?? false,
-        lastReadAt: parsedLastReadAt ?? null,
-      },
+    const workspace = await upsertWorkspaceMetadata({
+      workspaceId: sessionId,
+      userId: auth.user.id,
+      ...(alias !== undefined && { alias }),
+      ...(isPinned !== undefined && { isPinned }),
+      ...(parsedLastReadAt !== undefined && { lastReadAt: parsedLastReadAt }),
     });
 
-    return NextResponse.json({ metadata });
+    return NextResponse.json({
+      metadata: {
+        sessionId,
+        userId: auth.user.id,
+        alias: workspace.alias ?? null,
+        isPinned: workspace.isPinned,
+        lastReadAt: workspace.lastReadAt,
+      },
+    });
   } catch (error) {
+    if (error instanceof Error && error.message === 'WORKSPACE_NOT_FOUND') {
+      return NextResponse.json({ error: '워크스페이스를 찾을 수 없습니다.' }, { status: 404 });
+    }
     console.error('Metadata update error:', error);
     return NextResponse.json({ error: '세션 메타데이터 저장에 실패했습니다.' }, { status: 500 });
   }

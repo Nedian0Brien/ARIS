@@ -1,6 +1,6 @@
 import { env } from '@/lib/config';
-import { prisma } from '@/lib/db/prisma';
 import { normalizeEvents, normalizeSessionDetail, normalizeSessions } from '@/lib/happy/normalizer';
+import { getWorkspaceById, syncWorkspacesForUser } from '@/lib/happy/workspaces';
 import type {
   ApprovalPolicy,
   PermissionDecision,
@@ -25,6 +25,47 @@ export class HappyHttpError extends Error {
 }
 
 let runtimeStatusEndpointSupported: boolean | null = null;
+
+function normalizeWorkspacePath(input: string): string {
+  const normalized = input.replace(/\\/g, '/').trim();
+  if (!normalized) {
+    return '/';
+  }
+  if (normalized === '/') {
+    return '/';
+  }
+  return normalized.replace(/\/+$/, '');
+}
+
+function toActivityEpoch(value: string | null | undefined): number {
+  if (!value) {
+    return Number.NEGATIVE_INFINITY;
+  }
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) {
+    return Number.NEGATIVE_INFINITY;
+  }
+  return parsed;
+}
+
+function dedupeSessionsByWorkspacePath(sessions: SessionSummary[]): SessionSummary[] {
+  const byPath = new Map<string, SessionSummary>();
+  for (const session of sessions) {
+    const path = normalizeWorkspacePath(session.projectName);
+    const existing = byPath.get(path);
+    if (!existing) {
+      byPath.set(path, session);
+      continue;
+    }
+
+    const existingAt = toActivityEpoch(existing.lastActivityAt);
+    const candidateAt = toActivityEpoch(session.lastActivityAt);
+    if (candidateAt > existingAt || (candidateAt === existingAt && session.id > existing.id)) {
+      byPath.set(path, session);
+    }
+  }
+  return [...byPath.values()];
+}
 
 function asObject(value: unknown): JsonObject | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -275,28 +316,21 @@ export async function getRuntimeHealth(): Promise<{ api: 'up' | 'down'; happy: '
 
 export async function listSessions(userId?: string): Promise<SessionSummary[]> {
   const raw = await fetchHappy('/v1/sessions');
-  const sessions = normalizeSessions(extractArrayPayload(raw, 'sessions'));
+  const sessions = dedupeSessionsByWorkspacePath(normalizeSessions(extractArrayPayload(raw, 'sessions')));
 
   if (!userId) {
     return sessions;
   }
 
-  const metadatas = await prisma.sessionMetadata.findMany({
-    where: {
-      sessionId: { in: sessions.map((s) => s.id) },
-      userId,
-    },
-  });
-
-  const metadataMap = new Map(metadatas.map((m) => [m.sessionId, m]));
+  const workspaceMap = await syncWorkspacesForUser(userId, sessions);
 
   return sessions.map((s) => {
-    const meta = metadataMap.get(s.id);
+    const workspace = workspaceMap.get(s.id);
     return {
       ...s,
-      alias: meta?.alias || null,
-      isPinned: meta?.isPinned ?? false,
-      lastReadAt: meta?.lastReadAt?.toISOString() ?? null,
+      alias: workspace?.alias || null,
+      isPinned: workspace?.isPinned ?? false,
+      lastReadAt: workspace?.lastReadAt?.toISOString() ?? null,
     };
   });
 }
@@ -346,14 +380,11 @@ export async function getSessionEvents(
   const sessionDetail = normalizeSessionDetail(found);
 
   if (userId) {
-    const meta = await prisma.sessionMetadata.findUnique({
-      where: { sessionId_userId: { sessionId, userId } },
-    });
-
-    if (meta) {
-      sessionDetail.alias = meta.alias || null;
-      sessionDetail.isPinned = meta.isPinned;
-      sessionDetail.lastReadAt = meta.lastReadAt?.toISOString() ?? null;
+    const workspace = await getWorkspaceById(userId, sessionId);
+    if (workspace) {
+      sessionDetail.alias = workspace.alias || null;
+      sessionDetail.isPinned = workspace.isPinned;
+      sessionDetail.lastReadAt = workspace.lastReadAt?.toISOString() ?? null;
     }
   }
 
@@ -436,7 +467,13 @@ export async function decidePermissionRequest(input: {
   };
 }
 
-export async function getSessionRuntimeState(sessionId: string): Promise<{ sessionId: string; isRunning: boolean }> {
+export async function getSessionRuntimeState(
+  sessionId: string,
+  options: { chatId?: string } = {},
+): Promise<{ sessionId: string; isRunning: boolean }> {
+  const chatId = typeof options.chatId === 'string' && options.chatId.trim().length > 0
+    ? options.chatId.trim()
+    : undefined;
   const deriveFromSessions = async () => {
     const raw = await fetchHappy('/v1/sessions');
     const sessions = extractArrayPayload(raw, 'sessions');
@@ -450,7 +487,8 @@ export async function getSessionRuntimeState(sessionId: string): Promise<{ sessi
 
   if (runtimeStatusEndpointSupported !== false) {
     try {
-      const raw = await fetchHappy(`/v1/sessions/${encodeURIComponent(sessionId)}/runtime`);
+      const query = chatId ? `?chatId=${encodeURIComponent(chatId)}` : '';
+      const raw = await fetchHappy(`/v1/sessions/${encodeURIComponent(sessionId)}/runtime${query}`);
       const obj = asObject(raw);
       runtimeStatusEndpointSupported = true;
       return {
