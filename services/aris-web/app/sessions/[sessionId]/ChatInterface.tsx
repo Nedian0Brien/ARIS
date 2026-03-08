@@ -1601,6 +1601,7 @@ export function ChatInterface({
     includeUnassignedEvents,
     initialEvents,
     initialHasMoreBefore,
+    activeChatId,
   );
   const { isRunning: runtimeRunning, runtimeError } = useSessionRuntime(sessionId, activeChatIdResolved);
   const {

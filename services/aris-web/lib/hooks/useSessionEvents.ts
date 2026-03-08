@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionEventsPage, UiEvent } from '@/lib/happy/types';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
@@ -75,26 +75,40 @@ export function useSessionEvents(
   includeUnassigned: boolean,
   initialEvents: UiEvent[],
   initialHasMoreBefore = false,
+  initialEventsChatId: string | null = chatId,
 ) {
-  const [events, setEvents] = useState<UiEvent[]>(initialEvents);
-  const [hasMoreBefore, setHasMoreBefore] = useState<boolean>(initialHasMoreBefore);
+  const initialEventsMatchChat = initialEventsChatId === chatId;
+  const hydratedInitialEvents = useMemo(
+    () => (initialEventsMatchChat ? initialEvents : []),
+    [initialEventsMatchChat, initialEvents],
+  );
+  const hydratedInitialHasMoreBefore = initialEventsMatchChat ? initialHasMoreBefore : false;
+  const [events, setEvents] = useState<UiEvent[]>(hydratedInitialEvents);
+  const [hasMoreBefore, setHasMoreBefore] = useState<boolean>(hydratedInitialHasMoreBefore);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
-  const eventsRef = useRef<UiEvent[]>(initialEvents);
-  const hasMoreBeforeRef = useRef<boolean>(initialHasMoreBefore);
+  const eventsRef = useRef<UiEvent[]>(hydratedInitialEvents);
+  const hasMoreBeforeRef = useRef<boolean>(hydratedInitialHasMoreBefore);
   const loadingOlderRef = useRef<boolean>(false);
   const terminalStatusRef = useRef<number | null>(null);
 
   useEffect(() => {
-    setEvents(initialEvents);
-    eventsRef.current = initialEvents;
-    setHasMoreBefore(initialHasMoreBefore);
-    hasMoreBeforeRef.current = initialHasMoreBefore;
+    setEvents(hydratedInitialEvents);
+    eventsRef.current = hydratedInitialEvents;
+    setHasMoreBefore(hydratedInitialHasMoreBefore);
+    hasMoreBeforeRef.current = hydratedInitialHasMoreBefore;
     loadingOlderRef.current = false;
     terminalStatusRef.current = null;
     setIsLoadingOlder(false);
     setSyncError(null);
-  }, [sessionId, chatId, includeUnassigned, initialEvents, initialHasMoreBefore]);
+  }, [
+    sessionId,
+    chatId,
+    includeUnassigned,
+    hydratedInitialEvents,
+    hydratedInitialHasMoreBefore,
+    initialEventsChatId,
+  ]);
 
   useEffect(() => {
     eventsRef.current = events;
