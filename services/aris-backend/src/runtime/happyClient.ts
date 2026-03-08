@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 import { inferActionTypeFromCommand, titleForActionType } from './actionType.js';
+import { HappyEventLogger } from './happyEventLogger.js';
 import type {
   ApprovalPolicy,
   PermissionDecision,
@@ -27,6 +28,14 @@ const CODEX_SANDBOX_MODE = (process.env.CODEX_SANDBOX_MODE || 'workspace-write')
 const CODEX_RUNTIME_MODE = (process.env.CODEX_RUNTIME_MODE || 'app-server').trim().toLowerCase();
 const HAPPY_MESSAGES_BATCH_LIMIT = 500;
 const HAPPY_MESSAGES_MAX_PAGES = 1000;
+const HAPPY_EVENT_LOG_DIR = path.resolve(process.cwd(), 'logs');
+const HAPPY_EVENT_LOG_MAX_BYTES = (() => {
+  const parsed = Number.parseInt(process.env.HAPPY_EVENT_LOG_MAX_BYTES || '', 10);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+  return 1_024 * 1_024 * 1_024; // 1GB
+})();
 
 type RuntimeAgent = RuntimeSession['metadata']['flavor'];
 type PermissionState = PermissionRequest['state'];
@@ -797,12 +806,14 @@ export class HappyRuntimeStore {
   private readonly serverToken: string;
   private readonly workspaceRoot: string;
   private readonly hostProjectsRoot: string;
+  private readonly happyEventLogger: HappyEventLogger;
 
   constructor(opts: { serverUrl: string; token: string; workspaceRoot?: string; hostProjectsRoot?: string }) {
     this.serverUrl = opts.serverUrl.replace(/\/+$/, '');
     this.serverToken = opts.token;
     this.workspaceRoot = (opts.workspaceRoot || '/workspace').replace(/\/+$/, '');
     this.hostProjectsRoot = (opts.hostProjectsRoot || '').replace(/\/+$/, '');
+    this.happyEventLogger = new HappyEventLogger(HAPPY_EVENT_LOG_DIR, HAPPY_EVENT_LOG_MAX_BYTES);
   }
 
   private resolveSessionApprovalPolicy(session: RuntimeSession): ApprovalPolicy {
@@ -1062,6 +1073,17 @@ export class HappyRuntimeStore {
       meta: Record<string, unknown>,
       options: { type?: string; title?: string } = {},
     ) => {
+      this.happyEventLogger.logParsed({
+        sessionId: session.id,
+        ...(chatId ? { chatId } : {}),
+        channel: 'app_server',
+        stage: 'parsed_append',
+        payload: {
+          text,
+          meta,
+          options,
+        },
+      });
       appendChain = appendChain
         .then(() => this.appendAgentMessage(session.id, text, meta, options))
         .catch((error) => {
@@ -1432,10 +1454,31 @@ export class HappyRuntimeStore {
     });
 
     stdoutLines.on('line', (line) => {
-      const payload = parseJsonLine(line.trim());
+      const rawLine = line.trim();
+      this.happyEventLogger.logRaw({
+        sessionId: session.id,
+        ...(chatId ? { chatId } : {}),
+        channel: 'app_server',
+        line: rawLine,
+      });
+      const payload = parseJsonLine(rawLine);
       if (!payload) {
+        this.happyEventLogger.logParsed({
+          sessionId: session.id,
+          ...(chatId ? { chatId } : {}),
+          channel: 'app_server',
+          stage: 'incoming_payload',
+          payload: { parseError: 'invalid_json' },
+        });
         return;
       }
+      this.happyEventLogger.logParsed({
+        sessionId: session.id,
+        ...(chatId ? { chatId } : {}),
+        channel: 'app_server',
+        stage: 'incoming_payload',
+        payload,
+      });
 
       const messageMethod = typeof payload.method === 'string' ? payload.method : '';
       const hasId = Object.prototype.hasOwnProperty.call(payload, 'id');
@@ -1670,6 +1713,17 @@ export class HappyRuntimeStore {
       meta: Record<string, unknown>,
       options: { type?: string; title?: string } = {},
     ) => {
+      this.happyEventLogger.logParsed({
+        sessionId: session.id,
+        ...(chatId ? { chatId } : {}),
+        channel: 'exec_cli',
+        stage: 'parsed_append',
+        payload: {
+          text,
+          meta,
+          options,
+        },
+      });
       appendChain = appendChain
         .then(() => this.appendAgentMessage(session.id, text, meta, options))
         .catch((error) => {
@@ -1718,10 +1772,31 @@ export class HappyRuntimeStore {
     };
 
     stdoutLines.on('line', (line) => {
-      const payload = parseJsonLine(line.trim());
+      const rawLine = line.trim();
+      this.happyEventLogger.logRaw({
+        sessionId: session.id,
+        ...(chatId ? { chatId } : {}),
+        channel: 'exec_cli',
+        line: rawLine,
+      });
+      const payload = parseJsonLine(rawLine);
       if (!payload) {
+        this.happyEventLogger.logParsed({
+          sessionId: session.id,
+          ...(chatId ? { chatId } : {}),
+          channel: 'exec_cli',
+          stage: 'incoming_payload',
+          payload: { parseError: 'invalid_json' },
+        });
         return;
       }
+      this.happyEventLogger.logParsed({
+        sessionId: session.id,
+        ...(chatId ? { chatId } : {}),
+        channel: 'exec_cli',
+        stage: 'incoming_payload',
+        payload,
+      });
 
       if (payload.type === 'thread.started') {
         const startedThreadId = asString(payload.thread_id, '').trim();
