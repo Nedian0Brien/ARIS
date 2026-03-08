@@ -460,6 +460,15 @@ function approvalPolicyLabel(value?: ApprovalPolicy): string {
   return 'ON REQUEST';
 }
 
+function fileNameOnly(pathValue: string): string {
+  const normalized = pathValue.replace(/\\/g, '/').trim();
+  if (!normalized) {
+    return normalized;
+  }
+  const segments = normalized.split('/').filter(Boolean);
+  return segments[segments.length - 1] ?? normalized;
+}
+
 function parseCodeChangeSummary(event: UiEvent): {
   files: string[];
   additions: number;
@@ -572,7 +581,7 @@ function parseCodeChangeSummary(event: UiEvent): {
   const fallbackFile = [...files][0] ?? event.action?.path ?? '';
   const hunks = parsedHunks.map((hunk) => ({
     ...hunk,
-    file: hunk.file || fallbackFile,
+    file: fileNameOnly(hunk.file || fallbackFile),
   }));
 
   const previewCandidates = lines.filter((line) => (
@@ -1253,9 +1262,25 @@ function diffLineToneClass(line: string): string {
   return styles.diffLineContext;
 }
 
-function renderDiffLineContent(line: string): ReactNode {
+function renderDiffLineContent(
+  line: string,
+  hunk?: { file: string; line: number; additions: number; deletions: number },
+): ReactNode {
   if (!line.startsWith('@@ ')) {
     return line.length > 0 ? line : ' ';
+  }
+  if (hunk) {
+    return (
+      <>
+        {hunk.file || '(unknown)'}
+        {' | '}
+        line {hunk.line}
+        {' | '}
+        <span className={styles.diffHunkPlus}>+{hunk.additions}</span>
+        {' '}
+        <span className={styles.diffHunkMinus}>-{hunk.deletions}</span>
+      </>
+    );
   }
   const match = line.match(/^@@\s+-(\d+(?:,\d+)?)\s+\+(\d+(?:,\d+)?)\s+@@(.*)$/);
   if (!match) {
@@ -1274,15 +1299,27 @@ function renderDiffLineContent(line: string): ReactNode {
   );
 }
 
-function DiffCodeBlock({ text, className }: { text: string; className: string }) {
+function DiffCodeBlock({
+  text,
+  className,
+  hunks = [],
+}: {
+  text: string;
+  className: string;
+  hunks?: Array<{ file: string; line: number; additions: number; deletions: number }>;
+}) {
   const lines = text.replace(/\r\n/g, '\n').split('\n');
+  let hunkCursor = 0;
   return (
     <pre className={className}>
-      {lines.map((line, index) => (
-        <span key={`${index}-${line.length}`} className={`${styles.diffLine} ${diffLineToneClass(line)}`}>
-          {renderDiffLineContent(line)}
-        </span>
-      ))}
+      {lines.map((line, index) => {
+        const hunk = line.startsWith('@@ ') ? hunks[hunkCursor++] : undefined;
+        return (
+          <span key={`${index}-${line.length}`} className={`${styles.diffLine} ${diffLineToneClass(line)}`}>
+            {renderDiffLineContent(line, hunk)}
+          </span>
+        );
+      })}
     </pre>
   );
 }
@@ -1302,8 +1339,6 @@ function CodeChangesEventCard({
   const fullPrimary = resolveActionPrimary(event).replace(/\s+/g, ' ').trim();
   const resourceLabels = extractResourceLabelsFromEvent(event);
   const hasResource = resourceLabels.length > 0;
-  const compactHunks = summary.hunks.slice(0, 3);
-  const hiddenHunkCount = Math.max(0, summary.hunks.length - compactHunks.length);
 
   if (!expanded) {
     return (
@@ -1328,20 +1363,8 @@ function CodeChangesEventCard({
             <span className={styles.codeChangesAdd}>+{summary.additions}</span>
             <span className={styles.codeChangesDel}>-{summary.deletions}</span>
           </div>
-          {compactHunks.length > 0 && (
-            <div className={styles.codeChangesHunkList}>
-              {compactHunks.map((hunk, index) => (
-                <div key={`${hunk.file}:${hunk.line}:${index}`} className={styles.codeChangesHunkInfo}>
-                  {hunk.file} | line {hunk.line} | +{hunk.additions} -{hunk.deletions}
-                </div>
-              ))}
-              {hiddenHunkCount > 0 && (
-                <div className={styles.codeChangesHunkInfo}>+{hiddenHunkCount} more (확장 시 전체)</div>
-              )}
-            </div>
-          )}
           {previewText && (
-            <DiffCodeBlock text={previewText} className={styles.codeChangesPreview} />
+            <DiffCodeBlock text={previewText} className={styles.codeChangesPreview} hunks={summary.hunks} />
           )}
         </div>
         <button
@@ -1381,19 +1404,10 @@ function CodeChangesEventCard({
             <span className={styles.codeChangesAdd}>+{summary.additions}</span>
             <span className={styles.codeChangesDel}>-{summary.deletions}</span>
           </div>
-          {summary.hunks.length > 0 && (
-            <div className={styles.codeChangesHunkList}>
-              {summary.hunks.map((hunk, index) => (
-                <div key={`${hunk.file}:${hunk.line}:${index}`} className={styles.codeChangesHunkInfo}>
-                  {hunk.file} | line {hunk.line} | +{hunk.additions} -{hunk.deletions}
-                </div>
-              ))}
-            </div>
-          )}
           {summary.files.length > 0 && (
             <div className={styles.codeChangesFiles}>
               {summary.files.slice(0, 3).map((file) => (
-                <span key={file} className={styles.codeChangesFile}>{file}</span>
+                <span key={file} className={styles.codeChangesFile}>{fileNameOnly(file)}</span>
               ))}
               {summary.files.length > 3 && <span className={styles.codeChangesFile}>+{summary.files.length - 3} more</span>}
             </div>
@@ -1411,7 +1425,7 @@ function CodeChangesEventCard({
         </button>
       </div>
       <div id={`changes-${event.id}`} className={styles.actionResultWrap}>
-        <DiffCodeBlock text={summary.fullText || '(no diff output)'} className={styles.codeChangesFull} />
+        <DiffCodeBlock text={summary.fullText || '(no diff output)'} className={styles.codeChangesFull} hunks={summary.hunks} />
       </div>
     </div>
   );
