@@ -150,7 +150,10 @@ type Tone = 'sky' | 'amber' | 'cyan' | 'emerald' | 'violet' | 'red' | 'git' | 'd
 type ActionKind = 'run_execution' | 'exec_execution' | 'git_execution' | 'docker_execution' | 'command_execution' | 'file_list' | 'file_read' | 'file_write';
 type StreamRenderItem =
   | { type: 'event'; event: UiEvent }
-  | { type: 'action_overflow'; id: string; runId: string; kind: ActionKind; hiddenCount: number; expanded: boolean };
+  | { type: 'action_overflow'; id: string; runId: string; kind: ActionKind; hiddenCount: number; expanded: boolean; timestamp: string };
+type TimelineRenderItem =
+  | { type: 'stream'; item: StreamRenderItem; sortKey: number; order: number }
+  | { type: 'permission'; permission: PermissionRequest; sortKey: number; order: number };
 type ResourceLabel =
   | { kind: 'folder'; name: FolderLabel; sourcePath?: string }
   | { kind: 'file'; name: string; extension: string; sourcePath?: string };
@@ -660,6 +663,7 @@ function buildStreamRenderItems(events: UiEvent[], expandedActionRunIds: Record<
         kind: runKind,
         hiddenCount,
         expanded: true,
+        timestamp: firstEvent.timestamp,
       });
       cursor = end;
       continue;
@@ -673,6 +677,7 @@ function buildStreamRenderItems(events: UiEvent[], expandedActionRunIds: Record<
       kind: runKind,
       hiddenCount,
       expanded: false,
+      timestamp: firstEvent.timestamp,
     });
     items.push({ type: 'event', event: lastEvent });
 
@@ -1659,6 +1664,43 @@ export function ChatInterface({
   }, [events]);
   const agentReplies = useMemo(() => events.filter((event) => !isUserEvent(event)).length, [events]);
   const streamItems = useMemo(() => buildStreamRenderItems(events, expandedActionRunIds), [events, expandedActionRunIds]);
+  const timelineItems = useMemo<TimelineRenderItem[]>(() => {
+    const merged: TimelineRenderItem[] = [];
+    let order = 0;
+    const fallbackBase = Number.MAX_SAFE_INTEGER / 8;
+
+    for (const item of streamItems) {
+      const timestamp = item.type === 'event' ? item.event.timestamp : item.timestamp;
+      const parsed = Date.parse(timestamp);
+      merged.push({
+        type: 'stream',
+        item,
+        sortKey: Number.isFinite(parsed) ? parsed : fallbackBase + order,
+        order,
+      });
+      order += 1;
+    }
+
+    if (showPermissionQueue) {
+      for (const permission of displayPermissions) {
+        const parsed = Date.parse(permission.requestedAt);
+        merged.push({
+          type: 'permission',
+          permission,
+          sortKey: Number.isFinite(parsed) ? parsed : fallbackBase + order,
+          order,
+        });
+        order += 1;
+      }
+    }
+
+    return merged.sort((a, b) => {
+      if (a.sortKey !== b.sortKey) {
+        return a.sortKey - b.sortKey;
+      }
+      return a.order - b.order;
+    });
+  }, [displayPermissions, showPermissionQueue, streamItems]);
   const firstPendingPermissionId = pendingPermissions[0]?.id ?? null;
   const visibleChats = useMemo(() => chats.slice(0, chatVisibleCount), [chats, chatVisibleCount]);
   const hasMoreChats = chats.length > chatVisibleCount;
@@ -3073,7 +3115,24 @@ export function ChatInterface({
           )}
 
           <div className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''}`} ref={scrollRef} onScroll={handleStreamScroll}>
-            {streamItems.map((item) => {
+            {timelineItems.map((timelineItem) => {
+              if (timelineItem.type === 'permission') {
+                const permission = timelineItem.permission;
+                return (
+                  <PermissionRequestMessage
+                    key={permission.id}
+                    anchorId={`permission-${permission.id}`}
+                    permission={permission}
+                    disabled={!isOperator}
+                    loading={loadingPermissionId === permission.id}
+                    onDecide={(permissionId, decision) => {
+                      void decidePermission(permissionId, decision);
+                    }}
+                  />
+                );
+              }
+
+              const item = timelineItem.item;
               if (item.type === 'action_overflow') {
                 const overflowKindMeta = getEventKindMeta(item.kind);
                 const OverflowKindIcon = overflowKindMeta.Icon;
@@ -3176,18 +3235,6 @@ export function ChatInterface({
                 </article>
               );
             })}
-            {showPermissionQueue && displayPermissions.map((permission) => (
-              <PermissionRequestMessage
-                key={permission.id}
-                anchorId={`permission-${permission.id}`}
-                permission={permission}
-                disabled={!isOperator}
-                loading={loadingPermissionId === permission.id}
-                onDecide={(permissionId, decision) => {
-                  void decidePermission(permissionId, decision);
-                }}
-              />
-            ))}
           </div>
 
           <footer className={styles.composerDock} ref={composerDockRef}>
