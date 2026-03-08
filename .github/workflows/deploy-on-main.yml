@@ -155,6 +155,18 @@ jobs:
           DEPLOY_REPO_DIR="${{ steps.resolve-deploy-repo.outputs.deploy_repo_dir }}"
           git -C "$DEPLOY_REPO_DIR" fetch origin main
           git -C "$DEPLOY_REPO_DIR" checkout main
+          has_local_changes=0
+          if ! git -C "$DEPLOY_REPO_DIR" diff --quiet || ! git -C "$DEPLOY_REPO_DIR" diff --cached --quiet; then
+            has_local_changes=1
+          fi
+          if [[ -n "$(git -C "$DEPLOY_REPO_DIR" ls-files --others --exclude-standard)" ]]; then
+            has_local_changes=1
+          fi
+          if [[ "$has_local_changes" -eq 1 ]]; then
+            stash_name="gha-predeploy-$(date -u +%Y%m%dT%H%M%SZ)"
+            git -C "$DEPLOY_REPO_DIR" stash push --include-untracked -m "$stash_name"
+            echo "::warning::Local changes were stashed in ${DEPLOY_REPO_DIR} as ${stash_name} before pulling origin/main."
+          fi
           git -C "$DEPLOY_REPO_DIR" pull --ff-only origin main
 
       - name: Install backend dependencies
