@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui';
-import { Sparkles, LogOut, LayoutDashboard, Terminal, FolderTree, Settings } from 'lucide-react';
+import { Sparkles, LogOut, LayoutDashboard, Terminal, FolderTree, Settings, Sun, Moon, Monitor } from 'lucide-react';
 import type { TabType } from './BottomNav';
+import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
 
 interface HeaderProps {
   userEmail: string;
@@ -18,6 +19,7 @@ interface HeaderProps {
 export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScroll = false }: HeaderProps) {
   const router = useRouter();
   const [hiddenOnScroll, setHiddenOnScroll] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>('system');
   const navItems = [
     { id: 'sessions', label: '세션', icon: LayoutDashboard },
     { id: 'console', label: '콘솔', icon: Terminal },
@@ -31,6 +33,39 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
     } else {
       router.push(`/?tab=${id}`);
     }
+  };
+
+  useEffect(() => {
+    const mode = readThemeMode();
+    setThemeMode(mode);
+    applyTheme(mode);
+  }, []);
+
+  useEffect(() => {
+    if (themeMode !== 'system') {
+      return;
+    }
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const sync = () => {
+      applyTheme('system');
+    };
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', sync);
+    } else {
+      media.addListener(sync);
+    }
+    return () => {
+      if (typeof media.removeEventListener === 'function') {
+        media.removeEventListener('change', sync);
+      } else {
+        media.removeListener(sync);
+      }
+    };
+  }, [themeMode]);
+
+  const changeThemeMode = (next: ThemeMode) => {
+    setThemeMode(next);
+    applyTheme(next);
   };
 
   useEffect(() => {
@@ -174,6 +209,50 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
       </div>
       
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.2rem',
+            border: '1px solid var(--line)',
+            borderRadius: '999px',
+            background: 'var(--surface-subtle)',
+            padding: '0.18rem',
+          }}
+          aria-label="테마 선택"
+        >
+          {[
+            { mode: 'system' as const, label: '시스템', Icon: Monitor },
+            { mode: 'light' as const, label: '라이트', Icon: Sun },
+            { mode: 'dark' as const, label: '다크', Icon: Moon },
+          ].map(({ mode, label, Icon }) => {
+            const active = themeMode === mode;
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => changeThemeMode(mode)}
+                aria-pressed={active}
+                aria-label={`테마 ${label}`}
+                title={label}
+                style={{
+                  width: '30px',
+                  height: '30px',
+                  border: 0,
+                  borderRadius: '999px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: active ? 'var(--primary)' : 'transparent',
+                  color: active ? 'var(--text-on-accent)' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                }}
+              >
+                <Icon size={15} />
+              </button>
+            );
+          })}
+        </div>
         <div style={{ textAlign: 'right', display: 'none' }} className="block-desktop">
           <div className="text-sm" style={{ fontWeight: 600 }}>{userEmail}</div>
           <div className="text-sm text-muted" style={{ fontSize: '0.75rem', textTransform: 'uppercase' }}>{role}</div>

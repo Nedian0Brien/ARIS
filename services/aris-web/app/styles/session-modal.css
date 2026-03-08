@@ -2,7 +2,7 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.55);
+  background: var(--overlay-backdrop);
   backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
@@ -20,7 +20,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 24px 48px -8px rgba(15, 23, 42, 0.18), 0 8px 16px -4px rgba(15, 23, 42, 0.1);
+  box-shadow: var(--elevated-shadow);
 }
 
 /* ── Header ── */
@@ -30,7 +30,7 @@
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--line);
-  background: linear-gradient(135deg, #f8faff 0%, #f0f4ff 100%);
+  background: var(--modal-header-bg);
 }
 
 .header-title-group {
@@ -44,12 +44,12 @@
   height: 40px;
   border-radius: 10px;
   background: var(--gradient-primary);
-  color: #fff;
+  color: var(--text-on-accent);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 32%, transparent);
 }
 
 .modal-title {

@@ -13,9 +13,68 @@
 }
 
 .sessionDashboardLayout {
+  --dashboard-card-bg: rgba(255, 255, 255, 0.82);
+  --dashboard-card-bg-soft: rgba(255, 255, 255, 0.64);
+  --dashboard-card-bg-strong: rgba(255, 255, 255, 0.92);
+  --dashboard-input-bg: rgba(255, 255, 255, 0.82);
+  --dashboard-border-soft: rgba(255, 255, 255, 0.5);
+  --dashboard-border-strong: rgba(148, 163, 184, 0.34);
+  --dashboard-surface-track: rgba(226, 232, 240, 0.9);
+  --dashboard-shine: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  --dashboard-shadow-soft: 0 8px 32px rgba(15, 23, 42, 0.06);
+  --dashboard-shadow-tiny: 0 2px 8px rgba(15, 23, 42, 0.06);
+  --dashboard-shadow-card: 0 4px 16px rgba(15, 23, 42, 0.08);
+  --dashboard-shadow-hover: 0 12px 24px rgba(15, 23, 42, 0.12);
+  --dashboard-shadow-selected: 0 0 0 2px rgba(59, 130, 246, 0.22), 0 8px 20px rgba(15, 23, 42, 0.16);
+  --dashboard-menu-bg: rgba(255, 255, 255, 0.95);
+  --dashboard-menu-border: rgba(15, 23, 42, 0.08);
+  --dashboard-menu-shadow: 0 10px 40px rgba(15, 23, 42, 0.14);
+  --dashboard-list-item-bg: rgba(255, 255, 255, 0.44);
   display: grid;
   grid-template-columns: 400px minmax(0, 1fr);
   gap: 1.5rem;
+}
+
+:global(html[data-theme='dark']) .sessionDashboardLayout {
+  --dashboard-card-bg: rgba(17, 26, 42, 0.78);
+  --dashboard-card-bg-soft: rgba(17, 26, 42, 0.64);
+  --dashboard-card-bg-strong: rgba(17, 26, 42, 0.9);
+  --dashboard-input-bg: rgba(15, 23, 42, 0.78);
+  --dashboard-border-soft: rgba(71, 85, 105, 0.48);
+  --dashboard-border-strong: rgba(96, 165, 250, 0.52);
+  --dashboard-surface-track: rgba(51, 65, 85, 0.92);
+  --dashboard-shine: inset 0 1px 0 rgba(148, 163, 184, 0.08);
+  --dashboard-shadow-soft: 0 12px 32px rgba(2, 6, 23, 0.52);
+  --dashboard-shadow-tiny: 0 4px 12px rgba(2, 6, 23, 0.46);
+  --dashboard-shadow-card: 0 8px 24px rgba(2, 6, 23, 0.52);
+  --dashboard-shadow-hover: 0 14px 28px rgba(2, 6, 23, 0.58);
+  --dashboard-shadow-selected: 0 0 0 2px rgba(96, 165, 250, 0.32), 0 12px 26px rgba(2, 6, 23, 0.58);
+  --dashboard-menu-bg: rgba(17, 26, 42, 0.96);
+  --dashboard-menu-border: rgba(71, 85, 105, 0.58);
+  --dashboard-menu-shadow: 0 14px 36px rgba(2, 6, 23, 0.58);
+  --dashboard-list-item-bg: rgba(30, 41, 59, 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(html:not([data-theme='light']):not([data-theme='dark'])) .sessionDashboardLayout {
+    --dashboard-card-bg: rgba(17, 26, 42, 0.78);
+    --dashboard-card-bg-soft: rgba(17, 26, 42, 0.64);
+    --dashboard-card-bg-strong: rgba(17, 26, 42, 0.9);
+    --dashboard-input-bg: rgba(15, 23, 42, 0.78);
+    --dashboard-border-soft: rgba(71, 85, 105, 0.48);
+    --dashboard-border-strong: rgba(96, 165, 250, 0.52);
+    --dashboard-surface-track: rgba(51, 65, 85, 0.92);
+    --dashboard-shine: inset 0 1px 0 rgba(148, 163, 184, 0.08);
+    --dashboard-shadow-soft: 0 12px 32px rgba(2, 6, 23, 0.52);
+    --dashboard-shadow-tiny: 0 4px 12px rgba(2, 6, 23, 0.46);
+    --dashboard-shadow-card: 0 8px 24px rgba(2, 6, 23, 0.52);
+    --dashboard-shadow-hover: 0 14px 28px rgba(2, 6, 23, 0.58);
+    --dashboard-shadow-selected: 0 0 0 2px rgba(96, 165, 250, 0.32), 0 12px 26px rgba(2, 6, 23, 0.58);
+    --dashboard-menu-bg: rgba(17, 26, 42, 0.96);
+    --dashboard-menu-border: rgba(71, 85, 105, 0.58);
+    --dashboard-menu-shadow: 0 14px 36px rgba(2, 6, 23, 0.58);
+    --dashboard-list-item-bg: rgba(30, 41, 59, 0.5);
+  }
 }
 
 .sessionDashboardSidebar {
@@ -33,9 +92,9 @@
   border: none;
   border-radius: 1.5rem;
   overflow: visible;
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--dashboard-card-bg);
   backdrop-filter: blur(20px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--dashboard-shadow-soft);
 }
 
 .sessionSidebarTitle {
@@ -58,10 +117,10 @@
 
 .serverDonutCard {
   border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--dashboard-card-bg-soft);
   border: none;
   padding: 0.65rem 0.55rem 0.55rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: var(--dashboard-shine);
 }
 
 .serverDonutChart {
@@ -98,10 +157,10 @@
 /* 저장소 카드 (Full Width) */
 .serverStorageCardFull {
   border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--dashboard-card-bg-soft);
   border: none;
   padding: 1rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: var(--dashboard-shine);
 }
 
 .serverStorageHeader {
@@ -137,7 +196,7 @@
   width: 100%;
   height: 12px;
   border-radius: 999px;
-  background: #e9eef5;
+  background: var(--dashboard-surface-track);
   overflow: hidden;
 }
 
@@ -171,7 +230,7 @@
   width: 100%;
   height: 12px;
   margin: 0.85rem 0;
-  background: #e9eef5;
+  background: var(--dashboard-surface-track);
   border-radius: 999px;
   display: flex;
   overflow: hidden;
@@ -256,7 +315,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.4rem 0.6rem;
-  background: rgba(255, 255, 255, 0.4);
+  background: var(--dashboard-list-item-bg);
   border-radius: 0.5rem;
   font-size: 0.7rem;
   font-weight: 600;
@@ -283,9 +342,9 @@
 
 .agentDonutWrap {
   border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--dashboard-card-bg-soft);
   border: none;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: var(--dashboard-shine);
   padding: 0.5rem;
   flex: 1;
 }
@@ -343,13 +402,13 @@
   font-weight: 700;
   color: var(--text-muted);
   padding: 0.45rem 0.65rem;
-  background: rgba(255, 255, 255, 0.4);
+  background: var(--dashboard-list-item-bg);
   border-radius: 0.65rem;
   transition: background 0.2s;
 }
 
 .agentSummaryLegendItem:hover {
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--dashboard-card-bg-soft);
 }
 
 .agentSummaryLegendInfo {
@@ -377,12 +436,12 @@
   gap: 0.5rem;
   border: none;
   border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--dashboard-input-bg);
   backdrop-filter: blur(10px);
   padding: 0 1rem;
   min-height: 48px;
   flex: 1;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  box-shadow: var(--dashboard-shadow-tiny);
 }
 
 .sessionSearchInput {
@@ -452,12 +511,12 @@
   border: none;
   border-radius: 1rem;
   padding: 0 1rem;
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--dashboard-input-bg);
   backdrop-filter: blur(10px);
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  box-shadow: var(--dashboard-shadow-tiny);
   outline: none;
 }
 
@@ -469,12 +528,12 @@
 
 .sessionCard {
   position: relative;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--dashboard-card-bg-strong);
   backdrop-filter: blur(12px);
   border-radius: 1.5rem;
   padding: 1.25rem;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: var(--dashboard-shadow-card);
+  border: 1px solid var(--dashboard-border-soft);
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -483,13 +542,13 @@
 }
 
 .sessionCardSelected {
-  border-color: rgba(59, 130, 246, 0.45);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.22), 0 8px 20px rgba(0, 0, 0, 0.08);
+  border-color: var(--dashboard-border-strong);
+  box-shadow: var(--dashboard-shadow-selected);
 }
 
 .sessionCard:hover {
   transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--dashboard-shadow-hover);
 }
 
 .sessionSelectToggle {
@@ -500,7 +559,7 @@
   height: 24px;
   border-radius: 50%;
   border: 1px solid var(--line-strong);
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--dashboard-card-bg-strong);
   color: transparent;
   display: flex;
   align-items: center;
@@ -517,7 +576,7 @@
 .sessionSelectToggleActive {
   background: var(--primary);
   border-color: var(--primary);
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 .sessionCardHeader {
@@ -609,11 +668,11 @@
   position: absolute;
   top: 2.5rem;
   right: 0;
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--dashboard-menu-bg);
   backdrop-filter: blur(20px);
   border-radius: 1rem;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: var(--dashboard-menu-shadow);
+  border: 1px solid var(--dashboard-menu-border);
   padding: 0.5rem;
   min-width: 180px;
   z-index: 100;
@@ -668,7 +727,7 @@
   top: -0.5rem;
   right: -0.5rem;
   background: var(--accent-amber);
-  color: white;
+  color: var(--text-on-accent);
   width: 24px;
   height: 24px;
   border-radius: 50%;

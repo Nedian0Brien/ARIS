@@ -37,6 +37,9 @@
   /* Gradients */
   --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
   --gradient-surface: linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.4) 100%);
+  --modal-header-bg: linear-gradient(135deg, #f8faff 0%, #f0f4ff 100%);
+  --overlay-backdrop: rgba(15, 23, 42, 0.55);
+  --elevated-shadow: 0 24px 48px -8px rgba(15, 23, 42, 0.18), 0 8px 16px -4px rgba(15, 23, 42, 0.1);
 
   /* Typography */
   --font-sans: "Pretendard", "Inter", "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
@@ -97,6 +100,9 @@ html[data-theme='dark'] {
 
   --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
   --gradient-surface: linear-gradient(180deg, rgba(17, 26, 42, 0.95) 0%, rgba(17, 26, 42, 0.78) 100%);
+  --modal-header-bg: linear-gradient(135deg, rgba(23, 37, 84, 0.55) 0%, rgba(30, 41, 59, 0.9) 100%);
+  --overlay-backdrop: rgba(2, 6, 23, 0.72);
+  --elevated-shadow: 0 24px 48px -8px rgba(2, 6, 23, 0.58), 0 8px 16px -4px rgba(2, 6, 23, 0.46);
 
   --shadow-sm: 0 1px 3px 0 rgba(2, 6, 23, 0.45);
   --shadow-md: 0 4px 10px -2px rgba(2, 6, 23, 0.5);
@@ -131,6 +137,9 @@ html[data-theme='dark'] {
     --accent-red-bg: rgba(239, 68, 68, 0.22);
     --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
     --gradient-surface: linear-gradient(180deg, rgba(17, 26, 42, 0.95) 0%, rgba(17, 26, 42, 0.78) 100%);
+    --modal-header-bg: linear-gradient(135deg, rgba(23, 37, 84, 0.55) 0%, rgba(30, 41, 59, 0.9) 100%);
+    --overlay-backdrop: rgba(2, 6, 23, 0.72);
+    --elevated-shadow: 0 24px 48px -8px rgba(2, 6, 23, 0.58), 0 8px 16px -4px rgba(2, 6, 23, 0.46);
     --shadow-sm: 0 1px 3px 0 rgba(2, 6, 23, 0.45);
     --shadow-md: 0 4px 10px -2px rgba(2, 6, 23, 0.5);
     --shadow-lg: 0 12px 28px -8px rgba(2, 6, 23, 0.55);

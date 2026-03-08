@@ -541,7 +541,7 @@
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.86);
-  color: #0f172a;
+  color: var(--chat-text-primary);
   padding: 0.4rem 0.46rem;
   text-align: left;
   cursor: pointer;
@@ -571,7 +571,7 @@
 .sidebarMiniTitle {
   font-size: 0.72rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--chat-text-primary);
   line-height: 1.2;
   min-width: 0;
   overflow: hidden;
@@ -600,7 +600,7 @@
 }
 
 .sidebarFileBadgeExt {
-  color: #0f172a;
+  color: var(--chat-text-primary);
   background: rgba(226, 232, 240, 0.72);
 }
 
@@ -612,7 +612,7 @@
 
 .sidebarMiniMeta {
   font-size: 0.65rem;
-  color: #64748b;
+  color: var(--chat-text-muted);
   line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -621,14 +621,14 @@
 
 .sidebarMiniTime {
   font-size: 0.64rem;
-  color: #64748b;
+  color: var(--chat-text-muted);
   font-family: var(--font-mono);
 }
 
 .sidebarMiniText {
   font-size: 0.72rem;
   line-height: 1.35;
-  color: #0f172a;
+  color: var(--chat-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -643,8 +643,8 @@
   height: 32px;
   border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.32);
-  background: rgba(255, 255, 255, 0.92);
-  color: #334155;
+  background: var(--chat-control-bg);
+  color: var(--chat-control-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1069,7 +1069,7 @@
 }
 
 .disconnectNoticeAction:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.98);
+  background: var(--chat-popover-bg);
 }
 
 .disconnectNoticeAction:disabled {
@@ -1104,7 +1104,7 @@
 }
 
 .permissionNoticeAction:hover {
-  background: rgba(255, 255, 255, 0.98);
+  background: var(--chat-popover-bg);
 }
 
 .stream {
@@ -1428,7 +1428,7 @@
   margin: 0;
   font-size: 0.89rem;
   line-height: 1.5;
-  color: #0f172a;
+  color: var(--chat-text-primary);
   min-width: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -1457,7 +1457,7 @@
   font-size: 1rem;
   line-height: 1.35;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--chat-text-primary);
 }
 
 .markdownList {
@@ -1494,7 +1494,7 @@
   overflow-x: auto;
   border: 1px solid rgba(148, 163, 184, 0.28);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--chat-control-bg);
 }
 
 .markdownTable {
@@ -1514,7 +1514,7 @@
 
 .markdownTable th {
   font-weight: 800;
-  color: #0f172a;
+  color: var(--chat-text-primary);
   background: rgba(241, 245, 249, 0.78);
 }
 
@@ -1592,7 +1592,7 @@
   border-radius: 6px;
   padding: 0.08rem 0.32rem;
   background: rgba(15, 23, 42, 0.08);
-  color: #0f172a;
+  color: var(--chat-text-primary);
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -1682,7 +1682,7 @@
   text-align: left;
   font-size: 0.71rem;
   font-family: var(--font-mono);
-  color: #64748b;
+  color: var(--chat-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1714,7 +1714,7 @@
   border-radius: 999px;
   border: 1px solid rgba(148, 163, 184, 0.26);
   background: rgba(255, 255, 255, 0.88);
-  color: #334155;
+  color: var(--chat-control-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1800,7 +1800,7 @@
   border-radius: 8px;
   border: 1px solid rgba(148, 163, 184, 0.22);
   background: rgba(248, 250, 252, 0.92);
-  color: #0f172a;
+  color: var(--chat-text-primary);
   font-size: 0.69rem;
   line-height: 1.35;
   max-height: 140px;
@@ -1826,7 +1826,7 @@
   border-radius: 999px;
   border: 1px solid rgba(148, 163, 184, 0.28);
   background: rgba(248, 250, 252, 0.95);
-  color: #0f172a;
+  color: var(--chat-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1845,7 +1845,7 @@
   border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.22);
   background: rgba(248, 250, 252, 0.98);
-  color: #0f172a;
+  color: var(--chat-text-primary);
   font-size: 0.71rem;
   line-height: 1.42;
   max-height: 320px;
@@ -1865,7 +1865,7 @@
   border-radius: 999px;
   border: 1px solid rgba(148, 163, 184, 0.38);
   background: rgba(255, 255, 255, 0.95);
-  color: #334155;
+  color: var(--chat-control-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1888,7 +1888,7 @@
 }
 
 .diffLineContext {
-  color: #334155;
+  color: var(--chat-control-text);
 }
 
 .diffLineAdd {
@@ -1979,7 +1979,7 @@
   gap: 0.4rem;
   font-size: 0.76rem;
   font-weight: 700;
-  color: #64748b;
+  color: var(--chat-text-muted);
   white-space: nowrap;
 }
 
@@ -2133,7 +2133,7 @@
   font-family: var(--font-mono);
   font-size: 0.74rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--chat-text-primary);
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -2449,7 +2449,7 @@
 .modelOptionBadge {
   font-size: 0.64rem;
   font-weight: 600;
-  color: #64748b;
+  color: var(--chat-text-muted);
   background: rgba(148, 163, 184, 0.15);
   border-radius: 4px;
   padding: 0.1rem 0.32rem;
@@ -2505,7 +2505,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #64748b;
+  color: var(--chat-text-muted);
   cursor: pointer;
   flex-shrink: 0;
   padding: 0;
@@ -2794,7 +2794,7 @@
   align-items: center;
   gap: 0.42rem;
   font-size: 0.79rem;
-  color: #334155;
+  color: var(--chat-control-text);
 }
 
 .statusDot {
@@ -2835,14 +2835,14 @@
   display: block;
   font-size: 0.98rem;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--chat-text-primary);
 }
 
 .statLabel {
   display: block;
   margin-top: 0.12rem;
   font-size: 0.67rem;
-  color: #64748b;
+  color: var(--chat-text-muted);
 }
 
 .runtimeAlert {
