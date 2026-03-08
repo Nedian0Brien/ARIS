@@ -213,6 +213,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.45rem;
+  font-family: var(--font-sans);
+  font-size: 0.77rem;
+  line-height: 1.25;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   cursor: pointer;
 }
 
@@ -229,10 +234,10 @@
 }
 
 .chatListTitle {
-  font-size: 0.77rem;
+  font-size: inherit;
   font-weight: 700;
   color: #0f172a;
-  line-height: 1.25;
+  line-height: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -244,8 +249,9 @@
   border-radius: 8px;
   background: #ffffff;
   color: #0f172a;
-  font-size: 0.76rem;
+  font-size: 0.77rem;
   font-weight: 700;
+  line-height: 1.25;
   padding: 0.2rem 0.34rem;
   outline: none;
 }
