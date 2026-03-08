@@ -558,6 +558,10 @@ function looksLikeShellCommand(value: string): boolean {
   if (!trimmed || trimmed.length > 500 || trimmed.includes('\n')) {
     return false;
   }
+  // Treat non-ASCII text as natural language to avoid dropping localized assistant replies.
+  if (/[^\x20-\x7E]/.test(trimmed)) {
+    return false;
+  }
   return /^(?:\$ )?[a-z0-9._/-]+(?:\s+.+)?$/i.test(trimmed);
 }
 
@@ -1093,6 +1097,11 @@ function buildAgentCommand(
   }
   return null;
 }
+
+export const happyClientTestHooks = {
+  parseAgentStreamOutput,
+  looksLikeActionTranscript,
+};
 
 export class HappyRuntimeStore {
   private readonly permissions = new Map<string, PermissionRequest>();
