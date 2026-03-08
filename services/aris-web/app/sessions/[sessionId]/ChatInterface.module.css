@@ -997,6 +997,7 @@
   padding: 0.7rem 0.85rem;
   max-width: min(92%, 860px);
   min-width: 0;
+  box-sizing: border-box;
   box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
 }
 
@@ -1548,6 +1549,8 @@
   font-size: 0.71rem;
   line-height: 1.45;
   overflow: auto;
+  max-width: 100%;
+  box-sizing: border-box;
   max-height: 280px;
   white-space: pre-wrap;
   word-break: break-word;
@@ -1595,6 +1598,8 @@
   line-height: 1.35;
   max-height: 140px;
   overflow: auto;
+  max-width: 100%;
+  box-sizing: border-box;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -1630,8 +1635,33 @@
   line-height: 1.42;
   max-height: 320px;
   overflow: auto;
+  max-width: 100%;
+  box-sizing: border-box;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.scrollBottomButton {
+  position: fixed;
+  right: max(0.9rem, env(safe-area-inset-right));
+  bottom: calc(var(--composer-dock-height) + 0.92rem + var(--safe-area-bottom-effective));
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.38);
+  background: rgba(255, 255, 255, 0.95);
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.14);
+  z-index: 1046;
+}
+
+.scrollBottomButton:hover {
+  background: rgba(255, 255, 255, 1);
+  border-color: rgba(59, 130, 246, 0.42);
 }
 
 .diffLine {
@@ -2744,11 +2774,20 @@
     max-width: 100%;
   }
 
+  .messageBubbleAction {
+    max-width: 100%;
+  }
+
   .actionPrimary {
     white-space: normal;
     overflow-wrap: anywhere;
     word-break: break-all;
     text-overflow: clip;
+  }
+
+  .scrollBottomButton {
+    right: max(0.8rem, env(safe-area-inset-right));
+    bottom: calc(var(--composer-dock-height) + 0.7rem + var(--safe-area-bottom-effective));
   }
 }
 

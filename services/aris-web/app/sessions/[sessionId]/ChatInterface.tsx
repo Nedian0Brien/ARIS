@@ -802,7 +802,7 @@ type MarkdownBlock =
   | { type: 'heading'; level: 1 | 2 | 3 | 4; text: string }
   | { type: 'paragraph'; text: string }
   | { type: 'ul'; items: string[] }
-  | { type: 'ol'; items: string[] }
+  | { type: 'ol'; start: number; items: string[] }
   | { type: 'quote'; text: string }
   | { type: 'code'; language: string; code: string }
   | { type: 'table'; headers: string[]; rows: string[][]; alignments: TableAlign[] };
@@ -886,21 +886,54 @@ function parseMarkdownBlocks(source: string): MarkdownBlock[] {
 
     if (/^[-*+]\s+/.test(trimmed)) {
       const items: string[] = [];
-      while (i < lines.length && /^[-*+]\s+/.test(lines[i].trim())) {
-        items.push(lines[i].trim().replace(/^[-*+]\s+/, ''));
-        i += 1;
+      while (i < lines.length) {
+        const current = lines[i].trim();
+        const match = current.match(/^[-*+]\s+(.+)$/);
+        if (match) {
+          items.push(match[1]);
+          i += 1;
+          continue;
+        }
+        if (!current) {
+          let lookahead = i + 1;
+          while (lookahead < lines.length && !lines[lookahead].trim()) {
+            lookahead += 1;
+          }
+          if (lookahead < lines.length && /^[-*+]\s+/.test(lines[lookahead].trim())) {
+            i = lookahead;
+            continue;
+          }
+        }
+        break;
       }
       blocks.push({ type: 'ul', items });
       continue;
     }
 
     if (/^\d+\.\s+/.test(trimmed)) {
+      const start = Number.parseInt(trimmed.match(/^(\d+)\.\s+/)?.[1] ?? '1', 10);
       const items: string[] = [];
-      while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
-        items.push(lines[i].trim().replace(/^\d+\.\s+/, ''));
-        i += 1;
+      while (i < lines.length) {
+        const current = lines[i].trim();
+        const match = current.match(/^\d+\.\s+(.+)$/);
+        if (match) {
+          items.push(match[1]);
+          i += 1;
+          continue;
+        }
+        if (!current) {
+          let lookahead = i + 1;
+          while (lookahead < lines.length && !lines[lookahead].trim()) {
+            lookahead += 1;
+          }
+          if (lookahead < lines.length && /^\d+\.\s+/.test(lines[lookahead].trim())) {
+            i = lookahead;
+            continue;
+          }
+        }
+        break;
       }
-      blocks.push({ type: 'ol', items });
+      blocks.push({ type: 'ol', start: Number.isFinite(start) && start > 0 ? start : 1, items });
       continue;
     }
 
@@ -1112,7 +1145,7 @@ function MarkdownContent({ body }: { body: string }) {
 
         if (block.type === 'ol') {
           return (
-            <ol key={key} className={styles.markdownOrderedList}>
+            <ol key={key} className={styles.markdownOrderedList} start={block.start}>
               {block.items.map((item, itemIndex) => (
                 <li key={`${key}-oi-${itemIndex}`} className={styles.markdownListItem}>
                   {renderInlineWithBreaks(item, `${key}-oi-${itemIndex}`)}
@@ -1579,6 +1612,7 @@ export function ChatInterface({
   const [textContextInput, setTextContextInput] = useState('');
   const [selectedModelId, setSelectedModelId] = useState<ComposerModelId>('claude-sonnet-4-6');
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [fileBrowserPath, setFileBrowserPath] = useState('/');
   const [fileBrowserItems, setFileBrowserItems] = useState<Array<{ name: string; path: string; isDirectory: boolean; isFile: boolean }>>([]);
   const [fileBrowserParentPath, setFileBrowserParentPath] = useState<string | null>(null);
@@ -2013,6 +2047,25 @@ export function ChatInterface({
     stream.scrollTo({ top: stream.scrollHeight, behavior });
   }, [isMobileLayout]);
 
+  const syncScrollToBottomButton = useCallback(() => {
+    if (isMobileLayout) {
+      setShowScrollToBottom(!isNearWindowBottom());
+      return;
+    }
+    const stream = scrollRef.current;
+    if (!stream) {
+      setShowScrollToBottom(false);
+      return;
+    }
+    setShowScrollToBottom(!isNearBottom(stream));
+  }, [isMobileLayout]);
+
+  const handleJumpToBottom = useCallback(() => {
+    shouldStickToBottomRef.current = true;
+    setShowScrollToBottom(false);
+    scrollConversationToBottom('smooth');
+  }, [scrollConversationToBottom]);
+
   const handleComposerFocus = useCallback(() => {
     if (isMobileLayout) {
       shouldStickToBottomRef.current = false;
@@ -2185,11 +2238,14 @@ export function ChatInterface({
   useEffect(() => {
     if (!isMobileLayout) {
       shouldStickToBottomRef.current = true;
+      syncScrollToBottomButton();
       return;
     }
 
     const updateStickState = () => {
-      shouldStickToBottomRef.current = isNearWindowBottom();
+      const nearBottom = isNearWindowBottom();
+      shouldStickToBottomRef.current = nearBottom;
+      setShowScrollToBottom(!nearBottom);
     };
 
     const rafId = window.requestAnimationFrame(updateStickState);
@@ -2203,7 +2259,7 @@ export function ChatInterface({
       window.visualViewport?.removeEventListener('scroll', updateStickState);
       window.visualViewport?.removeEventListener('resize', updateStickState);
     };
-  }, [isMobileLayout]);
+  }, [isMobileLayout, syncScrollToBottomButton]);
 
   useEffect(() => {
     if (!isMobileLayout) {
@@ -2224,6 +2280,10 @@ export function ChatInterface({
       window.removeEventListener('scroll', onWindowScroll);
     };
   }, [isMobileLayout, isLoadingOlder, hasMoreBefore, loadOlderHistory]);
+
+  useEffect(() => {
+    syncScrollToBottomButton();
+  }, [events.length, pendingPermissions.length, showPermissionQueue, syncScrollToBottomButton]);
 
   useEffect(() => {
     if (!shouldStickToBottomRef.current) {
@@ -2728,9 +2788,12 @@ export function ChatInterface({
     }
     syncActiveRecentFromViewport();
     if (isMobileLayout) {
+      syncScrollToBottomButton();
       return;
     }
-    shouldStickToBottomRef.current = isNearBottom(stream);
+    const nearBottom = isNearBottom(stream);
+    shouldStickToBottomRef.current = nearBottom;
+    setShowScrollToBottom(!nearBottom);
     if (!isLoadingOlder && hasMoreBefore && stream.scrollTop <= 96) {
       void loadOlderHistory();
     }
@@ -3242,6 +3305,18 @@ export function ChatInterface({
               );
             })}
           </div>
+
+          {showScrollToBottom && (
+            <button
+              type="button"
+              className={styles.scrollBottomButton}
+              onClick={handleJumpToBottom}
+              aria-label="맨 아래로 이동"
+              title="맨 아래로 이동"
+            >
+              <ChevronDown size={16} />
+            </button>
+          )}
 
           <footer className={styles.composerDock} ref={composerDockRef}>
             <form onSubmit={handleSubmit} className={styles.composerForm}>
