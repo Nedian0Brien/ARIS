@@ -3,7 +3,7 @@ import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
 const RUNTIME_POLL_INTERVAL_MS = 1500;
 
-export function useSessionRuntime(sessionId: string) {
+export function useSessionRuntime(sessionId: string, chatId?: string | null) {
   const [isRunning, setIsRunning] = useState(false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
 
@@ -18,7 +18,10 @@ export function useSessionRuntime(sessionId: string) {
       }
       inFlight = true;
       try {
-        const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/runtime`, {
+        const query = chatId && chatId.trim().length > 0
+          ? `?chatId=${encodeURIComponent(chatId.trim())}`
+          : '';
+        const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/runtime${query}`, {
           cache: 'no-store',
         });
         if (response.status === 401) {
@@ -60,7 +63,7 @@ export function useSessionRuntime(sessionId: string) {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [sessionId]);
+  }, [sessionId, chatId]);
 
   return { isRunning, runtimeError };
 }

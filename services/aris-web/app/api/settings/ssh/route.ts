@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireOperatorApiUser } from '@/lib/auth/guard';
 import { prisma } from '@/lib/db/prisma';
-import { encryptSetting, decryptSetting } from '@/lib/crypto/settings';
+import { encryptSetting } from '@/lib/crypto/settings';
 
 export async function GET(request: NextRequest) {
   const auth = await requireOperatorApiUser(request);
@@ -53,4 +53,3 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ ok: true });
 }
-

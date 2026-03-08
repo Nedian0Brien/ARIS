@@ -197,8 +197,12 @@ export function buildServer(config: ServerConfig) {
 
   app.get('/v1/sessions/:sessionId/runtime', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
+    const { chatId } = request.query as { chatId?: string };
+    const normalizedChatId = typeof chatId === 'string' && chatId.trim().length > 0
+      ? chatId.trim()
+      : undefined;
     try {
-      const isRunning = await store.isSessionRunning(sessionId);
+      const isRunning = await store.isSessionRunning(sessionId, normalizedChatId);
       return { sessionId, isRunning };
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {

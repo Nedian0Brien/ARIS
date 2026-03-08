@@ -1,10 +1,11 @@
 export type SessionStatus = 'running' | 'idle' | 'stopped' | 'error' | 'unknown';
 export type SessionAction = 'abort' | 'retry' | 'kill' | 'resume';
 export type ApprovalPolicy = 'on-request' | 'on-failure' | 'never' | 'yolo';
+export type AgentFlavor = 'claude' | 'codex' | 'gemini' | 'unknown';
 
 export type SessionSummary = {
   id: string;
-  agent: 'claude' | 'codex' | 'gemini' | 'unknown';
+  agent: AgentFlavor;
   status: SessionStatus;
   lastActivityAt: string | null;
   lastReadAt?: string | null;
@@ -18,6 +19,7 @@ export type SessionSummary = {
 export type SessionChat = {
   id: string;
   sessionId: string;
+  agent: AgentFlavor;
   title: string;
   isPinned: boolean;
   isDefault: boolean;

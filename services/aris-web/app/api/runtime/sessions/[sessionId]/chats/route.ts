@@ -36,11 +36,15 @@ export async function POST(
 
   try {
     const { sessionId } = await params;
-    const body = (await request.json().catch(() => ({}))) as { title?: string };
+    const body = (await request.json().catch(() => ({}))) as { title?: string; agent?: string };
+    const normalizedAgent = body.agent === 'claude' || body.agent === 'codex' || body.agent === 'gemini'
+      ? body.agent
+      : 'codex';
     const chat = await createSessionChat({
       sessionId,
       userId: auth.user.id,
       title: body.title,
+      agent: normalizedAgent,
     });
 
     return NextResponse.json({ chat });

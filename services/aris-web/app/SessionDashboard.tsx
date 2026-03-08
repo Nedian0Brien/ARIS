@@ -612,9 +612,9 @@ export function SessionDashboard({
         body: JSON.stringify({ path, agent: agentInput, approvalPolicy: approvalPolicyInput }),
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error ?? '세션 생성에 실패했습니다.');
+      if (!response.ok) throw new Error(body.error ?? '워크스페이스 생성에 실패했습니다.');
       const sessionId = body.session?.id;
-      if (!sessionId) throw new Error('세션 생성 응답이 올바르지 않습니다.');
+      if (!sessionId) throw new Error('워크스페이스 생성 응답이 올바르지 않습니다.');
 
       recordHistory(path, agentInput, approvalPolicyInput, sessionId);
       router.push(`/sessions/${sessionId}`);
@@ -852,7 +852,7 @@ export function SessionDashboard({
     });
 
     if (failedIds.length > 0) {
-      alert(`${failedIds.length}개 세션 삭제에 실패했습니다. 다시 시도해 주세요.`);
+      alert(`${failedIds.length}개 워크스페이스 삭제에 실패했습니다. 다시 시도해 주세요.`);
     }
 
     setIsDeletingSessions(false);
@@ -939,7 +939,7 @@ export function SessionDashboard({
                   <PlusCircle size={20} />
                 </div>
                 <div>
-                  <h3 className="modal-title">새 세션 시작하기</h3>
+                  <h3 className="modal-title">새 워크스페이스 만들기</h3>
                   <p className="modal-subtitle">프로젝트 경로와 에이전트를 선택하여 시작하세요.</p>
                 </div>
               </div>
@@ -1180,7 +1180,7 @@ export function SessionDashboard({
                   취소
                 </Button>
                 <Button type="submit" isLoading={isCreating} disabled={!isOperator || !sanitizePath(newPath)} className="submit-btn">
-                  <Play size={18} fill="currentColor" /> 세션 시작하기
+                  <Play size={18} fill="currentColor" /> 워크스페이스 만들기
                 </Button>
               </footer>
             </form>
@@ -1238,7 +1238,7 @@ export function SessionDashboard({
           <h2 className="title-lg" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Activity size={28} color="var(--primary)" /> Workspace
           </h2>
-          <p className="text-sm text-muted">에이전트 세션과 리소스를 효율적으로 관리하세요.</p>
+          <p className="text-sm text-muted">워크스페이스와 리소스를 효율적으로 관리하세요.</p>
         </div>
         {isOperator && (
           <Button
@@ -1247,7 +1247,7 @@ export function SessionDashboard({
             className="btn-primary"
             style={{ borderRadius: '99px', padding: '0.75rem 1.5rem', boxShadow: 'var(--shadow-md)' }}
           >
-            <Plus size={18} /> 새 세션
+            <Plus size={18} /> 새 워크스페이스
           </Button>
         )}
       </div>
@@ -1258,9 +1258,9 @@ export function SessionDashboard({
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem', color: 'var(--text-muted)' }}>
               <FolderOpen size={80} strokeWidth={1} />
             </div>
-            <h3 className="title-md" style={{ marginBottom: '0.5rem' }}>활성화된 세션이 없습니다</h3>
+            <h3 className="title-md" style={{ marginBottom: '0.5rem' }}>활성화된 워크스페이스가 없습니다</h3>
             <p className="text-muted text-sm" style={{ margin: '0 auto', maxWidth: '320px' }}>
-              새로운 프로젝트 경로를 지정해서 첫 에이전트 세션을 시작해 보세요.
+              새로운 프로젝트 경로를 지정해서 첫 워크스페이스를 만들어 보세요.
             </p>
             <Button
               type="button"
@@ -1269,7 +1269,7 @@ export function SessionDashboard({
               className="empty-state-primary-action btn-primary"
               style={{ borderRadius: '99px', marginTop: '2rem' }}
             >
-              <PlusCircle size={18} /> 첫 세션 시작하기
+              <PlusCircle size={18} /> 첫 워크스페이스 만들기
             </Button>
           </Card>
         ) : (
@@ -1370,9 +1370,9 @@ export function SessionDashboard({
                 {/* Session Status */}
                 <Card className={styles.sessionSidebarCard}>
                   <h3 className={styles.sessionSidebarTitle}>
-                    <Terminal size={16} color="var(--accent-violet)" /> 세션 현황
+                    <Terminal size={16} color="var(--accent-violet)" /> 워크스페이스 현황
                   </h3>
-                  <div className={styles.sessionSummaryBarChart} role="img" aria-label="세션 상태 요약">
+                  <div className={styles.sessionSummaryBarChart} role="img" aria-label="워크스페이스 상태 요약">
                     {sessionStats.total > 0 ? (
                       <>
                         <div 
@@ -1422,7 +1422,7 @@ export function SessionDashboard({
                   {/* 세션 리스트 섹션 */}
                   <div className={styles.sessionStatusLists}>
                     <div className={styles.sessionStatusSubSection}>
-                      <h4 className={styles.sessionStatusSubTitle}>진행 중인 세션</h4>
+                      <h4 className={styles.sessionStatusSubTitle}>진행 중인 워크스페이스</h4>
                       {runningSessions.length > 0 ? (
                         <div className={styles.sessionMiniList}>
                           {runningSessions.slice(0, 3).map(s => (
@@ -1481,7 +1481,7 @@ export function SessionDashboard({
                         </ResponsiveContainer>
                         <div className={styles.agentDonutCenter}>
                           <div className={styles.agentDonutValue}>{sessionStats.total}</div>
-                          <div className={styles.agentDonutLabel}>sessions</div>
+                          <div className={styles.agentDonutLabel}>workspaces</div>
                         </div>
                       </div>
                     </div>
@@ -1508,7 +1508,7 @@ export function SessionDashboard({
                   <input
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="프로젝트, 세션 이름 검색..."
+                    placeholder="프로젝트, 워크스페이스 이름 검색..."
                     className={styles.sessionSearchInput}
                   />
                 </div>
@@ -1602,7 +1602,7 @@ export function SessionDashboard({
                             type="button"
                             className={`${styles.sessionSelectToggle} ${isSelected ? styles.sessionSelectToggleActive : ''}`}
                             onClick={(e) => toggleSessionSelection(session.id, e)}
-                            aria-label={isSelected ? '세션 선택 해제' : '세션 선택'}
+                            aria-label={isSelected ? '워크스페이스 선택 해제' : '워크스페이스 선택'}
                           >
                             {isSelected ? <Check size={14} /> : null}
                           </button>
@@ -1632,7 +1632,7 @@ export function SessionDashboard({
                                   className={styles.dropdownItem} 
                                   onClick={() => setOpenMenuId(null)}
                                 >
-                                  <ArrowUpRight size={16} /> 세션 접속
+                                  <ArrowUpRight size={16} /> 워크스페이스 열기
                                 </Link>
                                 <button type="button" className={styles.dropdownItem} onClick={(e) => openRenameModal(session, e)}>
                                   <Edit2 size={16} /> 이름 변경
@@ -1642,21 +1642,21 @@ export function SessionDashboard({
                                 </button>
                                 <hr style={{ margin: '4px 0', border: 'none', borderTop: '1px solid var(--line)' }} />
                                 <button type="button" className={styles.dropdownItem} onClick={(e) => executeSessionAction(session.id, 'retry', e)}>
-                                  <RotateCw size={16} /> 세션 재실행
+                                  <RotateCw size={16} /> 워크스페이스 재실행
                                 </button>
                                 <button
                                   type="button"
                                   className={`${styles.dropdownItem} ${styles.dropdownItemDanger}`}
                                   onClick={(e) => executeSessionAction(session.id, 'abort', e)}
                                 >
-                                  <Square size={16} /> 세션 종료
+                                  <Square size={16} /> 워크스페이스 종료
                                 </button>
                                 <button
                                   type="button"
                                   className={`${styles.dropdownItem} ${styles.dropdownItemDanger}`}
                                   onClick={(e) => executeSessionAction(session.id, 'kill', e)}
                                 >
-                                  <Trash2 size={16} /> 세션 삭제
+                                  <Trash2 size={16} /> 워크스페이스 삭제
                                 </button>
                               </div>
                             )}
@@ -1701,13 +1701,13 @@ export function SessionDashboard({
         <div className="modal-overlay" onClick={() => { if (!isDeletingSessions) setPendingDeleteSessionIds(null); }}>
           <div className="modal-content new-session-modal rename-modal animate-in" onClick={(e) => e.stopPropagation()}>
             <header className="modal-header">
-              <h3 className="modal-title" style={{ fontSize: '1rem' }}>세션 삭제 확인</h3>
+              <h3 className="modal-title" style={{ fontSize: '1rem' }}>워크스페이스 삭제 확인</h3>
             </header>
             <div className="modal-body" style={{ padding: '1.25rem 1.5rem' }}>
               <p style={{ marginBottom: '0.5rem', fontWeight: 700 }}>
-                선택한 {pendingDeleteSessionIds.length}개 세션을 삭제하시겠습니까?
+                선택한 {pendingDeleteSessionIds.length}개 워크스페이스를 삭제하시겠습니까?
               </p>
-              <p className="text-muted text-sm">삭제된 세션은 복구할 수 없습니다.</p>
+              <p className="text-muted text-sm">삭제된 워크스페이스는 복구할 수 없습니다.</p>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1.25rem' }}>
                 <Button type="button" variant="ghost" onClick={() => setPendingDeleteSessionIds(null)} disabled={isDeletingSessions}>
                   취소
@@ -1731,7 +1731,7 @@ export function SessionDashboard({
         <div className="modal-overlay" onClick={() => setRenameModalSession(null)}>
           <div className="modal-content new-session-modal rename-modal animate-in" onClick={(e) => e.stopPropagation()}>
             <header className="modal-header">
-              <h3 className="modal-title" style={{ fontSize: '1rem' }}>세션 이름 변경</h3>
+              <h3 className="modal-title" style={{ fontSize: '1rem' }}>워크스페이스 이름 변경</h3>
             </header>
             <form onSubmit={saveRename} className="modal-body" style={{ padding: '1.25rem 1.5rem' }}>
               <Input 

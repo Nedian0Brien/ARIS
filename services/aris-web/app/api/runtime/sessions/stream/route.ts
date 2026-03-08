@@ -1,8 +1,7 @@
 import { NextRequest } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
 import { listSessions } from '@/lib/happy/client';
-import { prisma } from '@/lib/db/prisma';
-import type { SessionMetadata } from '@prisma/client';
+import { syncWorkspacesForUser } from '@/lib/happy/workspaces';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,19 +32,15 @@ export async function GET(request: NextRequest) {
         if (cancelled) return;
         try {
           const sessions = await listSessions();
-          const sessionIds = sessions.map((s) => s.id);
-          const metadatas = await prisma.sessionMetadata.findMany({
-            where: { sessionId: { in: sessionIds }, userId },
-          });
-          const metadataMap = new Map(metadatas.map((m: SessionMetadata) => [m.sessionId, m]));
+          const workspaceMap = await syncWorkspacesForUser(userId, sessions);
           send({
             sessions: sessions.map((s) => {
-              const meta = metadataMap.get(s.id);
+              const workspace = workspaceMap.get(s.id);
               return {
                 ...s,
-                alias: meta?.alias ?? null,
-                isPinned: meta?.isPinned ?? false,
-                lastReadAt: meta?.lastReadAt?.toISOString() ?? null,
+                alias: workspace?.alias ?? null,
+                isPinned: workspace?.isPinned ?? false,
+                lastReadAt: workspace?.lastReadAt?.toISOString() ?? null,
               };
             }),
           });

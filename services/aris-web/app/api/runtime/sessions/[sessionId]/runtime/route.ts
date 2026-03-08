@@ -12,8 +12,12 @@ export async function GET(
   }
 
   const { sessionId } = await params;
+  const chatIdRaw = request.nextUrl.searchParams.get('chatId');
+  const chatId = typeof chatIdRaw === 'string' && chatIdRaw.trim().length > 0
+    ? chatIdRaw.trim()
+    : undefined;
   try {
-    const state = await getSessionRuntimeState(sessionId);
+    const state = await getSessionRuntimeState(sessionId, { chatId });
     return NextResponse.json(state);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch runtime state';

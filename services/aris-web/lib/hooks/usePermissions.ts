@@ -125,7 +125,7 @@ export function usePermissions(sessionId: string, initialPermissions: Permission
       return { success: false, error: 'Permission not found' };
     }
 
-    const nextState = decision === 'deny' ? 'denied' : 'approved';
+    const nextState: PermissionRequest['state'] = decision === 'deny' ? 'denied' : 'approved';
     const resolved = { ...current, state: nextState };
 
     setPermissions((prev) =>

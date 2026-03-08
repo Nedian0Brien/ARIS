@@ -24,7 +24,6 @@ import {
   FileSearch,
   FileText,
   Folder,
-  FolderOpen,
   FolderTree,
   MessageSquarePlus,
   MessageSquareText,
@@ -41,7 +40,7 @@ import {
   X,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import type { ApprovalPolicy, PermissionRequest, SessionChat, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
+import type { AgentFlavor, ApprovalPolicy, PermissionRequest, SessionChat, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '@/components/ui/AgentIcons';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import styles from './ChatInterface.module.css';
@@ -94,44 +93,9 @@ const ACTION_COLLAPSE_THRESHOLD = 4;
 const READ_CURSOR_SYNC_DEBOUNCE_MS = 800;
 const SIDEBAR_CHAT_PAGE_SIZE = 7;
 const SIDEBAR_RECENTS_LIMIT = 7;
-const SIDEBAR_FILES_LIMIT = 12;
+const CHAT_AGENT_CHOICES: AgentFlavor[] = ['codex', 'claude', 'gemini'];
 
 const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
-const CODE_FILE_EXTENSIONS = new Set([
-  'c',
-  'cpp',
-  'cs',
-  'css',
-  'go',
-  'h',
-  'hpp',
-  'html',
-  'java',
-  'js',
-  'jsx',
-  'kt',
-  'less',
-  'php',
-  'py',
-  'rb',
-  'rs',
-  'sass',
-  'scala',
-  'scss',
-  'sh',
-  'sql',
-  'swift',
-  'ts',
-  'tsx',
-  'vue',
-  'xml',
-  'zsh',
-]);
-const DOC_FILE_EXTENSIONS = new Set(['doc', 'docx', 'md', 'mdx', 'pdf', 'rst', 'txt']);
-const CONFIG_FILE_EXTENSIONS = new Set(['conf', 'config', 'env', 'ini', 'json', 'lock', 'toml', 'yaml', 'yml']);
-const DATA_FILE_EXTENSIONS = new Set(['avro', 'csv', 'jsonl', 'parquet', 'tsv', 'xls', 'xlsx']);
-const MEDIA_FILE_EXTENSIONS = new Set(['gif', 'ico', 'jpeg', 'jpg', 'mp3', 'mp4', 'png', 'svg', 'wav', 'webm', 'webp']);
-
 const COMPOSER_MODELS = [
   { id: 'claude-sonnet-4-6', shortLabel: 'Sonnet 4.6', badge: '권장' },
   { id: 'claude-opus-4-6', shortLabel: 'Opus 4.6', badge: '최고 성능' },
@@ -297,6 +261,13 @@ function resolveAgentMeta(agentFlavor: string): AgentMeta {
   return { label: 'Runtime', tone: 'blue', Icon: Cpu };
 }
 
+function normalizeAgentFlavor(value: unknown, fallback: AgentFlavor = 'codex'): AgentFlavor {
+  if (value === 'claude' || value === 'codex' || value === 'gemini') {
+    return value;
+  }
+  return fallback;
+}
+
 function isUserEvent(event: UiEvent): boolean {
   return event.meta?.role === 'user' || event.title === 'User Instruction';
 }
@@ -374,45 +345,6 @@ function buildChatTitleFromFirstPrompt(input: string): string {
     return '새 채팅';
   }
   return compact.slice(0, 120);
-}
-
-function extractPathLeaf(pathValue: string): string {
-  const normalized = pathValue.trim().replace(/\\/g, '/').replace(/\/+$/, '');
-  if (!normalized) {
-    return 'unknown';
-  }
-  const segments = normalized.split('/').filter(Boolean);
-  return segments[segments.length - 1] ?? normalized;
-}
-
-function resolveSidebarFileType(extension: string): string {
-  if (!extension) {
-    return 'Path';
-  }
-  if (CODE_FILE_EXTENSIONS.has(extension)) {
-    return 'Code';
-  }
-  if (DOC_FILE_EXTENSIONS.has(extension)) {
-    return 'Doc';
-  }
-  if (CONFIG_FILE_EXTENSIONS.has(extension)) {
-    return 'Config';
-  }
-  if (DATA_FILE_EXTENSIONS.has(extension)) {
-    return 'Data';
-  }
-  if (MEDIA_FILE_EXTENSIONS.has(extension)) {
-    return 'Media';
-  }
-  return 'File';
-}
-
-function resolveSidebarFileBadges(pathValue: string): { extensionBadge: string; typeBadge: string } {
-  const extension = fileExtension(extractPathLeaf(pathValue));
-  return {
-    extensionBadge: extension ? extension.toUpperCase().slice(0, 7) : 'PATH',
-    typeBadge: resolveSidebarFileType(extension),
-  };
 }
 
 function extractResourceLabels(source: string): ResourceLabel[] {
@@ -1656,7 +1588,7 @@ export function ChatInterface({
     initialEvents,
     initialHasMoreBefore,
   );
-  const { isRunning: runtimeRunning, runtimeError } = useSessionRuntime(sessionId);
+  const { isRunning: runtimeRunning, runtimeError } = useSessionRuntime(sessionId, activeChatIdResolved);
   const {
     displayPermissions,
     pendingPermissions,
@@ -1674,6 +1606,7 @@ export function ChatInterface({
   const [lastSubmittedPayload, setLastSubmittedPayload] = useState<{
     text: string;
     chatId: string;
+    agent: AgentFlavor;
     threadId?: string;
   } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -1683,11 +1616,7 @@ export function ChatInterface({
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
   const [showPermissionQueue, setShowPermissionQueue] = useState(true);
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
-  const [activeRecentEventId, setActiveRecentEventId] = useState<string | null>(null);
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(true);
-  const [isChatsSectionOpen, setIsChatsSectionOpen] = useState(true);
-  const [isFilesSectionOpen, setIsFilesSectionOpen] = useState(false);
-  const [isRecentsSectionOpen, setIsRecentsSectionOpen] = useState(true);
   const [chatVisibleCount, setChatVisibleCount] = useState(SIDEBAR_CHAT_PAGE_SIZE);
   const [chatActionMenuId, setChatActionMenuId] = useState<string | null>(null);
   const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
@@ -1695,6 +1624,7 @@ export function ChatInterface({
   const [chatMutationLoadingId, setChatMutationLoadingId] = useState<string | null>(null);
   const [chatMutationError, setChatMutationError] = useState<string | null>(null);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
+  const [isCreateChatMenuOpen, setIsCreateChatMenuOpen] = useState(false);
   const [contextItems, setContextItems] = useState<ContextItem[]>([]);
   const [plusMenuMode, setPlusMenuMode] = useState<'closed' | 'menu' | 'file' | 'text'>('closed');
   const [textContextInput, setTextContextInput] = useState('');
@@ -1712,6 +1642,7 @@ export function ChatInterface({
   const [recentAttachments, setRecentAttachments] = useState<string[]>([]);
   const [isMounted, setIsMounted] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const createChatMenuRef = useRef<HTMLDivElement>(null);
   const chatSidebarRef = useRef<HTMLDivElement>(null);
   const chatShellRef = useRef<HTMLDivElement>(null);
   const centerPanelRef = useRef<HTMLElement>(null);
@@ -1723,7 +1654,9 @@ export function ChatInterface({
   const shouldStickToBottomRef = useRef(true);
   const disconnectNoticeAwaitingRef = useRef<string | null>(null);
 
-  const agentMeta = resolveAgentMeta(agentFlavor);
+  const defaultAgentFlavor = normalizeAgentFlavor(agentFlavor, 'codex');
+  const activeAgentFlavor = normalizeAgentFlavor(activeChat?.agent, defaultAgentFlavor);
+  const agentMeta = resolveAgentMeta(activeAgentFlavor);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? runtimeError ?? null;
   const isRunActive = isSubmitting || runtimeRunning || isAborting;
   const isAgentRunning = isRunActive || isAwaitingReply;
@@ -1743,47 +1676,6 @@ export function ChatInterface({
     () => events.filter((event) => isUserEvent(event)).slice(-SIDEBAR_RECENTS_LIMIT).reverse(),
     [events]
   );
-  const recentFiles = useMemo(() => {
-    const dedup = new Set<string>();
-    const files: Array<{
-      path: string;
-      eventId: string;
-      label: string;
-      extensionBadge: string;
-      typeBadge: string;
-    }> = [];
-
-    for (let index = events.length - 1; index >= 0; index -= 1) {
-      const event = events[index];
-      const candidates = [
-        typeof event.action?.path === 'string' ? event.action.path : '',
-        typeof event.action?.target === 'string' ? event.action.target : '',
-        typeof event.meta?.path === 'string' ? event.meta.path : '',
-      ]
-        .map((item) => item.trim())
-        .filter(Boolean);
-
-      for (const pathValue of candidates) {
-        if (dedup.has(pathValue)) {
-          continue;
-        }
-        dedup.add(pathValue);
-        const badgeMeta = resolveSidebarFileBadges(pathValue);
-        files.push({
-          path: pathValue,
-          eventId: event.id,
-          label: extractPathLeaf(pathValue),
-          extensionBadge: badgeMeta.extensionBadge,
-          typeBadge: badgeMeta.typeBadge,
-        });
-        if (files.length >= SIDEBAR_FILES_LIMIT) {
-          return files;
-        }
-      }
-    }
-
-    return files;
-  }, [events]);
   const agentReplies = useMemo(() => events.filter((event) => !isUserEvent(event)).length, [events]);
   const streamItems = useMemo(() => buildStreamRenderItems(events, expandedActionRunIds), [events, expandedActionRunIds]);
   const timelineItems = useMemo<TimelineRenderItem[]>(() => {
@@ -1834,21 +1726,22 @@ export function ChatInterface({
   useEffect(() => { setIsMounted(true); }, []);
 
   useEffect(() => {
-    setActiveRecentEventId((current) => {
-      if (current && recentUserEvents.some((event) => event.id === current)) {
-        return current;
-      }
-      return recentUserEvents[0]?.id ?? null;
-    });
-  }, [recentUserEvents]);
-
-  useEffect(() => {
     setChats(sortSessionChats(initialChats));
     setChatActionMenuId(null);
     setRenamingChatId(null);
     setChatTitleDraft('');
     setChatMutationError(null);
   }, [initialChats, activeChatId]);
+
+  useEffect(() => {
+    setIsSubmitting(false);
+    setIsAborting(false);
+    setIsAwaitingReply(false);
+    setAwaitingReplySince(null);
+    setShowDisconnectRetry(false);
+    setSubmitError(null);
+    disconnectNoticeAwaitingRef.current = null;
+  }, [activeChatIdResolved]);
 
   useEffect(() => {
     setChatVisibleCount((prev) => {
@@ -1858,7 +1751,7 @@ export function ChatInterface({
   }, [chats.length]);
 
   useEffect(() => {
-    if (plusMenuMode === 'closed' && !isModelDropdownOpen) return;
+    if (plusMenuMode === 'closed' && !isModelDropdownOpen && !isCreateChatMenuOpen) return;
     function handleOutsideClick(e: MouseEvent) {
       if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
         setPlusMenuMode('closed');
@@ -1866,10 +1759,13 @@ export function ChatInterface({
       if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
         setIsModelDropdownOpen(false);
       }
+      if (createChatMenuRef.current && !createChatMenuRef.current.contains(e.target as Node)) {
+        setIsCreateChatMenuOpen(false);
+      }
     }
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, [plusMenuMode, isModelDropdownOpen]);
+  }, [plusMenuMode, isModelDropdownOpen, isCreateChatMenuOpen]);
 
   const removeContextItem = useCallback((id: string) => {
     setContextItems((prev) => prev.filter((item) => item.id !== id));
@@ -2185,7 +2081,6 @@ export function ChatInterface({
     if (!target) {
       return;
     }
-    setActiveRecentEventId(eventId);
     target.scrollIntoView({ behavior: 'smooth', block: 'center' });
     if (highlightedEventId === eventId) {
       setHighlightedEventId(null);
@@ -2206,62 +2101,6 @@ export function ChatInterface({
       window.clearTimeout(timer);
     };
   }, [highlightedEventId]);
-
-  const syncActiveRecentFromViewport = useCallback(() => {
-    const stream = scrollRef.current;
-    if (!stream || recentUserEvents.length === 0) {
-      return;
-    }
-
-    const streamRect = stream.getBoundingClientRect();
-    const anchorY = streamRect.top + Math.min(streamRect.height * 0.3, 180);
-    let nearestVisibleId: string | null = null;
-    let nearestVisibleDistance = Number.POSITIVE_INFINITY;
-    let nearestAboveId: string | null = null;
-    let nearestAboveDistance = Number.POSITIVE_INFINITY;
-
-    for (const event of recentUserEvents) {
-      const target = document.getElementById(`event-${event.id}`);
-      if (!target) {
-        continue;
-      }
-
-      const rect = target.getBoundingClientRect();
-      const centerY = rect.top + rect.height / 2;
-      const distance = Math.abs(centerY - anchorY);
-
-      if (rect.bottom >= streamRect.top && rect.top <= streamRect.bottom) {
-        if (distance < nearestVisibleDistance) {
-          nearestVisibleDistance = distance;
-          nearestVisibleId = event.id;
-        }
-        continue;
-      }
-
-      if (centerY < anchorY) {
-        const aboveDistance = anchorY - centerY;
-        if (aboveDistance < nearestAboveDistance) {
-          nearestAboveDistance = aboveDistance;
-          nearestAboveId = event.id;
-        }
-      }
-    }
-
-    const nextActiveId = nearestVisibleId ?? nearestAboveId ?? recentUserEvents[0]?.id ?? null;
-    if (!nextActiveId) {
-      return;
-    }
-    setActiveRecentEventId((current) => (current === nextActiveId ? current : nextActiveId));
-  }, [recentUserEvents]);
-
-  useEffect(() => {
-    const rafId = window.requestAnimationFrame(() => {
-      syncActiveRecentFromViewport();
-    });
-    return () => {
-      window.cancelAnimationFrame(rafId);
-    };
-  }, [syncActiveRecentFromViewport, events.length, isMobileLayout]);
 
   useEffect(() => {
     if (!isContextMenuOpen) {
@@ -2549,16 +2388,18 @@ export function ChatInterface({
     }
   }, [router, buildChatUrl, isMobileLayout]);
 
-  const handleCreateChat = useCallback(async () => {
+  const handleCreateChat = useCallback(async (agent: AgentFlavor) => {
     if (isCreatingChat) {
       return;
     }
     setIsCreatingChat(true);
     setChatMutationError(null);
+    setIsCreateChatMenuOpen(false);
     try {
       const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent }),
       });
       const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
       if (!response.ok || !body.chat) {
@@ -2702,6 +2543,9 @@ export function ChatInterface({
     setLastSubmittedPayload({
       text: finalText,
       chatId: activeChatIdResolved,
+      agent: activeChat?.agent === 'claude' || activeChat?.agent === 'codex' || activeChat?.agent === 'gemini'
+        ? activeChat.agent
+        : 'codex',
       ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
     });
 
@@ -2716,6 +2560,7 @@ export function ChatInterface({
           meta: {
             role: 'user',
             chatId: activeChatIdResolved,
+            agent: activeChat?.agent ?? 'codex',
             ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
           },
         }),
@@ -2808,6 +2653,7 @@ export function ChatInterface({
           meta: {
             role: 'user',
             chatId: lastSubmittedPayload.chatId,
+            agent: lastSubmittedPayload.agent,
             ...(lastSubmittedPayload.threadId ? { threadId: lastSubmittedPayload.threadId } : {}),
           },
         }),
@@ -2874,7 +2720,6 @@ export function ChatInterface({
     if (!stream) {
       return;
     }
-    syncActiveRecentFromViewport();
     if (isMobileLayout) {
       syncScrollToBottomButton();
       return;
@@ -2913,233 +2758,167 @@ export function ChatInterface({
       >
         <div className={styles.chatSidebarHeader}>
           <div>
-            <div className={styles.chatSidebarTitle}>채팅</div>
-            <div className={styles.chatSidebarSubTitle}>{projectName}</div>
+            <div className={styles.chatSidebarTitle}>채팅 목록</div>
+            <div className={styles.chatSidebarSubTitle}>{sessionTitle}</div>
           </div>
-          <button
-            type="button"
-            className={styles.chatSidebarNewButton}
-            onClick={() => void handleCreateChat()}
-            disabled={isCreatingChat}
-            title="새 채팅"
-          >
-            <MessageSquarePlus size={15} />
-            새 채팅
-          </button>
+          <div className={styles.createChatMenuWrap} ref={createChatMenuRef}>
+            <button
+              type="button"
+              className={styles.chatSidebarNewButton}
+              onClick={() => setIsCreateChatMenuOpen((prev) => !prev)}
+              disabled={isCreatingChat}
+              title="새 채팅"
+              aria-haspopup="menu"
+              aria-expanded={isCreateChatMenuOpen}
+            >
+              <MessageSquarePlus size={15} />
+              새 채팅
+              <ChevronDown size={14} />
+            </button>
+            {isCreateChatMenuOpen && (
+              <div className={styles.createChatMenuPanel} role="menu">
+                {CHAT_AGENT_CHOICES.map((choice) => {
+                  const choiceMeta = resolveAgentMeta(choice);
+                  const ChoiceIcon = choiceMeta.Icon;
+                  return (
+                    <button
+                      key={choice}
+                      type="button"
+                      role="menuitem"
+                      className={styles.createChatMenuItem}
+                      onClick={() => void handleCreateChat(choice)}
+                      disabled={isCreatingChat}
+                    >
+                      <span className={`${styles.chatListAgentAvatar} ${getAgentAvatarToneClass(choiceMeta.tone)}`}>
+                        <ChoiceIcon size={11} />
+                      </span>
+                      <span>{choiceMeta.label} 채팅</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {chatMutationError && <div className={styles.chatSidebarError}>{chatMutationError}</div>}
 
-        <div className={styles.chatSidebarSections}>
-          <section className={styles.sidebarSection}>
-            <button
-              type="button"
-              className={styles.sidebarSectionToggle}
-              onClick={() => setIsChatsSectionOpen((prev) => !prev)}
-              aria-expanded={isChatsSectionOpen}
-            >
-              <span className={styles.sidebarSectionHeading}>
-                <MessageSquareText size={13} />
-                Chats
-              </span>
-              {isChatsSectionOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            </button>
-            {isChatsSectionOpen && (
-              <div className={styles.sidebarSectionBody}>
-                <div className={`${styles.chatList} ${styles.chatSectionList}`}>
-                  {visibleChats.map((chat) => {
-                    const isActive = chat.id === activeChatIdResolved;
-                    const isRenaming = renamingChatId === chat.id;
-                    return (
-                      <div
-                        key={chat.id}
-                        className={`${styles.chatListItem} ${isActive ? styles.chatListItemActive : ''}`}
-                      >
-                        <button
-                          type="button"
-                          className={styles.chatListMainButton}
-                          onClick={() => goToChat(chat.id)}
-                          title={chat.title}
-                        >
-                          <span className={styles.chatListTitleWrap}>
-                            {chat.isPinned && <Pin size={12} className={styles.chatListPinIcon} />}
-                            {isRenaming ? (
-                              <input
-                                value={chatTitleDraft}
-                                onChange={(event) => setChatTitleDraft(event.target.value)}
-                                onClick={(event) => event.stopPropagation()}
-                                onKeyDown={(event) => {
-                                  if (event.key === 'Enter') {
-                                    event.preventDefault();
-                                    void handleRenameChat(chat.id, chatTitleDraft);
-                                  } else if (event.key === 'Escape') {
-                                    setRenamingChatId(null);
-                                    setChatTitleDraft('');
-                                  }
-                                }}
-                                onBlur={() => {
-                                  if (renamingChatId === chat.id) {
-                                    void handleRenameChat(chat.id, chatTitleDraft);
-                                  }
-                                }}
-                                className={styles.chatListRenameInput}
-                                autoFocus
-                              />
-                            ) : (
-                              <span className={styles.chatListTitle}>{chat.title}</span>
-                            )}
-                          </span>
-                          <RelativeTime timestamp={chat.lastActivityAt || chat.createdAt} className={styles.chatListTime} />
-                        </button>
-                        {!isRenaming && (
-                          <div className={styles.chatListMenuWrap}>
-                            <button
-                              type="button"
-                              className={styles.chatListMenuButton}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setChatActionMenuId((prev) => (prev === chat.id ? null : chat.id));
-                              }}
-                              title="채팅 메뉴"
-                            >
-                              <MoreVertical size={15} />
-                            </button>
-                            {chatActionMenuId === chat.id && (
-                              <div className={styles.chatListMenuPanel}>
-                                <button
-                                  type="button"
-                                  className={styles.chatListMenuItem}
-                                  onClick={() => {
-                                    setRenamingChatId(chat.id);
-                                    setChatTitleDraft(chat.title);
-                                    setChatActionMenuId(null);
-                                  }}
-                                >
-                                  <Pencil size={14} />
-                                  이름 변경
-                                </button>
-                                <button
-                                  type="button"
-                                  className={styles.chatListMenuItem}
-                                  onClick={() => void handleToggleChatPin(chat)}
-                                  disabled={chatMutationLoadingId === chat.id}
-                                >
-                                  <Pin size={14} />
-                                  {chat.isPinned ? '고정 해제' : '고정'}
-                                </button>
-                                <button
-                                  type="button"
-                                  className={`${styles.chatListMenuItem} ${styles.chatListMenuDelete}`}
-                                  onClick={() => void handleDeleteChat(chat)}
-                                  disabled={chatMutationLoadingId === chat.id}
-                                >
-                                  <Trash2 size={14} />
-                                  삭제
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                {hasMoreChats && (
+        <div className={styles.chatSidebarListWrap}>
+          <div className={styles.chatSidebarListHead}>
+            <span className={styles.chatSidebarListLabel}>채팅 {chats.length}개</span>
+          </div>
+          <div className={`${styles.chatList} ${styles.chatSectionList}`}>
+            {visibleChats.map((chat) => {
+              const isActive = chat.id === activeChatIdResolved;
+              const isRenaming = renamingChatId === chat.id;
+              const rowAgentMeta = resolveAgentMeta(chat.agent);
+              const RowAgentIcon = rowAgentMeta.Icon;
+              return (
+                <div
+                  key={chat.id}
+                  className={`${styles.chatListItem} ${isActive ? styles.chatListItemActive : ''}`}
+                >
                   <button
                     type="button"
-                    className={styles.chatSidebarLoadMoreButton}
-                    onClick={handleLoadMoreChats}
+                    className={styles.chatListMainButton}
+                    onClick={() => goToChat(chat.id)}
+                    title={chat.title}
                   >
-                    추가 로드
+                    <span className={styles.chatListTitleWrap}>
+                      <span className={`${styles.chatListAgentAvatar} ${getAgentAvatarToneClass(rowAgentMeta.tone)}`}>
+                        <RowAgentIcon size={11} />
+                      </span>
+                      {chat.isPinned && <Pin size={12} className={styles.chatListPinIcon} />}
+                      {isRenaming ? (
+                        <input
+                          value={chatTitleDraft}
+                          onChange={(event) => setChatTitleDraft(event.target.value)}
+                          onClick={(event) => event.stopPropagation()}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              void handleRenameChat(chat.id, chatTitleDraft);
+                            } else if (event.key === 'Escape') {
+                              setRenamingChatId(null);
+                              setChatTitleDraft('');
+                            }
+                          }}
+                          onBlur={() => {
+                            if (renamingChatId === chat.id) {
+                              void handleRenameChat(chat.id, chatTitleDraft);
+                            }
+                          }}
+                          className={styles.chatListRenameInput}
+                          autoFocus
+                        />
+                      ) : (
+                        <span className={styles.chatListTitle}>{chat.title}</span>
+                      )}
+                    </span>
+                    <RelativeTime timestamp={chat.lastActivityAt || chat.createdAt} className={styles.chatListTime} />
                   </button>
-                )}
-              </div>
-            )}
-          </section>
-
-          <section className={styles.sidebarSection}>
+                  {!isRenaming && (
+                    <div className={styles.chatListMenuWrap}>
+                      <button
+                        type="button"
+                        className={styles.chatListMenuButton}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setChatActionMenuId((prev) => (prev === chat.id ? null : chat.id));
+                        }}
+                        title="채팅 메뉴"
+                      >
+                        <MoreVertical size={15} />
+                      </button>
+                      {chatActionMenuId === chat.id && (
+                        <div className={styles.chatListMenuPanel}>
+                          <button
+                            type="button"
+                            className={styles.chatListMenuItem}
+                            onClick={() => {
+                              setRenamingChatId(chat.id);
+                              setChatTitleDraft(chat.title);
+                              setChatActionMenuId(null);
+                            }}
+                          >
+                            <Pencil size={14} />
+                            이름 변경
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.chatListMenuItem}
+                            onClick={() => void handleToggleChatPin(chat)}
+                            disabled={chatMutationLoadingId === chat.id}
+                          >
+                            <Pin size={14} />
+                            {chat.isPinned ? '고정 해제' : '고정'}
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.chatListMenuItem} ${styles.chatListMenuDelete}`}
+                            onClick={() => void handleDeleteChat(chat)}
+                            disabled={chatMutationLoadingId === chat.id}
+                          >
+                            <Trash2 size={14} />
+                            삭제
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {hasMoreChats && (
             <button
               type="button"
-              className={styles.sidebarSectionToggle}
-              onClick={() => setIsFilesSectionOpen((prev) => !prev)}
-              aria-expanded={isFilesSectionOpen}
+              className={styles.chatSidebarLoadMoreButton}
+              onClick={handleLoadMoreChats}
             >
-              <span className={styles.sidebarSectionHeading}>
-                <FileSearch size={13} />
-                Files
-              </span>
-              {isFilesSectionOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              추가 로드
             </button>
-            {isFilesSectionOpen && (
-              <div className={styles.sidebarSectionBody}>
-                {recentFiles.length === 0 ? (
-                  <p className={styles.emptyHint}>최근 파일 기록이 없습니다.</p>
-                ) : (
-                  <div className={styles.sidebarMiniList}>
-                    {recentFiles.map((item) => (
-                      <button
-                        key={`${item.path}:${item.eventId}`}
-                        type="button"
-                        className={styles.sidebarMiniItemButton}
-                        onClick={() => jumpToEvent(item.eventId)}
-                        title={item.path}
-                      >
-                        <span className={styles.sidebarMiniTitleRow}>
-                          <span className={styles.sidebarMiniTitle}>{item.label}</span>
-                          <span className={styles.sidebarFileBadges}>
-                            <span className={`${styles.sidebarFileBadge} ${styles.sidebarFileBadgeExt}`}>{item.extensionBadge}</span>
-                            <span className={`${styles.sidebarFileBadge} ${styles.sidebarFileBadgeType}`}>{item.typeBadge}</span>
-                          </span>
-                        </span>
-                        <span className={styles.sidebarMiniMeta}>{item.path}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
-
-          <section className={styles.sidebarSection}>
-            <button
-              type="button"
-              className={styles.sidebarSectionToggle}
-              onClick={() => setIsRecentsSectionOpen((prev) => !prev)}
-              aria-expanded={isRecentsSectionOpen}
-            >
-              <span className={styles.sidebarSectionHeading}>
-                <AlignLeft size={13} />
-                Recents
-              </span>
-              {isRecentsSectionOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            </button>
-            {isRecentsSectionOpen && (
-              <div className={styles.sidebarSectionBody}>
-                {recentUserEvents.length === 0 ? (
-                  <p className={styles.emptyHint}>최근 사용자 메시지가 없습니다.</p>
-                ) : (
-                  <div className={styles.sidebarMiniList}>
-                    {recentUserEvents.map((event) => {
-                      const isActiveRecent = activeRecentEventId === event.id;
-                      return (
-                      <button
-                        key={event.id}
-                        type="button"
-                        className={`${styles.sidebarMiniItemButton} ${isActiveRecent ? styles.sidebarMiniItemButtonActive : ''}`}
-                        onClick={() => jumpToEvent(event.id)}
-                        title="해당 메시지로 이동"
-                        aria-current={isActiveRecent ? 'true' : undefined}
-                      >
-                        <RelativeTime timestamp={event.timestamp} className={styles.sidebarMiniTime} />
-                        <span className={styles.sidebarMiniText}>{resolveRecentSummary(event)}</span>
-                      </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
+          )}
         </div>
       </aside>
 
@@ -3192,7 +2971,7 @@ export function ChatInterface({
                 <button
                   type="button"
                   className={styles.contextMenuButton}
-                  aria-label="세션 컨텍스트 메뉴"
+                  aria-label="워크스페이스 컨텍스트 메뉴"
                   onClick={() => setIsContextMenuOpen((prev) => !prev)}
                 >
                   <MoreVertical size={16} />
@@ -3642,7 +3421,7 @@ export function ChatInterface({
         </section>
 
         <section className={styles.panelCard}>
-          <div className={styles.panelHeading}>Session Controls</div>
+          <div className={styles.panelHeading}>Workspace Controls</div>
           <div className={styles.metaLine}>
             <TerminalSquare size={14} />
             승인 정책: {approvalPolicyLabel(approvalPolicy)}
