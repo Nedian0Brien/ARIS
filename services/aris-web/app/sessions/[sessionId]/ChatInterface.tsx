@@ -2328,12 +2328,18 @@ export function ChatInterface({
     if (!isAwaitingReply || !awaitingReplySince) {
       return;
     }
+    if (isRunActive || hasAgentEventSince(awaitingReplySince)) {
+      return;
+    }
 
     const sinceEpoch = Date.parse(awaitingReplySince);
     const deadline = (Number.isFinite(sinceEpoch) ? sinceEpoch : Date.now()) + AGENT_REPLY_TIMEOUT_MS;
     const remaining = Math.max(0, deadline - Date.now());
 
     const timer = window.setTimeout(() => {
+      if (isRunActive || hasAgentEventSince(awaitingReplySince)) {
+        return;
+      }
       setIsAwaitingReply(false);
       setSubmitError('에이전트 응답이 지연되고 있습니다. 런타임 연결 상태를 확인해 주세요.');
     }, remaining);
@@ -2341,7 +2347,7 @@ export function ChatInterface({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [isAwaitingReply, awaitingReplySince]);
+  }, [awaitingReplySince, hasAgentEventSince, isAwaitingReply, isRunActive]);
 
   useEffect(() => {
     if (!activeChatIdResolved) {
