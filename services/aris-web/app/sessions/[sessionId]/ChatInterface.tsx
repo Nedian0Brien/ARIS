@@ -1832,6 +1832,8 @@ export function ChatInterface({
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const createChatMenuRef = useRef<HTMLDivElement>(null);
   const chatSidebarRef = useRef<HTMLDivElement>(null);
+  const chatListRef = useRef<HTMLDivElement>(null);
+  const chatListSentinelRef = useRef<HTMLDivElement>(null);
   const chatShellRef = useRef<HTMLDivElement>(null);
   const centerPanelRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -2086,10 +2088,6 @@ export function ChatInterface({
     scheduleApprovalFeedbackReset(chatId);
   }, [decidePermission, isOperator, pendingPermissions, scheduleApprovalFeedbackReset]);
 
-  const handleLoadMoreChats = useCallback(() => {
-    setChatVisibleCount((prev) => Math.min(prev + SIDEBAR_CHAT_PAGE_SIZE, chats.length));
-  }, [chats.length]);
-
   useEffect(() => { setIsMounted(true); }, []);
 
   useEffect(() => {
@@ -2135,6 +2133,37 @@ export function ChatInterface({
       return Math.min(prev, nextMax);
     });
   }, [chats.length]);
+
+  useEffect(() => {
+    const listElement = chatListRef.current;
+    const sentinelElement = chatListSentinelRef.current;
+    if (!isChatSidebarOpen || !listElement || !sentinelElement || !hasMoreChats) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) {
+          return;
+        }
+        setChatVisibleCount((prev) => (
+          prev >= chats.length
+            ? prev
+            : Math.min(prev + SIDEBAR_CHAT_PAGE_SIZE, chats.length)
+        ));
+      },
+      {
+        root: listElement,
+        rootMargin: '0px 0px 140px 0px',
+        threshold: 0.1,
+      },
+    );
+
+    observer.observe(sentinelElement);
+    return () => {
+      observer.disconnect();
+    };
+  }, [chats.length, hasMoreChats, isChatSidebarOpen]);
 
   useEffect(() => {
     return () => {
@@ -3594,7 +3623,7 @@ export function ChatInterface({
           <div className={styles.chatSidebarListHead}>
             <span className={styles.chatSidebarListLabel}>채팅 {chats.length}개</span>
           </div>
-          <div className={`${styles.chatList} ${styles.chatSectionList}`}>
+          <div ref={chatListRef} className={`${styles.chatList} ${styles.chatSectionList}`}>
             {visibleChats.map((chat) => {
               const isActive = chat.id === activeChatIdResolved;
               const isRenaming = renamingChatId === chat.id;
@@ -3767,16 +3796,12 @@ export function ChatInterface({
                 </div>
               );
             })}
+            {hasMoreChats && (
+              <div ref={chatListSentinelRef} className={styles.chatSidebarInfiniteSentinel}>
+                이전 채팅 불러오는 중...
+              </div>
+            )}
           </div>
-          {hasMoreChats && (
-            <button
-              type="button"
-              className={styles.chatSidebarLoadMoreButton}
-              onClick={handleLoadMoreChats}
-            >
-              추가 로드
-            </button>
-          )}
         </div>
       </aside>
 

@@ -679,20 +679,15 @@
   }
 }
 
-.chatSidebarLoadMoreButton {
-  width: 100%;
-  border: 1px dashed var(--chat-item-hover-border);
-  border-radius: 10px;
-  background: var(--chat-surface-hover);
-  color: var(--chat-accent);
-  font-size: 0.73rem;
+.chatSidebarInfiniteSentinel {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.67rem;
   font-weight: 700;
-  padding: 0.42rem 0.5rem;
-  cursor: pointer;
-}
-
-.chatSidebarLoadMoreButton:hover {
-  background: rgba(219, 234, 254, 0.9);
+  color: var(--chat-text-muted);
+  padding: 0.15rem 0 0.35rem;
 }
 
 .sidebarMiniList {
