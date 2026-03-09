@@ -100,7 +100,7 @@ const CHAT_AGENT_CHOICES: AgentFlavor[] = ['codex', 'claude', 'gemini'];
 
 const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
 type ComposerModelOption = { id: string; shortLabel: string; badge: string };
-const COMPOSER_MODELS_BY_AGENT: Record<'codex' | 'claude' | 'gemini', ComposerModelOption[]> = {
+const FALLBACK_MODELS_BY_AGENT: Record<'codex' | 'claude' | 'gemini', ComposerModelOption[]> = {
   codex: [
     { id: 'gpt-5-codex', shortLabel: 'GPT-5 Codex', badge: '권장' },
     { id: 'gpt-5', shortLabel: 'GPT-5', badge: '고성능' },
@@ -306,15 +306,23 @@ function normalizeModelId(value: unknown): string | null {
   return trimmed.slice(0, 120);
 }
 
-function resolveComposerModels(agent: AgentFlavor): ComposerModelOption[] {
-  if (agent === 'claude' || agent === 'codex' || agent === 'gemini') {
-    return COMPOSER_MODELS_BY_AGENT[agent];
+function resolveComposerModels(
+  agent: AgentFlavor,
+  overrides: Partial<Record<AgentFlavor, ComposerModelOption[]>>,
+): ComposerModelOption[] {
+  const normalized = agent === 'claude' || agent === 'codex' || agent === 'gemini' ? agent : 'codex';
+  const remote = overrides[normalized];
+  if (remote && remote.length > 0) {
+    return remote;
   }
-  return COMPOSER_MODELS_BY_AGENT.codex;
+  return FALLBACK_MODELS_BY_AGENT[normalized];
 }
 
-function resolveDefaultModelId(agent: AgentFlavor): string {
-  return resolveComposerModels(agent)[0]?.id ?? 'gpt-5-codex';
+function resolveDefaultModelId(
+  agent: AgentFlavor,
+  overrides: Partial<Record<AgentFlavor, ComposerModelOption[]>> = {},
+): string {
+  return resolveComposerModels(agent, overrides)[0]?.id ?? 'gpt-5-codex';
 }
 
 function isUserEvent(event: UiEvent): boolean {
@@ -1781,10 +1789,11 @@ export function ChatInterface({
   const [sidebarApprovalLoadingChatId, setSidebarApprovalLoadingChatId] = useState<string | null>(null);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [isCreateChatMenuOpen, setIsCreateChatMenuOpen] = useState(false);
-  const [contextItems, setContextItems] = useState<ContextItem[]>([]);
-  const [plusMenuMode, setPlusMenuMode] = useState<'closed' | 'menu' | 'file' | 'text'>('closed');
-  const [textContextInput, setTextContextInput] = useState('');
-  const [selectedModelId, setSelectedModelId] = useState<ComposerModelId>(() => {
+const [contextItems, setContextItems] = useState<ContextItem[]>([]);
+const [plusMenuMode, setPlusMenuMode] = useState<'closed' | 'menu' | 'file' | 'text'>('closed');
+const [textContextInput, setTextContextInput] = useState('');
+const [remoteModelCatalog, setRemoteModelCatalog] = useState<Partial<Record<AgentFlavor, ComposerModelOption[]>>>({});
+const [selectedModelId, setSelectedModelId] = useState<ComposerModelId>(() => {
     const sortedInitialChats = sortSessionChats(initialChats);
     const initialChat = (activeChatId && activeChatId.trim().length > 0
       ? sortedInitialChats.find((chat) => chat.id === activeChatId.trim())
@@ -1830,8 +1839,11 @@ export function ChatInterface({
 
   const defaultAgentFlavor = normalizeAgentFlavor(agentFlavor, 'codex');
   const activeAgentFlavor = normalizeAgentFlavor(activeChat?.agent, defaultAgentFlavor);
-  const activeComposerModels = useMemo(() => resolveComposerModels(activeAgentFlavor), [activeAgentFlavor]);
-  const activeModelId = normalizeModelId(selectedModelId) ?? resolveDefaultModelId(activeAgentFlavor);
+  const activeComposerModels = useMemo(
+    () => resolveComposerModels(activeAgentFlavor, remoteModelCatalog),
+    [activeAgentFlavor, remoteModelCatalog],
+  );
+  const activeModelId = normalizeModelId(selectedModelId) ?? resolveDefaultModelId(activeAgentFlavor, remoteModelCatalog);
   const agentMeta = resolveAgentMeta(activeAgentFlavor);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? runtimeError ?? null;
   const isRunActive = isSubmitting || runtimeRunning || isAborting;
@@ -1894,6 +1906,57 @@ export function ChatInterface({
   const firstPendingPermissionId = pendingPermissions[0]?.id ?? null;
   const visibleChats = useMemo(() => chats.slice(0, chatVisibleCount), [chats, chatVisibleCount]);
   const hasMoreChats = chats.length > chatVisibleCount;
+  const activeRemoteCatalog = remoteModelCatalog[activeAgentFlavor];
+
+  useEffect(() => {
+    if (!activeAgentFlavor || activeRemoteCatalog) {
+      return;
+    }
+    const controller = new AbortController();
+    let cancelled = false;
+    const loadCatalog = async () => {
+      try {
+        const response = await fetch(
+          `/api/runtime/models?agent=${encodeURIComponent(activeAgentFlavor)}`,
+          { cache: 'no-store', signal: controller.signal },
+        );
+        const payload = (await response.json().catch(() => ({}))) as {
+          models?: Array<{ id?: string; label?: string }>;
+          error?: string;
+        };
+        if (!response.ok) {
+          throw new Error(payload.error ?? '모델 목록을 불러오지 못했습니다.');
+        }
+        if (cancelled) {
+          return;
+        }
+        const parsed = Array.isArray(payload.models)
+          ? payload.models.filter((model) => typeof model?.id === 'string')
+          : [];
+        if (parsed.length === 0) {
+          return;
+        }
+        setRemoteModelCatalog((prev) => ({
+          ...prev,
+          [activeAgentFlavor]: parsed.map((model) => ({
+            id: model.id!,
+            shortLabel: model.label?.trim() || model.id!,
+            badge: 'LIVE',
+          })),
+        }));
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        console.warn('Failed to load remote model catalog', error);
+      }
+    };
+    void loadCatalog();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [activeAgentFlavor, activeRemoteCatalog]);
 
   useEffect(() => {
     const sessionModelFallback = activeAgentFlavor === defaultAgentFlavor
@@ -1901,12 +1964,20 @@ export function ChatInterface({
       : null;
     const nextModelId = normalizeModelId(activeChat?.model)
       ?? sessionModelFallback
-      ?? resolveDefaultModelId(activeAgentFlavor);
+      ?? resolveDefaultModelId(activeAgentFlavor, remoteModelCatalog);
     if (nextModelId === selectedModelId) {
       return;
     }
     setSelectedModelId(nextModelId);
-  }, [activeAgentFlavor, activeChat?.id, activeChat?.model, defaultAgentFlavor, selectedModelId, sessionModel]);
+  }, [
+    activeAgentFlavor,
+    activeChat?.id,
+    activeChat?.model,
+    defaultAgentFlavor,
+    remoteModelCatalog,
+    selectedModelId,
+    sessionModel,
+  ]);
 
   const upsertChatSidebarSnapshot = useCallback((chatId: string, patch: Partial<ChatSidebarSnapshot>) => {
     setChatSidebarSnapshots((prev) => {
@@ -3143,7 +3214,7 @@ export function ChatInterface({
     setIsCreatingChat(true);
     setChatMutationError(null);
     setIsCreateChatMenuOpen(false);
-    const defaultModelId = resolveDefaultModelId(agent);
+    const defaultModelId = resolveDefaultModelId(agent, remoteModelCatalog);
     try {
       const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`, {
         method: 'POST',
@@ -3161,7 +3232,7 @@ export function ChatInterface({
     } finally {
       setIsCreatingChat(false);
     }
-  }, [sessionId, goToChat, isCreatingChat]);
+  }, [sessionId, goToChat, isCreatingChat, remoteModelCatalog]);
 
   const handleToggleChatPin = useCallback(async (chat: SessionChat) => {
     setChatMutationLoadingId(chat.id);
@@ -3282,7 +3353,7 @@ export function ChatInterface({
       )).join('\n') + '\n\n'
       : '';
     const finalText = contextPrefix + promptText;
-    const submitModelId = normalizeModelId(selectedModelId) ?? resolveDefaultModelId(activeAgentFlavor);
+    const submitModelId = normalizeModelId(selectedModelId) ?? resolveDefaultModelId(activeAgentFlavor, remoteModelCatalog);
 
     setIsSubmitting(true);
     setIsAwaitingReply(true);
