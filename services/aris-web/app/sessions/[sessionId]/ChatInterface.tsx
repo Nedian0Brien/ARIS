@@ -100,9 +100,11 @@ const CHAT_AGENT_CHOICES: AgentFlavor[] = ['codex', 'claude', 'gemini'];
 
 const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
 type ComposerModelOption = { id: string; shortLabel: string; badge: string };
+type ModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 const COMPOSER_MODELS_BY_AGENT: Record<'codex' | 'claude' | 'gemini', ComposerModelOption[]> = {
   codex: [
     { id: 'gpt-5.3-codex', shortLabel: 'GPT-5.3 Codex', badge: '권장' },
+    { id: 'gpt-5.4', shortLabel: 'GPT-5.4', badge: '신규' },
     { id: 'gpt-5', shortLabel: 'GPT-5', badge: '고성능' },
     { id: 'gpt-5-mini', shortLabel: 'GPT-5 mini', badge: '빠름' },
   ],
@@ -117,6 +119,12 @@ const COMPOSER_MODELS_BY_AGENT: Record<'codex' | 'claude' | 'gemini', ComposerMo
     { id: 'gemini-2.0-flash', shortLabel: 'Gemini 2.0 Flash', badge: '경량' },
   ],
 };
+const MODEL_REASONING_EFFORT_OPTIONS: Array<{ value: ModelReasoningEffort; label: string }> = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'xhigh', label: 'XHigh' },
+];
 
 // --- 2. 타입 정의 ---
 
@@ -305,6 +313,13 @@ function normalizeModelId(value: unknown): string | null {
   }
   const canonical = trimmed === 'gpt-5-codex' ? 'gpt-5.3-codex' : trimmed;
   return canonical.slice(0, 120);
+}
+
+function normalizeModelReasoningEffort(value: unknown, fallback: ModelReasoningEffort = 'medium'): ModelReasoningEffort {
+  if (value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh') {
+    return value;
+  }
+  return fallback;
 }
 
 type CustomModels = Record<string, string>;
@@ -1764,6 +1779,7 @@ export function ChatInterface({
     chatId: string;
     agent: AgentFlavor;
     model: string;
+    modelReasoningEffort?: ModelReasoningEffort;
     threadId?: string;
   } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -1836,6 +1852,7 @@ export function ChatInterface({
       ?? sessionModelFallback
       ?? resolveDefaultModelId(initialAgent, customModels);
   });
+  const [selectedModelReasoningEffort, setSelectedModelReasoningEffort] = useState<ModelReasoningEffort>('medium');
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [fileBrowserPath, setFileBrowserPath] = useState('/');
@@ -1874,6 +1891,9 @@ export function ChatInterface({
   const activeAgentFlavor = normalizeAgentFlavor(activeChat?.agent, defaultAgentFlavor);
   const activeComposerModels = useMemo(() => resolveComposerModels(activeAgentFlavor, customModels), [activeAgentFlavor, customModels]);
   const activeModelId = normalizeModelId(selectedModelId) ?? resolveDefaultModelId(activeAgentFlavor, customModels);
+  const codexReasoningEffort = activeAgentFlavor === 'codex'
+    ? selectedModelReasoningEffort
+    : undefined;
   const agentMeta = resolveAgentMeta(activeAgentFlavor);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? runtimeError ?? null;
   const isRunActive = isSubmitting || runtimeRunning || isAborting;
@@ -3435,6 +3455,7 @@ export function ChatInterface({
       : '';
     const finalText = contextPrefix + promptText;
     const submitModelId = normalizeModelId(selectedModelId) ?? resolveDefaultModelId(activeAgentFlavor, customModels);
+    const submitModelReasoningEffort = codexReasoningEffort;
 
     setIsSubmitting(true);
     setIsAwaitingReply(true);
@@ -3450,6 +3471,7 @@ export function ChatInterface({
         ? activeChat.agent
         : 'codex',
       model: submitModelId,
+      ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
       ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
     });
 
@@ -3466,6 +3488,12 @@ export function ChatInterface({
             chatId: activeChatIdResolved,
             agent: activeChat?.agent ?? 'codex',
             model: submitModelId,
+            ...(submitModelReasoningEffort
+              ? {
+                  modelReasoningEffort: submitModelReasoningEffort,
+                  model_reasoning_effort: submitModelReasoningEffort,
+                }
+              : {}),
             ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
           },
         }),
@@ -3564,6 +3592,12 @@ export function ChatInterface({
             chatId: lastSubmittedPayload.chatId,
             agent: lastSubmittedPayload.agent,
             model: lastSubmittedPayload.model,
+            ...(lastSubmittedPayload.modelReasoningEffort
+              ? {
+                  modelReasoningEffort: lastSubmittedPayload.modelReasoningEffort,
+                  model_reasoning_effort: lastSubmittedPayload.modelReasoningEffort,
+                }
+              : {}),
             ...(lastSubmittedPayload.threadId ? { threadId: lastSubmittedPayload.threadId } : {}),
           },
         }),
@@ -4246,6 +4280,25 @@ export function ChatInterface({
                       </div>
                     )}
                   </div>
+                  {activeAgentFlavor === 'codex' && (
+                    <label className={styles.modelEffortWrap}>
+                      <span className={styles.modelEffortLabel}>Effort</span>
+                      <select
+                        className={styles.modelEffortSelect}
+                        value={selectedModelReasoningEffort}
+                        onChange={(event) => setSelectedModelReasoningEffort(
+                          normalizeModelReasoningEffort(event.target.value, 'medium'),
+                        )}
+                        aria-label="모델 추론 강도"
+                      >
+                        {MODEL_REASONING_EFFORT_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   {isAgentRunning && (
                     <div className={styles.composerRunningBadge} role="status" aria-live="polite">
                       <span className={styles.runningDots} aria-hidden>

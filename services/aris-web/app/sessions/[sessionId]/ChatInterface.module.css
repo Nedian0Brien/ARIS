@@ -2540,6 +2540,54 @@
   position: relative;
 }
 
+.modelEffortWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+}
+
+.modelEffortLabel {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--chat-text-muted);
+  letter-spacing: 0.01em;
+}
+
+.modelEffortSelect {
+  appearance: none;
+  padding: 0.16rem 1.2rem 0.16rem 0.46rem;
+  border-radius: 6px;
+  border: 1px solid var(--chat-control-border);
+  background:
+    linear-gradient(45deg, transparent 50%, var(--chat-text-muted) 50%),
+    linear-gradient(135deg, var(--chat-text-muted) 50%, transparent 50%),
+    linear-gradient(to right, transparent, transparent);
+  background-position:
+    calc(100% - 0.68rem) calc(50% - 0.09rem),
+    calc(100% - 0.46rem) calc(50% - 0.09rem),
+    0 0;
+  background-size:
+    0.22rem 0.22rem,
+    0.22rem 0.22rem,
+    100% 100%;
+  background-repeat: no-repeat;
+  color: var(--chat-control-text);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modelEffortSelect:hover {
+  background-color: var(--chat-surface-subtle);
+  border-color: var(--chat-item-hover-border);
+}
+
+.modelEffortSelect:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--chat-accent) 52%, transparent);
+  outline-offset: 1px;
+}
+
 .modelSelectorBtn {
   display: inline-flex;
   align-items: center;

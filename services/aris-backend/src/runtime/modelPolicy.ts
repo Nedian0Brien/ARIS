@@ -8,7 +8,7 @@ type ModelSelectionSource = 'requested' | 'session' | 'custom' | 'default';
 const MODEL_ID_MAX_LEN = 120;
 const DEFAULT_CUSTOM_MODEL_PATTERN_RAW = '^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$';
 const DEFAULT_BUILTIN_MODELS_BY_AGENT: Record<SupportedAgent, readonly string[]> = {
-  codex: ['gpt-5.3-codex', 'gpt-5', 'gpt-5-mini'],
+  codex: ['gpt-5.3-codex', 'gpt-5.4', 'gpt-5', 'gpt-5-mini'],
   claude: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5'],
   gemini: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
 };

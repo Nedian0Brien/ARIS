@@ -24,6 +24,13 @@ function extractCustomModel(raw: unknown, agent: 'codex' | 'claude' | 'gemini'):
   return candidate ?? undefined;
 }
 
+function normalizeModelReasoningEffort(value: unknown): 'low' | 'medium' | 'high' | 'xhigh' | undefined {
+  if (value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh') {
+    return value;
+  }
+  return undefined;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
@@ -112,6 +119,16 @@ export async function POST(
       });
       meta.agent = resolved.agent;
       meta.model = resolved.model;
+      const reasoningEffort = normalizeModelReasoningEffort(
+        meta.modelReasoningEffort ?? meta.model_reasoning_effort,
+      );
+      if (reasoningEffort) {
+        meta.modelReasoningEffort = reasoningEffort;
+        meta.model_reasoning_effort = reasoningEffort;
+      } else {
+        delete meta.modelReasoningEffort;
+        delete meta.model_reasoning_effort;
+      }
       if (resolved.customModel) {
         meta.customModel = resolved.customModel;
       }
