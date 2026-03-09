@@ -2372,9 +2372,9 @@ export function ChatInterface({
         if (!payload.chat) {
           return;
         }
-        setChats((prev) => sortSessionChats(prev.map((chat) => (
+        setChats((prev) => prev.map((chat) => (
           chat.id === payload.chat?.id ? payload.chat : chat
-        ))));
+        )));
       })
       .catch(() => {
       })
