@@ -702,7 +702,12 @@ function inferCliAgentActionKind(input: {
   const text = input.text.replace(/\r\n/g, '\n');
   const lower = text.toLowerCase();
   const command = extractShellCommandFromBody(text);
-  const path = extractPathFromBody(text);
+  const hasPathPrefix = /(^|\n)\s*path:\s+\S+/i.test(text);
+  const hasExitCode = /(^|\n)\s*exit code:\s*-?\d+/i.test(text);
+  const hasStrongActionSignal = Boolean(command) || hasPathPrefix || hasExitCode;
+  if (!hasStrongActionSignal) {
+    return null;
+  }
 
   if (
     lower.includes('diff --git')
@@ -719,24 +724,6 @@ function inferCliAgentActionKind(input: {
     if (shellKind) {
       return shellKind;
     }
-  }
-
-  if (
-    path
-    && /(수정|변경|추가|삭제|작성|패치|updated|modified|created|deleted|patched|rewrote|renamed)/i.test(text)
-  ) {
-    return 'file_write';
-  }
-  if (
-    path
-    && /(확인|검토|읽|조회|열람|opened|read|checked|inspected|reviewed)/i.test(text)
-  ) {
-    return 'file_read';
-  }
-  if (
-    /(파일 목록|디렉터리|directory listing|file list|listed files|listed|ls\s|tree\s|rg --files)/i.test(text)
-  ) {
-    return 'file_list';
   }
 
   return null;

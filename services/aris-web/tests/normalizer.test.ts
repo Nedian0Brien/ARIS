@@ -334,7 +334,7 @@ describe('normalizeEvents', () => {
     expect(events[0].kind).toBe('text_reply');
   });
 
-  it('infers file_read action for claude cli-agent summary messages with file paths', () => {
+  it('keeps claude cli-agent natural language summaries as text_reply', () => {
     const events = normalizeEvents([
       {
         id: 'e9',
@@ -344,8 +344,7 @@ describe('normalizeEvents', () => {
       },
     ]);
 
-    expect(events[0].kind).toBe('file_read');
-    expect(events[0].action?.path).toBe('services/aris-web/package.json');
+    expect(events[0].kind).toBe('text_reply');
   });
 
   it('infers file_list action for gemini cli-agent messages that include shell commands', () => {
@@ -360,6 +359,19 @@ describe('normalizeEvents', () => {
 
     expect(events[0].kind).toBe('file_list');
     expect(events[0].action?.command).toBe('ls src');
+  });
+
+  it('keeps claude cli-agent project analysis markdown as text_reply', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e11',
+        type: 'message',
+        text: '## ARIS 프로젝트 분석 결과\n\n### 프로젝트 개요\n\nARIS 루트 디렉토리 구조를 분석했습니다.',
+        meta: { source: 'cli-agent', role: 'agent', agent: 'claude' },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('text_reply');
   });
 
   it('uses stable seq-based ids when backend id is missing', () => {
