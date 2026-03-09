@@ -564,9 +564,6 @@
 }
 
 .chatListMenuPanel {
-  position: absolute;
-  top: calc(100% + 0.3rem);
-  right: 0;
   width: 140px;
   border-radius: 10px;
   border: 1px solid var(--chat-popover-border);

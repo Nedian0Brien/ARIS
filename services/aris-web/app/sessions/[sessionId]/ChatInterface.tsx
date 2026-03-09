@@ -1775,6 +1775,8 @@ export function ChatInterface({
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(true);
   const [chatVisibleCount, setChatVisibleCount] = useState(SIDEBAR_CHAT_PAGE_SIZE);
   const [chatActionMenuId, setChatActionMenuId] = useState<string | null>(null);
+  const [chatActionMenuRect, setChatActionMenuRect] = useState<DOMRect | null>(null);
+  const chatActionMenuRef = useRef<HTMLDivElement>(null);
   const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
   const [chatTitleDraft, setChatTitleDraft] = useState('');
   const [chatMutationLoadingId, setChatMutationLoadingId] = useState<string | null>(null);
@@ -2902,14 +2904,39 @@ export function ChatInterface({
       if (!(target instanceof Element)) {
         return;
       }
-      if (chatSidebarRef.current?.contains(target)) {
+      if (chatActionMenuRef.current?.contains(target)) {
+        return;
+      }
+      if (target.closest(`.${styles.chatListMenuButton}`)) {
         return;
       }
       setChatActionMenuId(null);
+      setChatActionMenuRect(null);
     };
     document.addEventListener('mousedown', onClickOutside);
     return () => {
       document.removeEventListener('mousedown', onClickOutside);
+    };
+  }, [chatActionMenuId]);
+
+  useEffect(() => {
+    if (!chatActionMenuId) {
+      return;
+    }
+    const onScroll = () => {
+      setChatActionMenuId(null);
+      setChatActionMenuRect(null);
+    };
+    const chatListEl = chatListRef.current;
+    if (chatListEl) {
+      chatListEl.addEventListener('scroll', onScroll, { passive: true });
+    }
+    window.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    return () => {
+      if (chatListEl) {
+        chatListEl.removeEventListener('scroll', onScroll);
+      }
+      window.removeEventListener('scroll', onScroll, { capture: true });
     };
   }, [chatActionMenuId]);
 
@@ -3722,14 +3749,29 @@ export function ChatInterface({
                           className={styles.chatListMenuButton}
                           onClick={(event) => {
                             event.stopPropagation();
-                            setChatActionMenuId((prev) => (prev === chat.id ? null : chat.id));
+                            if (chatActionMenuId === chat.id) {
+                              setChatActionMenuId(null);
+                              setChatActionMenuRect(null);
+                            } else {
+                              setChatActionMenuId(chat.id);
+                              setChatActionMenuRect(event.currentTarget.getBoundingClientRect());
+                            }
                           }}
                           title="채팅 메뉴"
                         >
                           <MoreVertical size={15} />
                         </button>
-                        {chatActionMenuId === chat.id && (
-                          <div className={styles.chatListMenuPanel}>
+                        {isMounted && chatActionMenuId === chat.id && chatActionMenuRect && createPortal(
+                          <div
+                            ref={chatActionMenuRef}
+                            className={styles.chatListMenuPanel}
+                            style={{
+                              position: 'fixed',
+                              top: `${chatActionMenuRect.bottom + 4}px`,
+                              left: `${chatActionMenuRect.right - 140}px`, // 140px is panel width
+                              zIndex: 9999
+                            }}
+                          >
                             <button
                               type="button"
                               className={styles.chatListMenuItem}
@@ -3737,6 +3779,7 @@ export function ChatInterface({
                                 setRenamingChatId(chat.id);
                                 setChatTitleDraft(chat.title);
                                 setChatActionMenuId(null);
+                                setChatActionMenuRect(null);
                               }}
                             >
                               <Pencil size={14} />
@@ -3760,7 +3803,8 @@ export function ChatInterface({
                               <Trash2 size={14} />
                               삭제
                             </button>
-                          </div>
+                          </div>,
+                          document.body
                         )}
                       </div>
                     )}
