@@ -12,6 +12,7 @@ import {
   AlignLeft,
   ArrowUp,
   CheckCircle2,
+  CornerDownRight,
   ChevronDown,
   ChevronUp,
   ChevronRight,
@@ -93,6 +94,7 @@ const ACTION_COLLAPSE_THRESHOLD = 4;
 const READ_CURSOR_SYNC_DEBOUNCE_MS = 800;
 const SIDEBAR_CHAT_PAGE_SIZE = 7;
 const SIDEBAR_RECENTS_LIMIT = 7;
+const SIDEBAR_APPROVAL_FEEDBACK_MS = 3000;
 const CHAT_AGENT_CHOICES: AgentFlavor[] = ['codex', 'claude', 'gemini'];
 
 const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
@@ -127,6 +129,13 @@ type ComposerModelId = (typeof COMPOSER_MODELS)[number]['id'];
 type ContextItem =
   | { id: string; type: 'file'; path: string; content: string; name: string }
   | { id: string; type: 'text'; text: string };
+type ChatSidebarState = 'default' | 'running' | 'completed' | 'approval' | 'error';
+type ChatSidebarSnapshot = {
+  preview: string;
+  hasEvents: boolean;
+  hasErrorSignal: boolean;
+};
+type ChatApprovalFeedback = 'approved' | 'denied';
 
 // --- 3. 런타임 초기화 안전 장치 (TDZ 에러 방지) ---
 // styles 객체 및 복잡한 객체 참조를 함수 호출 시점으로 지연시킴
@@ -445,6 +454,25 @@ function resolveRecentSummary(event: UiEvent): string {
   }
 
   return truncateSingleLine(event.title || event.kind);
+}
+
+function hasChatErrorSignal(event: UiEvent | null | undefined): boolean {
+  if (!event) {
+    return false;
+  }
+
+  const streamEvent = typeof event.meta?.streamEvent === 'string'
+    ? event.meta.streamEvent.toLowerCase()
+    : '';
+  if (streamEvent.includes('disconnect') || streamEvent.includes('error')) {
+    return true;
+  }
+  if (event.severity === 'danger') {
+    return true;
+  }
+
+  const normalized = `${event.title} ${event.body}`.toLowerCase();
+  return normalized.includes('error') || normalized.includes('실패') || normalized.includes('끊김');
 }
 
 function approvalPolicyLabel(value?: ApprovalPolicy): string {
@@ -1640,6 +1668,9 @@ export function ChatInterface({
   const [chatTitleDraft, setChatTitleDraft] = useState('');
   const [chatMutationLoadingId, setChatMutationLoadingId] = useState<string | null>(null);
   const [chatMutationError, setChatMutationError] = useState<string | null>(null);
+  const [chatSidebarSnapshots, setChatSidebarSnapshots] = useState<Record<string, ChatSidebarSnapshot>>({});
+  const [approvalFeedbackByChat, setApprovalFeedbackByChat] = useState<Record<string, ChatApprovalFeedback>>({});
+  const [sidebarApprovalLoadingChatId, setSidebarApprovalLoadingChatId] = useState<string | null>(null);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [isCreateChatMenuOpen, setIsCreateChatMenuOpen] = useState(false);
   const [contextItems, setContextItems] = useState<ContextItem[]>([]);
@@ -1671,6 +1702,8 @@ export function ChatInterface({
   const shouldStickToBottomRef = useRef(true);
   const disconnectNoticeAwaitingRef = useRef<string | null>(null);
   const runtimeStartedSinceAwaitingRef = useRef(false);
+  const approvalFeedbackTimersRef = useRef<Record<string, number>>({});
+  const chatSidebarFetchInFlightRef = useRef<Record<string, boolean>>({});
 
   const defaultAgentFlavor = normalizeAgentFlavor(agentFlavor, 'codex');
   const activeAgentFlavor = normalizeAgentFlavor(activeChat?.agent, defaultAgentFlavor);
@@ -1737,6 +1770,125 @@ export function ChatInterface({
   const visibleChats = useMemo(() => chats.slice(0, chatVisibleCount), [chats, chatVisibleCount]);
   const hasMoreChats = chats.length > chatVisibleCount;
 
+  const upsertChatSidebarSnapshot = useCallback((chatId: string, patch: Partial<ChatSidebarSnapshot>) => {
+    setChatSidebarSnapshots((prev) => {
+      const current = prev[chatId] ?? {
+        preview: '',
+        hasEvents: false,
+        hasErrorSignal: false,
+      };
+      const next: ChatSidebarSnapshot = {
+        ...current,
+        ...patch,
+      };
+      if (
+        current.preview === next.preview
+        && current.hasEvents === next.hasEvents
+        && current.hasErrorSignal === next.hasErrorSignal
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [chatId]: next,
+      };
+    });
+  }, []);
+
+  const scheduleApprovalFeedbackReset = useCallback((chatId: string) => {
+    const currentTimer = approvalFeedbackTimersRef.current[chatId];
+    if (currentTimer) {
+      window.clearTimeout(currentTimer);
+    }
+    approvalFeedbackTimersRef.current[chatId] = window.setTimeout(() => {
+      setApprovalFeedbackByChat((prev) => {
+        if (!prev[chatId]) {
+          return prev;
+        }
+        const next = { ...prev };
+        delete next[chatId];
+        return next;
+      });
+      delete approvalFeedbackTimersRef.current[chatId];
+    }, SIDEBAR_APPROVAL_FEEDBACK_MS);
+  }, []);
+
+  const resolveChatSidebarState = useCallback((chat: SessionChat): ChatSidebarState => {
+    const isActive = chat.id === activeChatIdResolved;
+    const snapshot = chatSidebarSnapshots[chat.id];
+    const hasFeedback = Boolean(approvalFeedbackByChat[chat.id]);
+    const hasPendingApproval = isActive && pendingPermissions.length > 0;
+
+    if (hasPendingApproval && !hasFeedback) {
+      return 'approval';
+    }
+    if (
+      isActive
+      && (
+        Boolean(runtimeNotice)
+        || showDisconnectRetry
+        || Boolean(snapshot?.hasErrorSignal)
+      )
+    ) {
+      return 'error';
+    }
+    if (isActive && (isAgentRunning || hasFeedback)) {
+      return 'running';
+    }
+    if (snapshot?.hasErrorSignal) {
+      return 'error';
+    }
+    if (snapshot?.hasEvents || Boolean(snapshot?.preview)) {
+      return 'completed';
+    }
+    return 'default';
+  }, [
+    activeChatIdResolved,
+    approvalFeedbackByChat,
+    chatSidebarSnapshots,
+    isAgentRunning,
+    pendingPermissions.length,
+    runtimeNotice,
+    showDisconnectRetry,
+  ]);
+
+  const resolveChatPreviewText = useCallback((chatId: string): string => {
+    const preview = chatSidebarSnapshots[chatId]?.preview?.trim();
+    if (preview) {
+      return preview;
+    }
+    return '최근 메시지가 없습니다.';
+  }, [chatSidebarSnapshots]);
+
+  const handleSidebarPermissionDecision = useCallback(async (
+    chatId: string,
+    decision: 'allow_once' | 'allow_session' | 'deny',
+  ) => {
+    if (!isOperator) {
+      return;
+    }
+    const targetPermission = pendingPermissions[0];
+    if (!targetPermission) {
+      return;
+    }
+
+    setSidebarApprovalLoadingChatId(chatId);
+    setChatMutationError(null);
+    const result = await decidePermission(targetPermission.id, decision);
+    setSidebarApprovalLoadingChatId(null);
+
+    if (!result.success) {
+      setChatMutationError(result.error ?? '승인 요청 처리에 실패했습니다.');
+      return;
+    }
+
+    setApprovalFeedbackByChat((prev) => ({
+      ...prev,
+      [chatId]: decision === 'deny' ? 'denied' : 'approved',
+    }));
+    scheduleApprovalFeedbackReset(chatId);
+  }, [decidePermission, isOperator, pendingPermissions, scheduleApprovalFeedbackReset]);
+
   const handleLoadMoreChats = useCallback(() => {
     setChatVisibleCount((prev) => Math.min(prev + SIDEBAR_CHAT_PAGE_SIZE, chats.length));
   }, [chats.length]);
@@ -1762,6 +1914,7 @@ export function ChatInterface({
     setAwaitingReplySince(null);
     setShowDisconnectRetry(false);
     setSubmitError(null);
+    setSidebarApprovalLoadingChatId(null);
     disconnectNoticeAwaitingRef.current = null;
     runtimeStartedSinceAwaitingRef.current = false;
   }, [activeChatIdResolved]);
@@ -1772,6 +1925,130 @@ export function ChatInterface({
       return Math.min(prev, nextMax);
     });
   }, [chats.length]);
+
+  useEffect(() => {
+    return () => {
+      for (const timerId of Object.values(approvalFeedbackTimersRef.current)) {
+        window.clearTimeout(timerId);
+      }
+      approvalFeedbackTimersRef.current = {};
+    };
+  }, []);
+
+  useEffect(() => {
+    const chatIds = new Set(chats.map((chat) => chat.id));
+    setChatSidebarSnapshots((prev) => {
+      const nextEntries = Object.entries(prev).filter(([chatId]) => chatIds.has(chatId));
+      if (nextEntries.length === Object.keys(prev).length) {
+        return prev;
+      }
+      return Object.fromEntries(nextEntries);
+    });
+    setApprovalFeedbackByChat((prev) => {
+      const next: Record<string, ChatApprovalFeedback> = {};
+      for (const [chatId, state] of Object.entries(prev)) {
+        if (!chatIds.has(chatId)) {
+          const timerId = approvalFeedbackTimersRef.current[chatId];
+          if (timerId) {
+            window.clearTimeout(timerId);
+            delete approvalFeedbackTimersRef.current[chatId];
+          }
+          continue;
+        }
+        next[chatId] = state;
+      }
+      if (Object.keys(next).length === Object.keys(prev).length) {
+        return prev;
+      }
+      return next;
+    });
+
+    const nextInFlight: Record<string, boolean> = {};
+    for (const [chatId, value] of Object.entries(chatSidebarFetchInFlightRef.current)) {
+      if (chatIds.has(chatId)) {
+        nextInFlight[chatId] = value;
+      }
+    }
+    chatSidebarFetchInFlightRef.current = nextInFlight;
+  }, [chats]);
+
+  useEffect(() => {
+    if (!activeChatIdResolved) {
+      return;
+    }
+    const latestEvent = events[events.length - 1];
+    upsertChatSidebarSnapshot(activeChatIdResolved, {
+      preview: latestEvent ? resolveRecentSummary(latestEvent) : '',
+      hasEvents: events.length > 0,
+      hasErrorSignal: Boolean(runtimeNotice) || showDisconnectRetry || hasChatErrorSignal(latestEvent),
+    });
+  }, [
+    activeChatIdResolved,
+    events,
+    runtimeNotice,
+    showDisconnectRetry,
+    upsertChatSidebarSnapshot,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const targets = visibleChats.filter((chat) => (
+      !chatSidebarSnapshots[chat.id]
+      && !chatSidebarFetchInFlightRef.current[chat.id]
+    ));
+    if (targets.length === 0) {
+      return;
+    }
+
+    for (const chat of targets) {
+      chatSidebarFetchInFlightRef.current[chat.id] = true;
+    }
+
+    void Promise.all(targets.map(async (chat) => {
+      try {
+        const params = new URLSearchParams({
+          limit: '1',
+          chatId: chat.id,
+        });
+        if (chat.isDefault) {
+          params.set('includeUnassigned', '1');
+        }
+
+        const response = await fetch(
+          `/api/runtime/sessions/${encodeURIComponent(sessionId)}/events?${params.toString()}`,
+          { cache: 'no-store' },
+        );
+
+        if (!response.ok) {
+          if (!cancelled) {
+            upsertChatSidebarSnapshot(chat.id, { preview: '', hasEvents: false, hasErrorSignal: false });
+          }
+          return;
+        }
+
+        const payload = (await response.json().catch(() => ({}))) as { events?: UiEvent[] };
+        const resolvedEvents = Array.isArray(payload.events) ? payload.events : [];
+        const latestEvent = resolvedEvents[resolvedEvents.length - 1];
+        if (!cancelled) {
+          upsertChatSidebarSnapshot(chat.id, {
+            preview: latestEvent ? resolveRecentSummary(latestEvent) : '',
+            hasEvents: resolvedEvents.length > 0,
+            hasErrorSignal: hasChatErrorSignal(latestEvent),
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          upsertChatSidebarSnapshot(chat.id, { preview: '', hasEvents: false, hasErrorSignal: false });
+        }
+      } finally {
+        delete chatSidebarFetchInFlightRef.current[chat.id];
+      }
+    }));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chatSidebarSnapshots, sessionId, upsertChatSidebarSnapshot, visibleChats]);
 
   useEffect(() => {
     if (plusMenuMode === 'closed' && !isModelDropdownOpen && !isCreateChatMenuOpen) return;
@@ -2877,99 +3154,170 @@ export function ChatInterface({
               const isRenaming = renamingChatId === chat.id;
               const rowAgentMeta = resolveAgentMeta(chat.agent);
               const RowAgentIcon = rowAgentMeta.Icon;
+              const sidebarState = resolveChatSidebarState(chat);
+              const sidebarStateClass = sidebarState === 'running'
+                ? styles.chatListItemStateRunning
+                : sidebarState === 'completed'
+                  ? styles.chatListItemStateCompleted
+                  : sidebarState === 'approval'
+                    ? styles.chatListItemStateApproval
+                    : sidebarState === 'error'
+                      ? styles.chatListItemStateError
+                      : '';
+              const chatPreviewText = resolveChatPreviewText(chat.id);
+              const approvalFeedback = approvalFeedbackByChat[chat.id];
+              const hasPendingApproval = isActive && pendingPermissions.length > 0;
+              const showApprovalPanel = isActive && (
+                hasPendingApproval
+                || sidebarApprovalLoadingChatId === chat.id
+                || Boolean(approvalFeedback)
+              );
+              const approvalBusy = sidebarApprovalLoadingChatId === chat.id || loadingPermissionId !== null;
               return (
                 <div
                   key={chat.id}
-                  className={`${styles.chatListItem} ${isActive ? styles.chatListItemActive : ''}`}
+                  className={`${styles.chatListItem} ${isActive ? styles.chatListItemActive : ''} ${sidebarStateClass}`}
                 >
-                  <button
-                    type="button"
-                    className={styles.chatListMainButton}
-                    onClick={() => goToChat(chat.id)}
-                    title={chat.title}
-                  >
-                    <span className={styles.chatListTitleWrap}>
-                      <span className={`${styles.chatListAgentAvatar} ${getAgentAvatarToneClass(rowAgentMeta.tone)}`}>
-                        <RowAgentIcon size={11} />
+                  <div className={styles.chatListItemTopRow}>
+                    <button
+                      type="button"
+                      className={styles.chatListMainButton}
+                      onClick={() => goToChat(chat.id)}
+                      title={chat.title}
+                    >
+                      <span className={styles.chatListMainContent}>
+                        <span className={styles.chatListTitleWrap}>
+                          <span className={`${styles.chatListAgentAvatar} ${getAgentAvatarToneClass(rowAgentMeta.tone)}`}>
+                            <RowAgentIcon size={11} />
+                          </span>
+                          {chat.isPinned && <Pin size={12} className={styles.chatListPinIcon} />}
+                          {isRenaming ? (
+                            <input
+                              value={chatTitleDraft}
+                              onChange={(event) => setChatTitleDraft(event.target.value)}
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                  event.preventDefault();
+                                  void handleRenameChat(chat.id, chatTitleDraft);
+                                } else if (event.key === 'Escape') {
+                                  setRenamingChatId(null);
+                                  setChatTitleDraft('');
+                                }
+                              }}
+                              onBlur={() => {
+                                if (renamingChatId === chat.id) {
+                                  void handleRenameChat(chat.id, chatTitleDraft);
+                                }
+                              }}
+                              className={styles.chatListRenameInput}
+                              autoFocus
+                            />
+                          ) : (
+                            <span className={styles.chatListTitle}>{chat.title}</span>
+                          )}
+                        </span>
+                        {!isRenaming && (
+                          <span className={styles.chatListPreviewRow}>
+                            <CornerDownRight size={12} className={styles.chatListPreviewIcon} />
+                            <span className={styles.chatListPreviewText}>{chatPreviewText}</span>
+                          </span>
+                        )}
                       </span>
-                      {chat.isPinned && <Pin size={12} className={styles.chatListPinIcon} />}
-                      {isRenaming ? (
-                        <input
-                          value={chatTitleDraft}
-                          onChange={(event) => setChatTitleDraft(event.target.value)}
-                          onClick={(event) => event.stopPropagation()}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter') {
-                              event.preventDefault();
-                              void handleRenameChat(chat.id, chatTitleDraft);
-                            } else if (event.key === 'Escape') {
-                              setRenamingChatId(null);
-                              setChatTitleDraft('');
-                            }
+                      <RelativeTime timestamp={chat.lastActivityAt || chat.createdAt} className={styles.chatListTime} />
+                    </button>
+                    {!isRenaming && (
+                      <div className={styles.chatListMenuWrap}>
+                        <button
+                          type="button"
+                          className={styles.chatListMenuButton}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setChatActionMenuId((prev) => (prev === chat.id ? null : chat.id));
                           }}
-                          onBlur={() => {
-                            if (renamingChatId === chat.id) {
-                              void handleRenameChat(chat.id, chatTitleDraft);
-                            }
-                          }}
-                          className={styles.chatListRenameInput}
-                          autoFocus
-                        />
+                          title="채팅 메뉴"
+                        >
+                          <MoreVertical size={15} />
+                        </button>
+                        {chatActionMenuId === chat.id && (
+                          <div className={styles.chatListMenuPanel}>
+                            <button
+                              type="button"
+                              className={styles.chatListMenuItem}
+                              onClick={() => {
+                                setRenamingChatId(chat.id);
+                                setChatTitleDraft(chat.title);
+                                setChatActionMenuId(null);
+                              }}
+                            >
+                              <Pencil size={14} />
+                              이름 변경
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.chatListMenuItem}
+                              onClick={() => void handleToggleChatPin(chat)}
+                              disabled={chatMutationLoadingId === chat.id}
+                            >
+                              <Pin size={14} />
+                              {chat.isPinned ? '고정 해제' : '고정'}
+                            </button>
+                            <button
+                              type="button"
+                              className={`${styles.chatListMenuItem} ${styles.chatListMenuDelete}`}
+                              onClick={() => void handleDeleteChat(chat)}
+                              disabled={chatMutationLoadingId === chat.id}
+                            >
+                              <Trash2 size={14} />
+                              삭제
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className={`${styles.chatListApprovalWrap} ${showApprovalPanel ? styles.chatListApprovalWrapOpen : ''}`}>
+                    <div className={styles.chatListApprovalInner}>
+                      {approvalFeedback ? (
+                        <div
+                          className={`${styles.chatListApprovalResult} ${
+                            approvalFeedback === 'approved'
+                              ? styles.chatListApprovalResultApproved
+                              : styles.chatListApprovalResultDenied
+                          }`}
+                        >
+                          {approvalFeedback === 'approved' ? '승인됨' : '거부됨'}
+                        </div>
                       ) : (
-                        <span className={styles.chatListTitle}>{chat.title}</span>
-                      )}
-                    </span>
-                    <RelativeTime timestamp={chat.lastActivityAt || chat.createdAt} className={styles.chatListTime} />
-                  </button>
-                  {!isRenaming && (
-                    <div className={styles.chatListMenuWrap}>
-                      <button
-                        type="button"
-                        className={styles.chatListMenuButton}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setChatActionMenuId((prev) => (prev === chat.id ? null : chat.id));
-                        }}
-                        title="채팅 메뉴"
-                      >
-                        <MoreVertical size={15} />
-                      </button>
-                      {chatActionMenuId === chat.id && (
-                        <div className={styles.chatListMenuPanel}>
+                        <div className={styles.chatListApprovalButtons}>
                           <button
                             type="button"
-                            className={styles.chatListMenuItem}
-                            onClick={() => {
-                              setRenamingChatId(chat.id);
-                              setChatTitleDraft(chat.title);
-                              setChatActionMenuId(null);
-                            }}
+                            className={styles.chatListApprovalButton}
+                            onClick={() => { void handleSidebarPermissionDecision(chat.id, 'allow_once'); }}
+                            disabled={!hasPendingApproval || approvalBusy}
                           >
-                            <Pencil size={14} />
-                            이름 변경
+                            {approvalBusy ? '처리 중...' : '승인'}
                           </button>
                           <button
                             type="button"
-                            className={styles.chatListMenuItem}
-                            onClick={() => void handleToggleChatPin(chat)}
-                            disabled={chatMutationLoadingId === chat.id}
+                            className={styles.chatListApprovalButton}
+                            onClick={() => { void handleSidebarPermissionDecision(chat.id, 'allow_session'); }}
+                            disabled={!hasPendingApproval || approvalBusy}
                           >
-                            <Pin size={14} />
-                            {chat.isPinned ? '고정 해제' : '고정'}
+                            항상 승인
                           </button>
                           <button
                             type="button"
-                            className={`${styles.chatListMenuItem} ${styles.chatListMenuDelete}`}
-                            onClick={() => void handleDeleteChat(chat)}
-                            disabled={chatMutationLoadingId === chat.id}
+                            className={`${styles.chatListApprovalButton} ${styles.chatListApprovalButtonDeny}`}
+                            onClick={() => { void handleSidebarPermissionDecision(chat.id, 'deny'); }}
+                            disabled={!hasPendingApproval || approvalBusy}
                           >
-                            <Trash2 size={14} />
-                            삭제
+                            거부
                           </button>
                         </div>
                       )}
                     </div>
-                  )}
+                  </div>
                 </div>
               );
             })}
