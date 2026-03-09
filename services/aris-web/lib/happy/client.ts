@@ -375,7 +375,8 @@ async function listRecentSessionMessages(
       break;
     }
     collected = [...page.messages, ...collected];
-    matchedCount += page.messages.reduce((sum, message) => {
+    const messageBatch: unknown[] = Array.isArray(page.messages) ? page.messages : [];
+    matchedCount += messageBatch.reduce<number>((sum, message) => {
       const rec = asObject(message);
       const meta = asObject(rec?.meta);
       const eventChatId = typeof meta?.chatId === 'string' ? meta.chatId.trim() : '';
