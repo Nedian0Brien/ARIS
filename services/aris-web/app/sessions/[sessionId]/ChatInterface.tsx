@@ -95,6 +95,7 @@ const READ_CURSOR_SYNC_DEBOUNCE_MS = 800;
 const SIDEBAR_CHAT_PAGE_SIZE = 7;
 const SIDEBAR_RECENTS_LIMIT = 7;
 const SIDEBAR_APPROVAL_FEEDBACK_MS = 3000;
+const SIDEBAR_STATUS_REFRESH_MS = 5000;
 const CHAT_AGENT_CHOICES: AgentFlavor[] = ['codex', 'claude', 'gemini'];
 
 const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
@@ -134,6 +135,10 @@ type ChatSidebarSnapshot = {
   preview: string;
   hasEvents: boolean;
   hasErrorSignal: boolean;
+  latestEventId: string | null;
+  latestEventAt: string | null;
+  latestEventIsUser: boolean;
+  isRunning: boolean;
 };
 type ChatApprovalFeedback = 'approved' | 'denied';
 
@@ -464,15 +469,14 @@ function hasChatErrorSignal(event: UiEvent | null | undefined): boolean {
   const streamEvent = typeof event.meta?.streamEvent === 'string'
     ? event.meta.streamEvent.toLowerCase()
     : '';
-  if (streamEvent.includes('disconnect') || streamEvent.includes('error')) {
+  if (
+    streamEvent === 'runtime_disconnected'
+    || streamEvent === 'stream_error'
+    || streamEvent === 'runtime_error'
+  ) {
     return true;
   }
-  if (event.severity === 'danger') {
-    return true;
-  }
-
-  const normalized = `${event.title} ${event.body}`.toLowerCase();
-  return normalized.includes('error') || normalized.includes('실패') || normalized.includes('끊김');
+  return false;
 }
 
 function approvalPolicyLabel(value?: ApprovalPolicy): string {
@@ -1669,6 +1673,7 @@ export function ChatInterface({
   const [chatMutationLoadingId, setChatMutationLoadingId] = useState<string | null>(null);
   const [chatMutationError, setChatMutationError] = useState<string | null>(null);
   const [chatSidebarSnapshots, setChatSidebarSnapshots] = useState<Record<string, ChatSidebarSnapshot>>({});
+  const [chatReadMarkers, setChatReadMarkers] = useState<Record<string, string>>({});
   const [approvalFeedbackByChat, setApprovalFeedbackByChat] = useState<Record<string, ChatApprovalFeedback>>({});
   const [sidebarApprovalLoadingChatId, setSidebarApprovalLoadingChatId] = useState<string | null>(null);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
@@ -1776,6 +1781,10 @@ export function ChatInterface({
         preview: '',
         hasEvents: false,
         hasErrorSignal: false,
+        latestEventId: null,
+        latestEventAt: null,
+        latestEventIsUser: false,
+        isRunning: false,
       };
       const next: ChatSidebarSnapshot = {
         ...current,
@@ -1785,6 +1794,10 @@ export function ChatInterface({
         current.preview === next.preview
         && current.hasEvents === next.hasEvents
         && current.hasErrorSignal === next.hasErrorSignal
+        && current.latestEventId === next.latestEventId
+        && current.latestEventAt === next.latestEventAt
+        && current.latestEventIsUser === next.latestEventIsUser
+        && current.isRunning === next.isRunning
       ) {
         return prev;
       }
@@ -1813,42 +1826,60 @@ export function ChatInterface({
     }, SIDEBAR_APPROVAL_FEEDBACK_MS);
   }, []);
 
+  const hasUnreadMessages = useCallback((chatId: string): boolean => {
+    const snapshot = chatSidebarSnapshots[chatId];
+    if (!snapshot?.latestEventId) {
+      return false;
+    }
+    const readMarker = chatReadMarkers[chatId];
+    if (!readMarker) {
+      return false;
+    }
+    return readMarker !== snapshot.latestEventId;
+  }, [chatReadMarkers, chatSidebarSnapshots]);
+
   const resolveChatSidebarState = useCallback((chat: SessionChat): ChatSidebarState => {
     const isActive = chat.id === activeChatIdResolved;
     const snapshot = chatSidebarSnapshots[chat.id];
     const hasFeedback = Boolean(approvalFeedbackByChat[chat.id]);
     const hasPendingApproval = isActive && pendingPermissions.length > 0;
+    const hasUnread = hasUnreadMessages(chat.id);
+    const isRunningState = isActive
+      ? (isAgentRunning || Boolean(snapshot?.isRunning))
+      : Boolean(snapshot?.isRunning);
+    const hasErrorState = isActive
+      ? (
+        Boolean(submitError)
+        || Boolean(syncError)
+        || Boolean(runtimeError)
+        || showDisconnectRetry
+        || Boolean(snapshot?.hasErrorSignal)
+      )
+      : Boolean(snapshot?.hasErrorSignal);
 
     if (hasPendingApproval && !hasFeedback) {
       return 'approval';
     }
-    if (
-      isActive
-      && (
-        Boolean(runtimeNotice)
-        || showDisconnectRetry
-        || Boolean(snapshot?.hasErrorSignal)
-      )
-    ) {
+    if (hasErrorState) {
       return 'error';
     }
-    if (isActive && (isAgentRunning || hasFeedback)) {
+    if (isRunningState || hasFeedback) {
       return 'running';
     }
-    if (snapshot?.hasErrorSignal) {
-      return 'error';
-    }
-    if (snapshot?.hasEvents || Boolean(snapshot?.preview)) {
+    if (hasUnread && snapshot?.hasEvents && !snapshot.latestEventIsUser) {
       return 'completed';
     }
     return 'default';
   }, [
     activeChatIdResolved,
     approvalFeedbackByChat,
+    hasUnreadMessages,
     chatSidebarSnapshots,
     isAgentRunning,
     pendingPermissions.length,
-    runtimeNotice,
+    runtimeError,
+    submitError,
+    syncError,
     showDisconnectRetry,
   ]);
 
@@ -1962,6 +1993,18 @@ export function ChatInterface({
       }
       return next;
     });
+    setChatReadMarkers((prev) => {
+      const next: Record<string, string> = {};
+      for (const [chatId, marker] of Object.entries(prev)) {
+        if (chatIds.has(chatId)) {
+          next[chatId] = marker;
+        }
+      }
+      if (Object.keys(next).length === Object.keys(prev).length) {
+        return prev;
+      }
+      return next;
+    });
 
     const nextInFlight: Record<string, boolean> = {};
     for (const [chatId, value] of Object.entries(chatSidebarFetchInFlightRef.current)) {
@@ -1980,75 +2023,110 @@ export function ChatInterface({
     upsertChatSidebarSnapshot(activeChatIdResolved, {
       preview: latestEvent ? resolveRecentSummary(latestEvent) : '',
       hasEvents: events.length > 0,
-      hasErrorSignal: Boolean(runtimeNotice) || showDisconnectRetry || hasChatErrorSignal(latestEvent),
+      hasErrorSignal: hasChatErrorSignal(latestEvent),
+      latestEventId: latestEvent?.id ?? null,
+      latestEventAt: latestEvent?.timestamp ?? null,
+      latestEventIsUser: Boolean(latestEvent ? isUserEvent(latestEvent) : false),
+      isRunning: isAgentRunning,
     });
   }, [
     activeChatIdResolved,
     events,
-    runtimeNotice,
-    showDisconnectRetry,
+    isAgentRunning,
     upsertChatSidebarSnapshot,
   ]);
 
   useEffect(() => {
-    let cancelled = false;
-    const targets = visibleChats.filter((chat) => (
-      !chatSidebarSnapshots[chat.id]
-      && !chatSidebarFetchInFlightRef.current[chat.id]
-    ));
-    if (targets.length === 0) {
+    if (!activeChatIdResolved) {
       return;
     }
-
-    for (const chat of targets) {
-      chatSidebarFetchInFlightRef.current[chat.id] = true;
+    const latestEvent = events[events.length - 1];
+    if (!latestEvent || showScrollToBottom) {
+      return;
     }
-
-    void Promise.all(targets.map(async (chat) => {
-      try {
-        const params = new URLSearchParams({
-          limit: '1',
-          chatId: chat.id,
-        });
-        if (chat.isDefault) {
-          params.set('includeUnassigned', '1');
-        }
-
-        const response = await fetch(
-          `/api/runtime/sessions/${encodeURIComponent(sessionId)}/events?${params.toString()}`,
-          { cache: 'no-store' },
-        );
-
-        if (!response.ok) {
-          if (!cancelled) {
-            upsertChatSidebarSnapshot(chat.id, { preview: '', hasEvents: false, hasErrorSignal: false });
+    setChatReadMarkers((prev) => (
+      prev[activeChatIdResolved] === latestEvent.id
+        ? prev
+        : {
+            ...prev,
+            [activeChatIdResolved]: latestEvent.id,
           }
-          return;
-        }
+    ));
+  }, [activeChatIdResolved, events, showScrollToBottom]);
 
-        const payload = (await response.json().catch(() => ({}))) as { events?: UiEvent[] };
-        const resolvedEvents = Array.isArray(payload.events) ? payload.events : [];
-        const latestEvent = resolvedEvents[resolvedEvents.length - 1];
-        if (!cancelled) {
-          upsertChatSidebarSnapshot(chat.id, {
-            preview: latestEvent ? resolveRecentSummary(latestEvent) : '',
-            hasEvents: resolvedEvents.length > 0,
-            hasErrorSignal: hasChatErrorSignal(latestEvent),
-          });
-        }
-      } catch {
-        if (!cancelled) {
-          upsertChatSidebarSnapshot(chat.id, { preview: '', hasEvents: false, hasErrorSignal: false });
-        }
-      } finally {
-        delete chatSidebarFetchInFlightRef.current[chat.id];
+  useEffect(() => {
+    let cancelled = false;
+    const refreshVisibleChats = async () => {
+      const targets = visibleChats.filter((chat) => !chatSidebarFetchInFlightRef.current[chat.id]);
+      if (targets.length === 0) {
+        return;
       }
-    }));
 
+      for (const chat of targets) {
+        chatSidebarFetchInFlightRef.current[chat.id] = true;
+      }
+
+      await Promise.all(targets.map(async (chat) => {
+        try {
+          const eventsParams = new URLSearchParams({
+            limit: '1',
+            chatId: chat.id,
+          });
+          if (chat.isDefault) {
+            eventsParams.set('includeUnassigned', '1');
+          }
+
+          const runtimeParams = new URLSearchParams({ chatId: chat.id });
+          const [eventsResponse, runtimeResponse] = await Promise.all([
+            fetch(
+              `/api/runtime/sessions/${encodeURIComponent(sessionId)}/events?${eventsParams.toString()}`,
+              { cache: 'no-store' },
+            ),
+            fetch(
+              `/api/runtime/sessions/${encodeURIComponent(sessionId)}/runtime?${runtimeParams.toString()}`,
+              { cache: 'no-store' },
+            ),
+          ]);
+
+          const patch: Partial<ChatSidebarSnapshot> = {};
+
+          if (eventsResponse.ok) {
+            const payload = (await eventsResponse.json().catch(() => ({}))) as { events?: UiEvent[] };
+            const resolvedEvents = Array.isArray(payload.events) ? payload.events : [];
+            const latestEvent = resolvedEvents[resolvedEvents.length - 1];
+            patch.preview = latestEvent ? resolveRecentSummary(latestEvent) : '';
+            patch.hasEvents = resolvedEvents.length > 0;
+            patch.hasErrorSignal = hasChatErrorSignal(latestEvent);
+            patch.latestEventId = latestEvent?.id ?? null;
+            patch.latestEventAt = latestEvent?.timestamp ?? null;
+            patch.latestEventIsUser = Boolean(latestEvent ? isUserEvent(latestEvent) : false);
+          }
+
+          if (runtimeResponse.ok) {
+            const runtimePayload = (await runtimeResponse.json().catch(() => ({}))) as { isRunning?: boolean };
+            patch.isRunning = Boolean(runtimePayload.isRunning);
+          }
+
+          if (!cancelled && Object.keys(patch).length > 0) {
+            upsertChatSidebarSnapshot(chat.id, patch);
+          }
+        } catch {
+          // keep previous snapshot on transient failures
+        } finally {
+          delete chatSidebarFetchInFlightRef.current[chat.id];
+        }
+      }));
+    };
+
+    void refreshVisibleChats();
+    const intervalId = window.setInterval(() => {
+      void refreshVisibleChats();
+    }, SIDEBAR_STATUS_REFRESH_MS);
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
     };
-  }, [chatSidebarSnapshots, sessionId, upsertChatSidebarSnapshot, visibleChats]);
+  }, [sessionId, upsertChatSidebarSnapshot, visibleChats]);
 
   useEffect(() => {
     if (plusMenuMode === 'closed' && !isModelDropdownOpen && !isCreateChatMenuOpen) return;
