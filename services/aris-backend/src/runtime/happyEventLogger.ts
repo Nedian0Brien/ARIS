@@ -6,11 +6,13 @@ const RAW_LOG_FILE = 'happy-raw.ndjson';
 const PARSED_LOG_FILE = 'happy-parsed.ndjson';
 
 type LogChannel = 'app_server' | 'exec_cli';
-type LogStage = 'incoming_raw' | 'incoming_payload' | 'parsed_append';
+type LogStage = 'incoming_raw' | 'incoming_payload' | 'parsed_append' | 'run_status' | 'turn_status';
 
 export type HappyRawLogRecord = {
   sessionId: string;
   chatId?: string;
+  model?: string;
+  turnStatus?: string;
   channel: LogChannel;
   line: string;
 };
@@ -18,6 +20,8 @@ export type HappyRawLogRecord = {
 export type HappyParsedLogRecord = {
   sessionId: string;
   chatId?: string;
+  model?: string;
+  turnStatus?: string;
   channel: LogChannel;
   stage: LogStage;
   payload: unknown;

@@ -1,6 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
 import { getSessionEvents, appendSessionMessage, HappyHttpError } from '@/lib/happy/client';
+import { prisma } from '@/lib/db/prisma';
+import {
+  normalizeSupportedAgent,
+  resolveRuntimeMessageModel,
+  sanitizeCustomModel,
+} from '@/lib/happy/modelPolicy';
+
+function toMetaRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return { ...(value as Record<string, unknown>) };
+}
+
+function extractCustomModel(raw: unknown, agent: 'codex' | 'claude' | 'gemini'): string | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return undefined;
+  }
+  const rec = raw as Record<string, unknown>;
+  const candidate = sanitizeCustomModel(rec[agent]);
+  return candidate ?? undefined;
+}
 
 export async function GET(
   request: NextRequest,
@@ -62,12 +84,50 @@ export async function POST(
   const { sessionId } = await params;
   try {
     const body = await request.json();
+    const type = body?.type === 'tool' || body?.type === 'read' || body?.type === 'write' || body?.type === 'message'
+      ? body.type
+      : 'message';
+    const meta = toMetaRecord(body?.meta);
+    const role = meta.role === 'agent' ? 'agent' : 'user';
+
+    if (role === 'user' && type === 'message') {
+      const chatId = typeof meta.chatId === 'string' && meta.chatId.trim().length > 0 ? meta.chatId.trim() : undefined;
+      const chat = chatId
+        ? await prisma.sessionChat.findFirst({
+            where: { id: chatId, sessionId },
+            select: { agent: true, model: true },
+          })
+        : null;
+      const requestedAgent = normalizeSupportedAgent(meta.agent, normalizeSupportedAgent(chat?.agent, 'codex'));
+      const preference = await prisma.uiPreference.findUnique({
+        where: { userId: auth.user.id },
+        select: { customAiModels: true },
+      });
+      const customModel = extractCustomModel(preference?.customAiModels, requestedAgent);
+      const resolved = resolveRuntimeMessageModel({
+        agent: requestedAgent,
+        requestedModel: meta.model,
+        sessionModel: chat?.model,
+        customModel,
+      });
+      meta.agent = resolved.agent;
+      meta.model = resolved.model;
+      if (resolved.customModel) {
+        meta.customModel = resolved.customModel;
+      }
+      meta.modelValidation = {
+        source: resolved.source,
+        ...(resolved.fallbackReason ? { fallbackReason: resolved.fallbackReason } : {}),
+        ...(resolved.requestedModel ? { requestedModel: resolved.requestedModel } : {}),
+      };
+    }
+
     const event = await appendSessionMessage({
       sessionId,
-      type: body.type || 'message',
+      type,
       title: body.title,
       text: body.text,
-      meta: body.meta,
+      meta,
     });
     return NextResponse.json({ event });
   } catch (error) {

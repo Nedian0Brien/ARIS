@@ -60,7 +60,8 @@ function normalizeChatModel(input: unknown): string | null {
   if (!trimmed) {
     return null;
   }
-  return trimmed.slice(0, 120);
+  const canonical = trimmed === 'gpt-5-codex' ? 'gpt-5.3-codex' : trimmed;
+  return canonical.slice(0, 120);
 }
 
 function sortChats(chats: SessionChat[]): SessionChat[] {
@@ -157,7 +158,7 @@ export async function createSessionChat(input: {
 
   const title = typeof input.title === 'string' && input.title.trim()
     ? normalizeChatTitle(input.title)
-    : buildNextChatTitle(existing.map((chat) => chat.title));
+    : buildNextChatTitle(existing.map((chat: { title: string }) => chat.title));
 
   const created = await prisma.sessionChat.create({
     data: {

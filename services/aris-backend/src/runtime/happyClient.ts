@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { inferActionTypeFromCommand, titleForActionType } from './actionType.js';
 import { summarizeDiffText, summarizeFileChangeDiff } from './diffStats.js';
 import { HappyEventLogger } from './happyEventLogger.js';
+import { resolveRuntimeModelSelection } from './modelPolicy.js';
 import type {
   ApprovalPolicy,
   PermissionDecision,
@@ -38,12 +39,34 @@ const HAPPY_EVENT_LOG_MAX_BYTES = (() => {
   }
   return 1_024 * 1_024 * 1_024; // 1GB
 })();
+const CODEX_TURN_TIMEOUT_MS = (() => {
+  const parsed = Number.parseInt(process.env.CODEX_TURN_TIMEOUT_MS || '', 10);
+  if (Number.isFinite(parsed) && parsed >= 30_000) {
+    return parsed;
+  }
+  return 30 * 60 * 1000; // 30 minutes
+})();
+const STALE_RUN_TIMEOUT_MS = (() => {
+  const parsed = Number.parseInt(process.env.HAPPY_STALE_RUN_TIMEOUT_MS || '', 10);
+  if (Number.isFinite(parsed) && parsed >= 60_000) {
+    return parsed;
+  }
+  return 45 * 60 * 1000; // 45 minutes
+})();
 
 type RuntimeAgent = RuntimeSession['metadata']['flavor'];
 type PermissionState = PermissionRequest['state'];
 type SessionStatusValue = RuntimeSession['state']['status'];
 type PermissionActionType = 'exec' | 'patch';
 type JsonRpcId = string | number | null;
+type ActiveRun = {
+  controller: AbortController;
+  sessionId: string;
+  chatId?: string;
+  startedAt: number;
+  agent: RuntimeAgent;
+  model?: string;
+};
 
 type CodexPermissionRequest = {
   actionType: PermissionActionType;
@@ -178,7 +201,8 @@ function normalizeModel(value: unknown): string | undefined {
   if (!trimmed) {
     return undefined;
   }
-  return trimmed.slice(0, 120);
+  const canonical = trimmed === 'gpt-5-codex' ? 'gpt-5.3-codex' : trimmed;
+  return canonical.slice(0, 120);
 }
 
 function normalizeStatus(raw: unknown, active: unknown): SessionStatusValue {
@@ -1108,7 +1132,7 @@ export const happyClientTestHooks = {
 
 export class HappyRuntimeStore {
   private readonly permissions = new Map<string, PermissionRequest>();
-  private readonly activeRuns = new Map<string, AbortController>();
+  private readonly activeRuns = new Map<string, ActiveRun>();
   private readonly codexThreads = new Map<string, string>();
   private readonly codexPermissionIndex = new Map<string, string>();
   private readonly codexPermissionResponders = new Map<string, (decision: PermissionDecision) => Promise<void>>();
@@ -1151,14 +1175,68 @@ export class HappyRuntimeStore {
   }
 
   private abortSessionRuns(sessionId: string): void {
-    for (const [runKey, controller] of this.activeRuns.entries()) {
+    for (const [runKey, run] of this.activeRuns.entries()) {
       if (!this.isSessionRunKey(runKey, sessionId)) {
         continue;
       }
-      if (!controller.signal.aborted) {
-        controller.abort();
+      if (!run.controller.signal.aborted) {
+        run.controller.abort();
       }
       this.activeRuns.delete(runKey);
+    }
+  }
+
+  private async cleanupStaleRuns(reason: string): Promise<void> {
+    const now = Date.now();
+    const staleRuns: Array<{ runKey: string; run: ActiveRun; ageMs: number }> = [];
+    for (const [runKey, run] of this.activeRuns.entries()) {
+      const ageMs = now - run.startedAt;
+      if (ageMs <= STALE_RUN_TIMEOUT_MS) {
+        continue;
+      }
+      staleRuns.push({ runKey, run, ageMs });
+    }
+
+    for (const stale of staleRuns) {
+      if (!stale.run.controller.signal.aborted) {
+        stale.run.controller.abort();
+      }
+      this.activeRuns.delete(stale.runKey);
+      const channel = stale.run.agent === 'codex' && CODEX_RUNTIME_MODE !== 'exec' ? 'app_server' : 'exec_cli';
+      this.happyEventLogger.logParsed({
+        sessionId: stale.run.sessionId,
+        ...(stale.run.chatId ? { chatId: stale.run.chatId } : {}),
+        ...(stale.run.model ? { model: stale.run.model } : {}),
+        turnStatus: 'run_stale_cleanup',
+        channel,
+        stage: 'run_status',
+        payload: {
+          reason,
+          runKey: stale.runKey,
+          ageMs: stale.ageMs,
+          staleTimeoutMs: STALE_RUN_TIMEOUT_MS,
+          agent: stale.run.agent,
+        },
+      });
+      try {
+        await this.appendAgentMessage(
+          stale.run.sessionId,
+          `장기 실행 감지로 런타임을 정리했습니다. (${Math.floor(stale.ageMs / 1000)}초 경과)`,
+          {
+            ...(stale.run.chatId ? { chatId: stale.run.chatId } : {}),
+            ...(stale.run.model ? { model: stale.run.model } : {}),
+            runKey: stale.runKey,
+            streamEvent: 'runtime_stale_cleanup',
+            staleTimeoutMs: STALE_RUN_TIMEOUT_MS,
+            reason,
+            error: true,
+          },
+          { type: 'tool', title: 'Runtime Guard' },
+        );
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        console.error(`failed to persist stale run cleanup message: ${detail}`);
+      }
     }
   }
 
@@ -1388,7 +1466,10 @@ export class HappyRuntimeStore {
     const threadCacheKey = buildCodexThreadCacheKey(session.id, chatId);
     const sessionApprovalPolicy = this.resolveSessionApprovalPolicy(session);
     const codexApprovalPolicy = normalizeCodexApprovalPolicy(sessionApprovalPolicy);
-    const selectedModel = normalizeModel(model) ?? normalizeModel(session.metadata.model);
+    const selectedModel = normalizeModel(model) ?? resolveRuntimeModelSelection({
+      agent: 'codex',
+      sessionModel: session.metadata.model,
+    }).model;
     const autoApproveAll = sessionApprovalPolicy === 'yolo';
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
     const args = [
@@ -1402,6 +1483,18 @@ export class HappyRuntimeStore {
       env: { ...process.env, PATH: mergedPath },
       stdio: ['pipe', 'pipe', 'pipe'],
       signal,
+    });
+    this.happyEventLogger.logParsed({
+      sessionId: session.id,
+      ...(chatId ? { chatId } : {}),
+      model: selectedModel,
+      turnStatus: 'run_started',
+      channel: 'app_server',
+      stage: 'run_status',
+      payload: {
+        mode: 'app-server',
+        args,
+      },
     });
 
     if (!child.stdin || !child.stdout || !child.stderr) {
@@ -1421,6 +1514,8 @@ export class HappyRuntimeStore {
       : '';
     let activeTurnId = '';
     let turnCompleted = false;
+    let runStatus: 'running' | 'completed' | 'failed' | 'aborted' | 'timed_out' = 'running';
+    let runErrorMessage: string | undefined;
     const runtimePermissionIds = new Set<string>();
 
     const pendingRequests = new Map<string, {
@@ -1448,6 +1543,7 @@ export class HappyRuntimeStore {
       this.happyEventLogger.logParsed({
         sessionId: session.id,
         ...(chatId ? { chatId } : {}),
+        model: selectedModel,
         channel: 'app_server',
         stage: 'parsed_append',
         payload: {
@@ -1827,6 +1923,19 @@ export class HappyRuntimeStore {
 
         const status = asString(turn?.status, '').trim() || 'completed';
         const errorMessage = asString(asRecord(turn?.error)?.message, '').trim() || undefined;
+        this.happyEventLogger.logParsed({
+          sessionId: session.id,
+          ...(chatId ? { chatId } : {}),
+          model: selectedModel,
+          turnStatus: status,
+          channel: 'app_server',
+          stage: 'turn_status',
+          payload: {
+            turnId: completedTurnId || undefined,
+            threadId: resolvedThreadId || undefined,
+            ...(errorMessage ? { errorMessage } : {}),
+          },
+        });
         turnCompleted = true;
         resolveTurnCompletion?.({ status, errorMessage });
       }
@@ -1841,6 +1950,7 @@ export class HappyRuntimeStore {
       this.happyEventLogger.logRaw({
         sessionId: session.id,
         ...(chatId ? { chatId } : {}),
+        model: selectedModel,
         channel: 'app_server',
         line: rawLine,
       });
@@ -1849,6 +1959,7 @@ export class HappyRuntimeStore {
         this.happyEventLogger.logParsed({
           sessionId: session.id,
           ...(chatId ? { chatId } : {}),
+          model: selectedModel,
           channel: 'app_server',
           stage: 'incoming_payload',
           payload: { parseError: 'invalid_json' },
@@ -1858,6 +1969,7 @@ export class HappyRuntimeStore {
       this.happyEventLogger.logParsed({
         sessionId: session.id,
         ...(chatId ? { chatId } : {}),
+        model: selectedModel,
         channel: 'app_server',
         stage: 'incoming_payload',
         payload,
@@ -1982,19 +2094,45 @@ export class HappyRuntimeStore {
         approvalPolicy: codexApprovalPolicy,
       });
       activeTurnId = asString(asRecord(turnStarted.turn)?.id, '').trim();
+      this.happyEventLogger.logParsed({
+        sessionId: session.id,
+        ...(chatId ? { chatId } : {}),
+        model: selectedModel,
+        turnStatus: 'turn_started',
+        channel: 'app_server',
+        stage: 'turn_status',
+        payload: {
+          turnId: activeTurnId || undefined,
+          threadId: resolvedThreadId || undefined,
+          timeoutMs: CODEX_TURN_TIMEOUT_MS,
+        },
+      });
 
+      let turnTimeout: NodeJS.Timeout | undefined;
       const completion = await Promise.race([
         turnCompletion,
         childClosed.then(({ code }) => {
           throw new Error(`codex app-server closed before turn completion (exit code ${code ?? 'null'})`);
         }),
-      ]);
+        new Promise<{ status: string; errorMessage?: string }>((_resolve, reject) => {
+          turnTimeout = setTimeout(() => {
+            runStatus = 'timed_out';
+            runErrorMessage = `turn timeout exceeded (${CODEX_TURN_TIMEOUT_MS}ms)`;
+            reject(new Error(`codex app-server turn timed out after ${CODEX_TURN_TIMEOUT_MS}ms`));
+          }, CODEX_TURN_TIMEOUT_MS);
+        }),
+      ]).finally(() => {
+        if (turnTimeout) {
+          clearTimeout(turnTimeout);
+        }
+      });
 
       await appendChain;
       await permissionChain;
 
       const finalText = lastAgentMessage.trim();
       if (signal?.aborted || completion.status === 'interrupted') {
+        runStatus = 'aborted';
         return {
           output: trimOutput(finalText),
           cwd: safeCwd,
@@ -2006,9 +2144,12 @@ export class HappyRuntimeStore {
 
       if (completion.status === 'failed' && !finalText) {
         const suffix = completion.errorMessage ? `: ${completion.errorMessage}` : '';
+        runStatus = 'failed';
+        runErrorMessage = completion.errorMessage;
         throw new Error(`codex app-server turn failed${suffix}`);
       }
 
+      runStatus = 'completed';
       return {
         output: trimOutput(finalText),
         cwd: safeCwd,
@@ -2016,6 +2157,12 @@ export class HappyRuntimeStore {
         agentMessagePersisted,
         threadId: resolvedThreadId || undefined,
       };
+    } catch (error) {
+      if (runStatus === 'running') {
+        runStatus = signal?.aborted ? 'aborted' : 'failed';
+        runErrorMessage = error instanceof Error ? error.message : String(error);
+      }
+      throw error;
     } finally {
       for (const [key, pending] of pendingRequests.entries()) {
         pending.reject(new Error(`JSON-RPC request cancelled: ${pending.method}`));
@@ -2041,8 +2188,39 @@ export class HappyRuntimeStore {
       }
 
       if (!turnCompleted && !signal?.aborted && stderr.trim()) {
+        if (runStatus === 'running') {
+          runStatus = 'failed';
+          runErrorMessage = 'turn did not complete before process close';
+        }
+        this.happyEventLogger.logParsed({
+          sessionId: session.id,
+          ...(chatId ? { chatId } : {}),
+          model: selectedModel,
+          turnStatus: 'turn_incomplete',
+          channel: 'app_server',
+          stage: 'turn_status',
+          payload: {
+            threadId: resolvedThreadId || undefined,
+            turnId: activeTurnId || undefined,
+            stderrPreview: stripAnsi(stderr).slice(0, 800),
+          },
+        });
         console.error(`codex app-server stderr: ${stripAnsi(stderr).slice(0, 800)}`);
       }
+      this.happyEventLogger.logParsed({
+        sessionId: session.id,
+        ...(chatId ? { chatId } : {}),
+        model: selectedModel,
+        turnStatus: runStatus,
+        channel: 'app_server',
+        stage: 'run_status',
+        payload: {
+          threadId: resolvedThreadId || undefined,
+          turnId: activeTurnId || undefined,
+          turnCompleted,
+          ...(runErrorMessage ? { errorMessage: runErrorMessage } : {}),
+        },
+      });
 
       await closeChild();
     }
@@ -2060,7 +2238,10 @@ export class HappyRuntimeStore {
     const threadCacheKey = buildCodexThreadCacheKey(session.id, chatId);
     const sessionApprovalPolicy = this.resolveSessionApprovalPolicy(session);
     const codexApprovalPolicy = normalizeCodexApprovalPolicy(sessionApprovalPolicy);
-    const selectedModel = normalizeModel(model) ?? normalizeModel(session.metadata.model);
+    const selectedModel = normalizeModel(model) ?? resolveRuntimeModelSelection({
+      agent: 'codex',
+      sessionModel: session.metadata.model,
+    }).model;
     const autoApproveAll = sessionApprovalPolicy === 'yolo';
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
     const execArgs = threadId
@@ -2079,6 +2260,18 @@ export class HappyRuntimeStore {
       env: { ...process.env, PATH: mergedPath },
       stdio: ['pipe', 'pipe', 'pipe'],
       signal,
+    });
+    this.happyEventLogger.logParsed({
+      sessionId: session.id,
+      ...(chatId ? { chatId } : {}),
+      model: selectedModel,
+      turnStatus: 'run_started',
+      channel: 'exec_cli',
+      stage: 'run_status',
+      payload: {
+        mode: 'exec',
+        args,
+      },
     });
 
     const stdoutLines = createInterface({ input: child.stdout });
@@ -2100,6 +2293,7 @@ export class HappyRuntimeStore {
       this.happyEventLogger.logParsed({
         sessionId: session.id,
         ...(chatId ? { chatId } : {}),
+        model: selectedModel,
         channel: 'exec_cli',
         stage: 'parsed_append',
         payload: {
@@ -2160,6 +2354,7 @@ export class HappyRuntimeStore {
       this.happyEventLogger.logRaw({
         sessionId: session.id,
         ...(chatId ? { chatId } : {}),
+        model: selectedModel,
         channel: 'exec_cli',
         line: rawLine,
       });
@@ -2168,6 +2363,7 @@ export class HappyRuntimeStore {
         this.happyEventLogger.logParsed({
           sessionId: session.id,
           ...(chatId ? { chatId } : {}),
+          model: selectedModel,
           channel: 'exec_cli',
           stage: 'incoming_payload',
           payload: { parseError: 'invalid_json' },
@@ -2177,6 +2373,7 @@ export class HappyRuntimeStore {
       this.happyEventLogger.logParsed({
         sessionId: session.id,
         ...(chatId ? { chatId } : {}),
+        model: selectedModel,
         channel: 'exec_cli',
         stage: 'incoming_payload',
         payload,
@@ -2322,6 +2519,17 @@ export class HappyRuntimeStore {
 
     const finalText = lastAgentMessage.trim();
     if (signal?.aborted) {
+      this.happyEventLogger.logParsed({
+        sessionId: session.id,
+        ...(chatId ? { chatId } : {}),
+        model: selectedModel,
+        turnStatus: 'aborted',
+        channel: 'exec_cli',
+        stage: 'run_status',
+        payload: {
+          threadId: resolvedThreadId || undefined,
+        },
+      });
       return {
         output: trimOutput(finalText),
         cwd: safeCwd,
@@ -2333,9 +2541,34 @@ export class HappyRuntimeStore {
 
     if (result.code !== 0 && !finalText) {
       const detail = stripAnsi(stderr).slice(0, 800) || `exit code ${result.code}`;
+      this.happyEventLogger.logParsed({
+        sessionId: session.id,
+        ...(chatId ? { chatId } : {}),
+        model: selectedModel,
+        turnStatus: 'failed',
+        channel: 'exec_cli',
+        stage: 'run_status',
+        payload: {
+          threadId: resolvedThreadId || undefined,
+          exitCode: result.code,
+          errorMessage: detail,
+        },
+      });
       throw new Error(`codex CLI failed: ${detail}`);
     }
 
+    this.happyEventLogger.logParsed({
+      sessionId: session.id,
+      ...(chatId ? { chatId } : {}),
+      model: selectedModel,
+      turnStatus: 'completed',
+      channel: 'exec_cli',
+      stage: 'run_status',
+      payload: {
+        threadId: resolvedThreadId || undefined,
+        exitCode: result.code,
+      },
+    });
     return {
       output: trimOutput(finalText),
       cwd: safeCwd,
@@ -2383,7 +2616,7 @@ export class HappyRuntimeStore {
   private async generateAndPersistAgentReply(
     session: RuntimeSession,
     prompt: string,
-    context: { chatId?: string; threadId?: string; agent?: RuntimeAgent; model?: string } = {},
+    context: { chatId?: string; threadId?: string; agent?: RuntimeAgent; model?: string; customModel?: string } = {},
   ): Promise<void> {
     const flavor = context.agent && context.agent !== 'unknown'
       ? context.agent
@@ -2395,14 +2628,44 @@ export class HappyRuntimeStore {
     const scopedChatId = typeof context.chatId === 'string' && context.chatId.trim().length > 0
       ? context.chatId.trim()
       : undefined;
-    const selectedModel = normalizeModel(context.model) ?? normalizeModel(session.metadata.model);
+    await this.cleanupStaleRuns('before_new_run');
+    const modelSelection = resolveRuntimeModelSelection({
+      agent: flavor,
+      requestedModel: context.model,
+      sessionModel: session.metadata.model,
+      customModel: context.customModel,
+    });
+    const selectedModel = modelSelection.model;
+    if (modelSelection.source !== 'requested') {
+      this.happyEventLogger.logParsed({
+        sessionId: session.id,
+        ...(scopedChatId ? { chatId: scopedChatId } : {}),
+        model: selectedModel,
+        turnStatus: 'model_normalized',
+        channel: flavor === 'codex' && CODEX_RUNTIME_MODE !== 'exec' ? 'app_server' : 'exec_cli',
+        stage: 'run_status',
+        payload: {
+          source: modelSelection.source,
+          ...(modelSelection.fallbackReason ? { fallbackReason: modelSelection.fallbackReason } : {}),
+          ...(modelSelection.requestedModel ? { requestedModel: modelSelection.requestedModel } : {}),
+          ...(modelSelection.customModel ? { customModel: modelSelection.customModel } : {}),
+        },
+      });
+    }
     const runKey = this.buildRunKey(session.id, scopedChatId);
     const controller = new AbortController();
     const existing = this.activeRuns.get(runKey);
-    if (existing && !existing.signal.aborted) {
-      existing.abort();
+    if (existing && !existing.controller.signal.aborted) {
+      existing.controller.abort();
     }
-    this.activeRuns.set(runKey, controller);
+    this.activeRuns.set(runKey, {
+      controller,
+      sessionId: session.id,
+      ...(scopedChatId ? { chatId: scopedChatId } : {}),
+      startedAt: Date.now(),
+      agent: flavor,
+      ...(selectedModel ? { model: selectedModel } : {}),
+    });
 
     try {
       const isCodex = flavor === 'codex';
@@ -2487,6 +2750,7 @@ export class HappyRuntimeStore {
             hasDiffSignal: action.hasDiffSignal,
             streamEvent: 'agent_stream_action',
             agent: flavor,
+            model: selectedModel,
           }, {
             type: 'tool',
             title: action.title,
@@ -2502,6 +2766,7 @@ export class HappyRuntimeStore {
           requestedPath: session.metadata.path,
           execCwd: response.cwd,
           agent: flavor,
+          model: selectedModel,
           ...(response.threadId ? { threadId: response.threadId } : {}),
         });
       }
@@ -2520,6 +2785,7 @@ export class HappyRuntimeStore {
         await this.appendAgentMessage(session.id, `에이전트 실행 오류: ${message}`, {
           ...(scopedChatId ? { chatId: scopedChatId } : {}),
           requestedPath: session.metadata.path,
+          model: selectedModel,
           error: true,
         });
       } catch (persistError) {
@@ -2528,7 +2794,7 @@ export class HappyRuntimeStore {
       }
     } finally {
       const current = this.activeRuns.get(runKey);
-      if (current === controller) {
+      if (current?.controller === controller) {
         this.activeRuns.delete(runKey);
       }
     }
@@ -2720,11 +2986,13 @@ export class HappyRuntimeStore {
         : undefined;
       const requestedAgent = normalizeAgent(input.meta?.agent);
       const requestedModel = normalizeModel(input.meta?.model);
+      const customModel = normalizeModel(input.meta?.customModel);
       void this.generateAndPersistAgentReply(session, input.text, {
         chatId,
         threadId,
         ...(requestedAgent !== 'unknown' ? { agent: requestedAgent } : {}),
         ...(requestedModel ? { model: requestedModel } : {}),
+        ...(customModel ? { customModel } : {}),
       });
     }
 
@@ -2775,6 +3043,7 @@ export class HappyRuntimeStore {
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
     }
+    await this.cleanupStaleRuns('runtime_status_poll');
     if (chatId && chatId.trim().length > 0) {
       return this.activeRuns.has(this.buildRunKey(sessionId, chatId));
     }
