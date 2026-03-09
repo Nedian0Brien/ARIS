@@ -1694,12 +1694,26 @@ export function ChatInterface({
   const [customModels, setCustomModels] = useState<CustomModels>({});
   
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('customAiModels');
-      if (stored) {
-        setCustomModels(JSON.parse(stored));
-      }
-    } catch {}
+    fetch('/api/settings/models')
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.error) {
+          setCustomModels({
+            codex: data.codex || '',
+            claude: data.claude || '',
+            gemini: data.gemini || '',
+          });
+        }
+      })
+      .catch(() => {
+        // Fallback to localStorage if API fails (e.g. network issue)
+        try {
+          const stored = localStorage.getItem('customAiModels');
+          if (stored) {
+            setCustomModels(JSON.parse(stored));
+          }
+        } catch {}
+      });
   }, []);
 
   const [chats, setChats] = useState<SessionChat[]>(() => sortSessionChats(initialChats));

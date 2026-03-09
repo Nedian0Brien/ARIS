@@ -29,13 +29,19 @@ export function SettingsTab() {
       })
       .catch(() => {});
 
-    // Load custom models from localStorage
-    const savedModels = localStorage.getItem('customAiModels');
-    if (savedModels) {
-      try {
-        setCustomModels(JSON.parse(savedModels));
-      } catch (e) {}
-    }
+    // Load custom models from DB
+    fetch('/api/settings/models')
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.error) {
+          setCustomModels({
+            codex: data.codex || '',
+            claude: data.claude || '',
+            gemini: data.gemini || '',
+          });
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const loadFile = useCallback((file: File) => {
@@ -90,15 +96,26 @@ export function SettingsTab() {
     }
   };
 
-  const handleModelSave = () => {
+  const handleModelSave = async () => {
     setModelSaving(true);
     setModelFeedback(null);
     try {
-      localStorage.setItem('customAiModels', JSON.stringify(customModels));
-      setModelFeedback({ ok: true, msg: 'AI 모델 설정이 저장되었습니다.' });
-      setTimeout(() => setModelFeedback(null), 3000);
+      const res = await fetch('/api/settings/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(customModels),
+      });
+      if (!res.ok) {
+        setModelFeedback({ ok: false, msg: '저장 실패' });
+      } else {
+        // Also keep local storage as a fallback/fast-load cache for UI if needed,
+        // but now the DB is the source of truth.
+        localStorage.setItem('customAiModels', JSON.stringify(customModels));
+        setModelFeedback({ ok: true, msg: 'AI 모델 설정이 저장되었습니다.' });
+        setTimeout(() => setModelFeedback(null), 3000);
+      }
     } catch {
-      setModelFeedback({ ok: false, msg: '저장 실패' });
+      setModelFeedback({ ok: false, msg: '네트워크 오류' });
     } finally {
       setModelSaving(false);
     }
