@@ -1688,6 +1688,8 @@ export function ChatInterface({
     [chats, selectedChatId],
   );
   const activeChatIdResolved = activeChat?.id ?? null;
+  const activeChatLastActivityAt = activeChat?.lastActivityAt ?? null;
+  const activeChatCreatedAt = activeChat?.createdAt ?? null;
   const includeUnassignedEvents = Boolean(activeChat?.isDefault);
   const sessionTitle = alias || projectName;
   const currentChatTitle = activeChat?.title || '새 채팅';
@@ -2276,11 +2278,11 @@ export function ChatInterface({
     }
 
     const latestEventAt = snapshot.latestEventAt;
-    const activeChat = chats.find((chat) => chat.id === activeChatIdResolved);
-    const latestEventAtMs = latestEventAt ? Date.parse(latestEventAt) : Number.NaN;
-    const lastActivityAtMs = activeChat?.lastActivityAt ? Date.parse(activeChat.lastActivityAt) : Number.NaN;
-    const shouldTouchActivity = Number.isFinite(latestEventAtMs)
-      && (!Number.isFinite(lastActivityAtMs) || latestEventAtMs > lastActivityAtMs);
+    const latestEventAtTimestamp = latestEventAt ? Date.parse(latestEventAt) : Number.NaN;
+    const baselineActivityAt = activeChatLastActivityAt ?? activeChatCreatedAt;
+    const baselineActivityTimestamp = baselineActivityAt ? Date.parse(baselineActivityAt) : Number.NaN;
+    const shouldTouchActivity = Number.isFinite(latestEventAtTimestamp)
+      && (!Number.isFinite(baselineActivityTimestamp) || latestEventAtTimestamp > baselineActivityTimestamp);
     snapshotSyncInFlightRef.current[activeChatIdResolved] = true;
     void fetch(
       `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
@@ -2315,7 +2317,7 @@ export function ChatInterface({
       .finally(() => {
         delete snapshotSyncInFlightRef.current[activeChatIdResolved];
       });
-  }, [activeChatIdResolved, chatSidebarSnapshots, chats, sessionId]);
+  }, [activeChatCreatedAt, activeChatIdResolved, activeChatLastActivityAt, chatSidebarSnapshots, sessionId]);
 
   useEffect(() => {
     const pending = Object.entries(chatReadMarkers).filter(([chatId, marker]) => (
