@@ -84,6 +84,12 @@ export function useSessionEvents(
   );
   const hydratedInitialHasMoreBefore = initialEventsMatchChat ? initialHasMoreBefore : false;
   const [events, setEvents] = useState<UiEvent[]>(hydratedInitialEvents);
+  // Tracks which chatId the current `events` state belongs to.
+  // Used by callers to avoid consuming stale events from a previously active chat
+  // during the render cycle before the state reset effect fires.
+  const [eventsForChatId, setEventsForChatId] = useState<string | null>(
+    initialEventsMatchChat ? chatId : null,
+  );
   const [hasMoreBefore, setHasMoreBefore] = useState<boolean>(hydratedInitialHasMoreBefore);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -94,6 +100,7 @@ export function useSessionEvents(
 
   useEffect(() => {
     setEvents(hydratedInitialEvents);
+    setEventsForChatId(chatId);
     eventsRef.current = hydratedInitialEvents;
     setHasMoreBefore(hydratedInitialHasMoreBefore);
     hasMoreBeforeRef.current = hydratedInitialHasMoreBefore;
@@ -426,5 +433,5 @@ export function useSessionEvents(
     setEvents((prev) => mergeEvents([...prev, event]));
   };
 
-  return { events, addEvent, syncError, loadOlder, hasMoreBefore, isLoadingOlder };
+  return { events, eventsForChatId, addEvent, syncError, loadOlder, hasMoreBefore, isLoadingOlder };
 }
