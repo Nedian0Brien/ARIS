@@ -680,6 +680,113 @@ function looksLikeActionTranscript(value: string): boolean {
   );
 }
 
+function buildActionEventKey(action: ParsedAgentActionEvent): string {
+  const actionType = action.actionType;
+  const callId = action.callId?.trim() ?? '';
+  const command = action.command?.trim() ?? '';
+  const path = action.path?.trim() ?? '';
+  if (callId) {
+    return `${actionType}|${callId}`;
+  }
+  return `${actionType}|${command}|${path}`;
+}
+
+function parseAgentStreamLine(line: string): { action?: ParsedAgentActionEvent; actionKey?: string; assistantText?: string } {
+  const payload = parseJsonLine(line);
+  if (!payload) {
+    return {};
+  }
+
+  const payloadType = asString(payload.type, '').trim().toLowerCase();
+  const payloadSubtype = asString(payload.subtype, '').trim().toLowerCase();
+  const lineLower = line.toLowerCase();
+  const records = collectNestedRecords(payload);
+  const commandRaw = extractFirstStringByKeys(records, [
+    'command',
+    'cmd',
+    'parsed_cmd',
+    'shellCommand',
+    'shell_command',
+  ]);
+  const command = commandRaw ? unwrapShellCommand(commandRaw) : '';
+  const path = extractFirstStringByKeys(records, [
+    'path',
+    'filePath',
+    'file_path',
+    'targetPath',
+    'target_path',
+    'name',
+  ]);
+  const outputCandidate = extractFirstStringByKeys(records, [
+    'aggregatedOutput',
+    'aggregated_output',
+    'output',
+    'stdout',
+    'result',
+    'text',
+  ]);
+  const diffStats = summarizeDiffText(outputCandidate);
+  const normalizedPath = path && (path.includes('/') || path.includes('.') || path.startsWith('~')) ? path : '';
+  const callId = extractFirstStringByKeys(records, [
+    'callId',
+    'call_id',
+    'toolCallId',
+    'tool_call_id',
+    'call',
+  ]);
+
+  let action: ParsedAgentActionEvent | undefined;
+  let actionType: ParsedAgentActionEvent['actionType'] | null = null;
+  if (command && looksLikeShellCommand(command)) {
+    actionType = inferActionTypeFromCommand(command);
+  } else if (normalizedPath && /(write|patch|modify|edit|create|delete|update|changed)/i.test(lineLower)) {
+    actionType = 'file_write';
+  } else if (normalizedPath && /(read|open|inspect|view|cat|grep|sed -n)/i.test(lineLower)) {
+    actionType = 'file_read';
+  } else if (/(directory listing|file list|\bls\b|\btree\b|rg --files)/i.test(lineLower)) {
+    actionType = 'file_list';
+  }
+
+  if (actionType) {
+    const resolvedPath = normalizedPath || extractPathFromCommand(command);
+    action = {
+      actionType,
+      title: titleForActionType(actionType),
+      callId: callId || undefined,
+      command: command || undefined,
+      path: resolvedPath || undefined,
+      output: outputCandidate || undefined,
+      additions: diffStats.additions,
+      deletions: diffStats.deletions,
+      hasDiffSignal: diffStats.hasDiffSignal,
+    };
+  }
+
+  const isSystem = payloadType === 'system' || payloadSubtype === 'init';
+  const seemsToolEvent = (
+    lineLower.includes('commandexecution')
+    || lineLower.includes('exec_command')
+    || lineLower.includes('tool')
+    || lineLower.includes('file_change')
+    || lineLower.includes('filechange')
+  );
+  const seemsAssistantEvent = (
+    payloadType.includes('assistant')
+    || payloadSubtype.includes('assistant')
+    || payloadSubtype.includes('final')
+    || payloadType === 'result'
+    || lineLower.includes('"agent_message"')
+  );
+  const assistantText = (!isSystem && !seemsToolEvent && seemsAssistantEvent)
+    ? extractFirstStringByKeys(records, ['text', 'message', 'content', 'output'])
+    : '';
+
+  return {
+    ...(action ? { action, actionKey: buildActionEventKey(action) } : {}),
+    ...(assistantText ? { assistantText } : {}),
+  };
+}
+
 function parseAgentStreamOutput(stdout: string): { output: string; actions: ParsedAgentActionEvent[] } {
   const lines = stdout
     .replace(/\r\n/g, '\n')
@@ -690,104 +797,17 @@ function parseAgentStreamOutput(stdout: string): { output: string; actions: Pars
   let latestAssistantText = '';
 
   for (const line of lines) {
-    const payload = parseJsonLine(line);
-    if (!payload) {
-      continue;
+    const parsedLine = parseAgentStreamLine(line);
+    if (parsedLine.action && parsedLine.actionKey && !actionByKey.has(parsedLine.actionKey)) {
+      actionByKey.set(parsedLine.actionKey, parsedLine.action);
     }
-    const payloadType = asString(payload.type, '').trim().toLowerCase();
-    const payloadSubtype = asString(payload.subtype, '').trim().toLowerCase();
-    const lineLower = line.toLowerCase();
-    const records = collectNestedRecords(payload);
-    const commandRaw = extractFirstStringByKeys(records, [
-      'command',
-      'cmd',
-      'parsed_cmd',
-      'shellCommand',
-      'shell_command',
-    ]);
-    const command = commandRaw ? unwrapShellCommand(commandRaw) : '';
-    const path = extractFirstStringByKeys(records, [
-      'path',
-      'filePath',
-      'file_path',
-      'targetPath',
-      'target_path',
-      'name',
-    ]);
-    const outputCandidate = extractFirstStringByKeys(records, [
-      'aggregatedOutput',
-      'aggregated_output',
-      'output',
-      'stdout',
-      'result',
-      'text',
-    ]);
-    const diffStats = summarizeDiffText(outputCandidate);
-    const normalizedPath = path && (path.includes('/') || path.includes('.') || path.startsWith('~')) ? path : '';
-    const callId = extractFirstStringByKeys(records, [
-      'callId',
-      'call_id',
-      'toolCallId',
-      'tool_call_id',
-      'call',
-    ]);
-
-    let actionType: ParsedAgentActionEvent['actionType'] | null = null;
-    if (command && looksLikeShellCommand(command)) {
-      actionType = inferActionTypeFromCommand(command);
-    } else if (normalizedPath && /(write|patch|modify|edit|create|delete|update|changed)/i.test(lineLower)) {
-      actionType = 'file_write';
-    } else if (normalizedPath && /(read|open|inspect|view|cat|grep|sed -n)/i.test(lineLower)) {
-      actionType = 'file_read';
-    } else if (/(directory listing|file list|\bls\b|\btree\b|rg --files)/i.test(lineLower)) {
-      actionType = 'file_list';
-    }
-
-    if (actionType) {
-      const resolvedPath = normalizedPath || extractPathFromCommand(command);
-      const key = callId
-        ? `${actionType}|${callId}`
-        : `${actionType}|${command}|${resolvedPath}`;
-      if (!actionByKey.has(key)) {
-        actionByKey.set(key, {
-          actionType,
-          title: titleForActionType(actionType),
-          callId: callId || undefined,
-          command: command || undefined,
-          path: resolvedPath || undefined,
-          output: outputCandidate || undefined,
-          additions: diffStats.additions,
-          deletions: diffStats.deletions,
-          hasDiffSignal: diffStats.hasDiffSignal,
-        });
-      }
-    }
-
-    const isSystem = payloadType === 'system' || payloadSubtype === 'init';
-    const seemsToolEvent = (
-      lineLower.includes('commandexecution')
-      || lineLower.includes('exec_command')
-      || lineLower.includes('tool')
-      || lineLower.includes('file_change')
-      || lineLower.includes('filechange')
-    );
-    const seemsAssistantEvent = (
-      payloadType.includes('assistant')
-      || payloadSubtype.includes('assistant')
-      || payloadSubtype.includes('final')
-      || payloadType === 'result'
-      || lineLower.includes('"agent_message"')
-    );
-    if (!isSystem && !seemsToolEvent && seemsAssistantEvent) {
-      const assistantText = extractFirstStringByKeys(records, ['text', 'message', 'content', 'output']);
-      if (
-        assistantText
-        && !looksLikeShellCommand(assistantText)
-        && !looksLikeActionTranscript(assistantText)
-        && assistantText.length >= latestAssistantText.length
-      ) {
-        latestAssistantText = assistantText;
-      }
+    if (
+      parsedLine.assistantText
+      && !looksLikeShellCommand(parsedLine.assistantText)
+      && !looksLikeActionTranscript(parsedLine.assistantText)
+      && parsedLine.assistantText.length >= latestAssistantText.length
+    ) {
+      latestAssistantText = parsedLine.assistantText;
     }
   }
 
@@ -1244,6 +1264,7 @@ function buildAgentCommand(
 }
 
 export const happyClientTestHooks = {
+  parseAgentStreamLine,
   parseAgentStreamOutput,
   looksLikeActionTranscript,
   parseMessagePayloadText,
@@ -1432,7 +1453,8 @@ export class HappyRuntimeStore {
     cwdHint?: string,
     signal?: AbortSignal,
     resumeId?: string,
-  ): Promise<{ output: string; cwd: string; inferredActions: ParsedAgentActionEvent[] }> {
+    handlers?: { onAction?: (action: ParsedAgentActionEvent) => Promise<void> },
+  ): Promise<{ output: string; cwd: string; inferredActions: ParsedAgentActionEvent[]; streamedActionsPersisted: boolean }> {
     const command = buildAgentCommand(agent, prompt, approvalPolicy, model, resumeId);
     if (!command) {
       throw new Error(`Unsupported agent flavor: ${agent}`);
@@ -1462,16 +1484,167 @@ export class HappyRuntimeStore {
           signal,
         })
     );
+    const runCommandStreaming = async (
+      args: string[],
+      onAction?: (action: ParsedAgentActionEvent) => Promise<void>,
+    ): Promise<{
+      stdout: string;
+      stderr: string;
+      actions: ParsedAgentActionEvent[];
+      streamedActionsPersisted: boolean;
+    }> => new Promise((resolve, reject) => {
+      let child: ReturnType<typeof spawn>;
+      try {
+        child = command.requiresPty
+          ? spawn(
+            'script',
+            ['-q', '-c', `${shellEscapeSingle(command.command)} ${args.map(shellEscapeSingle).join(' ')}`, '/dev/null'],
+            {
+              cwd: safeCwd,
+              env: { ...spawnEnv, PATH: mergedPath },
+              signal,
+            },
+          )
+          : spawn(command.command, args, {
+            cwd: safeCwd,
+            env: { ...spawnEnv, PATH: mergedPath },
+            signal,
+          });
+      } catch (error) {
+        reject(error);
+        return;
+      }
+
+      const actionByKey = new Map<string, ParsedAgentActionEvent>();
+      let streamedActionsPersisted = false;
+      let stdoutBuffer = '';
+      let stderrBuffer = '';
+      let lineBuffer = '';
+      let emitChain: Promise<void> = Promise.resolve();
+      let settled = false;
+      let timeoutHandle: NodeJS.Timeout | null = setTimeout(() => {
+        timeoutHandle = null;
+        child.kill('SIGTERM');
+      }, AGENT_COMMAND_TIMEOUT_MS);
+
+      const settleReject = (error: unknown) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+          timeoutHandle = null;
+        }
+        reject(error instanceof Error ? error : new Error(String(error)));
+      };
+
+      const parseLine = (rawLine: string) => {
+        const normalized = stripAnsi(rawLine).trim();
+        if (!normalized) {
+          return;
+        }
+        const parsedLine = parseAgentStreamLine(normalized);
+        if (parsedLine.action && parsedLine.actionKey && !actionByKey.has(parsedLine.actionKey)) {
+          actionByKey.set(parsedLine.actionKey, parsedLine.action);
+          if (onAction) {
+            emitChain = emitChain.then(async () => {
+              await onAction(parsedLine.action!);
+              streamedActionsPersisted = true;
+            });
+          }
+        }
+      };
+
+      const flushLineBuffer = () => {
+        const remainder = lineBuffer.trim();
+        if (remainder) {
+          parseLine(remainder);
+        }
+        lineBuffer = '';
+      };
+
+      child.stdout?.on('data', (chunk: Buffer | string) => {
+        const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+        stdoutBuffer += text;
+        lineBuffer += text;
+        let lineEnd = lineBuffer.indexOf('\n');
+        while (lineEnd >= 0) {
+          const rawLine = lineBuffer.slice(0, lineEnd).replace(/\r$/, '');
+          parseLine(rawLine);
+          lineBuffer = lineBuffer.slice(lineEnd + 1);
+          lineEnd = lineBuffer.indexOf('\n');
+        }
+      });
+
+      child.stderr?.on('data', (chunk: Buffer | string) => {
+        stderrBuffer += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+      });
+
+      child.once('error', (error) => {
+        settleReject(error);
+      });
+
+      child.once('close', (code, closeSignal) => {
+        if (settled) {
+          return;
+        }
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+          timeoutHandle = null;
+        }
+        flushLineBuffer();
+        emitChain
+          .then(() => {
+            if (signal?.aborted) {
+              throw new Error('The operation was aborted');
+            }
+            if (code !== 0) {
+              const detail = stripAnsi(stderrBuffer || stdoutBuffer || '').slice(0, 800);
+              throw new Error(`${agent} CLI failed (${code}${closeSignal ? `/${closeSignal}` : ''}): ${detail || 'Unknown CLI error'}`);
+            }
+            settled = true;
+            resolve({
+              stdout: stdoutBuffer,
+              stderr: stderrBuffer,
+              actions: [...actionByKey.values()],
+              streamedActionsPersisted,
+            });
+          })
+          .catch((error) => {
+            settleReject(error);
+          });
+      });
+    });
 
     let result: { stdout: string; stderr: string } | null = null;
     let lastError: unknown = null;
-    try {
-      result = await runCommand(command.args);
-    } catch (error) {
-      if (isAbortFailure(error)) {
-        throw error;
+    let inferredActions: ParsedAgentActionEvent[] = [];
+    let streamedActionsPersisted = false;
+    if (command.streamJson && handlers?.onAction) {
+      try {
+        const streamed = await runCommandStreaming(command.args, handlers.onAction);
+        result = {
+          stdout: streamed.stdout,
+          stderr: streamed.stderr,
+        };
+        inferredActions = streamed.actions;
+        streamedActionsPersisted = streamed.streamedActionsPersisted;
+      } catch (error) {
+        if (isAbortFailure(error)) {
+          throw error;
+        }
+        lastError = error;
       }
-      lastError = error;
+    } else {
+      try {
+        result = await runCommand(command.args);
+      } catch (error) {
+        if (isAbortFailure(error)) {
+          throw error;
+        }
+        lastError = error;
+      }
     }
 
     if (!result && command.retryArgsOnFailure && command.retryArgsOnFailure.length > 0) {
@@ -1495,11 +1668,12 @@ export class HappyRuntimeStore {
 
     const cleanedStdout = stripAnsi(result.stdout || '');
     const cleanedStderr = stripAnsi(result.stderr || '');
-    let inferredActions: ParsedAgentActionEvent[] = [];
     let output = '';
     if (command.streamJson) {
       const parsed = parseAgentStreamOutput(cleanedStdout);
-      inferredActions = parsed.actions;
+      if (inferredActions.length === 0) {
+        inferredActions = parsed.actions;
+      }
       output = trimOutput(parsed.output || '');
       const needsFallback = !output || looksLikeActionTranscript(output);
       if (needsFallback && command.fallbackArgs && command.fallbackArgs.length > 0) {
@@ -1531,7 +1705,7 @@ export class HappyRuntimeStore {
     if (!output) {
       throw new Error(`${agent} returned an empty response`);
     }
-    return { output, cwd: safeCwd, inferredActions };
+    return { output, cwd: safeCwd, inferredActions, streamedActionsPersisted };
   }
 
   private async appendAgentMessage(
@@ -2815,8 +2989,51 @@ export class HappyRuntimeStore {
         cwd: string;
         streamedPersisted?: boolean;
         agentMessagePersisted?: boolean;
+        streamedActionsPersisted?: boolean;
         threadId?: string;
         inferredActions?: ParsedAgentActionEvent[];
+      };
+      const appendNonCodexAction = async (
+        action: ParsedAgentActionEvent,
+        indexSeed: number,
+        cwd: string,
+        threadId?: string,
+      ) => {
+        const sessionCallId = (action.callId || `call-${indexSeed + 1}`).trim();
+        const outputPreview = action.output ? trimOutput(action.output) : '';
+        const bodyParts = [
+          action.command ? `$ ${action.command}` : '',
+          action.path ? `path: ${action.path}` : '',
+          outputPreview,
+        ].filter(Boolean);
+        const body = bodyParts.join('\n').trim();
+        if (!body) {
+          return;
+        }
+
+        await this.appendAgentMessage(session.id, body, {
+          ...(scopedChatId ? { chatId: scopedChatId } : {}),
+          requestedPath: session.metadata.path,
+          execCwd: cwd,
+          actionType: action.actionType,
+          normalizedActionKind: action.actionType,
+          command: action.command,
+          path: action.path,
+          additions: action.additions,
+          deletions: action.deletions,
+          hasDiffSignal: action.hasDiffSignal,
+          ...buildSessionHintMeta({
+            eventType: 'tool-call-end',
+            callId: sessionCallId,
+          }),
+          streamEvent: 'agent_stream_action',
+          agent: flavor,
+          model: selectedModel,
+          ...(threadId ? { threadId } : {}),
+        }, {
+          type: 'tool',
+          title: action.title,
+        });
       };
 
       if (isCodex) {
@@ -2840,6 +3057,8 @@ export class HappyRuntimeStore {
           response = await this.runCodexCliWithEvents(session, prompt, controller.signal, undefined, scopedChatId, selectedModel);
         }
       } else {
+        const nonCodexCwd = this.resolveExecutionCwd(session.metadata.path);
+        let streamedActionIndex = 0;
         const nonCodex = await this.runAgentCli(
           flavor,
           prompt,
@@ -2848,12 +3067,19 @@ export class HappyRuntimeStore {
           session.metadata.path,
           controller.signal,
           preferredThreadId,
+          {
+            onAction: async (action) => {
+              await appendNonCodexAction(action, streamedActionIndex, nonCodexCwd, preferredThreadId);
+              streamedActionIndex += 1;
+            },
+          },
         );
         response = {
           output: nonCodex.output,
           cwd: nonCodex.cwd,
           streamedPersisted: false,
           agentMessagePersisted: false,
+          streamedActionsPersisted: nonCodex.streamedActionsPersisted,
           inferredActions: nonCodex.inferredActions,
           threadId: preferredThreadId,
         };
@@ -2863,43 +3089,14 @@ export class HappyRuntimeStore {
         this.codexThreads.set(threadCacheKey, response.threadId);
       }
 
-      if (!isCodex && Array.isArray(response.inferredActions) && response.inferredActions.length > 0) {
+      if (
+        !isCodex
+        && !response.streamedActionsPersisted
+        && Array.isArray(response.inferredActions)
+        && response.inferredActions.length > 0
+      ) {
         for (const [index, action] of response.inferredActions.slice(0, 10).entries()) {
-          const sessionCallId = (action.callId || `call-${index + 1}`).trim();
-          const outputPreview = action.output ? trimOutput(action.output) : '';
-          const bodyParts = [
-            action.command ? `$ ${action.command}` : '',
-            action.path ? `path: ${action.path}` : '',
-            outputPreview,
-          ].filter(Boolean);
-          const body = bodyParts.join('\n').trim();
-          if (!body) {
-            continue;
-          }
-
-          await this.appendAgentMessage(session.id, body, {
-            ...(scopedChatId ? { chatId: scopedChatId } : {}),
-            requestedPath: session.metadata.path,
-            execCwd: response.cwd,
-            actionType: action.actionType,
-            normalizedActionKind: action.actionType,
-            command: action.command,
-            path: action.path,
-            additions: action.additions,
-            deletions: action.deletions,
-            hasDiffSignal: action.hasDiffSignal,
-            ...buildSessionHintMeta({
-              eventType: 'tool-call-end',
-              callId: sessionCallId,
-            }),
-            streamEvent: 'agent_stream_action',
-            agent: flavor,
-            model: selectedModel,
-            ...(response.threadId ? { threadId: response.threadId } : {}),
-          }, {
-            type: 'tool',
-            title: action.title,
-          });
+          await appendNonCodexAction(action, index, response.cwd, response.threadId);
         }
       }
 

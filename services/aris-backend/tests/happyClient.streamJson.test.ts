@@ -72,6 +72,22 @@ describe('happyClient stream-json parsing', () => {
     expect(parsed.actions[0]?.command).toBe('git status');
   });
 
+  it('parses a single stream-json line into action metadata', () => {
+    const line = JSON.stringify({
+      type: 'tool',
+      subtype: 'command_execution',
+      callId: 'call-line-1',
+      command: 'ls -la',
+      output: 'total 12',
+    });
+
+    const parsed = happyClientTestHooks.parseAgentStreamLine(line);
+    expect(parsed.action?.actionType).toBe('file_list');
+    expect(parsed.action?.callId).toBe('call-line-1');
+    expect(parsed.action?.command).toBe('ls -la');
+    expect(parsed.actionKey).toContain('call-line-1');
+  });
+
   it('builds session hint meta for text and tool-call events', () => {
     const textMeta = happyClientTestHooks.buildSessionHintMeta({
       eventType: 'text',
