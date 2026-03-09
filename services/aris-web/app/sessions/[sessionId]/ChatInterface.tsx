@@ -1751,7 +1751,7 @@ export function ChatInterface({
     loadingPermissionId,
     decidePermission,
     error: permissionError,
-  } = usePermissions(sessionId, initialPermissions);
+  } = usePermissions(sessionId, initialPermissions, activeChatIdResolved, includeUnassignedEvents);
 
   const [prompt, setPrompt] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -2041,7 +2041,7 @@ export function ChatInterface({
     if (isRunningState || hasFeedback) {
       return 'running';
     }
-    if (hasUnread && snapshot?.hasEvents && !snapshot.latestEventIsUser) {
+    if (!isActive && hasUnread && snapshot?.hasEvents && !snapshot.latestEventIsUser) {
       return 'completed';
     }
     return 'default';

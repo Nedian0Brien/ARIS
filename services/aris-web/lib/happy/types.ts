@@ -117,6 +117,7 @@ export type PermissionDecision = 'allow_once' | 'allow_session' | 'deny';
 export type PermissionRequest = {
   id: string;
   sessionId: string;
+  chatId?: string | null;
   agent: SessionSummary['agent'];
   command: string;
   reason: string;

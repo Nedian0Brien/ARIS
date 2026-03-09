@@ -35,6 +35,7 @@ export type RuntimeMessage = {
 export type PermissionRequest = {
   id: string;
   sessionId: string;
+  chatId?: string | null;
   agent: AgentFlavor;
   command: string;
   reason: string;

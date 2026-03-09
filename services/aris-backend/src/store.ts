@@ -42,6 +42,7 @@ type AppendMessageInput = {
 
 type CreatePermissionInput = {
   sessionId: string;
+  chatId?: string | null;
   agent: PermissionRequest['agent'];
   command: string;
   reason: string;
@@ -261,6 +262,9 @@ class MockRuntimeStore implements RuntimeStoreBackend {
     const permission: PermissionRequest = {
       id: randomUUID(),
       sessionId: input.sessionId,
+      ...(typeof input.chatId === 'string' && input.chatId.trim().length > 0
+        ? { chatId: input.chatId.trim() }
+        : {}),
       agent: input.agent,
       command: input.command,
       reason: input.reason,

@@ -684,9 +684,11 @@ export async function listPermissionRequests(sessionId?: string): Promise<Permis
   const raw = await fetchHappy('/v1/permissions?state=pending');
   const list = extractArrayPayload(raw, 'permissions').map((item, idx): PermissionRequest => {
     const rec = asObject(item);
+    const rawChatId = typeof rec?.chatId === 'string' ? rec.chatId.trim() : '';
     return {
       id: String(rec?.id ?? `perm-${idx}`),
       sessionId: String(rec?.sessionId ?? 'unknown'),
+      ...(rawChatId ? { chatId: rawChatId } : {}),
       agent: (() => {
         const value = String(rec?.agent ?? 'unknown');
         if (value === 'claude' || value === 'codex' || value === 'gemini') {
