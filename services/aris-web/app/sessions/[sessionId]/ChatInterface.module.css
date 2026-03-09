@@ -357,6 +357,7 @@
 
 .chatListItem {
   position: relative;
+  flex-shrink: 0;
   border: 1px solid var(--chat-item-border);
   border-radius: 13px;
   background: var(--chat-item-bg);
