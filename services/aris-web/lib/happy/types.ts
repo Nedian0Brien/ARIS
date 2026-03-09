@@ -24,6 +24,11 @@ export type SessionChat = {
   isPinned: boolean;
   isDefault: boolean;
   threadId: string | null;
+  latestPreview?: string;
+  latestEventId?: string | null;
+  latestEventAt?: string | null;
+  latestEventIsUser?: boolean;
+  latestHasErrorSignal?: boolean;
   lastReadAt?: string | null;
   lastReadEventId?: string | null;
   lastActivityAt: string;

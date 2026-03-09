@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
-import { listSessionChats } from '@/lib/happy/chats';
-import { getSessionRuntimeState, listLatestEventsByChat } from '@/lib/happy/client';
+import { listSessionChats, updateSessionChat } from '@/lib/happy/chats';
+import { listLatestEventsByChat } from '@/lib/happy/client';
 import type { UiEvent } from '@/lib/happy/types';
 
 function isUserEvent(event: UiEvent): boolean {
@@ -87,23 +87,44 @@ export async function GET(
       return NextResponse.json({ snapshots: [] });
     }
 
-    const defaultChatId = chats.find((chat) => chat.isDefault)?.id ?? null;
-    const latestEventsByChat = await listLatestEventsByChat({
-      sessionId,
-      chatIds: targetChatIds,
-      defaultChatId,
-    });
-    const runtimePairs = await Promise.all(targetChatIds.map(async (chatId) => {
-      try {
-        const runtime = await getSessionRuntimeState(sessionId, { chatId });
-        return [chatId, runtime.isRunning] as const;
-      } catch {
-        return [chatId, false] as const;
+    const chatMap = new Map(chats.map((chat) => [chat.id, chat]));
+    const unresolvedChatIds = targetChatIds.filter((chatId) => {
+      const chat = chatMap.get(chatId);
+      if (!chat) {
+        return false;
       }
-    }));
-    const runtimeByChat = new Map<string, boolean>(runtimePairs);
+      const hasCachedEventId = typeof chat.latestEventId === 'string' && chat.latestEventId.trim().length > 0;
+      const hasCachedPreview = typeof chat.latestPreview === 'string' && chat.latestPreview.trim().length > 0;
+      return !hasCachedEventId && !hasCachedPreview;
+    });
+
+    const latestEventsByChat = unresolvedChatIds.length > 0
+      ? await listLatestEventsByChat({
+        sessionId,
+        chatIds: unresolvedChatIds,
+        defaultChatId: chats.find((chat) => chat.isDefault)?.id ?? null,
+      })
+      : {};
 
     const snapshots = targetChatIds.map((chatId) => {
+      const cached = chatMap.get(chatId);
+      if (cached) {
+        const cachedPreview = typeof cached.latestPreview === 'string' ? cached.latestPreview : '';
+        const cachedEventId = typeof cached.latestEventId === 'string' ? cached.latestEventId.trim() : '';
+        if (cachedEventId || cachedPreview.trim().length > 0) {
+          return {
+            chatId,
+            preview: cachedPreview,
+            hasEvents: true,
+            hasErrorSignal: Boolean(cached.latestHasErrorSignal),
+            latestEventId: cachedEventId || null,
+            latestEventAt: cached.latestEventAt ?? null,
+            latestEventIsUser: Boolean(cached.latestEventIsUser),
+            isRunning: false,
+          };
+        }
+      }
+
       const latest = latestEventsByChat[chatId] ?? null;
       return {
         chatId,
@@ -113,9 +134,29 @@ export async function GET(
         latestEventId: latest?.id ?? null,
         latestEventAt: latest?.timestamp ?? null,
         latestEventIsUser: latest ? isUserEvent(latest) : false,
-        isRunning: runtimeByChat.get(chatId) ?? false,
+        isRunning: false,
       };
     });
+
+    if (unresolvedChatIds.length > 0) {
+      const updates = unresolvedChatIds.map(async (chatId) => {
+        const latest = latestEventsByChat[chatId];
+        if (!latest) {
+          return;
+        }
+        await updateSessionChat({
+          sessionId,
+          userId: auth.user.id,
+          chatId,
+          latestPreview: resolveRecentSummary(latest),
+          latestEventId: latest.id,
+          latestEventAt: latest.timestamp,
+          latestEventIsUser: isUserEvent(latest),
+          latestHasErrorSignal: hasChatErrorSignal(latest),
+        });
+      });
+      await Promise.allSettled(updates);
+    }
 
     return NextResponse.json({ snapshots });
   } catch (error) {

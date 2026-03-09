@@ -20,6 +20,11 @@ export async function PATCH(
     touchActivity?: boolean;
     lastReadAt?: string | null;
     lastReadEventId?: string | null;
+    latestPreview?: string;
+    latestEventId?: string | null;
+    latestEventAt?: string | null;
+    latestEventIsUser?: boolean;
+    latestHasErrorSignal?: boolean;
   };
 
   try {
@@ -36,6 +41,11 @@ export async function PATCH(
       touchActivity: body.touchActivity,
       lastReadAt: body.lastReadAt,
       lastReadEventId: body.lastReadEventId,
+      latestPreview: body.latestPreview,
+      latestEventId: body.latestEventId,
+      latestEventAt: body.latestEventAt,
+      latestEventIsUser: body.latestEventIsUser,
+      latestHasErrorSignal: body.latestHasErrorSignal,
     });
     return NextResponse.json({ chat });
   } catch (error) {

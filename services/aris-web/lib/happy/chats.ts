@@ -11,6 +11,11 @@ function toSessionChat(record: {
   isPinned: boolean;
   isDefault: boolean;
   threadId: string | null;
+  latestPreview: string;
+  latestEventId: string | null;
+  latestEventAt: Date | null;
+  latestEventIsUser: boolean;
+  latestHasErrorSignal: boolean;
   lastReadAt: Date | null;
   lastReadEventId: string | null;
   lastActivityAt: Date;
@@ -25,6 +30,11 @@ function toSessionChat(record: {
     isPinned: record.isPinned,
     isDefault: record.isDefault,
     threadId: record.threadId,
+    latestPreview: record.latestPreview,
+    latestEventId: record.latestEventId,
+    latestEventAt: record.latestEventAt ? record.latestEventAt.toISOString() : null,
+    latestEventIsUser: record.latestEventIsUser,
+    latestHasErrorSignal: record.latestHasErrorSignal,
     lastReadAt: record.lastReadAt ? record.lastReadAt.toISOString() : null,
     lastReadEventId: record.lastReadEventId,
     lastActivityAt: record.lastActivityAt.toISOString(),
@@ -159,6 +169,11 @@ export async function updateSessionChat(input: {
   touchActivity?: boolean;
   lastReadAt?: string | null;
   lastReadEventId?: string | null;
+  latestPreview?: string;
+  latestEventId?: string | null;
+  latestEventAt?: string | null;
+  latestEventIsUser?: boolean;
+  latestHasErrorSignal?: boolean;
 }): Promise<SessionChat> {
   const existing = await prisma.sessionChat.findFirst({
     where: {
@@ -186,6 +201,19 @@ export async function updateSessionChat(input: {
     }
     return new Date(epoch);
   })();
+  const parsedLatestEventAt = (() => {
+    if (input.latestEventAt === undefined) {
+      return undefined;
+    }
+    if (!input.latestEventAt || !input.latestEventAt.trim()) {
+      return null;
+    }
+    const epoch = Date.parse(input.latestEventAt);
+    if (!Number.isFinite(epoch)) {
+      return null;
+    }
+    return new Date(epoch);
+  })();
 
   const shouldUpdate = input.title !== undefined
     || input.agent !== undefined
@@ -193,7 +221,12 @@ export async function updateSessionChat(input: {
     || input.threadId !== undefined
     || Boolean(input.touchActivity)
     || parsedLastReadAt !== undefined
-    || input.lastReadEventId !== undefined;
+    || input.lastReadEventId !== undefined
+    || input.latestPreview !== undefined
+    || input.latestEventId !== undefined
+    || parsedLatestEventAt !== undefined
+    || input.latestEventIsUser !== undefined
+    || input.latestHasErrorSignal !== undefined;
 
   if (!shouldUpdate) {
     const current = await prisma.sessionChat.findUnique({
@@ -217,6 +250,12 @@ export async function updateSessionChat(input: {
       ...(input.touchActivity && { lastActivityAt: new Date() }),
       ...(parsedLastReadAt !== undefined && { lastReadAt: parsedLastReadAt }),
       ...(input.lastReadEventId !== undefined && { lastReadEventId: input.lastReadEventId && input.lastReadEventId.trim() ? input.lastReadEventId.trim() : null }),
+      ...(input.latestPreview !== undefined && { latestPreview: input.latestPreview.trim().slice(0, 240) }),
+      ...(input.latestEventId !== undefined && { latestEventId: input.latestEventId && input.latestEventId.trim() ? input.latestEventId.trim() : null }),
+      ...(parsedLatestEventAt !== undefined && { latestEventAt: parsedLatestEventAt }),
+      ...(input.latestEventIsUser !== undefined && { latestEventIsUser: Boolean(input.latestEventIsUser) }),
+      ...(input.latestHasErrorSignal !== undefined && { latestHasErrorSignal: Boolean(input.latestHasErrorSignal) }),
+      ...(!input.touchActivity && parsedLatestEventAt instanceof Date && { lastActivityAt: parsedLatestEventAt }),
     },
   });
 

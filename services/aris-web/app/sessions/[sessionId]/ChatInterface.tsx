@@ -352,6 +352,29 @@ function buildReadMarkerMap(chats: SessionChat[]): Record<string, string> {
   return markers;
 }
 
+function buildSnapshotFromChat(chat: SessionChat): ChatSidebarSnapshot | null {
+  const preview = typeof chat.latestPreview === 'string' ? chat.latestPreview : '';
+  const latestEventId = typeof chat.latestEventId === 'string' && chat.latestEventId.trim()
+    ? chat.latestEventId.trim()
+    : null;
+  const latestEventAt = typeof chat.latestEventAt === 'string' && chat.latestEventAt.trim()
+    ? chat.latestEventAt
+    : null;
+  const hasEvents = Boolean(latestEventId) || preview.trim().length > 0;
+  if (!hasEvents) {
+    return null;
+  }
+  return {
+    preview,
+    hasEvents: true,
+    hasErrorSignal: Boolean(chat.latestHasErrorSignal),
+    latestEventId,
+    latestEventAt,
+    latestEventIsUser: Boolean(chat.latestEventIsUser),
+    isRunning: false,
+  };
+}
+
 function truncateSingleLine(input: string, max = 68): string {
   const compact = input.replace(/\s+/g, ' ').trim();
   if (compact.length <= max) {
@@ -1685,17 +1708,25 @@ export function ChatInterface({
   const [chatMutationError, setChatMutationError] = useState<string | null>(null);
   const [chatSidebarSnapshots, setChatSidebarSnapshots] = useState<Record<string, ChatSidebarSnapshot>>(() => {
     const sortedInitialChats = sortSessionChats(initialChats);
+    const seeded: Record<string, ChatSidebarSnapshot> = {};
+    for (const chat of sortedInitialChats) {
+      const snapshot = buildSnapshotFromChat(chat);
+      if (snapshot) {
+        seeded[chat.id] = snapshot;
+      }
+    }
     const initialActiveChatId = (activeChatId && activeChatId.trim().length > 0
       ? activeChatId.trim()
       : sortedInitialChats[0]?.id) ?? null;
     if (!initialActiveChatId) {
-      return {};
+      return seeded;
     }
     const latestInitialEvent = initialEvents[initialEvents.length - 1];
     if (!latestInitialEvent) {
-      return {};
+      return seeded;
     }
     return {
+      ...seeded,
       [initialActiveChatId]: {
         preview: resolveRecentSummary(latestInitialEvent),
         hasEvents: true,
@@ -1745,6 +1776,8 @@ export function ChatInterface({
   const chatSidebarFetchInFlightRef = useRef<Record<string, boolean>>({});
   const readMarkerSyncInFlightRef = useRef<Record<string, boolean>>({});
   const readMarkerSyncedRef = useRef<Record<string, string>>(buildReadMarkerMap(initialChats));
+  const snapshotSyncInFlightRef = useRef<Record<string, boolean>>({});
+  const snapshotSyncedEventRef = useRef<Record<string, string>>({});
 
   const defaultAgentFlavor = normalizeAgentFlavor(agentFlavor, 'codex');
   const activeAgentFlavor = normalizeAgentFlavor(activeChat?.agent, defaultAgentFlavor);
@@ -1922,6 +1955,11 @@ export function ChatInterface({
   const resolveChatPreviewText = useCallback((chatId: string): string => {
     const snapshot = chatSidebarSnapshots[chatId];
     if (!snapshot) {
+      const chat = chats.find((item) => item.id === chatId);
+      const cached = typeof chat?.latestPreview === 'string' ? chat.latestPreview.trim() : '';
+      if (cached) {
+        return cached;
+      }
       return '메시지 불러오는 중...';
     }
     const preview = snapshot.preview?.trim();
@@ -1932,7 +1970,7 @@ export function ChatInterface({
       return '메시지 불러오는 중...';
     }
     return '최근 메시지가 없습니다.';
-  }, [chatSidebarSnapshots]);
+  }, [chatSidebarSnapshots, chats]);
 
   const handleSidebarPermissionDecision = useCallback(async (
     chatId: string,
@@ -2085,7 +2123,38 @@ export function ChatInterface({
       }
     }
     readMarkerSyncedRef.current = nextReadSynced;
+
+    const nextSnapshotSyncInFlight: Record<string, boolean> = {};
+    for (const [chatId, inFlight] of Object.entries(snapshotSyncInFlightRef.current)) {
+      if (chatIds.has(chatId)) {
+        nextSnapshotSyncInFlight[chatId] = inFlight;
+      }
+    }
+    snapshotSyncInFlightRef.current = nextSnapshotSyncInFlight;
+
+    const nextSnapshotSyncedEvent: Record<string, string> = {};
+    for (const [chatId, eventId] of Object.entries(snapshotSyncedEventRef.current)) {
+      if (chatIds.has(chatId)) {
+        nextSnapshotSyncedEvent[chatId] = eventId;
+      }
+    }
+    snapshotSyncedEventRef.current = nextSnapshotSyncedEvent;
   }, [chats]);
+
+  useEffect(() => {
+    for (const chat of chats) {
+      const seeded = buildSnapshotFromChat(chat);
+      if (!seeded) {
+        continue;
+      }
+      const current = chatSidebarSnapshots[chat.id];
+      const currentHasData = Boolean(current?.latestEventId) || Boolean(current?.preview?.trim());
+      if (currentHasData) {
+        continue;
+      }
+      upsertChatSidebarSnapshot(chat.id, seeded);
+    }
+  }, [chats, chatSidebarSnapshots, upsertChatSidebarSnapshot]);
 
   useEffect(() => {
     if (!activeChatIdResolved) {
@@ -2119,12 +2188,65 @@ export function ChatInterface({
     setChatReadMarkers((prev) => (
       prev[activeChatIdResolved] === latestEvent.id
         ? prev
-        : {
-            ...prev,
-            [activeChatIdResolved]: latestEvent.id,
-          }
+      : {
+          ...prev,
+          [activeChatIdResolved]: latestEvent.id,
+        }
     ));
   }, [activeChatIdResolved, events, showScrollToBottom]);
+
+  useEffect(() => {
+    if (!activeChatIdResolved) {
+      return;
+    }
+    const snapshot = chatSidebarSnapshots[activeChatIdResolved];
+    const latestEventId = snapshot?.latestEventId?.trim() ?? '';
+    if (!latestEventId) {
+      return;
+    }
+    if (snapshotSyncedEventRef.current[activeChatIdResolved] === latestEventId) {
+      return;
+    }
+    if (snapshotSyncInFlightRef.current[activeChatIdResolved]) {
+      return;
+    }
+
+    const latestEventAt = snapshot.latestEventAt;
+    snapshotSyncInFlightRef.current[activeChatIdResolved] = true;
+    void fetch(
+      `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          latestPreview: snapshot.preview,
+          latestEventId,
+          latestEventAt,
+          latestEventIsUser: snapshot.latestEventIsUser,
+          latestHasErrorSignal: snapshot.hasErrorSignal,
+          ...(latestEventAt ? { touchActivity: true } : {}),
+        }),
+      },
+    )
+      .then(async (response) => {
+        if (!response.ok) {
+          return;
+        }
+        snapshotSyncedEventRef.current[activeChatIdResolved] = latestEventId;
+        const payload = (await response.json().catch(() => ({}))) as { chat?: SessionChat };
+        if (!payload.chat) {
+          return;
+        }
+        setChats((prev) => sortSessionChats(prev.map((chat) => (
+          chat.id === payload.chat?.id ? payload.chat : chat
+        ))));
+      })
+      .catch(() => {
+      })
+      .finally(() => {
+        delete snapshotSyncInFlightRef.current[activeChatIdResolved];
+      });
+  }, [activeChatIdResolved, chatSidebarSnapshots, sessionId]);
 
   useEffect(() => {
     const pending = Object.entries(chatReadMarkers).filter(([chatId, marker]) => (

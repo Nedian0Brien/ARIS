@@ -1,0 +1,6 @@
+ALTER TABLE "SessionChat"
+ADD COLUMN "latestPreview" TEXT NOT NULL DEFAULT '',
+ADD COLUMN "latestEventId" TEXT,
+ADD COLUMN "latestEventAt" TIMESTAMP(3),
+ADD COLUMN "latestEventIsUser" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "latestHasErrorSignal" BOOLEAN NOT NULL DEFAULT false;
