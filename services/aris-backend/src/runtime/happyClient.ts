@@ -53,6 +53,7 @@ const STALE_RUN_TIMEOUT_MS = (() => {
   }
   return 45 * 60 * 1000; // 45 minutes
 })();
+const UNPARSED_HAPPY_PAYLOAD_PREFIX = '[UNPARSED HAPPY PAYLOAD]';
 
 type RuntimeAgent = RuntimeSession['metadata']['flavor'];
 type PermissionState = PermissionRequest['state'];
@@ -423,12 +424,40 @@ function parseMessagePayloadText(payload: unknown): {
     }
   }
 
+  if (!text) {
+    const debugPayload = stringifyPayloadForDebug(normalized);
+    if (debugPayload) {
+      text = `${UNPARSED_HAPPY_PAYLOAD_PREFIX}\n${debugPayload}`;
+    }
+  }
+
   return {
     role,
     title,
     text,
     meta,
   };
+}
+
+function stringifyPayloadForDebug(payload: unknown): string | undefined {
+  if (payload === null || payload === undefined) {
+    return undefined;
+  }
+  if (typeof payload === 'string') {
+    const trimmed = payload.trim();
+    return trimmed || undefined;
+  }
+
+  try {
+    const serialized = JSON.stringify(payload);
+    if (!serialized || serialized === '{}') {
+      return undefined;
+    }
+    return serialized.slice(0, AGENT_MAX_OUTPUT_CHARS);
+  } catch {
+    const fallback = String(payload).trim();
+    return fallback ? fallback.slice(0, AGENT_MAX_OUTPUT_CHARS) : undefined;
+  }
 }
 
 function toRuntimeMessage(sessionId: string, raw: HappyBackendMessage): RuntimeMessage {
@@ -1128,6 +1157,7 @@ function buildAgentCommand(
 export const happyClientTestHooks = {
   parseAgentStreamOutput,
   looksLikeActionTranscript,
+  parseMessagePayloadText,
 };
 
 export class HappyRuntimeStore {

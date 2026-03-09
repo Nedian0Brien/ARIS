@@ -49,4 +49,28 @@ describe('happyClient stream-json parsing', () => {
     expect(parsed.actions.length).toBeGreaterThan(0);
     expect(parsed.actions[0]?.command).toContain('cat README.md');
   });
+
+  it('extracts message text from wrapped happy payload content', () => {
+    const wrappedPayload = {
+      t: 'json',
+      c: JSON.stringify({
+        role: 'agent',
+        title: 'Text Reply',
+        text: 'wrapped content from happy',
+      }),
+    };
+
+    const parsed = happyClientTestHooks.parseMessagePayloadText(wrappedPayload);
+    expect(parsed.role).toBe('agent');
+    expect(parsed.title).toBe('Text Reply');
+    expect(parsed.text).toBe('wrapped content from happy');
+  });
+
+  it('falls back to raw payload text when happy payload parsing fails', () => {
+    const parsed = happyClientTestHooks.parseMessagePayloadText({
+      unknownShape: { foo: 'bar' },
+    });
+    expect(parsed.text).toContain('[UNPARSED HAPPY PAYLOAD]');
+    expect(parsed.text).toContain('"unknownShape"');
+  });
 });
