@@ -1730,6 +1730,7 @@ export function ChatInterface({
   const displayName = activeChat?.title || alias || projectName;
   const {
     events,
+    eventsForChatId,
     addEvent,
     syncError,
     loadOlder,
@@ -2291,6 +2292,14 @@ export function ChatInterface({
     if (!activeChatIdResolved) {
       return;
     }
+    // Guard against stale events from the previously active chat.
+    // On the first render after switching chats, `events` still holds the old
+    // chat's data while the reset effect inside useSessionEvents hasn't fired
+    // yet. Writing those events into the new chat's snapshot would corrupt the
+    // sidebar order via the snapshot-sync effect below.
+    if (eventsForChatId !== activeChatIdResolved) {
+      return;
+    }
     const latestEvent = events[events.length - 1];
     upsertChatSidebarSnapshot(activeChatIdResolved, {
       preview: latestEvent ? resolveRecentSummary(latestEvent) : '',
@@ -2303,6 +2312,7 @@ export function ChatInterface({
     });
   }, [
     activeChatIdResolved,
+    eventsForChatId,
     events,
     isAgentRunning,
     upsertChatSidebarSnapshot,
