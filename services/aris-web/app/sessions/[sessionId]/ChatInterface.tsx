@@ -3762,47 +3762,49 @@ export function ChatInterface({
                           <MoreVertical size={15} />
                         </button>
                         {isMounted && chatActionMenuId === chat.id && chatActionMenuRect && createPortal(
-                          <div
-                            ref={chatActionMenuRef}
-                            className={styles.chatListMenuPanel}
-                            style={{
-                              position: 'fixed',
-                              top: `${chatActionMenuRect.bottom + 4}px`,
-                              left: `${chatActionMenuRect.right - 140}px`, // 140px is panel width
-                              zIndex: 9999
-                            }}
-                          >
-                            <button
-                              type="button"
-                              className={styles.chatListMenuItem}
-                              onClick={() => {
-                                setRenamingChatId(chat.id);
-                                setChatTitleDraft(chat.title);
-                                setChatActionMenuId(null);
-                                setChatActionMenuRect(null);
+                          <div className={styles.chatShell}>
+                            <div
+                              ref={chatActionMenuRef}
+                              className={styles.chatListMenuPanel}
+                              style={{
+                                position: 'fixed',
+                                top: `${chatActionMenuRect.bottom + 4}px`,
+                                left: `${chatActionMenuRect.right - 140}px`, // 140px is panel width
+                                zIndex: 9999
                               }}
                             >
-                              <Pencil size={14} />
-                              이름 변경
-                            </button>
-                            <button
-                              type="button"
-                              className={styles.chatListMenuItem}
-                              onClick={() => void handleToggleChatPin(chat)}
-                              disabled={chatMutationLoadingId === chat.id}
-                            >
-                              <Pin size={14} />
-                              {chat.isPinned ? '고정 해제' : '고정'}
-                            </button>
-                            <button
-                              type="button"
-                              className={`${styles.chatListMenuItem} ${styles.chatListMenuDelete}`}
-                              onClick={() => void handleDeleteChat(chat)}
-                              disabled={chatMutationLoadingId === chat.id}
-                            >
-                              <Trash2 size={14} />
-                              삭제
-                            </button>
+                              <button
+                                type="button"
+                                className={styles.chatListMenuItem}
+                                onClick={() => {
+                                  setRenamingChatId(chat.id);
+                                  setChatTitleDraft(chat.title);
+                                  setChatActionMenuId(null);
+                                  setChatActionMenuRect(null);
+                                }}
+                              >
+                                <Pencil size={14} />
+                                이름 변경
+                              </button>
+                              <button
+                                type="button"
+                                className={styles.chatListMenuItem}
+                                onClick={() => void handleToggleChatPin(chat)}
+                                disabled={chatMutationLoadingId === chat.id}
+                              >
+                                <Pin size={14} />
+                                {chat.isPinned ? '고정 해제' : '고정'}
+                              </button>
+                              <button
+                                type="button"
+                                className={`${styles.chatListMenuItem} ${styles.chatListMenuDelete}`}
+                                onClick={() => void handleDeleteChat(chat)}
+                                disabled={chatMutationLoadingId === chat.id}
+                              >
+                                <Trash2 size={14} />
+                                삭제
+                              </button>
+                            </div>
                           </div>,
                           document.body
                         )}
