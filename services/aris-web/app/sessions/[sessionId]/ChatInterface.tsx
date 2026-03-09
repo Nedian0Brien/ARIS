@@ -2276,6 +2276,11 @@ export function ChatInterface({
     }
 
     const latestEventAt = snapshot.latestEventAt;
+    const activeChat = chats.find((chat) => chat.id === activeChatIdResolved);
+    const latestEventAtMs = latestEventAt ? Date.parse(latestEventAt) : Number.NaN;
+    const lastActivityAtMs = activeChat?.lastActivityAt ? Date.parse(activeChat.lastActivityAt) : Number.NaN;
+    const shouldTouchActivity = Number.isFinite(latestEventAtMs)
+      && (!Number.isFinite(lastActivityAtMs) || latestEventAtMs > lastActivityAtMs);
     snapshotSyncInFlightRef.current[activeChatIdResolved] = true;
     void fetch(
       `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
@@ -2288,7 +2293,7 @@ export function ChatInterface({
           latestEventAt,
           latestEventIsUser: snapshot.latestEventIsUser,
           latestHasErrorSignal: snapshot.hasErrorSignal,
-          ...(latestEventAt ? { touchActivity: true } : {}),
+          ...(shouldTouchActivity ? { touchActivity: true } : {}),
         }),
       },
     )
@@ -2310,7 +2315,7 @@ export function ChatInterface({
       .finally(() => {
         delete snapshotSyncInFlightRef.current[activeChatIdResolved];
       });
-  }, [activeChatIdResolved, chatSidebarSnapshots, sessionId]);
+  }, [activeChatIdResolved, chatSidebarSnapshots, chats, sessionId]);
 
   useEffect(() => {
     const pending = Object.entries(chatReadMarkers).filter(([chatId, marker]) => (
