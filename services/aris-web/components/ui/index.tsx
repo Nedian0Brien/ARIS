@@ -2,15 +2,12 @@ import React from 'react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'ghost';
-  isLoading?: boolean;
 }
 
 export const Button = ({ 
   children, 
   variant = 'primary', 
-  isLoading, 
   className = '', 
-  disabled,
   ...props 
 }: ButtonProps) => {
   const baseClass = 'btn';
@@ -22,10 +19,9 @@ export const Button = ({
   return (
     <button 
       className={`${baseClass} ${variantClass} ${className}`} 
-      disabled={disabled || isLoading}
       {...props}
     >
-      {isLoading ? '...' : children}
+      {children}
     </button>
   );
 };

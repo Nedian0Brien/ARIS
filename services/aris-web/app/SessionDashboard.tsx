@@ -8,7 +8,7 @@ import {
   Play, Terminal, FolderOpen, Search, PlusCircle, X, Plus,
   Clock3, ArrowUpRight, Folder, ArrowUp, Check,
   MoreVertical, Activity, Pin, Edit2, RotateCw, Square, Trash2, HardDrive,
-  ShieldCheck, ShieldAlert, ShieldOff, Zap, CheckCircle2
+  ShieldCheck, ShieldAlert, ShieldOff, Zap, CheckCircle2, Loader2
 } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
 import type { ApprovalPolicy, SessionSummary } from '@/lib/happy/types';
@@ -1179,8 +1179,14 @@ export function SessionDashboard({
                 <Button type="button" variant="ghost" onClick={() => setIsCreateModalOpen(false)}>
                   취소
                 </Button>
-                <Button type="submit" isLoading={isCreating} disabled={!isOperator || !sanitizePath(newPath)} className="submit-btn">
-                  <Play size={18} fill="currentColor" /> 워크스페이스 만들기
+                <Button
+                  type="submit"
+                  disabled={isCreating || !isOperator || !sanitizePath(newPath)}
+                  aria-busy={isCreating || undefined}
+                  className="submit-btn"
+                >
+                  {isCreating ? <Loader2 data-icon="inline-start" className="btn-spinner" /> : <Play size={18} fill="currentColor" />}
+                  워크스페이스 만들기
                 </Button>
               </footer>
             </form>
@@ -1714,10 +1720,12 @@ export function SessionDashboard({
                 </Button>
                 <Button
                   type="button"
-                  isLoading={isDeletingSessions}
+                  disabled={isDeletingSessions}
+                  aria-busy={isDeletingSessions || undefined}
                   onClick={() => void confirmDeleteSessions()}
                   style={{ background: 'var(--accent-red)', color: 'var(--text-on-accent)' }}
                 >
+                  {isDeletingSessions && <Loader2 data-icon="inline-start" className="btn-spinner" />}
                   삭제
                 </Button>
               </div>

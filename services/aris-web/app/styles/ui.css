@@ -83,6 +83,16 @@
   box-shadow: none;
 }
 
+.btn [data-icon='inline-start'],
+.btn [data-icon='inline-end'] {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.btn-spinner {
+  animation: spin 0.8s linear infinite;
+}
+
 .input {
   width: 100%;
   padding: 0.75rem 1rem;
@@ -108,4 +118,3 @@
   font-weight: 700;
   gap: 0.25rem;
 }
-

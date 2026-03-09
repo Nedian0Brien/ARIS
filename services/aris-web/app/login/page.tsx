@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 import { Button, Input, Card } from '@/components/ui';
 
 export default function LoginPage() {
@@ -146,7 +147,10 @@ export default function LoginPage() {
             </div>
 
             {error && <div style={{ color: 'var(--accent-red)', fontSize: '0.875rem' }}>{error}</div>}
-            <Button type="submit" isLoading={loading}>Sign In</Button>
+            <Button type="submit" disabled={loading} aria-busy={loading || undefined}>
+              {loading && <Loader2 data-icon="inline-start" className="btn-spinner" />}
+              Sign In
+            </Button>
           </form>
         ) : (
           <form onSubmit={handleVerify2FA} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }} className="animate-in">
@@ -169,7 +173,10 @@ export default function LoginPage() {
               />
             </div>
             {error && <div style={{ color: 'var(--accent-red)', fontSize: '0.875rem', textAlign: 'center' }}>{error}</div>}
-            <Button type="submit" isLoading={loading}>Verify</Button>
+            <Button type="submit" disabled={loading} aria-busy={loading || undefined}>
+              {loading && <Loader2 data-icon="inline-start" className="btn-spinner" />}
+              Verify
+            </Button>
             <Button variant="secondary" onClick={() => setShow2FA(false)}>취소</Button>
           </form>
         )}
