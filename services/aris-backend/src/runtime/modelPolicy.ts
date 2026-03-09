@@ -1,32 +1,131 @@
+import { existsSync, readFileSync } from 'node:fs';
+import * as path from 'node:path';
 import type { AgentFlavor } from '../types.js';
 
 type SupportedAgent = Exclude<AgentFlavor, 'unknown'>;
 type ModelSelectionSource = 'requested' | 'session' | 'custom' | 'default';
 
 const MODEL_ID_MAX_LEN = 120;
-const DEFAULT_CUSTOM_MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
-const CUSTOM_MODEL_POLICY = (process.env.HAPPY_CUSTOM_MODEL_POLICY || 'strict').trim().toLowerCase();
-const CUSTOM_MODEL_PATTERN = (() => {
-  const raw = (process.env.HAPPY_CUSTOM_MODEL_PATTERN || '').trim();
-  if (!raw) {
-    return DEFAULT_CUSTOM_MODEL_PATTERN;
-  }
-  try {
-    return new RegExp(raw);
-  } catch {
-    return DEFAULT_CUSTOM_MODEL_PATTERN;
-  }
-})();
-
-const LEGACY_MODEL_ALIASES: Record<string, string> = {
-  'gpt-5-codex': 'gpt-5.3-codex',
-};
-
-export const BUILTIN_MODELS_BY_AGENT: Record<SupportedAgent, readonly string[]> = {
+const DEFAULT_CUSTOM_MODEL_PATTERN_RAW = '^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$';
+const DEFAULT_BUILTIN_MODELS_BY_AGENT: Record<SupportedAgent, readonly string[]> = {
   codex: ['gpt-5.3-codex', 'gpt-5', 'gpt-5-mini'],
   claude: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5'],
   gemini: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
 };
+const DEFAULT_LEGACY_ALIASES: Record<string, string> = {
+  'gpt-5-codex': 'gpt-5.3-codex',
+};
+
+type ModelPolicyFileShape = {
+  customModelPattern?: unknown;
+  legacyAliases?: unknown;
+  builtinModelsByAgent?: unknown;
+};
+
+type RuntimeModelPolicyConfig = {
+  customModelPatternRaw: string;
+  customModelPattern: RegExp;
+  legacyAliases: Record<string, string>;
+  builtinModelsByAgent: Record<SupportedAgent, readonly string[]>;
+};
+
+function parsePatternOrDefault(raw: unknown): { raw: string; regex: RegExp } {
+  const pattern = typeof raw === 'string' && raw.trim().length > 0
+    ? raw.trim()
+    : DEFAULT_CUSTOM_MODEL_PATTERN_RAW;
+  try {
+    return { raw: pattern, regex: new RegExp(pattern) };
+  } catch {
+    return { raw: DEFAULT_CUSTOM_MODEL_PATTERN_RAW, regex: new RegExp(DEFAULT_CUSTOM_MODEL_PATTERN_RAW) };
+  }
+}
+
+function resolvePolicyConfigPath(): string | null {
+  const explicit = (process.env.ARIS_MODEL_POLICY_CONFIG_PATH || '').trim();
+  const candidates = explicit
+    ? [explicit]
+    : [
+      path.resolve(process.cwd(), 'config/model-policy.json'),
+      path.resolve(process.cwd(), '../config/model-policy.json'),
+      path.resolve(process.cwd(), '../../config/model-policy.json'),
+      path.resolve(process.cwd(), '../../../config/model-policy.json'),
+    ];
+  for (const candidate of candidates) {
+    if (candidate && existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function loadModelPolicyConfig(): RuntimeModelPolicyConfig {
+  const parsedDefaultPattern = parsePatternOrDefault(DEFAULT_CUSTOM_MODEL_PATTERN_RAW);
+  const fallback: RuntimeModelPolicyConfig = {
+    customModelPatternRaw: parsedDefaultPattern.raw,
+    customModelPattern: parsedDefaultPattern.regex,
+    legacyAliases: DEFAULT_LEGACY_ALIASES,
+    builtinModelsByAgent: DEFAULT_BUILTIN_MODELS_BY_AGENT,
+  };
+
+  const configPath = resolvePolicyConfigPath();
+  if (!configPath) {
+    return fallback;
+  }
+
+  try {
+    const raw = JSON.parse(readFileSync(configPath, 'utf8')) as ModelPolicyFileShape;
+    const parsedPattern = parsePatternOrDefault(raw.customModelPattern);
+    const legacyAliases = (() => {
+      if (!raw.legacyAliases || typeof raw.legacyAliases !== 'object' || Array.isArray(raw.legacyAliases)) {
+        return DEFAULT_LEGACY_ALIASES;
+      }
+      const entries = Object.entries(raw.legacyAliases as Record<string, unknown>)
+        .filter(([key, value]) => typeof key === 'string' && key.trim() && typeof value === 'string' && value.trim())
+        .map(([key, value]) => [key.trim(), (value as string).trim()] as const);
+      if (entries.length === 0) {
+        return DEFAULT_LEGACY_ALIASES;
+      }
+      return Object.fromEntries(entries);
+    })();
+    const builtinModelsByAgent = (() => {
+      if (!raw.builtinModelsByAgent || typeof raw.builtinModelsByAgent !== 'object' || Array.isArray(raw.builtinModelsByAgent)) {
+        return DEFAULT_BUILTIN_MODELS_BY_AGENT;
+      }
+      const rec = raw.builtinModelsByAgent as Record<string, unknown>;
+      const normalizeList = (agent: SupportedAgent): readonly string[] => {
+        const list = rec[agent];
+        if (!Array.isArray(list)) {
+          return DEFAULT_BUILTIN_MODELS_BY_AGENT[agent];
+        }
+        const normalized = list
+          .filter((value): value is string => typeof value === 'string')
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0)
+          .slice(0, 20);
+        return normalized.length > 0 ? normalized : DEFAULT_BUILTIN_MODELS_BY_AGENT[agent];
+      };
+      return {
+        codex: normalizeList('codex'),
+        claude: normalizeList('claude'),
+        gemini: normalizeList('gemini'),
+      };
+    })();
+    return {
+      customModelPatternRaw: parsedPattern.raw,
+      customModelPattern: parsedPattern.regex,
+      legacyAliases,
+      builtinModelsByAgent,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+const MODEL_POLICY_CONFIG = loadModelPolicyConfig();
+const CUSTOM_MODEL_PATTERN = MODEL_POLICY_CONFIG.customModelPattern;
+const CUSTOM_MODEL_POLICY = 'pattern';
+
+export const BUILTIN_MODELS_BY_AGENT: Record<SupportedAgent, readonly string[]> = MODEL_POLICY_CONFIG.builtinModelsByAgent;
 
 function normalizeModelId(value: unknown): string | undefined {
   if (typeof value !== 'string') {
@@ -36,7 +135,7 @@ function normalizeModelId(value: unknown): string | undefined {
   if (!trimmed) {
     return undefined;
   }
-  const canonical = LEGACY_MODEL_ALIASES[trimmed] ?? trimmed;
+  const canonical = MODEL_POLICY_CONFIG.legacyAliases[trimmed] ?? trimmed;
   return canonical.slice(0, MODEL_ID_MAX_LEN);
 }
 

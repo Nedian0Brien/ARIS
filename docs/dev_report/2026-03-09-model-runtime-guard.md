@@ -61,6 +61,15 @@
 - violating rows = 0
 - 무효 값(`invalid model with space`) 업데이트 시 CHECK 위반으로 차단됨 확인
 
+## 후속 반영 (제약 위반 400 + 단일 정책 설정)
+- API 명시 에러 변환:
+  - `services/aris-web/app/api/runtime/sessions/[sessionId]/chats/route.ts`
+  - `services/aris-web/app/api/runtime/sessions/[sessionId]/chats/[chatId]/route.ts`
+  - `SessionChat_model_allowed_check` 위반 시 400 + 사용자 친화 메시지 반환
+- 단일 정책 설정 파일:
+  - `config/model-policy.json`
+  - 웹/백엔드 모델 정책 유틸이 동일 파일을 읽어 허용 목록/legacy alias/custom 패턴을 공통 적용
+
 ## 검증 결과
 - `aris-backend`: `npm run build` 통과
 - `aris-backend`: `npm run test` 통과 (23 tests)

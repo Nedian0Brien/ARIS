@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
 import { createSessionChat, listSessionChats } from '@/lib/happy/chats';
 
+function isSessionChatModelConstraintError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('SessionChat_model_allowed_check')
+    || (message.includes('violates check constraint') && message.includes('SessionChat'));
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> },
@@ -50,6 +56,12 @@ export async function POST(
 
     return NextResponse.json({ chat });
   } catch (error) {
+    if (isSessionChatModelConstraintError(error)) {
+      return NextResponse.json(
+        { error: '유효하지 않은 모델입니다. 허용 모델 또는 커스텀 패턴에 맞는 모델만 저장할 수 있습니다.' },
+        { status: 400 },
+      );
+    }
     const message = error instanceof Error ? error.message : 'Failed to create chat';
     return NextResponse.json({ error: message }, { status: 500 });
   }
