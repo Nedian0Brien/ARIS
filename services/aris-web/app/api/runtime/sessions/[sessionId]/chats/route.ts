@@ -58,7 +58,10 @@ export async function POST(
   } catch (error) {
     if (isSessionChatModelConstraintError(error)) {
       return NextResponse.json(
-        { error: '유효하지 않은 모델입니다. 허용 모델 또는 커스텀 패턴에 맞는 모델만 저장할 수 있습니다.' },
+        {
+          error: '유효하지 않은 모델입니다. 허용 모델 또는 커스텀 패턴에 맞는 모델만 저장할 수 있습니다.',
+          errorCode: 'INVALID_CHAT_MODEL',
+        },
         { status: 400 },
       );
     }
