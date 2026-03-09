@@ -1241,6 +1241,7 @@ export class HappyRuntimeStore {
 
     const safeCwd = this.resolveExecutionCwd(cwdHint);
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
+    const { CLAUDECODE: _cc, ...spawnEnv } = process.env;
     const runCommand = async (args: string[]): Promise<{ stdout: string; stderr: string }> => (
       command.requiresPty
         ? execFileAsync(
@@ -1250,7 +1251,7 @@ export class HappyRuntimeStore {
             cwd: safeCwd,
             timeout: AGENT_COMMAND_TIMEOUT_MS,
             maxBuffer: 8 * 1024 * 1024,
-            env: { ...process.env, PATH: mergedPath },
+            env: { ...spawnEnv, PATH: mergedPath },
             signal,
           },
         )
@@ -1258,7 +1259,7 @@ export class HappyRuntimeStore {
           cwd: safeCwd,
           timeout: AGENT_COMMAND_TIMEOUT_MS,
           maxBuffer: 8 * 1024 * 1024,
-          env: { ...process.env, PATH: mergedPath },
+          env: { ...spawnEnv, PATH: mergedPath },
           signal,
         })
     );
