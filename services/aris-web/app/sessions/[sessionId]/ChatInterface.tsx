@@ -102,7 +102,7 @@ const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
 type ComposerModelOption = { id: string; shortLabel: string; badge: string };
 const COMPOSER_MODELS_BY_AGENT: Record<'codex' | 'claude' | 'gemini', ComposerModelOption[]> = {
   codex: [
-    { id: 'gpt-5-codex', shortLabel: 'GPT-5 Codex', badge: '권장' },
+    { id: 'gpt-5.3-codex', shortLabel: 'GPT-5.3 Codex', badge: '권장' },
     { id: 'gpt-5', shortLabel: 'GPT-5', badge: '고성능' },
     { id: 'gpt-5-mini', shortLabel: 'GPT-5 mini', badge: '빠름' },
   ],
