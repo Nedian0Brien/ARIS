@@ -1630,6 +1630,7 @@ export function ChatInterface({
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
   const [expandedActionRunIds, setExpandedActionRunIds] = useState<Record<string, boolean>>({});
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
+  const [sessionIdCopyState, setSessionIdCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [showPermissionQueue, setShowPermissionQueue] = useState(true);
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(true);
@@ -2096,6 +2097,24 @@ export function ChatInterface({
     });
   }, [firstPendingPermissionId]);
 
+  const handleCopySessionId = useCallback(async () => {
+    try {
+      if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+        throw new Error('clipboard-unavailable');
+      }
+      await navigator.clipboard.writeText(sessionId);
+      setSessionIdCopyState('copied');
+      window.setTimeout(() => {
+        setSessionIdCopyState((current) => (current === 'copied' ? 'idle' : current));
+      }, 1800);
+    } catch {
+      setSessionIdCopyState('failed');
+      window.setTimeout(() => {
+        setSessionIdCopyState((current) => (current === 'failed' ? 'idle' : current));
+      }, 2200);
+    }
+  }, [sessionId]);
+
   const jumpToEvent = useCallback((eventId: string) => {
     const target = document.getElementById(`event-${eventId}`);
     if (!target) {
@@ -2121,6 +2140,12 @@ export function ChatInterface({
       window.clearTimeout(timer);
     };
   }, [highlightedEventId]);
+
+  useEffect(() => {
+    if (!isContextMenuOpen) {
+      setSessionIdCopyState('idle');
+    }
+  }, [isContextMenuOpen]);
 
   useEffect(() => {
     if (!isContextMenuOpen) {
@@ -3003,6 +3028,19 @@ export function ChatInterface({
                       <span>Policy: {approvalPolicyLabel(approvalPolicy)}</span>
                       <span>Pending: {pendingPermissions.length}</span>
                     </div>
+                    <button
+                      type="button"
+                      className={styles.contextMenuItem}
+                      onClick={() => {
+                        void handleCopySessionId();
+                      }}
+                    >
+                      {sessionIdCopyState === 'copied'
+                        ? '세션 ID 복사됨'
+                        : sessionIdCopyState === 'failed'
+                          ? '복사 실패 (다시 시도)'
+                          : '현재 세션 ID 복사'}
+                    </button>
                     <button
                       type="button"
                       className={styles.contextMenuItem}
