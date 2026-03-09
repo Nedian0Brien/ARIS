@@ -334,6 +334,19 @@ describe('normalizeEvents', () => {
     expect(events[0].kind).toBe('text_reply');
   });
 
+  it('keeps agent_message stream transcript-shaped text as text_reply', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e8b',
+        type: 'message',
+        text: '$ ls -la\nexit code: 0',
+        meta: { streamEvent: 'agent_message', source: 'cli-agent', agent: 'claude' },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('text_reply');
+  });
+
   it('keeps claude cli-agent natural language summaries as text_reply', () => {
     const events = normalizeEvents([
       {
