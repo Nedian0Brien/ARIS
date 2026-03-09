@@ -397,6 +397,18 @@ export function useSessionEvents(
     startSafetyReconcile();
     connect();
 
+    // Fetch initial data immediately if there is no client-side baseline
+    // (e.g. when changing chats dynamically before server components re-render)
+    void refreshEvents().catch((error) => {
+      if (!disposed) {
+        if (error instanceof SessionEventsHttpError && error.status === 404) {
+          setSyncError(error.message);
+          stopPolling();
+          closeStream();
+        }
+      }
+    });
+
     return () => {
       disposed = true;
       closeStream();

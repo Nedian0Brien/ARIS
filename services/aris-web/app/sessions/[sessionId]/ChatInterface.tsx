@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
@@ -3199,7 +3199,14 @@ export function ChatInterface({
     setRenamingChatId(null);
     setChatTitleDraft('');
     setSelectedChatId(chatId);
-    router.push(buildChatUrl(chatId));
+    
+    // Defer the expensive server-side navigation to keep the UI responsive.
+    // The client-side state will immediately render the selected chat
+    // while the RSC payload fetches in the background.
+    startTransition(() => {
+      router.push(buildChatUrl(chatId));
+    });
+
     if (isMobileLayout) {
       setIsChatSidebarOpen(false);
     }
