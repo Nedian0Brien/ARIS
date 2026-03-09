@@ -1579,9 +1579,10 @@ export function ChatInterface({
 }) {
   const router = useRouter();
   const [chats, setChats] = useState<SessionChat[]>(() => sortSessionChats(initialChats));
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(activeChatId);
   const activeChat = useMemo(
-    () => chats.find((chat) => chat.id === activeChatId) ?? chats[0] ?? null,
-    [chats, activeChatId],
+    () => (selectedChatId ? chats.find((chat) => chat.id === selectedChatId) : null) ?? chats[0] ?? null,
+    [chats, selectedChatId],
   );
   const activeChatIdResolved = activeChat?.id ?? null;
   const includeUnassignedEvents = Boolean(activeChat?.isDefault);
@@ -1747,6 +1748,10 @@ export function ChatInterface({
     setChatTitleDraft('');
     setChatMutationError(null);
   }, [initialChats, activeChatId]);
+
+  useEffect(() => {
+    setSelectedChatId(activeChatId);
+  }, [sessionId, activeChatId]);
 
   useEffect(() => {
     setIsSubmitting(false);
@@ -2397,6 +2402,7 @@ export function ChatInterface({
     setChatActionMenuId(null);
     setRenamingChatId(null);
     setChatTitleDraft('');
+    setSelectedChatId(chatId);
     router.push(buildChatUrl(chatId));
     if (isMobileLayout) {
       setIsChatSidebarOpen(false);
