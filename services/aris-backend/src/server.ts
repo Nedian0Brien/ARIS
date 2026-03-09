@@ -216,13 +216,42 @@ export function buildServer(config: ServerConfig) {
   app.get('/v3/sessions/:sessionId/messages', async (request, reply) => {
     try {
       const { sessionId } = request.params as { sessionId: string };
+      const { after_seq, limit } = request.query as { after_seq?: string; limit?: string };
       const session = await store.getSession(sessionId);
       if (!session) {
         return reply.code(404).send({ error: 'Session not found' });
       }
 
-      const messages = await store.listMessages(sessionId);
-      return { messages };
+      const parsedAfterSeq = Number.parseInt(String(after_seq ?? ''), 10);
+      const parsedLimit = Number.parseInt(String(limit ?? ''), 10);
+      const afterSeq = Number.isFinite(parsedAfterSeq) && parsedAfterSeq >= 0
+        ? parsedAfterSeq
+        : undefined;
+      const pageLimit = Number.isFinite(parsedLimit) && parsedLimit > 0
+        ? Math.min(1000, parsedLimit)
+        : undefined;
+
+      const readLimit = pageLimit ? pageLimit + 1 : undefined;
+      const rawMessages = await store.listMessages(sessionId, {
+        ...(afterSeq !== undefined ? { afterSeq } : {}),
+        ...(readLimit !== undefined ? { limit: readLimit } : {}),
+      });
+      const hasMore = pageLimit ? rawMessages.length > pageLimit : undefined;
+      const messages = pageLimit ? rawMessages.slice(0, pageLimit) : rawMessages;
+      const lastSeq = messages.reduce((max, message) => {
+        const seqRaw = (message.meta as { seq?: unknown } | undefined)?.seq;
+        const seq = typeof seqRaw === 'number' ? seqRaw : Number.parseInt(String(seqRaw ?? ''), 10);
+        if (!Number.isFinite(seq) || seq <= max) {
+          return max;
+        }
+        return seq;
+      }, 0);
+
+      return {
+        messages,
+        ...(typeof hasMore === 'boolean' ? { hasMore } : {}),
+        ...(lastSeq > 0 ? { lastSeq } : {}),
+      };
     } catch (error) {
       const message = toErrorMessage(error, 'Failed to list session messages');
       return reply.code(502).send({ error: message });

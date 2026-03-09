@@ -112,6 +112,8 @@ const DEFAULT_EVENTS_PAGE_LIMIT = 40;
 const MAX_EVENTS_PAGE_LIMIT = 200;
 const HAPPY_MESSAGES_BATCH_LIMIT = 500;
 const HAPPY_MESSAGES_MAX_PAGES = 1000;
+const RECENT_WINDOW_MIN = 240;
+const RECENT_WINDOW_MAX = 1400;
 
 function clampEventsLimit(limit?: number): number {
   const next = Number.isFinite(limit) ? Math.floor(Number(limit)) : DEFAULT_EVENTS_PAGE_LIMIT;
@@ -204,9 +206,23 @@ function toMessageSeq(value: unknown): number | null {
     return null;
   }
 
-  const raw = rec.seq;
+  const meta = asObject(rec.meta);
+  const raw = rec.seq ?? meta?.seq;
   const parsed = typeof raw === 'number' ? raw : Number.parseInt(String(raw ?? ''), 10);
   if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+  return parsed;
+}
+
+function toSessionSeq(value: unknown): number | null {
+  const rec = asObject(value);
+  if (!rec) {
+    return null;
+  }
+  const raw = rec.seq;
+  const parsed = typeof raw === 'number' ? raw : Number.parseInt(String(raw ?? ''), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
     return null;
   }
   return parsed;
@@ -261,40 +277,159 @@ async function fetchHappy(path: string, init?: RequestInit): Promise<unknown> {
   return response.json();
 }
 
+async function fetchSessionMessagesPage(
+  sessionId: string,
+  options: {
+    afterSeq: number;
+    limit: number;
+  },
+): Promise<{ messages: unknown[]; hasMore: boolean; lastSeq: number }> {
+  const query = new URLSearchParams({
+    after_seq: String(Math.max(0, Math.floor(options.afterSeq))),
+    limit: String(Math.max(1, Math.floor(options.limit))),
+  });
+  const raw = await fetchHappy(`/v3/sessions/${encodeURIComponent(sessionId)}/messages?${query.toString()}`);
+  const batch = extractArrayPayload(raw, 'messages');
+  const response = asObject(raw);
+  const maxSeqInBatch = batch.reduce((max: number, item) => {
+    const seq = toMessageSeq(item);
+    if (seq === null || seq <= max) {
+      return max;
+    }
+    return seq;
+  }, 0);
+  const responseLastSeqRaw = response?.lastSeq;
+  const responseLastSeq = typeof responseLastSeqRaw === 'number'
+    ? responseLastSeqRaw
+    : Number.parseInt(String(responseLastSeqRaw ?? ''), 10);
+  const lastSeq = Number.isFinite(responseLastSeq) && responseLastSeq > 0
+    ? responseLastSeq
+    : maxSeqInBatch;
+
+  return {
+    messages: batch,
+    hasMore: response?.hasMore === true,
+    lastSeq,
+  };
+}
+
 async function listAllSessionMessages(sessionId: string): Promise<unknown[]> {
   let afterSeq = 0;
   const allMessages: unknown[] = [];
 
   for (let page = 0; page < HAPPY_MESSAGES_MAX_PAGES; page += 1) {
-    const query = new URLSearchParams({
-      after_seq: String(afterSeq),
-      limit: String(HAPPY_MESSAGES_BATCH_LIMIT),
+    const pageResult = await fetchSessionMessagesPage(sessionId, {
+      afterSeq,
+      limit: HAPPY_MESSAGES_BATCH_LIMIT,
     });
-    const raw = await fetchHappy(`/v3/sessions/${encodeURIComponent(sessionId)}/messages?${query.toString()}`);
-    const batch = extractArrayPayload(raw, 'messages');
+    const batch = pageResult.messages;
     if (batch.length === 0) {
       break;
     }
 
     allMessages.push(...batch);
-
-    const maxSeq = batch.reduce((max: number, item) => {
-      const seq = toMessageSeq(item);
-      if (seq === null || seq <= max) {
-        return max;
-      }
-      return seq;
-    }, afterSeq);
-
-    const response = asObject(raw);
-    const hasMore = response?.hasMore === true;
-    if (!hasMore || maxSeq <= afterSeq) {
+    if (!pageResult.hasMore || pageResult.lastSeq <= afterSeq) {
       break;
     }
-    afterSeq = maxSeq;
+    afterSeq = pageResult.lastSeq;
   }
 
   return allMessages;
+}
+
+async function listRecentSessionMessages(
+  sessionId: string,
+  latestSeq: number,
+  options: GetSessionEventsOptions,
+): Promise<unknown[] | null> {
+  const pageLimit = clampEventsLimit(options.limit);
+  const chatId = typeof options.chatId === 'string' ? options.chatId.trim() : '';
+  if (!chatId) {
+    const recentWindow = Math.min(RECENT_WINDOW_MAX, Math.max(RECENT_WINDOW_MIN, pageLimit * 6));
+    const afterSeq = Math.max(0, latestSeq - recentWindow);
+    const page = await fetchSessionMessagesPage(sessionId, {
+      afterSeq,
+      limit: recentWindow,
+    });
+    if (page.messages.length === 0) {
+      return [];
+    }
+    return page.messages;
+  }
+
+  const scanWindow = Math.min(1000, Math.max(HAPPY_MESSAGES_BATCH_LIMIT, pageLimit * 20));
+  const maxScans = 8;
+  let cursor = latestSeq;
+  let collected: unknown[] = [];
+  let matchedCount = 0;
+
+  for (let i = 0; i < maxScans && cursor > 0; i += 1) {
+    const afterSeq = Math.max(0, cursor - scanWindow);
+    const page = await fetchSessionMessagesPage(sessionId, {
+      afterSeq,
+      limit: scanWindow,
+    });
+    if (page.messages.length === 0) {
+      break;
+    }
+    collected = [...page.messages, ...collected];
+    matchedCount += page.messages.reduce((sum, message) => {
+      const rec = asObject(message);
+      const meta = asObject(rec?.meta);
+      const eventChatId = typeof meta?.chatId === 'string' ? meta.chatId.trim() : '';
+      if (eventChatId) {
+        return eventChatId === chatId ? sum + 1 : sum;
+      }
+      return options.includeUnassigned === true ? sum + 1 : sum;
+    }, 0);
+    if (matchedCount >= pageLimit || afterSeq === 0) {
+      return collected;
+    }
+    if (page.lastSeq <= afterSeq) {
+      break;
+    }
+    cursor = afterSeq;
+  }
+  return null;
+}
+
+async function listMessagesForAfterCursor(
+  sessionId: string,
+  latestSeq: number,
+  options: GetSessionEventsOptions,
+): Promise<unknown[] | null> {
+  if (!options.after || options.before) {
+    return null;
+  }
+  const pageLimit = clampEventsLimit(options.limit);
+  const recentWindow = Math.min(1000, Math.max(RECENT_WINDOW_MIN, pageLimit * 10));
+  const maxScans = 6;
+  let cursor = latestSeq;
+  let collected: unknown[] = [];
+
+  for (let i = 0; i < maxScans && cursor > 0; i += 1) {
+    const afterSeq = Math.max(0, cursor - recentWindow);
+    const page = await fetchSessionMessagesPage(sessionId, {
+      afterSeq,
+      limit: recentWindow,
+    });
+    if (page.messages.length === 0) {
+      break;
+    }
+    collected = [...page.messages, ...collected];
+    const hasAfterCursor = page.messages.some((message) => {
+      const rec = asObject(message);
+      return String(rec?.id ?? '') === options.after;
+    });
+    if (hasAfterCursor || afterSeq === 0) {
+      return collected;
+    }
+    if (page.lastSeq <= afterSeq) {
+      break;
+    }
+    cursor = afterSeq;
+  }
+  return null;
 }
 
 export async function getRuntimeHealth(): Promise<{ api: 'up' | 'down'; happy: 'up' | 'down'; lastSyncAt: string | null }> {
@@ -374,8 +509,18 @@ export async function getSessionEvents(
   const sessionRaw = await fetchHappy('/v1/sessions');
   const sessions = extractArrayPayload(sessionRaw, 'sessions');
   const found = findSessionById(sessions, sessionId) ?? sessions[0] ?? { id: sessionId };
+  const latestSeq = toSessionSeq(found);
 
-  const messages = await listAllSessionMessages(sessionId);
+  let messages: unknown[];
+  if (latestSeq !== null && !resolvedOptions.before && !resolvedOptions.after) {
+    const recent = await listRecentSessionMessages(sessionId, latestSeq, resolvedOptions);
+    messages = recent ?? await listAllSessionMessages(sessionId);
+  } else if (latestSeq !== null && resolvedOptions.after && !resolvedOptions.before) {
+    const recentAfter = await listMessagesForAfterCursor(sessionId, latestSeq, resolvedOptions);
+    messages = recentAfter ?? await listAllSessionMessages(sessionId);
+  } else {
+    messages = await listAllSessionMessages(sessionId);
+  }
 
   const sessionDetail = normalizeSessionDetail(found);
 

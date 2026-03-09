@@ -8,6 +8,7 @@ export type SessionAction = 'abort' | 'retry' | 'kill' | 'resume';
 
 export type RuntimeSession = {
   id: string;
+  seq?: number;
   metadata: {
     flavor: AgentFlavor;
     path: string;

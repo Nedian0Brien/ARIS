@@ -28,6 +28,7 @@ const DEFAULT_APPROVAL_POLICY = normalizeApprovalPolicy(process.env.CODEX_APPROV
 const CODEX_SANDBOX_MODE = (process.env.CODEX_SANDBOX_MODE || 'workspace-write').trim();
 const CODEX_RUNTIME_MODE = (process.env.CODEX_RUNTIME_MODE || 'app-server').trim().toLowerCase();
 const HAPPY_MESSAGES_BATCH_LIMIT = 500;
+const HAPPY_MESSAGES_PAGE_MAX_LIMIT = 2000;
 const HAPPY_MESSAGES_MAX_PAGES = 1000;
 const HAPPY_EVENT_LOG_DIR = path.resolve(process.cwd(), 'logs');
 const HAPPY_EVENT_LOG_MAX_BYTES = (() => {
@@ -417,16 +418,18 @@ function toRuntimeMessage(sessionId: string, raw: HappyBackendMessage): RuntimeM
     title: parsed.title ?? (role === 'user' ? 'User Instruction' : 'Text Reply'),
     text: parsed.text ?? '',
     createdAt: toIso(raw.createdAt),
-    meta: parsed.meta || role
-      ? { ...(parsed.meta ?? {}), ...(role ? { role } : {}) }
+    meta: parsed.meta || role || Number.isFinite(raw.seq)
+      ? { ...(parsed.meta ?? {}), ...(role ? { role } : {}), ...(Number.isFinite(raw.seq) ? { seq: raw.seq } : {}) }
       : undefined,
   };
 }
 
 function toRuntimeSession(raw: HappyBackendSession): RuntimeSession {
   const metadata = normalizeMetadata(raw.metadata);
+  const seq = Number.isFinite(raw.seq) ? Number(raw.seq) : undefined;
   return {
     id: raw.id,
+    ...(seq !== undefined ? { seq } : {}),
     metadata: {
       flavor: metadata.flavor,
       path: metadata.path,
@@ -2567,10 +2570,60 @@ export class HappyRuntimeStore {
     return toRuntimeSession(mapped);
   }
 
-  async listMessages(sessionId: string): Promise<RuntimeMessage[]> {
+  async listMessages(
+    sessionId: string,
+    options: { afterSeq?: number; limit?: number } = {},
+  ): Promise<RuntimeMessage[]> {
     const session = await this.getSession(sessionId);
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
+    }
+
+    const hasPaginatedRequest = options.afterSeq !== undefined || options.limit !== undefined;
+    if (hasPaginatedRequest) {
+      const normalizedAfterSeq = Number.isFinite(options.afterSeq)
+        ? Math.max(0, Math.floor(Number(options.afterSeq)))
+        : 0;
+      const normalizedLimit = Number.isFinite(options.limit)
+        ? Math.max(1, Math.min(HAPPY_MESSAGES_PAGE_MAX_LIMIT, Math.floor(Number(options.limit))))
+        : HAPPY_MESSAGES_BATCH_LIMIT;
+
+      const collected: HappyBackendMessage[] = [];
+      let nextAfterSeq = normalizedAfterSeq;
+      let hasMore = true;
+
+      while (collected.length < normalizedLimit && hasMore) {
+        const remaining = normalizedLimit - collected.length;
+        const pageLimit = Math.min(HAPPY_MESSAGES_BATCH_LIMIT, remaining);
+        const query = new URLSearchParams({
+          after_seq: String(nextAfterSeq),
+          limit: String(pageLimit),
+        });
+        const response = await this.request<HappyMessageResponse>(
+          `/v3/sessions/${encodeURIComponent(sessionId)}/messages?${query.toString()}`,
+        );
+        const batch = Array.isArray(response.messages) ? response.messages : [];
+        if (batch.length === 0) {
+          break;
+        }
+        collected.push(...batch);
+        const maxSeq = batch.reduce((max, message) => {
+          if (!Number.isFinite(message.seq) || message.seq <= max) {
+            return max;
+          }
+          return message.seq;
+        }, nextAfterSeq);
+        hasMore = response.hasMore === true;
+        if (!hasMore || maxSeq <= nextAfterSeq) {
+          break;
+        }
+        nextAfterSeq = maxSeq;
+      }
+
+      return collected
+        .filter((message) => typeof message.id === 'string')
+        .map((message) => toRuntimeMessage(sessionId, message))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     }
 
     const messages = await this.listAllMessages(sessionId);

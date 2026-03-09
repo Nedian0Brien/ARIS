@@ -52,7 +52,7 @@ interface RuntimeStoreBackend {
   listSessions(): Promise<RuntimeSession[]>;
   getSession(sessionId: string): Promise<RuntimeSession | null>;
   createSession(input: CreateSessionInput): Promise<RuntimeSession>;
-  listMessages(sessionId: string): Promise<RuntimeMessage[]>;
+  listMessages(sessionId: string, options?: { afterSeq?: number; limit?: number }): Promise<RuntimeMessage[]>;
   appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage>;
   applySessionAction(sessionId: string, action: SessionAction): Promise<{ accepted: boolean; message: string; at: string }>;
   isSessionRunning(sessionId: string, chatId?: string): Promise<boolean>;
@@ -104,8 +104,30 @@ class MockRuntimeStore implements RuntimeStoreBackend {
     return session;
   }
 
-  async listMessages(sessionId: string): Promise<RuntimeMessage[]> {
-    return this.messages.get(sessionId) ?? [];
+  async listMessages(sessionId: string, options: { afterSeq?: number; limit?: number } = {}): Promise<RuntimeMessage[]> {
+    const base = this.messages.get(sessionId) ?? [];
+    const sorted = [...base].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const withSeq = sorted.map((message, index) => ({
+      ...message,
+      meta: {
+        ...(message.meta ?? {}),
+        seq: index + 1,
+      },
+    }));
+    const normalizedAfterSeq = Number.isFinite(options.afterSeq)
+      ? Math.max(0, Math.floor(Number(options.afterSeq)))
+      : 0;
+    const afterFiltered = withSeq.filter((message) => {
+      const seqValue = Number((message.meta as { seq?: number }).seq);
+      return Number.isFinite(seqValue) ? seqValue > normalizedAfterSeq : true;
+    });
+    const normalizedLimit = Number.isFinite(options.limit)
+      ? Math.max(1, Math.floor(Number(options.limit)))
+      : null;
+    if (normalizedLimit === null) {
+      return afterFiltered;
+    }
+    return afterFiltered.slice(0, normalizedLimit);
   }
 
   async appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage> {
@@ -302,8 +324,8 @@ export class RuntimeStore {
     return this.delegate.createSession(input);
   }
 
-  async listMessages(sessionId: string) {
-    return this.delegate.listMessages(sessionId);
+  async listMessages(sessionId: string, options?: { afterSeq?: number; limit?: number }) {
+    return this.delegate.listMessages(sessionId, options);
   }
 
   async appendMessage(sessionId: string, input: AppendMessageInput) {
