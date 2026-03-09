@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { KeyRound, CheckCircle2, UploadCloud, FileKey, ChevronDown, ChevronUp } from 'lucide-react';
+import { KeyRound, CheckCircle2, UploadCloud, FileKey, ChevronDown, ChevronUp, Bot } from 'lucide-react';
 import styles from './SettingsTab.module.css';
 
 export function SettingsTab() {
@@ -15,6 +15,11 @@ export function SettingsTab() {
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Model Settings State
+  const [customModels, setCustomModels] = useState({ codex: '', claude: '', gemini: '' });
+  const [modelSaving, setModelSaving] = useState(false);
+  const [modelFeedback, setModelFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
+
   useEffect(() => {
     fetch('/api/settings/ssh')
       .then((r) => r.json())
@@ -23,6 +28,14 @@ export function SettingsTab() {
         setHasKey(!!data.hasKey);
       })
       .catch(() => {});
+
+    // Load custom models from localStorage
+    const savedModels = localStorage.getItem('customAiModels');
+    if (savedModels) {
+      try {
+        setCustomModels(JSON.parse(savedModels));
+      } catch (e) {}
+    }
   }, []);
 
   const loadFile = useCallback((file: File) => {
@@ -77,10 +90,79 @@ export function SettingsTab() {
     }
   };
 
+  const handleModelSave = () => {
+    setModelSaving(true);
+    setModelFeedback(null);
+    try {
+      localStorage.setItem('customAiModels', JSON.stringify(customModels));
+      setModelFeedback({ ok: true, msg: 'AI 모델 설정이 저장되었습니다.' });
+      setTimeout(() => setModelFeedback(null), 3000);
+    } catch {
+      setModelFeedback({ ok: false, msg: '저장 실패' });
+    } finally {
+      setModelSaving(false);
+    }
+  };
+
   const isFileLoaded = !!sshPrivateKey && !!fileName;
 
   return (
     <div className={`animate-in ${styles.settingsShell}`}>
+      {/* AI 모델 설정 섹션 */}
+      <div className={styles.section} style={{ marginBottom: '24px' }}>
+        <div className={styles.sectionTitle}>
+          <Bot size={16} />
+          AI 모델 설정
+        </div>
+        <p className={styles.keyHint} style={{ marginBottom: '16px' }}>
+          채팅에서 사용할 각 제공자별 커스텀 모델 이름을 입력하세요. 입력된 모델은 채팅 화면의 모델 선택기에 자동 추가됩니다.
+        </p>
+
+        <div className={styles.field}>
+          <label className={styles.label}>CODEX (OpenAI) 커스텀 모델</label>
+          <input
+            className={styles.input}
+            type="text"
+            value={customModels.codex}
+            onChange={(e) => setCustomModels({ ...customModels, codex: e.target.value })}
+            placeholder="예: gpt-4-turbo"
+          />
+        </div>
+
+        <div className={styles.field}>
+          <label className={styles.label}>Claude (Anthropic) 커스텀 모델</label>
+          <input
+            className={styles.input}
+            type="text"
+            value={customModels.claude}
+            onChange={(e) => setCustomModels({ ...customModels, claude: e.target.value })}
+            placeholder="예: claude-3-opus-20240229"
+          />
+        </div>
+
+        <div className={styles.field}>
+          <label className={styles.label}>Gemini (Google) 커스텀 모델</label>
+          <input
+            className={styles.input}
+            type="text"
+            value={customModels.gemini}
+            onChange={(e) => setCustomModels({ ...customModels, gemini: e.target.value })}
+            placeholder="예: gemini-1.5-pro"
+          />
+        </div>
+
+        <div className={styles.footer}>
+          <button className={styles.saveBtn} onClick={handleModelSave} disabled={modelSaving}>
+            {modelSaving ? '저장 중...' : '저장'}
+          </button>
+          {modelFeedback && (
+            <span className={modelFeedback.ok ? styles.feedbackOk : styles.feedbackErr}>
+              {modelFeedback.msg}
+            </span>
+          )}
+        </div>
+      </div>
+
       <div className={styles.section}>
         <div className={styles.sectionTitle}>
           <KeyRound size={16} />

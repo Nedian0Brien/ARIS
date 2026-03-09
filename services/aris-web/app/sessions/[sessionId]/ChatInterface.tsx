@@ -306,15 +306,25 @@ function normalizeModelId(value: unknown): string | null {
   return trimmed.slice(0, 120);
 }
 
-function resolveComposerModels(agent: AgentFlavor): ComposerModelOption[] {
-  if (agent === 'claude' || agent === 'codex' || agent === 'gemini') {
-    return COMPOSER_MODELS_BY_AGENT[agent];
+type CustomModels = Record<string, string>;
+
+function resolveComposerModels(agent: AgentFlavor, customModels?: CustomModels): ComposerModelOption[] {
+  const baseModels = (agent === 'claude' || agent === 'codex' || agent === 'gemini')
+    ? COMPOSER_MODELS_BY_AGENT[agent]
+    : COMPOSER_MODELS_BY_AGENT.codex;
+
+  if (customModels) {
+    const customId = customModels[agent];
+    if (customId && customId.trim() !== '') {
+      const trimmed = customId.trim();
+      return [{ id: trimmed, shortLabel: trimmed, badge: '커스텀' }, ...baseModels.filter(m => m.id !== trimmed)];
+    }
   }
-  return COMPOSER_MODELS_BY_AGENT.codex;
+  return baseModels;
 }
 
-function resolveDefaultModelId(agent: AgentFlavor): string {
-  return resolveComposerModels(agent)[0]?.id ?? 'gpt-5-codex';
+function resolveDefaultModelId(agent: AgentFlavor, customModels?: CustomModels): string {
+  return resolveComposerModels(agent, customModels)[0]?.id ?? 'gpt-5-codex';
 }
 
 function isUserEvent(event: UiEvent): boolean {
@@ -1681,6 +1691,17 @@ export function ChatInterface({
   approvalPolicy?: ApprovalPolicy;
 }) {
   const router = useRouter();
+  const [customModels, setCustomModels] = useState<CustomModels>({});
+  
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('customAiModels');
+      if (stored) {
+        setCustomModels(JSON.parse(stored));
+      }
+    } catch {}
+  }, []);
+
   const [chats, setChats] = useState<SessionChat[]>(() => sortSessionChats(initialChats));
   const [selectedChatId, setSelectedChatId] = useState<string | null>(activeChatId);
   const activeChat = useMemo(
@@ -1794,7 +1815,7 @@ export function ChatInterface({
     const sessionModelFallback = initialAgent === sessionAgent ? normalizeModelId(sessionModel) : null;
     return normalizeModelId(initialChat?.model)
       ?? sessionModelFallback
-      ?? resolveDefaultModelId(initialAgent);
+      ?? resolveDefaultModelId(initialAgent, customModels);
   });
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -1830,8 +1851,8 @@ export function ChatInterface({
 
   const defaultAgentFlavor = normalizeAgentFlavor(agentFlavor, 'codex');
   const activeAgentFlavor = normalizeAgentFlavor(activeChat?.agent, defaultAgentFlavor);
-  const activeComposerModels = useMemo(() => resolveComposerModels(activeAgentFlavor), [activeAgentFlavor]);
-  const activeModelId = normalizeModelId(selectedModelId) ?? resolveDefaultModelId(activeAgentFlavor);
+  const activeComposerModels = useMemo(() => resolveComposerModels(activeAgentFlavor, customModels), [activeAgentFlavor, customModels]);
+  const activeModelId = normalizeModelId(selectedModelId) ?? resolveDefaultModelId(activeAgentFlavor, customModels);
   const agentMeta = resolveAgentMeta(activeAgentFlavor);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? runtimeError ?? null;
   const isRunActive = isSubmitting || runtimeRunning || isAborting;
@@ -1901,7 +1922,7 @@ export function ChatInterface({
       : null;
     const nextModelId = normalizeModelId(activeChat?.model)
       ?? sessionModelFallback
-      ?? resolveDefaultModelId(activeAgentFlavor);
+      ?? resolveDefaultModelId(activeAgentFlavor, customModels);
     if (nextModelId === selectedModelId) {
       return;
     }
@@ -3148,7 +3169,7 @@ export function ChatInterface({
     setIsCreatingChat(true);
     setChatMutationError(null);
     setIsCreateChatMenuOpen(false);
-    const defaultModelId = resolveDefaultModelId(agent);
+    const defaultModelId = resolveDefaultModelId(agent, customModels);
     try {
       const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`, {
         method: 'POST',
@@ -3287,7 +3308,7 @@ export function ChatInterface({
       )).join('\n') + '\n\n'
       : '';
     const finalText = contextPrefix + promptText;
-    const submitModelId = normalizeModelId(selectedModelId) ?? resolveDefaultModelId(activeAgentFlavor);
+    const submitModelId = normalizeModelId(selectedModelId) ?? resolveDefaultModelId(activeAgentFlavor, customModels);
 
     setIsSubmitting(true);
     setIsAwaitingReply(true);
