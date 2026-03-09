@@ -303,7 +303,8 @@ function normalizeModelId(value: unknown): string | null {
   if (!trimmed) {
     return null;
   }
-  return trimmed.slice(0, 120);
+  const canonical = trimmed === 'gpt-5-codex' ? 'gpt-5.3-codex' : trimmed;
+  return canonical.slice(0, 120);
 }
 
 type CustomModels = Record<string, string>;
@@ -324,7 +325,7 @@ function resolveComposerModels(agent: AgentFlavor, customModels?: CustomModels):
 }
 
 function resolveDefaultModelId(agent: AgentFlavor, customModels?: CustomModels): string {
-  return resolveComposerModels(agent, customModels)[0]?.id ?? 'gpt-5-codex';
+  return resolveComposerModels(agent, customModels)[0]?.id ?? 'gpt-5.3-codex';
 }
 
 function isUserEvent(event: UiEvent): boolean {

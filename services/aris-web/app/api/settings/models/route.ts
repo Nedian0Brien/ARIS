@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { getCurrentUserFromCookies } from '@/lib/auth/session';
+import { sanitizeCustomModel } from '@/lib/happy/modelPolicy';
 
 export async function GET() {
   try {
@@ -14,9 +15,14 @@ export async function GET() {
       select: { customAiModels: true },
     });
 
-    const customAiModels = pref?.customAiModels 
+    const rawModels = pref?.customAiModels
       ? (typeof pref.customAiModels === 'string' ? JSON.parse(pref.customAiModels) : pref.customAiModels)
-      : { codex: '', claude: '', gemini: '' };
+      : {};
+    const customAiModels = {
+      codex: sanitizeCustomModel((rawModels as Record<string, unknown>)?.codex) ?? '',
+      claude: sanitizeCustomModel((rawModels as Record<string, unknown>)?.claude) ?? '',
+      gemini: sanitizeCustomModel((rawModels as Record<string, unknown>)?.gemini) ?? '',
+    };
 
     return NextResponse.json(customAiModels);
   } catch (error) {
@@ -36,9 +42,9 @@ export async function POST(request: Request) {
     const { codex, claude, gemini } = body;
 
     const customModels = {
-      codex: typeof codex === 'string' ? codex : '',
-      claude: typeof claude === 'string' ? claude : '',
-      gemini: typeof gemini === 'string' ? gemini : '',
+      codex: sanitizeCustomModel(codex) ?? '',
+      claude: sanitizeCustomModel(claude) ?? '',
+      gemini: sanitizeCustomModel(gemini) ?? '',
     };
 
     await prisma.uiPreference.upsert({
