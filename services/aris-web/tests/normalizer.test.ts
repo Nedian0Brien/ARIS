@@ -425,4 +425,37 @@ describe('normalizeEvents', () => {
     expect(first[0].id).toMatch(/^evt-[0-9a-f]+$/);
     expect(first[0].id).toBe(second[0].id);
   });
+
+  it('extracts text from happy wrapped content payload', () => {
+    const wrapped = {
+      t: 'json',
+      c: JSON.stringify({
+        role: 'agent',
+        title: 'Text Reply',
+        text: 'Claude wrapped payload works.',
+      }),
+    };
+
+    const events = normalizeEvents([{ id: 'e12', content: wrapped }]);
+    expect(events[0]).toMatchObject({
+      id: 'e12',
+      kind: 'text_reply',
+      title: 'Text Reply',
+      body: 'Claude wrapped payload works.',
+    });
+  });
+
+  it('falls back to raw payload text when happy content parsing fails', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e13',
+        content: { weird: { nested: true }, value: 7 },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('text_reply');
+    expect(events[0].body).toContain('[UNPARSED HAPPY PAYLOAD]');
+    expect(events[0].body).toContain('"nested":true');
+    expect(events[0].meta?.parseFallback).toBe(true);
+  });
 });

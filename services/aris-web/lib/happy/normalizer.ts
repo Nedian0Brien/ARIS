@@ -13,6 +13,8 @@ type Severity = UiEvent['severity'];
 
 const PREVIEW_MAX_LINES = 12;
 const PREVIEW_MAX_CHARS = 600;
+const RAW_PAYLOAD_MAX_CHARS = 4000;
+const UNPARSED_HAPPY_PAYLOAD_PREFIX = '[UNPARSED HAPPY PAYLOAD]';
 
 function asRecord(value: unknown): RecordValue | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -47,6 +49,202 @@ function asNumber(value: unknown, fallback: number): number {
     return value;
   }
   return fallback;
+}
+
+function parseJson(value: string): unknown | null {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function decodeBase64ToUtf8(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed || !/^[A-Za-z0-9+/=\n\r]+$/.test(trimmed)) {
+    return null;
+  }
+
+  try {
+    const maybeBuffer = (globalThis as { Buffer?: { from: (input: string, encoding: string) => { toString: (encoding: string) => string } } }).Buffer;
+    if (maybeBuffer) {
+      const decoded = maybeBuffer.from(trimmed, 'base64').toString('utf8');
+      return decoded.length > 0 ? decoded : null;
+    }
+  } catch {
+    // Browser fallback below.
+  }
+
+  if (typeof atob !== 'function') {
+    return null;
+  }
+
+  try {
+    const binary = atob(trimmed);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const decoded = new TextDecoder().decode(bytes);
+    return decoded.length > 0 ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeWrappedContent(content: unknown): unknown {
+  const record = asRecord(content);
+  if (record && typeof record.t === 'string' && typeof record.c === 'string') {
+    const parsed = parseJson(record.c);
+    if (parsed !== null) {
+      return parsed;
+    }
+    const decoded = decodeBase64ToUtf8(record.c);
+    if (decoded) {
+      const decodedParsed = parseJson(decoded);
+      return decodedParsed ?? decoded;
+    }
+    return record.c;
+  }
+  return content;
+}
+
+function parseTextFromRecord(record: RecordValue | null): string | undefined {
+  if (!record) {
+    return undefined;
+  }
+
+  const directText = asString(record.text, '').trim() || asString(record.body, '').trim();
+  if (directText) {
+    return directText;
+  }
+
+  const nestedCandidates: unknown[] = [
+    record.message,
+    record.content,
+    record.payload,
+    record.result,
+    record.output,
+    record.delta,
+    record.data,
+    record.payloadMeta,
+    record.c,
+  ];
+  for (const nested of nestedCandidates) {
+    const candidate = findTextCandidate(nested);
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
+function findTextCandidate(value: unknown): string | undefined {
+  const normalized = normalizeWrappedContent(value);
+
+  if (typeof normalized === 'string') {
+    const trimmed = normalized.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    const parsed = parseJson(trimmed);
+    if (typeof parsed === 'string') {
+      return parsed;
+    }
+    if (parsed && typeof parsed === 'object') {
+      const nested = parseTextFromRecord(asRecord(parsed));
+      if (nested) {
+        return nested;
+      }
+    }
+
+    const decoded = decodeBase64ToUtf8(trimmed);
+    if (!decoded) {
+      return trimmed;
+    }
+    const decodedParsed = parseJson(decoded);
+    if (typeof decodedParsed === 'string') {
+      return decodedParsed;
+    }
+    if (decodedParsed && typeof decodedParsed === 'object') {
+      const nested = parseTextFromRecord(asRecord(decodedParsed));
+      if (nested) {
+        return nested;
+      }
+    }
+
+    return decoded;
+  }
+
+  if (Array.isArray(normalized)) {
+    for (const item of normalized) {
+      const candidate = findTextCandidate(item);
+      if (candidate) {
+        return candidate;
+      }
+    }
+    return undefined;
+  }
+
+  if (normalized && typeof normalized === 'object') {
+    const nested = parseTextFromRecord(asRecord(normalized));
+    if (nested) {
+      return nested;
+    }
+  }
+
+  return undefined;
+}
+
+function stringifyPayloadForDebug(value: unknown): string | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || undefined;
+  }
+
+  try {
+    const json = JSON.stringify(value);
+    if (!json || json === '{}') {
+      return undefined;
+    }
+    return json.slice(0, RAW_PAYLOAD_MAX_CHARS);
+  } catch {
+    const fallback = String(value).trim();
+    return fallback ? fallback.slice(0, RAW_PAYLOAD_MAX_CHARS) : undefined;
+  }
+}
+
+function parseHappyMessageContent(content: unknown): {
+  type?: string;
+  title?: string;
+  text?: string;
+  meta?: RecordValue;
+  fallbackUsed: boolean;
+} {
+  const normalized = normalizeWrappedContent(content);
+  const record = asRecord(normalized);
+  const text = findTextCandidate(normalized);
+
+  if (text) {
+    return {
+      type: asString(record?.type, '').trim() || undefined,
+      title: asString(record?.title, '').trim() || undefined,
+      text,
+      meta: asRecord(record?.meta) ?? asRecord(record?.payloadMeta) ?? asRecord(record?.data) ?? undefined,
+      fallbackUsed: false,
+    };
+  }
+
+  const rawPayload = stringifyPayloadForDebug(normalized ?? content);
+  return {
+    type: asString(record?.type, '').trim() || undefined,
+    title: asString(record?.title, '').trim() || undefined,
+    text: rawPayload ? `${UNPARSED_HAPPY_PAYLOAD_PREFIX}\n${rawPayload}` : undefined,
+    meta: asRecord(record?.meta) ?? asRecord(record?.payloadMeta) ?? asRecord(record?.data) ?? undefined,
+    fallbackUsed: Boolean(rawPayload),
+  };
 }
 
 function hashFNV1a(input: string): string {
@@ -774,14 +972,17 @@ export function normalizeEvents(raw: unknown): UiEvent[] {
 
   return list.map((item, idx): UiEvent => {
     const rec = asRecord(item);
-    const content = asRecord(rec?.content);
-    const meta = asRecord(rec?.meta);
+    const parsedContent = parseHappyMessageContent(rec?.content);
+    const baseMeta = asRecord(rec?.meta) ?? parsedContent.meta ?? null;
+    const meta = parsedContent.fallbackUsed
+      ? { ...(baseMeta ?? {}), parseFallback: true }
+      : baseMeta;
     const streamEvent = asString(meta?.streamEvent, '').toLowerCase();
 
-    const body = asString(rec?.body ?? rec?.text ?? content?.text ?? content, '');
-    const type = asString(rec?.type ?? content?.type, '');
+    const body = asString(rec?.body ?? rec?.text ?? parsedContent.text, '');
+    const type = asString(rec?.type ?? parsedContent.type, '');
     const timestamp = asString(rec?.createdAt ?? rec?.timestamp, new Date().toISOString());
-    const title = asString(rec?.title, '');
+    const title = asString(rec?.title ?? parsedContent.title, '');
     const resolvedId = resolveEventId(rec, meta, idx, {
       timestamp,
       type,
