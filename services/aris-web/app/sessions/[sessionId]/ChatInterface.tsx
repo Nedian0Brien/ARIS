@@ -2429,7 +2429,14 @@ export function ChatInterface({
   useEffect(() => {
     let cancelled = false;
     const refreshVisibleChats = async () => {
-      const targets = visibleChats.filter((chat) => !chatSidebarFetchInFlightRef.current[chat.id]);
+      // Limit polling to the first 15 visible chats plus the active chat
+      const recentChats = visibleChats.slice(0, 15);
+      const activeChat = chats.find((c) => c.id === activeChatIdResolved);
+      if (activeChat && !recentChats.some((c) => c.id === activeChat.id)) {
+        recentChats.push(activeChat);
+      }
+
+      const targets = recentChats.filter((chat) => !chatSidebarFetchInFlightRef.current[chat.id]);
       if (targets.length === 0) {
         return;
       }

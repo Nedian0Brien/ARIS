@@ -507,8 +507,16 @@ export async function listLatestEventsByChat(input: {
     return result;
   }
 
+  // If there are many missing chats, it is more efficient to fetch all messages once
+  // rather than making multiple sequential paginated API calls per chat.
+  if (missingChatIds.length > 3) {
+    const allMessages = await listAllSessionMessages(input.sessionId);
+    assignLatestEvents(normalizeEvents(allMessages));
+    return result;
+  }
+
   let requiresFullScan = false;
-  for (const chatId of missingChatIds) {
+  await Promise.all(missingChatIds.map(async (chatId) => {
     const recentByChat = await listRecentSessionMessages(input.sessionId, latestSeq, {
       limit: 1,
       chatId,
@@ -516,7 +524,7 @@ export async function listLatestEventsByChat(input: {
     });
     if (!recentByChat) {
       requiresFullScan = true;
-      continue;
+      return;
     }
     const filtered = filterEventsByChat(normalizeEvents(recentByChat), {
       chatId,
@@ -527,7 +535,7 @@ export async function listLatestEventsByChat(input: {
     if (latest) {
       result[chatId] = latest;
     }
-  }
+  }));
 
   if (!requiresFullScan) {
     return result;
