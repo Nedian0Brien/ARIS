@@ -526,6 +526,7 @@ type AgentCommand = {
   requiresPty?: boolean;
   streamJson?: boolean;
   fallbackArgs?: string[];
+  retryArgsOnFailure?: string[];
 };
 
 type ParsedAgentActionEvent = {
@@ -1106,48 +1107,85 @@ function buildAgentCommand(
   prompt: string,
   approvalPolicy: ApprovalPolicy,
   model?: string,
+  resumeId?: string,
 ): AgentCommand | null {
   const selectedModel = normalizeModel(model);
+  const normalizedResumeId = typeof resumeId === 'string' && resumeId.trim().length > 0
+    ? resumeId.trim().slice(0, 120)
+    : undefined;
   if (agent === 'claude') {
     const permissionMode = normalizeClaudePermissionMode(approvalPolicy);
+    const args = [
+      '--print',
+      '--output-format',
+      'stream-json',
+      '--verbose',
+      '--permission-mode',
+      permissionMode,
+      ...(selectedModel ? ['--model', selectedModel] : []),
+      ...(normalizedResumeId ? ['--resume', normalizedResumeId] : []),
+      prompt,
+    ];
+    const fallbackArgs = [
+      '--print',
+      '--permission-mode',
+      permissionMode,
+      ...(selectedModel ? ['--model', selectedModel] : []),
+      ...(normalizedResumeId ? ['--resume', normalizedResumeId] : []),
+      prompt,
+    ];
     return {
       command: 'claude',
-      args: [
-        '--print',
-        '--output-format',
-        'stream-json',
-        '--verbose',
-        '--permission-mode',
-        permissionMode,
-        ...(selectedModel ? ['--model', selectedModel] : []),
-        prompt,
-      ],
-      fallbackArgs: [
-        '--print',
-        '--permission-mode',
-        permissionMode,
-        ...(selectedModel ? ['--model', selectedModel] : []),
-        prompt,
-      ],
+      args,
+      fallbackArgs,
+      ...(normalizedResumeId
+        ? {
+          retryArgsOnFailure: [
+            '--print',
+            '--output-format',
+            'stream-json',
+            '--verbose',
+            '--permission-mode',
+            permissionMode,
+            ...(selectedModel ? ['--model', selectedModel] : []),
+            prompt,
+          ],
+        }
+        : {}),
       requiresPty: true,
       streamJson: true,
     };
   }
   if (agent === 'gemini') {
+    const args = [
+      ...(selectedModel ? ['-m', selectedModel] : []),
+      '--output-format',
+      'stream-json',
+      ...(normalizedResumeId ? ['--resume', normalizedResumeId] : []),
+      '-p',
+      prompt,
+    ];
+    const fallbackArgs = [
+      ...(selectedModel ? ['-m', selectedModel] : []),
+      ...(normalizedResumeId ? ['--resume', normalizedResumeId] : []),
+      '-p',
+      prompt,
+    ];
     return {
       command: 'gemini',
-      args: [
-        ...(selectedModel ? ['-m', selectedModel] : []),
-        '--output-format',
-        'stream-json',
-        '-p',
-        prompt,
-      ],
-      fallbackArgs: [
-        ...(selectedModel ? ['-m', selectedModel] : []),
-        '-p',
-        prompt,
-      ],
+      args,
+      fallbackArgs,
+      ...(normalizedResumeId
+        ? {
+          retryArgsOnFailure: [
+            ...(selectedModel ? ['-m', selectedModel] : []),
+            '--output-format',
+            'stream-json',
+            '-p',
+            prompt,
+          ],
+        }
+        : {}),
       streamJson: true,
     };
   }
@@ -1341,8 +1379,9 @@ export class HappyRuntimeStore {
     model?: string,
     cwdHint?: string,
     signal?: AbortSignal,
+    resumeId?: string,
   ): Promise<{ output: string; cwd: string; inferredActions: ParsedAgentActionEvent[] }> {
-    const command = buildAgentCommand(agent, prompt, approvalPolicy, model);
+    const command = buildAgentCommand(agent, prompt, approvalPolicy, model, resumeId);
     if (!command) {
       throw new Error(`Unsupported agent flavor: ${agent}`);
     }
@@ -1372,17 +1411,33 @@ export class HappyRuntimeStore {
         })
     );
 
-    let result: { stdout: string; stderr: string };
+    let result: { stdout: string; stderr: string } | null = null;
+    let lastError: unknown = null;
     try {
       result = await runCommand(command.args);
     } catch (error) {
       if (isAbortFailure(error)) {
         throw error;
       }
-      const asRecord = error as { stdout?: string; stderr?: string; message?: string };
-      const stdout = stripAnsi(asRecord.stdout || '');
-      const stderr = stripAnsi(asRecord.stderr || '');
-      const detail = stderr || stdout || asRecord.message || 'Unknown CLI error';
+      lastError = error;
+    }
+
+    if (!result && command.retryArgsOnFailure && command.retryArgsOnFailure.length > 0) {
+      try {
+        result = await runCommand(command.retryArgsOnFailure);
+      } catch (retryError) {
+        if (isAbortFailure(retryError)) {
+          throw retryError;
+        }
+        lastError = retryError;
+      }
+    }
+
+    if (!result) {
+      const asRecord = lastError as { stdout?: string; stderr?: string; message?: string } | null;
+      const stdout = stripAnsi(asRecord?.stdout || '');
+      const stderr = stripAnsi(asRecord?.stderr || '');
+      const detail = stderr || stdout || asRecord?.message || 'Unknown CLI error';
       throw new Error(`${agent} CLI failed: ${detail.slice(0, 800)}`);
     }
 
@@ -2740,6 +2795,7 @@ export class HappyRuntimeStore {
           selectedModel,
           session.metadata.path,
           controller.signal,
+          preferredThreadId,
         );
         response = {
           output: nonCodex.output,
@@ -2747,6 +2803,7 @@ export class HappyRuntimeStore {
           streamedPersisted: false,
           agentMessagePersisted: false,
           inferredActions: nonCodex.inferredActions,
+          threadId: preferredThreadId,
         };
       }
 
@@ -2781,6 +2838,7 @@ export class HappyRuntimeStore {
             streamEvent: 'agent_stream_action',
             agent: flavor,
             model: selectedModel,
+            ...(response.threadId ? { threadId: response.threadId } : {}),
           }, {
             type: 'tool',
             title: action.title,
