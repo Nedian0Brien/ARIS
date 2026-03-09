@@ -117,7 +117,7 @@ export function PermissionRequestMessage({
                 onClick={() => onDecide(permission.id, 'allow_session')}
                 disabled={loading}
               >
-                세션 허용
+                워크스페이스 허용
               </Button>
               <Button
                 type="button"

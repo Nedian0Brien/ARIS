@@ -48,7 +48,7 @@ export function usePermissions(sessionId: string, initialPermissions: Permission
         return;
       }
       if (response.status === 404) {
-        setError('세션이 종료되었거나 삭제되었습니다.');
+        setError('워크스페이스가 종료되었거나 삭제되었습니다.');
         return;
       }
 

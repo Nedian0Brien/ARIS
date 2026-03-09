@@ -4,7 +4,7 @@ import { upsertWorkspaceMetadata } from '@/lib/happy/workspaces';
 
 /**
  * POST /api/runtime/sessions/[sessionId]/metadata
- * 세션의 이름(alias), 상단 고정(isPinned), 읽음 커서(lastReadAt)를 DB에 저장합니다.
+ * 워크스페이스의 이름(alias), 상단 고정(isPinned), 읽음 커서(lastReadAt)를 DB에 저장합니다.
  */
 export async function POST(
   request: NextRequest,
@@ -58,6 +58,6 @@ export async function POST(
       return NextResponse.json({ error: '워크스페이스를 찾을 수 없습니다.' }, { status: 404 });
     }
     console.error('Metadata update error:', error);
-    return NextResponse.json({ error: '세션 메타데이터 저장에 실패했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: '워크스페이스 메타데이터 저장에 실패했습니다.' }, { status: 500 });
   }
 }

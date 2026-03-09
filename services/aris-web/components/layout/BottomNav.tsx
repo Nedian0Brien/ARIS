@@ -108,7 +108,7 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   }, [syncIndicator]);
 
   const tabs = [
-    { id: 'sessions', label: '세션', icon: LayoutDashboard },
+    { id: 'sessions', label: '워크스페이스', icon: LayoutDashboard },
     { id: 'console', label: '콘솔', icon: Terminal },
     { id: 'files', label: '파일', icon: FolderTree },
     { id: 'settings', label: '설정', icon: Settings },

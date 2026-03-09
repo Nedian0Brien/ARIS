@@ -31,7 +31,7 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null) {
         if (response.status === 404) {
           if (!disposed) {
             setIsRunning(false);
-            setRuntimeError('세션이 종료되었거나 삭제되었습니다.');
+            setRuntimeError('워크스페이스가 종료되었거나 삭제되었습니다.');
           }
           stopped = true;
           return;

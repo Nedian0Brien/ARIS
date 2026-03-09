@@ -1771,7 +1771,8 @@ export function ChatInterface({
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
   const [expandedActionRunIds, setExpandedActionRunIds] = useState<Record<string, boolean>>({});
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
-  const [sessionIdCopyState, setSessionIdCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [chatIdCopyState, setChatIdCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [idBundleCopyState, setIdBundleCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [showPermissionQueue, setShowPermissionQueue] = useState(true);
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(true);
@@ -2843,23 +2844,52 @@ export function ChatInterface({
     });
   }, [firstPendingPermissionId]);
 
-  const handleCopySessionId = useCallback(async () => {
+  const handleCopyChatId = useCallback(async () => {
     try {
       if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
         throw new Error('clipboard-unavailable');
       }
-      await navigator.clipboard.writeText(sessionId);
-      setSessionIdCopyState('copied');
+      if (!activeChatIdResolved) {
+        throw new Error('chat-id-unavailable');
+      }
+      await navigator.clipboard.writeText(activeChatIdResolved);
+      setChatIdCopyState('copied');
       window.setTimeout(() => {
-        setSessionIdCopyState((current) => (current === 'copied' ? 'idle' : current));
+        setChatIdCopyState((current) => (current === 'copied' ? 'idle' : current));
       }, 1800);
     } catch {
-      setSessionIdCopyState('failed');
+      setChatIdCopyState('failed');
       window.setTimeout(() => {
-        setSessionIdCopyState((current) => (current === 'failed' ? 'idle' : current));
+        setChatIdCopyState((current) => (current === 'failed' ? 'idle' : current));
       }, 2200);
     }
-  }, [sessionId]);
+  }, [activeChatIdResolved]);
+
+  const handleCopyChatThreadIdsJson = useCallback(async () => {
+    try {
+      if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+        throw new Error('clipboard-unavailable');
+      }
+      if (!activeChatIdResolved) {
+        throw new Error('chat-id-unavailable');
+      }
+
+      const payload = {
+        chatId: activeChatIdResolved,
+        threadId: activeChat?.threadId ?? null,
+      };
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      setIdBundleCopyState('copied');
+      window.setTimeout(() => {
+        setIdBundleCopyState((current) => (current === 'copied' ? 'idle' : current));
+      }, 1800);
+    } catch {
+      setIdBundleCopyState('failed');
+      window.setTimeout(() => {
+        setIdBundleCopyState((current) => (current === 'failed' ? 'idle' : current));
+      }, 2200);
+    }
+  }, [activeChat?.threadId, activeChatIdResolved]);
 
   const jumpToEvent = useCallback((eventId: string) => {
     const target = document.getElementById(`event-${eventId}`);
@@ -2889,7 +2919,8 @@ export function ChatInterface({
 
   useEffect(() => {
     if (!isContextMenuOpen) {
-      setSessionIdCopyState('idle');
+      setChatIdCopyState('idle');
+      setIdBundleCopyState('idle');
     }
   }, [isContextMenuOpen]);
 
@@ -3953,15 +3984,30 @@ export function ChatInterface({
                     <button
                       type="button"
                       className={styles.contextMenuItem}
+                      disabled={!activeChatIdResolved}
                       onClick={() => {
-                        void handleCopySessionId();
+                        void handleCopyChatId();
                       }}
                     >
-                      {sessionIdCopyState === 'copied'
-                        ? '세션 ID 복사됨'
-                        : sessionIdCopyState === 'failed'
-                          ? '복사 실패 (다시 시도)'
-                          : '현재 세션 ID 복사'}
+                      {chatIdCopyState === 'copied'
+                        ? '현재 채팅 ID 복사됨'
+                        : chatIdCopyState === 'failed'
+                          ? '채팅 ID 복사 실패 (다시 시도)'
+                          : '현재 채팅 ID 복사'}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.contextMenuItem}
+                      disabled={!activeChatIdResolved}
+                      onClick={() => {
+                        void handleCopyChatThreadIdsJson();
+                      }}
+                    >
+                      {idBundleCopyState === 'copied'
+                        ? '채팅/스레드 ID JSON 복사됨'
+                        : idBundleCopyState === 'failed'
+                          ? 'JSON 복사 실패 (다시 시도)'
+                          : '채팅/스레드 ID JSON 복사'}
                     </button>
                     <button
                       type="button"

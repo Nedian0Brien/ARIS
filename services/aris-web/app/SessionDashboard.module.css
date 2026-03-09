@@ -219,7 +219,7 @@
   color: var(--accent-red);
 }
 
-/* 세션 & 에이전트 수평 그리드 */
+/* 워크스페이스 & 에이전트 수평 그리드 */
 .sessionStatsGrid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -289,7 +289,7 @@
   flex-shrink: 0;
 }
 
-/* 세션 리스트 섹션 */
+/* 워크스페이스 리스트 섹션 */
 .sessionStatusLists {
   margin-top: 1rem;
   display: flex;

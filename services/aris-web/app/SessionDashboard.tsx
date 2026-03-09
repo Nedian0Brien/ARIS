@@ -326,7 +326,7 @@ export function SessionDashboard({
     setSessionAliases(aliases);
   }, [initialSessions]);
 
-  // 세션 상태(실행 중 등)를 주기적으로 갱신 — 초기 로드 이후 백엔드 상태 변화를 반영
+  // 워크스페이스 상태(실행 중 등)를 주기적으로 갱신 — 초기 로드 이후 백엔드 상태 변화를 반영
   useEffect(() => {
     const POLL_INTERVAL_MS = 4000;
     let disposed = false;
@@ -1218,7 +1218,7 @@ export function SessionDashboard({
     ? activeAgentDistribution
     : [{ name: '없음', value: 1, color: 'var(--chart-track)' }];
 
-  // 진행 중인 세션 및 미확인 완료 세션 필터링
+  // 진행 중인 워크스페이스 및 미확인 완료 워크스페이스 필터링
   const runningSessions = useMemo(
     () => sessionsList.filter((session) => sessionUiStatusById.get(session.id) === 'running'),
     [sessionsList, sessionUiStatusById],
@@ -1419,7 +1419,7 @@ export function SessionDashboard({
                     </div>
                   </div>
 
-                  {/* 세션 리스트 섹션 */}
+                  {/* 워크스페이스 리스트 섹션 */}
                   <div className={styles.sessionStatusLists}>
                     <div className={styles.sessionStatusSubSection}>
                       <h4 className={styles.sessionStatusSubTitle}>진행 중인 워크스페이스</h4>

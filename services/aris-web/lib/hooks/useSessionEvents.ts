@@ -149,7 +149,7 @@ export function useSessionEvents(
     }
     if (response.status === 404) {
       terminalStatusRef.current = 404;
-      throw new SessionEventsHttpError(404, '세션이 종료되었거나 삭제되었습니다.');
+      throw new SessionEventsHttpError(404, '워크스페이스가 종료되었거나 삭제되었습니다.');
     }
     if (!response.ok) {
       throw new SessionEventsHttpError(response.status, `백엔드 이벤트 API 응답 오류 (${response.status})`);
@@ -199,7 +199,7 @@ export function useSessionEvents(
       }
       if (response.status === 404) {
         terminalStatusRef.current = 404;
-        throw new SessionEventsHttpError(404, '세션이 종료되었거나 삭제되었습니다.');
+        throw new SessionEventsHttpError(404, '워크스페이스가 종료되었거나 삭제되었습니다.');
       }
       if (!response.ok) {
         throw new SessionEventsHttpError(response.status, `이전 이벤트 API 응답 오류 (${response.status})`);
@@ -355,7 +355,7 @@ export function useSessionEvents(
           }
           if (payload.status === 404) {
             terminalStatusRef.current = 404;
-            setSyncError(payload.message ?? '세션이 종료되었거나 삭제되었습니다.');
+            setSyncError(payload.message ?? '워크스페이스가 종료되었거나 삭제되었습니다.');
             stopPolling();
             closeStream();
             return;

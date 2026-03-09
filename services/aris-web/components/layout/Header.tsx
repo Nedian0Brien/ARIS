@@ -21,7 +21,7 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
   const [hiddenOnScroll, setHiddenOnScroll] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
   const navItems = [
-    { id: 'sessions', label: '세션', icon: LayoutDashboard },
+    { id: 'sessions', label: '워크스페이스', icon: LayoutDashboard },
     { id: 'console', label: '콘솔', icon: Terminal },
     { id: 'files', label: '파일', icon: FolderTree },
     { id: 'settings', label: '설정', icon: Settings },

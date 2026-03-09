@@ -168,7 +168,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
       setConnected(false);
       
       // 재연결 로직 (최대 5회)
-      if (sessionId) { // 세션이 지정된 경우만 자동 재연결 시도
+      if (sessionId) { // 워크스페이스가 지정된 경우만 자동 재연결 시도
         reconnectCountRef.current++;
         const nextCount = reconnectCountRef.current;
 
@@ -197,7 +197,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
     });
   }, []);
 
-  // 세션 변경 시 재연결
+  // 워크스페이스 변경 시 재연결
   useEffect(() => {
     if (user.role !== 'operator') return;
     connect(selectedSessionId);
@@ -341,7 +341,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
                     onClick={() => {
                       setSelectedSessionId(s.id);
                     }}
-                    title={`세션으로 전환: ${label}`}
+                    title={`워크스페이스로 전환: ${label}`}
                   >
                     <FolderOpen size={11} />
                     {label}
