@@ -2853,6 +2853,7 @@ export class HappyRuntimeStore {
           ...(scopedChatId ? { chatId: scopedChatId } : {}),
           requestedPath: session.metadata.path,
           execCwd: response.cwd,
+          streamEvent: 'agent_message',
           agent: flavor,
           model: selectedModel,
           ...(response.threadId ? { threadId: response.threadId } : {}),
