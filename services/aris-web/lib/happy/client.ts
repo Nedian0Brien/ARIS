@@ -114,6 +114,8 @@ const HAPPY_MESSAGES_BATCH_LIMIT = 500;
 const HAPPY_MESSAGES_MAX_PAGES = 1000;
 const RECENT_WINDOW_MIN = 240;
 const RECENT_WINDOW_MAX = 1400;
+const SIDEBAR_RECENT_SCAN_MIN = 500;
+const SIDEBAR_RECENT_SCAN_MAX = 2200;
 
 function clampEventsLimit(limit?: number): number {
   const next = Number.isFinite(limit) ? Math.floor(Number(limit)) : DEFAULT_EVENTS_PAGE_LIMIT;
@@ -430,6 +432,109 @@ async function listMessagesForAfterCursor(
     cursor = afterSeq;
   }
   return null;
+}
+
+async function listRecentMessagesForSidebar(
+  sessionId: string,
+  latestSeq: number,
+  chatCount: number,
+): Promise<unknown[] | null> {
+  const windowSize = Math.min(
+    SIDEBAR_RECENT_SCAN_MAX,
+    Math.max(SIDEBAR_RECENT_SCAN_MIN, chatCount * 240),
+  );
+  const afterSeq = Math.max(0, latestSeq - windowSize);
+  const page = await fetchSessionMessagesPage(sessionId, {
+    afterSeq,
+    limit: windowSize,
+  });
+  return page.messages;
+}
+
+export async function listLatestEventsByChat(input: {
+  sessionId: string;
+  chatIds: string[];
+  defaultChatId?: string | null;
+}): Promise<Record<string, UiEvent | null>> {
+  const normalizedChatIds = [...new Set(input.chatIds.map((chatId) => chatId.trim()).filter(Boolean))];
+  const result: Record<string, UiEvent | null> = {};
+  for (const chatId of normalizedChatIds) {
+    result[chatId] = null;
+  }
+  if (normalizedChatIds.length === 0) {
+    return result;
+  }
+
+  const assignLatestEvents = (events: UiEvent[]) => {
+    const defaultChatId = typeof input.defaultChatId === 'string' && input.defaultChatId.trim()
+      ? input.defaultChatId.trim()
+      : '';
+    const sorted = sortEventsChronologically(events);
+    const requestedSet = new Set(normalizedChatIds);
+    for (const event of sorted) {
+      const eventChatId = typeof event.meta?.chatId === 'string' ? event.meta.chatId.trim() : '';
+      if (eventChatId && requestedSet.has(eventChatId)) {
+        result[eventChatId] = event;
+        continue;
+      }
+      if (!eventChatId && defaultChatId && requestedSet.has(defaultChatId)) {
+        result[defaultChatId] = event;
+      }
+    }
+  };
+
+  const sessionRaw = await fetchHappy('/v1/sessions');
+  const sessions = extractArrayPayload(sessionRaw, 'sessions');
+  const found = findSessionById(sessions, input.sessionId) ?? sessions[0] ?? { id: input.sessionId };
+  const latestSeq = toSessionSeq(found);
+
+  let baseMessages: unknown[];
+  if (latestSeq !== null) {
+    const recent = await listRecentMessagesForSidebar(input.sessionId, latestSeq, normalizedChatIds.length);
+    baseMessages = recent ?? [];
+  } else {
+    baseMessages = await listAllSessionMessages(input.sessionId);
+  }
+  assignLatestEvents(normalizeEvents(baseMessages));
+
+  const missingChatIds = normalizedChatIds.filter((chatId) => !result[chatId]);
+  if (missingChatIds.length === 0) {
+    return result;
+  }
+
+  if (latestSeq === null) {
+    return result;
+  }
+
+  let requiresFullScan = false;
+  for (const chatId of missingChatIds) {
+    const recentByChat = await listRecentSessionMessages(input.sessionId, latestSeq, {
+      limit: 1,
+      chatId,
+      includeUnassigned: input.defaultChatId === chatId,
+    });
+    if (!recentByChat) {
+      requiresFullScan = true;
+      continue;
+    }
+    const filtered = filterEventsByChat(normalizeEvents(recentByChat), {
+      chatId,
+      includeUnassigned: input.defaultChatId === chatId,
+    });
+    const sortedFiltered = sortEventsChronologically(filtered);
+    const latest = sortedFiltered[sortedFiltered.length - 1] ?? null;
+    if (latest) {
+      result[chatId] = latest;
+    }
+  }
+
+  if (!requiresFullScan) {
+    return result;
+  }
+
+  const allMessages = await listAllSessionMessages(input.sessionId);
+  assignLatestEvents(normalizeEvents(allMessages));
+  return result;
 }
 
 export async function getRuntimeHealth(): Promise<{ api: 'up' | 'down'; happy: 'up' | 'down'; lastSyncAt: string | null }> {
