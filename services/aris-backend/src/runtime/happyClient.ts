@@ -1353,13 +1353,14 @@ export class HappyRuntimeStore {
     signal?: AbortSignal,
     threadId?: string,
     chatId?: string,
+    model?: string,
   ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; agentMessagePersisted: boolean; threadId?: string }> {
     if (CODEX_RUNTIME_MODE === 'exec') {
-      return this.runCodexExecCliWithEvents(session, prompt, signal, threadId, chatId);
+      return this.runCodexExecCliWithEvents(session, prompt, signal, threadId, chatId, model);
     }
 
     try {
-      return await this.runCodexAppServerWithEvents(session, prompt, signal, threadId, chatId);
+      return await this.runCodexAppServerWithEvents(session, prompt, signal, threadId, chatId, model);
     } catch (error) {
       if (isMissingCodexThreadError(error)) {
         throw error;
@@ -1370,7 +1371,7 @@ export class HappyRuntimeStore {
 
       const detail = error instanceof Error ? error.message : String(error);
       console.error(`codex app-server mode failed; falling back to exec mode: ${detail}`);
-      return this.runCodexExecCliWithEvents(session, prompt, signal, threadId, chatId);
+      return this.runCodexExecCliWithEvents(session, prompt, signal, threadId, chatId, model);
     }
   }
 
@@ -1380,12 +1381,13 @@ export class HappyRuntimeStore {
     signal?: AbortSignal,
     threadId?: string,
     chatId?: string,
+    model?: string,
   ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; agentMessagePersisted: boolean; threadId?: string }> {
     const safeCwd = this.resolveExecutionCwd(session.metadata.path);
     const threadCacheKey = buildCodexThreadCacheKey(session.id, chatId);
     const sessionApprovalPolicy = this.resolveSessionApprovalPolicy(session);
     const codexApprovalPolicy = normalizeCodexApprovalPolicy(sessionApprovalPolicy);
-    const selectedModel = normalizeModel(session.metadata.model);
+    const selectedModel = normalizeModel(model) ?? normalizeModel(session.metadata.model);
     const autoApproveAll = sessionApprovalPolicy === 'yolo';
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
     const args = [
@@ -2051,12 +2053,13 @@ export class HappyRuntimeStore {
     signal?: AbortSignal,
     threadId?: string,
     chatId?: string,
+    model?: string,
   ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; agentMessagePersisted: boolean; threadId?: string }> {
     const safeCwd = this.resolveExecutionCwd(session.metadata.path);
     const threadCacheKey = buildCodexThreadCacheKey(session.id, chatId);
     const sessionApprovalPolicy = this.resolveSessionApprovalPolicy(session);
     const codexApprovalPolicy = normalizeCodexApprovalPolicy(sessionApprovalPolicy);
-    const selectedModel = normalizeModel(session.metadata.model);
+    const selectedModel = normalizeModel(model) ?? normalizeModel(session.metadata.model);
     const autoApproveAll = sessionApprovalPolicy === 'yolo';
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
     const execArgs = threadId
@@ -2379,7 +2382,7 @@ export class HappyRuntimeStore {
   private async generateAndPersistAgentReply(
     session: RuntimeSession,
     prompt: string,
-    context: { chatId?: string; threadId?: string; agent?: RuntimeAgent } = {},
+    context: { chatId?: string; threadId?: string; agent?: RuntimeAgent; model?: string } = {},
   ): Promise<void> {
     const flavor = context.agent && context.agent !== 'unknown'
       ? context.agent
@@ -2391,6 +2394,7 @@ export class HappyRuntimeStore {
     const scopedChatId = typeof context.chatId === 'string' && context.chatId.trim().length > 0
       ? context.chatId.trim()
       : undefined;
+    const selectedModel = normalizeModel(context.model) ?? normalizeModel(session.metadata.model);
     const runKey = this.buildRunKey(session.id, scopedChatId);
     const controller = new AbortController();
     const existing = this.activeRuns.get(runKey);
@@ -2423,6 +2427,7 @@ export class HappyRuntimeStore {
             controller.signal,
             recoveredThreadId,
             scopedChatId,
+            selectedModel,
           );
         } catch (error) {
           if (!recoveredThreadId || !isMissingCodexThreadError(error)) {
@@ -2431,14 +2436,14 @@ export class HappyRuntimeStore {
 
           // Stored thread id became invalid; clear and start a fresh Codex thread.
           this.codexThreads.delete(threadCacheKey);
-          response = await this.runCodexCliWithEvents(session, prompt, controller.signal, undefined, scopedChatId);
+          response = await this.runCodexCliWithEvents(session, prompt, controller.signal, undefined, scopedChatId, selectedModel);
         }
       } else {
         const nonCodex = await this.runAgentCli(
           flavor,
           prompt,
           session.metadata.approvalPolicy,
-          session.metadata.model,
+          selectedModel,
           session.metadata.path,
           controller.signal,
         );
@@ -2713,10 +2718,12 @@ export class HappyRuntimeStore {
         ? input.meta.threadId.trim()
         : undefined;
       const requestedAgent = normalizeAgent(input.meta?.agent);
+      const requestedModel = normalizeModel(input.meta?.model);
       void this.generateAndPersistAgentReply(session, input.text, {
         chatId,
         threadId,
         ...(requestedAgent !== 'unknown' ? { agent: requestedAgent } : {}),
+        ...(requestedModel ? { model: requestedModel } : {}),
       });
     }
 

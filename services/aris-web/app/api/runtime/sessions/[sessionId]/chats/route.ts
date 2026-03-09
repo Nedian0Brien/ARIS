@@ -36,7 +36,7 @@ export async function POST(
 
   try {
     const { sessionId } = await params;
-    const body = (await request.json().catch(() => ({}))) as { title?: string; agent?: string };
+    const body = (await request.json().catch(() => ({}))) as { title?: string; agent?: string; model?: string | null };
     const normalizedAgent = body.agent === 'claude' || body.agent === 'codex' || body.agent === 'gemini'
       ? body.agent
       : 'codex';
@@ -45,6 +45,7 @@ export async function POST(
       userId: auth.user.id,
       title: body.title,
       agent: normalizedAgent,
+      model: body.model,
     });
 
     return NextResponse.json({ chat });

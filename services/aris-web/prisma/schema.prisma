@@ -68,6 +68,7 @@ model SessionChat {
   isPinned       Boolean  @default(false)
   isDefault      Boolean  @default(false)
   threadId       String?
+  model          String?
   latestPreview  String   @default("")
   latestEventId  String?
   latestEventAt  DateTime?

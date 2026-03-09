@@ -737,12 +737,14 @@ export function normalizeSessions(raw: unknown): SessionSummary[] {
     const metadata = asRecord(rec?.metadata);
     const state = asRecord(rec?.state);
     const status = asString(state?.status, asString(rec?.status, 'unknown'));
+    const model = asNullableString(metadata?.model ?? rec?.model);
 
     return {
       id: asString(rec?.id ?? rec?.sessionId, `unknown-${idx}`),
       agent: normalizeAgent(asString(metadata?.flavor ?? rec?.flavor, 'unknown')),
       status: normalizeStatus(status),
       lastActivityAt: asNullableString(rec?.updatedAt ?? rec?.lastActivityAt),
+      ...(model ? { model } : {}),
       riskScore: asNumber(rec?.riskScore, status === 'error' ? 90 : 20),
       projectName: asString(metadata?.path ?? rec?.projectName, 'unknown-project'),
       approvalPolicy: normalizeApprovalPolicy(asString(metadata?.approvalPolicy ?? rec?.approvalPolicy, 'on-request')),
@@ -754,12 +756,14 @@ export function normalizeSessionDetail(raw: unknown): SessionDetail {
   const rec = asRecord(raw);
   const metadata = asRecord(rec?.metadata);
   const state = asRecord(rec?.state);
+  const model = asNullableString(metadata?.model ?? rec?.model);
 
   return {
     id: asString(rec?.id ?? rec?.sessionId, 'unknown'),
     agent: normalizeAgent(asString(metadata?.flavor ?? rec?.flavor, 'unknown')),
     status: normalizeStatus(asString(state?.status ?? rec?.status, 'unknown')),
     projectName: asString(metadata?.path ?? rec?.projectName, 'unknown-project'),
+    ...(model ? { model } : {}),
     lastActivityAt: asNullableString(rec?.updatedAt ?? rec?.lastActivityAt),
     approvalPolicy: normalizeApprovalPolicy(asString(metadata?.approvalPolicy ?? rec?.approvalPolicy, 'on-request')),
   };

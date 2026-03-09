@@ -7,6 +7,7 @@ function toSessionChat(record: {
   id: string;
   sessionId: string;
   agent: string;
+  model: string | null;
   title: string;
   isPinned: boolean;
   isDefault: boolean;
@@ -26,6 +27,7 @@ function toSessionChat(record: {
     id: record.id,
     sessionId: record.sessionId,
     agent: resolveAgentFlavor(record.agent),
+    model: record.model,
     title: record.title,
     isPinned: record.isPinned,
     isDefault: record.isDefault,
@@ -48,6 +50,17 @@ function resolveAgentFlavor(input: unknown): AgentFlavor {
     return input;
   }
   return 'unknown';
+}
+
+function normalizeChatModel(input: unknown): string | null {
+  if (typeof input !== 'string') {
+    return null;
+  }
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.slice(0, 120);
 }
 
 function sortChats(chats: SessionChat[]): SessionChat[] {
@@ -131,6 +144,7 @@ export async function createSessionChat(input: {
   sessionId: string;
   userId: string;
   agent?: AgentFlavor;
+  model?: string | null;
   title?: string;
 }): Promise<SessionChat> {
   const existing = await prisma.sessionChat.findMany({
@@ -150,6 +164,7 @@ export async function createSessionChat(input: {
       sessionId: input.sessionId,
       userId: input.userId,
       agent: input.agent && input.agent !== 'unknown' ? input.agent : 'codex',
+      ...(input.model !== undefined && { model: normalizeChatModel(input.model) }),
       title,
       isDefault: false,
     },
@@ -167,6 +182,7 @@ export async function updateSessionChat(input: {
   isPinned?: boolean;
   threadId?: string | null;
   touchActivity?: boolean;
+  model?: string | null;
   lastReadAt?: string | null;
   lastReadEventId?: string | null;
   latestPreview?: string;
@@ -220,6 +236,7 @@ export async function updateSessionChat(input: {
     || input.isPinned !== undefined
     || input.threadId !== undefined
     || Boolean(input.touchActivity)
+    || input.model !== undefined
     || parsedLastReadAt !== undefined
     || input.lastReadEventId !== undefined
     || input.latestPreview !== undefined
@@ -248,6 +265,7 @@ export async function updateSessionChat(input: {
       ...(input.isPinned !== undefined && { isPinned: input.isPinned }),
       ...(input.threadId !== undefined && { threadId: input.threadId && input.threadId.trim() ? input.threadId.trim() : null }),
       ...(input.touchActivity && { lastActivityAt: new Date() }),
+      ...(input.model !== undefined && { model: normalizeChatModel(input.model) }),
       ...(parsedLastReadAt !== undefined && { lastReadAt: parsedLastReadAt }),
       ...(input.lastReadEventId !== undefined && { lastReadEventId: input.lastReadEventId && input.lastReadEventId.trim() ? input.lastReadEventId.trim() : null }),
       ...(input.latestPreview !== undefined && { latestPreview: input.latestPreview.trim().slice(0, 240) }),

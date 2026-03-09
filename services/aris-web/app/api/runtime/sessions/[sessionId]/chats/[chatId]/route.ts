@@ -18,6 +18,7 @@ export async function PATCH(
     isPinned?: boolean;
     threadId?: string | null;
     touchActivity?: boolean;
+    model?: string | null;
     lastReadAt?: string | null;
     lastReadEventId?: string | null;
     latestPreview?: string;
@@ -39,6 +40,7 @@ export async function PATCH(
       isPinned: body.isPinned,
       threadId: body.threadId,
       touchActivity: body.touchActivity,
+      model: body.model,
       lastReadAt: body.lastReadAt,
       lastReadEventId: body.lastReadEventId,
       latestPreview: body.latestPreview,

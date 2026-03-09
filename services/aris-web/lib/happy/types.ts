@@ -8,6 +8,7 @@ export type SessionSummary = {
   agent: AgentFlavor;
   status: SessionStatus;
   lastActivityAt: string | null;
+  model?: string | null;
   lastReadAt?: string | null;
   riskScore: number;
   projectName: string;
@@ -20,6 +21,7 @@ export type SessionChat = {
   id: string;
   sessionId: string;
   agent: AgentFlavor;
+  model?: string | null;
   title: string;
   isPinned: boolean;
   isDefault: boolean;
@@ -100,6 +102,7 @@ export type SessionDetail = {
   agent: SessionSummary['agent'];
   status: SessionStatus;
   projectName: string;
+  model?: string | null;
   lastActivityAt: string | null;
   lastReadAt?: string | null;
   approvalPolicy?: ApprovalPolicy;

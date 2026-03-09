@@ -56,6 +56,7 @@ export default async function SessionPage({
             projectName={detail.session.projectName}
             alias={detail.session.alias}
             agentFlavor={detail.session.agent}
+            sessionModel={detail.session.model}
             approvalPolicy={detail.session.approvalPolicy}
             initialChats={chats}
             activeChatId={activeChat?.id ?? null}

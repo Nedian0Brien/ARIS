@@ -99,11 +99,24 @@ const SIDEBAR_STATUS_REFRESH_MS = 5000;
 const CHAT_AGENT_CHOICES: AgentFlavor[] = ['codex', 'claude', 'gemini'];
 
 const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
-const COMPOSER_MODELS = [
-  { id: 'claude-sonnet-4-6', shortLabel: 'Sonnet 4.6', badge: '권장' },
-  { id: 'claude-opus-4-6', shortLabel: 'Opus 4.6', badge: '최고 성능' },
-  { id: 'claude-haiku-4-5', shortLabel: 'Haiku 4.5', badge: '빠름' },
-] as const;
+type ComposerModelOption = { id: string; shortLabel: string; badge: string };
+const COMPOSER_MODELS_BY_AGENT: Record<'codex' | 'claude' | 'gemini', ComposerModelOption[]> = {
+  codex: [
+    { id: 'gpt-5-codex', shortLabel: 'GPT-5 Codex', badge: '권장' },
+    { id: 'gpt-5', shortLabel: 'GPT-5', badge: '고성능' },
+    { id: 'gpt-5-mini', shortLabel: 'GPT-5 mini', badge: '빠름' },
+  ],
+  claude: [
+    { id: 'claude-sonnet-4-6', shortLabel: 'Sonnet 4.6', badge: '권장' },
+    { id: 'claude-opus-4-6', shortLabel: 'Opus 4.6', badge: '최고 성능' },
+    { id: 'claude-haiku-4-5', shortLabel: 'Haiku 4.5', badge: '빠름' },
+  ],
+  gemini: [
+    { id: 'gemini-2.5-pro', shortLabel: 'Gemini 2.5 Pro', badge: '권장' },
+    { id: 'gemini-2.5-flash', shortLabel: 'Gemini 2.5 Flash', badge: '빠름' },
+    { id: 'gemini-2.0-flash', shortLabel: 'Gemini 2.0 Flash', badge: '경량' },
+  ],
+};
 
 // --- 2. 타입 정의 ---
 
@@ -125,7 +138,7 @@ type ResourceLabel =
   | { kind: 'folder'; name: FolderLabel; sourcePath?: string }
   | { kind: 'file'; name: string; extension: string; sourcePath?: string };
 type FolderLabel = (typeof FOLDER_LABELS)[number];
-type ComposerModelId = (typeof COMPOSER_MODELS)[number]['id'];
+type ComposerModelId = string;
 
 type ContextItem =
   | { id: string; type: 'file'; path: string; content: string; name: string }
@@ -280,6 +293,28 @@ function normalizeAgentFlavor(value: unknown, fallback: AgentFlavor = 'codex'): 
     return value;
   }
   return fallback;
+}
+
+function normalizeModelId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.slice(0, 120);
+}
+
+function resolveComposerModels(agent: AgentFlavor): ComposerModelOption[] {
+  if (agent === 'claude' || agent === 'codex' || agent === 'gemini') {
+    return COMPOSER_MODELS_BY_AGENT[agent];
+  }
+  return COMPOSER_MODELS_BY_AGENT.codex;
+}
+
+function resolveDefaultModelId(agent: AgentFlavor): string {
+  return resolveComposerModels(agent)[0]?.id ?? 'gpt-5-codex';
 }
 
 function isUserEvent(event: UiEvent): boolean {
@@ -1629,6 +1664,7 @@ export function ChatInterface({
   projectName,
   alias,
   agentFlavor,
+  sessionModel,
   approvalPolicy,
 }: {
   sessionId: string;
@@ -1641,6 +1677,7 @@ export function ChatInterface({
   projectName: string;
   alias?: string | null;
   agentFlavor: string;
+  sessionModel?: string | null;
   approvalPolicy?: ApprovalPolicy;
 }) {
   const router = useRouter();
@@ -1689,6 +1726,7 @@ export function ChatInterface({
     text: string;
     chatId: string;
     agent: AgentFlavor;
+    model: string;
     threadId?: string;
   } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -1746,7 +1784,18 @@ export function ChatInterface({
   const [contextItems, setContextItems] = useState<ContextItem[]>([]);
   const [plusMenuMode, setPlusMenuMode] = useState<'closed' | 'menu' | 'file' | 'text'>('closed');
   const [textContextInput, setTextContextInput] = useState('');
-  const [selectedModelId, setSelectedModelId] = useState<ComposerModelId>('claude-sonnet-4-6');
+  const [selectedModelId, setSelectedModelId] = useState<ComposerModelId>(() => {
+    const sortedInitialChats = sortSessionChats(initialChats);
+    const initialChat = (activeChatId && activeChatId.trim().length > 0
+      ? sortedInitialChats.find((chat) => chat.id === activeChatId.trim())
+      : null) ?? sortedInitialChats[0] ?? null;
+    const sessionAgent = normalizeAgentFlavor(agentFlavor, 'codex');
+    const initialAgent = normalizeAgentFlavor(initialChat?.agent, sessionAgent);
+    const sessionModelFallback = initialAgent === sessionAgent ? normalizeModelId(sessionModel) : null;
+    return normalizeModelId(initialChat?.model)
+      ?? sessionModelFallback
+      ?? resolveDefaultModelId(initialAgent);
+  });
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [fileBrowserPath, setFileBrowserPath] = useState('/');
@@ -1781,6 +1830,8 @@ export function ChatInterface({
 
   const defaultAgentFlavor = normalizeAgentFlavor(agentFlavor, 'codex');
   const activeAgentFlavor = normalizeAgentFlavor(activeChat?.agent, defaultAgentFlavor);
+  const activeComposerModels = useMemo(() => resolveComposerModels(activeAgentFlavor), [activeAgentFlavor]);
+  const activeModelId = normalizeModelId(selectedModelId) ?? resolveDefaultModelId(activeAgentFlavor);
   const agentMeta = resolveAgentMeta(activeAgentFlavor);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? runtimeError ?? null;
   const isRunActive = isSubmitting || runtimeRunning || isAborting;
@@ -1843,6 +1894,19 @@ export function ChatInterface({
   const firstPendingPermissionId = pendingPermissions[0]?.id ?? null;
   const visibleChats = useMemo(() => chats.slice(0, chatVisibleCount), [chats, chatVisibleCount]);
   const hasMoreChats = chats.length > chatVisibleCount;
+
+  useEffect(() => {
+    const sessionModelFallback = activeAgentFlavor === defaultAgentFlavor
+      ? normalizeModelId(sessionModel)
+      : null;
+    const nextModelId = normalizeModelId(activeChat?.model)
+      ?? sessionModelFallback
+      ?? resolveDefaultModelId(activeAgentFlavor);
+    if (nextModelId === selectedModelId) {
+      return;
+    }
+    setSelectedModelId(nextModelId);
+  }, [activeAgentFlavor, activeChat?.id, activeChat?.model, defaultAgentFlavor, selectedModelId, sessionModel]);
 
   const upsertChatSidebarSnapshot = useCallback((chatId: string, patch: Partial<ChatSidebarSnapshot>) => {
     setChatSidebarSnapshots((prev) => {
@@ -3038,6 +3102,40 @@ export function ChatInterface({
     }
   }, [router, buildChatUrl, isMobileLayout]);
 
+  const handleSelectModel = useCallback(async (modelId: string) => {
+    const normalizedModelId = normalizeModelId(modelId);
+    if (!activeChatIdResolved || !normalizedModelId) {
+      return;
+    }
+    setSelectedModelId(normalizedModelId);
+    setIsModelDropdownOpen(false);
+    setChatMutationError(null);
+    setChats((prev) => sortSessionChats(prev.map((chat) => (
+      chat.id === activeChatIdResolved
+        ? { ...chat, model: normalizedModelId }
+        : chat
+    ))));
+    try {
+      const response = await fetch(
+        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: normalizedModelId }),
+        },
+      );
+      const payload = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
+      if (!response.ok || !payload.chat) {
+        throw new Error(payload.error ?? '모델 설정 저장에 실패했습니다.');
+      }
+      setChats((prev) => sortSessionChats(prev.map((chat) => (
+        chat.id === payload.chat?.id ? payload.chat : chat
+      ))));
+    } catch (error) {
+      setChatMutationError(error instanceof Error ? error.message : '모델 설정 저장에 실패했습니다.');
+    }
+  }, [activeChatIdResolved, sessionId]);
+
   const handleCreateChat = useCallback(async (agent: AgentFlavor) => {
     if (isCreatingChat) {
       return;
@@ -3045,11 +3143,12 @@ export function ChatInterface({
     setIsCreatingChat(true);
     setChatMutationError(null);
     setIsCreateChatMenuOpen(false);
+    const defaultModelId = resolveDefaultModelId(agent);
     try {
       const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent }),
+        body: JSON.stringify({ agent, model: defaultModelId }),
       });
       const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
       if (!response.ok || !body.chat) {
@@ -3183,6 +3282,7 @@ export function ChatInterface({
       )).join('\n') + '\n\n'
       : '';
     const finalText = contextPrefix + promptText;
+    const submitModelId = normalizeModelId(selectedModelId) ?? resolveDefaultModelId(activeAgentFlavor);
 
     setIsSubmitting(true);
     setIsAwaitingReply(true);
@@ -3197,6 +3297,7 @@ export function ChatInterface({
       agent: activeChat?.agent === 'claude' || activeChat?.agent === 'codex' || activeChat?.agent === 'gemini'
         ? activeChat.agent
         : 'codex',
+      model: submitModelId,
       ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
     });
 
@@ -3212,6 +3313,7 @@ export function ChatInterface({
             role: 'user',
             chatId: activeChatIdResolved,
             agent: activeChat?.agent ?? 'codex',
+            model: submitModelId,
             ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
           },
         }),
@@ -3246,6 +3348,7 @@ export function ChatInterface({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             touchActivity: true,
+            model: submitModelId,
             ...(firstPromptTitle ? { title: firstPromptTitle } : {}),
           }),
         },
@@ -3259,13 +3362,14 @@ export function ChatInterface({
             return;
           }
           setChats((prev) => sortSessionChats(prev.map((chat) => (
-            chat.id === activeChatIdResolved
-              ? {
-                  ...chat,
-                  title: payload.chat?.title ?? chat.title,
-                  lastActivityAt: payload.chat?.lastActivityAt ?? chat.lastActivityAt,
-                }
-              : chat
+                chat.id === activeChatIdResolved
+                  ? {
+                      ...chat,
+                      title: payload.chat?.title ?? chat.title,
+                      model: payload.chat?.model ?? chat.model,
+                      lastActivityAt: payload.chat?.lastActivityAt ?? chat.lastActivityAt,
+                    }
+                  : chat
           ))));
         })
         .catch(() => {
@@ -3307,6 +3411,7 @@ export function ChatInterface({
             role: 'user',
             chatId: lastSubmittedPayload.chatId,
             agent: lastSubmittedPayload.agent,
+            model: lastSubmittedPayload.model,
             ...(lastSubmittedPayload.threadId ? { threadId: lastSubmittedPayload.threadId } : {}),
           },
         }),
@@ -3387,7 +3492,8 @@ export function ChatInterface({
     }
   }
 
-  const activeModel = COMPOSER_MODELS.find((m) => m.id === selectedModelId) || COMPOSER_MODELS[0];
+  const activeModel = activeComposerModels.find((m) => m.id === activeModelId)
+    ?? { id: activeModelId, shortLabel: activeModelId, badge: '커스텀' };
 
   return (
     <>
@@ -3936,26 +4042,25 @@ export function ChatInterface({
                       aria-haspopup="listbox"
                       aria-expanded={isModelDropdownOpen}
                     >
-                      <ClaudeIcon size={13} />
+                      <agentMeta.Icon size={13} />
                       <span>{activeModel.shortLabel}</span>
                       <ChevronDown size={11} />
                     </button>
                     {isModelDropdownOpen && (
                       <div className={styles.modelDropdown} role="listbox">
-                        {COMPOSER_MODELS.map((model) => (
+                        {activeComposerModels.map((model) => (
                           <button
                             key={model.id}
                             type="button"
                             role="option"
-                            aria-selected={selectedModelId === model.id}
-                            className={`${styles.modelOption} ${selectedModelId === model.id ? styles.modelOptionActive : ''}`}
-                            onClick={() => { setSelectedModelId(model.id); setIsModelDropdownOpen(false); }}
+                            aria-selected={activeModelId === model.id}
+                            className={`${styles.modelOption} ${activeModelId === model.id ? styles.modelOptionActive : ''}`}
+                            onClick={() => { void handleSelectModel(model.id); }}
                           >
                             <span>{model.shortLabel}</span>
                             <span className={styles.modelOptionBadge}>{model.badge}</span>
                           </button>
                         ))}
-                        <div className={styles.modelDropdownNote}>모델 변경은 추후 지원 예정</div>
                       </div>
                     )}
                   </div>
