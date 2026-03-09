@@ -35,6 +35,7 @@ const sessionActionSchema = z.object({
 
 const createPermissionSchema = z.object({
   sessionId: z.string().min(1),
+  chatId: z.string().trim().min(1).optional(),
   agent: z.enum(['codex', 'claude', 'gemini', 'unknown']),
   command: z.string().min(1),
   reason: z.string().min(1),

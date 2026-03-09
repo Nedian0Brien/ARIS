@@ -2,6 +2,30 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { PermissionRequest, PermissionDecision } from '@/lib/happy/types';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
+function normalizePermissionChatId(permission: PermissionRequest): string | null {
+  const raw = typeof permission.chatId === 'string' ? permission.chatId.trim() : '';
+  return raw.length > 0 ? raw : null;
+}
+
+function isPermissionForChat(
+  permission: PermissionRequest,
+  activeChatId: string | null,
+  includeUnassignedForActiveChat: boolean,
+): boolean {
+  const permissionChatId = normalizePermissionChatId(permission);
+  const normalizedActiveChatId = typeof activeChatId === 'string' && activeChatId.trim().length > 0
+    ? activeChatId.trim()
+    : null;
+
+  if (permissionChatId && normalizedActiveChatId) {
+    return permissionChatId === normalizedActiveChatId;
+  }
+  if (!permissionChatId) {
+    return includeUnassignedForActiveChat || !normalizedActiveChatId;
+  }
+  return false;
+}
+
 function arePermissionsEqual(prev: PermissionRequest[], next: PermissionRequest[]): boolean {
   if (prev.length !== next.length) {
     return false;
@@ -13,6 +37,7 @@ function arePermissionsEqual(prev: PermissionRequest[], next: PermissionRequest[
     if (
       before.id !== after.id
       || before.state !== after.state
+      || normalizePermissionChatId(before) !== normalizePermissionChatId(after)
       || before.command !== after.command
       || before.reason !== after.reason
       || before.risk !== after.risk
@@ -25,7 +50,12 @@ function arePermissionsEqual(prev: PermissionRequest[], next: PermissionRequest[
   return true;
 }
 
-export function usePermissions(sessionId: string, initialPermissions: PermissionRequest[]) {
+export function usePermissions(
+  sessionId: string,
+  initialPermissions: PermissionRequest[],
+  activeChatId: string | null,
+  includeUnassignedForActiveChat = false,
+) {
   const [permissions, setPermissions] = useState<PermissionRequest[]>(initialPermissions);
   const [resolvedPermissions, setResolvedPermissions] = useState<PermissionRequest[]>([]);
   const [loadingPermissionId, setLoadingPermissionId] = useState<string | null>(null);
@@ -95,16 +125,25 @@ export function usePermissions(sessionId: string, initialPermissions: Permission
     };
   }, [refreshPermissions]);
 
+  const scopedPermissions = useMemo(
+    () => permissions.filter((item) => isPermissionForChat(item, activeChatId, includeUnassignedForActiveChat)),
+    [permissions, activeChatId, includeUnassignedForActiveChat],
+  );
+  const scopedResolvedPermissions = useMemo(
+    () => resolvedPermissions.filter((item) => isPermissionForChat(item, activeChatId, includeUnassignedForActiveChat)),
+    [resolvedPermissions, activeChatId, includeUnassignedForActiveChat],
+  );
+
   const pendingPermissions = useMemo(
-    () => permissions.filter((item) => item.state === 'pending'),
-    [permissions],
+    () => scopedPermissions.filter((item) => item.state === 'pending'),
+    [scopedPermissions],
   );
 
   const displayPermissions = useMemo(() => {
     const pendingIds = new Set(pendingPermissions.map((item) => item.id));
-    return [...pendingPermissions, ...resolvedPermissions.filter((item) => !pendingIds.has(item.id))]
+    return [...pendingPermissions, ...scopedResolvedPermissions.filter((item) => !pendingIds.has(item.id))]
       .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
-  }, [pendingPermissions, resolvedPermissions]);
+  }, [pendingPermissions, scopedResolvedPermissions]);
 
   const permissionById = useMemo(() => {
     const map = new Map<string, PermissionRequest>();
@@ -172,7 +211,7 @@ export function usePermissions(sessionId: string, initialPermissions: Permission
   }, [permissionById, refreshPermissions]);
 
   return {
-    permissions,
+    permissions: scopedPermissions,
     pendingPermissions,
     displayPermissions,
     loadingPermissionId,
