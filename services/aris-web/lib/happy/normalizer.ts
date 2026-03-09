@@ -296,6 +296,9 @@ function resolveEventId(
   const chatId = asString(meta?.chatId, '').trim();
   const role = asString(meta?.role, '').trim();
   const streamEvent = asString(meta?.streamEvent, '').trim();
+  const sessionEventType = readSessionEventType(meta);
+  const sessionCallId = readSessionCallId(meta);
+  const sessionTurnId = readSessionTurnId(meta);
   const seed = [
     input.timestamp.trim(),
     input.type.trim(),
@@ -304,6 +307,9 @@ function resolveEventId(
     chatId,
     role,
     streamEvent,
+    sessionEventType,
+    sessionCallId,
+    sessionTurnId,
   ].join('|');
   if (seed.replace(/\|/g, '').length > 0) {
     return `evt-${hashFNV1a(seed)}`;
@@ -360,6 +366,73 @@ function pickKindFromMeta(meta: RecordValue | null, type: string): UiEventKind |
     return fromMeta;
   }
   return toUiEventKind(type);
+}
+
+function readSessionEventType(meta: RecordValue | null): string {
+  const direct = asString(meta?.sessionEventType, '').trim().toLowerCase();
+  if (direct) {
+    return direct;
+  }
+  const sessionEvent = asRecord(meta?.sessionEvent);
+  const eventRecord = asRecord(sessionEvent?.ev);
+  return asString(eventRecord?.t, '').trim().toLowerCase();
+}
+
+function readSessionCallId(meta: RecordValue | null): string {
+  const direct = asString(meta?.sessionCallId, '').trim();
+  if (direct) {
+    return direct;
+  }
+  const sessionEvent = asRecord(meta?.sessionEvent);
+  const eventRecord = asRecord(sessionEvent?.ev);
+  return asString(eventRecord?.call, '').trim();
+}
+
+function readSessionTurnId(meta: RecordValue | null): string {
+  const direct = asString(meta?.sessionTurnId, '').trim();
+  if (direct) {
+    return direct;
+  }
+  const sessionEvent = asRecord(meta?.sessionEvent);
+  return asString(sessionEvent?.turn, '').trim();
+}
+
+function classifySessionEventKind(input: {
+  sessionEventType: string;
+  kindFromMeta: UiEventKind | null;
+  commandCandidate: string;
+}): UiEventKind | null {
+  if (!input.sessionEventType) {
+    return null;
+  }
+
+  if (
+    input.sessionEventType === 'text'
+    || input.sessionEventType === 'service'
+    || input.sessionEventType === 'turn-start'
+    || input.sessionEventType === 'turn-end'
+    || input.sessionEventType === 'start'
+    || input.sessionEventType === 'stop'
+  ) {
+    return 'text_reply';
+  }
+
+  if (input.sessionEventType === 'tool-call-start' || input.sessionEventType === 'tool-call-end') {
+    if (input.kindFromMeta) {
+      return input.kindFromMeta;
+    }
+    const shellKind = classifyShellCommandKind(input.commandCandidate);
+    if (shellKind) {
+      return shellKind;
+    }
+    return 'run_execution';
+  }
+
+  if (input.sessionEventType === 'file') {
+    return input.kindFromMeta ?? 'file_read';
+  }
+
+  return null;
 }
 
 function extractCommand(line: string): string {
@@ -883,6 +956,7 @@ function inferCliAgentActionKind(input: {
   const source = asString(input.meta?.source, '').trim().toLowerCase();
   const agent = asString(input.meta?.agent, '').trim().toLowerCase();
   const streamEvent = asString(input.meta?.streamEvent, '').trim().toLowerCase();
+  const sessionEventType = readSessionEventType(input.meta);
   const actionType = asString(input.meta?.actionType, '').trim();
   if (!input.type.includes('message')) {
     return null;
@@ -894,6 +968,9 @@ function inferCliAgentActionKind(input: {
     return null;
   }
   if (streamEvent || actionType) {
+    return null;
+  }
+  if (sessionEventType) {
     return null;
   }
 
@@ -978,6 +1055,7 @@ export function normalizeEvents(raw: unknown): UiEvent[] {
       ? { ...(baseMeta ?? {}), parseFallback: true }
       : baseMeta;
     const streamEvent = asString(meta?.streamEvent, '').toLowerCase();
+    const sessionEventType = readSessionEventType(meta);
 
     const body = asString(rec?.body ?? rec?.text ?? parsedContent.text, '');
     const type = asString(rec?.type ?? parsedContent.type, '');
@@ -993,8 +1071,15 @@ export function normalizeEvents(raw: unknown): UiEvent[] {
     const metaCommand = asString(meta?.command, '').trim();
     const commandCandidate = metaCommand || (firstLine.trim().startsWith('$ ') ? extractCommand(firstLine) : '');
     const kindFromMeta = pickKindFromMeta(meta, type.toLowerCase());
+    const kindFromSessionEvent = classifySessionEventKind({
+      sessionEventType,
+      kindFromMeta,
+      commandCandidate,
+    });
     const classifiedKind = streamEvent === 'agent_message' || streamEvent === 'agent_message_recovered'
       ? 'text_reply'
+      : kindFromSessionEvent
+        ? kindFromSessionEvent
       : classifyEventKind({
         type: kindFromMeta ?? type,
         text: body,

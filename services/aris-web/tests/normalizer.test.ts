@@ -347,6 +347,76 @@ describe('normalizeEvents', () => {
     expect(events[0].kind).toBe('text_reply');
   });
 
+  it('treats sessionEventType text as text_reply even for transcript-shaped body', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e8c',
+        type: 'message',
+        text: '$ ls -la\nexit code: 0',
+        meta: {
+          source: 'cli-agent',
+          agent: 'claude',
+          sessionEventType: 'text',
+        },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('text_reply');
+  });
+
+  it('reads nested sessionEvent.ev.t when top-level sessionEventType is missing', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e8d',
+        type: 'message',
+        text: '요약했습니다.',
+        meta: {
+          sessionEvent: {
+            role: 'agent',
+            ev: { t: 'text' },
+          },
+        },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('text_reply');
+  });
+
+  it('maps tool-call session events to action kind using meta actionType', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e8e',
+        type: 'message',
+        text: '파일을 수정했습니다.',
+        meta: {
+          sessionEventType: 'tool-call-end',
+          actionType: 'file_write',
+          path: 'services/aris-web/lib/happy/normalizer.ts',
+        },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('file_write');
+  });
+
+  it('maps tool-call session events to run_execution when actionType is missing', () => {
+    const events = normalizeEvents([
+      {
+        id: 'e8f',
+        type: 'message',
+        text: '명령 실행을 완료했습니다.',
+        meta: {
+          sessionEventType: 'tool-call-end',
+          command: 'npm test',
+          sessionCallId: 'call-12',
+        },
+      },
+    ]);
+
+    expect(events[0].kind).toBe('run_execution');
+    expect(events[0].action?.command).toBe('npm test');
+  });
+
   it('keeps claude cli-agent natural language summaries as text_reply', () => {
     const events = normalizeEvents([
       {
