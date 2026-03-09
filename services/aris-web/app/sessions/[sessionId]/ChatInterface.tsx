@@ -1683,7 +1683,30 @@ export function ChatInterface({
   const [chatTitleDraft, setChatTitleDraft] = useState('');
   const [chatMutationLoadingId, setChatMutationLoadingId] = useState<string | null>(null);
   const [chatMutationError, setChatMutationError] = useState<string | null>(null);
-  const [chatSidebarSnapshots, setChatSidebarSnapshots] = useState<Record<string, ChatSidebarSnapshot>>({});
+  const [chatSidebarSnapshots, setChatSidebarSnapshots] = useState<Record<string, ChatSidebarSnapshot>>(() => {
+    const sortedInitialChats = sortSessionChats(initialChats);
+    const initialActiveChatId = (activeChatId && activeChatId.trim().length > 0
+      ? activeChatId.trim()
+      : sortedInitialChats[0]?.id) ?? null;
+    if (!initialActiveChatId) {
+      return {};
+    }
+    const latestInitialEvent = initialEvents[initialEvents.length - 1];
+    if (!latestInitialEvent) {
+      return {};
+    }
+    return {
+      [initialActiveChatId]: {
+        preview: resolveRecentSummary(latestInitialEvent),
+        hasEvents: true,
+        hasErrorSignal: hasChatErrorSignal(latestInitialEvent),
+        latestEventId: latestInitialEvent.id,
+        latestEventAt: latestInitialEvent.timestamp,
+        latestEventIsUser: isUserEvent(latestInitialEvent),
+        isRunning: false,
+      },
+    };
+  });
   const [chatReadMarkers, setChatReadMarkers] = useState<Record<string, string>>(() => buildReadMarkerMap(initialChats));
   const [approvalFeedbackByChat, setApprovalFeedbackByChat] = useState<Record<string, ChatApprovalFeedback>>({});
   const [sidebarApprovalLoadingChatId, setSidebarApprovalLoadingChatId] = useState<string | null>(null);
@@ -1897,9 +1920,16 @@ export function ChatInterface({
   ]);
 
   const resolveChatPreviewText = useCallback((chatId: string): string => {
-    const preview = chatSidebarSnapshots[chatId]?.preview?.trim();
+    const snapshot = chatSidebarSnapshots[chatId];
+    if (!snapshot) {
+      return '메시지 불러오는 중...';
+    }
+    const preview = snapshot.preview?.trim();
     if (preview) {
       return preview;
+    }
+    if (snapshot.hasEvents) {
+      return '메시지 불러오는 중...';
     }
     return '최근 메시지가 없습니다.';
   }, [chatSidebarSnapshots]);
