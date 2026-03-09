@@ -50,6 +50,44 @@ describe('happyClient stream-json parsing', () => {
     expect(parsed.actions[0]?.command).toContain('cat README.md');
   });
 
+  it('extracts tool call ids from stream-json action events', () => {
+    const streamOutput = [
+      JSON.stringify({
+        type: 'tool',
+        subtype: 'command_execution',
+        callId: 'call-123',
+        command: 'git status',
+        output: 'On branch main',
+      }),
+      JSON.stringify({
+        type: 'event',
+        event: 'agent_message',
+        content: '현재 상태를 확인했습니다.',
+      }),
+    ].join('\n');
+
+    const parsed = happyClientTestHooks.parseAgentStreamOutput(streamOutput);
+    expect(parsed.actions.length).toBe(1);
+    expect(parsed.actions[0]?.callId).toBe('call-123');
+    expect(parsed.actions[0]?.command).toBe('git status');
+  });
+
+  it('builds session hint meta for text and tool-call events', () => {
+    const textMeta = happyClientTestHooks.buildSessionHintMeta({
+      eventType: 'text',
+    });
+    expect((textMeta.sessionEvent as { ev: { t: string } }).ev.t).toBe('text');
+    expect(textMeta.sessionEventType).toBe('text');
+
+    const toolMeta = happyClientTestHooks.buildSessionHintMeta({
+      eventType: 'tool-call-end',
+      callId: 'call-9',
+    });
+    expect((toolMeta.sessionEvent as { ev: { t: string; call?: string } }).ev.t).toBe('tool-call-end');
+    expect((toolMeta.sessionEvent as { ev: { t: string; call?: string } }).ev.call).toBe('call-9');
+    expect(toolMeta.sessionCallId).toBe('call-9');
+  });
+
   it('extracts message text from wrapped happy payload content', () => {
     const wrappedPayload = {
       t: 'json',

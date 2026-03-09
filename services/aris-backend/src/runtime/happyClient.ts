@@ -532,6 +532,7 @@ type AgentCommand = {
 type ParsedAgentActionEvent = {
   actionType: 'command_execution' | 'file_list' | 'file_read' | 'file_write';
   title: string;
+  callId?: string;
   command?: string;
   path?: string;
   output?: string;
@@ -539,6 +540,46 @@ type ParsedAgentActionEvent = {
   deletions: number;
   hasDiffSignal: boolean;
 };
+
+type SessionHintEventType = 'text' | 'tool-call-start' | 'tool-call-end' | 'turn-start' | 'turn-end';
+
+function buildSessionHintMeta(input: {
+  eventType: SessionHintEventType;
+  callId?: string;
+  turnId?: string;
+  turnStatus?: string;
+}): Record<string, unknown> {
+  const event = input.eventType === 'tool-call-end'
+    ? {
+      t: 'tool-call-end',
+      ...(input.callId ? { call: input.callId } : {}),
+    }
+    : input.eventType === 'tool-call-start'
+      ? {
+        t: 'tool-call-start',
+        ...(input.callId ? { call: input.callId } : {}),
+      }
+      : input.eventType === 'turn-end'
+        ? {
+          t: 'turn-end',
+          ...(input.turnStatus ? { status: input.turnStatus } : {}),
+        }
+        : input.eventType === 'turn-start'
+          ? { t: 'turn-start' }
+          : { t: 'text' };
+
+  return {
+    sessionRole: 'agent',
+    sessionEventType: input.eventType,
+    ...(input.callId ? { sessionCallId: input.callId } : {}),
+    ...(input.turnId ? { sessionTurnId: input.turnId } : {}),
+    ...(input.turnStatus ? { sessionTurnStatus: input.turnStatus } : {}),
+    sessionEvent: {
+      role: 'agent',
+      ev: event,
+    },
+  };
+}
 
 function shellEscapeSingle(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
@@ -683,6 +724,13 @@ function parseAgentStreamOutput(stdout: string): { output: string; actions: Pars
     ]);
     const diffStats = summarizeDiffText(outputCandidate);
     const normalizedPath = path && (path.includes('/') || path.includes('.') || path.startsWith('~')) ? path : '';
+    const callId = extractFirstStringByKeys(records, [
+      'callId',
+      'call_id',
+      'toolCallId',
+      'tool_call_id',
+      'call',
+    ]);
 
     let actionType: ParsedAgentActionEvent['actionType'] | null = null;
     if (command && looksLikeShellCommand(command)) {
@@ -697,11 +745,14 @@ function parseAgentStreamOutput(stdout: string): { output: string; actions: Pars
 
     if (actionType) {
       const resolvedPath = normalizedPath || extractPathFromCommand(command);
-      const key = `${actionType}|${command}|${resolvedPath}`;
+      const key = callId
+        ? `${actionType}|${callId}`
+        : `${actionType}|${command}|${resolvedPath}`;
       if (!actionByKey.has(key)) {
         actionByKey.set(key, {
           actionType,
           title: titleForActionType(actionType),
+          callId: callId || undefined,
           command: command || undefined,
           path: resolvedPath || undefined,
           output: outputCandidate || undefined,
@@ -1196,6 +1247,7 @@ export const happyClientTestHooks = {
   parseAgentStreamOutput,
   looksLikeActionTranscript,
   parseMessagePayloadText,
+  buildSessionHintMeta,
 };
 
 export class HappyRuntimeStore {
@@ -2812,7 +2864,8 @@ export class HappyRuntimeStore {
       }
 
       if (!isCodex && Array.isArray(response.inferredActions) && response.inferredActions.length > 0) {
-        for (const action of response.inferredActions.slice(0, 10)) {
+        for (const [index, action] of response.inferredActions.slice(0, 10).entries()) {
+          const sessionCallId = (action.callId || `call-${index + 1}`).trim();
           const outputPreview = action.output ? trimOutput(action.output) : '';
           const bodyParts = [
             action.command ? `$ ${action.command}` : '',
@@ -2835,6 +2888,10 @@ export class HappyRuntimeStore {
             additions: action.additions,
             deletions: action.deletions,
             hasDiffSignal: action.hasDiffSignal,
+            ...buildSessionHintMeta({
+              eventType: 'tool-call-end',
+              callId: sessionCallId,
+            }),
             streamEvent: 'agent_stream_action',
             agent: flavor,
             model: selectedModel,
@@ -2853,6 +2910,7 @@ export class HappyRuntimeStore {
           ...(scopedChatId ? { chatId: scopedChatId } : {}),
           requestedPath: session.metadata.path,
           execCwd: response.cwd,
+          ...buildSessionHintMeta({ eventType: 'text' }),
           streamEvent: 'agent_message',
           agent: flavor,
           model: selectedModel,
