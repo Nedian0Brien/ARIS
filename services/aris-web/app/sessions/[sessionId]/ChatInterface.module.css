@@ -360,10 +360,12 @@
   border: 1px solid var(--chat-item-border);
   border-radius: 13px;
   background: var(--chat-item-bg);
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: border-color 0.22s ease, background-color 0.22s ease, box-shadow 0.22s ease;
   display: flex;
+  flex-direction: column;
   align-items: stretch;
   min-width: 0;
+  overflow: hidden;
 }
 
 .chatListItem:hover {
@@ -371,8 +373,58 @@
 }
 
 .chatListItemActive {
-  border-color: var(--chat-item-active-border);
-  background: var(--chat-item-active-bg);
+  box-shadow: 0 0 0 1px rgba(30, 64, 175, 0.2) inset;
+}
+
+.chatListItemStateRunning {
+  border-color: rgba(59, 130, 246, 0.78);
+  background: linear-gradient(145deg, rgba(239, 246, 255, 0.96) 0%, rgba(219, 234, 254, 0.9) 100%);
+}
+
+.chatListItemStateRunning::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  border: 1px solid rgba(59, 130, 246, 0.55);
+  pointer-events: none;
+  animation: chatListPulseRing 1.8s ease-out infinite;
+}
+
+.chatListItemStateCompleted {
+  border-color: rgba(22, 163, 74, 0.5);
+  background: linear-gradient(145deg, rgba(236, 253, 245, 0.96) 0%, rgba(220, 252, 231, 0.88) 100%);
+}
+
+.chatListItemStateApproval {
+  border-color: rgba(217, 119, 6, 0.56);
+  background: linear-gradient(145deg, rgba(255, 251, 235, 0.98) 0%, rgba(254, 243, 199, 0.9) 100%);
+}
+
+.chatListItemStateError {
+  border-color: rgba(220, 38, 38, 0.52);
+  background: linear-gradient(145deg, rgba(254, 242, 242, 0.98) 0%, rgba(254, 226, 226, 0.9) 100%);
+}
+
+@keyframes chatListPulseRing {
+  0% {
+    opacity: 0.95;
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.34);
+  }
+  65% {
+    opacity: 0.25;
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
+  }
+  100% {
+    opacity: 0;
+    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+  }
+}
+
+.chatListItemTopRow {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
 }
 
 .chatListMainButton {
@@ -382,9 +434,9 @@
   background: transparent;
   text-align: left;
   padding: 0.56rem 0.56rem;
-  min-height: 56px;
+  min-height: 62px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.52rem;
   font-family: var(--font-sans);
@@ -396,8 +448,14 @@
   cursor: pointer;
 }
 
-.chatListTitleWrap {
+.chatListMainContent {
   flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 0.24rem;
+}
+
+.chatListTitleWrap {
   min-width: 0;
   display: flex;
   align-items: center;
@@ -434,6 +492,29 @@
   max-width: 100%;
 }
 
+.chatListPreviewRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+  padding-left: 1.52rem;
+}
+
+.chatListPreviewIcon {
+  color: #94a3b8;
+  flex: 0 0 auto;
+}
+
+.chatListPreviewText {
+  min-width: 0;
+  font-size: 0.68rem;
+  color: #94a3b8;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chatListRenameInput {
   width: 100%;
   border: 1px solid var(--chat-item-hover-border);
@@ -452,6 +533,7 @@
   color: var(--chat-text-muted);
   white-space: nowrap;
   flex-shrink: 0;
+  padding-top: 0.1rem;
   max-width: 4.8rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -460,10 +542,11 @@
 .chatListMenuWrap {
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   flex: 0 0 auto;
   min-width: 32px;
   padding-right: 0.36rem;
+  padding-top: 0.48rem;
 }
 
 .chatListMenuButton {
@@ -513,6 +596,87 @@
   color: #b91c1c;
   border-color: rgba(248, 113, 113, 0.32);
   background: rgba(254, 242, 242, 0.92);
+}
+
+.chatListApprovalWrap {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  padding: 0 0.5rem;
+  transition: max-height 0.28s ease, opacity 0.22s ease, padding-bottom 0.28s ease;
+}
+
+.chatListApprovalWrapOpen {
+  max-height: 100px;
+  opacity: 1;
+  padding-bottom: 0.5rem;
+}
+
+.chatListApprovalInner {
+  border-top: 1px dashed rgba(148, 163, 184, 0.36);
+  padding-top: 0.44rem;
+}
+
+.chatListApprovalButtons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.34rem;
+}
+
+.chatListApprovalButton {
+  border: 1px solid rgba(148, 163, 184, 0.42);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #334155;
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 0.34rem 0.2rem;
+  cursor: pointer;
+}
+
+.chatListApprovalButton:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.chatListApprovalButtonDeny {
+  color: #b91c1c;
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(254, 242, 242, 0.9);
+}
+
+.chatListApprovalResult {
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 8px;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 0.4rem 0.35rem;
+  animation: chatListApprovalFeedback 0.24s ease;
+}
+
+.chatListApprovalResultApproved {
+  color: #166534;
+  border-color: rgba(34, 197, 94, 0.45);
+  background: rgba(220, 252, 231, 0.84);
+}
+
+.chatListApprovalResultDenied {
+  color: #991b1b;
+  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(254, 226, 226, 0.84);
+}
+
+@keyframes chatListApprovalFeedback {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .chatSidebarLoadMoreButton {
