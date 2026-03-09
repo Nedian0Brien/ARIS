@@ -341,6 +341,17 @@ function sortSessionChats(chats: SessionChat[]): SessionChat[] {
   });
 }
 
+function buildReadMarkerMap(chats: SessionChat[]): Record<string, string> {
+  const markers: Record<string, string> = {};
+  for (const chat of chats) {
+    const marker = typeof chat.lastReadEventId === 'string' ? chat.lastReadEventId.trim() : '';
+    if (marker) {
+      markers[chat.id] = marker;
+    }
+  }
+  return markers;
+}
+
 function truncateSingleLine(input: string, max = 68): string {
   const compact = input.replace(/\s+/g, ' ').trim();
   if (compact.length <= max) {
@@ -1673,7 +1684,7 @@ export function ChatInterface({
   const [chatMutationLoadingId, setChatMutationLoadingId] = useState<string | null>(null);
   const [chatMutationError, setChatMutationError] = useState<string | null>(null);
   const [chatSidebarSnapshots, setChatSidebarSnapshots] = useState<Record<string, ChatSidebarSnapshot>>({});
-  const [chatReadMarkers, setChatReadMarkers] = useState<Record<string, string>>({});
+  const [chatReadMarkers, setChatReadMarkers] = useState<Record<string, string>>(() => buildReadMarkerMap(initialChats));
   const [approvalFeedbackByChat, setApprovalFeedbackByChat] = useState<Record<string, ChatApprovalFeedback>>({});
   const [sidebarApprovalLoadingChatId, setSidebarApprovalLoadingChatId] = useState<string | null>(null);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
@@ -1709,6 +1720,8 @@ export function ChatInterface({
   const runtimeStartedSinceAwaitingRef = useRef(false);
   const approvalFeedbackTimersRef = useRef<Record<string, number>>({});
   const chatSidebarFetchInFlightRef = useRef<Record<string, boolean>>({});
+  const readMarkerSyncInFlightRef = useRef<Record<string, boolean>>({});
+  const readMarkerSyncedRef = useRef<Record<string, string>>(buildReadMarkerMap(initialChats));
 
   const defaultAgentFlavor = normalizeAgentFlavor(agentFlavor, 'codex');
   const activeAgentFlavor = normalizeAgentFlavor(activeChat?.agent, defaultAgentFlavor);
@@ -1927,7 +1940,20 @@ export function ChatInterface({
   useEffect(() => { setIsMounted(true); }, []);
 
   useEffect(() => {
-    setChats(sortSessionChats(initialChats));
+    const sortedInitialChats = sortSessionChats(initialChats);
+    const persistedReadMarkers = buildReadMarkerMap(sortedInitialChats);
+    setChats(sortedInitialChats);
+    setChatReadMarkers((prev) => {
+      const merged = { ...persistedReadMarkers };
+      for (const chat of sortedInitialChats) {
+        const localMarker = prev[chat.id];
+        if (localMarker) {
+          merged[chat.id] = localMarker;
+        }
+      }
+      return merged;
+    });
+    readMarkerSyncedRef.current = { ...persistedReadMarkers };
     setChatActionMenuId(null);
     setRenamingChatId(null);
     setChatTitleDraft('');
@@ -2013,6 +2039,22 @@ export function ChatInterface({
       }
     }
     chatSidebarFetchInFlightRef.current = nextInFlight;
+
+    const nextReadSyncInFlight: Record<string, boolean> = {};
+    for (const [chatId, value] of Object.entries(readMarkerSyncInFlightRef.current)) {
+      if (chatIds.has(chatId)) {
+        nextReadSyncInFlight[chatId] = value;
+      }
+    }
+    readMarkerSyncInFlightRef.current = nextReadSyncInFlight;
+
+    const nextReadSynced: Record<string, string> = {};
+    for (const [chatId, marker] of Object.entries(readMarkerSyncedRef.current)) {
+      if (chatIds.has(chatId)) {
+        nextReadSynced[chatId] = marker;
+      }
+    }
+    readMarkerSyncedRef.current = nextReadSynced;
   }, [chats]);
 
   useEffect(() => {
@@ -2055,6 +2097,49 @@ export function ChatInterface({
   }, [activeChatIdResolved, events, showScrollToBottom]);
 
   useEffect(() => {
+    const pending = Object.entries(chatReadMarkers).filter(([chatId, marker]) => (
+      marker
+      && marker !== readMarkerSyncedRef.current[chatId]
+      && !readMarkerSyncInFlightRef.current[chatId]
+    ));
+    if (pending.length === 0) {
+      return;
+    }
+    let cancelled = false;
+
+    for (const [chatId, marker] of pending) {
+      readMarkerSyncInFlightRef.current[chatId] = true;
+      const readAt = chatSidebarSnapshots[chatId]?.latestEventAt ?? new Date().toISOString();
+      void fetch(
+        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chatId)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lastReadEventId: marker,
+            lastReadAt: readAt,
+          }),
+        },
+      )
+        .then((response) => {
+          if (!response.ok || cancelled) {
+            return;
+          }
+          readMarkerSyncedRef.current[chatId] = marker;
+        })
+        .catch(() => {
+        })
+        .finally(() => {
+          delete readMarkerSyncInFlightRef.current[chatId];
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chatReadMarkers, chatSidebarSnapshots, sessionId]);
+
+  useEffect(() => {
     let cancelled = false;
     const refreshVisibleChats = async () => {
       const targets = visibleChats.filter((chat) => !chatSidebarFetchInFlightRef.current[chat.id]);
@@ -2066,56 +2151,55 @@ export function ChatInterface({
         chatSidebarFetchInFlightRef.current[chat.id] = true;
       }
 
-      await Promise.all(targets.map(async (chat) => {
-        try {
-          const eventsParams = new URLSearchParams({
-            limit: '1',
-            chatId: chat.id,
+      try {
+        const params = new URLSearchParams();
+        for (const chat of targets) {
+          params.append('chatId', chat.id);
+        }
+        const response = await fetch(
+          `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/sidebar?${params.toString()}`,
+          { cache: 'no-store' },
+        );
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json().catch(() => ({}))) as {
+          snapshots?: Array<{
+            chatId: string;
+            preview: string;
+            hasEvents: boolean;
+            hasErrorSignal: boolean;
+            latestEventId: string | null;
+            latestEventAt: string | null;
+            latestEventIsUser: boolean;
+            isRunning: boolean;
+          }>;
+        };
+        if (!Array.isArray(payload.snapshots) || cancelled) {
+          return;
+        }
+        for (const snapshot of payload.snapshots) {
+          if (!snapshot?.chatId) {
+            continue;
+          }
+          upsertChatSidebarSnapshot(snapshot.chatId, {
+            preview: snapshot.preview,
+            hasEvents: snapshot.hasEvents,
+            hasErrorSignal: snapshot.hasErrorSignal,
+            latestEventId: snapshot.latestEventId,
+            latestEventAt: snapshot.latestEventAt,
+            latestEventIsUser: snapshot.latestEventIsUser,
+            isRunning: snapshot.isRunning,
           });
-          if (chat.isDefault) {
-            eventsParams.set('includeUnassigned', '1');
-          }
-
-          const runtimeParams = new URLSearchParams({ chatId: chat.id });
-          const [eventsResponse, runtimeResponse] = await Promise.all([
-            fetch(
-              `/api/runtime/sessions/${encodeURIComponent(sessionId)}/events?${eventsParams.toString()}`,
-              { cache: 'no-store' },
-            ),
-            fetch(
-              `/api/runtime/sessions/${encodeURIComponent(sessionId)}/runtime?${runtimeParams.toString()}`,
-              { cache: 'no-store' },
-            ),
-          ]);
-
-          const patch: Partial<ChatSidebarSnapshot> = {};
-
-          if (eventsResponse.ok) {
-            const payload = (await eventsResponse.json().catch(() => ({}))) as { events?: UiEvent[] };
-            const resolvedEvents = Array.isArray(payload.events) ? payload.events : [];
-            const latestEvent = resolvedEvents[resolvedEvents.length - 1];
-            patch.preview = latestEvent ? resolveRecentSummary(latestEvent) : '';
-            patch.hasEvents = resolvedEvents.length > 0;
-            patch.hasErrorSignal = hasChatErrorSignal(latestEvent);
-            patch.latestEventId = latestEvent?.id ?? null;
-            patch.latestEventAt = latestEvent?.timestamp ?? null;
-            patch.latestEventIsUser = Boolean(latestEvent ? isUserEvent(latestEvent) : false);
-          }
-
-          if (runtimeResponse.ok) {
-            const runtimePayload = (await runtimeResponse.json().catch(() => ({}))) as { isRunning?: boolean };
-            patch.isRunning = Boolean(runtimePayload.isRunning);
-          }
-
-          if (!cancelled && Object.keys(patch).length > 0) {
-            upsertChatSidebarSnapshot(chat.id, patch);
-          }
-        } catch {
-          // keep previous snapshot on transient failures
-        } finally {
+        }
+      } catch {
+        // keep previous snapshot on transient failures
+      } finally {
+        for (const chat of targets) {
           delete chatSidebarFetchInFlightRef.current[chat.id];
         }
-      }));
+      }
     };
 
     void refreshVisibleChats();

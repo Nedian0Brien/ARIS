@@ -11,6 +11,8 @@ function toSessionChat(record: {
   isPinned: boolean;
   isDefault: boolean;
   threadId: string | null;
+  lastReadAt: Date | null;
+  lastReadEventId: string | null;
   lastActivityAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -23,6 +25,8 @@ function toSessionChat(record: {
     isPinned: record.isPinned,
     isDefault: record.isDefault,
     threadId: record.threadId,
+    lastReadAt: record.lastReadAt ? record.lastReadAt.toISOString() : null,
+    lastReadEventId: record.lastReadEventId,
     lastActivityAt: record.lastActivityAt.toISOString(),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
@@ -153,6 +157,8 @@ export async function updateSessionChat(input: {
   isPinned?: boolean;
   threadId?: string | null;
   touchActivity?: boolean;
+  lastReadAt?: string | null;
+  lastReadEventId?: string | null;
 }): Promise<SessionChat> {
   const existing = await prisma.sessionChat.findFirst({
     where: {
@@ -167,11 +173,27 @@ export async function updateSessionChat(input: {
     throw new Error('CHAT_NOT_FOUND');
   }
 
+  const parsedLastReadAt = (() => {
+    if (input.lastReadAt === undefined) {
+      return undefined;
+    }
+    if (!input.lastReadAt || !input.lastReadAt.trim()) {
+      return null;
+    }
+    const epoch = Date.parse(input.lastReadAt);
+    if (!Number.isFinite(epoch)) {
+      return null;
+    }
+    return new Date(epoch);
+  })();
+
   const shouldUpdate = input.title !== undefined
     || input.agent !== undefined
     || input.isPinned !== undefined
     || input.threadId !== undefined
-    || Boolean(input.touchActivity);
+    || Boolean(input.touchActivity)
+    || parsedLastReadAt !== undefined
+    || input.lastReadEventId !== undefined;
 
   if (!shouldUpdate) {
     const current = await prisma.sessionChat.findUnique({
@@ -193,6 +215,8 @@ export async function updateSessionChat(input: {
       ...(input.isPinned !== undefined && { isPinned: input.isPinned }),
       ...(input.threadId !== undefined && { threadId: input.threadId && input.threadId.trim() ? input.threadId.trim() : null }),
       ...(input.touchActivity && { lastActivityAt: new Date() }),
+      ...(parsedLastReadAt !== undefined && { lastReadAt: parsedLastReadAt }),
+      ...(input.lastReadEventId !== undefined && { lastReadEventId: input.lastReadEventId && input.lastReadEventId.trim() ? input.lastReadEventId.trim() : null }),
     },
   });
 
