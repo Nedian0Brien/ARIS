@@ -47,6 +47,20 @@
 - 파일: `services/aris-web/app/api/settings/models/route.ts`
 - legacy 모델 ID 저장/사용 경로 정규화
 
+## DB CHECK 제약 추가 (추가 조치)
+- 마이그레이션: `services/aris-web/prisma/migrations/20260309191500_add_session_chat_model_check/migration.sql`
+- 제약명: `SessionChat_model_allowed_check`
+- 정책:
+  - `model IS NULL` 허용
+  - `trim(model)` 길이 1~120
+  - legacy 값 `gpt-5-codex` 금지
+  - built-in 허용 목록 또는 custom 패턴(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$`) 충족 시만 허용
+
+### 운영 DB 적용/검증 결과
+- constraint 생성/validated 확인 (`convalidated = true`)
+- violating rows = 0
+- 무효 값(`invalid model with space`) 업데이트 시 CHECK 위반으로 차단됨 확인
+
 ## 검증 결과
 - `aris-backend`: `npm run build` 통과
 - `aris-backend`: `npm run test` 통과 (23 tests)
