@@ -1669,6 +1669,7 @@ export function ChatInterface({
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const shouldStickToBottomRef = useRef(true);
   const disconnectNoticeAwaitingRef = useRef<string | null>(null);
+  const runtimeStartedSinceAwaitingRef = useRef(false);
 
   const defaultAgentFlavor = normalizeAgentFlavor(agentFlavor, 'codex');
   const activeAgentFlavor = normalizeAgentFlavor(activeChat?.agent, defaultAgentFlavor);
@@ -1761,6 +1762,7 @@ export function ChatInterface({
     setShowDisconnectRetry(false);
     setSubmitError(null);
     disconnectNoticeAwaitingRef.current = null;
+    runtimeStartedSinceAwaitingRef.current = false;
   }, [activeChatIdResolved]);
 
   useEffect(() => {
@@ -2261,7 +2263,7 @@ export function ChatInterface({
     }
     const sinceEpoch = Date.parse(since);
     return events.some((event) => {
-      if (isUserEvent(event) || !event.body.trim()) {
+      if (isUserEvent(event)) {
         return false;
       }
 
@@ -2272,6 +2274,15 @@ export function ChatInterface({
       return eventEpoch >= sinceEpoch;
     });
   }, [events]);
+
+  useEffect(() => {
+    if (!isAwaitingReply) {
+      return;
+    }
+    if (runtimeRunning) {
+      runtimeStartedSinceAwaitingRef.current = true;
+    }
+  }, [isAwaitingReply, runtimeRunning]);
 
   useEffect(() => {
     if (!awaitingReplySince) {
@@ -2285,6 +2296,7 @@ export function ChatInterface({
       setSubmitError(null);
       setShowDisconnectRetry(false);
       disconnectNoticeAwaitingRef.current = null;
+      runtimeStartedSinceAwaitingRef.current = false;
     }
   }, [awaitingReplySince, hasAgentEventSince, isRunActive]);
 
@@ -2292,10 +2304,9 @@ export function ChatInterface({
     if (!isAwaitingReply || !awaitingReplySince || isRunActive) {
       return;
     }
-
-    const sinceEpoch = Date.parse(awaitingReplySince);
-    const elapsed = Date.now() - (Number.isFinite(sinceEpoch) ? sinceEpoch : Date.now());
-    const remainingGrace = Math.max(0, RUNTIME_DISCONNECT_GRACE_MS - elapsed);
+    if (!runtimeStartedSinceAwaitingRef.current) {
+      return;
+    }
 
     const timer = window.setTimeout(() => {
       if (disconnectNoticeAwaitingRef.current === awaitingReplySince) {
@@ -2311,6 +2322,7 @@ export function ChatInterface({
       setSubmitError('에이전트 연결 중단됨');
       setIsAwaitingReply(false);
       setAwaitingReplySince(null);
+      runtimeStartedSinceAwaitingRef.current = false;
       addEvent({
         id: `runtime-disconnected-${now}`,
         timestamp: now,
@@ -2324,7 +2336,7 @@ export function ChatInterface({
         },
         severity: 'warning',
       });
-    }, remainingGrace);
+    }, RUNTIME_DISCONNECT_GRACE_MS);
 
     return () => {
       window.clearTimeout(timer);
@@ -2348,6 +2360,7 @@ export function ChatInterface({
         return;
       }
       setIsAwaitingReply(false);
+      runtimeStartedSinceAwaitingRef.current = false;
       setSubmitError('에이전트 응답이 지연되고 있습니다. 런타임 연결 상태를 확인해 주세요.');
     }, remaining);
 
@@ -2558,6 +2571,7 @@ export function ChatInterface({
     setIsSubmitting(true);
     setIsAwaitingReply(true);
     setAwaitingReplySince(new Date().toISOString());
+    runtimeStartedSinceAwaitingRef.current = false;
     setSubmitError(null);
     setShowDisconnectRetry(false);
     disconnectNoticeAwaitingRef.current = null;
@@ -2645,6 +2659,7 @@ export function ChatInterface({
     } catch (error) {
       setIsAwaitingReply(false);
       setAwaitingReplySince(null);
+      runtimeStartedSinceAwaitingRef.current = false;
       setSubmitError(error instanceof Error ? error.message : '백엔드 연결 상태를 확인해 주세요.');
     } finally {
       setIsSubmitting(false);
@@ -2659,6 +2674,7 @@ export function ChatInterface({
     setIsSubmitting(true);
     setIsAwaitingReply(true);
     setAwaitingReplySince(new Date().toISOString());
+    runtimeStartedSinceAwaitingRef.current = false;
     setSubmitError(null);
     setShowDisconnectRetry(false);
     disconnectNoticeAwaitingRef.current = null;
@@ -2695,6 +2711,7 @@ export function ChatInterface({
     } catch (error) {
       setIsAwaitingReply(false);
       setAwaitingReplySince(null);
+      runtimeStartedSinceAwaitingRef.current = false;
       setSubmitError(error instanceof Error ? error.message : '재시도 중 오류가 발생했습니다.');
       setShowDisconnectRetry(true);
     } finally {
@@ -2725,6 +2742,7 @@ export function ChatInterface({
 
       setIsAwaitingReply(false);
       setAwaitingReplySince(null);
+      runtimeStartedSinceAwaitingRef.current = false;
       setSubmitError(null);
       setShowDisconnectRetry(false);
       disconnectNoticeAwaitingRef.current = null;
