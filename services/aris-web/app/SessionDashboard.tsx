@@ -1244,7 +1244,7 @@ export function SessionDashboard({
           <Button
             type="button"
             onClick={openCreateSessionModal}
-            className="btn-primary"
+            className={`btn-primary ${styles.dashboardCreateButton}`}
             style={{ borderRadius: '99px', padding: '0.75rem 1.5rem', boxShadow: 'var(--shadow-md)' }}
           >
             <Plus size={18} /> 새 워크스페이스
