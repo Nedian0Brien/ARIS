@@ -7,9 +7,13 @@ const envSchema = z.object({
   AUTH_COOKIE_NAME: z.string().min(1).default('aris_session'),
   HAPPY_SERVER_URL: z.string().url().default('http://localhost:4080'),
   HAPPY_SERVER_TOKEN: z.string().optional(),
+  HOST_PROJECTS_ROOT: z.string().default(''),
   SSH_BASE_COMMAND: z.string().default('ssh ubuntu@your-server'),
   SSH_LINK_TTL_SECONDS: z.coerce.number().int().positive().default(300),
   SSH_KEY_ENCRYPTION_SECRET: z.string().min(16).default('dev-only-ssh-enc-secret-change-me'),
+  ARIS_AGENT_SKILLS_ROOT: z.string().default('/home/ubuntu/.agents/skills'),
+  ARIS_CODEX_SKILLS_ROOT: z.string().default('/home/ubuntu/.codex/skills'),
+  ARIS_CLAUDE_HOME: z.string().default('/home/ubuntu/.claude'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   
   /* SMTP Configuration for Email 2FA */
