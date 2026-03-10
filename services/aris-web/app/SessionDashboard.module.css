@@ -12,6 +12,11 @@
   gap: 0.35rem;
 }
 
+.dashboardCreateButton {
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
 .sessionDashboardLayout {
   --dashboard-card-bg: rgba(255, 255, 255, 0.82);
   --dashboard-card-bg-soft: rgba(255, 255, 255, 0.64);

@@ -169,6 +169,7 @@ type ContextItem =
   | { id: string; type: 'text'; text: string };
 type ChatRunPhase = 'idle' | keyof typeof CHAT_RUN_PHASE_LABELS;
 type ChatSidebarState = 'default' | 'running' | 'completed' | 'approval' | 'error';
+type ChatSidebarSectionKey = 'pinned' | 'running' | 'completed' | 'history';
 type ChatSidebarSnapshot = {
   preview: string;
   hasEvents: boolean;
@@ -179,6 +180,12 @@ type ChatSidebarSnapshot = {
   isRunning: boolean;
 };
 type ChatApprovalFeedback = 'approved' | 'denied';
+type ChatSidebarSection = {
+  key: ChatSidebarSectionKey;
+  label: string;
+  chats: SessionChat[];
+  totalCount: number;
+};
 type ChatSubmittedPayload = {
   text: string;
   chatId: string;
@@ -207,6 +214,19 @@ const DEFAULT_CHAT_RUNTIME_UI_STATE: ChatRuntimeUiState = {
   showDisconnectRetry: false,
   lastSubmittedPayload: null,
   submitError: null,
+};
+const CHAT_SIDEBAR_SECTION_ORDER: ChatSidebarSectionKey[] = ['pinned', 'running', 'completed', 'history'];
+const CHAT_SIDEBAR_SECTION_LABELS: Record<ChatSidebarSectionKey, string> = {
+  pinned: 'Pinned',
+  running: 'Running',
+  completed: 'Completed',
+  history: 'History',
+};
+const DEFAULT_SIDEBAR_SECTION_EXPANDED: Record<ChatSidebarSectionKey, boolean> = {
+  pinned: false,
+  running: false,
+  completed: false,
+  history: false,
 };
 
 // --- 3. 런타임 초기화 안전 장치 (TDZ 에러 방지) ---
@@ -1968,6 +1988,9 @@ export function ChatInterface({
   const [chatTitleDraft, setChatTitleDraft] = useState('');
   const [chatMutationLoadingId, setChatMutationLoadingId] = useState<string | null>(null);
   const [chatMutationError, setChatMutationError] = useState<string | null>(null);
+  const [expandedSidebarSections, setExpandedSidebarSections] = useState<Record<ChatSidebarSectionKey, boolean>>(
+    DEFAULT_SIDEBAR_SECTION_EXPANDED,
+  );
   const [chatSidebarSnapshots, setChatSidebarSnapshots] = useState<Record<string, ChatSidebarSnapshot>>(() => {
     const sortedInitialChats = sortSessionChats(initialChats);
     const seeded: Record<string, ChatSidebarSnapshot> = {};
@@ -2063,6 +2086,7 @@ export function ChatInterface({
   const runtimeStartedSinceAwaitingRef = useRef(false);
   const approvalFeedbackTimersRef = useRef<Record<string, number>>({});
   const chatSidebarFetchInFlightRef = useRef<Record<string, boolean>>({});
+  const previousSidebarSectionCountsRef = useRef<Record<ChatSidebarSectionKey, number> | null>(null);
   const readMarkerSyncInFlightRef = useRef<Record<string, boolean>>({});
   const readMarkerSyncedRef = useRef<Record<string, string>>(buildReadMarkerMap(initialChats));
   const snapshotSyncInFlightRef = useRef<Record<string, boolean>>({});
@@ -2153,8 +2177,6 @@ export function ChatInterface({
     });
   }, [displayPermissions, showPermissionQueue, streamItems]);
   const firstPendingPermissionId = pendingPermissions[0]?.id ?? null;
-  const visibleChats = useMemo(() => chats.slice(0, chatVisibleCount), [chats, chatVisibleCount]);
-  const hasMoreChats = chats.length > chatVisibleCount;
 
   useEffect(() => {
     const sessionModelFallback = activeAgentFlavor === defaultAgentFlavor
@@ -2338,6 +2360,82 @@ export function ChatInterface({
     return '최근 메시지가 없습니다.';
   }, [chatSidebarSnapshots, chats]);
 
+  const resolveChatSidebarSection = useCallback((chat: SessionChat): ChatSidebarSectionKey => {
+    if (chat.isPinned) {
+      return 'pinned';
+    }
+    const sidebarState = resolveChatSidebarState(chat);
+    if (sidebarState === 'running' || sidebarState === 'approval') {
+      return 'running';
+    }
+    if (sidebarState === 'completed') {
+      return 'completed';
+    }
+    return 'history';
+  }, [resolveChatSidebarState]);
+
+  const groupedSidebarChats = useMemo<Record<ChatSidebarSectionKey, SessionChat[]>>(() => {
+    const grouped: Record<ChatSidebarSectionKey, SessionChat[]> = {
+      pinned: [],
+      running: [],
+      completed: [],
+      history: [],
+    };
+    for (const chat of chats) {
+      grouped[resolveChatSidebarSection(chat)].push(chat);
+    }
+    return grouped;
+  }, [chats, resolveChatSidebarSection]);
+  const visibleHistoryChats = useMemo(() => {
+    const visibleIds = new Set(groupedSidebarChats.history.slice(0, chatVisibleCount).map((chat) => chat.id));
+    if (activeChatIdResolved) {
+      visibleIds.add(activeChatIdResolved);
+    }
+    return groupedSidebarChats.history.filter((chat) => visibleIds.has(chat.id));
+  }, [activeChatIdResolved, chatVisibleCount, groupedSidebarChats.history]);
+  const sidebarSections = useMemo<ChatSidebarSection[]>(() => ([
+    {
+      key: 'pinned',
+      label: CHAT_SIDEBAR_SECTION_LABELS.pinned,
+      chats: groupedSidebarChats.pinned,
+      totalCount: groupedSidebarChats.pinned.length,
+    },
+    {
+      key: 'running',
+      label: CHAT_SIDEBAR_SECTION_LABELS.running,
+      chats: groupedSidebarChats.running,
+      totalCount: groupedSidebarChats.running.length,
+    },
+    {
+      key: 'completed',
+      label: CHAT_SIDEBAR_SECTION_LABELS.completed,
+      chats: groupedSidebarChats.completed,
+      totalCount: groupedSidebarChats.completed.length,
+    },
+    {
+      key: 'history',
+      label: CHAT_SIDEBAR_SECTION_LABELS.history,
+      chats: visibleHistoryChats,
+      totalCount: groupedSidebarChats.history.length,
+    },
+  ]), [groupedSidebarChats, visibleHistoryChats]);
+  const renderedSidebarChats = useMemo(
+    () => [
+      ...groupedSidebarChats.pinned,
+      ...groupedSidebarChats.running,
+      ...groupedSidebarChats.completed,
+      ...visibleHistoryChats,
+    ],
+    [groupedSidebarChats, visibleHistoryChats],
+  );
+  const hasMoreChats = groupedSidebarChats.history.length > visibleHistoryChats.length;
+  const toggleSidebarSection = useCallback((sectionKey: ChatSidebarSectionKey) => {
+    setExpandedSidebarSections((prev) => ({
+      ...prev,
+      [sectionKey]: !prev[sectionKey],
+    }));
+  }, []);
+
   const handleSidebarPermissionDecision = useCallback(async (
     chatId: string,
     decision: 'allow_once' | 'allow_session' | 'deny',
@@ -2402,15 +2500,52 @@ export function ChatInterface({
 
   useEffect(() => {
     setChatVisibleCount((prev) => {
-      const nextMax = Math.max(SIDEBAR_CHAT_PAGE_SIZE, chats.length);
+      const nextMax = Math.max(SIDEBAR_CHAT_PAGE_SIZE, groupedSidebarChats.history.length);
       return Math.min(prev, nextMax);
     });
-  }, [chats.length]);
+  }, [groupedSidebarChats.history.length]);
+
+  useEffect(() => {
+    const nextCounts = sidebarSections.reduce<Record<ChatSidebarSectionKey, number>>((acc, section) => {
+      acc[section.key] = section.totalCount;
+      return acc;
+    }, {
+      pinned: 0,
+      running: 0,
+      completed: 0,
+      history: 0,
+    });
+
+    setExpandedSidebarSections((prev) => {
+      const previousCounts = previousSidebarSectionCountsRef.current;
+      let changed = false;
+      const nextState = { ...prev };
+
+      for (const key of CHAT_SIDEBAR_SECTION_ORDER) {
+        const nextCount = nextCounts[key];
+        if (!previousCounts) {
+          const shouldBeOpen = nextCount > 0;
+          if (nextState[key] !== shouldBeOpen) {
+            nextState[key] = shouldBeOpen;
+            changed = true;
+          }
+          continue;
+        }
+        if (nextCount > previousCounts[key] && !nextState[key]) {
+          nextState[key] = true;
+          changed = true;
+        }
+      }
+
+      previousSidebarSectionCountsRef.current = nextCounts;
+      return changed ? nextState : prev;
+    });
+  }, [sidebarSections]);
 
   useEffect(() => {
     const listElement = chatListRef.current;
     const sentinelElement = chatListSentinelRef.current;
-    if (!isChatSidebarOpen || !listElement || !sentinelElement || !hasMoreChats) {
+    if (!isChatSidebarOpen || !expandedSidebarSections.history || !listElement || !sentinelElement || !hasMoreChats) {
       return;
     }
 
@@ -2420,9 +2555,9 @@ export function ChatInterface({
           return;
         }
         setChatVisibleCount((prev) => (
-          prev >= chats.length
+          prev >= groupedSidebarChats.history.length
             ? prev
-            : Math.min(prev + SIDEBAR_CHAT_PAGE_SIZE, chats.length)
+            : Math.min(prev + SIDEBAR_CHAT_PAGE_SIZE, groupedSidebarChats.history.length)
         ));
       },
       {
@@ -2436,7 +2571,7 @@ export function ChatInterface({
     return () => {
       observer.disconnect();
     };
-  }, [chats.length, hasMoreChats, isChatSidebarOpen]);
+  }, [expandedSidebarSections.history, groupedSidebarChats.history.length, hasMoreChats, isChatSidebarOpen]);
 
   useEffect(() => {
     return () => {
@@ -2693,7 +2828,7 @@ export function ChatInterface({
     let cancelled = false;
     const refreshVisibleChats = async () => {
       // Limit polling to the first 15 visible chats plus the active chat
-      const recentChats = visibleChats.slice(0, 15);
+      const recentChats = renderedSidebarChats.slice(0, 15);
       const activeChat = chats.find((c) => c.id === activeChatIdResolved);
       if (activeChat && !recentChats.some((c) => c.id === activeChat.id)) {
         recentChats.push(activeChat);
@@ -2767,7 +2902,7 @@ export function ChatInterface({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [sessionId, upsertChatSidebarSnapshot, visibleChats]);
+  }, [activeChatIdResolved, chats, renderedSidebarChats, sessionId, upsertChatSidebarSnapshot]);
 
   useEffect(() => {
     if (plusMenuMode === 'closed' && !isModelDropdownOpen && !isCreateChatMenuOpen) return;
@@ -4106,8 +4241,27 @@ export function ChatInterface({
           <div className={styles.chatSidebarListHead}>
             <span className={styles.chatSidebarListLabel}>채팅 {chats.length}개</span>
           </div>
-          <div ref={chatListRef} className={`${styles.chatList} ${styles.chatSectionList}`}>
-            {visibleChats.map((chat) => {
+          <div ref={chatListRef} className={styles.chatList}>
+            {sidebarSections.map((section) => {
+              const isExpanded = expandedSidebarSections[section.key];
+              return (
+                <section key={section.key} className={styles.sidebarSection}>
+                  <button
+                    type="button"
+                    className={styles.sidebarSectionToggle}
+                    onClick={() => toggleSidebarSection(section.key)}
+                    aria-expanded={isExpanded}
+                    aria-controls={`chat-sidebar-section-${section.key}`}
+                  >
+                    <span className={styles.sidebarSectionHeading}>
+                      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      <span>{section.label}</span>
+                    </span>
+                    <span className={styles.sidebarSectionCount}>{section.totalCount}</span>
+                  </button>
+                  {isExpanded && (
+                    <div id={`chat-sidebar-section-${section.key}`} className={styles.sidebarSectionBody}>
+                      {section.chats.map((chat) => {
               const isActive = chat.id === activeChatIdResolved;
               const isRenaming = renamingChatId === chat.id;
               const rowAgentMeta = resolveAgentMeta(chat.agent);
@@ -4315,12 +4469,17 @@ export function ChatInterface({
                   </div>
                 </div>
               );
+                      })}
+                      {section.key === 'history' && hasMoreChats && (
+                        <div ref={chatListSentinelRef} className={styles.chatSidebarInfiniteSentinel}>
+                          이전 채팅 불러오는 중...
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </section>
+              );
             })}
-            {hasMoreChats && (
-              <div ref={chatListSentinelRef} className={styles.chatSidebarInfiniteSentinel}>
-                이전 채팅 불러오는 중...
-              </div>
-            )}
           </div>
         </div>
       </aside>
