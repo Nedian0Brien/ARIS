@@ -8,6 +8,7 @@ function toSessionChat(record: {
   sessionId: string;
   agent: string;
   model: string | null;
+  modelReasoningEffort: string | null;
   title: string;
   isPinned: boolean;
   isDefault: boolean;
@@ -28,6 +29,7 @@ function toSessionChat(record: {
     sessionId: record.sessionId,
     agent: resolveAgentFlavor(record.agent),
     model: record.model,
+    modelReasoningEffort: normalizeModelReasoningEffort(record.modelReasoningEffort),
     title: record.title,
     isPinned: record.isPinned,
     isDefault: record.isDefault,
@@ -62,6 +64,17 @@ function normalizeChatModel(input: unknown): string | null {
   }
   const canonical = trimmed === 'gpt-5-codex' ? 'gpt-5.3-codex' : trimmed;
   return canonical.slice(0, 120);
+}
+
+function normalizeModelReasoningEffort(input: unknown): 'low' | 'medium' | 'high' | 'xhigh' | null {
+  if (typeof input !== 'string') {
+    return null;
+  }
+  const normalized = input.trim().toLowerCase();
+  if (normalized === 'low' || normalized === 'medium' || normalized === 'high' || normalized === 'xhigh') {
+    return normalized;
+  }
+  return null;
 }
 
 function sortChats(chats: SessionChat[]): SessionChat[] {
@@ -146,6 +159,7 @@ export async function createSessionChat(input: {
   userId: string;
   agent?: AgentFlavor;
   model?: string | null;
+  modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh' | null;
   title?: string;
 }): Promise<SessionChat> {
   const existing = await prisma.sessionChat.findMany({
@@ -166,6 +180,9 @@ export async function createSessionChat(input: {
       userId: input.userId,
       agent: input.agent && input.agent !== 'unknown' ? input.agent : 'codex',
       ...(input.model !== undefined && { model: normalizeChatModel(input.model) }),
+      ...(input.modelReasoningEffort !== undefined && {
+        modelReasoningEffort: normalizeModelReasoningEffort(input.modelReasoningEffort),
+      }),
       title,
       isDefault: false,
     },
@@ -184,6 +201,7 @@ export async function updateSessionChat(input: {
   threadId?: string | null;
   touchActivity?: boolean;
   model?: string | null;
+  modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh' | null;
   lastReadAt?: string | null;
   lastReadEventId?: string | null;
   latestPreview?: string;
@@ -238,6 +256,7 @@ export async function updateSessionChat(input: {
     || input.threadId !== undefined
     || Boolean(input.touchActivity)
     || input.model !== undefined
+    || input.modelReasoningEffort !== undefined
     || parsedLastReadAt !== undefined
     || input.lastReadEventId !== undefined
     || input.latestPreview !== undefined
@@ -267,6 +286,9 @@ export async function updateSessionChat(input: {
       ...(input.threadId !== undefined && { threadId: input.threadId && input.threadId.trim() ? input.threadId.trim() : null }),
       ...(input.touchActivity && { lastActivityAt: new Date() }),
       ...(input.model !== undefined && { model: normalizeChatModel(input.model) }),
+      ...(input.modelReasoningEffort !== undefined && {
+        modelReasoningEffort: normalizeModelReasoningEffort(input.modelReasoningEffort),
+      }),
       ...(parsedLastReadAt !== undefined && { lastReadAt: parsedLastReadAt }),
       ...(input.lastReadEventId !== undefined && { lastReadEventId: input.lastReadEventId && input.lastReadEventId.trim() ? input.lastReadEventId.trim() : null }),
       ...(input.latestPreview !== undefined && { latestPreview: input.latestPreview.trim().slice(0, 240) }),

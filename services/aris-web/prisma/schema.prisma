@@ -69,6 +69,7 @@ model SessionChat {
   isDefault      Boolean  @default(false)
   threadId       String?
   model          String?
+  modelReasoningEffort String?
   latestPreview  String   @default("")
   latestEventId  String?
   latestEventAt  DateTime?

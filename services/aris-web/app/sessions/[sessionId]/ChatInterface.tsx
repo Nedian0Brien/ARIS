@@ -103,8 +103,8 @@ type ComposerModelOption = { id: string; shortLabel: string; badge: string };
 type ModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 const COMPOSER_MODELS_BY_AGENT: Record<'codex' | 'claude' | 'gemini', ComposerModelOption[]> = {
   codex: [
-    { id: 'gpt-5.3-codex', shortLabel: 'GPT-5.3 Codex', badge: '권장' },
-    { id: 'gpt-5.4', shortLabel: 'GPT-5.4', badge: '신규' },
+    { id: 'gpt-5.4', shortLabel: 'GPT-5.4', badge: '권장' },
+    { id: 'gpt-5.3-codex', shortLabel: 'GPT-5.3 Codex', badge: '유지' },
     { id: 'gpt-5', shortLabel: 'GPT-5', badge: '고성능' },
     { id: 'gpt-5-mini', shortLabel: 'GPT-5 mini', badge: '빠름' },
   ],
@@ -1852,7 +1852,18 @@ export function ChatInterface({
       ?? sessionModelFallback
       ?? resolveDefaultModelId(initialAgent, customModels);
   });
-  const [selectedModelReasoningEffort, setSelectedModelReasoningEffort] = useState<ModelReasoningEffort>('medium');
+  const [selectedModelReasoningEffort, setSelectedModelReasoningEffort] = useState<ModelReasoningEffort>(() => {
+    const sortedInitialChats = sortSessionChats(initialChats);
+    const initialChat = (activeChatId && activeChatId.trim().length > 0
+      ? sortedInitialChats.find((chat) => chat.id === activeChatId.trim())
+      : null) ?? sortedInitialChats[0] ?? null;
+    const sessionAgent = normalizeAgentFlavor(agentFlavor, 'codex');
+    const initialAgent = normalizeAgentFlavor(initialChat?.agent, sessionAgent);
+    if (initialAgent !== 'codex') {
+      return 'medium';
+    }
+    return normalizeModelReasoningEffort(initialChat?.modelReasoningEffort, 'medium');
+  });
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [fileBrowserPath, setFileBrowserPath] = useState('/');
@@ -1969,6 +1980,20 @@ export function ChatInterface({
     }
     setSelectedModelId(nextModelId);
   }, [activeAgentFlavor, activeChat?.id, activeChat?.model, defaultAgentFlavor, selectedModelId, sessionModel]);
+
+  useEffect(() => {
+    if (activeAgentFlavor !== 'codex') {
+      if (selectedModelReasoningEffort !== 'medium') {
+        setSelectedModelReasoningEffort('medium');
+      }
+      return;
+    }
+    const nextEffort = normalizeModelReasoningEffort(activeChat?.modelReasoningEffort, 'medium');
+    if (nextEffort === selectedModelReasoningEffort) {
+      return;
+    }
+    setSelectedModelReasoningEffort(nextEffort);
+  }, [activeAgentFlavor, activeChat?.id, activeChat?.modelReasoningEffort, selectedModelReasoningEffort]);
 
   const upsertChatSidebarSnapshot = useCallback((chatId: string, patch: Partial<ChatSidebarSnapshot>) => {
     setChatSidebarSnapshots((prev) => {
@@ -3308,6 +3333,46 @@ export function ChatInterface({
     }
   }, [activeChatIdResolved, sessionId]);
 
+  const handleSelectModelReasoningEffort = useCallback(async (value: unknown) => {
+    const normalizedEffort = normalizeModelReasoningEffort(value, 'medium');
+    setSelectedModelReasoningEffort(normalizedEffort);
+    if (!activeChatIdResolved || activeAgentFlavor !== 'codex') {
+      return;
+    }
+    setChatMutationError(null);
+    const previousEffort = normalizeModelReasoningEffort(activeChat?.modelReasoningEffort, 'medium');
+    setChats((prev) => sortSessionChats(prev.map((chat) => (
+      chat.id === activeChatIdResolved
+        ? { ...chat, modelReasoningEffort: normalizedEffort }
+        : chat
+    ))));
+    try {
+      const response = await fetch(
+        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ modelReasoningEffort: normalizedEffort }),
+        },
+      );
+      const payload = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
+      if (!response.ok || !payload.chat) {
+        throw new Error(payload.error ?? '모델 effort 저장에 실패했습니다.');
+      }
+      setChats((prev) => sortSessionChats(prev.map((chat) => (
+        chat.id === payload.chat?.id ? payload.chat : chat
+      ))));
+    } catch (error) {
+      setSelectedModelReasoningEffort(previousEffort);
+      setChats((prev) => sortSessionChats(prev.map((chat) => (
+        chat.id === activeChatIdResolved
+          ? { ...chat, modelReasoningEffort: previousEffort }
+          : chat
+      ))));
+      setChatMutationError(error instanceof Error ? error.message : '모델 effort 저장에 실패했습니다.');
+    }
+  }, [activeAgentFlavor, activeChat?.modelReasoningEffort, activeChatIdResolved, sessionId]);
+
   const handleCreateChat = useCallback(async (agent: AgentFlavor) => {
     if (isCreatingChat) {
       return;
@@ -3320,7 +3385,11 @@ export function ChatInterface({
       const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent, model: defaultModelId }),
+        body: JSON.stringify({
+          agent,
+          model: defaultModelId,
+          ...(agent === 'codex' ? { modelReasoningEffort: selectedModelReasoningEffort } : {}),
+        }),
       });
       const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
       if (!response.ok || !body.chat) {
@@ -3333,7 +3402,7 @@ export function ChatInterface({
     } finally {
       setIsCreatingChat(false);
     }
-  }, [sessionId, goToChat, isCreatingChat]);
+  }, [customModels, goToChat, isCreatingChat, selectedModelReasoningEffort, sessionId]);
 
   const handleToggleChatPin = useCallback(async (chat: SessionChat) => {
     setChatMutationLoadingId(chat.id);
@@ -3529,6 +3598,7 @@ export function ChatInterface({
           body: JSON.stringify({
             touchActivity: true,
             model: submitModelId,
+            ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
             ...(firstPromptTitle ? { title: firstPromptTitle } : {}),
           }),
         },
@@ -3547,6 +3617,7 @@ export function ChatInterface({
                       ...chat,
                       title: payload.chat?.title ?? chat.title,
                       model: payload.chat?.model ?? chat.model,
+                      modelReasoningEffort: payload.chat?.modelReasoningEffort ?? chat.modelReasoningEffort,
                       lastActivityAt: payload.chat?.lastActivityAt ?? chat.lastActivityAt,
                     }
                   : chat
@@ -4286,9 +4357,7 @@ export function ChatInterface({
                       <select
                         className={styles.modelEffortSelect}
                         value={selectedModelReasoningEffort}
-                        onChange={(event) => setSelectedModelReasoningEffort(
-                          normalizeModelReasoningEffort(event.target.value, 'medium'),
-                        )}
+                        onChange={(event) => { void handleSelectModelReasoningEffort(event.target.value); }}
                         aria-label="모델 추론 강도"
                       >
                         {MODEL_REASONING_EFFORT_OPTIONS.map((option) => (

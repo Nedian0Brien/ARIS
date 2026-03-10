@@ -22,6 +22,7 @@ export type SessionChat = {
   sessionId: string;
   agent: AgentFlavor;
   model?: string | null;
+  modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh' | null;
   title: string;
   isPinned: boolean;
   isDefault: boolean;
