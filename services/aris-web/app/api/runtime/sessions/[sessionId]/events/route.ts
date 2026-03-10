@@ -5,23 +5,14 @@ import { prisma } from '@/lib/db/prisma';
 import {
   normalizeSupportedAgent,
   resolveRuntimeMessageModel,
-  sanitizeCustomModel,
 } from '@/lib/happy/modelPolicy';
+import { getUserModelSettings } from '@/lib/settings/providerPreferences';
 
 function toMetaRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return {};
   }
   return { ...(value as Record<string, unknown>) };
-}
-
-function extractCustomModel(raw: unknown, agent: 'codex' | 'claude' | 'gemini'): string | undefined {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return undefined;
-  }
-  const rec = raw as Record<string, unknown>;
-  const candidate = sanitizeCustomModel(rec[agent]);
-  return candidate ?? undefined;
 }
 
 function normalizeModelReasoningEffort(value: unknown): 'low' | 'medium' | 'high' | 'xhigh' | undefined {
@@ -106,16 +97,15 @@ export async function POST(
           })
         : null;
       const requestedAgent = normalizeSupportedAgent(meta.agent, normalizeSupportedAgent(chat?.agent, 'codex'));
-      const preference = await prisma.uiPreference.findUnique({
-        where: { userId: auth.user.id },
-        select: { customAiModels: true },
-      });
-      const customModel = extractCustomModel(preference?.customAiModels, requestedAgent);
+      const settings = await getUserModelSettings(auth.user.id);
+      const selectedCustomModels = settings.providers[requestedAgent].selectedModelIds;
+      const legacyCustomModel = settings.legacyCustomModels[requestedAgent];
       const resolved = resolveRuntimeMessageModel({
         agent: requestedAgent,
         requestedModel: meta.model,
         sessionModel: chat?.model,
-        customModel,
+        customModel: legacyCustomModel,
+        customModels: selectedCustomModels,
       });
       meta.agent = resolved.agent;
       meta.model = resolved.model;

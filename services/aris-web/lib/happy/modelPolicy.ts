@@ -158,11 +158,29 @@ export type ResolvedModelSelection = {
   fallbackReason?: 'requested_disallowed' | 'requested_missing';
 };
 
+function sanitizeCustomModelList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const list: string[] = [];
+  for (const item of value) {
+    const normalized = sanitizeCustomModel(item);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    list.push(normalized);
+  }
+  return list;
+}
+
 export function resolveRuntimeMessageModel(input: {
   agent: AgentFlavor;
   requestedModel?: unknown;
   sessionModel?: unknown;
   customModel?: unknown;
+  customModels?: unknown;
 }): ResolvedModelSelection {
   const agent = normalizeSupportedAgent(input.agent);
   const builtinModels = BUILTIN_MODELS_BY_AGENT[agent];
@@ -170,12 +188,15 @@ export function resolveRuntimeMessageModel(input: {
   const requestedModel = normalizeModelId(input.requestedModel) ?? undefined;
   const sessionModel = normalizeModelId(input.sessionModel) ?? undefined;
   const customModel = sanitizeCustomModel(input.customModel) ?? undefined;
+  const customModels = sanitizeCustomModelList(input.customModels);
 
   const isAllowedModel = (model: string | undefined): model is string => {
     if (!model) {
       return false;
     }
-    return builtinModels.includes(model) || (customModel ? model === customModel : false);
+    return builtinModels.includes(model)
+      || (customModel ? model === customModel : false)
+      || customModels.includes(model);
   };
 
   if (requestedModel && isAllowedModel(requestedModel)) {
@@ -184,7 +205,7 @@ export function resolveRuntimeMessageModel(input: {
       model: requestedModel,
       source: 'requested',
       requestedModel,
-      ...(customModel ? { customModel } : {}),
+      ...(customModel ? { customModel } : requestedModel && customModels.includes(requestedModel) ? { customModel: requestedModel } : {}),
     };
   }
 
@@ -194,7 +215,7 @@ export function resolveRuntimeMessageModel(input: {
       model: sessionModel,
       source: 'session',
       ...(requestedModel ? { requestedModel, fallbackReason: 'requested_disallowed' } : {}),
-      ...(customModel ? { customModel } : {}),
+      ...(customModel ? { customModel } : sessionModel && customModels.includes(sessionModel) ? { customModel: sessionModel } : {}),
     };
   }
 
@@ -205,6 +226,17 @@ export function resolveRuntimeMessageModel(input: {
       source: 'custom',
       ...(requestedModel ? { requestedModel, fallbackReason: 'requested_disallowed' } : {}),
       ...(customModel ? { customModel } : {}),
+    };
+  }
+
+  const selectedCustomModel = customModels.find((model) => isAllowedModel(model));
+  if (selectedCustomModel) {
+    return {
+      agent,
+      model: selectedCustomModel,
+      source: 'custom',
+      ...(requestedModel ? { requestedModel, fallbackReason: 'requested_disallowed' } : {}),
+      customModel: selectedCustomModel,
     };
   }
 
