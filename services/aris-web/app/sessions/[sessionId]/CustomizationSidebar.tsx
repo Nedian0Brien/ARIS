@@ -14,6 +14,7 @@ import {
   Save,
   TerminalSquare,
   Wrench,
+  X,
 } from 'lucide-react';
 import styles from './CustomizationSidebar.module.css';
 
@@ -66,6 +67,8 @@ type SkillPayload = {
 type Props = {
   sessionId: string;
   projectName: string;
+  mode?: 'desktop' | 'mobile';
+  onRequestClose?: () => void;
 };
 
 const SURFACE_ITEMS: Array<{
@@ -117,7 +120,12 @@ function getMcpStatusLabel(status: MpcServerSummary['status']): string {
   return '확인 불가';
 }
 
-export function CustomizationSidebar({ sessionId, projectName }: Props) {
+export function CustomizationSidebar({
+  sessionId,
+  projectName,
+  mode = 'desktop',
+  onRequestClose,
+}: Props) {
   const [activeSurface, setActiveSurface] = useState<SidebarSurface>('customization');
   const [activeSection, setActiveSection] = useState<CustomizationSection>('instructions');
   const [overview, setOverview] = useState<CustomizationOverview | null>(null);
@@ -269,9 +277,10 @@ export function CustomizationSidebar({ sessionId, projectName }: Props) {
   }, [instructionContent, loadOverview, selectedInstructionId, sessionId]);
 
   const headerWorkspacePath = overview?.workspacePath ?? projectName;
+  const isMobileMode = mode === 'mobile';
 
   return (
-    <aside className={styles.sidebarRoot}>
+    <section className={`${styles.sidebarRoot} ${isMobileMode ? styles.sidebarRootMobile : ''}`}>
       <div className={styles.header}>
         <div className={styles.headerTop}>
           <div>
@@ -282,16 +291,29 @@ export function CustomizationSidebar({ sessionId, projectName }: Props) {
             <h3 className={styles.title}>Customization</h3>
             <p className={styles.subtle}>지침 문서, Skills, MCP 상태를 한 곳에서 확인하고 조정합니다.</p>
           </div>
-          <button
-            type="button"
-            className={styles.refreshButton}
-            onClick={() => void loadOverview()}
-            disabled={overviewLoading}
-            aria-label="Customization 새로고침"
-            title="Customization 새로고침"
-          >
-            <RefreshCw size={15} className={overviewLoading ? styles.rotate : ''} />
-          </button>
+          <div className={styles.headerActions}>
+            <button
+              type="button"
+              className={styles.refreshButton}
+              onClick={() => void loadOverview()}
+              disabled={overviewLoading}
+              aria-label="Customization 새로고침"
+              title="Customization 새로고침"
+            >
+              <RefreshCw size={15} className={overviewLoading ? styles.rotate : ''} />
+            </button>
+            {isMobileMode && onRequestClose ? (
+              <button
+                type="button"
+                className={styles.closeButton}
+                onClick={onRequestClose}
+                aria-label="Customization 패널 닫기"
+                title="Customization 패널 닫기"
+              >
+                <X size={15} />
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <span className={styles.workspacePath}>{headerWorkspacePath}</span>
@@ -574,6 +596,6 @@ export function CustomizationSidebar({ sessionId, projectName }: Props) {
           </>
         )}
       </div>
-    </aside>
+    </section>
   );
 }

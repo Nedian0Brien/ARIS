@@ -13,6 +13,11 @@
   overflow: hidden;
 }
 
+.sidebarRootMobile {
+  border-radius: 24px 0 0 24px;
+  border-right: none;
+}
+
 .header {
   padding: 1rem 1rem 0.82rem;
   border-bottom: 1px solid var(--chat-panel-border);
@@ -26,6 +31,12 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
+}
+
+.headerActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
 }
 
 .eyebrow {
@@ -67,9 +78,29 @@
   flex-shrink: 0;
 }
 
+.closeButton {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--chat-control-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--chat-control-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 .refreshButton:disabled {
   cursor: default;
   opacity: 0.55;
+}
+
+.refreshButton:hover:not(:disabled),
+.closeButton:hover {
+  border-color: var(--chat-item-hover-border);
+  background: rgba(255, 255, 255, 0.96);
 }
 
 .workspacePath {
@@ -501,4 +532,85 @@
 @keyframes sidebarSpin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+@media (max-width: 900px) {
+  .splitPane {
+    grid-template-columns: 1fr;
+  }
+
+  .itemList {
+    max-height: 216px;
+  }
+}
+
+@media (max-width: 640px) {
+  .sidebarRoot {
+    border-radius: 0;
+  }
+
+  .header {
+    padding: 0.96rem 0.92rem 0.76rem;
+    gap: 0.72rem;
+  }
+
+  .title {
+    font-size: 0.96rem;
+  }
+
+  .subtle,
+  .workspacePath {
+    font-size: 0.68rem;
+  }
+
+  .surfaceTabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sectionTabs {
+    padding: 0.68rem 0.72rem 0;
+  }
+
+  .content {
+    padding: 0.72rem;
+  }
+
+  .statsRow {
+    gap: 0.42rem;
+  }
+
+  .statCard {
+    padding: 0.56rem;
+  }
+
+  .statValue {
+    font-size: 0.92rem;
+  }
+
+  .splitPane {
+    gap: 0.62rem;
+  }
+
+  .itemList {
+    max-height: 182px;
+  }
+
+  .detailBody {
+    padding: 0.72rem;
+  }
+
+  .editor {
+    min-height: 240px;
+    font-size: 16px;
+  }
+
+  .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .saveButton {
+    min-height: 42px;
+    justify-content: center;
+  }
 }

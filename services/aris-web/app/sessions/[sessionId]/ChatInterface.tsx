@@ -44,6 +44,7 @@ import {
   MoreVertical,
   PanelLeftClose,
   PanelLeftOpen,
+  SlidersHorizontal,
   Paperclip,
   Pencil,
   Pin,
@@ -1976,6 +1977,7 @@ export function ChatInterface({
   const [showPermissionQueue, setShowPermissionQueue] = useState(true);
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(true);
+  const [isCustomizationSidebarOpen, setIsCustomizationSidebarOpen] = useState(false);
   const [chatVisibleCount, setChatVisibleCount] = useState(SIDEBAR_CHAT_PAGE_SIZE);
   const [chatActionMenuId, setChatActionMenuId] = useState<string | null>(null);
   const [chatActionMenuRect, setChatActionMenuRect] = useState<DOMRect | null>(null);
@@ -2986,6 +2988,7 @@ export function ChatInterface({
       const nextIsMobile = mediaQuery.matches;
       setIsMobileLayout(nextIsMobile);
       setIsChatSidebarOpen(!nextIsMobile);
+      setIsCustomizationSidebarOpen(false);
     };
 
     syncLayout();
@@ -3227,6 +3230,23 @@ export function ChatInterface({
       setIdBundleCopyState('idle');
     }
   }, [isContextMenuOpen]);
+
+  useEffect(() => {
+    if (!isMobileLayout || !isCustomizationSidebarOpen) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsCustomizationSidebarOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isCustomizationSidebarOpen, isMobileLayout]);
 
   useEffect(() => {
     if (!isContextMenuOpen) {
@@ -3630,6 +3650,7 @@ export function ChatInterface({
 
     if (isMobileLayout) {
       setIsChatSidebarOpen(false);
+      setIsCustomizationSidebarOpen(false);
     }
   }, [router, buildChatUrl, isMobileLayout]);
 
@@ -4423,7 +4444,10 @@ export function ChatInterface({
             <button
               type="button"
               className={styles.sidebarToggleButton}
-              onClick={() => setIsChatSidebarOpen((prev) => !prev)}
+              onClick={() => {
+                setIsCustomizationSidebarOpen(false);
+                setIsChatSidebarOpen((prev) => !prev);
+              }}
               aria-label={isChatSidebarOpen ? '채팅 사이드바 닫기' : '채팅 사이드바 열기'}
               title={isChatSidebarOpen ? '채팅 사이드바 닫기' : '채팅 사이드바 열기'}
             >
@@ -4444,6 +4468,22 @@ export function ChatInterface({
               )}
             </div>
             <div className={styles.centerHeaderActions}>
+              {isMobileLayout && (
+                <button
+                  type="button"
+                  className={`${styles.mobileCustomizationButton} ${isCustomizationSidebarOpen ? styles.mobileCustomizationButtonActive : ''}`}
+                  onClick={() => {
+                    setIsChatSidebarOpen(false);
+                    setIsContextMenuOpen(false);
+                    setIsCustomizationSidebarOpen((prev) => !prev);
+                  }}
+                  aria-label={isCustomizationSidebarOpen ? 'Customization 패널 닫기' : 'Customization 패널 열기'}
+                  title={isCustomizationSidebarOpen ? 'Customization 패널 닫기' : 'Customization 패널 열기'}
+                >
+                  <SlidersHorizontal size={15} />
+                  <span className={styles.mobileCustomizationLabel}>Customize</span>
+                </button>
+              )}
               <span
                 className={`${styles.connectionPill} ${
                   connectionState === 'running'
@@ -4895,8 +4935,34 @@ export function ChatInterface({
         </section>
       </main>
 
+      {isMobileLayout && (
+        <>
+          {isCustomizationSidebarOpen && (
+            <button
+              type="button"
+              className={styles.customizationBackdrop}
+              onClick={() => setIsCustomizationSidebarOpen(false)}
+              aria-label="Customization 패널 닫기"
+            />
+          )}
+          <aside
+            className={`${styles.customizationDrawer} ${
+              isCustomizationSidebarOpen ? styles.customizationDrawerOpen : styles.customizationDrawerClosed
+            }`}
+            aria-hidden={!isCustomizationSidebarOpen}
+          >
+            <CustomizationSidebar
+              sessionId={sessionId}
+              projectName={projectName}
+              mode="mobile"
+              onRequestClose={() => setIsCustomizationSidebarOpen(false)}
+            />
+          </aside>
+        </>
+      )}
+
       <aside className={styles.rightPanel}>
-        <CustomizationSidebar sessionId={sessionId} projectName={projectName} />
+        <CustomizationSidebar sessionId={sessionId} projectName={projectName} mode="desktop" />
       </aside>
     </div>
 
