@@ -262,6 +262,21 @@ function RelativeTime({ timestamp, className }: { timestamp: string; className?:
   return <span className={className}>{formatRelative(timestamp)}</span>;
 }
 
+function ElapsedTimer({ since, className }: { since: string; className?: string }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timerId = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => {
+      window.clearInterval(timerId);
+    };
+  }, []);
+
+  return <span className={className}>{formatElapsedDuration(since, now)}</span>;
+}
+
 // --- 5. 유틸리티 함수 ---
 
 function genId(): string {
@@ -476,6 +491,23 @@ function formatRelative(timestamp: string): string {
   return date.toLocaleDateString();
 }
 
+function formatElapsedDuration(timestamp: string, nowMs = Date.now()): string {
+  const startedAt = Date.parse(timestamp);
+  if (!Number.isFinite(startedAt)) {
+    return '--:--';
+  }
+
+  const diffSeconds = Math.max(0, Math.floor((nowMs - startedAt) / 1000));
+  const hours = Math.floor(diffSeconds / 3600);
+  const minutes = Math.floor((diffSeconds % 3600) / 60);
+  const seconds = diffSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
 function sortSessionChats(chats: SessionChat[]): SessionChat[] {
   return [...chats].sort((a, b) => {
     if (a.isPinned !== b.isPinned) {
@@ -504,6 +536,17 @@ function buildReadMarkerMap(chats: SessionChat[]): Record<string, string> {
     }
   }
   return markers;
+}
+
+function buildSnapshotSyncMap(chats: SessionChat[]): Record<string, string> {
+  const synced: Record<string, string> = {};
+  for (const chat of chats) {
+    const latestEventId = typeof chat.latestEventId === 'string' ? chat.latestEventId.trim() : '';
+    if (latestEventId) {
+      synced[chat.id] = latestEventId;
+    }
+  }
+  return synced;
 }
 
 function buildSnapshotFromChat(chat: SessionChat): ChatSidebarSnapshot | null {
@@ -2090,7 +2133,7 @@ export function ChatInterface({
   const readMarkerSyncInFlightRef = useRef<Record<string, boolean>>({});
   const readMarkerSyncedRef = useRef<Record<string, string>>(buildReadMarkerMap(initialChats));
   const snapshotSyncInFlightRef = useRef<Record<string, boolean>>({});
-  const snapshotSyncedEventRef = useRef<Record<string, string>>({});
+  const snapshotSyncedEventRef = useRef<Record<string, string>>(buildSnapshotSyncMap(initialChats));
 
   const defaultAgentFlavor = normalizeAgentFlavor(agentFlavor, 'codex');
   const providerSelections = modelSettings?.providers;
@@ -2300,12 +2343,11 @@ export function ChatInterface({
   const resolveChatSidebarState = useCallback((chat: SessionChat): ChatSidebarState => {
     const isActive = chat.id === activeChatIdResolved;
     const snapshot = chatSidebarSnapshots[chat.id];
+    const chatRunPhase = resolveChatRunPhase(chat);
     const hasFeedback = Boolean(approvalFeedbackByChat[chat.id]);
     const hasPendingApproval = isActive && pendingPermissions.length > 0;
     const hasUnread = hasUnreadMessages(chat.id);
-    const isRunningState = isActive
-      ? (isAgentRunning || Boolean(snapshot?.isRunning))
-      : Boolean(snapshot?.isRunning);
+    const isRunningState = chatRunPhase !== 'idle';
     const hasErrorState = isActive
       ? (
         Boolean(submitError)
@@ -2336,6 +2378,7 @@ export function ChatInterface({
     chatSidebarSnapshots,
     isAgentRunning,
     pendingPermissions.length,
+    resolveChatRunPhase,
     runtimeError,
     submitError,
     syncError,
@@ -2635,11 +2678,6 @@ export function ChatInterface({
     }
 
     const latestEventAt = snapshot.latestEventAt;
-    const activeChat = chats.find((chat) => chat.id === activeChatIdResolved);
-    const latestEventAtMs = latestEventAt ? Date.parse(latestEventAt) : Number.NaN;
-    const lastActivityAtMs = activeChat?.lastActivityAt ? Date.parse(activeChat.lastActivityAt) : Number.NaN;
-    const shouldTouchActivity = Number.isFinite(latestEventAtMs)
-      && (!Number.isFinite(lastActivityAtMs) || latestEventAtMs > lastActivityAtMs);
     snapshotSyncInFlightRef.current[activeChatIdResolved] = true;
     void fetch(
       `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
@@ -2652,7 +2690,6 @@ export function ChatInterface({
           latestEventAt,
           latestEventIsUser: snapshot.latestEventIsUser,
           latestHasErrorSignal: snapshot.hasErrorSignal,
-          ...(shouldTouchActivity ? { touchActivity: true } : {}),
         }),
       },
     )
@@ -2674,7 +2711,7 @@ export function ChatInterface({
       .finally(() => {
         delete snapshotSyncInFlightRef.current[activeChatIdResolved];
       });
-  }, [activeChatIdResolved, chatSidebarSnapshots, chats, sessionId]);
+  }, [activeChatIdResolved, chatSidebarSnapshots, sessionId]);
 
   useEffect(() => {
     const pending = Object.entries(chatReadMarkers).filter(([chatId, marker]) => (
@@ -4145,6 +4182,7 @@ export function ChatInterface({
               const chatPreviewText = resolveChatPreviewText(chat.id);
               const chatRunPhase = resolveChatRunPhase(chat);
               const chatRunPhaseLabel = chatRunPhase === 'idle' ? null : CHAT_RUN_PHASE_LABELS[chatRunPhase];
+              const chatRunStartedAt = (chatRuntimeUiByChat[chat.id]?.awaitingReplySince ?? '').trim() || null;
               const chatRunPhaseClass = chatRunPhase === 'aborting'
                 ? styles.chatListRunPhaseBadgeAborting
                 : chatRunPhase === 'waiting'
@@ -4210,6 +4248,9 @@ export function ChatInterface({
                             {chatRunPhaseLabel && (
                               <span className={`${styles.chatListRunPhaseBadge} ${chatRunPhaseClass}`}>
                                 {chatRunPhaseLabel}
+                                {chatRunStartedAt && (
+                                  <ElapsedTimer since={chatRunStartedAt} className={styles.chatListRunPhaseElapsed} />
+                                )}
                               </span>
                             )}
                             <span className={styles.chatListPreviewText}>{chatPreviewText}</span>
@@ -4689,6 +4730,9 @@ export function ChatInterface({
                         <span /><span /><span />
                       </span>
                       {runPhaseLabel ?? '실행 중'}
+                      {awaitingReplySince && (
+                        <ElapsedTimer since={awaitingReplySince} className={styles.composerRunningElapsed} />
+                      )}
                     </div>
                   )}
                 </div>
