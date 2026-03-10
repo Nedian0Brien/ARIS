@@ -1952,18 +1952,6 @@ export function ChatInterface({
   const updateActiveChatRuntimeUi = useCallback((patch: Partial<ChatRuntimeUiState>) => {
     updateChatRuntimeUi(activeChatIdResolved, patch);
   }, [activeChatIdResolved, updateChatRuntimeUi]);
-  const setIsAwaitingReply = useCallback((value: boolean) => {
-    updateActiveChatRuntimeUi({ isAwaitingReply: value });
-  }, [updateActiveChatRuntimeUi]);
-  const setAwaitingReplySince = useCallback((value: string | null) => {
-    updateActiveChatRuntimeUi({ awaitingReplySince: value });
-  }, [updateActiveChatRuntimeUi]);
-  const setShowDisconnectRetry = useCallback((value: boolean) => {
-    updateActiveChatRuntimeUi({ showDisconnectRetry: value });
-  }, [updateActiveChatRuntimeUi]);
-  const setSubmitError = useCallback((value: string | null) => {
-    updateActiveChatRuntimeUi({ submitError: value });
-  }, [updateActiveChatRuntimeUi]);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
   const [expandedActionRunIds, setExpandedActionRunIds] = useState<Record<string, boolean>>({});
@@ -3493,14 +3481,22 @@ export function ChatInterface({
         || hasFinalAgentReply
       )
     ) {
-      setIsAwaitingReply(false);
-      setAwaitingReplySince(null);
-      setSubmitError(null);
-      setShowDisconnectRetry(false);
+      updateActiveChatRuntimeUi({
+        isAwaitingReply: false,
+        awaitingReplySince: null,
+        submitError: null,
+        showDisconnectRetry: false,
+      });
       disconnectNoticeAwaitingRef.current = null;
       runtimeStartedSinceAwaitingRef.current = false;
     }
-  }, [awaitingReplySince, hasAgentEventSince, hasFinalAgentReplySinceAwaiting, isRunActive]);
+  }, [
+    awaitingReplySince,
+    hasAgentEventSince,
+    hasFinalAgentReplySinceAwaiting,
+    isRunActive,
+    updateActiveChatRuntimeUi,
+  ]);
 
   useEffect(() => {
     if (!isAwaitingReply || !awaitingReplySince || isRunActive) {
@@ -3520,10 +3516,12 @@ export function ChatInterface({
 
       const now = new Date().toISOString();
       disconnectNoticeAwaitingRef.current = awaitingReplySince;
-      setShowDisconnectRetry(true);
-      setSubmitError('에이전트 연결 중단됨');
-      setIsAwaitingReply(false);
-      setAwaitingReplySince(null);
+      updateActiveChatRuntimeUi({
+        showDisconnectRetry: true,
+        submitError: '에이전트 연결 중단됨',
+        isAwaitingReply: false,
+        awaitingReplySince: null,
+      });
       runtimeStartedSinceAwaitingRef.current = false;
       addEvent({
         id: `runtime-disconnected-${now}`,
@@ -3543,7 +3541,14 @@ export function ChatInterface({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [addEvent, awaitingReplySince, hasAgentEventSince, isAwaitingReply, isRunActive]);
+  }, [
+    addEvent,
+    awaitingReplySince,
+    hasAgentEventSince,
+    isAwaitingReply,
+    isRunActive,
+    updateActiveChatRuntimeUi,
+  ]);
 
   useEffect(() => {
     if (!isAwaitingReply || !awaitingReplySince) {
@@ -3561,15 +3566,17 @@ export function ChatInterface({
       if (isRunActive || hasAgentEventSince(awaitingReplySince)) {
         return;
       }
-      setIsAwaitingReply(false);
       runtimeStartedSinceAwaitingRef.current = false;
-      setSubmitError('에이전트 응답이 지연되고 있습니다. 런타임 연결 상태를 확인해 주세요.');
+      updateActiveChatRuntimeUi({
+        isAwaitingReply: false,
+        submitError: '에이전트 응답이 지연되고 있습니다. 런타임 연결 상태를 확인해 주세요.',
+      });
     }, remaining);
 
     return () => {
       window.clearTimeout(timer);
     };
-  }, [awaitingReplySince, hasAgentEventSince, isAwaitingReply, isRunActive]);
+  }, [awaitingReplySince, hasAgentEventSince, isAwaitingReply, isRunActive, updateActiveChatRuntimeUi]);
 
   useEffect(() => {
     if (!activeChatIdResolved) {
