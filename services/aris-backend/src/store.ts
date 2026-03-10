@@ -55,7 +55,7 @@ interface RuntimeStoreBackend {
   createSession(input: CreateSessionInput): Promise<RuntimeSession>;
   listMessages(sessionId: string, options?: { afterSeq?: number; limit?: number }): Promise<RuntimeMessage[]>;
   appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage>;
-  applySessionAction(sessionId: string, action: SessionAction): Promise<{ accepted: boolean; message: string; at: string }>;
+  applySessionAction(sessionId: string, action: SessionAction, chatId?: string): Promise<{ accepted: boolean; message: string; at: string }>;
   isSessionRunning(sessionId: string, chatId?: string): Promise<boolean>;
   listPermissions(state?: PermissionRequest['state']): Promise<PermissionRequest[]>;
   createPermission(input: CreatePermissionInput): Promise<PermissionRequest>;
@@ -185,7 +185,7 @@ class MockRuntimeStore implements RuntimeStoreBackend {
     return message;
   }
 
-  async applySessionAction(sessionId: string, action: SessionAction): Promise<{ accepted: boolean; message: string; at: string }> {
+  async applySessionAction(sessionId: string, action: SessionAction, _chatId?: string): Promise<{ accepted: boolean; message: string; at: string }> {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
@@ -336,8 +336,8 @@ export class RuntimeStore {
     return this.delegate.appendMessage(sessionId, input);
   }
 
-  async applySessionAction(sessionId: string, action: SessionAction) {
-    return this.delegate.applySessionAction(sessionId, action);
+  async applySessionAction(sessionId: string, action: SessionAction, chatId?: string) {
+    return this.delegate.applySessionAction(sessionId, action, chatId);
   }
 
   async isSessionRunning(sessionId: string, chatId?: string) {

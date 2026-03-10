@@ -1007,6 +1007,13 @@ function buildCodexPermissionKey(sessionId: string, request: CodexPermissionRequ
   return `${sessionId}:${request.approvalId || request.callId}`;
 }
 
+function buildScopedPermissionKey(baseKey: string, chatId?: string): string {
+  const normalizedChatId = typeof chatId === 'string' && chatId.trim().length > 0
+    ? chatId.trim()
+    : '__default__';
+  return `${normalizedChatId}:${baseKey}`;
+}
+
 function inferCodexFileWriteItem(item: Record<string, unknown>): {
   command: string;
   path?: string;
@@ -1325,9 +1332,16 @@ export class HappyRuntimeStore {
     return runKey === `${sessionId}:__default__` || runKey.startsWith(`${sessionId}:`);
   }
 
-  private abortSessionRuns(sessionId: string): void {
+  private abortSessionRuns(sessionId: string, chatId?: string): void {
+    const scopedRunKey = typeof chatId === 'string' && chatId.trim().length > 0
+      ? this.buildRunKey(sessionId, chatId)
+      : null;
     for (const [runKey, run] of this.activeRuns.entries()) {
-      if (!this.isSessionRunKey(runKey, sessionId)) {
+      if (scopedRunKey) {
+        if (runKey !== scopedRunKey) {
+          continue;
+        }
+      } else if (!this.isSessionRunKey(runKey, sessionId)) {
         continue;
       }
       if (!run.controller.signal.aborted) {
@@ -1999,7 +2013,10 @@ export class HappyRuntimeStore {
         const risk: PermissionRisk = hasNetworkContext || hasAdditionalPermissions || hasNetworkAmendments
           ? 'high'
           : 'medium';
-        const key = `${session.id}:cmd:${approvalId || itemId || requestIdKey}`;
+        const key = buildScopedPermissionKey(
+          `${session.id}:cmd:${approvalId || itemId || requestIdKey}`,
+          chatId,
+        );
         await registerPermissionResponder(
           key,
           unwrapShellCommand(commandRaw),
@@ -2015,7 +2032,10 @@ export class HappyRuntimeStore {
         const grantRoot = asString(params.grantRoot, '').trim();
         const reason = asString(params.reason, '패치 적용을 위해 사용자 승인이 필요합니다.').trim();
         const command = grantRoot ? `apply_patch (grant_root: ${grantRoot})` : 'apply_patch';
-        const key = `${session.id}:patch:${itemId || requestIdKey}`;
+        const key = buildScopedPermissionKey(
+          `${session.id}:patch:${itemId || requestIdKey}`,
+          chatId,
+        );
         await registerPermissionResponder(
           key,
           command,
@@ -2034,7 +2054,10 @@ export class HappyRuntimeStore {
           : [];
         const command = commandParts.length > 0 ? commandParts.join(' ') : `exec command (${callId})`;
         const reason = asString(params.reason, '명령 실행을 위해 사용자 승인이 필요합니다.').trim();
-        const key = `${session.id}:legacy-exec:${approvalId || callId}`;
+        const key = buildScopedPermissionKey(
+          `${session.id}:legacy-exec:${approvalId || callId}`,
+          chatId,
+        );
         await registerPermissionResponder(
           key,
           unwrapShellCommand(command),
@@ -2050,7 +2073,10 @@ export class HappyRuntimeStore {
         const grantRoot = asString(params.grantRoot, '').trim();
         const reason = asString(params.reason, '패치 적용을 위해 사용자 승인이 필요합니다.').trim();
         const command = grantRoot ? `apply_patch (grant_root: ${grantRoot})` : 'apply_patch';
-        const key = `${session.id}:legacy-patch:${callId}`;
+        const key = buildScopedPermissionKey(
+          `${session.id}:legacy-patch:${callId}`,
+          chatId,
+        );
         await registerPermissionResponder(
           key,
           command,
@@ -2646,7 +2672,7 @@ export class HappyRuntimeStore {
     const enqueuePermission = (request: CodexPermissionRequest) => {
       permissionChain = permissionChain
         .then(async () => {
-          const key = buildCodexPermissionKey(session.id, request);
+          const key = buildScopedPermissionKey(buildCodexPermissionKey(session.id, request), chatId);
           const knownPermissionId = this.codexPermissionIndex.get(key);
           if (knownPermissionId) {
             const knownPermission = this.permissions.get(knownPermissionId);
@@ -3393,14 +3419,14 @@ export class HappyRuntimeStore {
     return created;
   }
 
-  async applySessionAction(sessionId: string, action: SessionAction): Promise<{ accepted: boolean; message: string; at: string }> {
+  async applySessionAction(sessionId: string, action: SessionAction, chatId?: string): Promise<{ accepted: boolean; message: string; at: string }> {
     const session = await this.getSession(sessionId);
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
     }
 
     if (action === 'abort' || action === 'kill') {
-      this.abortSessionRuns(sessionId);
+      this.abortSessionRuns(sessionId, action === 'abort' ? chatId : undefined);
     }
 
     if (action === 'kill') {
@@ -3497,11 +3523,11 @@ export class HappyRuntimeStore {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`failed to send codex permission decision: ${message}`);
         if (decision === 'deny') {
-          this.abortSessionRuns(permission.sessionId);
+          this.abortSessionRuns(permission.sessionId, permission.chatId ?? undefined);
         }
       }
     } else if (decision === 'deny') {
-      this.abortSessionRuns(permission.sessionId);
+      this.abortSessionRuns(permission.sessionId, permission.chatId ?? undefined);
     }
 
     return updated;

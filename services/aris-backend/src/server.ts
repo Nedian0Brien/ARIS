@@ -31,6 +31,7 @@ const appendMessageSchema = z.object({
 
 const sessionActionSchema = z.object({
   action: z.enum(['abort', 'retry', 'kill', 'resume']),
+  chatId: z.string().trim().min(1).optional(),
 });
 
 const createPermissionSchema = z.object({
@@ -160,7 +161,11 @@ export function buildServer(config: ServerConfig) {
 
     const { sessionId } = request.params as { sessionId: string };
     try {
-      const result = await store.applySessionAction(sessionId, parsed.data.action);
+      const result = await store.applySessionAction(
+        sessionId,
+        parsed.data.action,
+        parsed.data.chatId,
+      );
 
       if (parsed.data.action === 'kill') {
         const remaining = await store.getSession(sessionId);
@@ -280,8 +285,35 @@ export function buildServer(config: ServerConfig) {
   });
 
   app.get('/v1/permissions', async (request) => {
-    const { state } = request.query as { state?: 'pending' | 'approved' | 'denied' };
-    return { permissions: await store.listPermissions(state) };
+    const { state, sessionId, chatId, includeUnassigned } = request.query as {
+      state?: 'pending' | 'approved' | 'denied';
+      sessionId?: string;
+      chatId?: string;
+      includeUnassigned?: string;
+    };
+    const normalizedSessionId = typeof sessionId === 'string' && sessionId.trim().length > 0
+      ? sessionId.trim()
+      : undefined;
+    const normalizedChatId = typeof chatId === 'string' && chatId.trim().length > 0
+      ? chatId.trim()
+      : undefined;
+    const allowUnassigned = includeUnassigned === '1' || includeUnassigned === 'true';
+    let permissions = await store.listPermissions(state);
+    if (normalizedSessionId) {
+      permissions = permissions.filter((permission) => permission.sessionId === normalizedSessionId);
+    }
+    if (normalizedChatId) {
+      permissions = permissions.filter((permission) => {
+        const permissionChatId = typeof permission.chatId === 'string' && permission.chatId.trim().length > 0
+          ? permission.chatId.trim()
+          : undefined;
+        if (permissionChatId === normalizedChatId) {
+          return true;
+        }
+        return allowUnassigned && !permissionChatId;
+      });
+    }
+    return { permissions };
   });
 
   app.post('/v1/permissions', async (request, reply) => {

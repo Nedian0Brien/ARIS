@@ -162,6 +162,33 @@ type ChatSidebarSnapshot = {
   isRunning: boolean;
 };
 type ChatApprovalFeedback = 'approved' | 'denied';
+type ChatSubmittedPayload = {
+  text: string;
+  chatId: string;
+  agent: AgentFlavor;
+  model: string;
+  modelReasoningEffort?: ModelReasoningEffort;
+  threadId?: string;
+};
+type ChatRuntimeUiState = {
+  isSubmitting: boolean;
+  isAwaitingReply: boolean;
+  isAborting: boolean;
+  awaitingReplySince: string | null;
+  showDisconnectRetry: boolean;
+  lastSubmittedPayload: ChatSubmittedPayload | null;
+  submitError: string | null;
+};
+
+const DEFAULT_CHAT_RUNTIME_UI_STATE: ChatRuntimeUiState = {
+  isSubmitting: false,
+  isAwaitingReply: false,
+  isAborting: false,
+  awaitingReplySince: null,
+  showDisconnectRetry: false,
+  lastSubmittedPayload: null,
+  submitError: null,
+};
 
 // --- 3. 런타임 초기화 안전 장치 (TDZ 에러 방지) ---
 // styles 객체 및 복잡한 객체 참조를 함수 호출 시점으로 지연시킴
@@ -1769,20 +1796,59 @@ export function ChatInterface({
   } = usePermissions(sessionId, initialPermissions, activeChatIdResolved, includeUnassignedEvents);
 
   const [prompt, setPrompt] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isAwaitingReply, setIsAwaitingReply] = useState(false);
-  const [isAborting, setIsAborting] = useState(false);
-  const [awaitingReplySince, setAwaitingReplySince] = useState<string | null>(null);
-  const [showDisconnectRetry, setShowDisconnectRetry] = useState(false);
-  const [lastSubmittedPayload, setLastSubmittedPayload] = useState<{
-    text: string;
-    chatId: string;
-    agent: AgentFlavor;
-    model: string;
-    modelReasoningEffort?: ModelReasoningEffort;
-    threadId?: string;
-  } | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [chatRuntimeUiByChat, setChatRuntimeUiByChat] = useState<Record<string, ChatRuntimeUiState>>({});
+  const activeChatRuntimeUi = activeChatIdResolved
+    ? (chatRuntimeUiByChat[activeChatIdResolved] ?? DEFAULT_CHAT_RUNTIME_UI_STATE)
+    : DEFAULT_CHAT_RUNTIME_UI_STATE;
+  const isSubmitting = activeChatRuntimeUi.isSubmitting;
+  const isAwaitingReply = activeChatRuntimeUi.isAwaitingReply;
+  const isAborting = activeChatRuntimeUi.isAborting;
+  const awaitingReplySince = activeChatRuntimeUi.awaitingReplySince;
+  const showDisconnectRetry = activeChatRuntimeUi.showDisconnectRetry;
+  const lastSubmittedPayload = activeChatRuntimeUi.lastSubmittedPayload;
+  const submitError = activeChatRuntimeUi.submitError;
+  const updateChatRuntimeUi = useCallback((chatId: string | null, patch: Partial<ChatRuntimeUiState>) => {
+    if (!chatId) {
+      return;
+    }
+    setChatRuntimeUiByChat((prev) => {
+      const current = prev[chatId] ?? DEFAULT_CHAT_RUNTIME_UI_STATE;
+      const next = {
+        ...current,
+        ...patch,
+      };
+      if (
+        current.isSubmitting === next.isSubmitting
+        && current.isAwaitingReply === next.isAwaitingReply
+        && current.isAborting === next.isAborting
+        && current.awaitingReplySince === next.awaitingReplySince
+        && current.showDisconnectRetry === next.showDisconnectRetry
+        && current.lastSubmittedPayload === next.lastSubmittedPayload
+        && current.submitError === next.submitError
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [chatId]: next,
+      };
+    });
+  }, []);
+  const updateActiveChatRuntimeUi = useCallback((patch: Partial<ChatRuntimeUiState>) => {
+    updateChatRuntimeUi(activeChatIdResolved, patch);
+  }, [activeChatIdResolved, updateChatRuntimeUi]);
+  const setIsAwaitingReply = useCallback((value: boolean) => {
+    updateActiveChatRuntimeUi({ isAwaitingReply: value });
+  }, [updateActiveChatRuntimeUi]);
+  const setAwaitingReplySince = useCallback((value: string | null) => {
+    updateActiveChatRuntimeUi({ awaitingReplySince: value });
+  }, [updateActiveChatRuntimeUi]);
+  const setShowDisconnectRetry = useCallback((value: boolean) => {
+    updateActiveChatRuntimeUi({ showDisconnectRetry: value });
+  }, [updateActiveChatRuntimeUi]);
+  const setSubmitError = useCallback((value: string | null) => {
+    updateActiveChatRuntimeUi({ submitError: value });
+  }, [updateActiveChatRuntimeUi]);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
   const [expandedActionRunIds, setExpandedActionRunIds] = useState<Record<string, boolean>>({});
@@ -2180,12 +2246,6 @@ export function ChatInterface({
   }, [sessionId, activeChatId]);
 
   useEffect(() => {
-    setIsSubmitting(false);
-    setIsAborting(false);
-    setIsAwaitingReply(false);
-    setAwaitingReplySince(null);
-    setShowDisconnectRetry(false);
-    setSubmitError(null);
     setSidebarApprovalLoadingChatId(null);
     disconnectNoticeAwaitingRef.current = null;
     runtimeStartedSinceAwaitingRef.current = false;
@@ -2368,6 +2428,9 @@ export function ChatInterface({
     if (!activeChatIdResolved) {
       return;
     }
+    if (eventsForChatId !== activeChatIdResolved) {
+      return;
+    }
     const latestEvent = events[events.length - 1];
     if (!latestEvent || showScrollToBottom) {
       return;
@@ -2380,7 +2443,7 @@ export function ChatInterface({
           [activeChatIdResolved]: latestEvent.id,
         }
     ));
-  }, [activeChatIdResolved, events, showScrollToBottom]);
+  }, [activeChatIdResolved, eventsForChatId, events, showScrollToBottom]);
 
   useEffect(() => {
     if (!activeChatIdResolved) {
@@ -3243,6 +3306,9 @@ export function ChatInterface({
     if (!activeChatIdResolved) {
       return;
     }
+    if (eventsForChatId !== activeChatIdResolved) {
+      return;
+    }
     const latestThreadId = [...events]
       .reverse()
       .map((event) => (typeof event.meta?.threadId === 'string' ? event.meta.threadId.trim() : ''))
@@ -3275,7 +3341,7 @@ export function ChatInterface({
     return () => {
       cancelled = true;
     };
-  }, [events, sessionId, activeChatIdResolved, activeChat?.threadId]);
+  }, [eventsForChatId, events, sessionId, activeChatIdResolved, activeChat?.threadId]);
 
   const buildChatUrl = useCallback((chatId: string) => {
     return `/sessions/${encodeURIComponent(sessionId)}?chat=${encodeURIComponent(chatId)}`;
@@ -3504,8 +3570,11 @@ export function ChatInterface({
     e.preventDefault();
     const promptText = prompt.trim();
     if (!promptText || !isOperator || isAgentRunning || !activeChatIdResolved) return;
+    const scopedChatId = activeChatIdResolved;
 
-    const isFirstUserMessageInChat = !events.some((event) => isUserEvent(event));
+    const isFirstUserMessageInChat = eventsForChatId === scopedChatId
+      ? !events.some((event) => isUserEvent(event))
+      : true;
     const shouldAutoRenameFromFirstPrompt = Boolean(
       activeChat
       && isAutoGeneratedChatTitle(activeChat.title)
@@ -3526,23 +3595,26 @@ export function ChatInterface({
     const submitModelId = normalizeModelId(selectedModelId) ?? resolveDefaultModelId(activeAgentFlavor, customModels);
     const submitModelReasoningEffort = codexReasoningEffort;
 
-    setIsSubmitting(true);
-    setIsAwaitingReply(true);
-    setAwaitingReplySince(new Date().toISOString());
-    runtimeStartedSinceAwaitingRef.current = false;
-    setSubmitError(null);
-    setShowDisconnectRetry(false);
-    disconnectNoticeAwaitingRef.current = null;
-    setLastSubmittedPayload({
-      text: finalText,
-      chatId: activeChatIdResolved,
-      agent: activeChat?.agent === 'claude' || activeChat?.agent === 'codex' || activeChat?.agent === 'gemini'
-        ? activeChat.agent
-        : 'codex',
-      model: submitModelId,
-      ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
-      ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
+    const awaitingSince = new Date().toISOString();
+    updateChatRuntimeUi(scopedChatId, {
+      isSubmitting: true,
+      isAwaitingReply: true,
+      awaitingReplySince: awaitingSince,
+      submitError: null,
+      showDisconnectRetry: false,
+      lastSubmittedPayload: {
+        text: finalText,
+        chatId: scopedChatId,
+        agent: activeChat?.agent === 'claude' || activeChat?.agent === 'codex' || activeChat?.agent === 'gemini'
+          ? activeChat.agent
+          : 'codex',
+        model: submitModelId,
+        ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
+        ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
+      },
     });
+    runtimeStartedSinceAwaitingRef.current = false;
+    disconnectNoticeAwaitingRef.current = null;
 
     try {
       const response = await fetch(`/api/runtime/sessions/${sessionId}/events`, {
@@ -3554,7 +3626,7 @@ export function ChatInterface({
           text: finalText,
           meta: {
             role: 'user',
-            chatId: activeChatIdResolved,
+            chatId: scopedChatId,
             agent: activeChat?.agent ?? 'codex',
             model: submitModelId,
             ...(submitModelReasoningEffort
@@ -3582,7 +3654,7 @@ export function ChatInterface({
       }
       const touchedAt = new Date().toISOString();
       setChats((prev) => sortSessionChats(prev.map((chat) => (
-        chat.id === activeChatIdResolved
+        chat.id === scopedChatId
           ? {
               ...chat,
               lastActivityAt: touchedAt,
@@ -3591,7 +3663,7 @@ export function ChatInterface({
           : chat
       ))));
       void fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
+        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(scopedChatId)}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -3612,7 +3684,7 @@ export function ChatInterface({
             return;
           }
           setChats((prev) => sortSessionChats(prev.map((chat) => (
-                chat.id === activeChatIdResolved
+                chat.id === scopedChatId
                   ? {
                       ...chat,
                       title: payload.chat?.title ?? chat.title,
@@ -3628,12 +3700,14 @@ export function ChatInterface({
       setPrompt('');
       setContextItems([]);
     } catch (error) {
-      setIsAwaitingReply(false);
-      setAwaitingReplySince(null);
+      updateChatRuntimeUi(scopedChatId, {
+        isAwaitingReply: false,
+        awaitingReplySince: null,
+        submitError: error instanceof Error ? error.message : '백엔드 연결 상태를 확인해 주세요.',
+      });
       runtimeStartedSinceAwaitingRef.current = false;
-      setSubmitError(error instanceof Error ? error.message : '백엔드 연결 상태를 확인해 주세요.');
     } finally {
-      setIsSubmitting(false);
+      updateChatRuntimeUi(scopedChatId, { isSubmitting: false });
     }
   }
 
@@ -3641,13 +3715,16 @@ export function ChatInterface({
     if (!isOperator || isAgentRunning || !lastSubmittedPayload) {
       return;
     }
+    const scopedChatId = lastSubmittedPayload.chatId;
 
-    setIsSubmitting(true);
-    setIsAwaitingReply(true);
-    setAwaitingReplySince(new Date().toISOString());
+    updateChatRuntimeUi(scopedChatId, {
+      isSubmitting: true,
+      isAwaitingReply: true,
+      awaitingReplySince: new Date().toISOString(),
+      submitError: null,
+      showDisconnectRetry: false,
+    });
     runtimeStartedSinceAwaitingRef.current = false;
-    setSubmitError(null);
-    setShowDisconnectRetry(false);
     disconnectNoticeAwaitingRef.current = null;
 
     try {
@@ -3687,28 +3764,31 @@ export function ChatInterface({
         addEvent(body.event);
       }
     } catch (error) {
-      setIsAwaitingReply(false);
-      setAwaitingReplySince(null);
+      updateChatRuntimeUi(scopedChatId, {
+        isAwaitingReply: false,
+        awaitingReplySince: null,
+        submitError: error instanceof Error ? error.message : '재시도 중 오류가 발생했습니다.',
+        showDisconnectRetry: true,
+      });
       runtimeStartedSinceAwaitingRef.current = false;
-      setSubmitError(error instanceof Error ? error.message : '재시도 중 오류가 발생했습니다.');
-      setShowDisconnectRetry(true);
     } finally {
-      setIsSubmitting(false);
+      updateChatRuntimeUi(scopedChatId, { isSubmitting: false });
     }
   }
 
   async function handleAbortRun() {
-    if (!isOperator || !isAgentRunning || isAborting) {
+    if (!isOperator || !isAgentRunning || isAborting || !activeChatIdResolved) {
       return;
     }
+    const scopedChatId = activeChatIdResolved;
 
-    setIsAborting(true);
+    updateChatRuntimeUi(scopedChatId, { isAborting: true });
 
     try {
       const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/actions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'abort' }),
+        body: JSON.stringify({ action: 'abort', chatId: scopedChatId }),
       });
       const body = (await response.json().catch(() => ({ error: '중단 응답을 읽을 수 없습니다.' }))) as {
         error?: string;
@@ -3718,17 +3798,23 @@ export function ChatInterface({
         throw new Error(body.error ?? '에이전트 실행 중단에 실패했습니다.');
       }
 
-      setIsAwaitingReply(false);
-      setAwaitingReplySince(null);
+      updateChatRuntimeUi(scopedChatId, {
+        isAwaitingReply: false,
+        awaitingReplySince: null,
+        submitError: null,
+        showDisconnectRetry: false,
+      });
       runtimeStartedSinceAwaitingRef.current = false;
-      setSubmitError(null);
-      setShowDisconnectRetry(false);
       disconnectNoticeAwaitingRef.current = null;
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '에이전트 실행 중단 중 오류가 발생했습니다.');
+      updateChatRuntimeUi(scopedChatId, {
+        submitError: error instanceof Error ? error.message : '에이전트 실행 중단 중 오류가 발생했습니다.',
+      });
     } finally {
-      setIsAborting(false);
-      setIsSubmitting(false);
+      updateChatRuntimeUi(scopedChatId, {
+        isAborting: false,
+        isSubmitting: false,
+      });
     }
   }
 

@@ -40,7 +40,11 @@ export default async function SessionPage({
         chatId: activeChat?.id,
         includeUnassigned: activeChat?.isDefault ?? false,
       }),
-      listPermissionRequests(sessionId),
+      listPermissionRequests({
+        sessionId,
+        chatId: activeChat?.id,
+        includeUnassigned: activeChat?.isDefault ?? false,
+      }),
     ]);
 
     return (

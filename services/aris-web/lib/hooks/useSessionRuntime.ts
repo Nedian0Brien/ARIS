@@ -11,6 +11,8 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null) {
     let disposed = false;
     let inFlight = false;
     let stopped = false;
+    setIsRunning(false);
+    setRuntimeError(null);
 
     const refresh = async () => {
       if (disposed || inFlight || stopped) {

@@ -10,7 +10,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const sessionId = request.nextUrl.searchParams.get('sessionId') ?? undefined;
-    const permissions = await listPermissionRequests(sessionId);
+    const chatId = request.nextUrl.searchParams.get('chatId') ?? undefined;
+    const includeUnassignedRaw = request.nextUrl.searchParams.get('includeUnassigned');
+    const includeUnassigned = includeUnassignedRaw === '1' || includeUnassignedRaw === 'true';
+    const permissions = await listPermissionRequests({
+      sessionId,
+      chatId,
+      includeUnassigned,
+    });
     return NextResponse.json({ permissions });
   } catch {
     return NextResponse.json({ error: 'Failed to fetch permissions' }, { status: 500 });

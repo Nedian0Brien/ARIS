@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { PermissionRequest, PermissionDecision } from '@/lib/happy/types';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
@@ -60,6 +60,17 @@ export function usePermissions(
   const [resolvedPermissions, setResolvedPermissions] = useState<PermissionRequest[]>([]);
   const [loadingPermissionId, setLoadingPermissionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const scopeKey = `${sessionId}:${activeChatId ?? ''}:${includeUnassignedForActiveChat ? '1' : '0'}`;
+  const scopeKeyRef = useRef(scopeKey);
+
+  useEffect(() => {
+    scopeKeyRef.current = scopeKey;
+  }, [scopeKey]);
+
+  useEffect(() => {
+    setLoadingPermissionId(null);
+    setError(null);
+  }, [scopeKey]);
 
   useEffect(() => {
     setPermissions(initialPermissions);
@@ -68,8 +79,17 @@ export function usePermissions(
   }, [sessionId, initialPermissions]);
 
   const refreshPermissions = useCallback(async () => {
+    const requestScopeKey = scopeKey;
     try {
-      const response = await fetch(`/api/runtime/permissions?sessionId=${encodeURIComponent(sessionId)}`, {
+      const params = new URLSearchParams();
+      params.set('sessionId', sessionId);
+      if (activeChatId && activeChatId.trim().length > 0) {
+        params.set('chatId', activeChatId.trim());
+        if (includeUnassignedForActiveChat) {
+          params.set('includeUnassigned', '1');
+        }
+      }
+      const response = await fetch(`/api/runtime/permissions?${params.toString()}`, {
         cache: 'no-store',
       });
 
@@ -78,6 +98,9 @@ export function usePermissions(
         return;
       }
       if (response.status === 404) {
+        if (scopeKeyRef.current !== requestScopeKey) {
+          return;
+        }
         setError('워크스페이스가 종료되었거나 삭제되었습니다.');
         return;
       }
@@ -88,6 +111,9 @@ export function usePermissions(
 
       const body = (await response.json()) as { permissions?: PermissionRequest[] };
       const nextPermissions = Array.isArray(body.permissions) ? body.permissions : [];
+      if (scopeKeyRef.current !== requestScopeKey) {
+        return;
+      }
 
       setPermissions((prev) => {
         const merged = [...nextPermissions].sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
@@ -102,9 +128,12 @@ export function usePermissions(
 
       setError(null);
     } catch {
+      if (scopeKeyRef.current !== requestScopeKey) {
+        return;
+      }
       setError('권한 요청 동기화를 확인하세요.');
     }
-  }, [sessionId]);
+  }, [scopeKey, sessionId, activeChatId, includeUnassignedForActiveChat]);
 
   useEffect(() => {
     let aborted = false;

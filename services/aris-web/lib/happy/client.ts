@@ -680,8 +680,33 @@ export async function appendSessionMessage(input: {
   throw new Error('백엔드 응답에서 이벤트를 읽을 수 없습니다.');
 }
 
-export async function listPermissionRequests(sessionId?: string): Promise<PermissionRequest[]> {
-  const raw = await fetchHappy('/v1/permissions?state=pending');
+export async function listPermissionRequests(
+  input: string | {
+    sessionId?: string;
+    chatId?: string;
+    includeUnassigned?: boolean;
+  } = {},
+): Promise<PermissionRequest[]> {
+  const options = typeof input === 'string' ? { sessionId: input } : input;
+  const sessionId = typeof options.sessionId === 'string' && options.sessionId.trim().length > 0
+    ? options.sessionId.trim()
+    : undefined;
+  const chatId = typeof options.chatId === 'string' && options.chatId.trim().length > 0
+    ? options.chatId.trim()
+    : undefined;
+  const includeUnassigned = options.includeUnassigned === true;
+  const params = new URLSearchParams();
+  params.set('state', 'pending');
+  if (sessionId) {
+    params.set('sessionId', sessionId);
+  }
+  if (chatId) {
+    params.set('chatId', chatId);
+    if (includeUnassigned) {
+      params.set('includeUnassigned', '1');
+    }
+  }
+  const raw = await fetchHappy(`/v1/permissions?${params.toString()}`);
   const list = extractArrayPayload(raw, 'permissions').map((item, idx): PermissionRequest => {
     const rec = asObject(item);
     const rawChatId = typeof rec?.chatId === 'string' ? rec.chatId.trim() : '';
@@ -710,7 +735,21 @@ export async function listPermissionRequests(sessionId?: string): Promise<Permis
     };
   });
 
-  return sessionId ? list.filter((item) => item.sessionId === sessionId) : list;
+  return list.filter((item) => {
+    if (sessionId && item.sessionId !== sessionId) {
+      return false;
+    }
+    if (!chatId) {
+      return true;
+    }
+    const permissionChatId = typeof item.chatId === 'string' && item.chatId.trim().length > 0
+      ? item.chatId.trim()
+      : '';
+    if (permissionChatId === chatId) {
+      return true;
+    }
+    return includeUnassigned && !permissionChatId;
+  });
 }
 
 export async function decidePermissionRequest(input: {
@@ -759,6 +798,11 @@ export async function getSessionRuntimeState(
     } catch (error) {
       if (error instanceof HappyHttpError && error.status === 404) {
         runtimeStatusEndpointSupported = false;
+        if (chatId) {
+          // Legacy fallback (`/v1/sessions`) is session-scoped and cannot
+          // represent chat-scoped runtime state safely.
+          return { sessionId, isRunning: false };
+        }
         return deriveFromSessions();
       }
       throw error;
@@ -772,14 +816,25 @@ export async function getSessionRuntimeState(
   };
 }
 
-export async function runSessionAction(sessionId: string, action: SessionAction): Promise<SessionActionResult> {
+export async function runSessionAction(
+  sessionId: string,
+  action: SessionAction,
+  options: { chatId?: string } = {},
+): Promise<SessionActionResult> {
+  const chatId = typeof options.chatId === 'string' && options.chatId.trim().length > 0
+    ? options.chatId.trim()
+    : undefined;
   await fetchHappy(`/v1/sessions/${encodeURIComponent(sessionId)}/actions`, {
     method: 'POST',
-    body: JSON.stringify({ action }),
+    body: JSON.stringify({
+      action,
+      ...(chatId ? { chatId } : {}),
+    }),
   });
 
   return {
     sessionId,
+    ...(chatId ? { chatId } : {}),
     action,
     accepted: true,
     message: `${action.toUpperCase()} acknowledged`,

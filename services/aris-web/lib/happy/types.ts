@@ -129,6 +129,7 @@ export type PermissionRequest = {
 
 export type SessionActionResult = {
   sessionId: string;
+  chatId?: string;
   action: SessionAction;
   accepted: boolean;
   message: string;

@@ -18,7 +18,10 @@ export async function POST(
   const { sessionId } = await params;
   try {
     const body = await request.json();
-    const result = await runSessionAction(sessionId, body.action);
+    const chatId = typeof body?.chatId === 'string' && body.chatId.trim().length > 0
+      ? body.chatId.trim()
+      : undefined;
+    const result = await runSessionAction(sessionId, body.action, { chatId });
     return NextResponse.json({ result });
   } catch {
     return NextResponse.json({ error: 'Failed to run session action' }, { status: 500 });
