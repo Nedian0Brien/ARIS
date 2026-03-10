@@ -28,13 +28,22 @@ x-aris-web-common: &aris_web_common
     DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?set in deploy/.env}@postgres:5432/${POSTGRES_DB:-aris}
     HAPPY_SERVER_URL: http://host.docker.internal:4080
     HAPPY_SERVER_TOKEN: ${RUNTIME_API_TOKEN:?set in deploy/.env}
+    HOST_PROJECTS_ROOT: ${HOST_PROJECTS_ROOT:-/home/ubuntu/project}
     SSH_BASE_COMMAND: ${SSH_BASE_COMMAND:-ssh ubuntu@your-server}
     SSH_LINK_TTL_SECONDS: ${SSH_LINK_TTL_SECONDS:-300}
     SSH_KEY_ENCRYPTION_SECRET: ${SSH_KEY_ENCRYPTION_SECRET:?set in deploy/.env}
+    ARIS_AGENT_SKILLS_ROOT: /agent-home/.agents/skills
+    ARIS_CODEX_SKILLS_ROOT: /agent-home/.codex-skills
+    ARIS_CLAUDE_HOME: /agent-home/.claude
   extra_hosts:
     - "host.docker.internal:host-gateway"
   volumes:
     - ${HOST_PROJECTS_ROOT:-/tmp/aris-workspace}:/workspace
+    - ${HOST_HOME_DIR:-/home/ubuntu}/.agents/skills:/agent-home/.agents/skills:ro
+    - ${HOST_HOME_DIR:-/home/ubuntu}/.codex/skills:/agent-home/.codex-skills:ro
+    - ${HOST_HOME_DIR:-/home/ubuntu}/.claude/debug:/agent-home/.claude/debug:ro
+    - ${HOST_HOME_DIR:-/home/ubuntu}/.claude/mcp-needs-auth-cache.json:/agent-home/.claude/mcp-needs-auth-cache.json:ro
+    - ${HOST_HOME_DIR:-/home/ubuntu}/.claude/.claude.json:/agent-home/.claude/.claude.json:ro
   expose:
     - "3000"
   healthcheck:

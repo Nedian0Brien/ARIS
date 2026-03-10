@@ -56,6 +56,7 @@ import {
 import { createPortal } from 'react-dom';
 import type { AgentFlavor, ApprovalPolicy, PermissionRequest, SessionChat, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '@/components/ui/AgentIcons';
+import { CustomizationSidebar } from './CustomizationSidebar';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import styles from './ChatInterface.module.css';
 import dynamic from 'next/dynamic';
@@ -106,7 +107,6 @@ const COMPOSER_MAX_HEIGHT_PX = 180;
 const ACTION_COLLAPSE_THRESHOLD = 4;
 const READ_CURSOR_SYNC_DEBOUNCE_MS = 800;
 const SIDEBAR_CHAT_PAGE_SIZE = 7;
-const SIDEBAR_RECENTS_LIMIT = 7;
 const SIDEBAR_APPROVAL_FEEDBACK_MS = 3000;
 const SIDEBAR_STATUS_REFRESH_MS = 5000;
 const CHAT_RUN_PHASE_LABELS = {
@@ -2120,12 +2120,6 @@ export function ChatInterface({
       ? '정상 연결'
       : '응답 지연 또는 연결 확인 필요';
 
-  const recentEvents = useMemo(() => [...events].slice(-10).reverse(), [events]);
-  const recentUserEvents = useMemo(
-    () => events.filter((event) => isUserEvent(event)).slice(-SIDEBAR_RECENTS_LIMIT).reverse(),
-    [events]
-  );
-  const agentReplies = useMemo(() => events.filter((event) => !isUserEvent(event)).length, [events]);
   const streamItems = useMemo(() => buildStreamRenderItems(events, expandedActionRunIds), [events, expandedActionRunIds]);
   const timelineItems = useMemo<TimelineRenderItem[]>(() => {
     const merged: TimelineRenderItem[] = [];
@@ -2373,30 +2367,30 @@ export function ChatInterface({
   }, [activeChatIdResolved, chatVisibleCount, groupedSidebarChats.history]);
   const sidebarSections = useMemo<ChatSidebarSection[]>(() => {
     const sections: ChatSidebarSection[] = [
-    {
-      key: 'pinned',
-      label: CHAT_SIDEBAR_SECTION_LABELS.pinned,
-      chats: groupedSidebarChats.pinned,
-      totalCount: groupedSidebarChats.pinned.length,
-    },
-    {
-      key: 'running',
-      label: CHAT_SIDEBAR_SECTION_LABELS.running,
-      chats: groupedSidebarChats.running,
-      totalCount: groupedSidebarChats.running.length,
-    },
-    {
-      key: 'completed',
-      label: CHAT_SIDEBAR_SECTION_LABELS.completed,
-      chats: groupedSidebarChats.completed,
-      totalCount: groupedSidebarChats.completed.length,
-    },
-    {
-      key: 'history',
-      label: CHAT_SIDEBAR_SECTION_LABELS.history,
-      chats: visibleHistoryChats,
-      totalCount: groupedSidebarChats.history.length,
-    },
+      {
+        key: 'pinned',
+        label: CHAT_SIDEBAR_SECTION_LABELS.pinned,
+        chats: groupedSidebarChats.pinned,
+        totalCount: groupedSidebarChats.pinned.length,
+      },
+      {
+        key: 'running',
+        label: CHAT_SIDEBAR_SECTION_LABELS.running,
+        chats: groupedSidebarChats.running,
+        totalCount: groupedSidebarChats.running.length,
+      },
+      {
+        key: 'completed',
+        label: CHAT_SIDEBAR_SECTION_LABELS.completed,
+        chats: groupedSidebarChats.completed,
+        totalCount: groupedSidebarChats.completed.length,
+      },
+      {
+        key: 'history',
+        label: CHAT_SIDEBAR_SECTION_LABELS.history,
+        chats: visibleHistoryChats,
+        totalCount: groupedSidebarChats.history.length,
+      },
     ];
     return sections.filter((section) => section.totalCount > 0);
   }, [groupedSidebarChats, visibleHistoryChats]);
@@ -3215,20 +3209,6 @@ export function ChatInterface({
     }
   }, [activeChat?.threadId, activeChatIdResolved]);
 
-  const jumpToEvent = useCallback((eventId: string) => {
-    const target = document.getElementById(`event-${eventId}`);
-    if (!target) {
-      return;
-    }
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    if (highlightedEventId === eventId) {
-      setHighlightedEventId(null);
-      requestAnimationFrame(() => setHighlightedEventId(eventId));
-      return;
-    }
-    setHighlightedEventId(eventId);
-  }, [highlightedEventId]);
-
   useEffect(() => {
     if (!highlightedEventId) {
       return;
@@ -3493,7 +3473,16 @@ export function ChatInterface({
       disconnectNoticeAwaitingRef.current = null;
       runtimeStartedSinceAwaitingRef.current = false;
     }
-  }, [awaitingReplySince, hasAgentEventSince, hasFinalAgentReplySinceAwaiting, isRunActive]);
+  }, [
+    awaitingReplySince,
+    hasAgentEventSince,
+    hasFinalAgentReplySinceAwaiting,
+    isRunActive,
+    setAwaitingReplySince,
+    setIsAwaitingReply,
+    setShowDisconnectRetry,
+    setSubmitError,
+  ]);
 
   useEffect(() => {
     if (!isAwaitingReply || !awaitingReplySince || isRunActive) {
@@ -3536,7 +3525,17 @@ export function ChatInterface({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [addEvent, awaitingReplySince, hasAgentEventSince, isAwaitingReply, isRunActive]);
+  }, [
+    addEvent,
+    awaitingReplySince,
+    hasAgentEventSince,
+    isAwaitingReply,
+    isRunActive,
+    setAwaitingReplySince,
+    setIsAwaitingReply,
+    setShowDisconnectRetry,
+    setSubmitError,
+  ]);
 
   useEffect(() => {
     if (!isAwaitingReply || !awaitingReplySince) {
@@ -3562,7 +3561,14 @@ export function ChatInterface({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [awaitingReplySince, hasAgentEventSince, isAwaitingReply, isRunActive]);
+  }, [
+    awaitingReplySince,
+    hasAgentEventSince,
+    isAwaitingReply,
+    isRunActive,
+    setIsAwaitingReply,
+    setSubmitError,
+  ]);
 
   useEffect(() => {
     if (!activeChatIdResolved) {
@@ -4889,88 +4895,8 @@ export function ChatInterface({
         </section>
       </main>
 
-      <aside className={`${styles.sidePanel} ${styles.rightPanel}`}>
-        <section className={styles.panelCard}>
-          <div className={styles.panelHeading}>Runtime Health</div>
-          <div className={styles.healthRow}>
-            <span
-              className={`${styles.statusDot} ${
-                connectionState === 'running'
-                  ? styles.statusDotRunning
-                  : connectionState === 'connected'
-                    ? styles.statusDotGood
-                    : styles.statusDotWarn
-              }`}
-            />
-            <span>{connectionLabel}</span>
-          </div>
-
-          <div className={styles.statsGrid}>
-            <div className={styles.statBox}>
-              <span className={styles.statValue}>{events.length}</span>
-              <span className={styles.statLabel}>전체 이벤트</span>
-            </div>
-            <div className={styles.statBox}>
-              <span className={styles.statValue}>{recentUserEvents.length}</span>
-              <span className={styles.statLabel}>최근 입력</span>
-            </div>
-            <div className={styles.statBox}>
-              <span className={styles.statValue}>{agentReplies}</span>
-              <span className={styles.statLabel}>에이전트 응답</span>
-            </div>
-          </div>
-
-          {runtimeNotice && <div className={styles.runtimeAlert}>{runtimeNotice}</div>}
-        </section>
-
-        <section className={styles.panelCard}>
-          <div className={styles.panelHeading}>최근 이벤트</div>
-          <div className={styles.miniList}>
-            {recentEvents.length === 0 && <p className={styles.emptyHint}>표시할 이벤트가 없습니다.</p>}
-            {recentEvents.map((event) => {
-              const userEvent = isUserEvent(event);
-              const kindMeta = getEventKindMeta(event.kind);
-              const KindIcon = kindMeta.Icon;
-              const miniKindLabel = userEvent ? 'YOU' : kindMeta.label;
-              return (
-                <button
-                  key={event.id}
-                  type="button"
-                  className={`${styles.miniItem} ${styles.miniItemButton}`}
-                  onClick={() => jumpToEvent(event.id)}
-                  title="해당 이벤트로 이동"
-                >
-                  <RelativeTime timestamp={event.timestamp} className={styles.miniTime} />
-                  <span className={styles.miniEventRow}>
-                    {miniKindLabel ? (
-                      <span className={`${styles.miniKindChip} ${getToneClass(kindMeta.tone)}`}>
-                        <KindIcon size={11} />
-                        {miniKindLabel}
-                      </span>
-                    ) : null}
-                    <span className={styles.miniText}>{resolveRecentSummary(event)}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className={styles.panelCard}>
-          <div className={styles.panelHeading}>Workspace Controls</div>
-          <div className={styles.metaLine}>
-            <TerminalSquare size={14} />
-            승인 정책: {approvalPolicyLabel(approvalPolicy)}
-          </div>
-          <div className={styles.metaLine}>
-            <Activity size={14} />
-            대기 승인: {pendingPermissions.length}건
-          </div>
-          <div className={styles.metaLine}>
-            <MessageSquareText size={14} />
-            연결 채널: runtime/events (SSE)
-          </div>
-        </section>
+      <aside className={styles.rightPanel}>
+        <CustomizationSidebar sessionId={sessionId} projectName={projectName} />
       </aside>
     </div>
 
