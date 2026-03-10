@@ -222,6 +222,12 @@ const CHAT_SIDEBAR_SECTION_LABELS: Record<ChatSidebarSectionKey, string> = {
   completed: 'Completed',
   history: 'History',
 };
+const CHAT_SIDEBAR_SECTION_ICONS: Record<ChatSidebarSectionKey, React.ComponentType<{ size?: number }>> = {
+  pinned: Pin,
+  running: Activity,
+  completed: CheckCircle2,
+  history: Clock,
+};
 const DEFAULT_SIDEBAR_SECTION_EXPANDED: Record<ChatSidebarSectionKey, boolean> = {
   pinned: false,
   running: false,
@@ -4244,6 +4250,7 @@ export function ChatInterface({
           <div ref={chatListRef} className={styles.chatList}>
             {sidebarSections.map((section) => {
               const isExpanded = expandedSidebarSections[section.key];
+              const SectionIcon = CHAT_SIDEBAR_SECTION_ICONS[section.key];
               return (
                 <section key={section.key} className={styles.sidebarSection}>
                   <button
@@ -4254,7 +4261,12 @@ export function ChatInterface({
                     aria-controls={`chat-sidebar-section-${section.key}`}
                   >
                     <span className={styles.sidebarSectionHeading}>
-                      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      <span className={styles.sidebarSectionChevron}>
+                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      </span>
+                      <span className={styles.sidebarSectionHeadingIcon}>
+                        <SectionIcon size={13} />
+                      </span>
                       <span>{section.label}</span>
                     </span>
                     <span className={styles.sidebarSectionCount}>{section.totalCount}</span>

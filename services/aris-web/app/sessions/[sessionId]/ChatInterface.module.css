@@ -303,6 +303,7 @@
 }
 
 .sidebarSection {
+  flex: 0 0 auto;
   border: 1px solid var(--chat-item-border);
   border-radius: 12px;
   background: var(--chat-item-bg);
@@ -336,6 +337,26 @@
   letter-spacing: 0.02em;
 }
 
+.sidebarSectionChevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--chat-text-muted);
+  flex: 0 0 auto;
+}
+
+.sidebarSectionHeadingIcon {
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--chat-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
 .sidebarSectionCount {
   min-width: 1.6rem;
   padding: 0.12rem 0.42rem;
@@ -350,7 +371,8 @@
 
 .sidebarSectionBody {
   padding: 0.45rem;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 0.42rem;
 }
 
