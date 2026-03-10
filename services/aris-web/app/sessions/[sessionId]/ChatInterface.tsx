@@ -181,6 +181,7 @@ type ChatRuntimeUiState = {
   isSubmitting: boolean;
   isAwaitingReply: boolean;
   isAborting: boolean;
+  hasCompletionSignal: boolean;
   awaitingReplySince: string | null;
   showDisconnectRetry: boolean;
   lastSubmittedPayload: ChatSubmittedPayload | null;
@@ -191,6 +192,7 @@ const DEFAULT_CHAT_RUNTIME_UI_STATE: ChatRuntimeUiState = {
   isSubmitting: false,
   isAwaitingReply: false,
   isAborting: false,
+  hasCompletionSignal: false,
   awaitingReplySince: null,
   showDisconnectRetry: false,
   lastSubmittedPayload: null,
@@ -1880,6 +1882,7 @@ export function ChatInterface({
   const isSubmitting = activeChatRuntimeUi.isSubmitting;
   const isAwaitingReply = activeChatRuntimeUi.isAwaitingReply;
   const isAborting = activeChatRuntimeUi.isAborting;
+  const hasCompletionSignal = activeChatRuntimeUi.hasCompletionSignal;
   const awaitingReplySince = activeChatRuntimeUi.awaitingReplySince;
   const showDisconnectRetry = activeChatRuntimeUi.showDisconnectRetry;
   const lastSubmittedPayload = activeChatRuntimeUi.lastSubmittedPayload;
@@ -1898,6 +1901,7 @@ export function ChatInterface({
         current.isSubmitting === next.isSubmitting
         && current.isAwaitingReply === next.isAwaitingReply
         && current.isAborting === next.isAborting
+        && current.hasCompletionSignal === next.hasCompletionSignal
         && current.awaitingReplySince === next.awaitingReplySince
         && current.showDisconnectRetry === next.showDisconnectRetry
         && current.lastSubmittedPayload === next.lastSubmittedPayload
@@ -2054,6 +2058,8 @@ export function ChatInterface({
     ? 'aborting'
     : isSubmitting
       ? 'submitting'
+      : hasCompletionSignal
+        ? 'idle'
       : runtimeRunning
         ? 'running'
         : isAwaitingReply
@@ -2221,6 +2227,9 @@ export function ChatInterface({
     }
     if (runtimeUi.isSubmitting) {
       return 'submitting';
+    }
+    if (runtimeUi.hasCompletionSignal) {
+      return 'idle';
     }
     if ((isActive && runtimeRunning) || Boolean(snapshot?.isRunning)) {
       return 'running';
@@ -3345,10 +3354,28 @@ export function ChatInterface({
     if (!awaitingReplySince) {
       return;
     }
-    const hasAnyAgentEvent = hasAgentEventSince(awaitingReplySince);
-    const hasCompletionSignal = hasAgentCompletionSignalSince(awaitingReplySince);
+    if (!hasAgentCompletionSignalSince(awaitingReplySince)) {
+      return;
+    }
 
-    if (!isRunActive && hasAnyAgentEvent && (runtimeStartedSinceAwaitingRef.current || hasCompletionSignal)) {
+    updateActiveChatRuntimeUi({
+      hasCompletionSignal: true,
+      isAwaitingReply: false,
+      awaitingReplySince: null,
+      submitError: null,
+      showDisconnectRetry: false,
+    });
+    disconnectNoticeAwaitingRef.current = null;
+    runtimeStartedSinceAwaitingRef.current = false;
+  }, [awaitingReplySince, hasAgentCompletionSignalSince, updateActiveChatRuntimeUi]);
+
+  useEffect(() => {
+    if (!awaitingReplySince) {
+      return;
+    }
+    const hasAnyAgentEvent = hasAgentEventSince(awaitingReplySince);
+
+    if (!isRunActive && hasAnyAgentEvent && runtimeStartedSinceAwaitingRef.current) {
       setIsAwaitingReply(false);
       setAwaitingReplySince(null);
       setSubmitError(null);
@@ -3356,7 +3383,7 @@ export function ChatInterface({
       disconnectNoticeAwaitingRef.current = null;
       runtimeStartedSinceAwaitingRef.current = false;
     }
-  }, [awaitingReplySince, hasAgentCompletionSignalSince, hasAgentEventSince, isRunActive]);
+  }, [awaitingReplySince, hasAgentEventSince, isRunActive]);
 
   useEffect(() => {
     if (!isAwaitingReply || !awaitingReplySince || isRunActive) {
@@ -3724,6 +3751,7 @@ export function ChatInterface({
     updateChatRuntimeUi(scopedChatId, {
       isSubmitting: true,
       isAwaitingReply: true,
+      hasCompletionSignal: false,
       awaitingReplySince: awaitingSince,
       submitError: null,
       showDisconnectRetry: false,
@@ -3827,6 +3855,7 @@ export function ChatInterface({
     } catch (error) {
       updateChatRuntimeUi(scopedChatId, {
         isAwaitingReply: false,
+        hasCompletionSignal: false,
         awaitingReplySince: null,
         submitError: error instanceof Error ? error.message : '백엔드 연결 상태를 확인해 주세요.',
       });
@@ -3845,6 +3874,7 @@ export function ChatInterface({
     updateChatRuntimeUi(scopedChatId, {
       isSubmitting: true,
       isAwaitingReply: true,
+      hasCompletionSignal: false,
       awaitingReplySince: new Date().toISOString(),
       submitError: null,
       showDisconnectRetry: false,
@@ -3891,6 +3921,7 @@ export function ChatInterface({
     } catch (error) {
       updateChatRuntimeUi(scopedChatId, {
         isAwaitingReply: false,
+        hasCompletionSignal: false,
         awaitingReplySince: null,
         submitError: error instanceof Error ? error.message : '재시도 중 오류가 발생했습니다.',
         showDisconnectRetry: true,
@@ -3925,6 +3956,7 @@ export function ChatInterface({
 
       updateChatRuntimeUi(scopedChatId, {
         isAwaitingReply: false,
+        hasCompletionSignal: false,
         awaitingReplySince: null,
         submitError: null,
         showDisconnectRetry: false,
