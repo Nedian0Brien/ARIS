@@ -591,6 +591,27 @@ function buildSessionHintMeta(input: {
   };
 }
 
+function shouldSkipDuplicateAgentMessage(
+  seenKeys: Set<string>,
+  turnId: string | undefined,
+  text: string,
+): boolean {
+  const normalizedText = text.trim();
+  if (!normalizedText) {
+    return false;
+  }
+
+  const normalizedTurnId = typeof turnId === 'string' ? turnId.trim() : '';
+  const dedupeKey = normalizedTurnId
+    ? `${normalizedTurnId}:${normalizedText}`
+    : normalizedText;
+  if (seenKeys.has(dedupeKey)) {
+    return true;
+  }
+  seenKeys.add(dedupeKey);
+  return false;
+}
+
 function shellEscapeSingle(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
@@ -1286,6 +1307,7 @@ export const happyClientTestHooks = {
   looksLikeActionTranscript,
   parseMessagePayloadText,
   buildSessionHintMeta,
+  shouldSkipDuplicateAgentMessage,
 };
 
 export class HappyRuntimeStore {
@@ -1856,6 +1878,7 @@ export class HappyRuntimeStore {
     let runStatus: 'running' | 'completed' | 'failed' | 'aborted' | 'timed_out' = 'running';
     let runErrorMessage: string | undefined;
     const runtimePermissionIds = new Set<string>();
+    const persistedAgentMessageKeys = new Set<string>();
 
     const pendingRequests = new Map<string, {
       method: string;
@@ -2137,6 +2160,10 @@ export class HappyRuntimeStore {
         if (itemType === 'agentMessage') {
           const text = asString(item.text, '').trim();
           if (!text) {
+            return;
+          }
+          const itemTurnId = asString(params.turnId, activeTurnId).trim() || activeTurnId;
+          if (shouldSkipDuplicateAgentMessage(persistedAgentMessageKeys, itemTurnId, text)) {
             return;
           }
           pendingAgentMessage = text;
@@ -2639,6 +2666,7 @@ export class HappyRuntimeStore {
     let resolvedThreadId = typeof threadId === 'string' && threadId.trim().length > 0
       ? threadId.trim()
       : '';
+    const persistedAgentMessageKeys = new Set<string>();
 
     const enqueueAppend = (
       text: string,
@@ -2763,6 +2791,13 @@ export class HappyRuntimeStore {
       if (itemType === 'agent_message') {
         const text = asString(item.text, '').trim();
         if (text) {
+          const itemTurnId = asString(
+            payload.turn_id,
+            asString(payload.turnId, asString(item.turn_id, asString(item.turnId, ''))),
+          ).trim();
+          if (shouldSkipDuplicateAgentMessage(persistedAgentMessageKeys, itemTurnId, text)) {
+            return;
+          }
           lastAgentMessage = text;
           streamedPersisted = true;
           agentMessagePersisted = true;

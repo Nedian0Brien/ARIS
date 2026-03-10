@@ -127,4 +127,13 @@ describe('happyClient stream-json parsing', () => {
     expect(parsed.text).toContain('[UNPARSED HAPPY PAYLOAD]');
     expect(parsed.text).toContain('"unknownShape"');
   });
+
+  it('skips duplicate agent messages for the same turn only', () => {
+    const seen = new Set<string>();
+
+    expect(happyClientTestHooks.shouldSkipDuplicateAgentMessage(seen, 'turn-1', 'same reply')).toBe(false);
+    expect(happyClientTestHooks.shouldSkipDuplicateAgentMessage(seen, 'turn-1', 'same reply')).toBe(true);
+    expect(happyClientTestHooks.shouldSkipDuplicateAgentMessage(seen, 'turn-1', 'different reply')).toBe(false);
+    expect(happyClientTestHooks.shouldSkipDuplicateAgentMessage(seen, 'turn-2', 'same reply')).toBe(false);
+  });
 });
