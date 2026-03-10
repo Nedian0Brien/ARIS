@@ -6,11 +6,12 @@ import { useRouter } from 'next/navigation';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
+import { readLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
 import {
   hasAgentCompletionSignal,
   hasFinalAgentReplySince,
   readUiEventStreamEvent,
-  resolveChatRunPhase,
+  resolveChatRunPhase as resolveRunPhaseState,
   type ResolvedChatRunPhase,
 } from '@/lib/happy/chatRuntime';
 import {
@@ -79,14 +80,14 @@ const RECENT_FILES_MAX = 5;
 
 function getRecentFiles(): string[] {
   try {
-    return JSON.parse(localStorage.getItem(RECENT_FILES_STORAGE_KEY) ?? '[]') as string[];
+    return JSON.parse(readLocalStorage(RECENT_FILES_STORAGE_KEY) ?? '[]') as string[];
   } catch { return []; }
 }
 
 function saveRecentFile(filePath: string): void {
   try {
     const prev = getRecentFiles().filter((p) => p !== filePath);
-    localStorage.setItem(RECENT_FILES_STORAGE_KEY, JSON.stringify([filePath, ...prev].slice(0, RECENT_FILES_MAX)));
+    writeLocalStorage(RECENT_FILES_STORAGE_KEY, JSON.stringify([filePath, ...prev].slice(0, RECENT_FILES_MAX)));
   } catch { /* localStorage 사용 불가 시 무시 */ }
 }
 
@@ -2098,7 +2099,7 @@ export function ChatInterface({
     : undefined;
   const agentMeta = resolveAgentMeta(activeAgentFlavor);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? runtimeError ?? null;
-  const runPhase: ChatRunPhase = resolveChatRunPhase({
+  const runPhase: ChatRunPhase = resolveRunPhaseState({
     isAborting,
     isSubmitting,
     hasCompletionSignal,
@@ -2259,12 +2260,12 @@ export function ChatInterface({
     return readMarker !== snapshot.latestEventId;
   }, [chatReadMarkers, chatSidebarSnapshots]);
 
-  const resolveChatRunPhase = useCallback((chat: SessionChat): ChatRunPhase => {
+  const resolveSidebarChatRunPhase = useCallback((chat: SessionChat): ChatRunPhase => {
     const runtimeUi = chatRuntimeUiByChat[chat.id] ?? DEFAULT_CHAT_RUNTIME_UI_STATE;
     const snapshot = chatSidebarSnapshots[chat.id];
     const isActive = chat.id === activeChatIdResolved;
 
-    return resolveChatRunPhase({
+    return resolveRunPhaseState({
       isAborting: runtimeUi.isAborting,
       isSubmitting: runtimeUi.isSubmitting,
       hasCompletionSignal: runtimeUi.hasCompletionSignal,
@@ -2276,7 +2277,7 @@ export function ChatInterface({
   const resolveChatSidebarState = useCallback((chat: SessionChat): ChatSidebarState => {
     const isActive = chat.id === activeChatIdResolved;
     const snapshot = chatSidebarSnapshots[chat.id];
-    const chatRunPhase = resolveChatRunPhase(chat);
+    const chatRunPhase = resolveSidebarChatRunPhase(chat);
     const hasFeedback = Boolean(approvalFeedbackByChat[chat.id]);
     const hasPendingApproval = isActive && pendingPermissions.length > 0;
     const hasUnread = hasUnreadMessages(chat.id);
@@ -2310,7 +2311,7 @@ export function ChatInterface({
     hasUnreadMessages,
     chatSidebarSnapshots,
     pendingPermissions.length,
-    resolveChatRunPhase,
+    resolveSidebarChatRunPhase,
     runtimeError,
     submitError,
     syncError,
@@ -2370,7 +2371,8 @@ export function ChatInterface({
     }
     return groupedSidebarChats.history.filter((chat) => visibleIds.has(chat.id));
   }, [activeChatIdResolved, chatVisibleCount, groupedSidebarChats.history]);
-  const sidebarSections = useMemo<ChatSidebarSection[]>(() => ([
+  const sidebarSections = useMemo<ChatSidebarSection[]>(() => {
+    const sections: ChatSidebarSection[] = [
     {
       key: 'pinned',
       label: CHAT_SIDEBAR_SECTION_LABELS.pinned,
@@ -2395,7 +2397,9 @@ export function ChatInterface({
       chats: visibleHistoryChats,
       totalCount: groupedSidebarChats.history.length,
     },
-  ].filter((section) => section.totalCount > 0)), [groupedSidebarChats, visibleHistoryChats]);
+    ];
+    return sections.filter((section) => section.totalCount > 0);
+  }, [groupedSidebarChats, visibleHistoryChats]);
   const renderedSidebarChats = useMemo(
     () => [
       ...groupedSidebarChats.pinned,
@@ -4201,7 +4205,7 @@ export function ChatInterface({
                               ? styles.chatListItemStateError
                               : '';
                       const chatPreviewText = resolveChatPreviewText(chat.id);
-                      const chatRunPhase = resolveChatRunPhase(chat);
+                      const chatRunPhase = resolveSidebarChatRunPhase(chat);
                       const chatRunPhaseLabel = chatRunPhase === 'idle' ? null : CHAT_RUN_PHASE_LABELS[chatRunPhase];
                       const chatRunStartedAt = (chatRuntimeUiByChat[chat.id]?.awaitingReplySince ?? '').trim() || null;
                       const chatRunPhaseClass = chatRunPhase === 'aborting'
