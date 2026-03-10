@@ -524,6 +524,9 @@
   font-weight: 800;
   letter-spacing: 0.01em;
   line-height: 1.45;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.24rem;
 }
 
 .chatListRunPhaseBadgeSubmitting {
@@ -544,6 +547,12 @@
 .chatListRunPhaseBadgeAborting {
   background: rgba(239, 68, 68, 0.14);
   color: #b91c1c;
+}
+
+.chatListRunPhaseElapsed {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.56rem;
+  opacity: 0.78;
 }
 
 .chatListRenameInput {
@@ -2703,6 +2712,12 @@
   font-weight: 600;
   color: #1e40af;
   margin-left: auto;
+}
+
+.composerRunningElapsed {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.68rem;
+  opacity: 0.82;
 }
 
 /* ── Context chips ── */

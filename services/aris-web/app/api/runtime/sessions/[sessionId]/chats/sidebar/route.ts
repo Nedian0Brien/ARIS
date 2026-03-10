@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
 import { listSessionChats, updateSessionChat } from '@/lib/happy/chats';
-import { listLatestEventsByChat } from '@/lib/happy/client';
+import { getSessionRuntimeState, listLatestEventsByChat } from '@/lib/happy/client';
 import type { UiEvent } from '@/lib/happy/types';
 
 function isUserEvent(event: UiEvent): boolean {
@@ -105,6 +105,16 @@ export async function GET(
         defaultChatId: chats.find((chat) => chat.isDefault)?.id ?? null,
       })
       : {};
+    const runningByChat = Object.fromEntries(
+      await Promise.all(targetChatIds.map(async (chatId) => {
+        try {
+          const runtime = await getSessionRuntimeState(sessionId, { chatId });
+          return [chatId, runtime.isRunning] as const;
+        } catch {
+          return [chatId, false] as const;
+        }
+      }))
+    );
 
     const snapshots = targetChatIds.map((chatId) => {
       const cached = chatMap.get(chatId);
@@ -120,7 +130,7 @@ export async function GET(
             latestEventId: cachedEventId || null,
             latestEventAt: cached.latestEventAt ?? null,
             latestEventIsUser: Boolean(cached.latestEventIsUser),
-            isRunning: false,
+            isRunning: Boolean(runningByChat[chatId]),
           };
         }
       }
@@ -134,7 +144,7 @@ export async function GET(
         latestEventId: latest?.id ?? null,
         latestEventAt: latest?.timestamp ?? null,
         latestEventIsUser: latest ? isUserEvent(latest) : false,
-        isRunning: false,
+        isRunning: Boolean(runningByChat[chatId]),
       };
     });
 
