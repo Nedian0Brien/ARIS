@@ -7,6 +7,11 @@ import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
 import {
+  hasAgentCompletionSignal,
+  hasFinalAgentReplySince,
+  readUiEventStreamEvent,
+} from '@/lib/happy/chatRuntime';
+import {
   deriveOpenAiModelLabel,
   type ModelSettingsResponse,
   type ProviderModelSelections,
@@ -103,7 +108,7 @@ const SIDEBAR_APPROVAL_FEEDBACK_MS = 3000;
 const SIDEBAR_STATUS_REFRESH_MS = 5000;
 const CHAT_RUN_PHASE_LABELS = {
   submitting: '전송 중',
-  waiting: '응답 대기 중',
+  waiting: '작업 중',
   running: '응답 생성 중',
   aborting: '중단 중',
 } as const;
@@ -697,9 +702,7 @@ function hasChatErrorSignal(event: UiEvent | null | undefined): boolean {
     return false;
   }
 
-  const streamEvent = typeof event.meta?.streamEvent === 'string'
-    ? event.meta.streamEvent.toLowerCase()
-    : '';
+  const streamEvent = readUiEventStreamEvent(event);
   if (
     streamEvent === 'runtime_disconnected'
     || streamEvent === 'stream_error'
@@ -708,76 +711,6 @@ function hasChatErrorSignal(event: UiEvent | null | undefined): boolean {
     return true;
   }
   return false;
-}
-
-function readUiEventSessionEventType(event: UiEvent): string {
-  if (typeof event.meta?.sessionEventType === 'string') {
-    return event.meta.sessionEventType.trim().toLowerCase();
-  }
-  const sessionEvent = event.meta?.sessionEvent;
-  if (!sessionEvent || typeof sessionEvent !== 'object') {
-    return '';
-  }
-  const ev = 'ev' in sessionEvent
-    && sessionEvent.ev
-    && typeof sessionEvent.ev === 'object'
-    ? sessionEvent.ev as Record<string, unknown>
-    : null;
-  if (!ev) {
-    return '';
-  }
-  return typeof ev.t === 'string' ? ev.t.trim().toLowerCase() : '';
-}
-
-function readUiEventTurnStatus(event: UiEvent): string {
-  if (typeof event.meta?.sessionTurnStatus === 'string') {
-    return event.meta.sessionTurnStatus.trim().toLowerCase();
-  }
-  const sessionEvent = event.meta?.sessionEvent;
-  if (!sessionEvent || typeof sessionEvent !== 'object') {
-    return '';
-  }
-  const ev = 'ev' in sessionEvent
-    && sessionEvent.ev
-    && typeof sessionEvent.ev === 'object'
-    ? sessionEvent.ev as Record<string, unknown>
-    : null;
-  if (!ev) {
-    return '';
-  }
-  return typeof ev.status === 'string' ? ev.status.trim().toLowerCase() : '';
-}
-
-function hasAgentCompletionSignal(event: UiEvent): boolean {
-  if (isUserEvent(event)) {
-    return false;
-  }
-
-  const streamEvent = typeof event.meta?.streamEvent === 'string'
-    ? event.meta.streamEvent.trim().toLowerCase()
-    : '';
-  if (
-    streamEvent === 'runtime_disconnected'
-    || streamEvent === 'stream_error'
-    || streamEvent === 'runtime_error'
-  ) {
-    return true;
-  }
-
-  const sessionEventType = readUiEventSessionEventType(event);
-  if (sessionEventType === 'turn-end' || sessionEventType === 'stop') {
-    return true;
-  }
-
-  const turnStatus = readUiEventTurnStatus(event);
-  return (
-    turnStatus === 'completed'
-    || turnStatus === 'failed'
-    || turnStatus === 'aborted'
-    || turnStatus === 'timed_out'
-    || turnStatus === 'turn_incomplete'
-    || turnStatus === 'run_stale_cleanup'
-  );
 }
 
 function approvalPolicyLabel(value?: ApprovalPolicy): string {
@@ -3434,6 +3367,9 @@ export function ChatInterface({
       return eventEpoch >= sinceEpoch;
     });
   }, [events]);
+  const hasFinalAgentReplySinceAwaiting = useCallback((since: string | null): boolean => (
+    hasFinalAgentReplySince(events, since)
+  ), [events]);
 
   useEffect(() => {
     if (!isAwaitingReply) {
@@ -3468,8 +3404,15 @@ export function ChatInterface({
       return;
     }
     const hasAnyAgentEvent = hasAgentEventSince(awaitingReplySince);
+    const hasFinalAgentReply = hasFinalAgentReplySinceAwaiting(awaitingReplySince);
 
-    if (!isRunActive && hasAnyAgentEvent && runtimeStartedSinceAwaitingRef.current) {
+    if (
+      !isRunActive
+      && (
+        (hasAnyAgentEvent && runtimeStartedSinceAwaitingRef.current)
+        || hasFinalAgentReply
+      )
+    ) {
       setIsAwaitingReply(false);
       setAwaitingReplySince(null);
       setSubmitError(null);
@@ -3477,7 +3420,7 @@ export function ChatInterface({
       disconnectNoticeAwaitingRef.current = null;
       runtimeStartedSinceAwaitingRef.current = false;
     }
-  }, [awaitingReplySince, hasAgentEventSince, isRunActive]);
+  }, [awaitingReplySince, hasAgentEventSince, hasFinalAgentReplySinceAwaiting, isRunActive]);
 
   useEffect(() => {
     if (!isAwaitingReply || !awaitingReplySince || isRunActive) {
