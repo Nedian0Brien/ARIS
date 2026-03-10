@@ -2,11 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { CheckCircle2, KeyRound, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
+import type { ProviderId } from '@/lib/settings/providerModels';
 import styles from './OpenAiApiKeyCard.module.css';
 
 type Feedback = { ok: boolean; msg: string } | null;
 
 export function OpenAiApiKeyCard({
+  providerOptions,
+  activeProvider,
+  onProviderChange,
   hasKey,
   saving,
   deleting,
@@ -14,6 +18,9 @@ export function OpenAiApiKeyCard({
   onSave,
   onDelete,
 }: {
+  providerOptions: Array<{ id: ProviderId; label: string }>;
+  activeProvider: ProviderId;
+  onProviderChange: (provider: ProviderId) => void;
   hasKey: boolean;
   saving: boolean;
   deleting: boolean;
@@ -29,6 +36,9 @@ export function OpenAiApiKeyCard({
     }
   }, [feedback]);
 
+  const isCodex = activeProvider === 'codex';
+  const providerTitle = activeProvider === 'claude' ? 'Claude' : activeProvider === 'gemini' ? 'Gemini' : 'Codex';
+
   return (
     <section className={styles.card}>
       <div className={styles.inner}>
@@ -36,75 +46,110 @@ export function OpenAiApiKeyCard({
           <div className={styles.titleWrap}>
             <div className={styles.eyebrow}>
               <KeyRound size={14} />
-              OpenAI Credentials
+              Provider Credentials
             </div>
-            <h3 className={styles.title}>모델 카탈로그 전용 API 키</h3>
+            <h3 className={styles.title}>Model Provider API Keys</h3>
             <p className={styles.description}>
-              키는 암호화 저장되며 OpenAI 모델 목록을 조회할 때만 사용됩니다. 에이전트 실행 경로에는 주입하지 않아
-              런타임 노출이나 추가 호출이 발생하지 않습니다.
+              공급자별 API 키를 분리 저장합니다. 현재는 Codex용 OpenAI 카탈로그 조회만 연결되어 있고, 키는 런타임
+              에이전트 실행 경로에 주입하지 않습니다.
             </p>
           </div>
-          <div className={`${styles.statusPill} ${hasKey ? styles.statusActive : styles.statusInactive}`}>
-            {hasKey ? '등록됨' : '미등록'}
-          </div>
-        </div>
-
-        <div className={styles.securityGrid}>
-          <div className={styles.securityItem}>
-            <span className={styles.securityLabel}>보관 방식</span>
-            <span className={styles.securityValue}>AES-256-GCM 암호화</span>
-          </div>
-          <div className={styles.securityItem}>
-            <span className={styles.securityLabel}>사용 범위</span>
-            <span className={styles.securityValue}>설정 탭 카탈로그 조회 전용</span>
-          </div>
-          <div className={styles.securityItem}>
-            <span className={styles.securityLabel}>런타임 분리</span>
-            <span className={styles.securityValue}>Codex 실행 인자에 미주입</span>
-          </div>
-        </div>
-
-        <div className={styles.form}>
-          <div>
-            <label className={styles.label}>OpenAI API Key</label>
-            <div className={styles.inputRow}>
-              <input
-                className={styles.input}
-                type="password"
-                autoComplete="off"
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
-                placeholder={hasKey ? '새 키를 입력하면 교체됩니다' : 'sk-...'}
-              />
+          {isCodex ? (
+            <div className={`${styles.statusPill} ${hasKey ? styles.statusActive : styles.statusInactive}`}>
+              {hasKey ? '등록됨' : '미등록'}
             </div>
-          </div>
-
-          <div className={styles.actions}>
-            <button
-              type="button"
-              className={styles.primaryButton}
-              onClick={() => { void onSave(apiKey); }}
-              disabled={saving || deleting || apiKey.trim().length < 20}
-            >
-              {hasKey ? <Sparkles size={16} /> : <ShieldCheck size={16} />}
-              {saving ? '저장 중...' : hasKey ? '키 갱신' : '키 등록'}
-            </button>
-            <button
-              type="button"
-              className={styles.ghostButton}
-              onClick={() => { void onDelete(); }}
-              disabled={!hasKey || saving || deleting}
-            >
-              {hasKey ? <Trash2 size={16} /> : <CheckCircle2 size={16} />}
-              {deleting ? '삭제 중...' : '등록 제거'}
-            </button>
-            {feedback ? (
-              <span className={`${styles.feedback} ${feedback.ok ? styles.feedbackOk : styles.feedbackErr}`}>
-                {feedback.msg}
-              </span>
-            ) : null}
-          </div>
+          ) : (
+            <div className={`${styles.statusPill} ${styles.statusPlanned}`}>
+              Placeholder
+            </div>
+          )}
         </div>
+
+        <div className={styles.providerRail} aria-label="모델 공급자 선택">
+          {providerOptions.map((provider) => {
+            const active = provider.id === activeProvider;
+            return (
+              <button
+                key={provider.id}
+                type="button"
+                className={`${styles.providerButton} ${active ? styles.providerButtonActive : ''} ${styles[`provider${provider.label}Tone` as keyof typeof styles]}`}
+                onClick={() => onProviderChange(provider.id)}
+              >
+                {provider.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {isCodex ? (
+          <>
+            <div className={styles.securityGrid}>
+              <div className={styles.securityItem}>
+                <span className={styles.securityLabel}>보관 방식</span>
+                <span className={styles.securityValue}>AES-256-GCM 암호화</span>
+              </div>
+              <div className={styles.securityItem}>
+                <span className={styles.securityLabel}>사용 범위</span>
+                <span className={styles.securityValue}>설정 탭 모델 카탈로그 조회 전용</span>
+              </div>
+              <div className={styles.securityItem}>
+                <span className={styles.securityLabel}>런타임 분리</span>
+                <span className={styles.securityValue}>Codex 실행 인자에 미주입</span>
+              </div>
+            </div>
+
+            <div className={styles.form}>
+              <div>
+                <label className={styles.label}>OpenAI API Key</label>
+                <div className={styles.inputRow}>
+                  <input
+                    className={styles.input}
+                    type="password"
+                    autoComplete="off"
+                    value={apiKey}
+                    onChange={(event) => setApiKey(event.target.value)}
+                    placeholder={hasKey ? '새 키를 입력하면 교체됩니다' : 'sk-...'}
+                  />
+                </div>
+              </div>
+
+              <div className={styles.actions}>
+                <button
+                  type="button"
+                  className={styles.primaryButton}
+                  onClick={() => { void onSave(apiKey); }}
+                  disabled={saving || deleting || apiKey.trim().length < 20}
+                >
+                  {hasKey ? <Sparkles size={16} /> : <ShieldCheck size={16} />}
+                  {saving ? '저장 중...' : hasKey ? '키 갱신' : '키 등록'}
+                </button>
+                <button
+                  type="button"
+                  className={styles.ghostButton}
+                  onClick={() => { void onDelete(); }}
+                  disabled={!hasKey || saving || deleting}
+                >
+                  {hasKey ? <Trash2 size={16} /> : <CheckCircle2 size={16} />}
+                  {deleting ? '삭제 중...' : '등록 제거'}
+                </button>
+                {feedback ? (
+                  <span className={`${styles.feedback} ${feedback.ok ? styles.feedbackOk : styles.feedbackErr}`}>
+                    {feedback.msg}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className={styles.placeholderPanel}>
+            <div className={styles.placeholderEyebrow}>{providerTitle} Placeholder</div>
+            <div className={styles.placeholderTitle}>{providerTitle} API 키 설정은 다음 단계에서 연결됩니다</div>
+            <p className={styles.placeholderText}>
+              공급자별 저장 구조는 동일하게 유지하되, 현재 배포에서는 Codex(OpenAI)만 실제 카탈로그 조회와 연결되어
+              있습니다. 이 영역은 이후 Claude, Gemini 키 관리 UI로 확장될 자리입니다.
+            </p>
+          </div>
+        )}
       </div>
     </section>
   );

@@ -8,10 +8,16 @@ import {
   DEFAULT_CODEX_MODEL_SELECTIONS,
   type ModelSettingsResponse,
   type OpenAiCatalogItem,
+  type ProviderId,
 } from '@/lib/settings/providerModels';
 import styles from './SettingsTab.module.css';
 
 type Feedback = { ok: boolean; msg: string } | null;
+const PROVIDER_OPTIONS: Array<{ id: ProviderId; label: string }> = [
+  { id: 'codex', label: 'Codex' },
+  { id: 'claude', label: 'Claude' },
+  { id: 'gemini', label: 'Gemini' },
+];
 
 const DEFAULT_MODEL_SETTINGS: ModelSettingsResponse = {
   providers: {
@@ -50,6 +56,7 @@ export function SettingsTab() {
   const [keySaving, setKeySaving] = useState(false);
   const [keyDeleting, setKeyDeleting] = useState(false);
   const [keyFeedback, setKeyFeedback] = useState<Feedback>(null);
+  const [activeProvider, setActiveProvider] = useState<ProviderId>('codex');
 
   const syncCodexSelection = useCallback((settings: ModelSettingsResponse) => {
     const persisted = settings.providers.codex.selectedModelIds;
@@ -263,13 +270,13 @@ export function SettingsTab() {
       });
       const data = await response.json().catch(() => null);
       if (!response.ok || !data) {
-        throw new Error('Codex 모델 설정을 저장하지 못했습니다.');
+        throw new Error('사용할 Codex 모델 목록을 저장하지 못했습니다.');
       }
       setModelSettings(data);
       syncCodexSelection(data);
-      setModelFeedback({ ok: true, msg: 'Codex 모델 등록 목록이 저장되었습니다.' });
+      setModelFeedback({ ok: true, msg: 'Codex 사용할 모델 목록이 저장되었습니다.' });
     } catch (error) {
-      setModelFeedback({ ok: false, msg: error instanceof Error ? error.message : 'Codex 모델 설정 저장에 실패했습니다.' });
+      setModelFeedback({ ok: false, msg: error instanceof Error ? error.message : 'Codex 모델 목록 저장에 실패했습니다.' });
     } finally {
       setModelSaving(false);
     }
@@ -293,6 +300,9 @@ export function SettingsTab() {
 
       <div className={styles.stack}>
         <OpenAiApiKeyCard
+          providerOptions={PROVIDER_OPTIONS}
+          activeProvider={activeProvider}
+          onProviderChange={setActiveProvider}
           hasKey={hasOpenAiApiKey}
           saving={keySaving}
           deleting={keyDeleting}
@@ -302,6 +312,9 @@ export function SettingsTab() {
         />
 
         <CodexModelCatalogCard
+          providerOptions={PROVIDER_OPTIONS}
+          activeProvider={activeProvider}
+          onProviderChange={setActiveProvider}
           hasApiKey={hasOpenAiApiKey}
           items={catalogItems}
           selectedModelIds={selectedCodexModelIds}
