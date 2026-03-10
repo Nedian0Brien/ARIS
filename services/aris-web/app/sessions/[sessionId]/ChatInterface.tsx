@@ -2211,6 +2211,26 @@ export function ChatInterface({
     return readMarker !== snapshot.latestEventId;
   }, [chatReadMarkers, chatSidebarSnapshots]);
 
+  const resolveChatRunPhase = useCallback((chat: SessionChat): ChatRunPhase => {
+    const runtimeUi = chatRuntimeUiByChat[chat.id] ?? DEFAULT_CHAT_RUNTIME_UI_STATE;
+    const snapshot = chatSidebarSnapshots[chat.id];
+    const isActive = chat.id === activeChatIdResolved;
+
+    if (runtimeUi.isAborting) {
+      return 'aborting';
+    }
+    if (runtimeUi.isSubmitting) {
+      return 'submitting';
+    }
+    if ((isActive && runtimeRunning) || Boolean(snapshot?.isRunning)) {
+      return 'running';
+    }
+    if (runtimeUi.isAwaitingReply) {
+      return 'waiting';
+    }
+    return 'idle';
+  }, [activeChatIdResolved, chatRuntimeUiByChat, chatSidebarSnapshots, runtimeRunning]);
+
   const resolveChatSidebarState = useCallback((chat: SessionChat): ChatSidebarState => {
     const isActive = chat.id === activeChatIdResolved;
     const snapshot = chatSidebarSnapshots[chat.id];
@@ -4033,6 +4053,15 @@ export function ChatInterface({
                       ? styles.chatListItemStateError
                       : '';
               const chatPreviewText = resolveChatPreviewText(chat.id);
+              const chatRunPhase = resolveChatRunPhase(chat);
+              const chatRunPhaseLabel = chatRunPhase === 'idle' ? null : CHAT_RUN_PHASE_LABELS[chatRunPhase];
+              const chatRunPhaseClass = chatRunPhase === 'aborting'
+                ? styles.chatListRunPhaseBadgeAborting
+                : chatRunPhase === 'waiting'
+                  ? styles.chatListRunPhaseBadgeWaiting
+                  : chatRunPhase === 'running'
+                    ? styles.chatListRunPhaseBadgeRunning
+                    : styles.chatListRunPhaseBadgeSubmitting;
               const approvalFeedback = approvalFeedbackByChat[chat.id];
               const hasPendingApproval = isActive && pendingPermissions.length > 0;
               const showApprovalPanel = isActive && (
@@ -4088,6 +4117,11 @@ export function ChatInterface({
                         {!isRenaming && (
                           <span className={styles.chatListPreviewRow}>
                             <CornerDownRight size={12} className={styles.chatListPreviewIcon} />
+                            {chatRunPhaseLabel && (
+                              <span className={`${styles.chatListRunPhaseBadge} ${chatRunPhaseClass}`}>
+                                {chatRunPhaseLabel}
+                              </span>
+                            )}
                             <span className={styles.chatListPreviewText}>{chatPreviewText}</span>
                           </span>
                         )}
