@@ -304,73 +304,45 @@
 
 .sidebarSection {
   flex: 0 0 auto;
-  border: 1px solid var(--chat-item-border);
-  border-radius: 12px;
-  background: var(--chat-item-bg);
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
 }
 
-.sidebarSectionToggle {
+.sidebarSectionDivider {
   width: 100%;
-  border: 0;
-  background: var(--chat-surface-subtle);
-  border-bottom: 1px solid var(--chat-item-border);
-  min-height: 38px;
-  padding: 0.42rem 0.52rem;
-  display: inline-flex;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0), rgba(148, 163, 184, 0.42), rgba(148, 163, 184, 0));
+}
+
+.sidebarSectionLabelRow {
+  display: flex;
   align-items: center;
   justify-content: space-between;
-  color: var(--chat-text-primary);
-  cursor: pointer;
+  gap: 0.5rem;
 }
 
-.sidebarSectionToggle:hover {
-  background: rgba(241, 245, 249, 0.96);
-}
-
-.sidebarSectionHeading {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.32rem;
-  font-size: 0.73rem;
+.sidebarSectionLabel {
+  font-size: 0.68rem;
   font-weight: 800;
-  letter-spacing: 0.02em;
-}
-
-.sidebarSectionChevron {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--chat-text-muted);
-  flex: 0 0 auto;
-}
-
-.sidebarSectionHeadingIcon {
-  width: 1.2rem;
-  height: 1.2rem;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.14);
-  color: var(--chat-text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
 }
 
 .sidebarSectionCount {
   min-width: 1.6rem;
-  padding: 0.12rem 0.42rem;
+  padding: 0.08rem 0.4rem;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.16);
+  background: rgba(148, 163, 184, 0.12);
   color: var(--chat-text-muted);
-  font-size: 0.67rem;
-  font-weight: 800;
+  font-size: 0.64rem;
+  font-weight: 700;
   line-height: 1.25;
   text-align: center;
 }
 
 .sidebarSectionBody {
-  padding: 0.45rem;
   display: flex;
   flex-direction: column;
   gap: 0.42rem;

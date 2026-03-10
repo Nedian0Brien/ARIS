@@ -2,16 +2,18 @@ import { useEffect, useState } from 'react';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
 const RUNTIME_POLL_INTERVAL_MS = 1500;
+const runtimeStateCache = new Map<string, boolean>();
 
 export function useSessionRuntime(sessionId: string, chatId?: string | null) {
-  const [isRunning, setIsRunning] = useState(false);
+  const cacheKey = `${sessionId}:${chatId?.trim() || '__default__'}`;
+  const [isRunning, setIsRunning] = useState(() => runtimeStateCache.get(cacheKey) ?? false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
 
   useEffect(() => {
     let disposed = false;
     let inFlight = false;
     let stopped = false;
-    setIsRunning(false);
+    setIsRunning(runtimeStateCache.get(cacheKey) ?? false);
     setRuntimeError(null);
 
     const refresh = async () => {
@@ -43,7 +45,9 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null) {
         }
         const body = (await response.json()) as { isRunning?: boolean };
         if (!disposed) {
-          setIsRunning(Boolean(body.isRunning));
+          const nextIsRunning = Boolean(body.isRunning);
+          runtimeStateCache.set(cacheKey, nextIsRunning);
+          setIsRunning(nextIsRunning);
           setRuntimeError(null);
         }
       } catch (error) {
@@ -65,7 +69,7 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null) {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [sessionId, chatId]);
+  }, [cacheKey, sessionId, chatId]);
 
   return { isRunning, runtimeError };
 }

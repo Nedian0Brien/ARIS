@@ -215,24 +215,11 @@ const DEFAULT_CHAT_RUNTIME_UI_STATE: ChatRuntimeUiState = {
   lastSubmittedPayload: null,
   submitError: null,
 };
-const CHAT_SIDEBAR_SECTION_ORDER: ChatSidebarSectionKey[] = ['pinned', 'running', 'completed', 'history'];
 const CHAT_SIDEBAR_SECTION_LABELS: Record<ChatSidebarSectionKey, string> = {
   pinned: 'Pinned',
   running: 'Running',
   completed: 'Completed',
   history: 'History',
-};
-const CHAT_SIDEBAR_SECTION_ICONS: Record<ChatSidebarSectionKey, React.ComponentType<{ size?: number }>> = {
-  pinned: Pin,
-  running: Activity,
-  completed: CheckCircle2,
-  history: Clock,
-};
-const DEFAULT_SIDEBAR_SECTION_EXPANDED: Record<ChatSidebarSectionKey, boolean> = {
-  pinned: false,
-  running: false,
-  completed: false,
-  history: false,
 };
 
 // --- 3. 런타임 초기화 안전 장치 (TDZ 에러 방지) ---
@@ -1994,9 +1981,6 @@ export function ChatInterface({
   const [chatTitleDraft, setChatTitleDraft] = useState('');
   const [chatMutationLoadingId, setChatMutationLoadingId] = useState<string | null>(null);
   const [chatMutationError, setChatMutationError] = useState<string | null>(null);
-  const [expandedSidebarSections, setExpandedSidebarSections] = useState<Record<ChatSidebarSectionKey, boolean>>(
-    DEFAULT_SIDEBAR_SECTION_EXPANDED,
-  );
   const [chatSidebarSnapshots, setChatSidebarSnapshots] = useState<Record<string, ChatSidebarSnapshot>>(() => {
     const sortedInitialChats = sortSessionChats(initialChats);
     const seeded: Record<string, ChatSidebarSnapshot> = {};
@@ -2092,7 +2076,6 @@ export function ChatInterface({
   const runtimeStartedSinceAwaitingRef = useRef(false);
   const approvalFeedbackTimersRef = useRef<Record<string, number>>({});
   const chatSidebarFetchInFlightRef = useRef<Record<string, boolean>>({});
-  const previousSidebarSectionCountsRef = useRef<Record<ChatSidebarSectionKey, number> | null>(null);
   const readMarkerSyncInFlightRef = useRef<Record<string, boolean>>({});
   const readMarkerSyncedRef = useRef<Record<string, string>>(buildReadMarkerMap(initialChats));
   const snapshotSyncInFlightRef = useRef<Record<string, boolean>>({});
@@ -2337,7 +2320,6 @@ export function ChatInterface({
     approvalFeedbackByChat,
     hasUnreadMessages,
     chatSidebarSnapshots,
-    isAgentRunning,
     pendingPermissions.length,
     resolveChatRunPhase,
     runtimeError,
@@ -2424,7 +2406,7 @@ export function ChatInterface({
       chats: visibleHistoryChats,
       totalCount: groupedSidebarChats.history.length,
     },
-  ]), [groupedSidebarChats, visibleHistoryChats]);
+  ].filter((section) => section.totalCount > 0)), [groupedSidebarChats, visibleHistoryChats]);
   const renderedSidebarChats = useMemo(
     () => [
       ...groupedSidebarChats.pinned,
@@ -2435,12 +2417,6 @@ export function ChatInterface({
     [groupedSidebarChats, visibleHistoryChats],
   );
   const hasMoreChats = groupedSidebarChats.history.length > visibleHistoryChats.length;
-  const toggleSidebarSection = useCallback((sectionKey: ChatSidebarSectionKey) => {
-    setExpandedSidebarSections((prev) => ({
-      ...prev,
-      [sectionKey]: !prev[sectionKey],
-    }));
-  }, []);
 
   const handleSidebarPermissionDecision = useCallback(async (
     chatId: string,
@@ -2512,46 +2488,9 @@ export function ChatInterface({
   }, [groupedSidebarChats.history.length]);
 
   useEffect(() => {
-    const nextCounts = sidebarSections.reduce<Record<ChatSidebarSectionKey, number>>((acc, section) => {
-      acc[section.key] = section.totalCount;
-      return acc;
-    }, {
-      pinned: 0,
-      running: 0,
-      completed: 0,
-      history: 0,
-    });
-
-    setExpandedSidebarSections((prev) => {
-      const previousCounts = previousSidebarSectionCountsRef.current;
-      let changed = false;
-      const nextState = { ...prev };
-
-      for (const key of CHAT_SIDEBAR_SECTION_ORDER) {
-        const nextCount = nextCounts[key];
-        if (!previousCounts) {
-          const shouldBeOpen = nextCount > 0;
-          if (nextState[key] !== shouldBeOpen) {
-            nextState[key] = shouldBeOpen;
-            changed = true;
-          }
-          continue;
-        }
-        if (nextCount > previousCounts[key] && !nextState[key]) {
-          nextState[key] = true;
-          changed = true;
-        }
-      }
-
-      previousSidebarSectionCountsRef.current = nextCounts;
-      return changed ? nextState : prev;
-    });
-  }, [sidebarSections]);
-
-  useEffect(() => {
     const listElement = chatListRef.current;
     const sentinelElement = chatListSentinelRef.current;
-    if (!isChatSidebarOpen || !expandedSidebarSections.history || !listElement || !sentinelElement || !hasMoreChats) {
+    if (!isChatSidebarOpen || !listElement || !sentinelElement || !hasMoreChats) {
       return;
     }
 
@@ -2577,7 +2516,7 @@ export function ChatInterface({
     return () => {
       observer.disconnect();
     };
-  }, [expandedSidebarSections.history, groupedSidebarChats.history.length, hasMoreChats, isChatSidebarOpen]);
+  }, [groupedSidebarChats.history.length, hasMoreChats, isChatSidebarOpen]);
 
   useEffect(() => {
     return () => {
@@ -4248,247 +4187,230 @@ export function ChatInterface({
             <span className={styles.chatSidebarListLabel}>채팅 {chats.length}개</span>
           </div>
           <div ref={chatListRef} className={styles.chatList}>
-            {sidebarSections.map((section) => {
-              const isExpanded = expandedSidebarSections[section.key];
-              const SectionIcon = CHAT_SIDEBAR_SECTION_ICONS[section.key];
+            {sidebarSections.map((section, sectionIndex) => {
               return (
                 <section key={section.key} className={styles.sidebarSection}>
-                  <button
-                    type="button"
-                    className={styles.sidebarSectionToggle}
-                    onClick={() => toggleSidebarSection(section.key)}
-                    aria-expanded={isExpanded}
-                    aria-controls={`chat-sidebar-section-${section.key}`}
-                  >
-                    <span className={styles.sidebarSectionHeading}>
-                      <span className={styles.sidebarSectionChevron}>
-                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                      </span>
-                      <span className={styles.sidebarSectionHeadingIcon}>
-                        <SectionIcon size={13} />
-                      </span>
-                      <span>{section.label}</span>
-                    </span>
+                  {sectionIndex > 0 && <div className={styles.sidebarSectionDivider} aria-hidden="true" />}
+                  <div className={styles.sidebarSectionLabelRow}>
+                    <span className={styles.sidebarSectionLabel}>{section.label}</span>
                     <span className={styles.sidebarSectionCount}>{section.totalCount}</span>
-                  </button>
-                  {isExpanded && (
-                    <div id={`chat-sidebar-section-${section.key}`} className={styles.sidebarSectionBody}>
-                      {section.chats.map((chat) => {
-              const isActive = chat.id === activeChatIdResolved;
-              const isRenaming = renamingChatId === chat.id;
-              const rowAgentMeta = resolveAgentMeta(chat.agent);
-              const RowAgentIcon = rowAgentMeta.Icon;
-              const sidebarState = resolveChatSidebarState(chat);
-              const sidebarStateClass = sidebarState === 'running'
-                ? styles.chatListItemStateRunning
-                : sidebarState === 'completed'
-                  ? styles.chatListItemStateCompleted
-                  : sidebarState === 'approval'
-                    ? styles.chatListItemStateApproval
-                    : sidebarState === 'error'
-                      ? styles.chatListItemStateError
-                      : '';
-              const chatPreviewText = resolveChatPreviewText(chat.id);
-              const chatRunPhase = resolveChatRunPhase(chat);
-              const chatRunPhaseLabel = chatRunPhase === 'idle' ? null : CHAT_RUN_PHASE_LABELS[chatRunPhase];
-              const chatRunStartedAt = (chatRuntimeUiByChat[chat.id]?.awaitingReplySince ?? '').trim() || null;
-              const chatRunPhaseClass = chatRunPhase === 'aborting'
-                ? styles.chatListRunPhaseBadgeAborting
-                : chatRunPhase === 'waiting'
-                  ? styles.chatListRunPhaseBadgeWaiting
-                  : chatRunPhase === 'running'
-                    ? styles.chatListRunPhaseBadgeRunning
-                    : styles.chatListRunPhaseBadgeSubmitting;
-              const approvalFeedback = approvalFeedbackByChat[chat.id];
-              const hasPendingApproval = isActive && pendingPermissions.length > 0;
-              const showApprovalPanel = isActive && (
-                hasPendingApproval
-                || sidebarApprovalLoadingChatId === chat.id
-                || Boolean(approvalFeedback)
-              );
-              const approvalBusy = sidebarApprovalLoadingChatId === chat.id || loadingPermissionId !== null;
-              return (
-                <div
-                  key={chat.id}
-                  className={`${styles.chatListItem} ${isActive ? styles.chatListItemActive : ''} ${sidebarStateClass}`}
-                >
-                  <div className={styles.chatListItemTopRow}>
-                    <button
-                      type="button"
-                      className={styles.chatListMainButton}
-                      onClick={() => goToChat(chat.id)}
-                      title={chat.title}
-                    >
-                      <span className={styles.chatListMainContent}>
-                        <span className={styles.chatListTitleWrap}>
-                          <span className={`${styles.chatListAgentAvatar} ${getAgentAvatarToneClass(rowAgentMeta.tone)}`}>
-                            <RowAgentIcon size={11} />
-                          </span>
-                          {chat.isPinned && <Pin size={12} className={styles.chatListPinIcon} />}
-                          {isRenaming ? (
-                            <input
-                              value={chatTitleDraft}
-                              onChange={(event) => setChatTitleDraft(event.target.value)}
-                              onClick={(event) => event.stopPropagation()}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') {
-                                  event.preventDefault();
-                                  void handleRenameChat(chat.id, chatTitleDraft);
-                                } else if (event.key === 'Escape') {
-                                  setRenamingChatId(null);
-                                  setChatTitleDraft('');
-                                }
-                              }}
-                              onBlur={() => {
-                                if (renamingChatId === chat.id) {
-                                  void handleRenameChat(chat.id, chatTitleDraft);
-                                }
-                              }}
-                              className={styles.chatListRenameInput}
-                              autoFocus
-                            />
-                          ) : (
-                            <span className={styles.chatListTitle}>{chat.title}</span>
-                          )}
-                        </span>
-                        {!isRenaming && (
-                          <span className={styles.chatListPreviewRow}>
-                            <CornerDownRight size={12} className={styles.chatListPreviewIcon} />
-                            {chatRunPhaseLabel && (
-                              <span className={`${styles.chatListRunPhaseBadge} ${chatRunPhaseClass}`}>
-                                {chatRunPhaseLabel}
-                                {chatRunStartedAt && (
-                                  <ElapsedTimer since={chatRunStartedAt} className={styles.chatListRunPhaseElapsed} />
+                  </div>
+                  <div id={`chat-sidebar-section-${section.key}`} className={styles.sidebarSectionBody}>
+                    {section.chats.map((chat) => {
+                      const isActive = chat.id === activeChatIdResolved;
+                      const isRenaming = renamingChatId === chat.id;
+                      const rowAgentMeta = resolveAgentMeta(chat.agent);
+                      const RowAgentIcon = rowAgentMeta.Icon;
+                      const sidebarState = resolveChatSidebarState(chat);
+                      const sidebarStateClass = sidebarState === 'running'
+                        ? styles.chatListItemStateRunning
+                        : sidebarState === 'completed'
+                          ? styles.chatListItemStateCompleted
+                          : sidebarState === 'approval'
+                            ? styles.chatListItemStateApproval
+                            : sidebarState === 'error'
+                              ? styles.chatListItemStateError
+                              : '';
+                      const chatPreviewText = resolveChatPreviewText(chat.id);
+                      const chatRunPhase = resolveChatRunPhase(chat);
+                      const chatRunPhaseLabel = chatRunPhase === 'idle' ? null : CHAT_RUN_PHASE_LABELS[chatRunPhase];
+                      const chatRunStartedAt = (chatRuntimeUiByChat[chat.id]?.awaitingReplySince ?? '').trim() || null;
+                      const chatRunPhaseClass = chatRunPhase === 'aborting'
+                        ? styles.chatListRunPhaseBadgeAborting
+                        : chatRunPhase === 'waiting'
+                          ? styles.chatListRunPhaseBadgeWaiting
+                          : chatRunPhase === 'running'
+                            ? styles.chatListRunPhaseBadgeRunning
+                            : styles.chatListRunPhaseBadgeSubmitting;
+                      const approvalFeedback = approvalFeedbackByChat[chat.id];
+                      const hasPendingApproval = isActive && pendingPermissions.length > 0;
+                      const showApprovalPanel = isActive && (
+                        hasPendingApproval
+                        || sidebarApprovalLoadingChatId === chat.id
+                        || Boolean(approvalFeedback)
+                      );
+                      const approvalBusy = sidebarApprovalLoadingChatId === chat.id || loadingPermissionId !== null;
+                      return (
+                        <div
+                          key={chat.id}
+                          className={`${styles.chatListItem} ${isActive ? styles.chatListItemActive : ''} ${sidebarStateClass}`}
+                        >
+                          <div className={styles.chatListItemTopRow}>
+                            <button
+                              type="button"
+                              className={styles.chatListMainButton}
+                              onClick={() => goToChat(chat.id)}
+                              title={chat.title}
+                            >
+                              <span className={styles.chatListMainContent}>
+                                <span className={styles.chatListTitleWrap}>
+                                  <span className={`${styles.chatListAgentAvatar} ${getAgentAvatarToneClass(rowAgentMeta.tone)}`}>
+                                    <RowAgentIcon size={11} />
+                                  </span>
+                                  {chat.isPinned && <Pin size={12} className={styles.chatListPinIcon} />}
+                                  {isRenaming ? (
+                                    <input
+                                      value={chatTitleDraft}
+                                      onChange={(event) => setChatTitleDraft(event.target.value)}
+                                      onClick={(event) => event.stopPropagation()}
+                                      onKeyDown={(event) => {
+                                        if (event.key === 'Enter') {
+                                          event.preventDefault();
+                                          void handleRenameChat(chat.id, chatTitleDraft);
+                                        } else if (event.key === 'Escape') {
+                                          setRenamingChatId(null);
+                                          setChatTitleDraft('');
+                                        }
+                                      }}
+                                      onBlur={() => {
+                                        if (renamingChatId === chat.id) {
+                                          void handleRenameChat(chat.id, chatTitleDraft);
+                                        }
+                                      }}
+                                      className={styles.chatListRenameInput}
+                                      autoFocus
+                                    />
+                                  ) : (
+                                    <span className={styles.chatListTitle}>{chat.title}</span>
+                                  )}
+                                </span>
+                                {!isRenaming && (
+                                  <span className={styles.chatListPreviewRow}>
+                                    <CornerDownRight size={12} className={styles.chatListPreviewIcon} />
+                                    {chatRunPhaseLabel && (
+                                      <span className={`${styles.chatListRunPhaseBadge} ${chatRunPhaseClass}`}>
+                                        {chatRunPhaseLabel}
+                                        {chatRunStartedAt && (
+                                          <ElapsedTimer since={chatRunStartedAt} className={styles.chatListRunPhaseElapsed} />
+                                        )}
+                                      </span>
+                                    )}
+                                    <span className={styles.chatListPreviewText}>{chatPreviewText}</span>
+                                  </span>
                                 )}
                               </span>
+                              <RelativeTime timestamp={chat.lastActivityAt || chat.createdAt} className={styles.chatListTime} />
+                            </button>
+                            {!isRenaming && (
+                              <div className={styles.chatListMenuWrap}>
+                                <button
+                                  type="button"
+                                  className={styles.chatListMenuButton}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    if (chatActionMenuId === chat.id) {
+                                      setChatActionMenuId(null);
+                                      setChatActionMenuRect(null);
+                                    } else {
+                                      setChatActionMenuId(chat.id);
+                                      setChatActionMenuRect(event.currentTarget.getBoundingClientRect());
+                                    }
+                                  }}
+                                  title="채팅 메뉴"
+                                >
+                                  <MoreVertical size={15} />
+                                </button>
+                                {isMounted && chatActionMenuId === chat.id && chatActionMenuRect && createPortal(
+                                  <div className={styles.chatShell}>
+                                    <div
+                                      ref={chatActionMenuRef}
+                                      className={styles.chatListMenuPanel}
+                                      style={{
+                                        position: 'fixed',
+                                        top: `${chatActionMenuRect.bottom + 4}px`,
+                                        left: `${chatActionMenuRect.right - 140}px`, // 140px is panel width
+                                        zIndex: 9999,
+                                      }}
+                                    >
+                                      <button
+                                        type="button"
+                                        className={styles.chatListMenuItem}
+                                        onClick={() => {
+                                          setRenamingChatId(chat.id);
+                                          setChatTitleDraft(chat.title);
+                                          setChatActionMenuId(null);
+                                          setChatActionMenuRect(null);
+                                        }}
+                                      >
+                                        <Pencil size={14} />
+                                        이름 변경
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className={styles.chatListMenuItem}
+                                        onClick={() => void handleToggleChatPin(chat)}
+                                        disabled={chatMutationLoadingId === chat.id}
+                                      >
+                                        <Pin size={14} />
+                                        {chat.isPinned ? '고정 해제' : '고정'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className={`${styles.chatListMenuItem} ${styles.chatListMenuDelete}`}
+                                        onClick={() => void handleDeleteChat(chat)}
+                                        disabled={chatMutationLoadingId === chat.id}
+                                      >
+                                        <Trash2 size={14} />
+                                        삭제
+                                      </button>
+                                    </div>
+                                  </div>,
+                                  document.body,
+                                )}
+                              </div>
                             )}
-                            <span className={styles.chatListPreviewText}>{chatPreviewText}</span>
-                          </span>
-                        )}
-                      </span>
-                      <RelativeTime timestamp={chat.lastActivityAt || chat.createdAt} className={styles.chatListTime} />
-                    </button>
-                    {!isRenaming && (
-                      <div className={styles.chatListMenuWrap}>
-                        <button
-                          type="button"
-                          className={styles.chatListMenuButton}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            if (chatActionMenuId === chat.id) {
-                              setChatActionMenuId(null);
-                              setChatActionMenuRect(null);
-                            } else {
-                              setChatActionMenuId(chat.id);
-                              setChatActionMenuRect(event.currentTarget.getBoundingClientRect());
-                            }
-                          }}
-                          title="채팅 메뉴"
-                        >
-                          <MoreVertical size={15} />
-                        </button>
-                        {isMounted && chatActionMenuId === chat.id && chatActionMenuRect && createPortal(
-                          <div className={styles.chatShell}>
-                            <div
-                              ref={chatActionMenuRef}
-                              className={styles.chatListMenuPanel}
-                              style={{
-                                position: 'fixed',
-                                top: `${chatActionMenuRect.bottom + 4}px`,
-                                left: `${chatActionMenuRect.right - 140}px`, // 140px is panel width
-                                zIndex: 9999
-                              }}
-                            >
-                              <button
-                                type="button"
-                                className={styles.chatListMenuItem}
-                                onClick={() => {
-                                  setRenamingChatId(chat.id);
-                                  setChatTitleDraft(chat.title);
-                                  setChatActionMenuId(null);
-                                  setChatActionMenuRect(null);
-                                }}
-                              >
-                                <Pencil size={14} />
-                                이름 변경
-                              </button>
-                              <button
-                                type="button"
-                                className={styles.chatListMenuItem}
-                                onClick={() => void handleToggleChatPin(chat)}
-                                disabled={chatMutationLoadingId === chat.id}
-                              >
-                                <Pin size={14} />
-                                {chat.isPinned ? '고정 해제' : '고정'}
-                              </button>
-                              <button
-                                type="button"
-                                className={`${styles.chatListMenuItem} ${styles.chatListMenuDelete}`}
-                                onClick={() => void handleDeleteChat(chat)}
-                                disabled={chatMutationLoadingId === chat.id}
-                              >
-                                <Trash2 size={14} />
-                                삭제
-                              </button>
+                          </div>
+                          <div className={`${styles.chatListApprovalWrap} ${showApprovalPanel ? styles.chatListApprovalWrapOpen : ''}`}>
+                            <div className={styles.chatListApprovalInner}>
+                              {approvalFeedback ? (
+                                <div
+                                  className={`${styles.chatListApprovalResult} ${
+                                    approvalFeedback === 'approved'
+                                      ? styles.chatListApprovalResultApproved
+                                      : styles.chatListApprovalResultDenied
+                                  }`}
+                                >
+                                  {approvalFeedback === 'approved' ? '승인됨' : '거부됨'}
+                                </div>
+                              ) : (
+                                <div className={styles.chatListApprovalButtons}>
+                                  <button
+                                    type="button"
+                                    className={styles.chatListApprovalButton}
+                                    onClick={() => { void handleSidebarPermissionDecision(chat.id, 'allow_once'); }}
+                                    disabled={!hasPendingApproval || approvalBusy}
+                                  >
+                                    {approvalBusy ? '처리 중...' : '승인'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={styles.chatListApprovalButton}
+                                    onClick={() => { void handleSidebarPermissionDecision(chat.id, 'allow_session'); }}
+                                    disabled={!hasPendingApproval || approvalBusy}
+                                  >
+                                    항상 승인
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`${styles.chatListApprovalButton} ${styles.chatListApprovalButtonDeny}`}
+                                    onClick={() => { void handleSidebarPermissionDecision(chat.id, 'deny'); }}
+                                    disabled={!hasPendingApproval || approvalBusy}
+                                  >
+                                    거부
+                                  </button>
+                                </div>
+                              )}
                             </div>
-                          </div>,
-                          document.body
-                        )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {section.key === 'history' && hasMoreChats && (
+                      <div ref={chatListSentinelRef} className={styles.chatSidebarInfiniteSentinel}>
+                        이전 채팅 불러오는 중...
                       </div>
                     )}
                   </div>
-                  <div className={`${styles.chatListApprovalWrap} ${showApprovalPanel ? styles.chatListApprovalWrapOpen : ''}`}>
-                    <div className={styles.chatListApprovalInner}>
-                      {approvalFeedback ? (
-                        <div
-                          className={`${styles.chatListApprovalResult} ${
-                            approvalFeedback === 'approved'
-                              ? styles.chatListApprovalResultApproved
-                              : styles.chatListApprovalResultDenied
-                          }`}
-                        >
-                          {approvalFeedback === 'approved' ? '승인됨' : '거부됨'}
-                        </div>
-                      ) : (
-                        <div className={styles.chatListApprovalButtons}>
-                          <button
-                            type="button"
-                            className={styles.chatListApprovalButton}
-                            onClick={() => { void handleSidebarPermissionDecision(chat.id, 'allow_once'); }}
-                            disabled={!hasPendingApproval || approvalBusy}
-                          >
-                            {approvalBusy ? '처리 중...' : '승인'}
-                          </button>
-                          <button
-                            type="button"
-                            className={styles.chatListApprovalButton}
-                            onClick={() => { void handleSidebarPermissionDecision(chat.id, 'allow_session'); }}
-                            disabled={!hasPendingApproval || approvalBusy}
-                          >
-                            항상 승인
-                          </button>
-                          <button
-                            type="button"
-                            className={`${styles.chatListApprovalButton} ${styles.chatListApprovalButtonDeny}`}
-                            onClick={() => { void handleSidebarPermissionDecision(chat.id, 'deny'); }}
-                            disabled={!hasPendingApproval || approvalBusy}
-                          >
-                            거부
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-                      })}
-                      {section.key === 'history' && hasMoreChats && (
-                        <div ref={chatListSentinelRef} className={styles.chatSidebarInfiniteSentinel}>
-                          이전 채팅 불러오는 중...
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </section>
               );
             })}
