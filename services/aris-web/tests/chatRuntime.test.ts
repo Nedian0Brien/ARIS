@@ -4,6 +4,7 @@ import {
   hasFinalAgentReplySince,
   isFinalAgentReplyEvent,
   readUiEventStreamEvent,
+  resolveChatRunPhase,
 } from '@/lib/happy/chatRuntime';
 import type { UiEvent } from '@/lib/happy/types';
 
@@ -88,5 +89,25 @@ describe('chatRuntime helpers', () => {
     ];
 
     expect(hasFinalAgentReplySince(events, '2026-03-10T02:00:00.000Z')).toBe(false);
+  });
+
+  it('keeps the run phase active while runtime is still running after completion signal', () => {
+    expect(resolveChatRunPhase({
+      isSubmitting: false,
+      isAwaitingReply: true,
+      isAborting: false,
+      hasCompletionSignal: true,
+      runtimeRunning: true,
+    })).toBe('running');
+  });
+
+  it('falls back to idle once runtime stops after completion signal', () => {
+    expect(resolveChatRunPhase({
+      isSubmitting: false,
+      isAwaitingReply: true,
+      isAborting: false,
+      hasCompletionSignal: true,
+      runtimeRunning: false,
+    })).toBe('idle');
   });
 });

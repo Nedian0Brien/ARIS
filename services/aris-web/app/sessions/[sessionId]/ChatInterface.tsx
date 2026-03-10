@@ -10,6 +10,8 @@ import {
   hasAgentCompletionSignal,
   hasFinalAgentReplySince,
   readUiEventStreamEvent,
+  resolveChatRunPhase,
+  type ResolvedChatRunPhase,
 } from '@/lib/happy/chatRuntime';
 import {
   deriveOpenAiModelLabel,
@@ -167,7 +169,7 @@ type ComposerModelId = string;
 type ContextItem =
   | { id: string; type: 'file'; path: string; content: string; name: string }
   | { id: string; type: 'text'; text: string };
-type ChatRunPhase = 'idle' | keyof typeof CHAT_RUN_PHASE_LABELS;
+type ChatRunPhase = ResolvedChatRunPhase;
 type ChatSidebarState = 'default' | 'running' | 'completed' | 'approval' | 'error';
 type ChatSidebarSectionKey = 'pinned' | 'running' | 'completed' | 'history';
 type ChatSidebarSnapshot = {
@@ -2096,17 +2098,13 @@ export function ChatInterface({
     : undefined;
   const agentMeta = resolveAgentMeta(activeAgentFlavor);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? runtimeError ?? null;
-  const runPhase: ChatRunPhase = isAborting
-    ? 'aborting'
-    : isSubmitting
-      ? 'submitting'
-      : hasCompletionSignal
-        ? 'idle'
-      : runtimeRunning
-        ? 'running'
-        : isAwaitingReply
-          ? 'waiting'
-          : 'idle';
+  const runPhase: ChatRunPhase = resolveChatRunPhase({
+    isAborting,
+    isSubmitting,
+    hasCompletionSignal,
+    runtimeRunning,
+    isAwaitingReply,
+  });
   const runPhaseLabel = runPhase === 'idle' ? null : CHAT_RUN_PHASE_LABELS[runPhase];
   const isRunActive = runPhase === 'submitting' || runPhase === 'running' || runPhase === 'aborting';
   const isAgentRunning = runPhase !== 'idle';
@@ -2266,22 +2264,13 @@ export function ChatInterface({
     const snapshot = chatSidebarSnapshots[chat.id];
     const isActive = chat.id === activeChatIdResolved;
 
-    if (runtimeUi.isAborting) {
-      return 'aborting';
-    }
-    if (runtimeUi.isSubmitting) {
-      return 'submitting';
-    }
-    if (runtimeUi.hasCompletionSignal) {
-      return 'idle';
-    }
-    if ((isActive && runtimeRunning) || Boolean(snapshot?.isRunning)) {
-      return 'running';
-    }
-    if (runtimeUi.isAwaitingReply) {
-      return 'waiting';
-    }
-    return 'idle';
+    return resolveChatRunPhase({
+      isAborting: runtimeUi.isAborting,
+      isSubmitting: runtimeUi.isSubmitting,
+      hasCompletionSignal: runtimeUi.hasCompletionSignal,
+      runtimeRunning: (isActive && runtimeRunning) || Boolean(snapshot?.isRunning),
+      isAwaitingReply: runtimeUi.isAwaitingReply,
+    });
   }, [activeChatIdResolved, chatRuntimeUiByChat, chatSidebarSnapshots, runtimeRunning]);
 
   const resolveChatSidebarState = useCallback((chat: SessionChat): ChatSidebarState => {

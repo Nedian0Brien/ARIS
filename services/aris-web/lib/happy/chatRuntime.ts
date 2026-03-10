@@ -1,5 +1,15 @@
 import type { UiEvent } from '@/lib/happy/types';
 
+export type ResolvedChatRunPhase = 'idle' | 'submitting' | 'waiting' | 'running' | 'aborting';
+
+type ResolveChatRunPhaseInput = {
+  isSubmitting: boolean;
+  isAwaitingReply: boolean;
+  isAborting: boolean;
+  hasCompletionSignal: boolean;
+  runtimeRunning: boolean;
+};
+
 function isUserEvent(event: UiEvent): boolean {
   return event.meta?.role === 'user';
 }
@@ -102,4 +112,23 @@ export function hasFinalAgentReplySince(events: UiEvent[], since: string | null)
   }
 
   return events.some((event) => isFinalAgentReplyEvent(event) && isOnOrAfter(event.timestamp, since));
+}
+
+export function resolveChatRunPhase(input: ResolveChatRunPhaseInput): ResolvedChatRunPhase {
+  if (input.isAborting) {
+    return 'aborting';
+  }
+  if (input.isSubmitting) {
+    return 'submitting';
+  }
+  if (input.runtimeRunning) {
+    return 'running';
+  }
+  if (input.hasCompletionSignal) {
+    return 'idle';
+  }
+  if (input.isAwaitingReply) {
+    return 'waiting';
+  }
+  return 'idle';
 }
