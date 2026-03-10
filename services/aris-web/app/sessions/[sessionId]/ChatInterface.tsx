@@ -96,6 +96,12 @@ const SIDEBAR_CHAT_PAGE_SIZE = 7;
 const SIDEBAR_RECENTS_LIMIT = 7;
 const SIDEBAR_APPROVAL_FEEDBACK_MS = 3000;
 const SIDEBAR_STATUS_REFRESH_MS = 5000;
+const CHAT_RUN_PHASE_LABELS = {
+  submitting: '전송 중',
+  waiting: '응답 대기 중',
+  running: '응답 생성 중',
+  aborting: '중단 중',
+} as const;
 const CHAT_AGENT_CHOICES: AgentFlavor[] = ['codex', 'claude', 'gemini'];
 
 const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
@@ -151,6 +157,7 @@ type ComposerModelId = string;
 type ContextItem =
   | { id: string; type: 'file'; path: string; content: string; name: string }
   | { id: string; type: 'text'; text: string };
+type ChatRunPhase = 'idle' | keyof typeof CHAT_RUN_PHASE_LABELS;
 type ChatSidebarState = 'default' | 'running' | 'completed' | 'approval' | 'error';
 type ChatSidebarSnapshot = {
   preview: string;
@@ -2043,15 +2050,25 @@ export function ChatInterface({
     : undefined;
   const agentMeta = resolveAgentMeta(activeAgentFlavor);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? runtimeError ?? null;
-  const isRunActive = isSubmitting || runtimeRunning || isAborting;
-  const isAgentRunning = isRunActive || isAwaitingReply;
+  const runPhase: ChatRunPhase = isAborting
+    ? 'aborting'
+    : isSubmitting
+      ? 'submitting'
+      : runtimeRunning
+        ? 'running'
+        : isAwaitingReply
+          ? 'waiting'
+          : 'idle';
+  const runPhaseLabel = runPhase === 'idle' ? null : CHAT_RUN_PHASE_LABELS[runPhase];
+  const isRunActive = runPhase === 'submitting' || runPhase === 'running' || runPhase === 'aborting';
+  const isAgentRunning = runPhase !== 'idle';
   const connectionState: 'running' | 'connected' | 'degraded' = isAgentRunning
     ? 'running'
     : runtimeNotice
       ? 'degraded'
       : 'connected';
   const connectionLabel = connectionState === 'running'
-    ? '실행 중'
+    ? (runPhaseLabel ?? '실행 중')
     : connectionState === 'connected'
       ? '정상 연결'
       : '응답 지연 또는 연결 확인 필요';
@@ -4547,7 +4564,7 @@ export function ChatInterface({
                       <span className={styles.runningDots} aria-hidden>
                         <span /><span /><span />
                       </span>
-                      실행 중
+                      {runPhaseLabel ?? '실행 중'}
                     </div>
                   )}
                 </div>
