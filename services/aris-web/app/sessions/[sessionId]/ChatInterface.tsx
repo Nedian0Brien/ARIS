@@ -6,6 +6,11 @@ import { useRouter } from 'next/navigation';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
+import {
+  deriveOpenAiModelLabel,
+  type ModelSettingsResponse,
+  type ProviderModelSelections,
+} from '@/lib/settings/providerModels';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import {
   Activity,
@@ -349,15 +354,43 @@ function normalizeModelReasoningEffort(value: unknown, fallback: ModelReasoningE
   return fallback;
 }
 
-type CustomModels = Record<string, string>;
+function isSupportedAgentFlavor(value: AgentFlavor): value is 'codex' | 'claude' | 'gemini' {
+  return value === 'codex' || value === 'claude' || value === 'gemini';
+}
 
-function resolveComposerModels(agent: AgentFlavor, customModels?: CustomModels): ComposerModelOption[] {
-  const baseModels = (agent === 'claude' || agent === 'codex' || agent === 'gemini')
+type LegacyCustomModels = Record<string, string>;
+
+function resolveComposerModels(
+  agent: AgentFlavor,
+  providerSelections?: ProviderModelSelections,
+  legacyCustomModels?: LegacyCustomModels,
+): ComposerModelOption[] {
+  const baseModels = isSupportedAgentFlavor(agent)
     ? COMPOSER_MODELS_BY_AGENT[agent]
     : COMPOSER_MODELS_BY_AGENT.codex;
 
-  if (customModels) {
-    const customId = customModels[agent];
+  const selectedModelIds = isSupportedAgentFlavor(agent)
+    ? (providerSelections?.[agent]?.selectedModelIds ?? [])
+    : [];
+  if (selectedModelIds.length > 0) {
+    return selectedModelIds.map((modelId: string, index: number) => {
+      const baseMatch = baseModels.find((item) => item.id === modelId);
+      if (baseMatch) {
+        return {
+          ...baseMatch,
+          badge: index === 0 ? '등록됨' : baseMatch.badge,
+        };
+      }
+      return {
+        id: modelId,
+        shortLabel: agent === 'codex' ? deriveOpenAiModelLabel(modelId) : modelId,
+        badge: index === 0 ? '등록됨' : '선택됨',
+      };
+    });
+  }
+
+  if (legacyCustomModels) {
+    const customId = legacyCustomModels[agent];
     if (customId && customId.trim() !== '') {
       const trimmed = customId.trim();
       return [{ id: trimmed, shortLabel: trimmed, badge: '커스텀' }, ...baseModels.filter(m => m.id !== trimmed)];
@@ -366,8 +399,32 @@ function resolveComposerModels(agent: AgentFlavor, customModels?: CustomModels):
   return baseModels;
 }
 
-function resolveDefaultModelId(agent: AgentFlavor, customModels?: CustomModels): string {
-  return resolveComposerModels(agent, customModels)[0]?.id ?? 'gpt-5.3-codex';
+function resolveDefaultModelId(
+  agent: AgentFlavor,
+  providerSelections?: ProviderModelSelections,
+  legacyCustomModels?: LegacyCustomModels,
+): string {
+  return resolveComposerModels(agent, providerSelections, legacyCustomModels)[0]?.id ?? 'gpt-5.4';
+}
+
+function resolveAvailableComposerModelId(input: {
+  agent: AgentFlavor;
+  requestedModel?: unknown;
+  sessionModelFallback?: unknown;
+  providerSelections?: ProviderModelSelections;
+  legacyCustomModels?: LegacyCustomModels;
+}): string {
+  const availableModels = resolveComposerModels(input.agent, input.providerSelections, input.legacyCustomModels);
+  const availableIds = new Set(availableModels.map((model) => model.id));
+  const requestedModel = normalizeModelId(input.requestedModel);
+  if (requestedModel && availableIds.has(requestedModel)) {
+    return requestedModel;
+  }
+  const sessionModelFallback = normalizeModelId(input.sessionModelFallback);
+  if (sessionModelFallback && availableIds.has(sessionModelFallback)) {
+    return sessionModelFallback;
+  }
+  return availableModels[0]?.id ?? 'gpt-5.4';
 }
 
 function isUserEvent(event: UiEvent): boolean {
@@ -1804,29 +1861,17 @@ export function ChatInterface({
   approvalPolicy?: ApprovalPolicy;
 }) {
   const router = useRouter();
-  const [customModels, setCustomModels] = useState<CustomModels>({});
+  const [modelSettings, setModelSettings] = useState<ModelSettingsResponse | null>(null);
   
   useEffect(() => {
     fetch('/api/settings/models')
       .then((r) => r.json())
       .then((data) => {
         if (!data.error) {
-          setCustomModels({
-            codex: data.codex || '',
-            claude: data.claude || '',
-            gemini: data.gemini || '',
-          });
+          setModelSettings(data);
         }
       })
-      .catch(() => {
-        // Fallback to localStorage if API fails (e.g. network issue)
-        try {
-          const stored = localStorage.getItem('customAiModels');
-          if (stored) {
-            setCustomModels(JSON.parse(stored));
-          }
-        } catch {}
-      });
+      .catch(() => {});
   }, []);
 
   const [chats, setChats] = useState<SessionChat[]>(() => sortSessionChats(initialChats));
@@ -1984,9 +2029,11 @@ export function ChatInterface({
     const sessionAgent = normalizeAgentFlavor(agentFlavor, 'codex');
     const initialAgent = normalizeAgentFlavor(initialChat?.agent, sessionAgent);
     const sessionModelFallback = initialAgent === sessionAgent ? normalizeModelId(sessionModel) : null;
-    return normalizeModelId(initialChat?.model)
-      ?? sessionModelFallback
-      ?? resolveDefaultModelId(initialAgent, customModels);
+    return resolveAvailableComposerModelId({
+      agent: initialAgent,
+      requestedModel: initialChat?.model,
+      sessionModelFallback,
+    });
   });
   const [selectedModelReasoningEffort, setSelectedModelReasoningEffort] = useState<ModelReasoningEffort>(() => {
     const sortedInitialChats = sortSessionChats(initialChats);
@@ -2035,9 +2082,15 @@ export function ChatInterface({
   const snapshotSyncedEventRef = useRef<Record<string, string>>({});
 
   const defaultAgentFlavor = normalizeAgentFlavor(agentFlavor, 'codex');
+  const providerSelections = modelSettings?.providers;
+  const legacyCustomModels = modelSettings?.legacyCustomModels;
   const activeAgentFlavor = normalizeAgentFlavor(activeChat?.agent, defaultAgentFlavor);
-  const activeComposerModels = useMemo(() => resolveComposerModels(activeAgentFlavor, customModels), [activeAgentFlavor, customModels]);
-  const activeModelId = normalizeModelId(selectedModelId) ?? resolveDefaultModelId(activeAgentFlavor, customModels);
+  const activeComposerModels = useMemo(
+    () => resolveComposerModels(activeAgentFlavor, providerSelections, legacyCustomModels),
+    [activeAgentFlavor, legacyCustomModels, providerSelections],
+  );
+  const activeModelId = normalizeModelId(selectedModelId)
+    ?? resolveDefaultModelId(activeAgentFlavor, providerSelections, legacyCustomModels);
   const codexReasoningEffort = activeAgentFlavor === 'codex'
     ? selectedModelReasoningEffort
     : undefined;
@@ -2108,14 +2161,18 @@ export function ChatInterface({
     const sessionModelFallback = activeAgentFlavor === defaultAgentFlavor
       ? normalizeModelId(sessionModel)
       : null;
-    const nextModelId = normalizeModelId(activeChat?.model)
-      ?? sessionModelFallback
-      ?? resolveDefaultModelId(activeAgentFlavor, customModels);
+    const nextModelId = resolveAvailableComposerModelId({
+      agent: activeAgentFlavor,
+      requestedModel: activeChat?.model,
+      sessionModelFallback,
+      providerSelections,
+      legacyCustomModels,
+    });
     if (nextModelId === selectedModelId) {
       return;
     }
     setSelectedModelId(nextModelId);
-  }, [activeAgentFlavor, activeChat?.id, activeChat?.model, defaultAgentFlavor, selectedModelId, sessionModel]);
+  }, [activeAgentFlavor, activeChat?.id, activeChat?.model, defaultAgentFlavor, legacyCustomModels, providerSelections, selectedModelId, sessionModel]);
 
   useEffect(() => {
     if (activeAgentFlavor !== 'codex') {
@@ -3534,7 +3591,7 @@ export function ChatInterface({
     setIsCreatingChat(true);
     setChatMutationError(null);
     setIsCreateChatMenuOpen(false);
-    const defaultModelId = resolveDefaultModelId(agent, customModels);
+    const defaultModelId = resolveDefaultModelId(agent, providerSelections, legacyCustomModels);
     try {
       const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`, {
         method: 'POST',
@@ -3556,7 +3613,7 @@ export function ChatInterface({
     } finally {
       setIsCreatingChat(false);
     }
-  }, [customModels, goToChat, isCreatingChat, selectedModelReasoningEffort, sessionId]);
+  }, [goToChat, isCreatingChat, legacyCustomModels, providerSelections, selectedModelReasoningEffort, sessionId]);
 
   const handleToggleChatPin = useCallback(async (chat: SessionChat) => {
     setChatMutationLoadingId(chat.id);
@@ -3680,7 +3737,8 @@ export function ChatInterface({
       )).join('\n') + '\n\n'
       : '';
     const finalText = contextPrefix + promptText;
-    const submitModelId = normalizeModelId(selectedModelId) ?? resolveDefaultModelId(activeAgentFlavor, customModels);
+    const submitModelId = normalizeModelId(selectedModelId)
+      ?? resolveDefaultModelId(activeAgentFlavor, providerSelections, legacyCustomModels);
     const submitModelReasoningEffort = codexReasoningEffort;
 
     const awaitingSince = new Date().toISOString();

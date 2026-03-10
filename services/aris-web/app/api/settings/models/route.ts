@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/db/prisma';
 import { getCurrentUserFromCookies } from '@/lib/auth/session';
-import { sanitizeCustomModel } from '@/lib/happy/modelPolicy';
+import { saveUserModelSettings, getUserModelSettings } from '@/lib/settings/providerPreferences';
+import { normalizePartialProviderModelSelections } from '@/lib/settings/providerModels';
 
 export async function GET() {
   try {
@@ -10,23 +10,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const pref = await prisma.uiPreference.findUnique({
-      where: { userId: session.id },
-      select: { customAiModels: true },
-    });
-
-    const rawModels = pref?.customAiModels
-      ? (typeof pref.customAiModels === 'string' ? JSON.parse(pref.customAiModels) : pref.customAiModels)
-      : {};
-    const customAiModels = {
-      codex: sanitizeCustomModel((rawModels as Record<string, unknown>)?.codex) ?? '',
-      claude: sanitizeCustomModel((rawModels as Record<string, unknown>)?.claude) ?? '',
-      gemini: sanitizeCustomModel((rawModels as Record<string, unknown>)?.gemini) ?? '',
-    };
-
-    return NextResponse.json(customAiModels);
+    return NextResponse.json(await getUserModelSettings(session.id));
   } catch (error) {
-    console.error('Failed to get custom models:', error);
+    console.error('Failed to get model settings:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
@@ -38,27 +24,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { codex, claude, gemini } = body;
+    const body = await request.json().catch(() => ({}));
+    const rawProviders = body?.providers;
+    const rawLegacyCustomModels = body?.legacyCustomModels;
+    const providers = normalizePartialProviderModelSelections(rawProviders);
 
-    const customModels = {
-      codex: sanitizeCustomModel(codex) ?? '',
-      claude: sanitizeCustomModel(claude) ?? '',
-      gemini: sanitizeCustomModel(gemini) ?? '',
-    };
-
-    await prisma.uiPreference.upsert({
-      where: { userId: session.id },
-      update: { customAiModels: customModels },
-      create: {
-        userId: session.id,
-        customAiModels: customModels,
-      },
+    await saveUserModelSettings({
+      userId: session.id,
+      providers,
+      legacyCustomModels: rawLegacyCustomModels,
     });
 
-    return NextResponse.json({ success: true, customModels });
+    return NextResponse.json(await getUserModelSettings(session.id));
   } catch (error) {
-    console.error('Failed to save custom models:', error);
+    console.error('Failed to save model settings:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

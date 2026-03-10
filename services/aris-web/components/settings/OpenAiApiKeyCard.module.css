@@ -1,0 +1,218 @@
+.card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(16, 163, 127, 0.18), transparent 38%),
+    linear-gradient(180deg, rgba(8, 18, 17, 0.96), rgba(10, 24, 22, 0.98));
+  box-shadow: 0 22px 44px rgba(2, 8, 23, 0.16);
+  color: #effcf7;
+}
+
+.inner {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.titleWrap {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(216, 250, 230, 0.8);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.18rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.description {
+  margin: 0;
+  max-width: 42rem;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: rgba(226, 252, 239, 0.76);
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 88px;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 1px solid rgba(167, 243, 208, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.statusActive {
+  color: #d1fae5;
+  background: rgba(16, 185, 129, 0.14);
+}
+
+.statusInactive {
+  color: rgba(236, 253, 245, 0.8);
+}
+
+.securityGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.securityItem {
+  display: grid;
+  gap: 0.32rem;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(167, 243, 208, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.securityLabel {
+  font-size: 0.74rem;
+  color: rgba(216, 250, 230, 0.72);
+}
+
+.securityValue {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #f0fdf4;
+}
+
+.form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(236, 253, 245, 0.84);
+  margin-bottom: 0.42rem;
+}
+
+.inputRow {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.88rem 1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(167, 243, 208, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f0fdf4;
+  font-size: 0.92rem;
+  outline: none;
+}
+
+.input::placeholder {
+  color: rgba(226, 252, 239, 0.4);
+}
+
+.input:focus {
+  border-color: rgba(52, 211, 153, 0.68);
+  box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.14);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.primaryButton,
+.ghostButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 44px;
+  padding: 0.75rem 1.05rem;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.primaryButton {
+  color: #052e16;
+  background: linear-gradient(135deg, #6ee7b7, #34d399);
+  box-shadow: 0 12px 24px rgba(16, 185, 129, 0.22);
+}
+
+.ghostButton {
+  color: #dcfce7;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(167, 243, 208, 0.18);
+}
+
+.primaryButton:hover:not(:disabled),
+.ghostButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.primaryButton:disabled,
+.ghostButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.feedback {
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.feedbackOk {
+  color: #bbf7d0;
+}
+
+.feedbackErr {
+  color: #fecaca;
+}
+
+@media (max-width: 860px) {
+  .securityGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .inputRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
