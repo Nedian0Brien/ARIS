@@ -38,9 +38,14 @@ export function OpenAiApiKeyCard({
 
   const isCodex = activeProvider === 'codex';
   const providerTitle = activeProvider === 'claude' ? 'Claude' : activeProvider === 'gemini' ? 'Gemini' : 'Codex';
+  const themeClass = activeProvider === 'claude'
+    ? styles.themeClaude
+    : activeProvider === 'gemini'
+      ? styles.themeGemini
+      : styles.themeCodex;
 
   return (
-    <section className={styles.card}>
+    <section className={`${styles.card} ${themeClass}`}>
       <div className={styles.inner}>
         <div className={styles.header}>
           <div className={styles.titleWrap}>
@@ -99,6 +104,12 @@ export function OpenAiApiKeyCard({
             </div>
 
             <div className={styles.form}>
+              {hasKey ? (
+                <div className={styles.keySet}>
+                  <CheckCircle2 size={14} />
+                  키가 등록되어 있습니다.
+                </div>
+              ) : null}
               <div>
                 <label className={styles.label}>OpenAI API Key</label>
                 <div className={styles.inputRow}>

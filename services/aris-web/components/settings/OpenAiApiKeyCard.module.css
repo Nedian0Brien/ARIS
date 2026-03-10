@@ -3,11 +3,28 @@
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
   border-radius: 24px;
-  background:
-    radial-gradient(circle at top left, rgba(250, 204, 21, 0.12), transparent 34%),
-    radial-gradient(circle at bottom right, rgba(59, 130, 246, 0.08), transparent 32%),
-    linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, white 6%), color-mix(in srgb, var(--surface) 98%, #f8fafc 2%));
   box-shadow: 0 22px 44px rgba(15, 23, 42, 0.08);
+}
+
+.themeCodex {
+  background:
+    radial-gradient(circle at top left, rgba(20, 184, 166, 0.18), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(45, 212, 191, 0.1), transparent 32%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, white 6%), color-mix(in srgb, var(--surface) 98%, #f0fdfa 2%));
+}
+
+.themeClaude {
+  background:
+    radial-gradient(circle at top left, rgba(249, 115, 22, 0.18), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(251, 191, 36, 0.1), transparent 32%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, white 6%), color-mix(in srgb, var(--surface) 98%, #fff7ed 2%));
+}
+
+.themeGemini {
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(99, 102, 241, 0.1), transparent 32%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, white 6%), color-mix(in srgb, var(--surface) 98%, #eff6ff 2%));
 }
 
 .inner {
@@ -17,9 +34,9 @@
 }
 
 .header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 1rem;
 }
 
@@ -36,7 +53,7 @@
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: color-mix(in srgb, #b45309 72%, var(--text-muted));
+  color: color-mix(in srgb, var(--text) 40%, var(--text-muted));
 }
 
 .title {
@@ -88,13 +105,14 @@
 
 .providerRail {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.45rem;
   padding: 0.34rem;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
   width: fit-content;
+  max-width: 100%;
 }
 
 .providerButton {
@@ -168,6 +186,15 @@
 .form {
   display: grid;
   gap: 0.85rem;
+}
+
+.keySet {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent-emerald);
 }
 
 .label {
@@ -298,6 +325,10 @@
 }
 
 @media (max-width: 860px) {
+  .header {
+    grid-template-columns: 1fr;
+  }
+
   .securityGrid {
     grid-template-columns: 1fr;
   }
@@ -305,5 +336,9 @@
   .inputRow {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .providerRail {
+    flex-wrap: wrap;
   }
 }
