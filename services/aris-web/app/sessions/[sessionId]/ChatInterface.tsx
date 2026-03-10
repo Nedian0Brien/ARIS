@@ -101,6 +101,12 @@ const SIDEBAR_CHAT_PAGE_SIZE = 7;
 const SIDEBAR_RECENTS_LIMIT = 7;
 const SIDEBAR_APPROVAL_FEEDBACK_MS = 3000;
 const SIDEBAR_STATUS_REFRESH_MS = 5000;
+const CHAT_RUN_PHASE_LABELS = {
+  submitting: '전송 중',
+  waiting: '응답 대기 중',
+  running: '응답 생성 중',
+  aborting: '중단 중',
+} as const;
 const CHAT_AGENT_CHOICES: AgentFlavor[] = ['codex', 'claude', 'gemini'];
 
 const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
@@ -156,6 +162,7 @@ type ComposerModelId = string;
 type ContextItem =
   | { id: string; type: 'file'; path: string; content: string; name: string }
   | { id: string; type: 'text'; text: string };
+type ChatRunPhase = 'idle' | keyof typeof CHAT_RUN_PHASE_LABELS;
 type ChatSidebarState = 'default' | 'running' | 'completed' | 'approval' | 'error';
 type ChatSidebarSnapshot = {
   preview: string;
@@ -179,6 +186,7 @@ type ChatRuntimeUiState = {
   isSubmitting: boolean;
   isAwaitingReply: boolean;
   isAborting: boolean;
+  hasCompletionSignal: boolean;
   awaitingReplySince: string | null;
   showDisconnectRetry: boolean;
   lastSubmittedPayload: ChatSubmittedPayload | null;
@@ -189,6 +197,7 @@ const DEFAULT_CHAT_RUNTIME_UI_STATE: ChatRuntimeUiState = {
   isSubmitting: false,
   isAwaitingReply: false,
   isAborting: false,
+  hasCompletionSignal: false,
   awaitingReplySince: null,
   showDisconnectRetry: false,
   lastSubmittedPayload: null,
@@ -1918,6 +1927,7 @@ export function ChatInterface({
   const isSubmitting = activeChatRuntimeUi.isSubmitting;
   const isAwaitingReply = activeChatRuntimeUi.isAwaitingReply;
   const isAborting = activeChatRuntimeUi.isAborting;
+  const hasCompletionSignal = activeChatRuntimeUi.hasCompletionSignal;
   const awaitingReplySince = activeChatRuntimeUi.awaitingReplySince;
   const showDisconnectRetry = activeChatRuntimeUi.showDisconnectRetry;
   const lastSubmittedPayload = activeChatRuntimeUi.lastSubmittedPayload;
@@ -1936,6 +1946,7 @@ export function ChatInterface({
         current.isSubmitting === next.isSubmitting
         && current.isAwaitingReply === next.isAwaitingReply
         && current.isAborting === next.isAborting
+        && current.hasCompletionSignal === next.hasCompletionSignal
         && current.awaitingReplySince === next.awaitingReplySince
         && current.showDisconnectRetry === next.showDisconnectRetry
         && current.lastSubmittedPayload === next.lastSubmittedPayload
@@ -2096,15 +2107,27 @@ export function ChatInterface({
     : undefined;
   const agentMeta = resolveAgentMeta(activeAgentFlavor);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? runtimeError ?? null;
-  const isRunActive = isSubmitting || runtimeRunning || isAborting;
-  const isAgentRunning = isRunActive || isAwaitingReply;
+  const runPhase: ChatRunPhase = isAborting
+    ? 'aborting'
+    : isSubmitting
+      ? 'submitting'
+      : hasCompletionSignal
+        ? 'idle'
+      : runtimeRunning
+        ? 'running'
+        : isAwaitingReply
+          ? 'waiting'
+          : 'idle';
+  const runPhaseLabel = runPhase === 'idle' ? null : CHAT_RUN_PHASE_LABELS[runPhase];
+  const isRunActive = runPhase === 'submitting' || runPhase === 'running' || runPhase === 'aborting';
+  const isAgentRunning = runPhase !== 'idle';
   const connectionState: 'running' | 'connected' | 'degraded' = isAgentRunning
     ? 'running'
     : runtimeNotice
       ? 'degraded'
       : 'connected';
   const connectionLabel = connectionState === 'running'
-    ? '실행 중'
+    ? (runPhaseLabel ?? '실행 중')
     : connectionState === 'connected'
       ? '정상 연결'
       : '응답 지연 또는 연결 확인 필요';
@@ -2250,6 +2273,29 @@ export function ChatInterface({
     }
     return readMarker !== snapshot.latestEventId;
   }, [chatReadMarkers, chatSidebarSnapshots]);
+
+  const resolveChatRunPhase = useCallback((chat: SessionChat): ChatRunPhase => {
+    const runtimeUi = chatRuntimeUiByChat[chat.id] ?? DEFAULT_CHAT_RUNTIME_UI_STATE;
+    const snapshot = chatSidebarSnapshots[chat.id];
+    const isActive = chat.id === activeChatIdResolved;
+
+    if (runtimeUi.isAborting) {
+      return 'aborting';
+    }
+    if (runtimeUi.isSubmitting) {
+      return 'submitting';
+    }
+    if (runtimeUi.hasCompletionSignal) {
+      return 'idle';
+    }
+    if ((isActive && runtimeRunning) || Boolean(snapshot?.isRunning)) {
+      return 'running';
+    }
+    if (runtimeUi.isAwaitingReply) {
+      return 'waiting';
+    }
+    return 'idle';
+  }, [activeChatIdResolved, chatRuntimeUiByChat, chatSidebarSnapshots, runtimeRunning]);
 
   const resolveChatSidebarState = useCallback((chat: SessionChat): ChatSidebarState => {
     const isActive = chat.id === activeChatIdResolved;
@@ -3365,10 +3411,28 @@ export function ChatInterface({
     if (!awaitingReplySince) {
       return;
     }
-    const hasAnyAgentEvent = hasAgentEventSince(awaitingReplySince);
-    const hasCompletionSignal = hasAgentCompletionSignalSince(awaitingReplySince);
+    if (!hasAgentCompletionSignalSince(awaitingReplySince)) {
+      return;
+    }
 
-    if (!isRunActive && hasAnyAgentEvent && (runtimeStartedSinceAwaitingRef.current || hasCompletionSignal)) {
+    updateActiveChatRuntimeUi({
+      hasCompletionSignal: true,
+      isAwaitingReply: false,
+      awaitingReplySince: null,
+      submitError: null,
+      showDisconnectRetry: false,
+    });
+    disconnectNoticeAwaitingRef.current = null;
+    runtimeStartedSinceAwaitingRef.current = false;
+  }, [awaitingReplySince, hasAgentCompletionSignalSince, updateActiveChatRuntimeUi]);
+
+  useEffect(() => {
+    if (!awaitingReplySince) {
+      return;
+    }
+    const hasAnyAgentEvent = hasAgentEventSince(awaitingReplySince);
+
+    if (!isRunActive && hasAnyAgentEvent && runtimeStartedSinceAwaitingRef.current) {
       setIsAwaitingReply(false);
       setAwaitingReplySince(null);
       setSubmitError(null);
@@ -3376,7 +3440,7 @@ export function ChatInterface({
       disconnectNoticeAwaitingRef.current = null;
       runtimeStartedSinceAwaitingRef.current = false;
     }
-  }, [awaitingReplySince, hasAgentCompletionSignalSince, hasAgentEventSince, isRunActive]);
+  }, [awaitingReplySince, hasAgentEventSince, isRunActive]);
 
   useEffect(() => {
     if (!isAwaitingReply || !awaitingReplySince || isRunActive) {
@@ -3745,6 +3809,7 @@ export function ChatInterface({
     updateChatRuntimeUi(scopedChatId, {
       isSubmitting: true,
       isAwaitingReply: true,
+      hasCompletionSignal: false,
       awaitingReplySince: awaitingSince,
       submitError: null,
       showDisconnectRetry: false,
@@ -3848,6 +3913,7 @@ export function ChatInterface({
     } catch (error) {
       updateChatRuntimeUi(scopedChatId, {
         isAwaitingReply: false,
+        hasCompletionSignal: false,
         awaitingReplySince: null,
         submitError: error instanceof Error ? error.message : '백엔드 연결 상태를 확인해 주세요.',
       });
@@ -3866,6 +3932,7 @@ export function ChatInterface({
     updateChatRuntimeUi(scopedChatId, {
       isSubmitting: true,
       isAwaitingReply: true,
+      hasCompletionSignal: false,
       awaitingReplySince: new Date().toISOString(),
       submitError: null,
       showDisconnectRetry: false,
@@ -3912,6 +3979,7 @@ export function ChatInterface({
     } catch (error) {
       updateChatRuntimeUi(scopedChatId, {
         isAwaitingReply: false,
+        hasCompletionSignal: false,
         awaitingReplySince: null,
         submitError: error instanceof Error ? error.message : '재시도 중 오류가 발생했습니다.',
         showDisconnectRetry: true,
@@ -3946,6 +4014,7 @@ export function ChatInterface({
 
       updateChatRuntimeUi(scopedChatId, {
         isAwaitingReply: false,
+        hasCompletionSignal: false,
         awaitingReplySince: null,
         submitError: null,
         showDisconnectRetry: false,
@@ -4074,6 +4143,15 @@ export function ChatInterface({
                       ? styles.chatListItemStateError
                       : '';
               const chatPreviewText = resolveChatPreviewText(chat.id);
+              const chatRunPhase = resolveChatRunPhase(chat);
+              const chatRunPhaseLabel = chatRunPhase === 'idle' ? null : CHAT_RUN_PHASE_LABELS[chatRunPhase];
+              const chatRunPhaseClass = chatRunPhase === 'aborting'
+                ? styles.chatListRunPhaseBadgeAborting
+                : chatRunPhase === 'waiting'
+                  ? styles.chatListRunPhaseBadgeWaiting
+                  : chatRunPhase === 'running'
+                    ? styles.chatListRunPhaseBadgeRunning
+                    : styles.chatListRunPhaseBadgeSubmitting;
               const approvalFeedback = approvalFeedbackByChat[chat.id];
               const hasPendingApproval = isActive && pendingPermissions.length > 0;
               const showApprovalPanel = isActive && (
@@ -4129,6 +4207,11 @@ export function ChatInterface({
                         {!isRenaming && (
                           <span className={styles.chatListPreviewRow}>
                             <CornerDownRight size={12} className={styles.chatListPreviewIcon} />
+                            {chatRunPhaseLabel && (
+                              <span className={`${styles.chatListRunPhaseBadge} ${chatRunPhaseClass}`}>
+                                {chatRunPhaseLabel}
+                              </span>
+                            )}
                             <span className={styles.chatListPreviewText}>{chatPreviewText}</span>
                           </span>
                         )}
@@ -4605,7 +4688,7 @@ export function ChatInterface({
                       <span className={styles.runningDots} aria-hidden>
                         <span /><span /><span />
                       </span>
-                      실행 중
+                      {runPhaseLabel ?? '실행 중'}
                     </div>
                   )}
                 </div>

@@ -61,6 +61,24 @@ npm --prefix services/aris-backend run dev
 npm --prefix services/aris-web run dev
 ```
 
+## Worktree Helper
+
+If you use dedicated `git worktree` directories, you can reuse the main
+checkout's installed dependencies instead of running `npm install` in every
+worktree.
+
+Create a new worktree and auto-link shared `node_modules`:
+
+```bash
+scripts/create_worktree_with_shared_node_modules.sh .worktrees/my-task feat/my-task
+```
+
+Link shared `node_modules` into an already existing worktree:
+
+```bash
+scripts/link_shared_node_modules.sh /absolute/path/to/worktree
+```
+
 Default ports:
 - Web: `3000`
 - Backend: `4080`
