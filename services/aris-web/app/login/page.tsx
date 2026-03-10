@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Input, Card } from '@/components/ui';
+import { readLocalStorage, removeLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -18,7 +19,7 @@ export default function LoginPage() {
 
   // Load remembered email
   useEffect(() => {
-    const savedEmail = localStorage.getItem('aris_remembered_email');
+    const savedEmail = readLocalStorage('aris_remembered_email');
     if (savedEmail) {
       setEmail(savedEmail);
       setAutoLogin(true);
@@ -32,9 +33,9 @@ export default function LoginPage() {
 
     // Save or clear email based on auto-login setting
     if (autoLogin) {
-      localStorage.setItem('aris_remembered_email', email);
+      writeLocalStorage('aris_remembered_email', email);
     } else {
-      localStorage.removeItem('aris_remembered_email');
+      removeLocalStorage('aris_remembered_email');
     }
 
     try {

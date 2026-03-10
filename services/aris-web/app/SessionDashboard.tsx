@@ -13,6 +13,7 @@ import {
 import { Button, Input, Card, Badge } from '@/components/ui';
 import type { ApprovalPolicy, SessionSummary } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
+import { readLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import styles from './SessionDashboard.module.css';
 
@@ -451,7 +452,7 @@ export function SessionDashboard({
   useEffect(() => {
     setMounted(true);
     // Load histories
-    const savedHist = localStorage.getItem(PATH_HISTORY_STORAGE_KEY);
+    const savedHist = readLocalStorage(PATH_HISTORY_STORAGE_KEY);
     if (savedHist) {
       try {
         const parsed = JSON.parse(savedHist);
@@ -482,7 +483,7 @@ export function SessionDashboard({
 
   useEffect(() => {
     if (mounted) {
-      localStorage.setItem(PATH_HISTORY_STORAGE_KEY, JSON.stringify(pathHistory));
+      writeLocalStorage(PATH_HISTORY_STORAGE_KEY, JSON.stringify(pathHistory));
     }
   }, [pathHistory, mounted]);
 

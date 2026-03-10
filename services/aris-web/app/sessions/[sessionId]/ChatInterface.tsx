@@ -6,11 +6,12 @@ import { useRouter } from 'next/navigation';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
+import { readLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
 import {
   hasAgentCompletionSignal,
   hasFinalAgentReplySince,
   readUiEventStreamEvent,
-  resolveChatRunPhase as resolveRuntimeRunPhase,
+  resolveChatRunPhase as resolveRunPhaseState,
   type ResolvedChatRunPhase,
 } from '@/lib/happy/chatRuntime';
 import {
@@ -80,14 +81,14 @@ const RECENT_FILES_MAX = 5;
 
 function getRecentFiles(): string[] {
   try {
-    return JSON.parse(localStorage.getItem(RECENT_FILES_STORAGE_KEY) ?? '[]') as string[];
+    return JSON.parse(readLocalStorage(RECENT_FILES_STORAGE_KEY) ?? '[]') as string[];
   } catch { return []; }
 }
 
 function saveRecentFile(filePath: string): void {
   try {
     const prev = getRecentFiles().filter((p) => p !== filePath);
-    localStorage.setItem(RECENT_FILES_STORAGE_KEY, JSON.stringify([filePath, ...prev].slice(0, RECENT_FILES_MAX)));
+    writeLocalStorage(RECENT_FILES_STORAGE_KEY, JSON.stringify([filePath, ...prev].slice(0, RECENT_FILES_MAX)));
   } catch { /* localStorage 사용 불가 시 무시 */ }
 }
 
@@ -2098,7 +2099,7 @@ export function ChatInterface({
     : undefined;
   const agentMeta = resolveAgentMeta(activeAgentFlavor);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? runtimeError ?? null;
-  const runPhase: ChatRunPhase = resolveRuntimeRunPhase({
+  const runPhase: ChatRunPhase = resolveRunPhaseState({
     isAborting,
     isSubmitting,
     hasCompletionSignal,
@@ -2258,7 +2259,7 @@ export function ChatInterface({
     const snapshot = chatSidebarSnapshots[chat.id];
     const isActive = chat.id === activeChatIdResolved;
 
-    return resolveRuntimeRunPhase({
+    return resolveRunPhaseState({
       isAborting: runtimeUi.isAborting,
       isSubmitting: runtimeUi.isSubmitting,
       hasCompletionSignal: runtimeUi.hasCompletionSignal,

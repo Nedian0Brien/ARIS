@@ -1,3 +1,5 @@
+import { readLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
+
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
 
@@ -11,7 +13,7 @@ export function readThemeMode(): ThemeMode {
   if (typeof window === 'undefined') {
     return 'system';
   }
-  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  const stored = readLocalStorage(THEME_STORAGE_KEY);
   return isThemeMode(stored) ? stored : 'system';
 }
 
@@ -32,8 +34,6 @@ export function applyTheme(mode: ThemeMode): ResolvedTheme {
     root.dataset.theme = resolved;
     root.dataset.themeMode = mode;
   }
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(THEME_STORAGE_KEY, mode);
-  }
+  writeLocalStorage(THEME_STORAGE_KEY, mode);
   return resolved;
 }
