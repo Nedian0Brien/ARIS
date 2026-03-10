@@ -601,6 +601,76 @@ function hasChatErrorSignal(event: UiEvent | null | undefined): boolean {
   return false;
 }
 
+function readUiEventSessionEventType(event: UiEvent): string {
+  if (typeof event.meta?.sessionEventType === 'string') {
+    return event.meta.sessionEventType.trim().toLowerCase();
+  }
+  const sessionEvent = event.meta?.sessionEvent;
+  if (!sessionEvent || typeof sessionEvent !== 'object') {
+    return '';
+  }
+  const ev = 'ev' in sessionEvent
+    && sessionEvent.ev
+    && typeof sessionEvent.ev === 'object'
+    ? sessionEvent.ev as Record<string, unknown>
+    : null;
+  if (!ev) {
+    return '';
+  }
+  return typeof ev.t === 'string' ? ev.t.trim().toLowerCase() : '';
+}
+
+function readUiEventTurnStatus(event: UiEvent): string {
+  if (typeof event.meta?.sessionTurnStatus === 'string') {
+    return event.meta.sessionTurnStatus.trim().toLowerCase();
+  }
+  const sessionEvent = event.meta?.sessionEvent;
+  if (!sessionEvent || typeof sessionEvent !== 'object') {
+    return '';
+  }
+  const ev = 'ev' in sessionEvent
+    && sessionEvent.ev
+    && typeof sessionEvent.ev === 'object'
+    ? sessionEvent.ev as Record<string, unknown>
+    : null;
+  if (!ev) {
+    return '';
+  }
+  return typeof ev.status === 'string' ? ev.status.trim().toLowerCase() : '';
+}
+
+function hasAgentCompletionSignal(event: UiEvent): boolean {
+  if (isUserEvent(event)) {
+    return false;
+  }
+
+  const streamEvent = typeof event.meta?.streamEvent === 'string'
+    ? event.meta.streamEvent.trim().toLowerCase()
+    : '';
+  if (
+    streamEvent === 'runtime_disconnected'
+    || streamEvent === 'stream_error'
+    || streamEvent === 'runtime_error'
+  ) {
+    return true;
+  }
+
+  const sessionEventType = readUiEventSessionEventType(event);
+  if (sessionEventType === 'turn-end' || sessionEventType === 'stop') {
+    return true;
+  }
+
+  const turnStatus = readUiEventTurnStatus(event);
+  return (
+    turnStatus === 'completed'
+    || turnStatus === 'failed'
+    || turnStatus === 'aborted'
+    || turnStatus === 'timed_out'
+    || turnStatus === 'turn_incomplete'
+    || turnStatus === 'run_stale_cleanup'
+  );
+}
+
 function approvalPolicyLabel(value?: ApprovalPolicy): string {
   if (value === 'on-failure') {
     return 'ON FAILURE';
@@ -3208,6 +3278,23 @@ export function ChatInterface({
     });
   }, [events]);
 
+  const hasAgentCompletionSignalSince = useCallback((since: string | null): boolean => {
+    if (!since) {
+      return false;
+    }
+    const sinceEpoch = Date.parse(since);
+    return events.some((event) => {
+      if (!hasAgentCompletionSignal(event)) {
+        return false;
+      }
+      const eventEpoch = Date.parse(event.timestamp);
+      if (!Number.isFinite(sinceEpoch) || !Number.isFinite(eventEpoch)) {
+        return true;
+      }
+      return eventEpoch >= sinceEpoch;
+    });
+  }, [events]);
+
   useEffect(() => {
     if (!isAwaitingReply) {
       return;
@@ -3222,8 +3309,9 @@ export function ChatInterface({
       return;
     }
     const hasAnyAgentEvent = hasAgentEventSince(awaitingReplySince);
+    const hasCompletionSignal = hasAgentCompletionSignalSince(awaitingReplySince);
 
-    if (!isRunActive && hasAnyAgentEvent) {
+    if (!isRunActive && hasAnyAgentEvent && (runtimeStartedSinceAwaitingRef.current || hasCompletionSignal)) {
       setIsAwaitingReply(false);
       setAwaitingReplySince(null);
       setSubmitError(null);
@@ -3231,7 +3319,7 @@ export function ChatInterface({
       disconnectNoticeAwaitingRef.current = null;
       runtimeStartedSinceAwaitingRef.current = false;
     }
-  }, [awaitingReplySince, hasAgentEventSince, isRunActive]);
+  }, [awaitingReplySince, hasAgentCompletionSignalSince, hasAgentEventSince, isRunActive]);
 
   useEffect(() => {
     if (!isAwaitingReply || !awaitingReplySince || isRunActive) {
@@ -4550,7 +4638,7 @@ export function ChatInterface({
                           ? '메시지를 입력하세요...'
                           : 'Viewer 권한입니다.'
                     }
-                    disabled={!activeChatIdResolved || !isOperator || isAgentRunning}
+                    disabled={!activeChatIdResolved || !isOperator}
                     className={styles.composerInput}
                   />
 
