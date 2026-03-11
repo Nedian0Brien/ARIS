@@ -76,6 +76,11 @@ const RUNTIME_DISCONNECT_GRACE_MS = 4000;
 const AUTO_SCROLL_THRESHOLD_PX = 80;
 const MOBILE_LAYOUT_MAX_WIDTH_PX = 960;
 const CUSTOMIZATION_OVERLAY_MAX_WIDTH_PX = 1280;
+const CHAT_SIDEBAR_FIXED_WIDTH_PX = 280;
+const CUSTOMIZATION_SIDEBAR_FIXED_WIDTH_PX = 320;
+const CENTER_PANEL_MIN_WIDTH_PX = 720;
+const RIGHT_PIN_PREFERS_LEFT_OVERLAY_MIN_WIDTH_PX =
+  CHAT_SIDEBAR_FIXED_WIDTH_PX + CUSTOMIZATION_SIDEBAR_FIXED_WIDTH_PX + CENTER_PANEL_MIN_WIDTH_PX;
 const PREVIEW_MAX_LINES = 12;
 const PREVIEW_MAX_CHARS = 600;
 const COMPOSER_MIN_HEIGHT_PX = 36;
@@ -2043,8 +2048,10 @@ export function ChatInterface({
   const [showPermissionQueue, setShowPermissionQueue] = useState(true);
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(true);
+  const [viewportWidth, setViewportWidth] = useState(0);
   const [isCustomizationOverlayLayout, setIsCustomizationOverlayLayout] = useState(false);
   const [isCustomizationSidebarOpen, setIsCustomizationSidebarOpen] = useState(false);
+  const [isCustomizationPinned, setIsCustomizationPinned] = useState(false);
   const [chatVisibleCount, setChatVisibleCount] = useState(SIDEBAR_CHAT_PAGE_SIZE);
   const [chatActionMenuId, setChatActionMenuId] = useState<string | null>(null);
   const [chatActionMenuRect, setChatActionMenuRect] = useState<DOMRect | null>(null);
@@ -2157,6 +2164,9 @@ export function ChatInterface({
   const readMarkerSyncedRef = useRef<Record<string, string>>(buildReadMarkerMap(initialChats));
   const snapshotSyncInFlightRef = useRef<Record<string, boolean>>({});
   const sidebarFileRequestNonceRef = useRef(0);
+  const isRightSidebarPinnedLayout = !isMobileLayout && (viewportWidth > CUSTOMIZATION_OVERLAY_MAX_WIDTH_PX || isCustomizationPinned);
+  const isLeftSidebarOverlayLayout = isMobileLayout
+    || (isRightSidebarPinnedLayout && viewportWidth < RIGHT_PIN_PREFERS_LEFT_OVERLAY_MIN_WIDTH_PX);
   const snapshotSyncedEventRef = useRef<Record<string, string>>(buildSnapshotSyncMap(initialChats));
 
   const defaultAgentFlavor = normalizeAgentFlavor(agentFlavor, 'codex');
@@ -2532,7 +2542,7 @@ export function ChatInterface({
       if (isCustomizationOverlayLayout) {
         setIsCustomizationSidebarOpen(true);
       }
-      if (isMobileLayout) {
+      if (isLeftSidebarOverlayLayout) {
         setIsChatSidebarOpen(false);
       }
     };
@@ -2541,7 +2551,7 @@ export function ChatInterface({
     return () => {
       window.removeEventListener(WORKSPACE_FILE_OPEN_EVENT, handleWorkspaceFileOpen as EventListener);
     };
-  }, [isCustomizationOverlayLayout, isMobileLayout]);
+  }, [isCustomizationOverlayLayout, isLeftSidebarOverlayLayout]);
 
   useEffect(() => {
     const sortedInitialChats = sortSessionChats(initialChats);
@@ -3096,10 +3106,17 @@ export function ChatInterface({
 
     const syncLayout = () => {
       const nextIsMobile = mobileQuery.matches;
-      const nextUsesCustomizationOverlay = customizationOverlayQuery.matches;
+      const nextViewportWidth = window.innerWidth;
+      const nextUsesCustomizationOverlay = nextIsMobile || (customizationOverlayQuery.matches && !isCustomizationPinned);
+      const nextUsesLeftSidebarOverlay = nextIsMobile || (
+        (!nextUsesCustomizationOverlay)
+        && nextViewportWidth < RIGHT_PIN_PREFERS_LEFT_OVERLAY_MIN_WIDTH_PX
+        && (nextViewportWidth > CUSTOMIZATION_OVERLAY_MAX_WIDTH_PX || isCustomizationPinned)
+      );
+      setViewportWidth(nextViewportWidth);
       setIsMobileLayout(nextIsMobile);
       setIsCustomizationOverlayLayout(nextUsesCustomizationOverlay);
-      setIsChatSidebarOpen(!nextIsMobile);
+      setIsChatSidebarOpen(!nextUsesLeftSidebarOverlay);
       if (!nextUsesCustomizationOverlay) {
         setIsCustomizationSidebarOpen(false);
       }
@@ -3123,7 +3140,7 @@ export function ChatInterface({
         customizationOverlayQuery.removeListener(syncLayout);
       }
     };
-  }, []);
+  }, [isCustomizationPinned]);
 
   const toggleResult = useCallback((eventId: string) => {
     setExpandedResultIds((prev) => ({
@@ -4258,10 +4275,12 @@ export function ChatInterface({
     <div
       className={`${styles.chatShell} ${
         isChatSidebarOpen ? styles.chatShellSidebarOpen : styles.chatShellSidebarClosed
-      } ${isMobileLayout ? styles.chatShellMobileScroll : ''}`}
+      } ${isMobileLayout ? styles.chatShellMobileScroll : ''} ${
+        isRightSidebarPinnedLayout ? styles.chatShellRightPinned : ''
+      } ${isLeftSidebarOverlayLayout ? styles.chatShellLeftOverlay : ''}`}
       ref={chatShellRef}
     >
-      {isMobileLayout && isChatSidebarOpen && (
+      {isLeftSidebarOverlayLayout && isChatSidebarOpen && (
         <button
           type="button"
           className={styles.chatSidebarBackdrop}
@@ -4273,7 +4292,9 @@ export function ChatInterface({
         ref={chatSidebarRef}
         className={`${styles.chatSidebar} ${
           isChatSidebarOpen ? styles.chatSidebarOpen : styles.chatSidebarClosed
-        } ${isMobileLayout ? styles.chatSidebarMobile : ''}`}
+        } ${isMobileLayout ? styles.chatSidebarMobile : ''} ${
+          isLeftSidebarOverlayLayout ? styles.chatSidebarOverlay : ''
+        }`}
       >
         <div className={styles.chatSidebarHeader}>
           <div>
@@ -4595,7 +4616,7 @@ export function ChatInterface({
                   type="button"
                   className={styles.sidebarToggleButton}
                   onClick={() => {
-                    if (isMobileLayout) {
+                    if (isLeftSidebarOverlayLayout) {
                       setIsChatSidebarOpen(false);
                     }
                     setIsContextMenuOpen(false);
@@ -5079,7 +5100,9 @@ export function ChatInterface({
               projectName={projectName}
               workspaceRootPath={normalizedWorkspaceRootPath}
               requestedFile={isCustomizationOverlayLayout ? sidebarFileRequest : null}
-              mode="mobile"
+              isPinned={isCustomizationPinned}
+              onTogglePinned={() => setIsCustomizationPinned((prev) => !prev)}
+              mode={isMobileLayout ? 'mobile' : 'desktop'}
               onRequestClose={() => setIsCustomizationSidebarOpen(false)}
             />
           </aside>
@@ -5092,6 +5115,8 @@ export function ChatInterface({
           projectName={projectName}
           workspaceRootPath={normalizedWorkspaceRootPath}
           requestedFile={isCustomizationOverlayLayout ? null : sidebarFileRequest}
+          isPinned={isCustomizationPinned}
+          onTogglePinned={() => setIsCustomizationPinned((prev) => !prev)}
           mode="desktop"
         />
       </aside>
