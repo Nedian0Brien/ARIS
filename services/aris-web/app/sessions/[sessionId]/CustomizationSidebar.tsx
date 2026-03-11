@@ -876,6 +876,9 @@ export function CustomizationSidebar({
               <button
                 type="button"
                 className={`${styles.refreshButton} ${isPinned ? styles.pinButtonActive : ''}`}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
                 onClick={(event) => {
                   event.currentTarget.blur();
                   onTogglePinned();
