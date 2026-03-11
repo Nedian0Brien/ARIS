@@ -47,6 +47,25 @@ describe('claudeProtocolMapper', () => {
     expect(parsed.output).toBe('응답 완료');
   });
 
+  it('extracts result-only final output when Claude omits an assistant text event', () => {
+    const streamOutput = [
+      JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        session_id: 'claude-session-result-only',
+      }),
+      JSON.stringify({
+        type: 'result',
+        result: 'OK',
+        session_id: 'claude-session-result-only',
+      }),
+    ].join('\n');
+
+    const parsed = parseClaudeStreamOutput(streamOutput);
+    expect(parsed.sessionId).toBe('claude-session-result-only');
+    expect(parsed.output).toBe('OK');
+  });
+
   it('maps a single Claude tool line into an action event', () => {
     const line = JSON.stringify({
       type: 'tool',

@@ -6,6 +6,7 @@ type ClaudeMappedLine = {
   action?: ClaudeActionEvent;
   actionKey?: string;
   assistantText?: string;
+  assistantSource?: 'assistant' | 'result';
   sessionId?: string;
 };
 
@@ -236,12 +237,15 @@ export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
     || lineLower.includes('"agent_message"')
   );
   const assistantText = (!isSystem && !seemsToolEvent && seemsAssistantEvent)
-    ? extractFirstStringByKeys(records, ['text', 'message', 'content', 'output'])
+    ? extractFirstStringByKeys(records, ['text', 'message', 'content', 'output', 'result'])
     : '';
 
   return {
     ...(action ? { action, actionKey: buildActionEventKey(action) } : {}),
-    ...(assistantText ? { assistantText } : {}),
+    ...(assistantText ? {
+      assistantText,
+      assistantSource: payloadType === 'result' ? 'result' as const : 'assistant' as const,
+    } : {}),
     ...(sessionId ? { sessionId } : {}),
   };
 }
@@ -263,8 +267,13 @@ export function parseClaudeStreamOutput(stdout: string): { output: string; actio
     }
     if (
       parsedLine.assistantText
-      && !looksLikeShellCommand(parsedLine.assistantText)
-      && !looksLikeClaudeActionTranscript(parsedLine.assistantText)
+      && (
+        !looksLikeClaudeActionTranscript(parsedLine.assistantText)
+        && (
+          parsedLine.assistantSource === 'result'
+          || !looksLikeShellCommand(parsedLine.assistantText)
+        )
+      )
       && parsedLine.assistantText.length >= latestAssistantText.length
     ) {
       latestAssistantText = parsedLine.assistantText;
