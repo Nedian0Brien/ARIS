@@ -210,6 +210,15 @@ type ChatRuntimeUiState = {
   lastSubmittedPayload: ChatSubmittedPayload | null;
   submitError: string | null;
 };
+type WorkspaceFileOpenDetail = {
+  path: string;
+  name?: string;
+};
+type SidebarFileRequest = WorkspaceFileOpenDetail & {
+  nonce: number;
+};
+
+const WORKSPACE_FILE_OPEN_EVENT = 'aris-open-workspace-file';
 
 const DEFAULT_CHAT_RUNTIME_UI_STATE: ChatRuntimeUiState = {
   isSubmitting: false,
@@ -322,6 +331,38 @@ function fileExtension(filename: string): string {
     return '';
   }
   return base.slice(dotIndex + 1).toLowerCase();
+}
+
+function normalizeWorkspaceClientPath(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return '/';
+  }
+
+  const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  const normalized = withLeadingSlash.replace(/\/+/g, '/').replace(/\/$/, '');
+  return normalized || '/';
+}
+
+function isWorkspacePathWithinRoot(targetPath: string, rootPath: string): boolean {
+  const normalizedTarget = normalizeWorkspaceClientPath(targetPath);
+  const normalizedRoot = normalizeWorkspaceClientPath(rootPath);
+  return normalizedRoot === '/'
+    ? normalizedTarget.startsWith('/')
+    : normalizedTarget === normalizedRoot || normalizedTarget.startsWith(`${normalizedRoot}/`);
+}
+
+function dispatchWorkspaceFileOpen(detail: WorkspaceFileOpenDetail) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.dispatchEvent(new CustomEvent<WorkspaceFileOpenDetail>(WORKSPACE_FILE_OPEN_EVENT, {
+    detail: {
+      ...detail,
+      path: normalizeWorkspaceClientPath(detail.path),
+    },
+  }));
 }
 
 function classifyLabelLink(label: string, rawPath: string): ResourceLabel | null {
@@ -1320,12 +1361,22 @@ function ResourceChip({ resource }: { resource: ResourceLabel }) {
 
   const { Icon, iconClassName } = resolveFileIconMeta(resource.extension);
   return (
-    <span className={`${styles.resourceChip} ${styles.resourceChipFile}`} title={resource.sourcePath}>
+    <button
+      type="button"
+      className={`${styles.resourceChip} ${styles.resourceChipFile} ${styles.resourceChipButton}`}
+      title={resource.sourcePath}
+      onClick={() => {
+        if (resource.sourcePath) {
+          dispatchWorkspaceFileOpen({ path: resource.sourcePath, name: resource.name });
+        }
+      }}
+      disabled={!resource.sourcePath}
+    >
       <span className={`${styles.resourceChipIcon} ${iconClassName}`}>
         <Icon size={12} />
       </span>
       <span className={styles.resourceChipText}>{resource.name}</span>
-    </span>
+    </button>
   );
 }
 
@@ -1557,7 +1608,18 @@ function renderDiffLineContent(
   if (hunk) {
     return (
       <>
-        <span className={`${styles.fileBadgeBase} ${styles.diffHunkFileBadge}`}>{hunk.file || '(unknown)'}</span>
+        <button
+          type="button"
+          className={`${styles.fileBadgeBase} ${styles.diffHunkFileBadge} ${styles.fileBadgeButton}`}
+          onClick={() => {
+            if (hunk.file) {
+              dispatchWorkspaceFileOpen({ path: hunk.file });
+            }
+          }}
+          disabled={!hunk.file}
+        >
+          {hunk.file || '(unknown)'}
+        </button>
         {' | '}
         line {hunk.line}
         {' | '}
@@ -1846,6 +1908,7 @@ export function ChatInterface({
   activeChatId,
   isOperator,
   projectName,
+  workspaceRootPath,
   alias,
   agentFlavor,
   sessionModel,
@@ -1859,6 +1922,7 @@ export function ChatInterface({
   activeChatId: string | null;
   isOperator: boolean;
   projectName: string;
+  workspaceRootPath: string;
   alias?: string | null;
   agentFlavor: string;
   sessionModel?: string | null;
@@ -2057,7 +2121,11 @@ export function ChatInterface({
   });
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
-  const [fileBrowserPath, setFileBrowserPath] = useState('/');
+  const normalizedWorkspaceRootPath = useMemo(
+    () => normalizeWorkspaceClientPath(workspaceRootPath),
+    [workspaceRootPath],
+  );
+  const [fileBrowserPath, setFileBrowserPath] = useState(normalizedWorkspaceRootPath);
   const [fileBrowserItems, setFileBrowserItems] = useState<Array<{ name: string; path: string; isDirectory: boolean; isFile: boolean }>>([]);
   const [fileBrowserParentPath, setFileBrowserParentPath] = useState<string | null>(null);
   const [fileBrowserLoading, setFileBrowserLoading] = useState(false);
@@ -2066,6 +2134,7 @@ export function ChatInterface({
   const [fileBrowserSearchResults, setFileBrowserSearchResults] = useState<Array<{ name: string; path: string; isDirectory: boolean }> | null>(null);
   const [fileBrowserSearchLoading, setFileBrowserSearchLoading] = useState(false);
   const [recentAttachments, setRecentAttachments] = useState<string[]>([]);
+  const [sidebarFileRequest, setSidebarFileRequest] = useState<SidebarFileRequest | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const createChatMenuRef = useRef<HTMLDivElement>(null);
@@ -2087,6 +2156,7 @@ export function ChatInterface({
   const readMarkerSyncInFlightRef = useRef<Record<string, boolean>>({});
   const readMarkerSyncedRef = useRef<Record<string, string>>(buildReadMarkerMap(initialChats));
   const snapshotSyncInFlightRef = useRef<Record<string, boolean>>({});
+  const sidebarFileRequestNonceRef = useRef(0);
   const snapshotSyncedEventRef = useRef<Record<string, string>>(buildSnapshotSyncMap(initialChats));
 
   const defaultAgentFlavor = normalizeAgentFlavor(agentFlavor, 'codex');
@@ -2440,6 +2510,38 @@ export function ChatInterface({
   }, [decidePermission, isOperator, pendingPermissions, scheduleApprovalFeedbackReset]);
 
   useEffect(() => { setIsMounted(true); }, []);
+
+  useEffect(() => {
+    setFileBrowserPath(normalizedWorkspaceRootPath);
+  }, [normalizedWorkspaceRootPath]);
+
+  useEffect(() => {
+    const handleWorkspaceFileOpen = (event: Event) => {
+      const detail = (event as CustomEvent<WorkspaceFileOpenDetail>).detail;
+      if (!detail?.path) {
+        return;
+      }
+
+      sidebarFileRequestNonceRef.current += 1;
+      setSidebarFileRequest({
+        path: normalizeWorkspaceClientPath(detail.path),
+        name: detail.name,
+        nonce: sidebarFileRequestNonceRef.current,
+      });
+
+      if (isCustomizationOverlayLayout) {
+        setIsCustomizationSidebarOpen(true);
+      }
+      if (isMobileLayout) {
+        setIsChatSidebarOpen(false);
+      }
+    };
+
+    window.addEventListener(WORKSPACE_FILE_OPEN_EVENT, handleWorkspaceFileOpen as EventListener);
+    return () => {
+      window.removeEventListener(WORKSPACE_FILE_OPEN_EVENT, handleWorkspaceFileOpen as EventListener);
+    };
+  }, [isCustomizationOverlayLayout, isMobileLayout]);
 
   useEffect(() => {
     const sortedInitialChats = sortSessionChats(initialChats);
@@ -2881,23 +2983,27 @@ export function ChatInterface({
         error?: string;
       };
       if (!res.ok || data.error) throw new Error(data.error ?? '디렉토리를 읽을 수 없습니다.');
-      setFileBrowserPath(dirPath);
+      const normalizedDirPath = normalizeWorkspaceClientPath(dirPath);
+      setFileBrowserPath(normalizedDirPath);
       setFileBrowserItems(data.directories ?? []);
-      setFileBrowserParentPath(data.parentPath ?? null);
+      const nextParentPath = data.parentPath && isWorkspacePathWithinRoot(data.parentPath, normalizedWorkspaceRootPath)
+        ? data.parentPath
+        : null;
+      setFileBrowserParentPath(nextParentPath);
     } catch (err) {
       setFileBrowserError(err instanceof Error ? err.message : '디렉토리 읽기 실패');
     } finally {
       setFileBrowserLoading(false);
     }
-  }, []);
+  }, [normalizedWorkspaceRootPath]);
 
   const handleFileBrowserOpen = useCallback(() => {
     setPlusMenuMode('file');
     setFileBrowserQuery('');
     setFileBrowserSearchResults(null);
     setRecentAttachments(getRecentFiles());
-    void fetchFileBrowserDir('/');
-  }, [fetchFileBrowserDir]);
+    void fetchFileBrowserDir(normalizedWorkspaceRootPath);
+  }, [fetchFileBrowserDir, normalizedWorkspaceRootPath]);
 
   const handleFileBrowserSearch = useCallback(async (query: string) => {
     setFileBrowserQuery(query);
@@ -2907,7 +3013,7 @@ export function ChatInterface({
     }
     setFileBrowserSearchLoading(true);
     try {
-      const res = await fetch(`/api/fs/search?q=${encodeURIComponent(query.trim())}`);
+      const res = await fetch(`/api/fs/search?q=${encodeURIComponent(query.trim())}&path=${encodeURIComponent(normalizedWorkspaceRootPath)}`);
       const data = (await res.json().catch(() => ({}))) as {
         results?: Array<{ name: string; path: string; isDirectory: boolean }>;
         error?: string;
@@ -2919,7 +3025,7 @@ export function ChatInterface({
     } finally {
       setFileBrowserSearchLoading(false);
     }
-  }, []);
+  }, [normalizedWorkspaceRootPath]);
 
   const handleFileBrowserSelect = useCallback(async (filePath: string) => {
     setFileBrowserLoading(true);
@@ -4971,6 +5077,8 @@ export function ChatInterface({
             <CustomizationSidebar
               sessionId={sessionId}
               projectName={projectName}
+              workspaceRootPath={normalizedWorkspaceRootPath}
+              requestedFile={isCustomizationOverlayLayout ? sidebarFileRequest : null}
               mode="mobile"
               onRequestClose={() => setIsCustomizationSidebarOpen(false)}
             />
@@ -4979,7 +5087,13 @@ export function ChatInterface({
       )}
 
       <aside className={styles.rightPanel}>
-        <CustomizationSidebar sessionId={sessionId} projectName={projectName} mode="desktop" />
+        <CustomizationSidebar
+          sessionId={sessionId}
+          projectName={projectName}
+          workspaceRootPath={normalizedWorkspaceRootPath}
+          requestedFile={isCustomizationOverlayLayout ? null : sidebarFileRequest}
+          mode="desktop"
+        />
       </aside>
     </div>
 

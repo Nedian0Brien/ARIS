@@ -65,17 +65,22 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const query = (searchParams.get('q') ?? '').trim().toLowerCase();
+  const requestedRootPath = searchParams.get('path') ?? '/';
 
   if (!query) {
     return NextResponse.json({ results: [] });
   }
 
-  let rootPath = WORKSPACE_ROOT;
+  const normalizedRootPath = path.normalize(requestedRootPath).replace(/^(\.\.[\/\\])+/, '');
+  let rootPath = path.join(WORKSPACE_ROOT, normalizedRootPath);
   try {
-    await fs.stat(rootPath);
+    const stat = await fs.stat(rootPath);
+    if (!stat.isDirectory()) {
+      return NextResponse.json({ error: 'Directory not found' }, { status: 404 });
+    }
   } catch {
     if (env.NODE_ENV !== 'production') {
-      rootPath = process.cwd();
+      rootPath = path.join(process.cwd(), normalizedRootPath);
     } else {
       return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
     }

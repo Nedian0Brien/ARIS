@@ -1572,6 +1572,19 @@
   line-height: 1;
 }
 
+.resourceChipButton {
+  cursor: pointer;
+}
+
+.resourceChipButton:disabled {
+  cursor: default;
+}
+
+.resourceChipButton:hover:not(:disabled) {
+  border-color: var(--chat-item-hover-border);
+  background: var(--chat-surface-hover);
+}
+
 .resourceChipFolder {
   border-color: rgba(96, 165, 250, 0.5);
   background: rgba(59, 130, 246, 0.14);
@@ -2068,6 +2081,19 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.fileBadgeButton {
+  cursor: pointer;
+}
+
+.fileBadgeButton:disabled {
+  cursor: default;
+}
+
+.fileBadgeButton:hover:not(:disabled) {
+  border-color: var(--chat-item-hover-border);
+  background: var(--chat-surface-hover);
 }
 
 .codeChangesFile {

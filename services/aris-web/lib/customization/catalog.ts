@@ -104,6 +104,28 @@ async function resolveWorkspacePath(projectPath: string): Promise<ResolvedWorksp
   throw new Error(`워크스페이스 경로를 해석할 수 없습니다: ${absoluteProjectPath}`);
 }
 
+function toClientWorkspacePath(runtimePath: string): string {
+  const normalizedRuntimePath = normalizeAbsolutePath(runtimePath);
+
+  if (normalizedRuntimePath === WORKSPACE_MOUNT_ROOT) {
+    return '/';
+  }
+
+  if (normalizedRuntimePath.startsWith(`${WORKSPACE_MOUNT_ROOT}/`)) {
+    const relativePath = path.relative(WORKSPACE_MOUNT_ROOT, normalizedRuntimePath).split(path.sep).join('/');
+    return relativePath ? `/${relativePath}` : '/';
+  }
+
+  if (env.NODE_ENV !== 'production') {
+    const relativePath = path.relative(process.cwd(), normalizedRuntimePath).split(path.sep).join('/');
+    if (!relativePath.startsWith('..') && !path.isAbsolute(relativePath)) {
+      return relativePath ? `/${relativePath}` : '/';
+    }
+  }
+
+  return '/';
+}
+
 async function statIfExists(targetPath: string) {
   try {
     return await fs.stat(targetPath);
@@ -415,4 +437,9 @@ export async function buildCustomizationOverview(projectPath: string): Promise<C
     skills,
     mcpServers,
   };
+}
+
+export async function resolveWorkspaceClientPath(projectPath: string): Promise<string> {
+  const resolved = await resolveWorkspacePath(projectPath);
+  return toClientWorkspacePath(resolved.runtimePath);
 }

@@ -6,6 +6,7 @@ import { BackendNotice } from '@/components/ui/BackendNotice';
 import { Card } from '@/components/ui';
 import Link from 'next/link';
 import { ChatInterface } from './ChatInterface';
+import { resolveWorkspaceClientPath } from '@/lib/customization/catalog';
 
 const INITIAL_EVENTS_PAGE_LIMIT = 40;
 
@@ -47,6 +48,8 @@ export default async function SessionPage({
       }),
     ]);
 
+    const workspaceRootPath = await resolveWorkspaceClientPath(detail.session.projectName).catch(() => '/');
+
     return (
       <div className="app-shell app-shell-immersive">
         <Header userEmail={user.email} role={user.role} autoHideOnScroll />
@@ -58,6 +61,7 @@ export default async function SessionPage({
             initialPermissions={permissions}
             isOperator={user.role === 'operator'}
             projectName={detail.session.projectName}
+            workspaceRootPath={workspaceRootPath}
             alias={detail.session.alias}
             agentFlavor={detail.session.agent}
             sessionModel={detail.session.model}

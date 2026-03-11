@@ -5,6 +5,7 @@ import { requireApiUser } from '@/lib/auth/guard';
 import { env } from '@/lib/config';
 
 const WORKSPACE_ROOT = '/workspace';
+const MAX_PREVIEW_BYTES = 256 * 1024;
 
 export async function GET(request: NextRequest) {
   const auth = await requireApiUser(request);
@@ -30,8 +31,30 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const content = await fs.readFile(fullPath, 'utf8');
-    return NextResponse.json({ content });
+    const stat = await fs.stat(fullPath);
+    if (!stat.isFile()) {
+      return NextResponse.json({ error: 'Not a file' }, { status: 400 });
+    }
+
+    if (stat.size > MAX_PREVIEW_BYTES) {
+      return NextResponse.json({
+        blockedReason: 'large',
+        sizeBytes: stat.size,
+      });
+    }
+
+    const contentBuffer = await fs.readFile(fullPath);
+    if (contentBuffer.includes(0)) {
+      return NextResponse.json({
+        blockedReason: 'binary',
+        sizeBytes: stat.size,
+      });
+    }
+
+    return NextResponse.json({
+      content: contentBuffer.toString('utf8'),
+      sizeBytes: stat.size,
+    });
   } catch {
     return NextResponse.json({ error: 'Failed to read file' }, { status: 500 });
   }
