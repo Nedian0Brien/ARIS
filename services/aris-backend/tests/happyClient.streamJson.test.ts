@@ -154,7 +154,7 @@ describe('happyClient stream-json parsing', () => {
       'Reply with OK',
       'on-request',
       'claude-haiku-4-5',
-      sessionId,
+      { id: sessionId, mode: 'session-id' },
     );
 
     expect(command).not.toBeNull();
@@ -163,18 +163,37 @@ describe('happyClient stream-json parsing', () => {
     expect(command?.args).not.toContain('--resume');
   });
 
-  it('keeps legacy --resume behavior for non-UUID Claude resume ids', () => {
+  it('uses --resume for stored Claude session ids', () => {
     const command = happyClientTestHooks.buildAgentCommand(
       'claude',
       'Reply with OK',
       'on-request',
       'claude-haiku-4-5',
-      'legacy-session-handle',
+      { id: 'session-live-123', mode: 'resume' },
     );
 
     expect(command).not.toBeNull();
     expect(command?.args).toContain('--resume');
-    expect(command?.args).toContain('legacy-session-handle');
+    expect(command?.args).toContain('session-live-123');
     expect(command?.args).not.toContain('--session-id');
+  });
+
+  it('extracts Claude session ids from stream-json output', () => {
+    const streamOutput = [
+      JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        session_id: 'claude-session-abc',
+      }),
+      JSON.stringify({
+        type: 'event',
+        event: 'agent_message',
+        content: '응답 완료',
+      }),
+    ].join('\n');
+
+    const parsed = happyClientTestHooks.parseAgentStreamOutput(streamOutput);
+    expect(parsed.sessionId).toBe('claude-session-abc');
+    expect(parsed.output).toBe('응답 완료');
   });
 });

@@ -61,6 +61,10 @@ type PermissionState = PermissionRequest['state'];
 type SessionStatusValue = RuntimeSession['state']['status'];
 type PermissionActionType = 'exec' | 'patch';
 type JsonRpcId = string | number | null;
+type AgentResumeTarget = {
+  id: string;
+  mode?: 'resume' | 'session-id';
+};
 type ActiveRun = {
   controller: AbortController;
   sessionId: string;
@@ -69,6 +73,7 @@ type ActiveRun = {
   agent: RuntimeAgent;
   model?: string;
   modelReasoningEffort?: ModelReasoningEffort;
+  completed: Promise<void>;
 };
 
 type CodexPermissionRequest = {
@@ -722,7 +727,7 @@ function buildActionEventKey(action: ParsedAgentActionEvent): string {
   return `${actionType}|${command}|${path}`;
 }
 
-function parseAgentStreamLine(line: string): { action?: ParsedAgentActionEvent; actionKey?: string; assistantText?: string } {
+function parseAgentStreamLine(line: string): { action?: ParsedAgentActionEvent; actionKey?: string; assistantText?: string; sessionId?: string } {
   const payload = parseJsonLine(line);
   if (!payload) {
     return {};
@@ -764,6 +769,12 @@ function parseAgentStreamLine(line: string): { action?: ParsedAgentActionEvent; 
     'toolCallId',
     'tool_call_id',
     'call',
+  ]);
+  const sessionId = extractFirstStringByKeys(records, [
+    'session_id',
+    'sessionId',
+    'resume_session_id',
+    'resumeSessionId',
   ]);
 
   let action: ParsedAgentActionEvent | undefined;
@@ -815,10 +826,11 @@ function parseAgentStreamLine(line: string): { action?: ParsedAgentActionEvent; 
   return {
     ...(action ? { action, actionKey: buildActionEventKey(action) } : {}),
     ...(assistantText ? { assistantText } : {}),
+    ...(sessionId ? { sessionId } : {}),
   };
 }
 
-function parseAgentStreamOutput(stdout: string): { output: string; actions: ParsedAgentActionEvent[] } {
+function parseAgentStreamOutput(stdout: string): { output: string; actions: ParsedAgentActionEvent[]; sessionId?: string } {
   const lines = stdout
     .replace(/\r\n/g, '\n')
     .split('\n')
@@ -826,6 +838,7 @@ function parseAgentStreamOutput(stdout: string): { output: string; actions: Pars
     .filter(Boolean);
   const actionByKey = new Map<string, ParsedAgentActionEvent>();
   let latestAssistantText = '';
+  let latestSessionId = '';
 
   for (const line of lines) {
     const parsedLine = parseAgentStreamLine(line);
@@ -840,11 +853,15 @@ function parseAgentStreamOutput(stdout: string): { output: string; actions: Pars
     ) {
       latestAssistantText = parsedLine.assistantText;
     }
+    if (parsedLine.sessionId) {
+      latestSessionId = parsedLine.sessionId;
+    }
   }
 
   return {
     output: latestAssistantText,
     actions: [...actionByKey.values()],
+    ...(latestSessionId ? { sessionId: latestSessionId } : {}),
   };
 }
 
@@ -908,6 +925,11 @@ function isAbortFailure(error: unknown): boolean {
   }
 
   return typeof candidate.message === 'string' && candidate.message.toLowerCase().includes('aborted');
+}
+
+function isClaudeSessionInUseError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes('session id') && message.includes('already in use');
 }
 
 function isMissingCodexThreadError(error: unknown): boolean {
@@ -1211,10 +1233,6 @@ function buildCodexThreadCacheKey(sessionId: string, chatId?: string): string {
   return sessionId;
 }
 
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}
-
 function formatUuidFromBytes(bytes: Uint8Array): string {
   const hex = Buffer.from(bytes).toString('hex');
   return [
@@ -1246,18 +1264,19 @@ function buildAgentCommand(
   prompt: string,
   approvalPolicy: ApprovalPolicy,
   model?: string,
-  resumeId?: string,
+  resumeTarget?: AgentResumeTarget | string,
 ): AgentCommand | null {
   const selectedModel = normalizeModel(model);
-  const normalizedResumeId = typeof resumeId === 'string' && resumeId.trim().length > 0
-    ? resumeId.trim().slice(0, 120)
+  const resolvedResumeTarget = typeof resumeTarget === 'string'
+    ? { id: resumeTarget, mode: 'resume' as const }
+    : resumeTarget;
+  const normalizedResumeId = typeof resolvedResumeTarget?.id === 'string' && resolvedResumeTarget.id.trim().length > 0
+    ? resolvedResumeTarget.id.trim().slice(0, 120)
     : undefined;
   if (agent === 'claude') {
     const permissionMode = normalizeClaudePermissionMode(approvalPolicy);
     const claudeResumeArgs = normalizedResumeId
-      ? isUuid(normalizedResumeId)
-        ? ['--session-id', normalizedResumeId]
-        : ['--resume', normalizedResumeId]
+      ? [resolvedResumeTarget?.mode === 'session-id' ? '--session-id' : '--resume', normalizedResumeId]
       : [];
     const args = [
       '--print',
@@ -1536,10 +1555,10 @@ export class HappyRuntimeStore {
     model?: string,
     cwdHint?: string,
     signal?: AbortSignal,
-    resumeId?: string,
+    resumeTarget?: AgentResumeTarget | string,
     handlers?: { onAction?: (action: ParsedAgentActionEvent) => Promise<void> },
-  ): Promise<{ output: string; cwd: string; inferredActions: ParsedAgentActionEvent[]; streamedActionsPersisted: boolean }> {
-    const command = buildAgentCommand(agent, prompt, approvalPolicy, model, resumeId);
+  ): Promise<{ output: string; cwd: string; inferredActions: ParsedAgentActionEvent[]; streamedActionsPersisted: boolean; threadId?: string }> {
+    const command = buildAgentCommand(agent, prompt, approvalPolicy, model, resumeTarget);
     if (!command) {
       throw new Error(`Unsupported agent flavor: ${agent}`);
     }
@@ -1576,6 +1595,7 @@ export class HappyRuntimeStore {
       stderr: string;
       actions: ParsedAgentActionEvent[];
       streamedActionsPersisted: boolean;
+      threadId?: string;
     }> => new Promise((resolve, reject) => {
       let child: ReturnType<typeof spawn>;
       try {
@@ -1604,6 +1624,7 @@ export class HappyRuntimeStore {
       let stdoutBuffer = '';
       let stderrBuffer = '';
       let lineBuffer = '';
+      let resolvedSessionId = '';
       let emitChain: Promise<void> = Promise.resolve();
       let settled = false;
       let timeoutHandle: NodeJS.Timeout | null = setTimeout(() => {
@@ -1629,6 +1650,9 @@ export class HappyRuntimeStore {
           return;
         }
         const parsedLine = parseAgentStreamLine(normalized);
+        if (parsedLine.sessionId) {
+          resolvedSessionId = parsedLine.sessionId;
+        }
         if (parsedLine.action && parsedLine.actionKey && !actionByKey.has(parsedLine.actionKey)) {
           actionByKey.set(parsedLine.actionKey, parsedLine.action);
           if (onAction) {
@@ -1693,6 +1717,7 @@ export class HappyRuntimeStore {
               stderr: stderrBuffer,
               actions: [...actionByKey.values()],
               streamedActionsPersisted,
+              ...(resolvedSessionId ? { threadId: resolvedSessionId } : {}),
             });
           })
           .catch((error) => {
@@ -1701,7 +1726,7 @@ export class HappyRuntimeStore {
       });
     });
 
-    let result: { stdout: string; stderr: string } | null = null;
+    let result: { stdout: string; stderr: string; threadId?: string } | null = null;
     let lastError: unknown = null;
     let inferredActions: ParsedAgentActionEvent[] = [];
     let streamedActionsPersisted = false;
@@ -1711,6 +1736,7 @@ export class HappyRuntimeStore {
         result = {
           stdout: streamed.stdout,
           stderr: streamed.stderr,
+          ...(streamed.threadId ? { threadId: streamed.threadId } : {}),
         };
         inferredActions = streamed.actions;
         streamedActionsPersisted = streamed.streamedActionsPersisted;
@@ -1758,6 +1784,9 @@ export class HappyRuntimeStore {
       if (inferredActions.length === 0) {
         inferredActions = parsed.actions;
       }
+      if (!result.threadId && parsed.sessionId) {
+        result.threadId = parsed.sessionId;
+      }
       output = trimOutput(parsed.output || '');
       const needsFallback = !output || looksLikeActionTranscript(output);
       if (needsFallback && command.fallbackArgs && command.fallbackArgs.length > 0) {
@@ -1789,7 +1818,13 @@ export class HappyRuntimeStore {
     if (!output) {
       throw new Error(`${agent} returned an empty response`);
     }
-    return { output, cwd: safeCwd, inferredActions, streamedActionsPersisted };
+    return {
+      output,
+      cwd: safeCwd,
+      inferredActions,
+      streamedActionsPersisted,
+      ...(result.threadId ? { threadId: result.threadId } : {}),
+    };
   }
 
   private async appendAgentMessage(
@@ -3097,6 +3132,18 @@ export class HappyRuntimeStore {
     if (existing && !existing.controller.signal.aborted) {
       existing.controller.abort();
     }
+    if (existing) {
+      await Promise.race([
+        existing.completed,
+        new Promise<void>((resolve) => {
+          setTimeout(resolve, 5000);
+        }),
+      ]);
+    }
+    let finishRun = () => {};
+    const completed = new Promise<void>((resolve) => {
+      finishRun = resolve;
+    });
     this.activeRuns.set(runKey, {
       controller,
       sessionId: session.id,
@@ -3105,6 +3152,7 @@ export class HappyRuntimeStore {
       agent: flavor,
       ...(selectedModel ? { model: selectedModel } : {}),
       ...(selectedModelReasoningEffort ? { modelReasoningEffort: selectedModelReasoningEffort } : {}),
+      completed,
     });
 
     try {
@@ -3112,9 +3160,19 @@ export class HappyRuntimeStore {
       const preferredThreadId = typeof context.threadId === 'string' && context.threadId.trim().length > 0
         ? context.threadId.trim()
         : undefined;
-      const nonCodexThreadId = flavor === 'claude'
-        ? preferredThreadId ?? buildClaudeSessionId(session.id, scopedChatId)
-        : preferredThreadId;
+      const initialClaudeSessionId = flavor === 'claude' && !preferredThreadId
+        ? buildClaudeSessionId(session.id, scopedChatId)
+        : undefined;
+      const nonCodexResumeTarget = flavor === 'claude'
+        ? preferredThreadId
+          ? { id: preferredThreadId, mode: 'resume' as const }
+          : initialClaudeSessionId
+            ? { id: initialClaudeSessionId, mode: 'session-id' as const }
+            : undefined
+        : preferredThreadId
+          ? { id: preferredThreadId, mode: 'resume' as const }
+          : undefined;
+      const nonCodexActionThreadId = preferredThreadId ?? initialClaudeSessionId;
       const threadCacheKey = buildCodexThreadCacheKey(session.id, scopedChatId);
       let response: {
         output: string;
@@ -3200,21 +3258,46 @@ export class HappyRuntimeStore {
       } else {
         const nonCodexCwd = this.resolveExecutionCwd(session.metadata.path);
         let streamedActionIndex = 0;
-        const nonCodex = await this.runAgentCli(
-          flavor,
-          prompt,
-          session.metadata.approvalPolicy,
-          selectedModel,
-          session.metadata.path,
-          controller.signal,
-          nonCodexThreadId,
-          {
-            onAction: async (action) => {
-              await appendNonCodexAction(action, streamedActionIndex, nonCodexCwd, nonCodexThreadId);
-              streamedActionIndex += 1;
+        let nonCodex;
+        try {
+          nonCodex = await this.runAgentCli(
+            flavor,
+            prompt,
+            session.metadata.approvalPolicy,
+            selectedModel,
+            session.metadata.path,
+            controller.signal,
+            nonCodexResumeTarget,
+            {
+              onAction: async (action) => {
+                await appendNonCodexAction(action, streamedActionIndex, nonCodexCwd, nonCodexActionThreadId);
+                streamedActionIndex += 1;
+              },
             },
-          },
-        );
+          );
+        } catch (error) {
+          if (flavor !== 'claude' || !isClaudeSessionInUseError(error) || controller.signal.aborted) {
+            throw error;
+          }
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, 1500);
+          });
+          nonCodex = await this.runAgentCli(
+            flavor,
+            prompt,
+            session.metadata.approvalPolicy,
+            selectedModel,
+            session.metadata.path,
+            controller.signal,
+            nonCodexResumeTarget,
+            {
+              onAction: async (action) => {
+                await appendNonCodexAction(action, streamedActionIndex, nonCodexCwd, nonCodexActionThreadId);
+                streamedActionIndex += 1;
+              },
+            },
+          );
+        }
         response = {
           output: nonCodex.output,
           cwd: nonCodex.cwd,
@@ -3222,7 +3305,7 @@ export class HappyRuntimeStore {
           agentMessagePersisted: false,
           streamedActionsPersisted: nonCodex.streamedActionsPersisted,
           inferredActions: nonCodex.inferredActions,
-          threadId: nonCodexThreadId,
+          threadId: nonCodex.threadId ?? nonCodexActionThreadId,
         };
       }
 
@@ -3278,6 +3361,7 @@ export class HappyRuntimeStore {
         console.error(`failed to persist agent error message: ${persistMessage}`);
       }
     } finally {
+      finishRun();
       const current = this.activeRuns.get(runKey);
       if (current?.controller === controller) {
         this.activeRuns.delete(runKey);
