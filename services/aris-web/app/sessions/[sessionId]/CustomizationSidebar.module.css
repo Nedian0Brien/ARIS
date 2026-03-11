@@ -161,7 +161,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .sectionTabs {
@@ -189,13 +189,13 @@
 }
 
 .content {
-  flex: 1;
-  min-height: 0;
+  flex: 1 0 auto;
+  min-height: auto;
   padding: 0.78rem;
   display: flex;
   flex-direction: column;
   gap: 0.72rem;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .statsRow {
@@ -265,9 +265,9 @@
 }
 
 .itemList {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+  flex: 1 0 auto;
+  min-height: auto;
+  overflow: visible;
   padding: 0.48rem;
   display: flex;
   flex-direction: column;
@@ -552,7 +552,7 @@
 
 .modalCard {
   width: min(920px, 100%);
-  max-height: min(88vh, 860px);
+  max-height: min(94vh, 1040px);
   border-radius: 24px;
   border: 1px solid rgba(148, 163, 184, 0.22);
   background:
@@ -609,7 +609,15 @@
   padding: 1rem 1.08rem 1.08rem;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+}
+
+.modalBody .editor {
+  min-height: clamp(460px, 64vh, 820px);
+}
+
+.modalBody .preview {
+  min-height: clamp(420px, 60vh, 760px);
 }
 
 .rotate {
@@ -622,10 +630,6 @@
 }
 
 @media (max-width: 900px) {
-  .itemList {
-    max-height: 216px;
-  }
-
   .documentGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -682,10 +686,6 @@
     gap: 0.62rem;
   }
 
-  .itemList {
-    max-height: 182px;
-  }
-
   .documentGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -727,7 +727,7 @@
   }
 
   .editor {
-    min-height: 240px;
+    min-height: 360px;
     font-size: 16px;
   }
 
