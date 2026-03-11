@@ -8,9 +8,10 @@ import { inferActionTypeFromCommand, titleForActionType } from './actionType.js'
 import { summarizeDiffText, summarizeFileChangeDiff } from './diffStats.js';
 import { HappyEventLogger } from './happyEventLogger.js';
 import { resolveRuntimeModelSelection } from './modelPolicy.js';
+import { buildClaudeCommand } from './providers/claude/claudeLauncher.js';
 import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.js';
 import { buildClaudeSessionId, runClaudeTurn } from './providers/claude/claudeRuntime.js';
-import type { ClaudeActionEvent, ClaudeResumeTarget } from './providers/claude/types.js';
+import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget } from './providers/claude/types.js';
 import type {
   ApprovalPolicy,
   PermissionDecision,
@@ -253,16 +254,6 @@ function normalizeCodexApprovalPolicy(value: ApprovalPolicy): 'on-request' | 'on
     return value;
   }
   return 'on-request';
-}
-
-function normalizeClaudePermissionMode(value: ApprovalPolicy): 'default' | 'dontAsk' | 'bypassPermissions' {
-  if (value === 'never') {
-    return 'dontAsk';
-  }
-  if (value === 'yolo') {
-    return 'bypassPermissions';
-  }
-  return 'default';
 }
 
 function normalizeMetadata(raw: unknown): {
@@ -1232,42 +1223,12 @@ function buildAgentCommand(
     ? resolvedResumeTarget.id.trim().slice(0, 120)
     : undefined;
   if (agent === 'claude') {
-    const permissionMode = normalizeClaudePermissionMode(approvalPolicy);
-    const claudeResumeArgs = normalizedResumeId
-      ? [resolvedResumeTarget?.mode === 'session-id' ? '--session-id' : '--resume', normalizedResumeId]
-      : [];
-    const args = [
-      '--print',
-      '--output-format',
-      'stream-json',
-      '--verbose',
-      '--permission-mode',
-      permissionMode,
-      ...(selectedModel ? ['--model', selectedModel] : []),
-      ...claudeResumeArgs,
+    return buildClaudeCommand({
       prompt,
-    ];
-    return {
-      command: 'claude',
-      args,
-      ...(normalizedResumeId
-        ? {
-          retryArgsOnFailure: [
-            '--print',
-            '--output-format',
-            'stream-json',
-            '--verbose',
-            '--permission-mode',
-            permissionMode,
-            ...(selectedModel ? ['--model', selectedModel] : []),
-            ...claudeResumeArgs,
-            prompt,
-          ],
-        }
-        : {}),
-      requiresPty: true,
-      streamJson: true,
-    };
+      approvalPolicy,
+      model: selectedModel,
+      resumeTarget: resolvedResumeTarget,
+    });
   }
   if (agent === 'gemini') {
     const args = [
@@ -1532,21 +1493,13 @@ export class HappyRuntimeStore {
     throw new Error(`Session project path not found on backend host: ${raw}`);
   }
 
-  private async runAgentCli(
+  private async runAgentCommand(
     agent: RuntimeAgent,
-    prompt: string,
-    approvalPolicy: ApprovalPolicy,
-    model?: string,
+    command: AgentCommand | ClaudeLaunchCommand,
     cwdHint?: string,
     signal?: AbortSignal,
-    resumeTarget?: ClaudeResumeTarget | string,
     handlers?: { onAction?: (action: ParsedAgentActionEvent) => Promise<void> },
   ): Promise<{ output: string; cwd: string; inferredActions: ParsedAgentActionEvent[]; streamedActionsPersisted: boolean; threadId?: string }> {
-    const command = buildAgentCommand(agent, prompt, approvalPolicy, model, resumeTarget);
-    if (!command) {
-      throw new Error(`Unsupported agent flavor: ${agent}`);
-    }
-
     const safeCwd = this.resolveExecutionCwd(cwdHint);
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
     const { CLAUDECODE: _cc, ...spawnEnv } = process.env;
@@ -1809,6 +1762,23 @@ export class HappyRuntimeStore {
       streamedActionsPersisted,
       ...(result.threadId ? { threadId: result.threadId } : {}),
     };
+  }
+
+  private async runAgentCli(
+    agent: RuntimeAgent,
+    prompt: string,
+    approvalPolicy: ApprovalPolicy,
+    model?: string,
+    cwdHint?: string,
+    signal?: AbortSignal,
+    resumeTarget?: ClaudeResumeTarget | string,
+    handlers?: { onAction?: (action: ParsedAgentActionEvent) => Promise<void> },
+  ): Promise<{ output: string; cwd: string; inferredActions: ParsedAgentActionEvent[]; streamedActionsPersisted: boolean; threadId?: string }> {
+    const command = buildAgentCommand(agent, prompt, approvalPolicy, model, resumeTarget);
+    if (!command) {
+      throw new Error(`Unsupported agent flavor: ${agent}`);
+    }
+    return this.runAgentCommand(agent, command, cwdHint, signal, handlers);
   }
 
   private async appendAgentMessage(
@@ -3264,20 +3234,16 @@ export class HappyRuntimeStore {
             preferredThreadId,
             model: selectedModel,
             signal: controller.signal,
-            runCli: async ({ prompt: cliPrompt, approvalPolicy, model, cwdHint, signal, resumeTarget }) => this.runAgentCli(
+            onAction: async (action) => {
+              await appendNonCodexAction(action, streamedActionIndex, nonCodexCwd, nonCodexActionThreadId);
+              streamedActionIndex += 1;
+            },
+            executeCommand: async ({ command, cwdHint, signal, onAction }) => this.runAgentCommand(
               'claude',
-              cliPrompt,
-              approvalPolicy,
-              model,
+              command,
               cwdHint,
               signal,
-              resumeTarget,
-              {
-                onAction: async (action) => {
-                  await appendNonCodexAction(action, streamedActionIndex, nonCodexCwd, nonCodexActionThreadId);
-                  streamedActionIndex += 1;
-                },
-              },
+              { onAction },
             ),
           })
           : await this.runAgentCli(

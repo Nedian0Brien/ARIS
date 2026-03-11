@@ -1,4 +1,4 @@
-import type { ApprovalPolicy, RuntimeSession } from '../../../types.js';
+import type { RuntimeSession } from '../../../types.js';
 
 export type ClaudeResumeTarget = {
   id: string;
@@ -25,13 +25,19 @@ export type ClaudeCliResult = {
   threadId?: string;
 };
 
-export type ClaudeRunCli = (input: {
-  prompt: string;
-  approvalPolicy: ApprovalPolicy;
-  model?: string;
+export type ClaudeLaunchCommand = {
+  command: 'claude';
+  args: string[];
+  requiresPty: true;
+  streamJson: true;
+  fallbackArgs?: string[];
+  retryArgsOnFailure?: string[];
+};
+
+export type ClaudeCommandExecutor = (input: {
+  command: ClaudeLaunchCommand;
   cwdHint?: string;
   signal?: AbortSignal;
-  resumeTarget?: ClaudeResumeTarget;
   onAction?: (action: ClaudeActionEvent) => Promise<void>;
 }) => Promise<ClaudeCliResult>;
 

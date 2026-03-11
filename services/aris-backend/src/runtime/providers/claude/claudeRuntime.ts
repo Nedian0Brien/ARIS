@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { setTimeout as delay } from 'node:timers/promises';
-import type { ClaudeResumeTarget, ClaudeRunCli, ClaudeRuntimeSession, ClaudeTurnResult } from './types.js';
+import { runClaudeCommand } from './claudeLauncher.js';
+import type { ClaudeCommandExecutor, ClaudeResumeTarget, ClaudeRuntimeSession, ClaudeTurnResult } from './types.js';
 
 function formatUuidFromBytes(bytes: Uint8Array): string {
   const hex = Buffer.from(bytes).toString('hex');
@@ -26,11 +26,6 @@ export function buildClaudeSessionId(sessionId: string, chatId?: string): string
     ? chatId.trim()
     : '__default__';
   return buildDeterministicUuid(`aris:claude:${sessionId}:${scopedChatId}`);
-}
-
-export function isClaudeSessionInUseError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-  return message.includes('session id') && message.includes('already in use');
 }
 
 export function buildClaudeResumeTarget(
@@ -59,7 +54,8 @@ export async function runClaudeTurn(input: {
   preferredThreadId?: string;
   model?: string;
   signal?: AbortSignal;
-  runCli: ClaudeRunCli;
+  onAction?: Parameters<ClaudeCommandExecutor>[0]['onAction'];
+  executeCommand: ClaudeCommandExecutor;
 }): Promise<ClaudeTurnResult> {
   const { resumeTarget, actionThreadId } = buildClaudeResumeTarget(
     input.preferredThreadId,
@@ -67,36 +63,22 @@ export async function runClaudeTurn(input: {
     input.chatId,
   );
 
-  const runOnce = async () => input.runCli({
+  const result = await runClaudeCommand({
     prompt: input.prompt,
     approvalPolicy: input.session.metadata.approvalPolicy,
     model: input.model,
     cwdHint: input.session.metadata.path,
     signal: input.signal,
     resumeTarget,
+    onAction: input.onAction,
+    executeCommand: input.executeCommand,
   });
 
-  try {
-    const result = await runOnce();
-    return {
-      output: result.output,
-      cwd: result.cwd,
-      streamedActionsPersisted: result.streamedActionsPersisted,
-      inferredActions: result.inferredActions,
-      threadId: result.threadId ?? actionThreadId,
-    };
-  } catch (error) {
-    if (!isClaudeSessionInUseError(error) || input.signal?.aborted) {
-      throw error;
-    }
-    await delay(1500);
-    const retry = await runOnce();
-    return {
-      output: retry.output,
-      cwd: retry.cwd,
-      streamedActionsPersisted: retry.streamedActionsPersisted,
-      inferredActions: retry.inferredActions,
-      threadId: retry.threadId ?? actionThreadId,
-    };
-  }
+  return {
+    output: result.output,
+    cwd: result.cwd,
+    streamedActionsPersisted: result.streamedActionsPersisted,
+    inferredActions: result.inferredActions,
+    threadId: result.threadId ?? actionThreadId,
+  };
 }
