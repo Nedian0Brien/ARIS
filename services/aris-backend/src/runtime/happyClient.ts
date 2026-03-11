@@ -8,12 +8,12 @@ import { inferActionTypeFromCommand, titleForActionType } from './actionType.js'
 import { summarizeDiffText, summarizeFileChangeDiff } from './diffStats.js';
 import { HappyEventLogger } from './happyEventLogger.js';
 import { resolveRuntimeModelSelection } from './modelPolicy.js';
-import { buildClaudeCommand } from './providers/claude/claudeLauncher.js';
 import { buildClaudeActionThreadId, recoverClaudeThreadIdFromMessages, runClaudeProviderTurn } from './providers/claude/claudeOrchestrator.js';
 import { looksLikeClaudeActionTranscript, parseClaudeStreamLine, parseClaudeStreamOutput } from './providers/claude/claudeProtocolMapper.js';
 import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.js';
 import { extractClaudeSessionHintIds, scanClaudeSessionLogs } from './providers/claude/claudeSessionScanner.js';
 import { buildClaudeSessionId } from './providers/claude/claudeSessionSource.js';
+import { buildProviderCommand, type ProviderCommand } from './providers/providerCommandFactory.js';
 import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget } from './providers/claude/types.js';
 import type {
   ApprovalPolicy,
@@ -528,14 +528,7 @@ function trimOutput(value: string): string {
   return normalized.slice(0, AGENT_MAX_OUTPUT_CHARS);
 }
 
-type AgentCommand = {
-  command: string;
-  args: string[];
-  requiresPty?: boolean;
-  streamJson?: boolean;
-  fallbackArgs?: string[];
-  retryArgsOnFailure?: string[];
-};
+type AgentCommand = ProviderCommand;
 
 type ParsedAgentActionEvent = ClaudeActionEvent;
 
@@ -1218,55 +1211,13 @@ function buildAgentCommand(
   model?: string,
   resumeTarget?: ClaudeResumeTarget | string,
 ): AgentCommand | null {
-  const selectedModel = normalizeModel(model);
-  const resolvedResumeTarget = typeof resumeTarget === 'string'
-    ? { id: resumeTarget, mode: 'resume' as const }
-    : resumeTarget;
-  const normalizedResumeId = typeof resolvedResumeTarget?.id === 'string' && resolvedResumeTarget.id.trim().length > 0
-    ? resolvedResumeTarget.id.trim().slice(0, 120)
-    : undefined;
-  if (agent === 'claude') {
-    return buildClaudeCommand({
-      prompt,
-      approvalPolicy,
-      model: selectedModel,
-      resumeTarget: resolvedResumeTarget,
-    });
-  }
-  if (agent === 'gemini') {
-    const args = [
-      ...(selectedModel ? ['-m', selectedModel] : []),
-      '--output-format',
-      'stream-json',
-      ...(normalizedResumeId ? ['--resume', normalizedResumeId] : []),
-      '-p',
-      prompt,
-    ];
-    const fallbackArgs = [
-      ...(selectedModel ? ['-m', selectedModel] : []),
-      ...(normalizedResumeId ? ['--resume', normalizedResumeId] : []),
-      '-p',
-      prompt,
-    ];
-    return {
-      command: 'gemini',
-      args,
-      fallbackArgs,
-      ...(normalizedResumeId
-        ? {
-          retryArgsOnFailure: [
-            ...(selectedModel ? ['-m', selectedModel] : []),
-            '--output-format',
-            'stream-json',
-            '-p',
-            prompt,
-          ],
-        }
-        : {}),
-      streamJson: true,
-    };
-  }
-  return null;
+  return buildProviderCommand({
+    agent,
+    prompt,
+    approvalPolicy,
+    model: normalizeModel(model),
+    resumeTarget,
+  });
 }
 
 export const happyClientTestHooks = {
