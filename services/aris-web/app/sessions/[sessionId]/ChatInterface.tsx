@@ -3142,26 +3142,42 @@ export function ChatInterface({
     };
   }, [isCustomizationPinned]);
 
+  const restorePinnedCenterPanelView = useCallback(() => {
+    const shell = chatShellRef.current;
+    const centerPanel = centerPanelRef.current;
+    if (!shell || !centerPanel) {
+      return;
+    }
+
+    shell.scrollLeft = 0;
+    centerPanel.scrollIntoView({ block: 'nearest', inline: 'start' });
+  }, []);
+
   useEffect(() => {
     if (!isCustomizationPinned || !isRightSidebarPinnedLayout) {
       return;
     }
 
-    const shell = chatShellRef.current;
-    if (!shell) {
-      return;
-    }
-
-    const resetScroll = () => {
-      shell.scrollLeft = 0;
-    };
-
-    resetScroll();
-    const frameId = window.requestAnimationFrame(resetScroll);
+    restorePinnedCenterPanelView();
+    let secondFrameId = 0;
+    const frameId = window.requestAnimationFrame(() => {
+      restorePinnedCenterPanelView();
+      secondFrameId = window.requestAnimationFrame(restorePinnedCenterPanelView);
+    });
     return () => {
       window.cancelAnimationFrame(frameId);
+      if (secondFrameId) {
+        window.cancelAnimationFrame(secondFrameId);
+      }
     };
-  }, [isCustomizationPinned, isRightSidebarPinnedLayout, isLeftSidebarOverlayLayout]);
+  }, [isCustomizationPinned, isRightSidebarPinnedLayout, isLeftSidebarOverlayLayout, restorePinnedCenterPanelView]);
+
+  const handleToggleCustomizationPinned = useCallback(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    setIsCustomizationPinned((prev) => !prev);
+  }, []);
 
   const toggleResult = useCallback((eventId: string) => {
     setExpandedResultIds((prev) => ({
@@ -5122,7 +5138,7 @@ export function ChatInterface({
               workspaceRootPath={normalizedWorkspaceRootPath}
               requestedFile={isCustomizationOverlayLayout ? sidebarFileRequest : null}
               isPinned={isCustomizationPinned}
-              onTogglePinned={() => setIsCustomizationPinned((prev) => !prev)}
+              onTogglePinned={handleToggleCustomizationPinned}
               mode={isMobileLayout ? 'mobile' : 'desktop'}
               onRequestClose={() => setIsCustomizationSidebarOpen(false)}
             />
@@ -5137,7 +5153,7 @@ export function ChatInterface({
           workspaceRootPath={normalizedWorkspaceRootPath}
           requestedFile={isCustomizationOverlayLayout ? null : sidebarFileRequest}
           isPinned={isCustomizationPinned}
-          onTogglePinned={() => setIsCustomizationPinned((prev) => !prev)}
+          onTogglePinned={handleToggleCustomizationPinned}
           mode="desktop"
         />
       </aside>
