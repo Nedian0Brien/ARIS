@@ -2167,6 +2167,8 @@ export function ChatInterface({
   const isRightSidebarPinnedLayout = !isMobileLayout && (viewportWidth > CUSTOMIZATION_OVERLAY_MAX_WIDTH_PX || isCustomizationPinned);
   const isLeftSidebarOverlayLayout = isMobileLayout
     || (isRightSidebarPinnedLayout && viewportWidth < RIGHT_PIN_PREFERS_LEFT_OVERLAY_MIN_WIDTH_PX);
+  const isLeftSidebarDocked = isChatSidebarOpen && !isLeftSidebarOverlayLayout;
+  const isRightSidebarDocked = !isCustomizationOverlayLayout;
   const snapshotSyncedEventRef = useRef<Record<string, string>>(buildSnapshotSyncMap(initialChats));
 
   const defaultAgentFlavor = normalizeAgentFlavor(agentFlavor, 'codex');
@@ -3142,40 +3144,7 @@ export function ChatInterface({
     };
   }, [isCustomizationPinned]);
 
-  const restorePinnedCenterPanelView = useCallback(() => {
-    const shell = chatShellRef.current;
-    const centerPanel = centerPanelRef.current;
-    if (!shell || !centerPanel) {
-      return;
-    }
-
-    shell.scrollLeft = 0;
-    centerPanel.scrollIntoView({ block: 'nearest', inline: 'start' });
-  }, []);
-
-  useEffect(() => {
-    if (!isCustomizationPinned || !isRightSidebarPinnedLayout) {
-      return;
-    }
-
-    restorePinnedCenterPanelView();
-    let secondFrameId = 0;
-    const frameId = window.requestAnimationFrame(() => {
-      restorePinnedCenterPanelView();
-      secondFrameId = window.requestAnimationFrame(restorePinnedCenterPanelView);
-    });
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      if (secondFrameId) {
-        window.cancelAnimationFrame(secondFrameId);
-      }
-    };
-  }, [isCustomizationPinned, isRightSidebarPinnedLayout, isLeftSidebarOverlayLayout, restorePinnedCenterPanelView]);
-
   const handleToggleCustomizationPinned = useCallback(() => {
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
     setIsCustomizationPinned((prev) => !prev);
   }, []);
 
@@ -4311,10 +4280,10 @@ export function ChatInterface({
     <>
     <div
       className={`${styles.chatShell} ${
-        isChatSidebarOpen ? styles.chatShellSidebarOpen : styles.chatShellSidebarClosed
-      } ${isMobileLayout ? styles.chatShellMobileScroll : ''} ${
-        isRightSidebarPinnedLayout ? styles.chatShellRightPinned : ''
-      } ${isLeftSidebarOverlayLayout ? styles.chatShellLeftOverlay : ''}`}
+        isLeftSidebarDocked ? styles.chatShellLeftVisible : ''
+      } ${isRightSidebarDocked ? styles.chatShellRightVisible : ''} ${
+        isMobileLayout ? styles.chatShellMobileScroll : ''
+      }`}
       ref={chatShellRef}
     >
       {isLeftSidebarOverlayLayout && isChatSidebarOpen && (

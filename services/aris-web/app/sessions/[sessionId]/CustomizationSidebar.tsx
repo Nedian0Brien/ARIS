@@ -876,13 +876,7 @@ export function CustomizationSidebar({
               <button
                 type="button"
                 className={`${styles.refreshButton} ${isPinned ? styles.pinButtonActive : ''}`}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                }}
-                onClick={(event) => {
-                  event.currentTarget.blur();
-                  onTogglePinned();
-                }}
+                onClick={onTogglePinned}
                 aria-label={isPinned ? '우측 사이드바 고정 해제' : '우측 사이드바 고정'}
                 title={isPinned ? '우측 사이드바 고정 해제' : '우측 사이드바 고정'}
               >
