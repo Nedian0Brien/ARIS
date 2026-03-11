@@ -134,11 +134,14 @@
 }
 
 .chatShellRightPinned {
-  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  grid-template-columns: 280px minmax(720px, 1fr) 320px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
 }
 
 .chatShellLeftOverlay {
-  grid-template-columns: 0 minmax(0, 1fr) 320px;
+  grid-template-columns: 0 minmax(720px, 1fr) 320px;
 }
 
 .chatShell.chatShellMobileScroll {
@@ -3235,11 +3238,11 @@
   }
 
   .chatShellRightPinned {
-    grid-template-columns: 280px minmax(0, 1fr) 320px;
+    grid-template-columns: 280px minmax(720px, 1fr) 320px;
   }
 
   .chatShellRightPinned.chatShellLeftOverlay {
-    grid-template-columns: 0 minmax(0, 1fr) 320px;
+    grid-template-columns: 0 minmax(720px, 1fr) 320px;
   }
 
   .chatShellRightPinned .rightPanel {
