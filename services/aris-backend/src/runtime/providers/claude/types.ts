@@ -30,7 +30,7 @@ export type ClaudeCliResult = {
 export type ClaudeLaunchCommand = {
   command: 'claude';
   args: string[];
-  requiresPty: true;
+  requiresPty: boolean;
   streamJson: true;
   fallbackArgs?: string[];
   retryArgsOnFailure?: string[];

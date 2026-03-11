@@ -1498,12 +1498,14 @@ export class HappyRuntimeStore {
               cwd: safeCwd,
               env: { ...spawnEnv, PATH: mergedPath },
               signal,
+              stdio: ['ignore', 'pipe', 'pipe'],
             },
           )
           : spawn(command.command, args, {
             cwd: safeCwd,
             env: { ...spawnEnv, PATH: mergedPath },
             signal,
+            stdio: ['ignore', 'pipe', 'pipe'],
           });
       } catch (error) {
         reject(error);

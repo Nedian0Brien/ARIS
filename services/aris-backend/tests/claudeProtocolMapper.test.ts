@@ -66,6 +66,31 @@ describe('claudeProtocolMapper', () => {
     expect(parsed.output).toBe('OK');
   });
 
+  it('does not misclassify assistant/result usage fields as tool events', () => {
+    const streamOutput = [
+      JSON.stringify({
+        type: 'assistant',
+        session_id: 'claude-session-usage',
+        message: {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'OK.' }],
+          usage: { output_tokens: 2 },
+        },
+      }),
+      JSON.stringify({
+        type: 'result',
+        result: 'OK.',
+        session_id: 'claude-session-usage',
+        usage: { server_tool_use: { web_search_requests: 0 } },
+      }),
+    ].join('\n');
+
+    const parsed = parseClaudeStreamOutput(streamOutput);
+    expect(parsed.sessionId).toBe('claude-session-usage');
+    expect(parsed.output).toBe('OK.');
+  });
+
   it('maps a single Claude tool line into an action event', () => {
     const line = JSON.stringify({
       type: 'tool',

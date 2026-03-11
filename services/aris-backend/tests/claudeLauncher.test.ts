@@ -11,6 +11,7 @@ describe('claudeLauncher', () => {
     });
 
     expect(command.command).toBe('claude');
+    expect(command.requiresPty).toBe(false);
     expect(command.args).toContain('--session-id');
     expect(command.args).not.toContain('--resume');
     expect(command.retryArgsOnFailure).toEqual(command.args);

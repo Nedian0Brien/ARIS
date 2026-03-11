@@ -50,7 +50,7 @@ export function buildClaudeCommand(input: {
   return {
     command: 'claude',
     args,
-    requiresPty: true,
+    requiresPty: false,
     streamJson: true,
     ...(normalizedResumeId ? { retryArgsOnFailure: [...args] } : {}),
   };

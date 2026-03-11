@@ -223,9 +223,11 @@ export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
 
   const isSystem = payloadType === 'system' || payloadSubtype === 'init';
   const seemsToolEvent = (
-    lineLower.includes('commandexecution')
+    payloadType === 'tool'
+    || payloadSubtype.includes('tool')
+    || lineLower.includes('"tool')
+    || lineLower.includes('commandexecution')
     || lineLower.includes('exec_command')
-    || lineLower.includes('tool')
     || lineLower.includes('file_change')
     || lineLower.includes('filechange')
   );
