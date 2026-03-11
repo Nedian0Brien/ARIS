@@ -44,3 +44,15 @@ export type ClaudeTurnResult = {
 };
 
 export type ClaudeRuntimeSession = Pick<RuntimeSession, 'id' | 'metadata'>;
+
+export type ClaudeRunLifecycleMeta = {
+  sessionId: string;
+  chatId?: string;
+  startedAt: number;
+  model?: string;
+};
+
+export type ClaudeRunScope = {
+  sessionId: string;
+  chatId?: string;
+};

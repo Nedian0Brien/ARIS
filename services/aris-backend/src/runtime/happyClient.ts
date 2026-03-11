@@ -8,6 +8,7 @@ import { inferActionTypeFromCommand, titleForActionType } from './actionType.js'
 import { summarizeDiffText, summarizeFileChangeDiff } from './diffStats.js';
 import { HappyEventLogger } from './happyEventLogger.js';
 import { resolveRuntimeModelSelection } from './modelPolicy.js';
+import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.js';
 import { buildClaudeSessionId, runClaudeTurn } from './providers/claude/claudeRuntime.js';
 import type { ClaudeActionEvent, ClaudeResumeTarget } from './providers/claude/types.js';
 import type {
@@ -1318,6 +1319,7 @@ export const happyClientTestHooks = {
 export class HappyRuntimeStore {
   private readonly permissions = new Map<string, PermissionRequest>();
   private readonly activeRuns = new Map<string, ActiveRun>();
+  private readonly claudeSessionRegistry = new ClaudeSessionRegistry();
   private readonly codexThreads = new Map<string, string>();
   private readonly codexPermissionIndex = new Map<string, string>();
   private readonly codexPermissionResponders = new Map<string, (decision: PermissionDecision) => Promise<void>>();
@@ -1360,6 +1362,7 @@ export class HappyRuntimeStore {
   }
 
   private abortSessionRuns(sessionId: string, chatId?: string): void {
+    this.claudeSessionRegistry.abortSessionRuns({ sessionId, chatId });
     const scopedRunKey = typeof chatId === 'string' && chatId.trim().length > 0
       ? this.buildRunKey(sessionId, chatId)
       : null;
@@ -1379,6 +1382,19 @@ export class HappyRuntimeStore {
   }
 
   private async cleanupStaleRuns(reason: string): Promise<void> {
+    await this.claudeSessionRegistry.cleanupStaleRuns(
+      STALE_RUN_TIMEOUT_MS,
+      async ({ runKey, run, ageMs }) => this.handleStaleRunCleanup({
+        sessionId: run.sessionId,
+        chatId: run.chatId,
+        model: run.model,
+        agent: 'claude',
+        runKey,
+        ageMs,
+        reason,
+      }),
+    );
+
     const now = Date.now();
     const staleRuns: Array<{ runKey: string; run: ActiveRun; ageMs: number }> = [];
     for (const [runKey, run] of this.activeRuns.entries()) {
@@ -1394,41 +1410,61 @@ export class HappyRuntimeStore {
         stale.run.controller.abort();
       }
       this.activeRuns.delete(stale.runKey);
-      const channel = stale.run.agent === 'codex' && CODEX_RUNTIME_MODE !== 'exec' ? 'app_server' : 'exec_cli';
-      this.happyEventLogger.logParsed({
+      await this.handleStaleRunCleanup({
         sessionId: stale.run.sessionId,
-        ...(stale.run.chatId ? { chatId: stale.run.chatId } : {}),
-        ...(stale.run.model ? { model: stale.run.model } : {}),
-        turnStatus: 'run_stale_cleanup',
-        channel,
-        stage: 'run_status',
-        payload: {
-          reason,
-          runKey: stale.runKey,
-          ageMs: stale.ageMs,
-          staleTimeoutMs: STALE_RUN_TIMEOUT_MS,
-          agent: stale.run.agent,
-        },
+        chatId: stale.run.chatId,
+        model: stale.run.model,
+        agent: stale.run.agent,
+        runKey: stale.runKey,
+        ageMs: stale.ageMs,
+        reason,
       });
-      try {
-        await this.appendAgentMessage(
-          stale.run.sessionId,
-          `장기 실행 감지로 런타임을 정리했습니다. (${Math.floor(stale.ageMs / 1000)}초 경과)`,
-          {
-            ...(stale.run.chatId ? { chatId: stale.run.chatId } : {}),
-            ...(stale.run.model ? { model: stale.run.model } : {}),
-            runKey: stale.runKey,
-            streamEvent: 'runtime_stale_cleanup',
-            staleTimeoutMs: STALE_RUN_TIMEOUT_MS,
-            reason,
-            error: true,
-          },
-          { type: 'tool', title: 'Runtime Guard' },
-        );
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        console.error(`failed to persist stale run cleanup message: ${detail}`);
-      }
+    }
+  }
+
+  private async handleStaleRunCleanup(input: {
+    sessionId: string;
+    chatId?: string;
+    model?: string;
+    agent: RuntimeAgent;
+    runKey: string;
+    ageMs: number;
+    reason: string;
+  }): Promise<void> {
+    const channel = input.agent === 'codex' && CODEX_RUNTIME_MODE !== 'exec' ? 'app_server' : 'exec_cli';
+    this.happyEventLogger.logParsed({
+      sessionId: input.sessionId,
+      ...(input.chatId ? { chatId: input.chatId } : {}),
+      ...(input.model ? { model: input.model } : {}),
+      turnStatus: 'run_stale_cleanup',
+      channel,
+      stage: 'run_status',
+      payload: {
+        reason: input.reason,
+        runKey: input.runKey,
+        ageMs: input.ageMs,
+        staleTimeoutMs: STALE_RUN_TIMEOUT_MS,
+        agent: input.agent,
+      },
+    });
+    try {
+      await this.appendAgentMessage(
+        input.sessionId,
+        `장기 실행 감지로 런타임을 정리했습니다. (${Math.floor(input.ageMs / 1000)}초 경과)`,
+        {
+          ...(input.chatId ? { chatId: input.chatId } : {}),
+          ...(input.model ? { model: input.model } : {}),
+          runKey: input.runKey,
+          streamEvent: 'runtime_stale_cleanup',
+          staleTimeoutMs: STALE_RUN_TIMEOUT_MS,
+          reason: input.reason,
+          error: true,
+        },
+        { type: 'tool', title: 'Runtime Guard' },
+      );
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      console.error(`failed to persist stale run cleanup message: ${detail}`);
     }
   }
 
@@ -3074,34 +3110,57 @@ export class HappyRuntimeStore {
         },
       });
     }
-    const runKey = this.buildRunKey(session.id, scopedChatId);
-    const controller = new AbortController();
-    const existing = this.activeRuns.get(runKey);
-    if (existing && !existing.controller.signal.aborted) {
-      existing.controller.abort();
+    const isClaudeRun = flavor === 'claude';
+    let controller: AbortController;
+    let finalizeRun = () => {};
+    if (isClaudeRun) {
+      const claudeController = await this.claudeSessionRegistry.start({
+        sessionId: session.id,
+        ...(scopedChatId ? { chatId: scopedChatId } : {}),
+        ...(selectedModel ? { model: selectedModel } : {}),
+      }, 5000);
+      controller = claudeController.abortController;
+      finalizeRun = () => {
+        this.claudeSessionRegistry.finish(claudeController);
+      };
+    } else {
+      const runKey = this.buildRunKey(session.id, scopedChatId);
+      const activeController = new AbortController();
+      const existing = this.activeRuns.get(runKey);
+      if (existing && !existing.controller.signal.aborted) {
+        existing.controller.abort();
+      }
+      if (existing) {
+        await Promise.race([
+          existing.completed,
+          new Promise<void>((resolve) => {
+            setTimeout(resolve, 5000);
+          }),
+        ]);
+      }
+      let finishRun = () => {};
+      const completed = new Promise<void>((resolve) => {
+        finishRun = resolve;
+      });
+      this.activeRuns.set(runKey, {
+        controller: activeController,
+        sessionId: session.id,
+        ...(scopedChatId ? { chatId: scopedChatId } : {}),
+        startedAt: Date.now(),
+        agent: flavor,
+        ...(selectedModel ? { model: selectedModel } : {}),
+        ...(selectedModelReasoningEffort ? { modelReasoningEffort: selectedModelReasoningEffort } : {}),
+        completed,
+      });
+      controller = activeController;
+      finalizeRun = () => {
+        finishRun();
+        const current = this.activeRuns.get(runKey);
+        if (current?.controller === activeController) {
+          this.activeRuns.delete(runKey);
+        }
+      };
     }
-    if (existing) {
-      await Promise.race([
-        existing.completed,
-        new Promise<void>((resolve) => {
-          setTimeout(resolve, 5000);
-        }),
-      ]);
-    }
-    let finishRun = () => {};
-    const completed = new Promise<void>((resolve) => {
-      finishRun = resolve;
-    });
-    this.activeRuns.set(runKey, {
-      controller,
-      sessionId: session.id,
-      ...(scopedChatId ? { chatId: scopedChatId } : {}),
-      startedAt: Date.now(),
-      agent: flavor,
-      ...(selectedModel ? { model: selectedModel } : {}),
-      ...(selectedModelReasoningEffort ? { modelReasoningEffort: selectedModelReasoningEffort } : {}),
-      completed,
-    });
 
     try {
       const isCodex = flavor === 'codex';
@@ -3299,11 +3358,7 @@ export class HappyRuntimeStore {
         console.error(`failed to persist agent error message: ${persistMessage}`);
       }
     } finally {
-      finishRun();
-      const current = this.activeRuns.get(runKey);
-      if (current?.controller === controller) {
-        this.activeRuns.delete(runKey);
-      }
+      finalizeRun();
     }
   }
 
@@ -3555,6 +3610,9 @@ export class HappyRuntimeStore {
       throw new Error('SESSION_NOT_FOUND');
     }
     await this.cleanupStaleRuns('runtime_status_poll');
+    if (this.claudeSessionRegistry.isRunning({ sessionId, chatId })) {
+      return true;
+    }
     if (chatId && chatId.trim().length > 0) {
       return this.activeRuns.has(this.buildRunKey(sessionId, chatId));
     }
