@@ -4487,7 +4487,7 @@ export function ChatInterface({
               {isCustomizationOverlayLayout && (
                 <button
                   type="button"
-                  className={`${styles.mobileCustomizationButton} ${isCustomizationSidebarOpen ? styles.mobileCustomizationButtonActive : ''}`}
+                  className={styles.sidebarToggleButton}
                   onClick={() => {
                     if (isMobileLayout) {
                       setIsChatSidebarOpen(false);
@@ -4499,7 +4499,6 @@ export function ChatInterface({
                   title={isCustomizationSidebarOpen ? '우측 사이드바 닫기' : '우측 사이드바 열기'}
                 >
                   {isCustomizationSidebarOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
-                  <span className={styles.mobileCustomizationLabel}>Sidebar</span>
                 </button>
               )}
               <span

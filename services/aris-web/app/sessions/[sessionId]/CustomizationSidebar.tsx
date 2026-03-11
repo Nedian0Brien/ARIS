@@ -401,7 +401,7 @@ export function CustomizationSidebar({
                 className={`${styles.sectionTab} ${activeSection === 'instructions' ? styles.sectionTabActive : ''}`}
                 onClick={() => setActiveSection('instructions')}
               >
-                지침 문서
+                AGENTS.md
               </button>
               <button
                 type="button"
