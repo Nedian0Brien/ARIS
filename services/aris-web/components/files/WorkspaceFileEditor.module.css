@@ -1,0 +1,313 @@
+.editorRoot {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background-color: var(--surface);
+}
+
+.editorHeader {
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+  background-color: var(--surface-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.editorTitleBox {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.titleIcon {
+  color: var(--accent-sky);
+  flex-shrink: 0;
+}
+
+.editorTitleText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fileName {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileLang {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.editorActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.buttonSmall {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 6px;
+  min-height: unset !important;
+}
+
+.editorViewport {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  background-color: var(--bg);
+  position: relative;
+  min-height: 0;
+}
+
+.lineNumbers {
+  width: 3.5rem;
+  padding: 1.5rem 0.5rem;
+  background-color: var(--surface-subtle);
+  border-right: 1px solid var(--line);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  text-align: right;
+  user-select: none;
+  overflow: hidden;
+  white-space: pre;
+  flex-shrink: 0;
+}
+
+.editorContainer {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+}
+
+.editorPre {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 1.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  pointer-events: none;
+  white-space: pre;
+  overflow: hidden;
+  background: transparent;
+  color: var(--text);
+  tab-size: 2;
+  z-index: 1;
+}
+
+.editorTextarea {
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 1.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+  resize: none;
+  outline: none;
+  white-space: pre;
+  overflow: auto;
+  tab-size: 2;
+  z-index: 2;
+}
+
+.editorFooter {
+  padding: 0.4rem 1rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  background-color: var(--surface-subtle);
+  flex-shrink: 0;
+}
+
+.markdownBody {
+  flex: 1;
+  padding: 2rem;
+  overflow: auto;
+  background-color: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.markdownBody ol {
+  padding-left: 1.5rem;
+  list-style-type: decimal;
+}
+
+.markdownBody ul {
+  padding-left: 1.5rem;
+  list-style-type: disc;
+}
+
+.markdownBody ol li + li,
+.markdownBody ul li + li {
+  margin-top: 0.24rem;
+}
+
+.animateSpin {
+  animation: editorSpin 1s linear infinite;
+}
+
+@keyframes editorSpin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.markdownBody :global(.md-code-block) {
+  margin: 0.75rem 0;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.95);
+  overflow: hidden;
+}
+
+.markdownBody :global(.md-code-header) {
+  display: flex;
+  align-items: center;
+  padding: 0.3rem 0.6rem 0;
+  min-height: 1.4rem;
+}
+
+.markdownBody :global(.md-code-lang) {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.15);
+  padding: 0.06rem 0.4rem;
+  border-radius: 999px;
+}
+
+.markdownBody :global(.md-code-pre) {
+  margin: 0;
+  padding: 0.4rem 0.6rem 0.6rem;
+  overflow-x: auto;
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.markdownBody :global(.md-code-pre code) {
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  padding: 0;
+  border-radius: 0;
+}
+
+.markdownBody :global(.token.comment),
+.markdownBody :global(.token.prolog),
+.markdownBody :global(.token.doctype),
+.markdownBody :global(.token.cdata) {
+  color: #64748b;
+  font-style: italic;
+}
+
+.markdownBody :global(.token.punctuation) {
+  color: #94a3b8;
+}
+
+.markdownBody :global(.token.property),
+.markdownBody :global(.token.tag),
+.markdownBody :global(.token.boolean),
+.markdownBody :global(.token.number),
+.markdownBody :global(.token.constant),
+.markdownBody :global(.token.symbol) {
+  color: #f472b6;
+}
+
+.markdownBody :global(.token.selector),
+.markdownBody :global(.token.attr-name),
+.markdownBody :global(.token.string),
+.markdownBody :global(.token.char),
+.markdownBody :global(.token.builtin) {
+  color: #86efac;
+}
+
+.markdownBody :global(.token.operator),
+.markdownBody :global(.token.entity),
+.markdownBody :global(.token.url) {
+  color: #67e8f9;
+}
+
+.markdownBody :global(.token.atrule),
+.markdownBody :global(.token.attr-value),
+.markdownBody :global(.token.keyword) {
+  color: #c4b5fd;
+}
+
+.markdownBody :global(.token.function),
+.markdownBody :global(.token.class-name) {
+  color: #93c5fd;
+}
+
+.markdownBody :global(.token.regex),
+.markdownBody :global(.token.important),
+.markdownBody :global(.token.variable) {
+  color: #fde68a;
+}
+
+@media (max-width: 640px) {
+  .editorHeader {
+    padding: 0.82rem 0.92rem;
+  }
+
+  .editorActions {
+    width: 100%;
+  }
+
+  .buttonSmall {
+    flex: 1;
+    justify-content: center;
+    min-height: 42px;
+    font-size: 0.78rem;
+  }
+
+  .lineNumbers {
+    width: 3rem;
+    padding: 1rem 0.42rem;
+  }
+
+  .editorPre,
+  .editorTextarea {
+    padding: 1rem;
+    font-size: 16px;
+  }
+
+  .markdownBody {
+    padding: 1rem;
+  }
+}
