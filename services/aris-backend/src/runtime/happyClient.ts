@@ -9,6 +9,7 @@ import { summarizeDiffText, summarizeFileChangeDiff } from './diffStats.js';
 import { HappyEventLogger } from './happyEventLogger.js';
 import { resolveRuntimeModelSelection } from './modelPolicy.js';
 import { buildClaudeCommand } from './providers/claude/claudeLauncher.js';
+import { looksLikeClaudeActionTranscript, parseClaudeStreamLine, parseClaudeStreamOutput } from './providers/claude/claudeProtocolMapper.js';
 import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.js';
 import { extractClaudeSessionHintIds, scanClaudeSessionLogs } from './providers/claude/claudeSessionScanner.js';
 import { buildClaudeSessionId } from './providers/claude/claudeSessionSource.js';
@@ -1588,7 +1589,9 @@ export class HappyRuntimeStore {
         if (!normalized) {
           return;
         }
-        const parsedLine = parseAgentStreamLine(normalized);
+        const parsedLine = agent === 'claude'
+          ? parseClaudeStreamLine(normalized)
+          : parseAgentStreamLine(normalized);
         if (parsedLine.sessionId) {
           resolvedSessionId = parsedLine.sessionId;
         }
@@ -1739,7 +1742,9 @@ export class HappyRuntimeStore {
     const cleanedStderr = stripAnsi(result.stderr || '');
     let output = '';
     if (command.streamJson) {
-      const parsed = parseAgentStreamOutput(cleanedStdout);
+      const parsed = agent === 'claude'
+        ? parseClaudeStreamOutput(cleanedStdout)
+        : parseAgentStreamOutput(cleanedStdout);
       if (inferredActions.length === 0) {
         inferredActions = parsed.actions;
       }
@@ -1747,7 +1752,9 @@ export class HappyRuntimeStore {
         result.threadId = parsed.sessionId;
       }
       output = trimOutput(parsed.output || '');
-      const needsFallback = !output || looksLikeActionTranscript(output);
+      const needsFallback = !output || (agent === 'claude'
+        ? looksLikeClaudeActionTranscript(output)
+        : looksLikeActionTranscript(output));
       if (needsFallback && command.fallbackArgs && command.fallbackArgs.length > 0) {
         try {
           const fallback = await runCommand(command.fallbackArgs);
