@@ -3142,6 +3142,27 @@ export function ChatInterface({
     };
   }, [isCustomizationPinned]);
 
+  useEffect(() => {
+    if (!isCustomizationPinned || !isRightSidebarPinnedLayout) {
+      return;
+    }
+
+    const shell = chatShellRef.current;
+    if (!shell) {
+      return;
+    }
+
+    const resetScroll = () => {
+      shell.scrollLeft = 0;
+    };
+
+    resetScroll();
+    const frameId = window.requestAnimationFrame(resetScroll);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [isCustomizationPinned, isRightSidebarPinnedLayout, isLeftSidebarOverlayLayout]);
+
   const toggleResult = useCallback((eventId: string) => {
     setExpandedResultIds((prev) => ({
       ...prev,
