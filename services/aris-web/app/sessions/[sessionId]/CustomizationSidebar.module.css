@@ -103,6 +103,13 @@
   background: rgba(255, 255, 255, 0.96);
 }
 
+.pinButtonActive {
+  border-color: rgba(37, 99, 235, 0.42);
+  background: linear-gradient(155deg, rgba(239, 246, 255, 0.98) 0%, rgba(219, 234, 254, 0.88) 100%);
+  color: var(--chat-accent);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.12);
+}
+
 .workspacePath {
   display: block;
   padding: 0.56rem 0.65rem;
@@ -692,9 +699,55 @@
 }
 
 .fileTreeActions {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.28rem;
+  margin-left: auto;
+}
+
+.fileTreeMenu {
+  position: absolute;
+  top: calc(100% + 0.28rem);
+  right: 0;
+  min-width: 8.6rem;
+  padding: 0.28rem;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 0.16rem;
+  z-index: 40;
+}
+
+.fileTreeMenuItem {
+  width: 100%;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  padding: 0.46rem 0.58rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  color: var(--chat-text-primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fileTreeMenuItem:hover {
+  background: rgba(239, 246, 255, 0.9);
+}
+
+.fileTreeMenuItemDanger {
+  color: var(--accent-red);
+}
+
+.fileTreeMenuItemDanger:hover {
+  background: rgba(254, 242, 242, 0.9);
 }
 
 .fileTreeHint {

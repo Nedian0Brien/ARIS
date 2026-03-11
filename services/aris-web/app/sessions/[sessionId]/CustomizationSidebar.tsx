@@ -18,7 +18,10 @@ import {
   GitBranch,
   type LucideIcon,
   Loader2,
+  MoreVertical,
   Pencil,
+  Pin,
+  PinOff,
   PlugZap,
   RefreshCw,
   Save,
@@ -112,6 +115,8 @@ type Props = {
   projectName: string;
   workspaceRootPath?: string;
   requestedFile?: RequestedFilePayload | null;
+  isPinned?: boolean;
+  onTogglePinned?: () => void;
   mode?: 'desktop' | 'mobile';
   onRequestClose?: () => void;
 };
@@ -204,6 +209,8 @@ export function CustomizationSidebar({
   projectName,
   workspaceRootPath = '/',
   requestedFile = null,
+  isPinned = false,
+  onTogglePinned,
   mode = 'desktop',
   onRequestClose,
 }: Props) {
@@ -249,6 +256,7 @@ export function CustomizationSidebar({
   const [fileStatus, setFileStatus] = useState<string | null>(null);
   const [filePreviewBlock, setFilePreviewBlock] = useState<FilePreviewBlock | null>(null);
   const [fileActionDialog, setFileActionDialog] = useState<FileActionDialog | null>(null);
+  const [fileActionMenuPath, setFileActionMenuPath] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<CustomizationModal>(null);
   const [isMounted, setIsMounted] = useState(false);
   const handledRequestedFileNonceRef = useRef<number | null>(null);
@@ -525,6 +533,21 @@ export function CustomizationSidebar({
     };
   }, [activeModal]);
 
+  useEffect(() => {
+    if (!fileActionMenuPath) {
+      return;
+    }
+
+    const handlePointerDown = () => {
+      setFileActionMenuPath(null);
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [fileActionMenuPath]);
+
   const handleSaveInstruction = useCallback(async () => {
     if (!selectedInstructionId) return;
     setInstructionSaving(true);
@@ -593,12 +616,6 @@ export function CustomizationSidebar({
 
     await Promise.all(paths.map((pathKey) => loadFilesDirectory(pathKey, { focus: pathKey === filesPath })));
   }, [expandedDirectories, filesPath, loadFilesDirectory]);
-
-  const handleFocusDirectory = useCallback((dirPath: string) => {
-    setFilesSearchQuery('');
-    setFilesSearchResults(null);
-    void loadFilesDirectory(dirPath);
-  }, [loadFilesDirectory]);
 
   const handleToggleDirectory = useCallback((dirPath: string) => {
     const normalizedDirPath = normalizeWorkspaceClientPath(dirPath);
@@ -730,14 +747,10 @@ export function CustomizationSidebar({
       const childEntries = filesEntriesByPath[item.path] ?? [];
       const childLoading = Boolean(filesLoadingByPath[item.path]);
       const childError = filesErrorByPath[item.path];
-      const isSelectedDirectory = item.isDirectory && filesPath === item.path;
 
       return (
         <div key={item.path} className={styles.fileTreeBranch}>
-          <div
-            className={`${styles.fileTreeRow} ${isSelectedDirectory ? styles.fileTreeRowActive : ''}`}
-            style={{ paddingLeft: `${depth * 16}px` }}
-          >
+          <div className={styles.fileTreeRow} style={{ paddingLeft: `${depth * 16}px` }}>
             {item.isDirectory ? (
               <button
                 type="button"
@@ -756,10 +769,7 @@ export function CustomizationSidebar({
               className={styles.fileTreeMain}
               onClick={() => {
                 if (item.isDirectory) {
-                  handleFocusDirectory(item.path);
-                  if (!isExpanded) {
-                    handleToggleDirectory(item.path);
-                  }
+                  handleToggleDirectory(item.path);
                 } else {
                   openFileModal(item.path, item.name);
                 }
@@ -773,36 +783,53 @@ export function CustomizationSidebar({
                 <span className={styles.itemDescription}>{item.path}</span>
               </span>
             </button>
-            <div className={styles.fileTreeActions}>
+            <div className={styles.fileTreeActions} onMouseDown={(event) => event.stopPropagation()}>
               <button
                 type="button"
                 className={styles.fileTreeActionButton}
-                onClick={() => {
-                  setFileActionDialog({
-                    kind: 'rename',
-                    targetPath: item.path,
-                    targetName: item.name,
-                    value: item.name,
-                  });
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setFileActionMenuPath((current) => (current === item.path ? null : item.path));
                 }}
-                title="이름 변경"
+                title="파일 메뉴"
               >
-                <Pencil size={13} />
+                <MoreVertical size={13} />
               </button>
-              <button
-                type="button"
-                className={`${styles.fileTreeActionButton} ${styles.fileTreeActionDanger}`}
-                onClick={() => {
-                  setFileActionDialog({
-                    kind: 'delete',
-                    targetPath: item.path,
-                    targetName: item.name,
-                  });
-                }}
-                title="삭제"
-              >
-                <Trash2 size={13} />
-              </button>
+              {fileActionMenuPath === item.path ? (
+                <div className={styles.fileTreeMenu}>
+                  <button
+                    type="button"
+                    className={styles.fileTreeMenuItem}
+                    onClick={() => {
+                      setFileActionMenuPath(null);
+                      setFileActionDialog({
+                        kind: 'rename',
+                        targetPath: item.path,
+                        targetName: item.name,
+                        value: item.name,
+                      });
+                    }}
+                  >
+                    <Pencil size={13} />
+                    이름 변경
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.fileTreeMenuItem} ${styles.fileTreeMenuItemDanger}`}
+                    onClick={() => {
+                      setFileActionMenuPath(null);
+                      setFileActionDialog({
+                        kind: 'delete',
+                        targetPath: item.path,
+                        targetName: item.name,
+                      });
+                    }}
+                  >
+                    <Trash2 size={13} />
+                    삭제
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
           {item.isDirectory && isExpanded ? (
@@ -830,7 +857,7 @@ export function CustomizationSidebar({
         </div>
       );
     })
-  ), [expandedDirectories, filesEntriesByPath, filesErrorByPath, filesLoadingByPath, filesPath, handleFocusDirectory, handleToggleDirectory, openFileModal]);
+  ), [expandedDirectories, fileActionMenuPath, filesEntriesByPath, filesErrorByPath, filesLoadingByPath, handleToggleDirectory, openFileModal]);
 
   return (
     <section className={`${styles.sidebarRoot} ${isMobileMode ? styles.sidebarRootMobile : ''}`}>
@@ -845,6 +872,17 @@ export function CustomizationSidebar({
             <p className={styles.subtle}>지침 문서, Skills, MCP 상태를 한 곳에서 확인하고 조정합니다.</p>
           </div>
           <div className={styles.headerActions}>
+            {!isMobileMode && onTogglePinned ? (
+              <button
+                type="button"
+                className={`${styles.refreshButton} ${isPinned ? styles.pinButtonActive : ''}`}
+                onClick={onTogglePinned}
+                aria-label={isPinned ? '우측 사이드바 고정 해제' : '우측 사이드바 고정'}
+                title={isPinned ? '우측 사이드바 고정 해제' : '우측 사이드바 고정'}
+              >
+                {isPinned ? <PinOff size={15} /> : <Pin size={15} />}
+              </button>
+            ) : null}
             <button
               type="button"
               className={styles.refreshButton}
@@ -872,7 +910,7 @@ export function CustomizationSidebar({
                 }
               />
             </button>
-            {isMobileMode && onRequestClose ? (
+            {onRequestClose ? (
               <button
                 type="button"
                 className={styles.closeButton}
@@ -1143,66 +1181,7 @@ export function CustomizationSidebar({
                     <p>{filesSearchResults ? '검색 결과가 없습니다.' : '표시할 파일이 없습니다.'}</p>
                   </div>
                 ) : (
-                  filesSearchResults ? (
-                    visibleFiles.map((item) => (
-                      <div key={item.path} className={styles.fileTreeBranch}>
-                        <div className={styles.fileTreeRow}>
-                          <span className={styles.fileTreeSpacer} />
-                          <button
-                            type="button"
-                            className={styles.fileTreeMain}
-                            onClick={() => {
-                              if (item.isDirectory) {
-                                handleFocusDirectory(item.path);
-                                setExpandedDirectories((prev) => ({ ...prev, [item.path]: true }));
-                              } else {
-                                openFileModal(item.path, item.name);
-                              }
-                            }}
-                          >
-                            {item.isDirectory ? <Folder size={14} /> : <FileText size={14} />}
-                            <span className={styles.fileEntryText}>
-                              <span className={styles.itemTitle}>{item.name}</span>
-                              <span className={styles.itemDescription}>{item.path}</span>
-                            </span>
-                          </button>
-                          <div className={styles.fileTreeActions}>
-                            <button
-                              type="button"
-                              className={styles.fileTreeActionButton}
-                              onClick={() => {
-                                setFileActionDialog({
-                                  kind: 'rename',
-                                  targetPath: item.path,
-                                  targetName: item.name,
-                                  value: item.name,
-                                });
-                              }}
-                              title="이름 변경"
-                            >
-                              <Pencil size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              className={`${styles.fileTreeActionButton} ${styles.fileTreeActionDanger}`}
-                              onClick={() => {
-                                setFileActionDialog({
-                                  kind: 'delete',
-                                  targetPath: item.path,
-                                  targetName: item.name,
-                                });
-                              }}
-                              title="삭제"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    renderFileTree(visibleFiles)
-                  )
+                  renderFileTree(visibleFiles)
                 )}
               </div>
             </div>
