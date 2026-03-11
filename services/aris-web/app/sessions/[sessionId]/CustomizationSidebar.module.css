@@ -624,7 +624,6 @@
   box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.14);
 }
 
-.fileTreeToggle,
 .fileTreeActionButton {
   width: 28px;
   height: 28px;
@@ -639,10 +638,27 @@
   flex-shrink: 0;
 }
 
+.fileTreeToggle {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--chat-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 .fileTreeToggle:hover,
 .fileTreeActionButton:hover {
-  border-color: rgba(37, 99, 235, 0.24);
   color: var(--chat-text-primary);
+}
+
+.fileTreeActionButton:hover {
+  border-color: rgba(37, 99, 235, 0.24);
 }
 
 .fileTreeActionDanger:hover {
