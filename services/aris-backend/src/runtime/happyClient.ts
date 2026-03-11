@@ -10,6 +10,7 @@ import { HappyEventLogger } from './happyEventLogger.js';
 import { resolveRuntimeModelSelection } from './modelPolicy.js';
 import { buildClaudeCommand } from './providers/claude/claudeLauncher.js';
 import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.js';
+import { extractClaudeSessionHintIds, scanClaudeSessionLogs } from './providers/claude/claudeSessionScanner.js';
 import { buildClaudeSessionId } from './providers/claude/claudeSessionSource.js';
 import { runClaudeTurn } from './providers/claude/claudeRuntime.js';
 import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget } from './providers/claude/types.js';
@@ -1712,6 +1713,26 @@ export class HappyRuntimeStore {
       const stderr = stripAnsi(asRecord?.stderr || '');
       const detail = stderr || stdout || asRecord?.message || 'Unknown CLI error';
       throw new Error(`${agent} CLI failed: ${detail.slice(0, 800)}`);
+    }
+
+    if (agent === 'claude') {
+      const hintedSessionIds = extractClaudeSessionHintIds(command.args);
+      if (result.threadId) {
+        hintedSessionIds.unshift(result.threadId);
+      }
+      const scannedSession = await scanClaudeSessionLogs({
+        workingDirectory: safeCwd,
+        hintedSessionIds,
+      });
+      if (
+        scannedSession.sessionId
+        && (
+          !result.threadId
+          || hintedSessionIds.includes(result.threadId)
+        )
+      ) {
+        result.threadId = scannedSession.sessionId;
+      }
     }
 
     const cleanedStdout = stripAnsi(result.stdout || '');
