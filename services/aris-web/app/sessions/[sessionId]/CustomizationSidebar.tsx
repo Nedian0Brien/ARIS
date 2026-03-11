@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  ArrowUpCircle,
   Blocks,
   CheckCircle2,
+  ChevronRight,
   FileText,
+  Folder,
   FolderKanban,
   GitBranch,
   type LucideIcon,
@@ -13,6 +16,7 @@ import {
   PlugZap,
   RefreshCw,
   Save,
+  Search,
   TerminalSquare,
   Wrench,
   X,
@@ -65,9 +69,17 @@ type SkillPayload = {
   summary: SkillSummary;
 };
 
+type WorkspaceFileEntry = {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  isFile: boolean;
+};
+
 type CustomizationModal =
   | { kind: 'instruction'; id: string }
   | { kind: 'skill'; id: string }
+  | { kind: 'file'; id: string }
   | null;
 
 type Props = {
@@ -85,7 +97,7 @@ const SURFACE_ITEMS: Array<{
   disabled?: boolean;
 }> = [
   { id: 'customization', label: 'Customization', hint: '활성', Icon: Wrench },
-  { id: 'files', label: 'Files', hint: '다음 단계', Icon: FolderKanban, disabled: true },
+  { id: 'files', label: 'Files', hint: '활성', Icon: FolderKanban },
   { id: 'git', label: 'Git', hint: '다음 단계', Icon: GitBranch, disabled: true },
   { id: 'terminal', label: 'Terminal', hint: '다음 단계', Icon: TerminalSquare, disabled: true },
 ];
@@ -149,6 +161,21 @@ export function CustomizationSidebar({
   const [skillContent, setSkillContent] = useState('');
   const [skillLoading, setSkillLoading] = useState(false);
   const [skillError, setSkillError] = useState<string | null>(null);
+  const [filesPath, setFilesPath] = useState('/');
+  const [filesParentPath, setFilesParentPath] = useState<string | null>(null);
+  const [filesEntries, setFilesEntries] = useState<WorkspaceFileEntry[]>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [filesError, setFilesError] = useState<string | null>(null);
+  const [filesSearchQuery, setFilesSearchQuery] = useState('');
+  const [filesSearchResults, setFilesSearchResults] = useState<WorkspaceFileEntry[] | null>(null);
+  const [filesSearchLoading, setFilesSearchLoading] = useState(false);
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [fileContent, setFileContent] = useState('');
+  const [fileLoading, setFileLoading] = useState(false);
+  const [fileSaving, setFileSaving] = useState(false);
+  const [fileDirty, setFileDirty] = useState(false);
+  const [fileStatus, setFileStatus] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<CustomizationModal>(null);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -163,6 +190,9 @@ export function CustomizationSidebar({
   const activeModalKind = activeModal?.kind ?? null;
   const activeInstructionModal = activeModalKind === 'instruction' ? selectedInstruction : null;
   const activeSkillModal = activeModalKind === 'skill' ? selectedSkill : null;
+  const activeFileModal = activeModalKind === 'file' && selectedFilePath
+    ? { path: selectedFilePath, name: selectedFileName ?? selectedFilePath.split('/').pop() ?? selectedFilePath }
+    : null;
 
   const loadOverview = useCallback(async () => {
     setOverviewLoading(true);
@@ -244,6 +274,84 @@ export function CustomizationSidebar({
     }
   }, [sessionId]);
 
+  const loadFilesDirectory = useCallback(async (dirPath: string) => {
+    setFilesLoading(true);
+    setFilesError(null);
+    try {
+      const response = await fetch(`/api/fs/list?path=${encodeURIComponent(dirPath)}`, { cache: 'no-store' });
+      const data = await response.json().catch(() => null) as {
+        currentPath?: string;
+        parentPath?: string | null;
+        directories?: WorkspaceFileEntry[];
+        error?: string;
+      } | null;
+      if (!response.ok || !data) {
+        throw new Error(typeof data?.error === 'string' ? data.error : '파일 목록을 불러오지 못했습니다.');
+      }
+
+      setFilesPath(data.currentPath ?? dirPath);
+      setFilesParentPath(data.parentPath ?? null);
+      setFilesEntries(data.directories ?? []);
+    } catch (error) {
+      setFilesError(error instanceof Error ? error.message : '파일 목록을 불러오지 못했습니다.');
+    } finally {
+      setFilesLoading(false);
+    }
+  }, []);
+
+  const searchFiles = useCallback(async (query: string) => {
+    setFilesSearchQuery(query);
+    setFilesError(null);
+    if (!query.trim()) {
+      setFilesSearchResults(null);
+      return;
+    }
+
+    setFilesSearchLoading(true);
+    try {
+      const response = await fetch(`/api/fs/search?q=${encodeURIComponent(query.trim())}`, { cache: 'no-store' });
+      const data = await response.json().catch(() => null) as {
+        results?: Array<{ name: string; path: string; isDirectory: boolean }>;
+        error?: string;
+      } | null;
+      if (!response.ok || !data) {
+        throw new Error(typeof data?.error === 'string' ? data.error : '파일 검색에 실패했습니다.');
+      }
+
+      setFilesSearchResults((data.results ?? []).map((item) => ({
+        ...item,
+        isFile: !item.isDirectory,
+      })));
+    } catch (error) {
+      setFilesError(error instanceof Error ? error.message : '파일 검색에 실패했습니다.');
+      setFilesSearchResults([]);
+    } finally {
+      setFilesSearchLoading(false);
+    }
+  }, []);
+
+  const loadFile = useCallback(async (filePath: string, fileName?: string) => {
+    setFileLoading(true);
+    setFileStatus(null);
+    setSelectedFilePath(filePath);
+    setSelectedFileName(fileName ?? filePath.split('/').pop() ?? filePath);
+    try {
+      const response = await fetch(`/api/fs/read?path=${encodeURIComponent(filePath)}`, { cache: 'no-store' });
+      const data = await response.json().catch(() => null) as { content?: string; error?: string } | null;
+      if (!response.ok || !data) {
+        throw new Error(typeof data?.error === 'string' ? data.error : '파일을 불러오지 못했습니다.');
+      }
+
+      setFileContent(data.content ?? '');
+      setFileDirty(false);
+    } catch (error) {
+      setFileStatus(error instanceof Error ? error.message : '파일을 불러오지 못했습니다.');
+      setFileContent('');
+    } finally {
+      setFileLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -261,6 +369,16 @@ export function CustomizationSidebar({
     if (!selectedSkillId) return;
     void loadSkill(selectedSkillId);
   }, [loadSkill, selectedSkillId]);
+
+  useEffect(() => {
+    if (activeSurface !== 'files') {
+      return;
+    }
+    if (filesEntries.length > 0 || filesLoading || filesError) {
+      return;
+    }
+    void loadFilesDirectory(filesPath);
+  }, [activeSurface, filesEntries.length, filesError, filesLoading, filesPath, loadFilesDirectory]);
 
   useEffect(() => {
     if (!activeModal) {
@@ -308,6 +426,34 @@ export function CustomizationSidebar({
     }
   }, [instructionContent, loadOverview, selectedInstructionId, sessionId]);
 
+  const handleSaveFile = useCallback(async () => {
+    if (!selectedFilePath) return;
+    setFileSaving(true);
+    setFileStatus(null);
+    try {
+      const response = await fetch('/api/fs/write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: selectedFilePath,
+          content: fileContent,
+        }),
+      });
+      const data = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok || data?.error) {
+        throw new Error(typeof data?.error === 'string' ? data.error : '파일을 저장하지 못했습니다.');
+      }
+
+      setFileDirty(false);
+      setFileStatus('저장됨');
+      await loadFilesDirectory(filesPath);
+    } catch (error) {
+      setFileStatus(error instanceof Error ? error.message : '파일을 저장하지 못했습니다.');
+    } finally {
+      setFileSaving(false);
+    }
+  }, [fileContent, filesPath, loadFilesDirectory, selectedFilePath]);
+
   const headerWorkspacePath = overview?.workspacePath ?? projectName;
   const isMobileMode = mode === 'mobile';
   const openInstructionModal = useCallback((instructionId: string) => {
@@ -318,9 +464,15 @@ export function CustomizationSidebar({
     setSelectedSkillId(skillId);
     setActiveModal({ kind: 'skill', id: skillId });
   }, []);
+  const openFileModal = useCallback((filePath: string, fileName?: string) => {
+    void loadFile(filePath, fileName);
+    setActiveModal({ kind: 'file', id: filePath });
+  }, [loadFile]);
   const closeModal = useCallback(() => {
     setActiveModal(null);
   }, []);
+  const visibleFiles = filesSearchResults ?? filesEntries;
+  const filesCountLabel = filesSearchResults ? `검색 ${visibleFiles.length}개` : `${visibleFiles.length}개`;
 
   return (
     <section className={`${styles.sidebarRoot} ${isMobileMode ? styles.sidebarRootMobile : ''}`}>
@@ -338,12 +490,29 @@ export function CustomizationSidebar({
             <button
               type="button"
               className={styles.refreshButton}
-              onClick={() => void loadOverview()}
-              disabled={overviewLoading}
+              onClick={() => {
+                if (activeSurface === 'files') {
+                  if (filesSearchQuery.trim()) {
+                    void searchFiles(filesSearchQuery);
+                  } else {
+                    void loadFilesDirectory(filesPath);
+                  }
+                  return;
+                }
+                void loadOverview();
+              }}
+              disabled={activeSurface === 'files' ? filesLoading || filesSearchLoading : overviewLoading}
               aria-label="Customization 새로고침"
               title="Customization 새로고침"
             >
-              <RefreshCw size={15} className={overviewLoading ? styles.rotate : ''} />
+              <RefreshCw
+                size={15}
+                className={
+                  activeSurface === 'files'
+                    ? (filesLoading || filesSearchLoading ? styles.rotate : '')
+                    : (overviewLoading ? styles.rotate : '')
+                }
+              />
             </button>
             {isMobileMode && onRequestClose ? (
               <button
@@ -386,14 +555,7 @@ export function CustomizationSidebar({
       </div>
 
       <div className={styles.body}>
-        {activeSurface !== 'customization' ? (
-          <div className={styles.content}>
-            <div className={styles.emptyState}>
-              <FolderKanban size={18} />
-              <p>이 패널은 다음 구현 단계에서 연결됩니다.</p>
-            </div>
-          </div>
-        ) : (
+        {activeSurface === 'customization' ? (
           <>
             <div className={styles.sectionTabs}>
               <button
@@ -542,6 +704,94 @@ export function CustomizationSidebar({
               )}
             </div>
           </>
+        ) : activeSurface === 'files' ? (
+          <div className={styles.content}>
+            <div className={styles.listCard}>
+              <div className={styles.cardHeader}>
+                <span className={styles.cardTitle}>Workspace Files</span>
+                <span className={styles.cardMeta}>{filesCountLabel}</span>
+              </div>
+              <div className={styles.filesToolbar}>
+                <label className={styles.searchField}>
+                  <Search size={14} />
+                  <input
+                    className={styles.searchInput}
+                    value={filesSearchQuery}
+                    onChange={(event) => { void searchFiles(event.target.value); }}
+                    placeholder="파일 또는 폴더 검색"
+                  />
+                </label>
+                <div className={styles.pathRow}>
+                  {filesParentPath !== null && filesSearchResults === null ? (
+                    <button
+                      type="button"
+                      className={styles.pathButton}
+                      onClick={() => { void loadFilesDirectory(filesParentPath); }}
+                    >
+                      <ArrowUpCircle size={14} />
+                      상위 폴더
+                    </button>
+                  ) : null}
+                  <span className={styles.pathValue}>{filesSearchResults ? '검색 결과' : filesPath}</span>
+                </div>
+              </div>
+              <div className={styles.itemList}>
+                {filesLoading || filesSearchLoading ? (
+                  <div className={styles.loadingState}>
+                    <Loader2 size={16} className={styles.rotate} />
+                    <p>{filesSearchLoading ? '파일을 검색하는 중입니다.' : '파일 목록을 불러오는 중입니다.'}</p>
+                  </div>
+                ) : filesError ? (
+                  <div className={styles.errorState}>
+                    <FileText size={18} />
+                    <p>{filesError}</p>
+                  </div>
+                ) : visibleFiles.length === 0 ? (
+                  <div className={styles.emptyState}>
+                    <FolderKanban size={18} />
+                    <p>{filesSearchResults ? '검색 결과가 없습니다.' : '표시할 파일이 없습니다.'}</p>
+                  </div>
+                ) : (
+                  visibleFiles.map((item) => (
+                    <button
+                      key={item.path}
+                      type="button"
+                      className={`${styles.itemButton} ${styles.fileEntryButton}`}
+                      onClick={() => {
+                        if (item.isDirectory) {
+                          setFilesSearchQuery('');
+                          setFilesSearchResults(null);
+                          void loadFilesDirectory(item.path);
+                        } else {
+                          openFileModal(item.path, item.name);
+                        }
+                      }}
+                    >
+                      <span className={styles.fileEntryMain}>
+                        {item.isDirectory ? <Folder size={14} /> : <FileText size={14} />}
+                        <span className={styles.fileEntryText}>
+                          <span className={styles.itemTitle}>{item.name}</span>
+                          <span className={styles.itemDescription}>{item.path}</span>
+                        </span>
+                      </span>
+                      {item.isDirectory ? (
+                        <ChevronRight size={14} className={styles.fileEntryChevron} />
+                      ) : (
+                        <span className={`${styles.tag} ${styles.tagMuted}`}>편집</span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className={styles.content}>
+            <div className={styles.emptyState}>
+              <FolderKanban size={18} />
+              <p>이 패널은 다음 구현 단계에서 연결됩니다.</p>
+            </div>
+          </div>
         )}
       </div>
       {isMounted && activeModal && createPortal(
@@ -550,14 +800,25 @@ export function CustomizationSidebar({
             <div className={styles.modalHeader}>
               <div>
                 <div className={styles.eyebrow}>
-                  {activeModalKind === 'instruction' ? <FileText size={13} /> : <Blocks size={13} />}
-                  {activeModalKind === 'instruction' ? 'Document Editor' : 'Skill Viewer'}
+                  {activeModalKind === 'instruction'
+                    ? <FileText size={13} />
+                    : activeModalKind === 'skill'
+                      ? <Blocks size={13} />
+                      : <FolderKanban size={13} />}
+                  {activeModalKind === 'instruction'
+                    ? 'Document Editor'
+                    : activeModalKind === 'skill'
+                      ? 'Skill Viewer'
+                      : 'File Editor'}
                 </div>
                 <h4 className={styles.modalTitle}>
-                  {activeInstructionModal?.name ?? activeSkillModal?.name ?? '선택 없음'}
+                  {activeInstructionModal?.name ?? activeSkillModal?.name ?? activeFileModal?.name ?? '선택 없음'}
                 </h4>
                 <p className={styles.modalSubtle}>
-                  {activeInstructionModal?.path ?? activeSkillModal?.relativePath ?? '내용을 확인할 수 없습니다.'}
+                  {activeInstructionModal?.path
+                    ?? activeSkillModal?.relativePath
+                    ?? activeFileModal?.path
+                    ?? '내용을 확인할 수 없습니다.'}
                 </p>
               </div>
               <button
@@ -628,6 +889,41 @@ export function CustomizationSidebar({
                   <div className={styles.preview}>
                     <pre>{skillContent}</pre>
                   </div>
+                )
+              ) : activeFileModal ? (
+                fileLoading ? (
+                  <div className={styles.loadingState}>
+                    <Loader2 size={16} className={styles.rotate} />
+                    <p>파일을 불러오는 중입니다.</p>
+                  </div>
+                ) : (
+                  <>
+                    <textarea
+                      className={`${styles.editor} ${styles.fileEditor}`}
+                      value={fileContent}
+                      onChange={(event) => {
+                        setFileContent(event.target.value);
+                        setFileDirty(true);
+                        setFileStatus(null);
+                      }}
+                      spellCheck={false}
+                    />
+                    <div className={styles.actions}>
+                      <span className={styles.statusText}>
+                        {fileStatus
+                          ?? (fileDirty ? '저장되지 않은 변경사항 있음' : '변경사항 없음')}
+                      </span>
+                      <button
+                        type="button"
+                        className={styles.saveButton}
+                        onClick={() => void handleSaveFile()}
+                        disabled={fileSaving || fileLoading || !fileDirty}
+                      >
+                        {fileSaving ? <Loader2 size={14} className={styles.rotate} /> : <Save size={14} />}
+                        저장
+                      </button>
+                    </div>
+                  </>
                 )
               ) : (
                 <div className={styles.emptyState}>

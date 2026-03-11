@@ -10,7 +10,7 @@
   box-shadow: var(--chat-panel-shadow);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .sidebarRootMobile {
@@ -157,11 +157,11 @@
 }
 
 .body {
-  flex: 1;
-  min-height: 0;
+  flex: 1 0 auto;
+  min-height: auto;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: visible;
 }
 
 .sectionTabs {
@@ -504,11 +504,103 @@
 
 .mcpList {
   flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+  min-height: auto;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   gap: 0.52rem;
+}
+
+.filesToolbar {
+  padding: 0.72rem 0.78rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.52rem;
+}
+
+.searchField {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--chat-text-muted);
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--chat-text-primary);
+  font-size: 0.72rem;
+}
+
+.searchInput::placeholder {
+  color: var(--chat-text-muted);
+}
+
+.pathRow {
+  display: flex;
+  align-items: center;
+  gap: 0.48rem;
+  flex-wrap: wrap;
+}
+
+.pathButton {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.9);
+  color: var(--chat-text-primary);
+  padding: 0.42rem 0.56rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  cursor: pointer;
+}
+
+.pathValue {
+  font-size: 0.66rem;
+  line-height: 1.45;
+  color: var(--chat-text-muted);
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.fileEntryButton {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.56rem;
+}
+
+.fileEntryMain {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.46rem;
+  flex: 1;
+}
+
+.fileEntryText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.16rem;
+}
+
+.fileEntryChevron {
+  color: var(--chat-text-muted);
+  flex-shrink: 0;
+}
+
+.fileEditor {
+  min-height: clamp(520px, 70vh, 900px);
 }
 
 .mcpCard {
@@ -677,6 +769,10 @@
 
   .content {
     padding: 0.72rem;
+  }
+
+  .filesToolbar {
+    padding: 0.68rem 0.72rem 0;
   }
 
   .statsRow {
