@@ -666,6 +666,10 @@
   overflow: hidden;
 }
 
+.fileModalCard {
+  width: min(1180px, 100%);
+}
+
 .modalHeader {
   padding: 1rem 1.08rem 0.9rem;
   border-bottom: 1px solid rgba(148, 163, 184, 0.18);
@@ -713,6 +717,25 @@
   overflow-y: auto;
 }
 
+.fileModalBody {
+  padding: 0;
+  overflow: hidden;
+  min-height: clamp(560px, 78vh, 920px);
+}
+
+.fileModalStatus {
+  padding: 0.58rem 0.9rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(248, 250, 252, 0.92);
+  font-size: 0.72rem;
+  color: var(--chat-text-muted);
+}
+
+.fileModalEditor {
+  flex: 1;
+  min-height: 0;
+}
+
 .modalBody .editor {
   min-height: clamp(460px, 64vh, 820px);
 }
@@ -737,6 +760,10 @@
 
   .modalCard {
     width: min(760px, 100%);
+  }
+
+  .fileModalCard {
+    width: min(1020px, 100%);
   }
 }
 
@@ -829,6 +856,11 @@
 
   .modalBody {
     padding: 0.88rem 0.92rem 0.96rem;
+  }
+
+  .fileModalBody {
+    padding: 0;
+    min-height: 100%;
   }
 
   .editor {

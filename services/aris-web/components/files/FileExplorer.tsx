@@ -1,28 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Folder, FolderOpen, File, ChevronRight, ArrowUpCircle,
-  Loader2, FolderPlus, FilePlus, Trash2, X, Save, AlertCircle,
-  Code, Eye, Edit3, MoreVertical, Pencil, Move
+  Loader2, FolderPlus, FilePlus, Trash2, X, AlertCircle,
+  MoreVertical, Pencil, Move
 } from 'lucide-react';
 import { Card } from '@/components/ui';
-import Prism from 'prismjs';
-import { marked } from 'marked';
 import styles from './FileExplorer.module.css';
-
-// Import Prism languages
-import 'prismjs/components/prism-typescript';
-import 'prismjs/components/prism-javascript';
-import 'prismjs/components/prism-json';
-import 'prismjs/components/prism-python';
-import 'prismjs/components/prism-bash';
-import 'prismjs/components/prism-markdown';
-import 'prismjs/components/prism-css';
-import 'prismjs/components/prism-markup';
-
-// Prism theme
-import 'prismjs/themes/prism.css';
+import { WorkspaceFileEditor } from './WorkspaceFileEditor';
 
 interface FileItem {
   name: string;
@@ -56,7 +42,6 @@ export function FileExplorer() {
   // UI States
   const [editingFile, setEditingFile] = useState<{ path: string; name: string; content: string } | null>(null);
   const [isEditorSaving, setIsEditorSaving] = useState(false);
-  const [isPreview, setIsPreview] = useState(false);
   const [newPathInput, setNewPathInput] = useState<{ type: 'file' | 'folder'; active: boolean }>({ type: 'file', active: false });
   const [newName, setNewName] = useState('');
 
@@ -65,9 +50,6 @@ export function FileExplorer() {
   const [actionModal, setActionModal] = useState<{ type: 'rename' | 'move'; item: FileItem; value: string } | null>(null);
 
   // Refs
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const lineNumbersRef = useRef<HTMLDivElement>(null);
-  const preRef = useRef<HTMLPreElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -181,7 +163,6 @@ export function FileExplorer() {
       if (!res.ok) throw new Error('파일을 읽는 데 실패했습니다.');
       const { content } = await res.json();
       setEditingFile({ path: item.path, name: item.name, content });
-      setIsPreview(false);
     } catch (err) {
       alert(err instanceof Error ? err.message : '오류 발생');
     }
@@ -205,177 +186,20 @@ export function FileExplorer() {
     }
   };
 
-  // IDE Editor Handlers
-  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const textarea = e.currentTarget;
-    const { selectionStart, selectionEnd, value } = textarea;
-
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const newValue = value.substring(0, selectionStart) + '  ' + value.substring(selectionEnd);
-      setEditingFile(prev => prev ? { ...prev, content: newValue } : null);
-      setTimeout(() => { if (textarea) { textarea.selectionStart = textarea.selectionEnd = selectionStart + 2; } }, 0);
-    }
-
-    if (e.key === 'Enter') {
-      const lines = value.substring(0, selectionStart).split('\n');
-      const currentLine = lines[lines.length - 1];
-      const match = currentLine.match(/^\s*/);
-      const indentation = match ? match[0] : '';
-
-      const charBefore = value[selectionStart - 1];
-      const charAfter = value[selectionStart];
-      if ((charBefore === '{' && charAfter === '}') || (charBefore === '[' && charAfter === ']') || (charBefore === '(' && charAfter === ')')) {
-        e.preventDefault();
-        const newValue = value.substring(0, selectionStart) + '\n' + indentation + '  \n' + indentation + value.substring(selectionEnd);
-        setEditingFile(prev => prev ? { ...prev, content: newValue } : null);
-        setTimeout(() => { if (textarea) { textarea.selectionStart = textarea.selectionEnd = selectionStart + 1 + indentation.length + 2; } }, 0);
-        return;
-      }
-
-      if (indentation) {
-        e.preventDefault();
-        const newValue = value.substring(0, selectionStart) + '\n' + indentation + value.substring(selectionEnd);
-        setEditingFile(prev => prev ? { ...prev, content: newValue } : null);
-        setTimeout(() => { if (textarea) { textarea.selectionStart = textarea.selectionEnd = selectionStart + 1 + indentation.length; } }, 0);
-      }
-    }
-
-    const pairs: Record<string, string> = { '{': '}', '[': ']', '(': ')', '"': '"', "'": "'", '`': '`' };
-    if (pairs[e.key]) {
-      const newValue = value.substring(0, selectionStart) + e.key + pairs[e.key] + value.substring(selectionEnd);
-      e.preventDefault();
-      setEditingFile(prev => prev ? { ...prev, content: newValue } : null);
-      setTimeout(() => { if (textarea) { textarea.selectionStart = textarea.selectionEnd = selectionStart + 1; } }, 0);
-    }
-  };
-
-  const handleEditorScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
-    if (lineNumbersRef.current) lineNumbersRef.current.scrollTop = e.currentTarget.scrollTop;
-    if (preRef.current) {
-      preRef.current.scrollTop = e.currentTarget.scrollTop;
-      preRef.current.scrollLeft = e.currentTarget.scrollLeft;
-    }
-  };
-
-  const getLineNumbers = () => {
-    if (!editingFile) return null;
-    const lines = editingFile.content.split('\n').length;
-    return Array.from({ length: lines }, (_, i) => i + 1).join('\n');
-  };
-
-  const getLanguage = useCallback((fileName: string) => {
-    const ext = fileName.split('.').pop()?.toLowerCase();
-    switch (ext) {
-      case 'ts': case 'tsx': return 'typescript';
-      case 'js': case 'jsx': return 'javascript';
-      case 'css': return 'css';
-      case 'html': return 'markup';
-      case 'json': return 'json';
-      case 'md': return 'markdown';
-      case 'py': return 'python';
-      case 'sh': return 'bash';
-      default: return 'text';
-    }
-  }, []);
-
-  const highlightedContent = useMemo(() => {
-    if (!editingFile) return '';
-    const lang = getLanguage(editingFile.name);
-    if (lang === 'text' || !Prism.languages[lang]) {
-      return editingFile.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
-    return Prism.highlight(editingFile.content, Prism.languages[lang], lang);
-  }, [editingFile, getLanguage]);
-
-  const markdownHtml = useMemo(() => {
-    if (!editingFile || !isPreview) return '';
-    const renderer = new marked.Renderer();
-    renderer.code = ({ text, lang }) => {
-      const validLang = lang && Prism.languages[lang] ? lang : null;
-      const highlighted = validLang
-        ? Prism.highlight(text, Prism.languages[validLang], validLang)
-        : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      const langBadge = validLang
-        ? `<span class="md-code-lang">${validLang}</span>`
-        : '';
-      return `<div class="md-code-block"><div class="md-code-header">${langBadge}</div><pre class="md-code-pre"><code>${highlighted}</code></pre></div>`;
-    };
-    return marked.parse(editingFile.content, { breaks: true, gfm: true, renderer }) as string;
-  }, [editingFile, isPreview]);
-
-  const displayLanguageName = (fileName: string) => {
-    const lang = getLanguage(fileName);
-    const map: Record<string, string> = {
-      'typescript': 'TypeScript', 'javascript': 'JavaScript', 'css': 'CSS', 'markup': 'HTML',
-      'json': 'JSON', 'markdown': 'Markdown', 'python': 'Python', 'bash': 'Shell', 'text': 'Text'
-    };
-    return map[lang] || 'Text';
-  };
-
   const renderEditor = () => {
     if (!editingFile) return null;
 
     return (
-      <div className={styles.editorRoot}>
-        <div className={styles.editorHeader}>
-          <div className={styles.editorTitleBox}>
-            <Code size={20} style={{ color: 'var(--accent-sky)', flexShrink: 0 }} />
-            <div className={styles.editorTitleText}>
-              <span className={styles.fileName}>{editingFile.name}</span>
-              <span className={styles.fileLang}>{displayLanguageName(editingFile.name)}</span>
-            </div>
-          </div>
-          <div className={styles.editorActions}>
-            {getLanguage(editingFile.name) === 'markdown' && (
-              <button onClick={() => setIsPreview(!isPreview)} className={`btn-secondary ${styles.btnSm}`}>
-                {isPreview ? <Edit3 size={16} /> : <Eye size={16} />}
-                <span>{isPreview ? '편집' : '미리보기'}</span>
-              </button>
-            )}
-            <button onClick={saveEditedFile} disabled={isEditorSaving} className={`btn-primary ${styles.btnSm}`}>
-              {isEditorSaving ? <Loader2 size={16} className={styles.animateSpin} /> : <Save size={16} />}
-              <span>저장</span>
-            </button>
-            <button onClick={() => setEditingFile(null)} className={`btn-secondary ${styles.btnSm}`}>
-              <X size={16} /> <span>닫기</span>
-            </button>
-          </div>
-        </div>
-
-        <div className={styles.editorViewport}>
-          {!isPreview ? (
-            <>
-              <div ref={lineNumbersRef} className={styles.lineNumbers}>
-                {getLineNumbers()}
-              </div>
-              <div className={styles.editorContainer}>
-                <pre
-                  ref={preRef}
-                  className={styles.editorPre}
-                  dangerouslySetInnerHTML={{ __html: highlightedContent + '\n' }}
-                />
-                <textarea
-                  ref={textareaRef}
-                  className={styles.editorTextarea}
-                  value={editingFile.content}
-                  onChange={(e) => setEditingFile({ ...editingFile, content: e.target.value })}
-                  onKeyDown={handleEditorKeyDown}
-                  onScroll={handleEditorScroll}
-                  spellCheck={false}
-                />
-              </div>
-            </>
-          ) : (
-            <div className={styles.markdownBody} dangerouslySetInnerHTML={{ __html: markdownHtml }} />
-          )}
-        </div>
-
-        <div className={styles.editorFooter}>
-          <span>라인: {editingFile.content.split('\n').length}</span>
-          <span>탭: 2 spaces</span>
-        </div>
-      </div>
+      <WorkspaceFileEditor
+        fileName={editingFile.name}
+        content={editingFile.content}
+        isSaving={isEditorSaving}
+        onChange={(nextContent) => {
+          setEditingFile((current) => (current ? { ...current, content: nextContent } : null));
+        }}
+        onSave={() => void saveEditedFile()}
+        onClose={() => setEditingFile(null)}
+      />
     );
   };
 

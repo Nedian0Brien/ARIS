@@ -21,6 +21,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
+import { WorkspaceFileEditor } from '@/components/files/WorkspaceFileEditor';
 import styles from './CustomizationSidebar.module.css';
 
 type SidebarSurface = 'customization' | 'files' | 'git' | 'terminal';
@@ -796,142 +797,137 @@ export function CustomizationSidebar({
       </div>
       {isMounted && activeModal && createPortal(
         <div className={styles.modalOverlay} onClick={closeModal}>
-          <section className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
-            <div className={styles.modalHeader}>
-              <div>
-                <div className={styles.eyebrow}>
-                  {activeModalKind === 'instruction'
-                    ? <FileText size={13} />
-                    : activeModalKind === 'skill'
-                      ? <Blocks size={13} />
-                      : <FolderKanban size={13} />}
-                  {activeModalKind === 'instruction'
-                    ? 'Document Editor'
-                    : activeModalKind === 'skill'
-                      ? 'Skill Viewer'
-                      : 'File Editor'}
-                </div>
-                <h4 className={styles.modalTitle}>
-                  {activeInstructionModal?.name ?? activeSkillModal?.name ?? activeFileModal?.name ?? '선택 없음'}
-                </h4>
-                <p className={styles.modalSubtle}>
-                  {activeInstructionModal?.path
-                    ?? activeSkillModal?.relativePath
-                    ?? activeFileModal?.path
-                    ?? '내용을 확인할 수 없습니다.'}
-                </p>
-              </div>
-              <button
-                type="button"
-                className={styles.modalCloseButton}
-                onClick={closeModal}
-                aria-label="모달 닫기"
-                title="모달 닫기"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className={styles.modalBody}>
-              {activeModalKind === 'instruction' ? (
-                activeInstructionModal ? (
-                  instructionLoading ? (
+          <section
+            className={`${styles.modalCard}${activeModalKind === 'file' ? ` ${styles.fileModalCard}` : ''}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {activeModalKind === 'file' ? (
+              <div className={`${styles.modalBody} ${styles.fileModalBody}`}>
+                {activeFileModal ? (
+                  fileLoading ? (
                     <div className={styles.loadingState}>
                       <Loader2 size={16} className={styles.rotate} />
-                      <p>문서를 불러오는 중입니다.</p>
+                      <p>파일을 불러오는 중입니다.</p>
                     </div>
                   ) : (
                     <>
-                      <textarea
-                        className={styles.editor}
-                        value={instructionContent}
-                        onChange={(event) => {
-                          setInstructionContent(event.target.value);
-                          setInstructionDirty(true);
-                          setInstructionStatus(null);
+                      {fileStatus ? <div className={styles.fileModalStatus}>{fileStatus}</div> : null}
+                      <WorkspaceFileEditor
+                        fileName={activeFileModal.name}
+                        content={fileContent}
+                        isSaving={fileSaving}
+                        saveDisabled={fileSaving || fileLoading || !fileDirty}
+                        className={styles.fileModalEditor}
+                        onChange={(nextContent) => {
+                          setFileContent(nextContent);
+                          setFileDirty(true);
+                          setFileStatus(null);
                         }}
-                        spellCheck={false}
+                        onSave={() => void handleSaveFile()}
+                        onClose={closeModal}
                       />
-                      <div className={styles.actions}>
-                        <span className={styles.statusText}>
-                          {instructionStatus
-                            ?? (instructionDirty ? '저장되지 않은 변경사항 있음' : '변경사항 없음')}
-                        </span>
-                        <button
-                          type="button"
-                          className={styles.saveButton}
-                          onClick={() => void handleSaveInstruction()}
-                          disabled={instructionSaving || instructionLoading || !instructionDirty}
-                        >
-                          {instructionSaving ? <Loader2 size={14} className={styles.rotate} /> : <Save size={14} />}
-                          저장
-                        </button>
-                      </div>
                     </>
                   )
                 ) : (
                   <div className={styles.emptyState}>
                     <FileText size={18} />
-                    <p>편집할 문서를 선택해 주세요.</p>
+                    <p>편집할 파일을 선택해 주세요.</p>
                   </div>
-                )
-              ) : activeSkillModal ? (
-                skillLoading ? (
-                  <div className={styles.loadingState}>
-                    <Loader2 size={16} className={styles.rotate} />
-                    <p>스킬 본문을 불러오는 중입니다.</p>
-                  </div>
-                ) : skillError ? (
-                  <div className={styles.errorState}>
-                    <Blocks size={18} />
-                    <p>{skillError}</p>
-                  </div>
-                ) : (
-                  <div className={styles.preview}>
-                    <pre>{skillContent}</pre>
-                  </div>
-                )
-              ) : activeFileModal ? (
-                fileLoading ? (
-                  <div className={styles.loadingState}>
-                    <Loader2 size={16} className={styles.rotate} />
-                    <p>파일을 불러오는 중입니다.</p>
-                  </div>
-                ) : (
-                  <>
-                    <textarea
-                      className={`${styles.editor} ${styles.fileEditor}`}
-                      value={fileContent}
-                      onChange={(event) => {
-                        setFileContent(event.target.value);
-                        setFileDirty(true);
-                        setFileStatus(null);
-                      }}
-                      spellCheck={false}
-                    />
-                    <div className={styles.actions}>
-                      <span className={styles.statusText}>
-                        {fileStatus
-                          ?? (fileDirty ? '저장되지 않은 변경사항 있음' : '변경사항 없음')}
-                      </span>
-                      <button
-                        type="button"
-                        className={styles.saveButton}
-                        onClick={() => void handleSaveFile()}
-                        disabled={fileSaving || fileLoading || !fileDirty}
-                      >
-                        {fileSaving ? <Loader2 size={14} className={styles.rotate} /> : <Save size={14} />}
-                        저장
-                      </button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className={styles.modalHeader}>
+                  <div>
+                    <div className={styles.eyebrow}>
+                      {activeModalKind === 'instruction' ? <FileText size={13} /> : <Blocks size={13} />}
+                      {activeModalKind === 'instruction' ? 'Document Editor' : 'Skill Viewer'}
                     </div>
-                  </>
-                )
-              ) : (
-                <div className={styles.emptyState}>
-                  <Blocks size={18} />
-                  <p>확인할 Skill을 선택해 주세요.</p>
+                    <h4 className={styles.modalTitle}>
+                      {activeInstructionModal?.name ?? activeSkillModal?.name ?? '선택 없음'}
+                    </h4>
+                    <p className={styles.modalSubtle}>
+                      {activeInstructionModal?.path ?? activeSkillModal?.relativePath ?? '내용을 확인할 수 없습니다.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.modalCloseButton}
+                    onClick={closeModal}
+                    aria-label="모달 닫기"
+                    title="모달 닫기"
+                  >
+                    <X size={16} />
+                  </button>
                 </div>
-              )}
-            </div>
+                <div className={styles.modalBody}>
+                  {activeModalKind === 'instruction' ? (
+                    activeInstructionModal ? (
+                      instructionLoading ? (
+                        <div className={styles.loadingState}>
+                          <Loader2 size={16} className={styles.rotate} />
+                          <p>문서를 불러오는 중입니다.</p>
+                        </div>
+                      ) : (
+                        <>
+                          <textarea
+                            className={styles.editor}
+                            value={instructionContent}
+                            onChange={(event) => {
+                              setInstructionContent(event.target.value);
+                              setInstructionDirty(true);
+                              setInstructionStatus(null);
+                            }}
+                            spellCheck={false}
+                          />
+                          <div className={styles.actions}>
+                            <span className={styles.statusText}>
+                              {instructionStatus
+                                ?? (instructionDirty ? '저장되지 않은 변경사항 있음' : '변경사항 없음')}
+                            </span>
+                            <button
+                              type="button"
+                              className={styles.saveButton}
+                              onClick={() => void handleSaveInstruction()}
+                              disabled={instructionSaving || instructionLoading || !instructionDirty}
+                            >
+                              {instructionSaving ? <Loader2 size={14} className={styles.rotate} /> : <Save size={14} />}
+                              저장
+                            </button>
+                          </div>
+                        </>
+                      )
+                    ) : (
+                      <div className={styles.emptyState}>
+                        <FileText size={18} />
+                        <p>편집할 문서를 선택해 주세요.</p>
+                      </div>
+                    )
+                  ) : activeSkillModal ? (
+                    skillLoading ? (
+                      <div className={styles.loadingState}>
+                        <Loader2 size={16} className={styles.rotate} />
+                        <p>스킬 본문을 불러오는 중입니다.</p>
+                      </div>
+                    ) : skillError ? (
+                      <div className={styles.errorState}>
+                        <Blocks size={18} />
+                        <p>{skillError}</p>
+                      </div>
+                    ) : (
+                      <div className={styles.preview}>
+                        <pre>{skillContent}</pre>
+                      </div>
+                    )
+                  ) : (
+                    <div className={styles.emptyState}>
+                      <Blocks size={18} />
+                      <p>확인할 Skill을 선택해 주세요.</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </section>
         </div>,
         document.body,
