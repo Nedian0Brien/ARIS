@@ -2170,6 +2170,7 @@ export function ChatInterface({
   const chatListSentinelRef = useRef<HTMLDivElement>(null);
   const chatShellRef = useRef<HTMLDivElement>(null);
   const centerPanelRef = useRef<HTMLElement>(null);
+  const centerFrameRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerDockRef = useRef<HTMLElement>(null);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
@@ -3226,7 +3227,7 @@ export function ChatInterface({
 
   const syncComposerDockMetrics = useCallback(() => {
     const shell = chatShellRef.current;
-    const centerPanel = centerPanelRef.current;
+    const centerPanel = centerFrameRef.current ?? centerPanelRef.current;
     const dock = composerDockRef.current;
     if (!shell || !dock) {
       return;
@@ -3491,6 +3492,43 @@ export function ChatInterface({
       window.removeEventListener('scroll', handleResize);
       window.visualViewport?.removeEventListener('resize', handleResize);
       window.visualViewport?.removeEventListener('scroll', handleResize);
+    };
+  }, [syncComposerDockMetrics]);
+
+  useEffect(() => {
+    const rafId = window.requestAnimationFrame(() => {
+      syncComposerDockMetrics();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [
+    isChatSidebarOpen,
+    isLeftSidebarOverlayLayout,
+    isCustomizationOverlayLayout,
+    isCustomizationSidebarOpen,
+    isCustomizationPinned,
+    isMobileLayout,
+    syncComposerDockMetrics,
+    viewportWidth,
+  ]);
+
+  useEffect(() => {
+    const centerPanel = centerFrameRef.current ?? centerPanelRef.current;
+    const dock = composerDockRef.current;
+    if (!centerPanel || !dock || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      syncComposerDockMetrics();
+    });
+    observer.observe(centerPanel);
+    observer.observe(dock);
+
+    return () => {
+      observer.disconnect();
     };
   }, [syncComposerDockMetrics]);
 
@@ -4606,7 +4644,10 @@ export function ChatInterface({
       </aside>
 
       <main className={`${styles.centerPanel} ${isMobileLayout ? styles.centerPanelMobileScroll : ''}`} ref={centerPanelRef}>
-        <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
+        <section
+          className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}
+          ref={centerFrameRef}
+        >
           <header className={styles.centerHeader}>
             <button
               type="button"
