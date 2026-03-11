@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Blocks,
   CheckCircle2,
@@ -14,6 +15,7 @@ import {
   Save,
   TerminalSquare,
   Wrench,
+  X,
 } from 'lucide-react';
 import styles from './CustomizationSidebar.module.css';
 
@@ -63,9 +65,16 @@ type SkillPayload = {
   summary: SkillSummary;
 };
 
+type CustomizationModal =
+  | { kind: 'instruction'; id: string }
+  | { kind: 'skill'; id: string }
+  | null;
+
 type Props = {
   sessionId: string;
   projectName: string;
+  mode?: 'desktop' | 'mobile';
+  onRequestClose?: () => void;
 };
 
 const SURFACE_ITEMS: Array<{
@@ -117,7 +126,12 @@ function getMcpStatusLabel(status: MpcServerSummary['status']): string {
   return '확인 불가';
 }
 
-export function CustomizationSidebar({ sessionId, projectName }: Props) {
+export function CustomizationSidebar({
+  sessionId,
+  projectName,
+  mode = 'desktop',
+  onRequestClose,
+}: Props) {
   const [activeSurface, setActiveSurface] = useState<SidebarSurface>('customization');
   const [activeSection, setActiveSection] = useState<CustomizationSection>('instructions');
   const [overview, setOverview] = useState<CustomizationOverview | null>(null);
@@ -135,6 +149,8 @@ export function CustomizationSidebar({ sessionId, projectName }: Props) {
   const [skillContent, setSkillContent] = useState('');
   const [skillLoading, setSkillLoading] = useState(false);
   const [skillError, setSkillError] = useState<string | null>(null);
+  const [activeModal, setActiveModal] = useState<CustomizationModal>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   const selectedInstruction = useMemo(
     () => overview?.instructionDocs.find((doc) => doc.id === selectedInstructionId) ?? null,
@@ -144,6 +160,9 @@ export function CustomizationSidebar({ sessionId, projectName }: Props) {
     () => overview?.skills.find((skill) => skill.id === selectedSkillId) ?? null,
     [overview, selectedSkillId],
   );
+  const activeModalKind = activeModal?.kind ?? null;
+  const activeInstructionModal = activeModalKind === 'instruction' ? selectedInstruction : null;
+  const activeSkillModal = activeModalKind === 'skill' ? selectedSkill : null;
 
   const loadOverview = useCallback(async () => {
     setOverviewLoading(true);
@@ -226,6 +245,10 @@ export function CustomizationSidebar({ sessionId, projectName }: Props) {
   }, [sessionId]);
 
   useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
     void loadOverview();
   }, [loadOverview]);
 
@@ -238,6 +261,23 @@ export function CustomizationSidebar({ sessionId, projectName }: Props) {
     if (!selectedSkillId) return;
     void loadSkill(selectedSkillId);
   }, [loadSkill, selectedSkillId]);
+
+  useEffect(() => {
+    if (!activeModal) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActiveModal(null);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeModal]);
 
   const handleSaveInstruction = useCallback(async () => {
     if (!selectedInstructionId) return;
@@ -269,9 +309,21 @@ export function CustomizationSidebar({ sessionId, projectName }: Props) {
   }, [instructionContent, loadOverview, selectedInstructionId, sessionId]);
 
   const headerWorkspacePath = overview?.workspacePath ?? projectName;
+  const isMobileMode = mode === 'mobile';
+  const openInstructionModal = useCallback((instructionId: string) => {
+    setSelectedInstructionId(instructionId);
+    setActiveModal({ kind: 'instruction', id: instructionId });
+  }, []);
+  const openSkillModal = useCallback((skillId: string) => {
+    setSelectedSkillId(skillId);
+    setActiveModal({ kind: 'skill', id: skillId });
+  }, []);
+  const closeModal = useCallback(() => {
+    setActiveModal(null);
+  }, []);
 
   return (
-    <aside className={styles.sidebarRoot}>
+    <section className={`${styles.sidebarRoot} ${isMobileMode ? styles.sidebarRootMobile : ''}`}>
       <div className={styles.header}>
         <div className={styles.headerTop}>
           <div>
@@ -282,16 +334,29 @@ export function CustomizationSidebar({ sessionId, projectName }: Props) {
             <h3 className={styles.title}>Customization</h3>
             <p className={styles.subtle}>지침 문서, Skills, MCP 상태를 한 곳에서 확인하고 조정합니다.</p>
           </div>
-          <button
-            type="button"
-            className={styles.refreshButton}
-            onClick={() => void loadOverview()}
-            disabled={overviewLoading}
-            aria-label="Customization 새로고침"
-            title="Customization 새로고침"
-          >
-            <RefreshCw size={15} className={overviewLoading ? styles.rotate : ''} />
-          </button>
+          <div className={styles.headerActions}>
+            <button
+              type="button"
+              className={styles.refreshButton}
+              onClick={() => void loadOverview()}
+              disabled={overviewLoading}
+              aria-label="Customization 새로고침"
+              title="Customization 새로고침"
+            >
+              <RefreshCw size={15} className={overviewLoading ? styles.rotate : ''} />
+            </button>
+            {isMobileMode && onRequestClose ? (
+              <button
+                type="button"
+                className={styles.closeButton}
+                onClick={onRequestClose}
+                aria-label="Customization 패널 닫기"
+                title="Customization 패널 닫기"
+              >
+                <X size={15} />
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <span className={styles.workspacePath}>{headerWorkspacePath}</span>
@@ -383,154 +448,59 @@ export function CustomizationSidebar({ sessionId, projectName }: Props) {
                   </div>
 
                   {activeSection === 'instructions' && (
-                    <div className={styles.splitPane}>
-                      <div className={styles.listCard}>
-                        <div className={styles.cardHeader}>
-                          <span className={styles.cardTitle}>문서 목록</span>
-                          <span className={styles.cardMeta}>{overview.instructionDocs.length}개</span>
-                        </div>
-                        <div className={styles.itemList}>
-                          {overview.instructionDocs.map((doc) => (
-                            <button
-                              key={doc.id}
-                              type="button"
-                              className={`${styles.itemButton} ${selectedInstructionId === doc.id ? styles.itemButtonActive : ''}`}
-                              onClick={() => setSelectedInstructionId(doc.id)}
-                            >
-                              <span className={styles.itemTitleRow}>
-                                <FileText size={13} />
-                                <span className={styles.itemTitle}>{doc.name}</span>
-                              </span>
-                              <span className={styles.itemDescription}>
-                                {doc.exists ? `${formatBytes(doc.sizeBytes)} · ${formatTimestamp(doc.updatedAt)}` : '아직 생성되지 않음'}
-                              </span>
-                              <span className={`${styles.tag} ${doc.exists ? styles.tagGood : styles.tagWarn}`}>
-                                {doc.exists ? '사용 중' : '생성 가능'}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
+                    <div className={styles.listCard}>
+                      <div className={styles.cardHeader}>
+                        <span className={styles.cardTitle}>AGENTS.md</span>
+                        <span className={styles.cardMeta}>{overview.instructionDocs.length}개</span>
                       </div>
-
-                      <div className={styles.detailCard}>
-                        <div className={styles.cardHeader}>
-                          <span className={styles.cardTitle}>문서 편집</span>
-                          <span className={styles.cardMeta}>
-                            {selectedInstruction ? selectedInstruction.name : '선택 없음'}
-                          </span>
-                        </div>
-                        {selectedInstruction ? (
-                          <div className={styles.detailBody}>
-                            <div>
-                              <h4 className={styles.detailTitle}>{selectedInstruction.name}</h4>
-                              <p className={styles.detailSubtle}>{selectedInstruction.path}</p>
-                            </div>
-                            {instructionLoading ? (
-                              <div className={styles.loadingState}>
-                                <Loader2 size={16} className={styles.rotate} />
-                                <p>문서를 불러오는 중입니다.</p>
-                              </div>
-                            ) : (
-                              <>
-                                <textarea
-                                  className={styles.editor}
-                                  value={instructionContent}
-                                  onChange={(event) => {
-                                    setInstructionContent(event.target.value);
-                                    setInstructionDirty(true);
-                                    setInstructionStatus(null);
-                                  }}
-                                  spellCheck={false}
-                                />
-                                <div className={styles.actions}>
-                                  <span className={styles.statusText}>
-                                    {instructionStatus
-                                      ?? (instructionDirty ? '저장되지 않은 변경사항 있음' : '변경사항 없음')}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    className={styles.saveButton}
-                                    onClick={() => void handleSaveInstruction()}
-                                    disabled={instructionSaving || instructionLoading || !instructionDirty}
-                                  >
-                                    {instructionSaving ? <Loader2 size={14} className={styles.rotate} /> : <Save size={14} />}
-                                    저장
-                                  </button>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        ) : (
-                          <div className={styles.emptyState}>
-                            <FileText size={18} />
-                            <p>편집할 문서를 선택해 주세요.</p>
-                          </div>
-                        )}
+                      <div className={`${styles.itemList} ${styles.documentGrid}`}>
+                        {overview.instructionDocs.map((doc) => (
+                          <button
+                            key={doc.id}
+                            type="button"
+                            className={`${styles.itemButton} ${styles.documentTile} ${selectedInstructionId === doc.id ? styles.itemButtonActive : ''}`}
+                            onClick={() => openInstructionModal(doc.id)}
+                          >
+                            <span className={styles.itemTitleRow}>
+                              <FileText size={14} />
+                              <span className={styles.itemTitle}>{doc.name}</span>
+                            </span>
+                            <span className={styles.itemDescription}>
+                              {doc.exists ? `${formatBytes(doc.sizeBytes)} · ${formatTimestamp(doc.updatedAt)}` : '아직 생성되지 않음'}
+                            </span>
+                            <span className={`${styles.tag} ${doc.exists ? styles.tagGood : styles.tagWarn}`}>
+                              {doc.exists ? '열기' : '새로 작성'}
+                            </span>
+                          </button>
+                        ))}
                       </div>
                     </div>
                   )}
 
                   {activeSection === 'skills' && (
-                    <div className={styles.splitPane}>
-                      <div className={styles.listCard}>
-                        <div className={styles.cardHeader}>
-                          <span className={styles.cardTitle}>Skill 목록</span>
-                          <span className={styles.cardMeta}>{overview.skills.length}개</span>
-                        </div>
-                        <div className={styles.itemList}>
-                          {overview.skills.map((skill) => (
-                            <button
-                              key={skill.id}
-                              type="button"
-                              className={`${styles.itemButton} ${selectedSkillId === skill.id ? styles.itemButtonActive : ''}`}
-                              onClick={() => setSelectedSkillId(skill.id)}
-                            >
-                              <span className={styles.itemTitleRow}>
-                                <Blocks size={13} />
-                                <span className={styles.itemTitle}>{skill.name}</span>
-                              </span>
-                              <span className={styles.itemDescription}>{skill.description}</span>
-                              <span className={`${styles.tag} ${skill.source === 'codex' ? styles.tagWarn : styles.tagMuted}`}>
-                                {skill.source === 'codex' ? 'Codex' : 'Agents'}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
+                    <div className={styles.listCard}>
+                      <div className={styles.cardHeader}>
+                        <span className={styles.cardTitle}>Skill 목록</span>
+                        <span className={styles.cardMeta}>{overview.skills.length}개</span>
                       </div>
-
-                      <div className={styles.detailCard}>
-                        <div className={styles.cardHeader}>
-                          <span className={styles.cardTitle}>Skill 본문</span>
-                          <span className={styles.cardMeta}>{selectedSkill?.relativePath ?? '선택 없음'}</span>
-                        </div>
-                        {selectedSkill ? (
-                          <div className={styles.detailBody}>
-                            <div>
-                              <h4 className={styles.detailTitle}>{selectedSkill.name}</h4>
-                              <p className={styles.detailSubtle}>{selectedSkill.description}</p>
-                            </div>
-                            {skillLoading ? (
-                              <div className={styles.loadingState}>
-                                <Loader2 size={16} className={styles.rotate} />
-                                <p>스킬 본문을 불러오는 중입니다.</p>
-                              </div>
-                            ) : skillError ? (
-                              <div className={styles.errorState}>
-                                <Blocks size={18} />
-                                <p>{skillError}</p>
-                              </div>
-                            ) : (
-                              <div className={styles.preview}>
-                                <pre>{skillContent}</pre>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className={styles.emptyState}>
-                            <Blocks size={18} />
-                            <p>확인할 Skill을 선택해 주세요.</p>
-                          </div>
-                        )}
+                      <div className={styles.itemList}>
+                        {overview.skills.map((skill) => (
+                          <button
+                            key={skill.id}
+                            type="button"
+                            className={`${styles.itemButton} ${selectedSkillId === skill.id ? styles.itemButtonActive : ''}`}
+                            onClick={() => openSkillModal(skill.id)}
+                          >
+                            <span className={styles.itemTitleRow}>
+                              <Blocks size={13} />
+                              <span className={styles.itemTitle}>{skill.name}</span>
+                            </span>
+                            <span className={styles.itemDescription}>{skill.description}</span>
+                            <span className={`${styles.tag} ${skill.source === 'codex' ? styles.tagWarn : styles.tagMuted}`}>
+                              {skill.source === 'codex' ? 'Codex' : 'Agents'}
+                            </span>
+                          </button>
+                        ))}
                       </div>
                     </div>
                   )}
@@ -574,6 +544,102 @@ export function CustomizationSidebar({ sessionId, projectName }: Props) {
           </>
         )}
       </div>
-    </aside>
+      {isMounted && activeModal && createPortal(
+        <div className={styles.modalOverlay} onClick={closeModal}>
+          <section className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <div>
+                <div className={styles.eyebrow}>
+                  {activeModalKind === 'instruction' ? <FileText size={13} /> : <Blocks size={13} />}
+                  {activeModalKind === 'instruction' ? 'Document Editor' : 'Skill Viewer'}
+                </div>
+                <h4 className={styles.modalTitle}>
+                  {activeInstructionModal?.name ?? activeSkillModal?.name ?? '선택 없음'}
+                </h4>
+                <p className={styles.modalSubtle}>
+                  {activeInstructionModal?.path ?? activeSkillModal?.relativePath ?? '내용을 확인할 수 없습니다.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                className={styles.modalCloseButton}
+                onClick={closeModal}
+                aria-label="모달 닫기"
+                title="모달 닫기"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className={styles.modalBody}>
+              {activeModalKind === 'instruction' ? (
+                activeInstructionModal ? (
+                  instructionLoading ? (
+                    <div className={styles.loadingState}>
+                      <Loader2 size={16} className={styles.rotate} />
+                      <p>문서를 불러오는 중입니다.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <textarea
+                        className={styles.editor}
+                        value={instructionContent}
+                        onChange={(event) => {
+                          setInstructionContent(event.target.value);
+                          setInstructionDirty(true);
+                          setInstructionStatus(null);
+                        }}
+                        spellCheck={false}
+                      />
+                      <div className={styles.actions}>
+                        <span className={styles.statusText}>
+                          {instructionStatus
+                            ?? (instructionDirty ? '저장되지 않은 변경사항 있음' : '변경사항 없음')}
+                        </span>
+                        <button
+                          type="button"
+                          className={styles.saveButton}
+                          onClick={() => void handleSaveInstruction()}
+                          disabled={instructionSaving || instructionLoading || !instructionDirty}
+                        >
+                          {instructionSaving ? <Loader2 size={14} className={styles.rotate} /> : <Save size={14} />}
+                          저장
+                        </button>
+                      </div>
+                    </>
+                  )
+                ) : (
+                  <div className={styles.emptyState}>
+                    <FileText size={18} />
+                    <p>편집할 문서를 선택해 주세요.</p>
+                  </div>
+                )
+              ) : activeSkillModal ? (
+                skillLoading ? (
+                  <div className={styles.loadingState}>
+                    <Loader2 size={16} className={styles.rotate} />
+                    <p>스킬 본문을 불러오는 중입니다.</p>
+                  </div>
+                ) : skillError ? (
+                  <div className={styles.errorState}>
+                    <Blocks size={18} />
+                    <p>{skillError}</p>
+                  </div>
+                ) : (
+                  <div className={styles.preview}>
+                    <pre>{skillContent}</pre>
+                  </div>
+                )
+              ) : (
+                <div className={styles.emptyState}>
+                  <Blocks size={18} />
+                  <p>확인할 Skill을 선택해 주세요.</p>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>,
+        document.body,
+      )}
+    </section>
   );
 }
