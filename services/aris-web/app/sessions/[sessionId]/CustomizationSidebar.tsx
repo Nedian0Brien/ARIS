@@ -146,6 +146,20 @@ function formatTimestamp(value: string | null): string {
   }).format(parsed);
 }
 
+function TimestampText({ value, className }: { value: string | null; className?: string }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  return (
+    <span className={className} suppressHydrationWarning>
+      {mounted ? formatTimestamp(value) : '시간 정보 없음'}
+    </span>
+  );
+}
+
 function formatBytes(value: number | null): string {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
     return '--';
@@ -1024,7 +1038,13 @@ export function CustomizationSidebar({
                               <span className={styles.itemTitle}>{doc.name}</span>
                             </span>
                             <span className={styles.itemDescription}>
-                              {doc.exists ? `${formatBytes(doc.sizeBytes)} · ${formatTimestamp(doc.updatedAt)}` : '아직 생성되지 않음'}
+                              {doc.exists ? (
+                                <>
+                                  {formatBytes(doc.sizeBytes)}
+                                  {' · '}
+                                  <TimestampText value={doc.updatedAt} />
+                                </>
+                              ) : '아직 생성되지 않음'}
                             </span>
                             <span className={`${styles.tag} ${doc.exists ? styles.tagGood : styles.tagWarn}`}>
                               {doc.exists ? '열기' : '새로 작성'}
@@ -1082,7 +1102,7 @@ export function CustomizationSidebar({
                               </div>
                               <div className={styles.mcpMeta}>
                                 <span className={styles.tag}>{server.source}</span>
-                                <span className={styles.tag}>{formatTimestamp(server.lastSeenAt)}</span>
+                                <TimestampText value={server.lastSeenAt} className={styles.tag} />
                               </div>
                               <div className={styles.mcpDetail}>{server.detail}</div>
                             </article>

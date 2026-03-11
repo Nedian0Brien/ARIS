@@ -292,18 +292,20 @@ function RelativeTime({ timestamp, className }: { timestamp: string; className?:
     setMounted(true);
   }, []);
 
-  if (!mounted) {
-    const date = new Date(timestamp);
-    return <span className={className}>{Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>;
-  }
-
-  return <span className={className}>{formatRelative(timestamp)}</span>;
+  return (
+    <span className={className} suppressHydrationWarning>
+      {mounted ? formatRelative(timestamp) : '--'}
+    </span>
+  );
 }
 
 function ElapsedTimer({ since, className }: { since: string; className?: string }) {
-  const [now, setNow] = useState(() => Date.now());
+  const [mounted, setMounted] = useState(false);
+  const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
+    setMounted(true);
+    setNow(Date.now());
     const timerId = window.setInterval(() => {
       setNow(Date.now());
     }, 1000);
@@ -312,7 +314,25 @@ function ElapsedTimer({ since, className }: { since: string; className?: string 
     };
   }, []);
 
-  return <span className={className}>{formatElapsedDuration(since, now)}</span>;
+  return (
+    <span className={className} suppressHydrationWarning>
+      {mounted && now !== null ? formatElapsedDuration(since, now) : '--:--'}
+    </span>
+  );
+}
+
+function ClockTime({ timestamp, className }: { timestamp: string; className?: string }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  return (
+    <span className={className} suppressHydrationWarning>
+      {mounted ? formatClock(timestamp) : '--:--'}
+    </span>
+  );
 }
 
 // --- 5. 유틸리티 함수 ---
@@ -4837,7 +4857,7 @@ export function ChatInterface({
                 return (
                   <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowUser}`}>
                     <div className={`${styles.msgHeader} ${styles.msgHeaderUser}`}>
-                      <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
+                      <ClockTime timestamp={event.timestamp} className={styles.msgTime} />
                       <span className={`${styles.msgSender} ${styles.msgSenderUser}`}>YOU</span>
                     </div>
                     <div className={`${styles.messageBubble} ${styles.messageBubbleUser} ${highlightedEventId === event.id ? styles.messageBubbleHighlight : ''}`}>
@@ -4866,7 +4886,7 @@ export function ChatInterface({
                     <div className={styles.msgBody}>
                       <div className={styles.msgHeader}>
                         <span className={styles.msgSender}>{agentMeta.label}</span>
-                        <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
+                        <ClockTime timestamp={event.timestamp} className={styles.msgTime} />
                       </div>
                       <div className={`${styles.messageBubble} ${styles.messageBubbleAgent}`}>
                         {kindMeta.label ? (
