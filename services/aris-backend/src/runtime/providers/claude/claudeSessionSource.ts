@@ -1,0 +1,70 @@
+import { createHash } from 'node:crypto';
+import type { ClaudeResumeTarget, ClaudeThreadIdSource } from './types.js';
+
+function formatUuidFromBytes(bytes: Uint8Array): string {
+  const hex = Buffer.from(bytes).toString('hex');
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20, 32),
+  ].join('-');
+}
+
+function buildDeterministicUuid(seed: string): string {
+  const hash = createHash('sha1').update(seed).digest();
+  const bytes = Uint8Array.from(hash.subarray(0, 16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  return formatUuidFromBytes(bytes);
+}
+
+export function buildClaudeSessionId(sessionId: string, chatId?: string): string {
+  const scopedChatId = typeof chatId === 'string' && chatId.trim().length > 0
+    ? chatId.trim()
+    : '__default__';
+  return buildDeterministicUuid(`aris:claude:${sessionId}:${scopedChatId}`);
+}
+
+export function buildClaudeResumeTarget(
+  preferredThreadId: string | undefined,
+  sessionId: string,
+  chatId?: string,
+): { resumeTarget?: ClaudeResumeTarget; actionThreadId?: string; threadIdSource: ClaudeThreadIdSource } {
+  if (preferredThreadId) {
+    return {
+      resumeTarget: { id: preferredThreadId, mode: 'resume' },
+      actionThreadId: preferredThreadId,
+      threadIdSource: 'resume',
+    };
+  }
+
+  const generatedSessionId = buildClaudeSessionId(sessionId, chatId);
+  return {
+    resumeTarget: { id: generatedSessionId, mode: 'session-id' },
+    actionThreadId: generatedSessionId,
+    threadIdSource: 'synthetic',
+  };
+}
+
+export function resolveClaudeThreadId(input: {
+  observedThreadId?: string;
+  actionThreadId?: string;
+  initialSource: ClaudeThreadIdSource;
+}): { threadId?: string; threadIdSource: ClaudeThreadIdSource } {
+  const observedThreadId = typeof input.observedThreadId === 'string' && input.observedThreadId.trim().length > 0
+    ? input.observedThreadId.trim()
+    : undefined;
+  if (observedThreadId) {
+    return {
+      threadId: observedThreadId,
+      threadIdSource: 'observed',
+    };
+  }
+
+  return {
+    threadId: input.actionThreadId,
+    threadIdSource: input.initialSource,
+  };
+}

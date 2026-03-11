@@ -10,7 +10,8 @@ import { HappyEventLogger } from './happyEventLogger.js';
 import { resolveRuntimeModelSelection } from './modelPolicy.js';
 import { buildClaudeCommand } from './providers/claude/claudeLauncher.js';
 import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.js';
-import { buildClaudeSessionId, runClaudeTurn } from './providers/claude/claudeRuntime.js';
+import { buildClaudeSessionId } from './providers/claude/claudeSessionSource.js';
+import { runClaudeTurn } from './providers/claude/claudeRuntime.js';
 import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget } from './providers/claude/types.js';
 import type {
   ApprovalPolicy,
@@ -3031,6 +3032,47 @@ export class HappyRuntimeStore {
     return undefined;
   }
 
+  private async resolveClaudeThreadId(sessionId: string, chatId?: string): Promise<string | undefined> {
+    try {
+      const history = await this.listMessages(sessionId);
+      for (let index = history.length - 1; index >= 0; index -= 1) {
+        const message = history[index];
+        if (chatId) {
+          const rawChatId = message?.meta?.chatId;
+          const messageChatId = typeof rawChatId === 'string' ? rawChatId.trim() : '';
+          if (messageChatId !== chatId) {
+            continue;
+          }
+        }
+        const messageAgent = normalizeAgent(message?.meta?.agent);
+        if (messageAgent !== 'claude') {
+          continue;
+        }
+
+        const providerThreadId = typeof message?.meta?.claudeSessionId === 'string'
+          ? message.meta.claudeSessionId.trim()
+          : '';
+        if (providerThreadId) {
+          return providerThreadId;
+        }
+
+        const source = typeof message?.meta?.threadIdSource === 'string'
+          ? message.meta.threadIdSource.trim()
+          : '';
+        const threadId = typeof message?.meta?.threadId === 'string'
+          ? message.meta.threadId.trim()
+          : '';
+        if (threadId && source && source !== 'synthetic') {
+          return threadId;
+        }
+      }
+    } catch {
+      // Ignore Claude thread recovery failures and let the launcher start from the synthetic seed.
+    }
+
+    return undefined;
+  }
+
   private async generateAndPersistAgentReply(
     session: RuntimeSession,
     prompt: string,
@@ -3135,9 +3177,12 @@ export class HappyRuntimeStore {
     try {
       const isCodex = flavor === 'codex';
       const isClaude = flavor === 'claude';
-      const preferredThreadId = typeof context.threadId === 'string' && context.threadId.trim().length > 0
+      const requestedThreadId = typeof context.threadId === 'string' && context.threadId.trim().length > 0
         ? context.threadId.trim()
         : undefined;
+      const preferredThreadId = isClaude
+        ? requestedThreadId ?? await this.resolveClaudeThreadId(session.id, scopedChatId)
+        : requestedThreadId;
       const threadCacheKey = buildCodexThreadCacheKey(session.id, scopedChatId);
       let response: {
         output: string;
@@ -3146,6 +3191,7 @@ export class HappyRuntimeStore {
         agentMessagePersisted?: boolean;
         streamedActionsPersisted?: boolean;
         threadId?: string;
+        threadIdSource?: 'resume' | 'observed' | 'synthetic';
         inferredActions?: ParsedAgentActionEvent[];
       };
       const appendNonCodexAction = async (
@@ -3261,6 +3307,15 @@ export class HappyRuntimeStore {
               },
             },
           );
+        const nonCodexThreadIdSource = isClaude
+          && 'threadIdSource' in nonCodex
+          && (
+            nonCodex.threadIdSource === 'resume'
+            || nonCodex.threadIdSource === 'observed'
+            || nonCodex.threadIdSource === 'synthetic'
+          )
+          ? nonCodex.threadIdSource
+          : undefined;
         response = {
           output: nonCodex.output,
           cwd: nonCodex.cwd,
@@ -3269,6 +3324,7 @@ export class HappyRuntimeStore {
           streamedActionsPersisted: nonCodex.streamedActionsPersisted,
           inferredActions: nonCodex.inferredActions,
           threadId: nonCodex.threadId ?? nonCodexActionThreadId,
+          ...(nonCodexThreadIdSource ? { threadIdSource: nonCodexThreadIdSource } : {}),
         };
       }
 
@@ -3299,6 +3355,8 @@ export class HappyRuntimeStore {
           agent: flavor,
           model: selectedModel,
           ...(response.threadId ? { threadId: response.threadId } : {}),
+          ...(isClaude && response.threadId ? { claudeSessionId: response.threadId } : {}),
+          ...(isClaude && response.threadIdSource ? { threadIdSource: response.threadIdSource } : {}),
         });
       }
     } catch (error) {

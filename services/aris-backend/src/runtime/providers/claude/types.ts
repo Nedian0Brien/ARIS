@@ -5,6 +5,8 @@ export type ClaudeResumeTarget = {
   mode?: 'resume' | 'session-id';
 };
 
+export type ClaudeThreadIdSource = 'resume' | 'observed' | 'synthetic';
+
 export type ClaudeActionEvent = {
   actionType: 'file_read' | 'file_write' | 'file_list' | 'command_execution';
   title: string;
@@ -47,6 +49,7 @@ export type ClaudeTurnResult = {
   streamedActionsPersisted: boolean;
   inferredActions: ClaudeActionEvent[];
   threadId?: string;
+  threadIdSource: ClaudeThreadIdSource;
 };
 
 export type ClaudeRuntimeSession = Pick<RuntimeSession, 'id' | 'metadata'>;
