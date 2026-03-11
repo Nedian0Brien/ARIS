@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
@@ -1211,6 +1211,36 @@ function buildCodexThreadCacheKey(sessionId: string, chatId?: string): string {
   return sessionId;
 }
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function formatUuidFromBytes(bytes: Uint8Array): string {
+  const hex = Buffer.from(bytes).toString('hex');
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20, 32),
+  ].join('-');
+}
+
+function buildDeterministicUuid(seed: string): string {
+  const hash = createHash('sha1').update(seed).digest();
+  const bytes = Uint8Array.from(hash.subarray(0, 16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  return formatUuidFromBytes(bytes);
+}
+
+function buildClaudeSessionId(sessionId: string, chatId?: string): string {
+  const scopedChatId = typeof chatId === 'string' && chatId.trim().length > 0
+    ? chatId.trim()
+    : '__default__';
+  return buildDeterministicUuid(`aris:claude:${sessionId}:${scopedChatId}`);
+}
+
 function buildAgentCommand(
   agent: RuntimeAgent,
   prompt: string,
@@ -1224,6 +1254,11 @@ function buildAgentCommand(
     : undefined;
   if (agent === 'claude') {
     const permissionMode = normalizeClaudePermissionMode(approvalPolicy);
+    const claudeResumeArgs = normalizedResumeId
+      ? isUuid(normalizedResumeId)
+        ? ['--session-id', normalizedResumeId]
+        : ['--resume', normalizedResumeId]
+      : [];
     const args = [
       '--print',
       '--output-format',
@@ -1232,7 +1267,7 @@ function buildAgentCommand(
       '--permission-mode',
       permissionMode,
       ...(selectedModel ? ['--model', selectedModel] : []),
-      ...(normalizedResumeId ? ['--resume', normalizedResumeId] : []),
+      ...claudeResumeArgs,
       prompt,
     ];
     const fallbackArgs = [
@@ -1240,7 +1275,7 @@ function buildAgentCommand(
       '--permission-mode',
       permissionMode,
       ...(selectedModel ? ['--model', selectedModel] : []),
-      ...(normalizedResumeId ? ['--resume', normalizedResumeId] : []),
+      ...claudeResumeArgs,
       prompt,
     ];
     return {
@@ -1257,6 +1292,7 @@ function buildAgentCommand(
             '--permission-mode',
             permissionMode,
             ...(selectedModel ? ['--model', selectedModel] : []),
+            ...claudeResumeArgs,
             prompt,
           ],
         }
@@ -1308,6 +1344,8 @@ export const happyClientTestHooks = {
   parseMessagePayloadText,
   buildSessionHintMeta,
   shouldSkipDuplicateAgentMessage,
+  buildClaudeSessionId,
+  buildAgentCommand,
 };
 
 export class HappyRuntimeStore {
@@ -3074,6 +3112,9 @@ export class HappyRuntimeStore {
       const preferredThreadId = typeof context.threadId === 'string' && context.threadId.trim().length > 0
         ? context.threadId.trim()
         : undefined;
+      const nonCodexThreadId = flavor === 'claude'
+        ? preferredThreadId ?? buildClaudeSessionId(session.id, scopedChatId)
+        : preferredThreadId;
       const threadCacheKey = buildCodexThreadCacheKey(session.id, scopedChatId);
       let response: {
         output: string;
@@ -3166,10 +3207,10 @@ export class HappyRuntimeStore {
           selectedModel,
           session.metadata.path,
           controller.signal,
-          preferredThreadId,
+          nonCodexThreadId,
           {
             onAction: async (action) => {
-              await appendNonCodexAction(action, streamedActionIndex, nonCodexCwd, preferredThreadId);
+              await appendNonCodexAction(action, streamedActionIndex, nonCodexCwd, nonCodexThreadId);
               streamedActionIndex += 1;
             },
           },
@@ -3181,7 +3222,7 @@ export class HappyRuntimeStore {
           agentMessagePersisted: false,
           streamedActionsPersisted: nonCodex.streamedActionsPersisted,
           inferredActions: nonCodex.inferredActions,
-          threadId: preferredThreadId,
+          threadId: nonCodexThreadId,
         };
       }
 

@@ -136,4 +136,45 @@ describe('happyClient stream-json parsing', () => {
     expect(happyClientTestHooks.shouldSkipDuplicateAgentMessage(seen, 'turn-1', 'different reply')).toBe(false);
     expect(happyClientTestHooks.shouldSkipDuplicateAgentMessage(seen, 'turn-2', 'same reply')).toBe(false);
   });
+
+  it('builds a stable Claude session id per session and chat', () => {
+    const first = happyClientTestHooks.buildClaudeSessionId('session-1', 'chat-1');
+    const second = happyClientTestHooks.buildClaudeSessionId('session-1', 'chat-1');
+    const otherChat = happyClientTestHooks.buildClaudeSessionId('session-1', 'chat-2');
+
+    expect(first).toBe(second);
+    expect(otherChat).not.toBe(first);
+    expect(first).toMatch(/^[0-9a-f-]{36}$/i);
+  });
+
+  it('uses --session-id for Claude when the resume id is a UUID', () => {
+    const sessionId = happyClientTestHooks.buildClaudeSessionId('session-2', 'chat-2');
+    const command = happyClientTestHooks.buildAgentCommand(
+      'claude',
+      'Reply with OK',
+      'on-request',
+      'claude-haiku-4-5',
+      sessionId,
+    );
+
+    expect(command).not.toBeNull();
+    expect(command?.args).toContain('--session-id');
+    expect(command?.args).toContain(sessionId);
+    expect(command?.args).not.toContain('--resume');
+  });
+
+  it('keeps legacy --resume behavior for non-UUID Claude resume ids', () => {
+    const command = happyClientTestHooks.buildAgentCommand(
+      'claude',
+      'Reply with OK',
+      'on-request',
+      'claude-haiku-4-5',
+      'legacy-session-handle',
+    );
+
+    expect(command).not.toBeNull();
+    expect(command?.args).toContain('--resume');
+    expect(command?.args).toContain('legacy-session-handle');
+    expect(command?.args).not.toContain('--session-id');
+  });
 });
