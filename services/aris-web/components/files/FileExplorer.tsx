@@ -161,8 +161,19 @@ export function FileExplorer() {
     try {
       const res = await fetch(`/api/fs/read?path=${encodeURIComponent(item.path)}`);
       if (!res.ok) throw new Error('파일을 읽는 데 실패했습니다.');
-      const { content } = await res.json();
-      setEditingFile({ path: item.path, name: item.name, content });
+      const data = await res.json() as {
+        content?: string;
+        blockedReason?: 'binary' | 'large';
+        sizeBytes?: number;
+      };
+      if (data.blockedReason === 'binary') {
+        throw new Error(`바이너리 파일은 미리보기를 지원하지 않습니다. (${Math.round((data.sizeBytes ?? 0) / 1024)}KB)`);
+      }
+      if (data.blockedReason === 'large') {
+        throw new Error(`큰 파일은 우측 모달에서 직접 열지 않습니다. (${Math.round((data.sizeBytes ?? 0) / 1024)}KB)`);
+      }
+      const { content } = data;
+      setEditingFile({ path: item.path, name: item.name, content: content ?? '' });
     } catch (err) {
       alert(err instanceof Error ? err.message : '오류 발생');
     }

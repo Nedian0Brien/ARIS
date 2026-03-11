@@ -1,23 +1,30 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  AlertTriangle,
   ArrowUpCircle,
   Blocks,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
+  FilePlus,
   FileText,
   Folder,
   FolderKanban,
+  FolderOpen,
+  FolderPlus,
   GitBranch,
   type LucideIcon,
   Loader2,
+  Pencil,
   PlugZap,
   RefreshCw,
   Save,
   Search,
   TerminalSquare,
+  Trash2,
   Wrench,
   X,
 } from 'lucide-react';
@@ -77,6 +84,23 @@ type WorkspaceFileEntry = {
   isFile: boolean;
 };
 
+type FilePreviewBlock = {
+  reason: 'binary' | 'large';
+  sizeBytes: number;
+};
+
+type FileActionDialog =
+  | { kind: 'create-file'; targetPath: string; value: string }
+  | { kind: 'create-folder'; targetPath: string; value: string }
+  | { kind: 'rename'; targetPath: string; targetName: string; value: string }
+  | { kind: 'delete'; targetPath: string; targetName: string };
+
+type RequestedFilePayload = {
+  path: string;
+  name?: string;
+  nonce: number;
+};
+
 type CustomizationModal =
   | { kind: 'instruction'; id: string }
   | { kind: 'skill'; id: string }
@@ -86,6 +110,8 @@ type CustomizationModal =
 type Props = {
   sessionId: string;
   projectName: string;
+  workspaceRootPath?: string;
+  requestedFile?: RequestedFilePayload | null;
   mode?: 'desktop' | 'mobile';
   onRequestClose?: () => void;
 };
@@ -139,12 +165,52 @@ function getMcpStatusLabel(status: MpcServerSummary['status']): string {
   return '확인 불가';
 }
 
+function normalizeWorkspaceClientPath(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return '/';
+  }
+
+  const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  const normalized = withLeadingSlash.replace(/\/+/g, '/').replace(/\/$/, '');
+  return normalized || '/';
+}
+
+function getParentWorkspacePath(targetPath: string): string | null {
+  const normalized = normalizeWorkspaceClientPath(targetPath);
+  if (normalized === '/') {
+    return null;
+  }
+  const lastSlash = normalized.lastIndexOf('/');
+  return lastSlash <= 0 ? '/' : normalized.slice(0, lastSlash);
+}
+
+function joinWorkspacePath(dirPath: string, name: string): string {
+  const normalizedDir = normalizeWorkspaceClientPath(dirPath);
+  const trimmedName = name.trim().replace(/^\/+/, '');
+  return normalizedDir === '/' ? `/${trimmedName}` : `${normalizedDir}/${trimmedName}`;
+}
+
+function isWorkspacePathWithinRoot(targetPath: string, rootPath: string): boolean {
+  const normalizedTarget = normalizeWorkspaceClientPath(targetPath);
+  const normalizedRoot = normalizeWorkspaceClientPath(rootPath);
+  return normalizedRoot === '/'
+    ? normalizedTarget.startsWith('/')
+    : normalizedTarget === normalizedRoot || normalizedTarget.startsWith(`${normalizedRoot}/`);
+}
+
 export function CustomizationSidebar({
   sessionId,
   projectName,
+  workspaceRootPath = '/',
+  requestedFile = null,
   mode = 'desktop',
   onRequestClose,
 }: Props) {
+  const normalizedWorkspaceRootPath = useMemo(
+    () => normalizeWorkspaceClientPath(workspaceRootPath),
+    [workspaceRootPath],
+  );
   const [activeSurface, setActiveSurface] = useState<SidebarSurface>('customization');
   const [activeSection, setActiveSection] = useState<CustomizationSection>('instructions');
   const [overview, setOverview] = useState<CustomizationOverview | null>(null);
@@ -162,11 +228,15 @@ export function CustomizationSidebar({
   const [skillContent, setSkillContent] = useState('');
   const [skillLoading, setSkillLoading] = useState(false);
   const [skillError, setSkillError] = useState<string | null>(null);
-  const [filesPath, setFilesPath] = useState('/');
+  const [filesPath, setFilesPath] = useState(normalizedWorkspaceRootPath);
   const [filesParentPath, setFilesParentPath] = useState<string | null>(null);
   const [filesEntries, setFilesEntries] = useState<WorkspaceFileEntry[]>([]);
+  const [filesEntriesByPath, setFilesEntriesByPath] = useState<Record<string, WorkspaceFileEntry[]>>({});
+  const [filesLoadingByPath, setFilesLoadingByPath] = useState<Record<string, boolean>>({});
   const [filesLoading, setFilesLoading] = useState(false);
   const [filesError, setFilesError] = useState<string | null>(null);
+  const [filesErrorByPath, setFilesErrorByPath] = useState<Record<string, string | null>>({});
+  const [expandedDirectories, setExpandedDirectories] = useState<Record<string, boolean>>({});
   const [filesSearchQuery, setFilesSearchQuery] = useState('');
   const [filesSearchResults, setFilesSearchResults] = useState<WorkspaceFileEntry[] | null>(null);
   const [filesSearchLoading, setFilesSearchLoading] = useState(false);
@@ -177,8 +247,11 @@ export function CustomizationSidebar({
   const [fileSaving, setFileSaving] = useState(false);
   const [fileDirty, setFileDirty] = useState(false);
   const [fileStatus, setFileStatus] = useState<string | null>(null);
+  const [filePreviewBlock, setFilePreviewBlock] = useState<FilePreviewBlock | null>(null);
+  const [fileActionDialog, setFileActionDialog] = useState<FileActionDialog | null>(null);
   const [activeModal, setActiveModal] = useState<CustomizationModal>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const handledRequestedFileNonceRef = useRef<number | null>(null);
 
   const selectedInstruction = useMemo(
     () => overview?.instructionDocs.find((doc) => doc.id === selectedInstructionId) ?? null,
@@ -275,11 +348,18 @@ export function CustomizationSidebar({
     }
   }, [sessionId]);
 
-  const loadFilesDirectory = useCallback(async (dirPath: string) => {
-    setFilesLoading(true);
-    setFilesError(null);
+  const loadFilesDirectory = useCallback(async (dirPath: string, options?: { focus?: boolean }) => {
+    const normalizedDirPath = normalizeWorkspaceClientPath(dirPath);
+    const shouldFocus = options?.focus ?? true;
+
+    setFilesLoadingByPath((prev) => ({ ...prev, [normalizedDirPath]: true }));
+    setFilesErrorByPath((prev) => ({ ...prev, [normalizedDirPath]: null }));
+    if (shouldFocus) {
+      setFilesLoading(true);
+      setFilesError(null);
+    }
     try {
-      const response = await fetch(`/api/fs/list?path=${encodeURIComponent(dirPath)}`, { cache: 'no-store' });
+      const response = await fetch(`/api/fs/list?path=${encodeURIComponent(normalizedDirPath)}`, { cache: 'no-store' });
       const data = await response.json().catch(() => null) as {
         currentPath?: string;
         parentPath?: string | null;
@@ -290,15 +370,31 @@ export function CustomizationSidebar({
         throw new Error(typeof data?.error === 'string' ? data.error : '파일 목록을 불러오지 못했습니다.');
       }
 
-      setFilesPath(data.currentPath ?? dirPath);
-      setFilesParentPath(data.parentPath ?? null);
-      setFilesEntries(data.directories ?? []);
+      const currentPath = normalizeWorkspaceClientPath(data.currentPath ?? normalizedDirPath);
+      const parentPath = data.parentPath && isWorkspacePathWithinRoot(data.parentPath, normalizedWorkspaceRootPath)
+        ? data.parentPath
+        : null;
+      const entries = data.directories ?? [];
+
+      setFilesEntriesByPath((prev) => ({ ...prev, [currentPath]: entries }));
+      if (shouldFocus) {
+        setFilesPath(currentPath);
+        setFilesParentPath(parentPath);
+        setFilesEntries(entries);
+      }
     } catch (error) {
-      setFilesError(error instanceof Error ? error.message : '파일 목록을 불러오지 못했습니다.');
+      const message = error instanceof Error ? error.message : '파일 목록을 불러오지 못했습니다.';
+      setFilesErrorByPath((prev) => ({ ...prev, [normalizedDirPath]: message }));
+      if (shouldFocus) {
+        setFilesError(message);
+      }
     } finally {
-      setFilesLoading(false);
+      setFilesLoadingByPath((prev) => ({ ...prev, [normalizedDirPath]: false }));
+      if (shouldFocus) {
+        setFilesLoading(false);
+      }
     }
-  }, []);
+  }, [normalizedWorkspaceRootPath]);
 
   const searchFiles = useCallback(async (query: string) => {
     setFilesSearchQuery(query);
@@ -310,7 +406,10 @@ export function CustomizationSidebar({
 
     setFilesSearchLoading(true);
     try {
-      const response = await fetch(`/api/fs/search?q=${encodeURIComponent(query.trim())}`, { cache: 'no-store' });
+      const response = await fetch(
+        `/api/fs/search?q=${encodeURIComponent(query.trim())}&path=${encodeURIComponent(normalizedWorkspaceRootPath)}`,
+        { cache: 'no-store' },
+      );
       const data = await response.json().catch(() => null) as {
         results?: Array<{ name: string; path: string; isDirectory: boolean }>;
         error?: string;
@@ -329,18 +428,34 @@ export function CustomizationSidebar({
     } finally {
       setFilesSearchLoading(false);
     }
-  }, []);
+  }, [normalizedWorkspaceRootPath]);
 
   const loadFile = useCallback(async (filePath: string, fileName?: string) => {
     setFileLoading(true);
     setFileStatus(null);
+    setFilePreviewBlock(null);
     setSelectedFilePath(filePath);
     setSelectedFileName(fileName ?? filePath.split('/').pop() ?? filePath);
     try {
       const response = await fetch(`/api/fs/read?path=${encodeURIComponent(filePath)}`, { cache: 'no-store' });
-      const data = await response.json().catch(() => null) as { content?: string; error?: string } | null;
+      const data = await response.json().catch(() => null) as {
+        content?: string;
+        sizeBytes?: number;
+        blockedReason?: 'binary' | 'large';
+        error?: string;
+      } | null;
       if (!response.ok || !data) {
         throw new Error(typeof data?.error === 'string' ? data.error : '파일을 불러오지 못했습니다.');
+      }
+
+      if (data.blockedReason) {
+        setFilePreviewBlock({
+          reason: data.blockedReason,
+          sizeBytes: typeof data.sizeBytes === 'number' ? data.sizeBytes : 0,
+        });
+        setFileContent('');
+        setFileDirty(false);
+        return;
       }
 
       setFileContent(data.content ?? '');
@@ -356,6 +471,18 @@ export function CustomizationSidebar({
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  useEffect(() => {
+    setFilesPath(normalizedWorkspaceRootPath);
+    setFilesParentPath(null);
+    setFilesEntries([]);
+    setFilesEntriesByPath({});
+    setFilesErrorByPath({});
+    setFilesLoadingByPath({});
+    setExpandedDirectories({});
+    setFilesSearchQuery('');
+    setFilesSearchResults(null);
+  }, [normalizedWorkspaceRootPath]);
 
   useEffect(() => {
     void loadOverview();
@@ -375,11 +502,11 @@ export function CustomizationSidebar({
     if (activeSurface !== 'files') {
       return;
     }
-    if (filesEntries.length > 0 || filesLoading || filesError) {
+    if ((filesEntriesByPath[filesPath]?.length ?? 0) > 0 || filesLoading || filesError) {
       return;
     }
     void loadFilesDirectory(filesPath);
-  }, [activeSurface, filesEntries.length, filesError, filesLoading, filesPath, loadFilesDirectory]);
+  }, [activeSurface, filesEntriesByPath, filesError, filesLoading, filesPath, loadFilesDirectory]);
 
   useEffect(() => {
     if (!activeModal) {
@@ -455,6 +582,119 @@ export function CustomizationSidebar({
     }
   }, [fileContent, filesPath, loadFilesDirectory, selectedFilePath]);
 
+  const refreshFocusedFiles = useCallback(async (extraPaths: string[] = []) => {
+    const paths = Array.from(new Set([
+      filesPath,
+      ...Object.entries(expandedDirectories)
+        .filter(([, isExpanded]) => isExpanded)
+        .map(([pathKey]) => pathKey),
+      ...extraPaths,
+    ].filter((value): value is string => Boolean(value))));
+
+    await Promise.all(paths.map((pathKey) => loadFilesDirectory(pathKey, { focus: pathKey === filesPath })));
+  }, [expandedDirectories, filesPath, loadFilesDirectory]);
+
+  const handleFocusDirectory = useCallback((dirPath: string) => {
+    setFilesSearchQuery('');
+    setFilesSearchResults(null);
+    void loadFilesDirectory(dirPath);
+  }, [loadFilesDirectory]);
+
+  const handleToggleDirectory = useCallback((dirPath: string) => {
+    const normalizedDirPath = normalizeWorkspaceClientPath(dirPath);
+    const nextExpanded = !expandedDirectories[normalizedDirPath];
+    setExpandedDirectories((prev) => ({ ...prev, [normalizedDirPath]: nextExpanded }));
+    if (nextExpanded && !filesEntriesByPath[normalizedDirPath] && !filesLoadingByPath[normalizedDirPath]) {
+      void loadFilesDirectory(normalizedDirPath, { focus: false });
+    }
+  }, [expandedDirectories, filesEntriesByPath, filesLoadingByPath, loadFilesDirectory]);
+
+  const openFileModal = useCallback((filePath: string, fileName?: string) => {
+    void loadFile(filePath, fileName);
+    setActiveModal({ kind: 'file', id: filePath });
+  }, [loadFile]);
+
+  const handleConfirmFileAction = useCallback(async () => {
+    if (!fileActionDialog) {
+      return;
+    }
+
+    const trimValue = 'value' in fileActionDialog ? fileActionDialog.value.trim() : '';
+    if ('value' in fileActionDialog && !trimValue) {
+      setFilesError('이름을 입력해 주세요.');
+      return;
+    }
+
+    try {
+      if (fileActionDialog.kind === 'create-file') {
+        const nextPath = joinWorkspacePath(fileActionDialog.targetPath, trimValue);
+        const response = await fetch('/api/fs/write', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: nextPath, content: '' }),
+        });
+        const data = await response.json().catch(() => null) as { error?: string } | null;
+        if (!response.ok || data?.error) {
+          throw new Error(typeof data?.error === 'string' ? data.error : '파일을 생성하지 못했습니다.');
+        }
+        await refreshFocusedFiles([fileActionDialog.targetPath]);
+        openFileModal(nextPath, trimValue);
+      } else if (fileActionDialog.kind === 'create-folder') {
+        const nextPath = joinWorkspacePath(fileActionDialog.targetPath, trimValue);
+        const response = await fetch('/api/fs/mkdir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: nextPath }),
+        });
+        const data = await response.json().catch(() => null) as { error?: string } | null;
+        if (!response.ok || data?.error) {
+          throw new Error(typeof data?.error === 'string' ? data.error : '폴더를 생성하지 못했습니다.');
+        }
+        setExpandedDirectories((prev) => ({ ...prev, [fileActionDialog.targetPath]: true }));
+        await refreshFocusedFiles([fileActionDialog.targetPath]);
+      } else if (fileActionDialog.kind === 'rename') {
+        const parentPath = getParentWorkspacePath(fileActionDialog.targetPath) ?? normalizedWorkspaceRootPath;
+        const nextPath = joinWorkspacePath(parentPath, trimValue);
+        const response = await fetch('/api/fs/move', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ oldPath: fileActionDialog.targetPath, newPath: nextPath }),
+        });
+        const data = await response.json().catch(() => null) as { error?: string } | null;
+        if (!response.ok || data?.error) {
+          throw new Error(typeof data?.error === 'string' ? data.error : '이름을 변경하지 못했습니다.');
+        }
+        if (filesPath === fileActionDialog.targetPath) {
+          setFilesPath(nextPath);
+        }
+        if (selectedFilePath === fileActionDialog.targetPath) {
+          setSelectedFilePath(nextPath);
+          setSelectedFileName(trimValue);
+        }
+        await refreshFocusedFiles([parentPath]);
+      } else {
+        const response = await fetch(`/api/fs/delete?path=${encodeURIComponent(fileActionDialog.targetPath)}`, {
+          method: 'DELETE',
+        });
+        const data = await response.json().catch(() => null) as { error?: string } | null;
+        if (!response.ok || data?.error) {
+          throw new Error(typeof data?.error === 'string' ? data.error : '삭제하지 못했습니다.');
+        }
+        if (selectedFilePath && (selectedFilePath === fileActionDialog.targetPath || selectedFilePath.startsWith(`${fileActionDialog.targetPath}/`))) {
+          setSelectedFilePath(null);
+          setSelectedFileName(null);
+          setActiveModal(null);
+        }
+        await refreshFocusedFiles([getParentWorkspacePath(fileActionDialog.targetPath) ?? filesPath]);
+      }
+
+      setFileActionDialog(null);
+      setFilesError(null);
+    } catch (error) {
+      setFilesError(error instanceof Error ? error.message : '파일 작업을 완료하지 못했습니다.');
+    }
+  }, [fileActionDialog, filesPath, normalizedWorkspaceRootPath, openFileModal, refreshFocusedFiles, selectedFilePath]);
+
   const headerWorkspacePath = overview?.workspacePath ?? projectName;
   const isMobileMode = mode === 'mobile';
   const openInstructionModal = useCallback((instructionId: string) => {
@@ -465,15 +705,132 @@ export function CustomizationSidebar({
     setSelectedSkillId(skillId);
     setActiveModal({ kind: 'skill', id: skillId });
   }, []);
-  const openFileModal = useCallback((filePath: string, fileName?: string) => {
-    void loadFile(filePath, fileName);
-    setActiveModal({ kind: 'file', id: filePath });
-  }, [loadFile]);
+  useEffect(() => {
+    if (!requestedFile || handledRequestedFileNonceRef.current === requestedFile.nonce) {
+      return;
+    }
+
+    handledRequestedFileNonceRef.current = requestedFile.nonce;
+    const nextParentPath = getParentWorkspacePath(requestedFile.path) ?? normalizedWorkspaceRootPath;
+    setActiveSurface('files');
+    setFilesSearchQuery('');
+    setFilesSearchResults(null);
+    setExpandedDirectories({});
+    void loadFilesDirectory(nextParentPath);
+    openFileModal(requestedFile.path, requestedFile.name);
+  }, [loadFilesDirectory, normalizedWorkspaceRootPath, openFileModal, requestedFile]);
   const closeModal = useCallback(() => {
     setActiveModal(null);
   }, []);
-  const visibleFiles = filesSearchResults ?? filesEntries;
+  const visibleFiles = filesSearchResults ?? (filesEntriesByPath[filesPath] ?? filesEntries);
   const filesCountLabel = filesSearchResults ? `검색 ${visibleFiles.length}개` : `${visibleFiles.length}개`;
+  const renderFileTree = useCallback((entries: WorkspaceFileEntry[], depth = 0) => (
+    entries.map((item) => {
+      const isExpanded = Boolean(expandedDirectories[item.path]);
+      const childEntries = filesEntriesByPath[item.path] ?? [];
+      const childLoading = Boolean(filesLoadingByPath[item.path]);
+      const childError = filesErrorByPath[item.path];
+      const isSelectedDirectory = item.isDirectory && filesPath === item.path;
+
+      return (
+        <div key={item.path} className={styles.fileTreeBranch}>
+          <div
+            className={`${styles.fileTreeRow} ${isSelectedDirectory ? styles.fileTreeRowActive : ''}`}
+            style={{ paddingLeft: `${depth * 16}px` }}
+          >
+            {item.isDirectory ? (
+              <button
+                type="button"
+                className={styles.fileTreeToggle}
+                onClick={() => handleToggleDirectory(item.path)}
+                aria-label={isExpanded ? '폴더 접기' : '폴더 펼치기'}
+                title={isExpanded ? '폴더 접기' : '폴더 펼치기'}
+              >
+                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+            ) : (
+              <span className={styles.fileTreeSpacer} />
+            )}
+            <button
+              type="button"
+              className={styles.fileTreeMain}
+              onClick={() => {
+                if (item.isDirectory) {
+                  handleFocusDirectory(item.path);
+                  if (!isExpanded) {
+                    handleToggleDirectory(item.path);
+                  }
+                } else {
+                  openFileModal(item.path, item.name);
+                }
+              }}
+            >
+              {item.isDirectory
+                ? (isExpanded ? <FolderOpen size={14} /> : <Folder size={14} />)
+                : <FileText size={14} />}
+              <span className={styles.fileEntryText}>
+                <span className={styles.itemTitle}>{item.name}</span>
+                <span className={styles.itemDescription}>{item.path}</span>
+              </span>
+            </button>
+            <div className={styles.fileTreeActions}>
+              <button
+                type="button"
+                className={styles.fileTreeActionButton}
+                onClick={() => {
+                  setFileActionDialog({
+                    kind: 'rename',
+                    targetPath: item.path,
+                    targetName: item.name,
+                    value: item.name,
+                  });
+                }}
+                title="이름 변경"
+              >
+                <Pencil size={13} />
+              </button>
+              <button
+                type="button"
+                className={`${styles.fileTreeActionButton} ${styles.fileTreeActionDanger}`}
+                onClick={() => {
+                  setFileActionDialog({
+                    kind: 'delete',
+                    targetPath: item.path,
+                    targetName: item.name,
+                  });
+                }}
+                title="삭제"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          </div>
+          {item.isDirectory && isExpanded ? (
+            <div className={styles.fileTreeChildren}>
+              {childLoading ? (
+                <div className={styles.fileTreeHint}>
+                  <Loader2 size={14} className={styles.rotate} />
+                  <span>폴더를 불러오는 중입니다.</span>
+                </div>
+              ) : childError ? (
+                <div className={`${styles.fileTreeHint} ${styles.fileTreeHintError}`}>
+                  <AlertTriangle size={14} />
+                  <span>{childError}</span>
+                </div>
+              ) : childEntries.length > 0 ? (
+                renderFileTree(childEntries, depth + 1)
+              ) : (
+                <div className={styles.fileTreeHint}>
+                  <FolderKanban size={14} />
+                  <span>빈 폴더</span>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+      );
+    })
+  ), [expandedDirectories, filesEntriesByPath, filesErrorByPath, filesLoadingByPath, filesPath, handleFocusDirectory, handleToggleDirectory, openFileModal]);
 
   return (
     <section className={`${styles.sidebarRoot} ${isMobileMode ? styles.sidebarRootMobile : ''}`}>
@@ -722,8 +1079,30 @@ export function CustomizationSidebar({
                     placeholder="파일 또는 폴더 검색"
                   />
                 </label>
+                <div className={styles.filesActionRow}>
+                  <button
+                    type="button"
+                    className={styles.pathButton}
+                    onClick={() => {
+                      setFileActionDialog({ kind: 'create-file', targetPath: filesPath, value: '' });
+                    }}
+                  >
+                    <FilePlus size={14} />
+                    새 파일
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.pathButton}
+                    onClick={() => {
+                      setFileActionDialog({ kind: 'create-folder', targetPath: filesPath, value: '' });
+                    }}
+                  >
+                    <FolderPlus size={14} />
+                    새 폴더
+                  </button>
+                </div>
                 <div className={styles.pathRow}>
-                  {filesParentPath !== null && filesSearchResults === null ? (
+                  {filesParentPath !== null && filesSearchResults === null && isWorkspacePathWithinRoot(filesParentPath, normalizedWorkspaceRootPath) ? (
                     <button
                       type="button"
                       className={styles.pathButton}
@@ -733,6 +1112,17 @@ export function CustomizationSidebar({
                       상위 폴더
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    className={styles.pathButton}
+                    onClick={() => {
+                      setExpandedDirectories({});
+                      void loadFilesDirectory(normalizedWorkspaceRootPath);
+                    }}
+                  >
+                    <FolderKanban size={14} />
+                    워크스페이스 루트
+                  </button>
                   <span className={styles.pathValue}>{filesSearchResults ? '검색 결과' : filesPath}</span>
                 </div>
               </div>
@@ -753,35 +1143,66 @@ export function CustomizationSidebar({
                     <p>{filesSearchResults ? '검색 결과가 없습니다.' : '표시할 파일이 없습니다.'}</p>
                   </div>
                 ) : (
-                  visibleFiles.map((item) => (
-                    <button
-                      key={item.path}
-                      type="button"
-                      className={`${styles.itemButton} ${styles.fileEntryButton}`}
-                      onClick={() => {
-                        if (item.isDirectory) {
-                          setFilesSearchQuery('');
-                          setFilesSearchResults(null);
-                          void loadFilesDirectory(item.path);
-                        } else {
-                          openFileModal(item.path, item.name);
-                        }
-                      }}
-                    >
-                      <span className={styles.fileEntryMain}>
-                        {item.isDirectory ? <Folder size={14} /> : <FileText size={14} />}
-                        <span className={styles.fileEntryText}>
-                          <span className={styles.itemTitle}>{item.name}</span>
-                          <span className={styles.itemDescription}>{item.path}</span>
-                        </span>
-                      </span>
-                      {item.isDirectory ? (
-                        <ChevronRight size={14} className={styles.fileEntryChevron} />
-                      ) : (
-                        <span className={`${styles.tag} ${styles.tagMuted}`}>편집</span>
-                      )}
-                    </button>
-                  ))
+                  filesSearchResults ? (
+                    visibleFiles.map((item) => (
+                      <div key={item.path} className={styles.fileTreeBranch}>
+                        <div className={styles.fileTreeRow}>
+                          <span className={styles.fileTreeSpacer} />
+                          <button
+                            type="button"
+                            className={styles.fileTreeMain}
+                            onClick={() => {
+                              if (item.isDirectory) {
+                                handleFocusDirectory(item.path);
+                                setExpandedDirectories((prev) => ({ ...prev, [item.path]: true }));
+                              } else {
+                                openFileModal(item.path, item.name);
+                              }
+                            }}
+                          >
+                            {item.isDirectory ? <Folder size={14} /> : <FileText size={14} />}
+                            <span className={styles.fileEntryText}>
+                              <span className={styles.itemTitle}>{item.name}</span>
+                              <span className={styles.itemDescription}>{item.path}</span>
+                            </span>
+                          </button>
+                          <div className={styles.fileTreeActions}>
+                            <button
+                              type="button"
+                              className={styles.fileTreeActionButton}
+                              onClick={() => {
+                                setFileActionDialog({
+                                  kind: 'rename',
+                                  targetPath: item.path,
+                                  targetName: item.name,
+                                  value: item.name,
+                                });
+                              }}
+                              title="이름 변경"
+                            >
+                              <Pencil size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              className={`${styles.fileTreeActionButton} ${styles.fileTreeActionDanger}`}
+                              onClick={() => {
+                                setFileActionDialog({
+                                  kind: 'delete',
+                                  targetPath: item.path,
+                                  targetName: item.name,
+                                });
+                              }}
+                              title="삭제"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    renderFileTree(visibleFiles)
+                  )
                 )}
               </div>
             </div>
@@ -808,6 +1229,23 @@ export function CustomizationSidebar({
                     <div className={styles.loadingState}>
                       <Loader2 size={16} className={styles.rotate} />
                       <p>파일을 불러오는 중입니다.</p>
+                    </div>
+                  ) : filePreviewBlock ? (
+                    <div className={styles.filePreviewBlocked}>
+                      <AlertTriangle size={18} />
+                      <div className={styles.filePreviewBlockedText}>
+                        <strong>
+                          {filePreviewBlock.reason === 'binary'
+                            ? '바이너리 파일은 에디터에서 미리보기를 지원하지 않습니다.'
+                            : '큰 파일은 우측 모달에서 직접 열지 않습니다.'}
+                        </strong>
+                        <span>파일 크기: {formatBytes(filePreviewBlock.sizeBytes)}</span>
+                        <span>
+                          {filePreviewBlock.reason === 'binary'
+                            ? '텍스트 파일만 미리보기와 편집을 지원합니다.'
+                            : '대용량 파일은 별도 편집기나 로컬 도구에서 여는 방식을 권장합니다.'}
+                        </span>
+                      </div>
                     </div>
                   ) : (
                     <>
@@ -928,6 +1366,90 @@ export function CustomizationSidebar({
                 </div>
               </>
             )}
+          </section>
+        </div>,
+        document.body,
+      )}
+      {isMounted && fileActionDialog && createPortal(
+        <div className={styles.modalOverlay} onClick={() => setFileActionDialog(null)}>
+          <section className={styles.actionDialogCard} onClick={(event) => event.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <div>
+                <div className={styles.eyebrow}>
+                  {fileActionDialog.kind === 'delete' ? <Trash2 size={13} /> : <FolderKanban size={13} />}
+                  {fileActionDialog.kind === 'create-file'
+                    ? 'New File'
+                    : fileActionDialog.kind === 'create-folder'
+                      ? 'New Folder'
+                      : fileActionDialog.kind === 'rename'
+                        ? 'Rename'
+                        : 'Delete'}
+                </div>
+                <h4 className={styles.modalTitle}>
+                  {fileActionDialog.kind === 'create-file'
+                    ? '새 파일 만들기'
+                    : fileActionDialog.kind === 'create-folder'
+                      ? '새 폴더 만들기'
+                      : fileActionDialog.kind === 'rename'
+                        ? `${fileActionDialog.targetName} 이름 변경`
+                        : `${fileActionDialog.targetName} 삭제`}
+                </h4>
+                <p className={styles.modalSubtle}>
+                  {'value' in fileActionDialog ? fileActionDialog.targetPath : `삭제 대상: ${fileActionDialog.targetPath}`}
+                </p>
+              </div>
+              <button
+                type="button"
+                className={styles.modalCloseButton}
+                onClick={() => setFileActionDialog(null)}
+                aria-label="모달 닫기"
+                title="모달 닫기"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className={styles.actionDialogBody}>
+              {'value' in fileActionDialog ? (
+                <input
+                  autoFocus
+                  className={styles.actionDialogInput}
+                  value={fileActionDialog.value}
+                  onChange={(event) => {
+                    setFileActionDialog((current) => (
+                      current && 'value' in current
+                        ? { ...current, value: event.target.value }
+                        : current
+                    ));
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      void handleConfirmFileAction();
+                    }
+                  }}
+                  placeholder={fileActionDialog.kind === 'rename' ? '새 이름' : '이름 입력'}
+                />
+              ) : (
+                <p className={styles.actionDialogCopy}>
+                  이 작업은 되돌릴 수 없습니다. 정말 삭제하시겠습니까?
+                </p>
+              )}
+              <div className={styles.actionDialogActions}>
+                <button
+                  type="button"
+                  className={styles.pathButton}
+                  onClick={() => setFileActionDialog(null)}
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.pathButton} ${styles.actionDialogConfirm}`}
+                  onClick={() => { void handleConfirmFileAction(); }}
+                >
+                  {fileActionDialog.kind === 'delete' ? '삭제' : '확인'}
+                </button>
+              </div>
+            </div>
           </section>
         </div>,
         document.body,
