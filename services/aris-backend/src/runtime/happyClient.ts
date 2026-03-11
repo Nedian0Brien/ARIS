@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
@@ -8,6 +8,8 @@ import { inferActionTypeFromCommand, titleForActionType } from './actionType.js'
 import { summarizeDiffText, summarizeFileChangeDiff } from './diffStats.js';
 import { HappyEventLogger } from './happyEventLogger.js';
 import { resolveRuntimeModelSelection } from './modelPolicy.js';
+import { buildClaudeSessionId, runClaudeTurn } from './providers/claude/claudeRuntime.js';
+import type { ClaudeActionEvent, ClaudeResumeTarget } from './providers/claude/types.js';
 import type {
   ApprovalPolicy,
   PermissionDecision,
@@ -61,10 +63,6 @@ type PermissionState = PermissionRequest['state'];
 type SessionStatusValue = RuntimeSession['state']['status'];
 type PermissionActionType = 'exec' | 'patch';
 type JsonRpcId = string | number | null;
-type AgentResumeTarget = {
-  id: string;
-  mode?: 'resume' | 'session-id';
-};
 type ActiveRun = {
   controller: AbortController;
   sessionId: string;
@@ -544,17 +542,7 @@ type AgentCommand = {
   retryArgsOnFailure?: string[];
 };
 
-type ParsedAgentActionEvent = {
-  actionType: 'command_execution' | 'file_list' | 'file_read' | 'file_write';
-  title: string;
-  callId?: string;
-  command?: string;
-  path?: string;
-  output?: string;
-  additions: number;
-  deletions: number;
-  hasDiffSignal: boolean;
-};
+type ParsedAgentActionEvent = ClaudeActionEvent;
 
 type SessionHintEventType = 'text' | 'tool-call-start' | 'tool-call-end' | 'turn-start' | 'turn-end';
 
@@ -927,11 +915,6 @@ function isAbortFailure(error: unknown): boolean {
   return typeof candidate.message === 'string' && candidate.message.toLowerCase().includes('aborted');
 }
 
-function isClaudeSessionInUseError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-  return message.includes('session id') && message.includes('already in use');
-}
-
 function isMissingCodexThreadError(error: unknown): boolean {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
   if (!message.includes('thread') && !message.includes('session')) {
@@ -1233,38 +1216,12 @@ function buildCodexThreadCacheKey(sessionId: string, chatId?: string): string {
   return sessionId;
 }
 
-function formatUuidFromBytes(bytes: Uint8Array): string {
-  const hex = Buffer.from(bytes).toString('hex');
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    hex.slice(12, 16),
-    hex.slice(16, 20),
-    hex.slice(20, 32),
-  ].join('-');
-}
-
-function buildDeterministicUuid(seed: string): string {
-  const hash = createHash('sha1').update(seed).digest();
-  const bytes = Uint8Array.from(hash.subarray(0, 16));
-  bytes[6] = (bytes[6] & 0x0f) | 0x50;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  return formatUuidFromBytes(bytes);
-}
-
-function buildClaudeSessionId(sessionId: string, chatId?: string): string {
-  const scopedChatId = typeof chatId === 'string' && chatId.trim().length > 0
-    ? chatId.trim()
-    : '__default__';
-  return buildDeterministicUuid(`aris:claude:${sessionId}:${scopedChatId}`);
-}
-
 function buildAgentCommand(
   agent: RuntimeAgent,
   prompt: string,
   approvalPolicy: ApprovalPolicy,
   model?: string,
-  resumeTarget?: AgentResumeTarget | string,
+  resumeTarget?: ClaudeResumeTarget | string,
 ): AgentCommand | null {
   const selectedModel = normalizeModel(model);
   const resolvedResumeTarget = typeof resumeTarget === 'string'
@@ -1289,18 +1246,9 @@ function buildAgentCommand(
       ...claudeResumeArgs,
       prompt,
     ];
-    const fallbackArgs = [
-      '--print',
-      '--permission-mode',
-      permissionMode,
-      ...(selectedModel ? ['--model', selectedModel] : []),
-      ...claudeResumeArgs,
-      prompt,
-    ];
     return {
       command: 'claude',
       args,
-      fallbackArgs,
       ...(normalizedResumeId
         ? {
           retryArgsOnFailure: [
@@ -1555,7 +1503,7 @@ export class HappyRuntimeStore {
     model?: string,
     cwdHint?: string,
     signal?: AbortSignal,
-    resumeTarget?: AgentResumeTarget | string,
+    resumeTarget?: ClaudeResumeTarget | string,
     handlers?: { onAction?: (action: ParsedAgentActionEvent) => Promise<void> },
   ): Promise<{ output: string; cwd: string; inferredActions: ParsedAgentActionEvent[]; streamedActionsPersisted: boolean; threadId?: string }> {
     const command = buildAgentCommand(agent, prompt, approvalPolicy, model, resumeTarget);
@@ -3157,22 +3105,10 @@ export class HappyRuntimeStore {
 
     try {
       const isCodex = flavor === 'codex';
+      const isClaude = flavor === 'claude';
       const preferredThreadId = typeof context.threadId === 'string' && context.threadId.trim().length > 0
         ? context.threadId.trim()
         : undefined;
-      const initialClaudeSessionId = flavor === 'claude' && !preferredThreadId
-        ? buildClaudeSessionId(session.id, scopedChatId)
-        : undefined;
-      const nonCodexResumeTarget = flavor === 'claude'
-        ? preferredThreadId
-          ? { id: preferredThreadId, mode: 'resume' as const }
-          : initialClaudeSessionId
-            ? { id: initialClaudeSessionId, mode: 'session-id' as const }
-            : undefined
-        : preferredThreadId
-          ? { id: preferredThreadId, mode: 'resume' as const }
-          : undefined;
-      const nonCodexActionThreadId = preferredThreadId ?? initialClaudeSessionId;
       const threadCacheKey = buildCodexThreadCacheKey(session.id, scopedChatId);
       let response: {
         output: string;
@@ -3258,16 +3194,41 @@ export class HappyRuntimeStore {
       } else {
         const nonCodexCwd = this.resolveExecutionCwd(session.metadata.path);
         let streamedActionIndex = 0;
-        let nonCodex;
-        try {
-          nonCodex = await this.runAgentCli(
+        const nonCodexActionThreadId = isClaude
+          ? preferredThreadId ?? buildClaudeSessionId(session.id, scopedChatId)
+          : preferredThreadId;
+        const nonCodex = isClaude
+          ? await runClaudeTurn({
+            session,
+            prompt,
+            chatId: scopedChatId,
+            preferredThreadId,
+            model: selectedModel,
+            signal: controller.signal,
+            runCli: async ({ prompt: cliPrompt, approvalPolicy, model, cwdHint, signal, resumeTarget }) => this.runAgentCli(
+              'claude',
+              cliPrompt,
+              approvalPolicy,
+              model,
+              cwdHint,
+              signal,
+              resumeTarget,
+              {
+                onAction: async (action) => {
+                  await appendNonCodexAction(action, streamedActionIndex, nonCodexCwd, nonCodexActionThreadId);
+                  streamedActionIndex += 1;
+                },
+              },
+            ),
+          })
+          : await this.runAgentCli(
             flavor,
             prompt,
             session.metadata.approvalPolicy,
             selectedModel,
             session.metadata.path,
             controller.signal,
-            nonCodexResumeTarget,
+            preferredThreadId ? { id: preferredThreadId, mode: 'resume' } : undefined,
             {
               onAction: async (action) => {
                 await appendNonCodexAction(action, streamedActionIndex, nonCodexCwd, nonCodexActionThreadId);
@@ -3275,29 +3236,6 @@ export class HappyRuntimeStore {
               },
             },
           );
-        } catch (error) {
-          if (flavor !== 'claude' || !isClaudeSessionInUseError(error) || controller.signal.aborted) {
-            throw error;
-          }
-          await new Promise<void>((resolve) => {
-            setTimeout(resolve, 1500);
-          });
-          nonCodex = await this.runAgentCli(
-            flavor,
-            prompt,
-            session.metadata.approvalPolicy,
-            selectedModel,
-            session.metadata.path,
-            controller.signal,
-            nonCodexResumeTarget,
-            {
-              onAction: async (action) => {
-                await appendNonCodexAction(action, streamedActionIndex, nonCodexCwd, nonCodexActionThreadId);
-                streamedActionIndex += 1;
-              },
-            },
-          );
-        }
         response = {
           output: nonCodex.output,
           cwd: nonCodex.cwd,

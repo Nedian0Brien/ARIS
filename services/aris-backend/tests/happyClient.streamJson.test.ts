@@ -161,6 +161,7 @@ describe('happyClient stream-json parsing', () => {
     expect(command?.args).toContain('--session-id');
     expect(command?.args).toContain(sessionId);
     expect(command?.args).not.toContain('--resume');
+    expect(command?.fallbackArgs).toBeUndefined();
   });
 
   it('uses --resume for stored Claude session ids', () => {
@@ -176,6 +177,7 @@ describe('happyClient stream-json parsing', () => {
     expect(command?.args).toContain('--resume');
     expect(command?.args).toContain('session-live-123');
     expect(command?.args).not.toContain('--session-id');
+    expect(command?.fallbackArgs).toBeUndefined();
   });
 
   it('extracts Claude session ids from stream-json output', () => {
