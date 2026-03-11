@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Blocks,
   CheckCircle2,
@@ -63,6 +64,11 @@ type SkillPayload = {
   content: string;
   summary: SkillSummary;
 };
+
+type CustomizationModal =
+  | { kind: 'instruction'; id: string }
+  | { kind: 'skill'; id: string }
+  | null;
 
 type Props = {
   sessionId: string;
@@ -143,6 +149,8 @@ export function CustomizationSidebar({
   const [skillContent, setSkillContent] = useState('');
   const [skillLoading, setSkillLoading] = useState(false);
   const [skillError, setSkillError] = useState<string | null>(null);
+  const [activeModal, setActiveModal] = useState<CustomizationModal>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   const selectedInstruction = useMemo(
     () => overview?.instructionDocs.find((doc) => doc.id === selectedInstructionId) ?? null,
@@ -152,6 +160,9 @@ export function CustomizationSidebar({
     () => overview?.skills.find((skill) => skill.id === selectedSkillId) ?? null,
     [overview, selectedSkillId],
   );
+  const activeModalKind = activeModal?.kind ?? null;
+  const activeInstructionModal = activeModalKind === 'instruction' ? selectedInstruction : null;
+  const activeSkillModal = activeModalKind === 'skill' ? selectedSkill : null;
 
   const loadOverview = useCallback(async () => {
     setOverviewLoading(true);
@@ -234,6 +245,10 @@ export function CustomizationSidebar({
   }, [sessionId]);
 
   useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
     void loadOverview();
   }, [loadOverview]);
 
@@ -246,6 +261,23 @@ export function CustomizationSidebar({
     if (!selectedSkillId) return;
     void loadSkill(selectedSkillId);
   }, [loadSkill, selectedSkillId]);
+
+  useEffect(() => {
+    if (!activeModal) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActiveModal(null);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeModal]);
 
   const handleSaveInstruction = useCallback(async () => {
     if (!selectedInstructionId) return;
@@ -278,6 +310,17 @@ export function CustomizationSidebar({
 
   const headerWorkspacePath = overview?.workspacePath ?? projectName;
   const isMobileMode = mode === 'mobile';
+  const openInstructionModal = useCallback((instructionId: string) => {
+    setSelectedInstructionId(instructionId);
+    setActiveModal({ kind: 'instruction', id: instructionId });
+  }, []);
+  const openSkillModal = useCallback((skillId: string) => {
+    setSelectedSkillId(skillId);
+    setActiveModal({ kind: 'skill', id: skillId });
+  }, []);
+  const closeModal = useCallback(() => {
+    setActiveModal(null);
+  }, []);
 
   return (
     <section className={`${styles.sidebarRoot} ${isMobileMode ? styles.sidebarRootMobile : ''}`}>
@@ -405,154 +448,59 @@ export function CustomizationSidebar({
                   </div>
 
                   {activeSection === 'instructions' && (
-                    <div className={styles.splitPane}>
-                      <div className={styles.listCard}>
-                        <div className={styles.cardHeader}>
-                          <span className={styles.cardTitle}>문서 목록</span>
-                          <span className={styles.cardMeta}>{overview.instructionDocs.length}개</span>
-                        </div>
-                        <div className={styles.itemList}>
-                          {overview.instructionDocs.map((doc) => (
-                            <button
-                              key={doc.id}
-                              type="button"
-                              className={`${styles.itemButton} ${selectedInstructionId === doc.id ? styles.itemButtonActive : ''}`}
-                              onClick={() => setSelectedInstructionId(doc.id)}
-                            >
-                              <span className={styles.itemTitleRow}>
-                                <FileText size={13} />
-                                <span className={styles.itemTitle}>{doc.name}</span>
-                              </span>
-                              <span className={styles.itemDescription}>
-                                {doc.exists ? `${formatBytes(doc.sizeBytes)} · ${formatTimestamp(doc.updatedAt)}` : '아직 생성되지 않음'}
-                              </span>
-                              <span className={`${styles.tag} ${doc.exists ? styles.tagGood : styles.tagWarn}`}>
-                                {doc.exists ? '사용 중' : '생성 가능'}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
+                    <div className={styles.listCard}>
+                      <div className={styles.cardHeader}>
+                        <span className={styles.cardTitle}>AGENTS.md</span>
+                        <span className={styles.cardMeta}>{overview.instructionDocs.length}개</span>
                       </div>
-
-                      <div className={styles.detailCard}>
-                        <div className={styles.cardHeader}>
-                          <span className={styles.cardTitle}>문서 편집</span>
-                          <span className={styles.cardMeta}>
-                            {selectedInstruction ? selectedInstruction.name : '선택 없음'}
-                          </span>
-                        </div>
-                        {selectedInstruction ? (
-                          <div className={styles.detailBody}>
-                            <div>
-                              <h4 className={styles.detailTitle}>{selectedInstruction.name}</h4>
-                              <p className={styles.detailSubtle}>{selectedInstruction.path}</p>
-                            </div>
-                            {instructionLoading ? (
-                              <div className={styles.loadingState}>
-                                <Loader2 size={16} className={styles.rotate} />
-                                <p>문서를 불러오는 중입니다.</p>
-                              </div>
-                            ) : (
-                              <>
-                                <textarea
-                                  className={styles.editor}
-                                  value={instructionContent}
-                                  onChange={(event) => {
-                                    setInstructionContent(event.target.value);
-                                    setInstructionDirty(true);
-                                    setInstructionStatus(null);
-                                  }}
-                                  spellCheck={false}
-                                />
-                                <div className={styles.actions}>
-                                  <span className={styles.statusText}>
-                                    {instructionStatus
-                                      ?? (instructionDirty ? '저장되지 않은 변경사항 있음' : '변경사항 없음')}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    className={styles.saveButton}
-                                    onClick={() => void handleSaveInstruction()}
-                                    disabled={instructionSaving || instructionLoading || !instructionDirty}
-                                  >
-                                    {instructionSaving ? <Loader2 size={14} className={styles.rotate} /> : <Save size={14} />}
-                                    저장
-                                  </button>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        ) : (
-                          <div className={styles.emptyState}>
-                            <FileText size={18} />
-                            <p>편집할 문서를 선택해 주세요.</p>
-                          </div>
-                        )}
+                      <div className={`${styles.itemList} ${styles.documentGrid}`}>
+                        {overview.instructionDocs.map((doc) => (
+                          <button
+                            key={doc.id}
+                            type="button"
+                            className={`${styles.itemButton} ${styles.documentTile} ${selectedInstructionId === doc.id ? styles.itemButtonActive : ''}`}
+                            onClick={() => openInstructionModal(doc.id)}
+                          >
+                            <span className={styles.itemTitleRow}>
+                              <FileText size={14} />
+                              <span className={styles.itemTitle}>{doc.name}</span>
+                            </span>
+                            <span className={styles.itemDescription}>
+                              {doc.exists ? `${formatBytes(doc.sizeBytes)} · ${formatTimestamp(doc.updatedAt)}` : '아직 생성되지 않음'}
+                            </span>
+                            <span className={`${styles.tag} ${doc.exists ? styles.tagGood : styles.tagWarn}`}>
+                              {doc.exists ? '열기' : '새로 작성'}
+                            </span>
+                          </button>
+                        ))}
                       </div>
                     </div>
                   )}
 
                   {activeSection === 'skills' && (
-                    <div className={styles.splitPane}>
-                      <div className={styles.listCard}>
-                        <div className={styles.cardHeader}>
-                          <span className={styles.cardTitle}>Skill 목록</span>
-                          <span className={styles.cardMeta}>{overview.skills.length}개</span>
-                        </div>
-                        <div className={styles.itemList}>
-                          {overview.skills.map((skill) => (
-                            <button
-                              key={skill.id}
-                              type="button"
-                              className={`${styles.itemButton} ${selectedSkillId === skill.id ? styles.itemButtonActive : ''}`}
-                              onClick={() => setSelectedSkillId(skill.id)}
-                            >
-                              <span className={styles.itemTitleRow}>
-                                <Blocks size={13} />
-                                <span className={styles.itemTitle}>{skill.name}</span>
-                              </span>
-                              <span className={styles.itemDescription}>{skill.description}</span>
-                              <span className={`${styles.tag} ${skill.source === 'codex' ? styles.tagWarn : styles.tagMuted}`}>
-                                {skill.source === 'codex' ? 'Codex' : 'Agents'}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
+                    <div className={styles.listCard}>
+                      <div className={styles.cardHeader}>
+                        <span className={styles.cardTitle}>Skill 목록</span>
+                        <span className={styles.cardMeta}>{overview.skills.length}개</span>
                       </div>
-
-                      <div className={styles.detailCard}>
-                        <div className={styles.cardHeader}>
-                          <span className={styles.cardTitle}>Skill 본문</span>
-                          <span className={styles.cardMeta}>{selectedSkill?.relativePath ?? '선택 없음'}</span>
-                        </div>
-                        {selectedSkill ? (
-                          <div className={styles.detailBody}>
-                            <div>
-                              <h4 className={styles.detailTitle}>{selectedSkill.name}</h4>
-                              <p className={styles.detailSubtle}>{selectedSkill.description}</p>
-                            </div>
-                            {skillLoading ? (
-                              <div className={styles.loadingState}>
-                                <Loader2 size={16} className={styles.rotate} />
-                                <p>스킬 본문을 불러오는 중입니다.</p>
-                              </div>
-                            ) : skillError ? (
-                              <div className={styles.errorState}>
-                                <Blocks size={18} />
-                                <p>{skillError}</p>
-                              </div>
-                            ) : (
-                              <div className={styles.preview}>
-                                <pre>{skillContent}</pre>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className={styles.emptyState}>
-                            <Blocks size={18} />
-                            <p>확인할 Skill을 선택해 주세요.</p>
-                          </div>
-                        )}
+                      <div className={styles.itemList}>
+                        {overview.skills.map((skill) => (
+                          <button
+                            key={skill.id}
+                            type="button"
+                            className={`${styles.itemButton} ${selectedSkillId === skill.id ? styles.itemButtonActive : ''}`}
+                            onClick={() => openSkillModal(skill.id)}
+                          >
+                            <span className={styles.itemTitleRow}>
+                              <Blocks size={13} />
+                              <span className={styles.itemTitle}>{skill.name}</span>
+                            </span>
+                            <span className={styles.itemDescription}>{skill.description}</span>
+                            <span className={`${styles.tag} ${skill.source === 'codex' ? styles.tagWarn : styles.tagMuted}`}>
+                              {skill.source === 'codex' ? 'Codex' : 'Agents'}
+                            </span>
+                          </button>
+                        ))}
                       </div>
                     </div>
                   )}
@@ -596,6 +544,102 @@ export function CustomizationSidebar({
           </>
         )}
       </div>
+      {isMounted && activeModal && createPortal(
+        <div className={styles.modalOverlay} onClick={closeModal}>
+          <section className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <div>
+                <div className={styles.eyebrow}>
+                  {activeModalKind === 'instruction' ? <FileText size={13} /> : <Blocks size={13} />}
+                  {activeModalKind === 'instruction' ? 'Document Editor' : 'Skill Viewer'}
+                </div>
+                <h4 className={styles.modalTitle}>
+                  {activeInstructionModal?.name ?? activeSkillModal?.name ?? '선택 없음'}
+                </h4>
+                <p className={styles.modalSubtle}>
+                  {activeInstructionModal?.path ?? activeSkillModal?.relativePath ?? '내용을 확인할 수 없습니다.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                className={styles.modalCloseButton}
+                onClick={closeModal}
+                aria-label="모달 닫기"
+                title="모달 닫기"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className={styles.modalBody}>
+              {activeModalKind === 'instruction' ? (
+                activeInstructionModal ? (
+                  instructionLoading ? (
+                    <div className={styles.loadingState}>
+                      <Loader2 size={16} className={styles.rotate} />
+                      <p>문서를 불러오는 중입니다.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <textarea
+                        className={styles.editor}
+                        value={instructionContent}
+                        onChange={(event) => {
+                          setInstructionContent(event.target.value);
+                          setInstructionDirty(true);
+                          setInstructionStatus(null);
+                        }}
+                        spellCheck={false}
+                      />
+                      <div className={styles.actions}>
+                        <span className={styles.statusText}>
+                          {instructionStatus
+                            ?? (instructionDirty ? '저장되지 않은 변경사항 있음' : '변경사항 없음')}
+                        </span>
+                        <button
+                          type="button"
+                          className={styles.saveButton}
+                          onClick={() => void handleSaveInstruction()}
+                          disabled={instructionSaving || instructionLoading || !instructionDirty}
+                        >
+                          {instructionSaving ? <Loader2 size={14} className={styles.rotate} /> : <Save size={14} />}
+                          저장
+                        </button>
+                      </div>
+                    </>
+                  )
+                ) : (
+                  <div className={styles.emptyState}>
+                    <FileText size={18} />
+                    <p>편집할 문서를 선택해 주세요.</p>
+                  </div>
+                )
+              ) : activeSkillModal ? (
+                skillLoading ? (
+                  <div className={styles.loadingState}>
+                    <Loader2 size={16} className={styles.rotate} />
+                    <p>스킬 본문을 불러오는 중입니다.</p>
+                  </div>
+                ) : skillError ? (
+                  <div className={styles.errorState}>
+                    <Blocks size={18} />
+                    <p>{skillError}</p>
+                  </div>
+                ) : (
+                  <div className={styles.preview}>
+                    <pre>{skillContent}</pre>
+                  </div>
+                )
+              ) : (
+                <div className={styles.emptyState}>
+                  <Blocks size={18} />
+                  <p>확인할 Skill을 선택해 주세요.</p>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>,
+        document.body,
+      )}
     </section>
   );
 }

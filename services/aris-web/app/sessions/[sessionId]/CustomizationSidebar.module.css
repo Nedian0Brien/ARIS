@@ -274,6 +274,13 @@
   gap: 0.34rem;
 }
 
+.documentGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.48rem;
+  align-content: start;
+}
+
 .itemButton {
   width: 100%;
   border: 1px solid rgba(148, 163, 184, 0.18);
@@ -286,6 +293,12 @@
   flex-direction: column;
   gap: 0.2rem;
   cursor: pointer;
+}
+
+.documentTile {
+  aspect-ratio: 1 / 1;
+  justify-content: space-between;
+  padding: 0.72rem;
 }
 
 .itemButtonActive {
@@ -525,6 +538,80 @@
   color: var(--chat-text-muted);
 }
 
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  background: rgba(15, 23, 42, 0.36);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.modalCard {
+  width: min(920px, 100%);
+  max-height: min(88vh, 860px);
+  border-radius: 24px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background:
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.12), transparent 34%),
+    radial-gradient(circle at top left, rgba(245, 158, 11, 0.12), transparent 28%),
+    rgba(255, 255, 255, 0.96);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modalHeader {
+  padding: 1rem 1.08rem 0.9rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.9rem;
+}
+
+.modalTitle {
+  margin: 0.24rem 0 0;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--chat-text-primary);
+}
+
+.modalSubtle {
+  margin: 0.24rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--chat-text-muted);
+  word-break: break-word;
+}
+
+.modalCloseButton {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--chat-control-border);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--chat-control-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.modalBody {
+  flex: 1;
+  min-height: 0;
+  padding: 1rem 1.08rem 1.08rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .rotate {
   animation: sidebarSpin 1s linear infinite;
 }
@@ -535,12 +622,16 @@
 }
 
 @media (max-width: 900px) {
-  .splitPane {
-    grid-template-columns: 1fr;
-  }
-
   .itemList {
     max-height: 216px;
+  }
+
+  .documentGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .modalCard {
+    width: min(760px, 100%);
   }
 }
 
@@ -595,8 +686,44 @@
     max-height: 182px;
   }
 
+  .documentGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .documentTile {
+    padding: 0.64rem;
+  }
+
   .detailBody {
     padding: 0.72rem;
+  }
+
+  .modalOverlay {
+    padding: 0;
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  .modalCard {
+    width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+
+  .modalHeader {
+    padding: 0.96rem 0.92rem 0.82rem;
+  }
+
+  .modalTitle {
+    font-size: 0.96rem;
+  }
+
+  .modalSubtle {
+    font-size: 0.68rem;
+  }
+
+  .modalBody {
+    padding: 0.88rem 0.92rem 0.96rem;
   }
 
   .editor {

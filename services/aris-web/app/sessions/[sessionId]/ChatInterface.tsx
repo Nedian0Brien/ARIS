@@ -44,7 +44,8 @@ import {
   MoreVertical,
   PanelLeftClose,
   PanelLeftOpen,
-  SlidersHorizontal,
+  PanelRightClose,
+  PanelRightOpen,
   Paperclip,
   Pencil,
   Pin,
@@ -74,6 +75,7 @@ const AGENT_REPLY_TIMEOUT_MS = 90000;
 const RUNTIME_DISCONNECT_GRACE_MS = 4000;
 const AUTO_SCROLL_THRESHOLD_PX = 80;
 const MOBILE_LAYOUT_MAX_WIDTH_PX = 960;
+const CUSTOMIZATION_OVERLAY_MAX_WIDTH_PX = 1280;
 const PREVIEW_MAX_LINES = 12;
 const PREVIEW_MAX_CHARS = 600;
 const COMPOSER_MIN_HEIGHT_PX = 36;
@@ -1977,6 +1979,7 @@ export function ChatInterface({
   const [showPermissionQueue, setShowPermissionQueue] = useState(true);
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(true);
+  const [isCustomizationOverlayLayout, setIsCustomizationOverlayLayout] = useState(false);
   const [isCustomizationSidebarOpen, setIsCustomizationSidebarOpen] = useState(false);
   const [chatVisibleCount, setChatVisibleCount] = useState(SIDEBAR_CHAT_PAGE_SIZE);
   const [chatActionMenuId, setChatActionMenuId] = useState<string | null>(null);
@@ -2982,27 +2985,36 @@ export function ChatInterface({
   }, [markSessionAsRead]);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia(`(max-width: ${MOBILE_LAYOUT_MAX_WIDTH_PX}px)`);
+    const mobileQuery = window.matchMedia(`(max-width: ${MOBILE_LAYOUT_MAX_WIDTH_PX}px)`);
+    const customizationOverlayQuery = window.matchMedia(`(max-width: ${CUSTOMIZATION_OVERLAY_MAX_WIDTH_PX}px)`);
 
     const syncLayout = () => {
-      const nextIsMobile = mediaQuery.matches;
+      const nextIsMobile = mobileQuery.matches;
+      const nextUsesCustomizationOverlay = customizationOverlayQuery.matches;
       setIsMobileLayout(nextIsMobile);
+      setIsCustomizationOverlayLayout(nextUsesCustomizationOverlay);
       setIsChatSidebarOpen(!nextIsMobile);
-      setIsCustomizationSidebarOpen(false);
+      if (!nextUsesCustomizationOverlay) {
+        setIsCustomizationSidebarOpen(false);
+      }
     };
 
     syncLayout();
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', syncLayout);
+    if (typeof mobileQuery.addEventListener === 'function') {
+      mobileQuery.addEventListener('change', syncLayout);
+      customizationOverlayQuery.addEventListener('change', syncLayout);
     } else {
-      mediaQuery.addListener(syncLayout);
+      mobileQuery.addListener(syncLayout);
+      customizationOverlayQuery.addListener(syncLayout);
     }
 
     return () => {
-      if (typeof mediaQuery.removeEventListener === 'function') {
-        mediaQuery.removeEventListener('change', syncLayout);
+      if (typeof mobileQuery.removeEventListener === 'function') {
+        mobileQuery.removeEventListener('change', syncLayout);
+        customizationOverlayQuery.removeEventListener('change', syncLayout);
       } else {
-        mediaQuery.removeListener(syncLayout);
+        mobileQuery.removeListener(syncLayout);
+        customizationOverlayQuery.removeListener(syncLayout);
       }
     };
   }, []);
@@ -3232,7 +3244,7 @@ export function ChatInterface({
   }, [isContextMenuOpen]);
 
   useEffect(() => {
-    if (!isMobileLayout || !isCustomizationSidebarOpen) {
+    if (!isCustomizationOverlayLayout || !isCustomizationSidebarOpen) {
       return;
     }
 
@@ -3246,7 +3258,7 @@ export function ChatInterface({
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isCustomizationSidebarOpen, isMobileLayout]);
+  }, [isCustomizationOverlayLayout, isCustomizationSidebarOpen]);
 
   useEffect(() => {
     if (!isContextMenuOpen) {
@@ -3650,9 +3662,11 @@ export function ChatInterface({
 
     if (isMobileLayout) {
       setIsChatSidebarOpen(false);
+    }
+    if (isCustomizationOverlayLayout) {
       setIsCustomizationSidebarOpen(false);
     }
-  }, [router, buildChatUrl, isMobileLayout]);
+  }, [router, buildChatUrl, isCustomizationOverlayLayout, isMobileLayout]);
 
   const handleSelectModel = useCallback(async (modelId: string) => {
     const normalizedModelId = normalizeModelId(modelId);
@@ -4445,7 +4459,9 @@ export function ChatInterface({
               type="button"
               className={styles.sidebarToggleButton}
               onClick={() => {
-                setIsCustomizationSidebarOpen(false);
+                if (isCustomizationOverlayLayout) {
+                  setIsCustomizationSidebarOpen(false);
+                }
                 setIsChatSidebarOpen((prev) => !prev);
               }}
               aria-label={isChatSidebarOpen ? '채팅 사이드바 닫기' : '채팅 사이드바 열기'}
@@ -4468,20 +4484,22 @@ export function ChatInterface({
               )}
             </div>
             <div className={styles.centerHeaderActions}>
-              {isMobileLayout && (
+              {isCustomizationOverlayLayout && (
                 <button
                   type="button"
                   className={`${styles.mobileCustomizationButton} ${isCustomizationSidebarOpen ? styles.mobileCustomizationButtonActive : ''}`}
                   onClick={() => {
-                    setIsChatSidebarOpen(false);
+                    if (isMobileLayout) {
+                      setIsChatSidebarOpen(false);
+                    }
                     setIsContextMenuOpen(false);
                     setIsCustomizationSidebarOpen((prev) => !prev);
                   }}
-                  aria-label={isCustomizationSidebarOpen ? 'Customization 패널 닫기' : 'Customization 패널 열기'}
-                  title={isCustomizationSidebarOpen ? 'Customization 패널 닫기' : 'Customization 패널 열기'}
+                  aria-label={isCustomizationSidebarOpen ? '우측 사이드바 닫기' : '우측 사이드바 열기'}
+                  title={isCustomizationSidebarOpen ? '우측 사이드바 닫기' : '우측 사이드바 열기'}
                 >
-                  <SlidersHorizontal size={15} />
-                  <span className={styles.mobileCustomizationLabel}>Customize</span>
+                  {isCustomizationSidebarOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
+                  <span className={styles.mobileCustomizationLabel}>Sidebar</span>
                 </button>
               )}
               <span
@@ -4935,7 +4953,7 @@ export function ChatInterface({
         </section>
       </main>
 
-      {isMobileLayout && (
+      {isCustomizationOverlayLayout && (
         <>
           {isCustomizationSidebarOpen && (
             <button
