@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   getLatestAgentEventTimestampSince,
+  getLatestRunStatusSince,
   hasAgentCompletionSignal,
   hasFinalAgentReplySince,
+  isRunLifecycleEvent,
   isFinalAgentReplyEvent,
   readUiEventStreamEvent,
   resolveChatRunPhase,
@@ -133,6 +135,43 @@ describe('chatRuntime helpers', () => {
     expect(getLatestAgentEventTimestampSince(events, '2026-03-10T02:00:00.000Z')).toBeNull();
   });
 
+  it('recognizes hidden run lifecycle events', () => {
+    const event = buildEvent({
+      meta: {
+        streamEvent: 'run_status',
+        runStatus: 'run_started',
+        role: 'agent',
+      },
+    });
+
+    expect(isRunLifecycleEvent(event)).toBe(true);
+  });
+
+  it('tracks the latest explicit run status after the await timestamp', () => {
+    const events = [
+      buildEvent({
+        id: 'status-1',
+        timestamp: '2026-03-10T02:00:01.000Z',
+        meta: {
+          streamEvent: 'run_status',
+          runStatus: 'run_started',
+          role: 'agent',
+        },
+      }),
+      buildEvent({
+        id: 'status-2',
+        timestamp: '2026-03-10T02:00:05.000Z',
+        meta: {
+          streamEvent: 'run_status',
+          runStatus: 'waiting_for_approval',
+          role: 'agent',
+        },
+      }),
+    ];
+
+    expect(getLatestRunStatusSince(events, '2026-03-10T02:00:00.000Z')).toBe('waiting_for_approval');
+  });
+
   it('keeps the run phase active while runtime is still running after completion signal', () => {
     expect(resolveChatRunPhase({
       isSubmitting: false,
@@ -151,5 +190,28 @@ describe('chatRuntime helpers', () => {
       hasCompletionSignal: true,
       runtimeRunning: false,
     })).toBe('idle');
+  });
+
+  it('keeps the run phase active from an explicit run_started status even without runtime polling', () => {
+    expect(resolveChatRunPhase({
+      isSubmitting: false,
+      isAwaitingReply: true,
+      isAborting: false,
+      hasCompletionSignal: false,
+      runtimeRunning: false,
+      runStatus: 'run_started',
+    })).toBe('running');
+  });
+
+  it('surfaces approval phase while waiting for a permission decision', () => {
+    expect(resolveChatRunPhase({
+      isSubmitting: false,
+      isAwaitingReply: true,
+      isAborting: false,
+      hasCompletionSignal: false,
+      runtimeRunning: false,
+      runStatus: 'waiting_for_approval',
+      hasPendingPermission: true,
+    })).toBe('approval');
   });
 });
