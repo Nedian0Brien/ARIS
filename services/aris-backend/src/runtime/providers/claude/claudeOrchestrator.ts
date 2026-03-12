@@ -2,7 +2,14 @@ import { buildClaudeSessionId, chooseClaudePreferredThreadId } from './claudeSes
 import { isClaudeMissingConversationError } from './claudeLauncher.js';
 import { runClaudeTurn } from './claudeRuntime.js';
 import type { ClaudeSessionStateOwner } from './claudeSessionContract.js';
-import type { ClaudeActionEvent, ClaudeCommandExecutor, ClaudeRuntimeSession, ClaudeTurnResult } from './types.js';
+import type {
+  ClaudeActionEvent,
+  ClaudeCommandExecutor,
+  ClaudePermissionRequest,
+  ClaudeRuntimeSession,
+  ClaudeTurnResult,
+} from './types.js';
+import type { PermissionDecision } from '../../../types.js';
 import type { RuntimeMessage } from '../../../types.js';
 
 export function buildClaudeActionThreadId(
@@ -66,6 +73,7 @@ export async function runClaudeProviderTurn(input: {
   model?: string;
   signal?: AbortSignal;
   onAction?: (action: ClaudeActionEvent, meta: { threadId: string }) => Promise<void>;
+  onPermission?: (request: ClaudePermissionRequest, meta: { threadId: string }) => Promise<PermissionDecision>;
   executeCommand: ClaudeCommandExecutor;
 }): Promise<ClaudeTurnResult & { actionThreadId?: string; messageMeta: Record<string, unknown> }> {
   const preferredThreadId = input.sessionOwner?.resolvePreferredThreadId(
@@ -76,6 +84,7 @@ export async function runClaudeProviderTurn(input: {
     activeThreadId: input.sessionOwner?.getActiveThreadId(),
     storedThreadId: input.storedThreadId,
   });
+  const handlePermission = input.onPermission;
   const executeTurn = async (attemptedThreadId?: string) => {
     const actionThreadId = attemptedThreadId ?? buildClaudeSessionId(input.session.id, input.chatId);
     const result = await runClaudeTurn({
@@ -88,6 +97,9 @@ export async function runClaudeProviderTurn(input: {
       signal: input.signal,
       onAction: input.onAction
         ? async (action) => input.onAction?.(action, { threadId: actionThreadId })
+        : undefined,
+      onPermission: handlePermission
+        ? async (request) => handlePermission(request, { threadId: actionThreadId })
         : undefined,
       executeCommand: input.executeCommand,
     });

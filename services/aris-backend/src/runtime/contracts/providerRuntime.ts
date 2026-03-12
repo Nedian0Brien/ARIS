@@ -1,4 +1,4 @@
-import type { AgentFlavor, ApprovalPolicy, RuntimeSession } from '../../types.js';
+import type { AgentFlavor, ApprovalPolicy, PermissionDecision, PermissionRisk, RuntimeSession } from '../../types.js';
 
 export type ProviderRuntimeFlavor = Exclude<AgentFlavor, 'unknown'>;
 export type ProviderActionType = 'file_read' | 'file_write' | 'file_list' | 'command_execution';
@@ -14,6 +14,14 @@ export const PROVIDER_RUNTIME_METHODS = [
 export type ProviderResumeTarget = {
   id: string;
   mode?: ProviderResumeTargetMode;
+};
+
+export type ProviderPermissionRequest = {
+  callId: string;
+  approvalId?: string;
+  command: string;
+  reason: string;
+  risk: PermissionRisk;
 };
 
 export type ProviderActionEvent = {
@@ -50,6 +58,7 @@ export type ProviderCommandExecutor<TCommand extends ProviderLaunchCommand = Pro
   cwdHint?: string;
   signal?: AbortSignal;
   onAction?: (action: ProviderActionEvent) => Promise<void>;
+  onPermission?: (request: ProviderPermissionRequest) => Promise<PermissionDecision>;
 }) => Promise<ProviderCliResult>;
 
 export type ProviderRuntimeSession<TFlavor extends ProviderRuntimeFlavor = ProviderRuntimeFlavor> = Pick<RuntimeSession, 'id'> & {
@@ -81,6 +90,7 @@ export type ProviderTurnRequest<TSession extends ProviderRuntimeSession = Provid
   model?: string;
   signal?: AbortSignal;
   onAction?: (action: ProviderActionEvent, meta: { threadId: string }) => Promise<void>;
+  onPermission?: (request: ProviderPermissionRequest, meta: { threadId: string }) => Promise<PermissionDecision>;
 };
 
 export type ProviderTurnResult = {

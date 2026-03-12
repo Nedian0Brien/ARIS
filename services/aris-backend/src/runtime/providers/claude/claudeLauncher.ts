@@ -4,9 +4,10 @@ import type {
   ClaudeCliResult,
   ClaudeCommandExecutor,
   ClaudeLaunchCommand,
+  ClaudePermissionRequest,
   ClaudeResumeTarget,
 } from './types.js';
-import type { ApprovalPolicy } from '../../../types.js';
+import type { ApprovalPolicy, PermissionDecision } from '../../../types.js';
 
 function normalizeClaudePermissionMode(value: ApprovalPolicy): 'default' | 'dontAsk' | 'bypassPermissions' {
   if (value === 'never') {
@@ -74,6 +75,7 @@ export async function runClaudeCommand(input: {
   signal?: AbortSignal;
   resumeTarget?: ClaudeResumeTarget;
   onAction?: (action: ClaudeActionEvent) => Promise<void>;
+  onPermission?: (request: ClaudePermissionRequest) => Promise<PermissionDecision>;
   executeCommand: ClaudeCommandExecutor;
 }): Promise<ClaudeCliResult> {
   const command = buildClaudeCommand({
@@ -88,6 +90,7 @@ export async function runClaudeCommand(input: {
     cwdHint: input.cwdHint,
     signal: input.signal,
     onAction: input.onAction,
+    onPermission: input.onPermission,
   });
 
   try {

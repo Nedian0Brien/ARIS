@@ -4,6 +4,7 @@ import type {
   ProviderCliResult,
   ProviderCommandExecutor,
   ProviderLaunchCommand,
+  ProviderPermissionRequest,
   ProviderResumeTarget,
   ProviderThreadIdSource,
 } from '../../contracts/providerRuntime.js';
@@ -14,6 +15,7 @@ export type { ClaudeRuntimeSession } from './claudeSessionContract.js';
 export type ClaudeResumeTarget = ProviderResumeTarget;
 export type ClaudeThreadIdSource = ProviderThreadIdSource;
 export type ClaudeActionEvent = ProviderActionEvent;
+export type ClaudePermissionRequest = ProviderPermissionRequest;
 export type ClaudeCliResult = ProviderCliResult & {
   protocolEnvelopes?: SessionProtocolEnvelope[];
 };

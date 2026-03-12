@@ -13,12 +13,14 @@ import {
   buildClaudeSessionHintMeta as buildSessionHintMeta,
 } from './providers/claude/claudeEventBridge.js';
 import { ClaudeMessageQueue } from './providers/claude/claudeMessageQueue.js';
+import { extractClaudePermissionRequest } from './providers/claude/claudePermissionBridge.js';
 import { looksLikeClaudeActionTranscript, parseClaudeStreamLine, parseClaudeStreamOutput } from './providers/claude/claudeProtocolMapper.js';
 import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.js';
 import { ClaudeSessionLogTracker, extractClaudeSessionHintIds } from './providers/claude/claudeSessionScanner.js';
 import { buildClaudeSessionId } from './providers/claude/claudeSessionSource.js';
 import { buildProviderCommand, type ProviderCommand } from './providers/providerCommandFactory.js';
 import type { SessionProtocolEnvelope } from './contracts/sessionProtocol.js';
+import type { ProviderPermissionRequest } from './contracts/providerRuntime.js';
 import type { ClaudeSessionLaunchMode } from './providers/claude/claudeSessionContract.js';
 import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeRuntimeSession } from './providers/claude/types.js';
 import type {
@@ -1278,6 +1280,12 @@ export class HappyRuntimeStore {
   private readonly codexThreads = new Map<string, string>();
   private readonly codexPermissionIndex = new Map<string, string>();
   private readonly codexPermissionResponders = new Map<string, (decision: PermissionDecision) => Promise<void>>();
+  private readonly providerPermissionIndex = new Map<string, string>();
+  private readonly providerPermissionWaiters = new Map<string, {
+    resolve: (decision: PermissionDecision) => void;
+    reject: (error: Error) => void;
+  }>();
+  private readonly providerPermissionDecisions = new Map<string, PermissionDecision>();
 
   private readonly serverUrl: string;
   private readonly serverToken: string;
@@ -1303,6 +1311,91 @@ export class HappyRuntimeStore {
         this.codexThreads.delete(key);
       }
     }
+  }
+
+  private async awaitProviderPermissionDecision(
+    permissionId: string,
+    signal?: AbortSignal,
+  ): Promise<PermissionDecision> {
+    const knownDecision = this.providerPermissionDecisions.get(permissionId);
+    if (knownDecision) {
+      return knownDecision;
+    }
+
+    const existing = this.permissions.get(permissionId);
+    if (existing && existing.state !== 'pending') {
+      return existing.state === 'denied' ? 'deny' : 'allow_once';
+    }
+
+    return new Promise<PermissionDecision>((resolve, reject) => {
+      const handleAbort = () => {
+        this.providerPermissionWaiters.delete(permissionId);
+        reject(new Error('The operation was aborted'));
+      };
+
+      if (signal?.aborted) {
+        handleAbort();
+        return;
+      }
+
+      const cleanup = () => {
+        signal?.removeEventListener('abort', handleAbort);
+      };
+
+      this.providerPermissionWaiters.set(permissionId, {
+        resolve: (decision) => {
+          cleanup();
+          resolve(decision);
+        },
+        reject: (error) => {
+          cleanup();
+          reject(error);
+        },
+      });
+      signal?.addEventListener('abort', handleAbort, { once: true });
+    });
+  }
+
+  private async handleProviderPermissionRequest(input: {
+    session: RuntimeSession;
+    chatId?: string;
+    agent: PermissionRequest['agent'];
+    request: ProviderPermissionRequest;
+    signal?: AbortSignal;
+  }): Promise<PermissionDecision> {
+    const permissionKey = buildScopedPermissionKey(
+      `${input.session.id}:provider:${input.request.approvalId || input.request.callId}`,
+      input.chatId,
+    );
+    const knownPermissionId = this.providerPermissionIndex.get(permissionKey);
+    if (knownPermissionId) {
+      const knownPermission = this.permissions.get(knownPermissionId);
+      if (knownPermission?.state === 'pending') {
+        return this.awaitProviderPermissionDecision(knownPermissionId, input.signal);
+      }
+      if (knownPermission) {
+        return knownPermission.state === 'denied' ? 'deny' : 'allow_once';
+      }
+      this.providerPermissionIndex.delete(permissionKey);
+    }
+
+    const created = await this.createPermission({
+      sessionId: input.session.id,
+      ...(input.chatId ? { chatId: input.chatId } : {}),
+      agent: input.agent,
+      command: input.request.command,
+      reason: input.request.reason,
+      risk: input.request.risk,
+    });
+    this.providerPermissionIndex.set(permissionKey, created.id);
+
+    const approvalPolicy = this.resolveSessionApprovalPolicy(input.session);
+    if (approvalPolicy === 'yolo') {
+      await this.decidePermission(created.id, 'allow_session');
+      return 'allow_session';
+    }
+
+    return this.awaitProviderPermissionDecision(created.id, input.signal);
   }
 
   private getClaudeSessionScanner(workingDirectory: string): ClaudeSessionLogTracker {
@@ -1502,7 +1595,10 @@ export class HappyRuntimeStore {
     command: AgentCommand | ClaudeLaunchCommand,
     cwdHint?: string,
     signal?: AbortSignal,
-    handlers?: { onAction?: (action: ParsedAgentActionEvent) => Promise<void> },
+    handlers?: {
+      onAction?: (action: ParsedAgentActionEvent) => Promise<void>;
+      onPermission?: (request: ProviderPermissionRequest) => Promise<PermissionDecision>;
+    },
   ): Promise<{
     output: string;
     cwd: string;
@@ -1538,6 +1634,7 @@ export class HappyRuntimeStore {
     const runCommandStreaming = async (
       args: string[],
       onAction?: (action: ParsedAgentActionEvent) => Promise<void>,
+      onPermission?: (request: ProviderPermissionRequest) => Promise<PermissionDecision>,
     ): Promise<{
       stdout: string;
       stderr: string;
@@ -1570,6 +1667,7 @@ export class HappyRuntimeStore {
       }
 
       const actionByKey = new Map<string, ParsedAgentActionEvent>();
+      const seenPermissionKeys = new Set<string>();
       let streamedActionsPersisted = false;
       let stdoutBuffer = '';
       let stderrBuffer = '';
@@ -1598,6 +1696,18 @@ export class HappyRuntimeStore {
         const normalized = stripAnsi(rawLine).trim();
         if (!normalized) {
           return;
+        }
+        if (agent === 'claude' && onPermission) {
+          const permissionRequest = extractClaudePermissionRequest(normalized);
+          if (permissionRequest) {
+            const permissionKey = permissionRequest.approvalId || permissionRequest.callId;
+            if (!seenPermissionKeys.has(permissionKey)) {
+              seenPermissionKeys.add(permissionKey);
+              emitChain = emitChain.then(async () => {
+                await onPermission(permissionRequest);
+              });
+            }
+          }
         }
         const parsedLine = agent === 'claude'
           ? parseClaudeStreamLine(normalized)
@@ -1682,9 +1792,9 @@ export class HappyRuntimeStore {
     let lastError: unknown = null;
     let inferredActions: ParsedAgentActionEvent[] = [];
     let streamedActionsPersisted = false;
-    if (command.streamJson && handlers?.onAction) {
+    if (command.streamJson && (handlers?.onAction || handlers?.onPermission)) {
       try {
-        const streamed = await runCommandStreaming(command.args, handlers.onAction);
+        const streamed = await runCommandStreaming(command.args, handlers.onAction, handlers.onPermission);
         result = {
           stdout: streamed.stdout,
           stderr: streamed.stderr,
@@ -1822,7 +1932,10 @@ export class HappyRuntimeStore {
     cwdHint?: string,
     signal?: AbortSignal,
     resumeTarget?: ClaudeResumeTarget | string,
-    handlers?: { onAction?: (action: ParsedAgentActionEvent) => Promise<void> },
+    handlers?: {
+      onAction?: (action: ParsedAgentActionEvent) => Promise<void>;
+      onPermission?: (request: ProviderPermissionRequest) => Promise<PermissionDecision>;
+    },
   ): Promise<{
     output: string;
     cwd: string;
@@ -3389,12 +3502,22 @@ export class HappyRuntimeStore {
               });
               streamedActionIndex += 1;
             },
-            executeCommand: async ({ command, cwdHint, signal, onAction }) => this.runAgentCommand(
+            onPermission: async (request) => this.handleProviderPermissionRequest({
+              session,
+              chatId: scopedChatId,
+              agent: 'claude',
+              request,
+              signal: controller.signal,
+            }),
+            executeCommand: async ({ command, cwdHint, signal, onAction, onPermission }) => this.runAgentCommand(
               'claude',
               command,
               cwdHint,
               signal,
-              { onAction },
+              {
+                onAction,
+                onPermission,
+              },
             ),
           });
           response = {
@@ -3842,6 +3965,16 @@ export class HappyRuntimeStore {
         this.codexPermissionIndex.delete(key);
       }
     }
+    for (const [key, mappedPermissionId] of this.providerPermissionIndex.entries()) {
+      if (mappedPermissionId === permissionId) {
+        this.providerPermissionIndex.delete(key);
+      }
+    }
+
+    this.providerPermissionDecisions.set(permissionId, decision);
+    const providerWaiter = this.providerPermissionWaiters.get(permissionId);
+    this.providerPermissionWaiters.delete(permissionId);
+    providerWaiter?.resolve(decision);
 
     const responder = this.codexPermissionResponders.get(permissionId);
     this.codexPermissionResponders.delete(permissionId);

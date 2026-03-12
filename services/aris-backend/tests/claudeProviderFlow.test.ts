@@ -156,4 +156,71 @@ describe('Claude provider flow', () => {
     }), { threadId: buildClaudeSessionId('runtime-session-2', 'chat-2') });
     expect(sessionOwner.snapshot().sessionSource).toBe('synthetic');
   });
+
+  it('waits for permission resolution before returning to streaming and completion', async () => {
+    const seenStates: string[] = [];
+    let resolveDecision!: (decision: 'allow_once') => void;
+    const permissionDecision = new Promise<'allow_once'>((resolve) => {
+      resolveDecision = resolve;
+    });
+    const session = {
+      id: 'runtime-session-3',
+      metadata: {
+        approvalPolicy: 'on-request',
+        path: '/tmp/claude-provider-flow',
+      },
+    };
+    const sessionOwner = new ClaudeSession({
+      sessionId: 'runtime-session-3',
+      chatId: 'chat-3',
+      callbacks: {
+        onTurnStateChanged: (state) => {
+          seenStates.push(state);
+        },
+      },
+    });
+
+    const resultPromise = runClaudeProviderTurn({
+      session,
+      sessionOwner,
+      prompt: 'need approval',
+      chatId: 'chat-3',
+      onPermission: async () => permissionDecision,
+      executeCommand: async ({ onPermission, onAction }) => {
+        const decisionPromise = onPermission?.({
+          callId: 'approval-1',
+          approvalId: 'approval-1',
+          command: 'npm install sharp',
+          reason: 'Need approval',
+          risk: 'high',
+        });
+        expect(sessionOwner.snapshot().turnState).toBe('waiting_permission');
+        resolveDecision('allow_once');
+        const decision = await decisionPromise;
+        expect(decision).toBe('allow_once');
+        await onAction?.({
+          actionType: 'command_execution',
+          title: 'Run command',
+          command: 'npm install sharp',
+          additions: 0,
+          deletions: 0,
+          hasDiffSignal: false,
+        });
+        return {
+          output: 'approved',
+          cwd: '/tmp/claude-provider-flow',
+          streamedActionsPersisted: true,
+          inferredActions: [],
+          threadId: 'observed-session-3',
+        };
+      },
+    });
+
+    const result = await resultPromise;
+
+    expect(result.threadId).toBe('observed-session-3');
+    expect(seenStates).toContain('waiting_permission');
+    expect(seenStates).toContain('streaming');
+    expect(sessionOwner.snapshot().turnState).toBe('completed');
+  });
 });

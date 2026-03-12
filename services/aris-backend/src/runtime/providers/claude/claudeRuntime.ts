@@ -12,9 +12,11 @@ export async function runClaudeTurn(input: {
   model?: string;
   signal?: AbortSignal;
   onAction?: Parameters<ClaudeCommandExecutor>[0]['onAction'];
+  onPermission?: Parameters<ClaudeCommandExecutor>[0]['onPermission'];
   executeCommand: ClaudeCommandExecutor;
 }): Promise<ClaudeTurnResult> {
   input.sessionOwner?.beginTurn();
+  const handlePermission = input.onPermission;
   const { resumeTarget, actionThreadId, threadIdSource: initialThreadIdSource } = buildClaudeResumeTarget(
     input.preferredThreadId,
     input.session.id,
@@ -32,6 +34,16 @@ export async function runClaudeTurn(input: {
       ? async (action) => {
         input.sessionOwner?.markTurnState('streaming');
         await input.onAction?.(action);
+      }
+      : undefined,
+    onPermission: handlePermission
+      ? async (request) => {
+        input.sessionOwner?.markTurnState('waiting_permission');
+        const decision = await handlePermission(request);
+        if (!input.signal?.aborted) {
+          input.sessionOwner?.markTurnState('streaming');
+        }
+        return decision;
       }
       : undefined,
     executeCommand: input.executeCommand,
