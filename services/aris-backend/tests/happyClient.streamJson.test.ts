@@ -226,12 +226,11 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     expect(command?.fallbackArgs).toBeUndefined();
   });
 
-  it('extracts Claude session ids from stream-json output', () => {
+  it('extracts generic session ids from stream-json output', () => {
     const streamOutput = [
       JSON.stringify({
         type: 'system',
-        subtype: 'init',
-        session_id: 'claude-session-abc',
+        sessionId: 'stream-session-abc',
       }),
       JSON.stringify({
         type: 'event',
@@ -241,26 +240,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     ].join('\n');
 
     const parsed = happyClientTestHooks.parseAgentStreamOutput(streamOutput);
-    expect(parsed.sessionId).toBe('claude-session-abc');
-    expect(parsed.output).toBe('응답 완료');
-  });
-
-  it('extracts lowercase Claude sessionid fields from stream-json output', () => {
-    const streamOutput = [
-      JSON.stringify({
-        type: 'system',
-        subtype: 'init',
-        sessionid: 'claude-session-lowercase',
-      }),
-      JSON.stringify({
-        type: 'event',
-        event: 'agent_message',
-        content: '응답 완료',
-      }),
-    ].join('\n');
-
-    const parsed = happyClientTestHooks.parseAgentStreamOutput(streamOutput);
-    expect(parsed.sessionId).toBe('claude-session-lowercase');
+    expect(parsed.sessionId).toBe('stream-session-abc');
     expect(parsed.output).toBe('응답 완료');
   });
 

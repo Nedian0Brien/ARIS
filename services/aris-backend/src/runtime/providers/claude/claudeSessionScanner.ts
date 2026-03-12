@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { readdir, readFile, stat } from 'node:fs/promises';
+import { collectClaudeNestedRecords, extractClaudeObservedSessionId, extractFirstClaudeStringByKeys } from './claudeProtocolFields.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const INTERNAL_CLAUDE_EVENT_TYPES = new Set([
@@ -45,47 +46,8 @@ function buildProjectPath(workingDirectory: string): string {
   return join(claudeConfigDir, 'projects', projectId);
 }
 
-function extractFirstStringByKeys(records: Record<string, unknown>[], keys: string[]): string {
-  for (const key of keys) {
-    for (const record of records) {
-      const value = record[key];
-      if (typeof value !== 'string') {
-        continue;
-      }
-      const trimmed = value.trim();
-      if (trimmed) {
-        return trimmed;
-      }
-    }
-  }
-  return '';
-}
-
-function collectNestedRecords(value: unknown): Record<string, unknown>[] {
-  const stack: unknown[] = [value];
-  const records: Record<string, unknown>[] = [];
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (!current || typeof current !== 'object' || Array.isArray(current)) {
-      continue;
-    }
-    const record = current as Record<string, unknown>;
-    records.push(record);
-    for (const nested of Object.values(record)) {
-      if (Array.isArray(nested)) {
-        for (const item of nested) {
-          stack.push(item);
-        }
-      } else if (nested && typeof nested === 'object') {
-        stack.push(nested);
-      }
-    }
-  }
-  return records;
-}
-
 function extractEventKey(sessionId: string, line: string, records: Record<string, unknown>[]): string {
-  const uuid = extractFirstStringByKeys(records, ['uuid', 'id', 'messageId', 'message_id']);
+  const uuid = extractFirstClaudeStringByKeys(records, ['uuid', 'id', 'messageId', 'message_id']);
   if (uuid) {
     return `${sessionId}:${uuid}`;
   }
@@ -144,18 +106,12 @@ async function readSessionLogDelta(projectDir: string, sessionId: string, cursor
       }
       try {
         const parsed = JSON.parse(trimmed);
-        const records = collectNestedRecords(parsed);
-        const eventType = extractFirstStringByKeys(records, ['type']);
+        const records = collectClaudeNestedRecords(parsed);
+        const eventType = extractFirstClaudeStringByKeys(records, ['type']);
         if (eventType && INTERNAL_CLAUDE_EVENT_TYPES.has(eventType)) {
           continue;
         }
-        const discoveredSessionId = normalizeSessionId(extractFirstStringByKeys(records, [
-          'sessionId',
-          'session_id',
-          'sessionid',
-          'resumeSessionId',
-          'resume_session_id',
-        ]));
+        const discoveredSessionId = normalizeSessionId(extractClaudeObservedSessionId(records));
         const eventKey = extractEventKey(sessionId, trimmed, records);
         if (cursor.processedKeys.has(eventKey)) {
           continue;

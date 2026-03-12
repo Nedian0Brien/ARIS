@@ -129,6 +129,31 @@ describe('claudeSessionScanner', () => {
     expect(third.events[0]?.eventKey).toBe(`${sessionId}:msg-2`);
   });
 
+  it('discovers lowercase sessionid fields from Claude logs', async () => {
+    tempClaudeDir = await mkdtemp(join(tmpdir(), 'aris-claude-scanner-'));
+    process.env.CLAUDE_CONFIG_DIR = tempClaudeDir;
+    const workingDirectory = '/tmp/project-epsilon';
+    const projectDir = buildProjectDir(tempClaudeDir, workingDirectory);
+    await mkdir(projectDir, { recursive: true });
+
+    const sessionId = 'ffffffff-6666-4666-8666-ffffffffffff';
+    const logPath = join(projectDir, `${sessionId}.jsonl`);
+    await writeFile(logPath, JSON.stringify({
+      type: 'system',
+      subtype: 'init',
+      uuid: 'sys-1',
+      sessionid: sessionId,
+    }));
+
+    const scanned = await scanClaudeSessionLogs({
+      workingDirectory,
+      hintedSessionIds: [sessionId],
+    });
+
+    expect(scanned.sessionId).toBe(sessionId);
+    expect(scanned.events[0]?.discoveredSessionId).toBe(sessionId);
+  });
+
   it('tracks pending and finished sessions while stitching resume targets', async () => {
     tempClaudeDir = await mkdtemp(join(tmpdir(), 'aris-claude-scanner-'));
     process.env.CLAUDE_CONFIG_DIR = tempClaudeDir;

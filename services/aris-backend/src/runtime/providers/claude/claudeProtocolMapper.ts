@@ -2,6 +2,7 @@ import { inferActionTypeFromCommand, titleForActionType } from '../../actionType
 import { sanitizeAgentMessageText } from '../../agentMessageSanitizer.js';
 import { summarizeDiffText } from '../../diffStats.js';
 import type { SessionProtocolEnvelope, SessionProtocolStopReason } from '../../contracts/sessionProtocol.js';
+import { collectClaudeNestedRecords, extractClaudeObservedSessionId, extractFirstClaudeStringByKeys, parseClaudeJsonLine } from './claudeProtocolFields.js';
 import type { ClaudeActionEvent } from './types.js';
 
 type ClaudeMappedLine = {
@@ -12,59 +13,6 @@ type ClaudeMappedLine = {
   assistantSource?: 'assistant' | 'result';
   sessionId?: string;
 };
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
-}
-
-function parseJsonLine(line: string): Record<string, unknown> | null {
-  try {
-    return asRecord(JSON.parse(line));
-  } catch {
-    return null;
-  }
-}
-
-function collectNestedRecords(root: Record<string, unknown>): Record<string, unknown>[] {
-  const stack: unknown[] = [root];
-  const records: Record<string, unknown>[] = [];
-  while (stack.length > 0) {
-    const current = stack.pop();
-    const record = asRecord(current);
-    if (!record) {
-      continue;
-    }
-    records.push(record);
-    for (const value of Object.values(record)) {
-      if (Array.isArray(value)) {
-        for (const item of value) {
-          stack.push(item);
-        }
-      } else if (value && typeof value === 'object') {
-        stack.push(value);
-      }
-    }
-  }
-  return records;
-}
-
-function extractFirstStringByKeys(records: Record<string, unknown>[], keys: string[]): string {
-  for (const key of keys) {
-    for (const record of records) {
-      const value = record[key];
-      if (typeof value !== 'string') {
-        continue;
-      }
-      const trimmed = value.trim();
-      if (trimmed) {
-        return trimmed;
-      }
-    }
-  }
-  return '';
-}
 
 function unwrapShellCommand(command: string): string {
   let current = command.trim();
@@ -175,7 +123,7 @@ function buildToolName(action: ClaudeActionEvent, payloadSubtype: string): strin
 }
 
 export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
-  const payload = parseJsonLine(line);
+  const payload = parseClaudeJsonLine(line);
   if (!payload) {
     return { envelopes: [] };
   }
@@ -200,8 +148,8 @@ export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
     || payloadType === 'result'
     || lineLower.includes('"agent_message"')
   );
-  const records = collectNestedRecords(payload);
-  const commandRaw = extractFirstStringByKeys(records, [
+  const records = collectClaudeNestedRecords(payload);
+  const commandRaw = extractFirstClaudeStringByKeys(records, [
     'command',
     'cmd',
     'parsed_cmd',
@@ -209,14 +157,14 @@ export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
     'shell_command',
   ]);
   const command = commandRaw ? unwrapShellCommand(commandRaw) : '';
-  const path = extractFirstStringByKeys(records, [
+  const path = extractFirstClaudeStringByKeys(records, [
     'path',
     'filePath',
     'file_path',
     'targetPath',
     'target_path',
   ]);
-  const outputCandidate = extractFirstStringByKeys(records, [
+  const outputCandidate = extractFirstClaudeStringByKeys(records, [
     'aggregatedOutput',
     'aggregated_output',
     'output',
@@ -226,21 +174,15 @@ export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
   ]);
   const diffStats = summarizeDiffText(outputCandidate);
   const normalizedPath = path && (path.includes('/') || path.includes('.') || path.startsWith('~')) ? path : '';
-  const callId = extractFirstStringByKeys(records, [
+  const callId = extractFirstClaudeStringByKeys(records, [
     'callId',
     'call_id',
     'toolCallId',
     'tool_call_id',
     'call',
   ]);
-  const sessionId = extractFirstStringByKeys(records, [
-    'session_id',
-    'sessionId',
-    'sessionid',
-    'resume_session_id',
-    'resumeSessionId',
-  ]);
-  const turnId = sessionId || extractFirstStringByKeys(records, ['turnId', 'turn_id']) || undefined;
+  const sessionId = extractClaudeObservedSessionId(records);
+  const turnId = sessionId || extractFirstClaudeStringByKeys(records, ['turnId', 'turn_id']) || undefined;
 
   let action: ClaudeActionEvent | undefined;
   let actionType: ClaudeActionEvent['actionType'] | null = null;
@@ -270,7 +212,7 @@ export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
   }
 
   const assistantText = (!isSystem && !seemsToolEvent && seemsAssistantEvent)
-    ? extractFirstStringByKeys(records, ['text', 'message', 'content', 'output', 'result'])
+    ? extractFirstClaudeStringByKeys(records, ['text', 'message', 'content', 'output', 'result'])
     : '';
 
   const envelopes: SessionProtocolEnvelope[] = [];
