@@ -147,7 +147,6 @@ describe('Claude provider flow', () => {
     expect(result.threadId).toBe(buildClaudeSessionId('runtime-session-2', 'chat-2'));
     expect(result.threadIdSource).toBe('synthetic');
     expect(result.messageMeta).toEqual({
-      claudeSessionId: buildClaudeSessionId('runtime-session-2', 'chat-2'),
       threadIdSource: 'synthetic',
     });
     expect(onAction).toHaveBeenCalledWith(expect.objectContaining({
@@ -155,6 +154,52 @@ describe('Claude provider flow', () => {
       command: 'pwd',
     }), { threadId: buildClaudeSessionId('runtime-session-2', 'chat-2') });
     expect(sessionOwner.snapshot().sessionSource).toBe('synthetic');
+  });
+
+  it('rotates the synthetic Claude session id when the bootstrap id is already in use', async () => {
+    const seenCommands: string[][] = [];
+    const session = {
+      id: 'runtime-session-4',
+      metadata: {
+        approvalPolicy: 'never',
+        path: '/tmp/claude-provider-flow',
+      },
+    };
+    const sessionOwner = new ClaudeSession({
+      sessionId: 'runtime-session-4',
+      chatId: 'chat-4',
+    });
+
+    const result = await runClaudeProviderTurn({
+      session,
+      sessionOwner,
+      prompt: 'retry bootstrap',
+      chatId: 'chat-4',
+      executeCommand: async ({ command }) => {
+        seenCommands.push(command.args);
+        if (seenCommands.length === 1) {
+          throw new Error(`Session ID ${buildClaudeSessionId('runtime-session-4', 'chat-4')} is already in use.`);
+        }
+        return {
+          output: 'fresh bootstrap response',
+          cwd: '/tmp/claude-provider-flow',
+          streamedActionsPersisted: false,
+          inferredActions: [],
+        };
+      },
+    });
+
+    expect(seenCommands).toHaveLength(2);
+    expect(seenCommands[0]).toContain('--session-id');
+    expect(seenCommands[0]).toContain(buildClaudeSessionId('runtime-session-4', 'chat-4'));
+    expect(seenCommands[1]).toContain('--session-id');
+    expect(seenCommands[1]).not.toContain(buildClaudeSessionId('runtime-session-4', 'chat-4'));
+    expect(result.actionThreadId).not.toBe(buildClaudeSessionId('runtime-session-4', 'chat-4'));
+    expect(result.threadId).toBe(result.actionThreadId);
+    expect(result.threadIdSource).toBe('synthetic');
+    expect(result.messageMeta).toEqual({
+      threadIdSource: 'synthetic',
+    });
   });
 
   it('waits for permission resolution before returning to streaming and completion', async () => {

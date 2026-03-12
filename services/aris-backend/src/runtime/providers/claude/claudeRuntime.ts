@@ -9,6 +9,7 @@ export async function runClaudeTurn(input: {
   prompt: string;
   chatId?: string;
   preferredThreadId?: string;
+  syntheticThreadId?: string;
   model?: string;
   signal?: AbortSignal;
   onAction?: Parameters<ClaudeCommandExecutor>[0]['onAction'];
@@ -21,6 +22,7 @@ export async function runClaudeTurn(input: {
     input.preferredThreadId,
     input.session.id,
     input.chatId,
+    input.syntheticThreadId,
   );
 
   const result = await runClaudeCommand({

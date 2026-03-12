@@ -99,6 +99,9 @@ export async function runClaudeCommand(input: {
     if (!isClaudeSessionInUseError(error) || input.signal?.aborted) {
       throw error;
     }
+    if (input.resumeTarget?.mode === 'session-id') {
+      throw error;
+    }
     await delay(1500);
     return runOnce();
   }

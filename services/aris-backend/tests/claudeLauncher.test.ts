@@ -30,7 +30,7 @@ describe('claudeLauncher', () => {
     expect(command.args).toContain('dontAsk');
   });
 
-  it('retries once when Claude reports a session-in-use collision', async () => {
+  it('retries once when Claude reports a session-in-use collision for a resume target', async () => {
     const executeCommand = vi.fn()
       .mockRejectedValueOnce(new Error('Session ID abc is already in use.'))
       .mockResolvedValueOnce({
@@ -52,5 +52,20 @@ describe('claudeLauncher', () => {
     expect(executeCommand).toHaveBeenCalledTimes(2);
     expect(result.output).toBe('done');
     expect(result.threadId).toBe('session-live-123');
+  });
+
+  it('does not retry the same synthetic session-id when Claude reports it is already in use', async () => {
+    const executeCommand = vi.fn()
+      .mockRejectedValueOnce(new Error('Session ID abc is already in use.'));
+
+    await expect(runClaudeCommand({
+      prompt: 'Reply with OK',
+      approvalPolicy: 'on-request',
+      model: 'claude-haiku-4-5',
+      resumeTarget: { id: '11111111-2222-5333-8444-555555555555', mode: 'session-id' },
+      executeCommand,
+    })).rejects.toThrow('already in use');
+
+    expect(executeCommand).toHaveBeenCalledTimes(1);
   });
 });

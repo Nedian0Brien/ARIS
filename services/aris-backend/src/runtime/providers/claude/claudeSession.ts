@@ -24,7 +24,8 @@ export class ClaudeSession implements ClaudeSessionStateOwner {
   readonly chatId?: string;
 
   private readonly callbacks: ClaudeSessionCallbacks;
-  private readonly syntheticId: string;
+  private syntheticId: string;
+  private syntheticRetrySequence = 0;
   private launchModeValue: ClaudeSessionContract['launchMode'];
   private keepAliveState: ClaudeSessionKeepAliveState = 'idle';
   private sessionSource: ClaudeSessionSource = 'synthetic';
@@ -127,6 +128,8 @@ export class ClaudeSession implements ClaudeSessionStateOwner {
   clearActiveThread(): void {
     this.activeThreadId = undefined;
     this.observedThreadId = undefined;
+    this.syntheticRetrySequence = 0;
+    this.syntheticId = buildClaudeSessionId(this.sessionId, this.chatId);
     this.sessionSource = 'synthetic';
     this.threadIdSource = 'synthetic';
     void this.callbacks.onSessionCleared?.({
@@ -183,6 +186,17 @@ export class ClaudeSession implements ClaudeSessionStateOwner {
   }
 
   getSyntheticThreadId(): string {
+    this.consumeOneTimeFlag('synthetic-bootstrap');
+    return this.syntheticId;
+  }
+
+  rotateSyntheticThreadId(): string {
+    this.syntheticRetrySequence += 1;
+    this.syntheticId = buildClaudeSessionId(this.sessionId, this.chatId, `retry:${this.syntheticRetrySequence}`);
+    this.sessionSource = 'synthetic';
+    this.threadIdSource = 'synthetic';
+    this.activeThreadId = undefined;
+    this.observedThreadId = undefined;
     this.consumeOneTimeFlag('synthetic-bootstrap');
     return this.syntheticId;
   }
