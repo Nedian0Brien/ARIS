@@ -1,8 +1,10 @@
 import { inferActionTypeFromCommand, titleForActionType } from '../../actionType.js';
 import { summarizeDiffText } from '../../diffStats.js';
+import type { SessionProtocolEnvelope, SessionProtocolStopReason } from '../../contracts/sessionProtocol.js';
 import type { ClaudeActionEvent } from './types.js';
 
 type ClaudeMappedLine = {
+  envelopes: SessionProtocolEnvelope[];
   action?: ClaudeActionEvent;
   actionKey?: string;
   assistantText?: string;
@@ -144,10 +146,37 @@ function buildActionEventKey(action: ClaudeActionEvent): string {
   return `${action.actionType}|${command}|${path}`;
 }
 
+function resolveStopReason(payloadType: string, payloadSubtype: string, payload: Record<string, unknown>): SessionProtocolStopReason | undefined {
+  const normalizedStopReason = String(payload.stop_reason ?? payload.stopReason ?? payload.reason ?? '').trim().toLowerCase();
+  if (normalizedStopReason.includes('abort') || payloadSubtype.includes('abort')) {
+    return 'aborted';
+  }
+  if (normalizedStopReason.includes('timeout')) {
+    return 'timeout';
+  }
+  if (normalizedStopReason.includes('error') || payloadType === 'error') {
+    return 'error';
+  }
+  if (payloadType === 'result' || payloadSubtype.includes('final')) {
+    return 'completed';
+  }
+  return undefined;
+}
+
+function buildToolName(action: ClaudeActionEvent, payloadSubtype: string): string {
+  if (payloadSubtype) {
+    return payloadSubtype;
+  }
+  if (action.command) {
+    return action.command.split(/\s+/)[0] || action.actionType;
+  }
+  return action.actionType;
+}
+
 export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
   const payload = parseJsonLine(line);
   if (!payload) {
-    return {};
+    return { envelopes: [] };
   }
 
   const payloadType = String(payload.type ?? '').trim().toLowerCase();
@@ -209,6 +238,7 @@ export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
     'resume_session_id',
     'resumeSessionId',
   ]);
+  const turnId = sessionId || extractFirstStringByKeys(records, ['turnId', 'turn_id']) || undefined;
 
   let action: ClaudeActionEvent | undefined;
   let actionType: ClaudeActionEvent['actionType'] | null = null;
@@ -241,7 +271,83 @@ export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
     ? extractFirstStringByKeys(records, ['text', 'message', 'content', 'output', 'result'])
     : '';
 
+  const envelopes: SessionProtocolEnvelope[] = [];
+  if (isSystem && sessionId) {
+    envelopes.push({
+      kind: 'turn-start',
+      provider: 'claude',
+      source: 'system',
+      sessionId,
+      ...(turnId ? { turnId } : {}),
+      threadId: sessionId,
+      threadIdSource: 'observed',
+    });
+  }
+  if (action) {
+    const toolCallId = action.callId?.trim() || buildActionEventKey(action);
+    const toolName = buildToolName(action, payloadSubtype);
+    envelopes.push({
+      kind: 'tool-call-start',
+      provider: 'claude',
+      source: 'tool',
+      ...(sessionId ? { sessionId } : {}),
+      ...(turnId ? { turnId } : {}),
+      toolCallId,
+      toolName,
+      action,
+    });
+    envelopes.push({
+      kind: 'tool-call-end',
+      provider: 'claude',
+      source: 'tool',
+      ...(sessionId ? { sessionId } : {}),
+      ...(turnId ? { turnId } : {}),
+      toolCallId,
+      toolName,
+      action,
+      stopReason: 'completed',
+    });
+  }
+  if (
+    assistantText
+    && !looksLikeClaudeActionTranscript(assistantText)
+    && (
+      payloadType === 'result'
+      || !looksLikeShellCommand(assistantText)
+    )
+  ) {
+    envelopes.push({
+      kind: 'text',
+      provider: 'claude',
+      source: payloadType === 'result' ? 'result' : 'assistant',
+      ...(sessionId ? { sessionId } : {}),
+      ...(turnId ? { turnId } : {}),
+      text: assistantText,
+    });
+  }
+  const stopReason = resolveStopReason(payloadType, payloadSubtype, payload);
+  if (stopReason) {
+    envelopes.push({
+      kind: 'turn-end',
+      provider: 'claude',
+      source: payloadType === 'result' ? 'result' : seemsToolEvent ? 'tool' : isSystem ? 'system' : 'assistant',
+      ...(sessionId ? { sessionId } : {}),
+      ...(turnId ? { turnId } : {}),
+      ...(sessionId ? { threadId: sessionId, threadIdSource: 'observed' as const } : {}),
+      stopReason,
+    });
+    envelopes.push({
+      kind: 'stop',
+      provider: 'claude',
+      source: payloadType === 'result' ? 'result' : seemsToolEvent ? 'tool' : isSystem ? 'system' : 'assistant',
+      ...(sessionId ? { sessionId } : {}),
+      ...(turnId ? { turnId } : {}),
+      reason: stopReason,
+    });
+  }
+
   return {
+    envelopes,
     ...(action ? { action, actionKey: buildActionEventKey(action) } : {}),
     ...(assistantText ? {
       assistantText,
@@ -251,7 +357,37 @@ export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
   };
 }
 
-export function parseClaudeStreamOutput(stdout: string): { output: string; actions: ClaudeActionEvent[]; sessionId?: string } {
+export function mapClaudeStreamOutputToProtocol(stdout: string): { envelopes: SessionProtocolEnvelope[]; sessionId?: string } {
+  const lines = stdout
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const envelopes: SessionProtocolEnvelope[] = [];
+  const envelopeKeys = new Set<string>();
+  let latestSessionId = '';
+
+  for (const line of lines) {
+    const parsedLine = parseClaudeStreamLine(line);
+    for (const envelope of parsedLine.envelopes) {
+      const envelopeKey = JSON.stringify(envelope);
+      if (envelope.kind === 'text' || !envelopeKeys.has(envelopeKey)) {
+        envelopes.push(envelope);
+        envelopeKeys.add(envelopeKey);
+      }
+    }
+    if (parsedLine.sessionId) {
+      latestSessionId = parsedLine.sessionId;
+    }
+  }
+
+  return {
+    envelopes,
+    ...(latestSessionId ? { sessionId: latestSessionId } : {}),
+  };
+}
+
+export function parseClaudeStreamOutput(stdout: string): { output: string; actions: ClaudeActionEvent[]; sessionId?: string; envelopes: SessionProtocolEnvelope[] } {
   const lines = stdout
     .replace(/\r\n/g, '\n')
     .split('\n')
@@ -284,9 +420,12 @@ export function parseClaudeStreamOutput(stdout: string): { output: string; actio
     }
   }
 
+  const mapped = mapClaudeStreamOutputToProtocol(stdout);
+
   return {
     output: latestAssistantText,
     actions: [...actionByKey.values()],
+    envelopes: mapped.envelopes,
     ...(latestSessionId ? { sessionId: latestSessionId } : {}),
   };
 }
