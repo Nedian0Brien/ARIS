@@ -110,35 +110,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          workspace="${GITHUB_WORKSPACE}"
-          if [[ ! -d "$workspace" ]]; then
-            echo "::error::GITHUB_WORKSPACE does not exist: $workspace"
-            exit 1
-          fi
-
           deploy_repo_dir=""
-          if [[ -f "$workspace/deploy/.env" ]]; then
-            deploy_repo_dir="$workspace"
-          else
-            expected_https="${REPO_SERVER_URL}/${REPO_SLUG}.git"
-            expected_public_https="https://github.com/${REPO_SLUG}.git"
-            expected_ssh="git@github.com:${REPO_SLUG}.git"
+          expected_https="${REPO_SERVER_URL}/${REPO_SLUG}.git"
+          expected_public_https="https://github.com/${REPO_SLUG}.git"
+          expected_ssh="git@github.com:${REPO_SLUG}.git"
 
-            while IFS= read -r git_dir; do
-              candidate="${git_dir%/.git}"
-              [[ -d "$candidate" ]] || continue
-              [[ -f "$candidate/deploy/.env" ]] || continue
+          while IFS= read -r git_dir; do
+            candidate="${git_dir%/.git}"
+            [[ -d "$candidate" ]] || continue
+            [[ -f "$candidate/deploy/.env" ]] || continue
 
-              origin_url="$(git -C "$candidate" remote get-url origin 2>/dev/null || true)"
-              if [[ "$origin_url" == "$expected_https" || "$origin_url" == "$expected_public_https" || "$origin_url" == "$expected_ssh" ]]; then
-                deploy_repo_dir="$candidate"
-                break
-              fi
-            done < <(find "$HOST_PROJECTS_ROOT" -mindepth 1 -maxdepth 4 -type d -name .git 2>/dev/null)
-          fi
+            origin_url="$(git -C "$candidate" remote get-url origin 2>/dev/null || true)"
+            if [[ "$origin_url" == "$expected_https" || "$origin_url" == "$expected_public_https" || "$origin_url" == "$expected_ssh" ]]; then
+              deploy_repo_dir="$candidate"
+              break
+            fi
+          done < <(find "$HOST_PROJECTS_ROOT" -mindepth 1 -maxdepth 4 -type d -name .git 2>/dev/null)
 
           if [[ -z "$deploy_repo_dir" ]]; then
-            echo "::error::Unable to locate deploy repository with deploy/.env (workspace=${workspace}, search_root=${HOST_PROJECTS_ROOT})"
+            echo "::error::Unable to locate deploy repository with deploy/.env under ${HOST_PROJECTS_ROOT}"
             exit 1
           fi
 
@@ -183,6 +173,7 @@ jobs:
         run: |
           set -euo pipefail
           DEPLOY_REPO_DIR="${{ steps.resolve-deploy-repo.outputs.deploy_repo_dir }}"
+          export ARIS_SHARED_REPO_ROOT="$DEPLOY_REPO_DIR"
           "$DEPLOY_REPO_DIR/deploy/deploy_backend_zero_downtime.sh"
 
       - name: Deploy web (blue/green zero-downtime)
