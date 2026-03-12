@@ -58,6 +58,14 @@ function resolveRuntimeToken() {
   return resolveEnvValue('RUNTIME_API_TOKEN', 'change-this-runtime-token');
 }
 
+function resolvePm2BackendCwd() {
+  return process.env.ARIS_BACKEND_PM2_CWD || './services/aris-backend';
+}
+
+function resolvePm2BackendScript() {
+  return process.env.ARIS_BACKEND_PM2_SCRIPT || './dist/index.js';
+}
+
 function resolveBackendInstances() {
   const raw = resolveEnvValue('ARIS_BACKEND_INSTANCES', '1');
   const value = Number.parseInt(raw, 10);
@@ -71,8 +79,8 @@ module.exports = {
   apps: [
     {
       name: 'aris-backend',
-      script: './dist/index.js',
-      cwd: './services/aris-backend',
+      script: resolvePm2BackendScript(),
+      cwd: resolvePm2BackendCwd(),
       exec_mode: 'cluster',
       instances: resolveBackendInstances(),
       listen_timeout: 10000,

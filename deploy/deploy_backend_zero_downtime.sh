@@ -6,6 +6,9 @@ BACKEND_DIR="${ROOT_DIR}/services/aris-backend"
 ECOSYSTEM_FILE="${ROOT_DIR}/deploy/ecosystem.config.cjs"
 BACKEND_PORT="${BACKEND_PORT:-4080}"
 HEALTH_TIMEOUT_SECONDS="${BACKEND_HEALTH_TIMEOUT_SECONDS:-60}"
+COMMON_GIT_DIR="$(git -C "$ROOT_DIR" rev-parse --git-common-dir)"
+SHARED_REPO_ROOT="$(cd "${COMMON_GIT_DIR}/.." && pwd)"
+PM2_RUNTIME_DIR="${ARIS_BACKEND_PM2_RUNTIME_DIR:-${SHARED_REPO_ROOT}/.runtime/aris-backend}"
 
 cd "$ROOT_DIR"
 
@@ -56,13 +59,44 @@ wait_for_backend_health() {
   return 1
 }
 
+prepare_pm2_runtime_dir() {
+  local runtime_dir="$1"
+
+  mkdir -p "$runtime_dir"
+  rm -rf "${runtime_dir}/dist.next"
+  cp -a "${BACKEND_DIR}/dist" "${runtime_dir}/dist.next"
+  rm -rf "${runtime_dir}/dist"
+  mv "${runtime_dir}/dist.next" "${runtime_dir}/dist"
+  cp -a "${BACKEND_DIR}/package.json" "${runtime_dir}/package.json"
+  ln -sfn "${SHARED_REPO_ROOT}/services/aris-backend/node_modules" "${runtime_dir}/node_modules"
+}
+
 echo "[deploy:backend-zd] building backend"
 npm --prefix "$BACKEND_DIR" run build
 
-expected_exec_path="${BACKEND_DIR}/dist/index.js"
+echo "[deploy:backend-zd] staging backend runtime files"
+prepare_pm2_runtime_dir "$PM2_RUNTIME_DIR"
 
-echo "[deploy:backend-zd] applying aris-backend PM2 definition via startOrReload"
-pm2 startOrReload "$ECOSYSTEM_FILE" --only aris-backend --env production --update-env
+export ARIS_BACKEND_PM2_CWD="$PM2_RUNTIME_DIR"
+export ARIS_BACKEND_PM2_SCRIPT="./dist/index.js"
+
+expected_exec_path="${PM2_RUNTIME_DIR}/dist/index.js"
+mode="$(current_exec_mode || true)"
+exec_path="$(current_exec_path || true)"
+
+if [[ "$mode" != "cluster_mode" || "$exec_path" != "$expected_exec_path" ]]; then
+  echo "[deploy:backend-zd] performing protected one-time PM2 cutover"
+  cutover_started=1
+  cutover_complete=0
+  trap 'if [[ "${cutover_started:-0}" == "1" && "${cutover_complete:-0}" == "0" ]]; then echo "[deploy:backend-zd] cutover interrupted; attempting backend start" >&2; pm2 start "$ECOSYSTEM_FILE" --only aris-backend --env production --update-env >/dev/null 2>&1 || true; fi' EXIT INT TERM
+  pm2 delete aris-backend >/dev/null 2>&1 || true
+  pm2 start "$ECOSYSTEM_FILE" --only aris-backend --env production --update-env
+  cutover_complete=1
+  trap - EXIT INT TERM
+else
+  echo "[deploy:backend-zd] applying aris-backend PM2 definition via startOrReload"
+  pm2 startOrReload "$ECOSYSTEM_FILE" --only aris-backend --env production --update-env
+fi
 
 mode="$(current_exec_mode || true)"
 exec_path="$(current_exec_path || true)"
