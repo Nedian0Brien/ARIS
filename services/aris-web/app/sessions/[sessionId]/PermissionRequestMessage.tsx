@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui';
 import type { PermissionDecision, PermissionRequest } from '@/lib/happy/types';
 import { CircleCheckBig, CircleX, ShieldAlert } from 'lucide-react';
@@ -29,6 +30,20 @@ function formatRequestedTime(value: string): string {
     return '--:--';
   }
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function RequestedTime({ value }: { value: string }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  return (
+    <span className={styles.permissionTime} suppressHydrationWarning>
+      {mounted ? formatRequestedTime(value) : '--:--'}
+    </span>
+  );
 }
 
 function stateLabel(state: PermissionRequest['state']): string {
@@ -65,7 +80,7 @@ export function PermissionRequestMessage({
             Permission Request
           </span>
           <div className={styles.permissionHeaderMeta}>
-            <span className={styles.permissionTime}>{formatRequestedTime(permission.requestedAt)}</span>
+            <RequestedTime value={permission.requestedAt} />
             <span
               className={`${styles.permissionStateChip} ${
                 isPending
