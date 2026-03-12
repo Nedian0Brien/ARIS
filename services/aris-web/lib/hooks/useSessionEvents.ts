@@ -4,6 +4,7 @@ import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
 const SAFETY_RECONCILE_INTERVAL_MS = 5000;
 const EVENTS_PAGE_LIMIT = 40;
+const isDocumentVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
 
 type EventsApiResponse = {
   events?: UiEvent[];
@@ -126,7 +127,7 @@ export function useSessionEvents(
   }, [hasMoreBefore]);
 
   const refreshEvents = useCallback(async () => {
-    if (terminalStatusRef.current === 404) {
+    if (terminalStatusRef.current === 404 || !isDocumentVisible()) {
       return;
     }
 
@@ -247,6 +248,9 @@ export function useSessionEvents(
       if (terminalStatusRef.current === 404) {
         return;
       }
+      if (!isDocumentVisible()) {
+        return;
+      }
       if (pollTimer !== null) {
         return;
       }
@@ -304,6 +308,9 @@ export function useSessionEvents(
 
     const connect = () => {
       if (disposed || terminalStatusRef.current === 404) {
+        return;
+      }
+      if (!isDocumentVisible()) {
         return;
       }
 
@@ -402,7 +409,48 @@ export function useSessionEvents(
     };
 
     startSafetyReconcile();
-    connect();
+    if (isDocumentVisible()) {
+      connect();
+    }
+
+    const pauseRealtime = () => {
+      stopPolling();
+      closeStream();
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      if (reconcileTimer !== null) {
+        window.clearInterval(reconcileTimer);
+        reconcileTimer = null;
+      }
+    };
+
+    const resumeRealtime = () => {
+      if (disposed || terminalStatusRef.current === 404 || !isDocumentVisible()) {
+        return;
+      }
+      startSafetyReconcile();
+      connect();
+      void refreshEvents().catch((error) => {
+        if (!disposed && error instanceof SessionEventsHttpError && error.status === 404) {
+          setSyncError(error.message);
+          stopPolling();
+          closeStream();
+        }
+      });
+    };
+
+    const handleVisibilityChange = () => {
+      if (isDocumentVisible()) {
+        resumeRealtime();
+      } else {
+        pauseRealtime();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', resumeRealtime);
 
     // Fetch initial data immediately if there is no client-side baseline
     // (e.g. when changing chats dynamically before server components re-render)
@@ -426,6 +474,8 @@ export function useSessionEvents(
       if (reconnectTimer !== null) {
         window.clearTimeout(reconnectTimer);
       }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', resumeRealtime);
     };
   }, [sessionId, chatId, includeUnassigned, refreshEvents]);
 

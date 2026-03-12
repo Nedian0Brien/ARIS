@@ -72,6 +72,38 @@ describe('aris-backend API', () => {
     await app.close();
   });
 
+  it('returns 429 when API request frequency exceeds rate limit', async () => {
+    const app = buildServer({
+      RUNTIME_API_TOKEN: TOKEN,
+      DEFAULT_PROJECT_PATH: '/tmp/project',
+      LOG_LEVEL: 'silent',
+    });
+
+    const burstHeaders = {
+      ...authHeader(),
+      'x-forwarded-for': '203.0.113.5',
+    };
+
+    for (let i = 0; i < 120; i += 1) {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/v1/sessions',
+        headers: burstHeaders,
+      });
+      expect(response.statusCode).toBe(200);
+    }
+
+    const burstResponse = await app.inject({
+      method: 'GET',
+      url: '/v1/sessions',
+      headers: burstHeaders,
+    });
+    expect(burstResponse.statusCode).toBe(429);
+    const payload = burstResponse.json() as { error?: string };
+    expect(payload.error).toContain('요청이 너무 빠릅니다');
+    await app.close();
+  });
+
   it('applies action and permission decision', async () => {
     const app = buildServer({
       RUNTIME_API_TOKEN: TOKEN,

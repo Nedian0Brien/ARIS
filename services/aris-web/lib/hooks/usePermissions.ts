@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { PermissionRequest, PermissionDecision } from '@/lib/happy/types';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
+const POLL_INTERVAL_MS = 5000;
+const isDocumentVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
+
 function normalizePermissionChatId(permission: PermissionRequest): string | null {
   const raw = typeof permission.chatId === 'string' ? permission.chatId.trim() : '';
   return raw.length > 0 ? raw : null;
@@ -79,6 +82,10 @@ export function usePermissions(
   }, [sessionId, initialPermissions]);
 
   const refreshPermissions = useCallback(async () => {
+    if (!isDocumentVisible()) {
+      return;
+    }
+
     const requestScopeKey = scopeKey;
     try {
       const params = new URLSearchParams();
@@ -146,11 +153,22 @@ export function usePermissions(
     }
 
     void sync();
-    const timer = setInterval(sync, 5000);
+    const timer = setInterval(sync, POLL_INTERVAL_MS);
+
+    const syncWhenVisible = () => {
+      if (!aborted && isDocumentVisible()) {
+        void sync();
+      }
+    };
+
+    document.addEventListener('visibilitychange', syncWhenVisible);
+    window.addEventListener('focus', syncWhenVisible);
 
     return () => {
       aborted = true;
       clearInterval(timer);
+      document.removeEventListener('visibilitychange', syncWhenVisible);
+      window.removeEventListener('focus', syncWhenVisible);
     };
   }, [refreshPermissions]);
 

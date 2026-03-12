@@ -3,6 +3,7 @@ import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
 const RUNTIME_POLL_INTERVAL_MS = 1500;
 const runtimeStateCache = new Map<string, boolean>();
+const isDocumentVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
 
 export function useSessionRuntime(sessionId: string, chatId?: string | null) {
   const cacheKey = `${sessionId}:${chatId?.trim() || '__default__'}`;
@@ -18,6 +19,9 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null) {
 
     const refresh = async () => {
       if (disposed || inFlight || stopped) {
+        return;
+      }
+      if (!isDocumentVisible()) {
         return;
       }
       inFlight = true;
@@ -65,9 +69,20 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null) {
       void refresh();
     }, RUNTIME_POLL_INTERVAL_MS);
 
+    const syncWhenVisible = () => {
+      if (!disposed && isDocumentVisible()) {
+        void refresh();
+      }
+    };
+
+    document.addEventListener('visibilitychange', syncWhenVisible);
+    window.addEventListener('focus', syncWhenVisible);
+
     return () => {
       disposed = true;
       window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', syncWhenVisible);
+      window.removeEventListener('focus', syncWhenVisible);
     };
   }, [cacheKey, sessionId, chatId]);
 
