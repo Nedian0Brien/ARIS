@@ -583,6 +583,7 @@ type AgentCommand = ProviderCommand;
 type ParsedAgentActionEvent = ClaudeActionEvent;
 
 type SessionHintEventType = 'text' | 'tool-call-start' | 'tool-call-end' | 'turn-start' | 'turn-end';
+type RunLifecycleStatus = 'run_started' | 'waiting_for_approval' | 'completed' | 'failed' | 'aborted';
 
 function buildSessionHintMeta(input: {
   eventType: SessionHintEventType;
@@ -618,6 +619,38 @@ function buildSessionHintMeta(input: {
     sessionEvent: {
       role: 'agent',
       ev: event,
+    },
+  };
+}
+
+function buildRunLifecycleMeta(input: {
+  status: RunLifecycleStatus;
+  turnId?: string;
+  command?: string;
+  reason?: string;
+}): Record<string, unknown> {
+  const eventType = input.status === 'run_started'
+    ? 'start'
+    : input.status === 'waiting_for_approval'
+      ? 'service'
+      : 'stop';
+
+  return {
+    sessionRole: 'agent',
+    sessionEventType: eventType,
+    ...(input.turnId ? { sessionTurnId: input.turnId } : {}),
+    sessionTurnStatus: input.status,
+    runStatus: input.status,
+    ...(input.command ? { command: input.command } : {}),
+    ...(input.reason ? { reason: input.reason } : {}),
+    sessionEvent: {
+      role: 'agent',
+      ev: {
+        t: eventType,
+        status: input.status,
+        ...(input.command ? { command: input.command } : {}),
+        ...(input.reason ? { reason: input.reason } : {}),
+      },
     },
   };
 }
@@ -1841,6 +1874,48 @@ export class HappyRuntimeStore {
         messages: [{ localId, content }],
       }),
     });
+  }
+
+  private async appendRunLifecycleEvent(
+    sessionId: string,
+    status: RunLifecycleStatus,
+    meta: {
+      chatId?: string;
+      requestedPath?: string;
+      execCwd?: string;
+      agent?: RuntimeAgent;
+      model?: string;
+      threadId?: string;
+      turnId?: string;
+      command?: string;
+      reason?: string;
+    } = {},
+  ): Promise<void> {
+    try {
+      await this.appendAgentMessage(
+        sessionId,
+        `run status: ${status}`,
+        {
+          ...(meta.chatId ? { chatId: meta.chatId } : {}),
+          ...(meta.requestedPath ? { requestedPath: meta.requestedPath } : {}),
+          ...(meta.execCwd ? { execCwd: meta.execCwd } : {}),
+          ...(meta.agent ? { agent: meta.agent } : {}),
+          ...(meta.model ? { model: meta.model } : {}),
+          ...(meta.threadId ? { threadId: meta.threadId } : {}),
+          streamEvent: 'run_status',
+          ...buildRunLifecycleMeta({
+            status,
+            ...(meta.turnId ? { turnId: meta.turnId } : {}),
+            ...(meta.command ? { command: meta.command } : {}),
+            ...(meta.reason ? { reason: meta.reason } : {}),
+          }),
+        },
+        { type: 'message', title: 'Run Status' },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`failed to persist run lifecycle event (${status}): ${message}`);
+    }
   }
 
   private async runCodexCliWithEvents(
@@ -3210,6 +3285,13 @@ export class HappyRuntimeStore {
       };
     }
 
+    await this.appendRunLifecycleEvent(session.id, 'run_started', {
+      ...(scopedChatId ? { chatId: scopedChatId } : {}),
+      requestedPath: session.metadata.path,
+      agent: flavor,
+      ...(selectedModel ? { model: selectedModel } : {}),
+    });
+
     try {
       const isCodex = flavor === 'codex';
       const isClaude = flavor === 'claude';
@@ -3399,6 +3481,14 @@ export class HappyRuntimeStore {
             ...(response.messageMeta ?? {}),
         });
       }
+      await this.appendRunLifecycleEvent(session.id, 'completed', {
+        ...(scopedChatId ? { chatId: scopedChatId } : {}),
+        requestedPath: session.metadata.path,
+        execCwd: response.cwd,
+        agent: flavor,
+        ...(selectedModel ? { model: selectedModel } : {}),
+        ...(response.threadId ? { threadId: response.threadId } : {}),
+      });
     } catch (error) {
       const scopedChatId = typeof context.chatId === 'string' && context.chatId.trim().length > 0
         ? context.chatId.trim()
@@ -3407,6 +3497,12 @@ export class HappyRuntimeStore {
         this.codexThreads.delete(buildCodexThreadCacheKey(session.id, scopedChatId));
       }
       if (isAbortFailure(error) || controller.signal.aborted) {
+        await this.appendRunLifecycleEvent(session.id, 'aborted', {
+          ...(scopedChatId ? { chatId: scopedChatId } : {}),
+          requestedPath: session.metadata.path,
+          agent: flavor,
+          ...(selectedModel ? { model: selectedModel } : {}),
+        });
         return;
       }
       const message = error instanceof Error ? error.message : 'Unknown runtime error';
@@ -3421,6 +3517,12 @@ export class HappyRuntimeStore {
         const persistMessage = persistError instanceof Error ? persistError.message : 'Unknown persist error';
         console.error(`failed to persist agent error message: ${persistMessage}`);
       }
+      await this.appendRunLifecycleEvent(session.id, 'failed', {
+        ...(scopedChatId ? { chatId: scopedChatId } : {}),
+        requestedPath: session.metadata.path,
+        agent: flavor,
+        ...(selectedModel ? { model: selectedModel } : {}),
+      });
     } finally {
       finalizeRun();
     }
@@ -3714,6 +3816,13 @@ export class HappyRuntimeStore {
     };
 
     this.permissions.set(permission.id, permission);
+    await this.appendRunLifecycleEvent(input.sessionId, 'waiting_for_approval', {
+      ...(permission.chatId ? { chatId: permission.chatId } : {}),
+      requestedPath: session.metadata.path,
+      agent: input.agent,
+      command: input.command,
+      reason: input.reason,
+    });
     return permission;
   }
 
