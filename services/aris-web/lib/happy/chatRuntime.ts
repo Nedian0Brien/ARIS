@@ -114,6 +114,22 @@ export function hasFinalAgentReplySince(events: UiEvent[], since: string | null)
   return events.some((event) => isFinalAgentReplyEvent(event) && isOnOrAfter(event.timestamp, since));
 }
 
+export function getLatestAgentEventTimestampSince(events: UiEvent[], since: string | null): string | null {
+  if (!since) {
+    return null;
+  }
+
+  let latestTimestamp: string | null = null;
+  for (const event of events) {
+    if (isUserEvent(event) || !isOnOrAfter(event.timestamp, since)) {
+      continue;
+    }
+    latestTimestamp = event.timestamp;
+  }
+
+  return latestTimestamp;
+}
+
 export function resolveChatRunPhase(input: ResolveChatRunPhaseInput): ResolvedChatRunPhase {
   if (input.isAborting) {
     return 'aborting';
