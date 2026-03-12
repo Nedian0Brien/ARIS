@@ -18,7 +18,9 @@
    - 배포 브랜치가 기대 브랜치(`main`)인지 확인
 
 2. 환경변수 정합성(중요)
-   - `deploy/.env`와 `services/aris-backend/.env`의 `RUNTIME_API_TOKEN`이 일치해야 한다.
+   - 운영 단일 소스 env는 `/home/ubuntu/.config/aris/prod.env`다.
+   - `DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env`를 명시하지 않으면 배포 스크립트는 실패한다.
+   - `services/aris-backend/.env`를 병행 관리한다면 `RUNTIME_API_TOKEN`이 `/home/ubuntu/.config/aris/prod.env`와 일치해야 한다.
    - `AUTH_JWT_SECRET`, `ARIS_ADMIN_EMAIL`, `ARIS_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`가 값이 채워져 있는지 확인한다.
    - `HOST_PROJECTS_ROOT`는 실제 호스트 프로젝트 경로와 일치해야 한다.
 
@@ -28,19 +30,19 @@
 ## 1. 백엔드 배포(필수 선행)
 ```bash
 cd /path/to/ARIS
-./deploy/deploy_backend_zero_downtime.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_backend_zero_downtime.sh
 ```
 
 ## 2. 웹/DB 배포
 ```bash
 cd /path/to/ARIS
-./deploy/deploy_web.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_web.sh
 ```
 
 통합 배포(백엔드 + 웹):
 
 ```bash
-./deploy/deploy_zero_downtime.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_zero_downtime.sh
 ```
 
 `deploy_web.sh` 기본 정책
@@ -58,8 +60,8 @@ SKIP_BUILD_IF_UNCHANGED=0 ./deploy/deploy_web.sh
 
 ## 3. 배포 후 즉시 헬스체크
 ```bash
-docker compose --env-file deploy/.env ps aris-web-blue aris-web-green
-docker compose --env-file deploy/.env logs --tail=120 aris-web-blue aris-web-green
+docker compose --env-file /home/ubuntu/.config/aris/prod.env ps aris-web-blue aris-web-green
+docker compose --env-file /home/ubuntu/.config/aris/prod.env logs --tail=120 aris-web-blue aris-web-green
 pm2 logs aris-backend --lines 120 --nostream
 curl -sS http://127.0.0.1:4080/health
 ```
@@ -73,11 +75,11 @@ curl -sS http://127.0.0.1:4080/health
 아래 스크립트를 실행해 토큰/연결 상태를 한 번에 확인한다.
 
 ```bash
-./deploy/check-runtime-connection.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/check-runtime-connection.sh
 ```
 
 체크 항목
-- `deploy/.env`와 `services/aris-backend/.env` 토큰 동일 여부
+- `/home/ubuntu/.config/aris/prod.env`와 `services/aris-backend/.env` 토큰 동일 여부
 - `backend /health`
 - 토큰 없을 때 `/v1/sessions`가 `401`
 - 배포 토큰으로 `/v1/sessions`가 `200`
@@ -86,7 +88,7 @@ curl -sS http://127.0.0.1:4080/health
 
 ### A. `백엔드 응답 오류 (401): Unauthorized`
 원인 우선순위
-1. `deploy/.env`와 `services/aris-backend/.env`의 `RUNTIME_API_TOKEN` 불일치
+1. `/home/ubuntu/.config/aris/prod.env`와 `services/aris-backend/.env`의 `RUNTIME_API_TOKEN` 불일치
 2. 백엔드 reload 누락(`deploy_backend_zero_downtime.sh` 미실행)
 3. 호스트 네트워크/URL 변경(`HAPPY_SERVER_URL`)로 백엔드 URL을 잘못 가리킴
 4. 브라우저/API 캐시로 구 버전 화면이 노출되어 오류 메시지가 오래 보임
@@ -122,7 +124,7 @@ curl -sS http://127.0.0.1:4080/health
 ss -tulpn | rg ':3005\\b|:4080\\b'
 docker ps -a --filter name=happy
 curl -sS http://127.0.0.1:3005/health
-./deploy/check-runtime-connection.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/check-runtime-connection.sh
 ```
 
 해결 순서
@@ -134,7 +136,7 @@ docker start happy-postgres happy-server
 ```bash
 docker update --restart unless-stopped happy-server happy-postgres
 ```
-3. `deploy/.env`, `services/aris-backend/.env`의 `RUNTIME_BACKEND=happy` 및 `HAPPY_SERVER_URL` 확인
+3. `/home/ubuntu/.config/aris/prod.env`, `services/aris-backend/.env`의 `RUNTIME_BACKEND=happy` 및 `HAPPY_SERVER_URL` 확인
 4. 백엔드 reload 후 재검증
 ```bash
 ./deploy/deploy_backend_zero_downtime.sh
@@ -143,15 +145,15 @@ docker update --restart unless-stopped happy-server happy-postgres
 
 ## 6. 일반적인 운영 커맨드
 ```bash
-docker compose --env-file deploy/.env up -d --build            # 전체 서비스 재기동
-./deploy/deploy_web.sh                                          # 웹 무중단(blue/green) 배포
-./deploy/deploy_backend_zero_downtime.sh                        # 백엔드 무중단 reload 배포
-./deploy/deploy_zero_downtime.sh                                # 백엔드+웹 통합 무중단 배포
+docker compose --env-file /home/ubuntu/.config/aris/prod.env up -d --build # 전체 서비스 재기동
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_web.sh   # 웹 무중단(blue/green) 배포
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_backend_zero_downtime.sh # 백엔드 무중단 reload 배포
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_zero_downtime.sh # 백엔드+웹 통합 무중단 배포
 
-docker compose --env-file deploy/.env ps                        # 상태 확인
-docker compose --env-file deploy/.env logs -f aris-web-blue aris-web-green # 웹 로그
+docker compose --env-file /home/ubuntu/.config/aris/prod.env ps # 상태 확인
+docker compose --env-file /home/ubuntu/.config/aris/prod.env logs -f aris-web-blue aris-web-green # 웹 로그
 pm2 logs aris-backend                                            # 백엔드 로그
-docker compose --env-file deploy/.env down                      # 스택 중지
+docker compose --env-file /home/ubuntu/.config/aris/prod.env down # 스택 중지
 docker system df -v                                              # 디스크 사용량 점검
 ```
 

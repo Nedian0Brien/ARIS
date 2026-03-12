@@ -5,8 +5,17 @@ This deployment setup runs `aris-web`, `aris-backend`, and PostgreSQL together w
 ## 1. Prepare env file
 
 ```bash
-cp deploy/.env.example deploy/.env
+mkdir -p /home/ubuntu/.config/aris
+cp deploy/.env.example /home/ubuntu/.config/aris/prod.env
+export DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env
 ```
+
+All deploy scripts now require `DEPLOY_ENV_FILE` and are expected to point at `/home/ubuntu/.config/aris/prod.env` in production.
+
+For runtime auth naming:
+
+- `services/aris-web` uses `RUNTIME_API_URL` / `RUNTIME_API_TOKEN`
+- `services/aris-backend` uses `HAPPY_SERVER_URL` / `HAPPY_SERVER_TOKEN` only for upstream Happy runtime access
 
 Set at minimum:
 
@@ -14,6 +23,9 @@ Set at minimum:
 - `ARIS_ADMIN_EMAIL`
 - `ARIS_ADMIN_PASSWORD`
 - `RUNTIME_API_TOKEN`
+- `RUNTIME_BACKEND`
+- `HAPPY_SERVER_URL`
+- `HAPPY_SERVER_TOKEN`
 - `POSTGRES_PASSWORD`
 
 Use unique random values. Do not use placeholder or generic defaults.
@@ -29,16 +41,16 @@ ARIS uses a hybrid deployment model:
 # In services/aris-backend
 npm install
 npm run build
-# Start with pm2 (token is read from deploy/services env files automatically)
+# Start with pm2
 pm2 start deploy/ecosystem.config.cjs --env production
 
 # Zero-downtime backend deploy:
-./deploy/deploy_backend_zero_downtime.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_backend_zero_downtime.sh
 ```
 
 ### 2.2 Web & DB (Docker)
 ```bash
-./deploy/deploy_web.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_web.sh
 ```
 
 `deploy_web.sh` now runs zero-downtime blue/green deployment:
@@ -50,10 +62,10 @@ pm2 start deploy/ecosystem.config.cjs --env production
 
 Useful overrides:
 ```bash
-WEB_DRAIN_SECONDS=12 ./deploy/deploy_web.sh
-PULL_BASE=1 ./deploy/deploy_web.sh
-SKIP_BUILD_IF_UNCHANGED=0 ./deploy/deploy_web.sh
-STOP_LEGACY_WEB=0 ./deploy/deploy_web.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env WEB_DRAIN_SECONDS=12 ./deploy/deploy_web.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env PULL_BASE=1 ./deploy/deploy_web.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env SKIP_BUILD_IF_UNCHANGED=0 ./deploy/deploy_web.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env STOP_LEGACY_WEB=0 ./deploy/deploy_web.sh
 ```
 
 Access web UI:
@@ -64,14 +76,14 @@ Access web UI:
 
 ### 2.3 Backend (PM2 zero-downtime reload)
 ```bash
-./deploy/deploy_backend_zero_downtime.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_backend_zero_downtime.sh
 ```
 
 `deploy/ecosystem.config.cjs` runs `aris-backend` in PM2 cluster mode so `pm2 reload` performs graceful worker replacement.
 
 ### 2.4 Full zero-downtime deploy (backend + web)
 ```bash
-./deploy/deploy_zero_downtime.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_zero_downtime.sh
 ```
 
 ### 2.5 Web Hot Reload mode (no deploy)
@@ -79,7 +91,7 @@ Access web UI:
 Use this when you want to verify frontend/backend web changes immediately without running deploy scripts.
 
 ```bash
-./deploy/run_web_dev_hot_reload.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/run_web_dev_hot_reload.sh
 ```
 
 Then open:
@@ -99,10 +111,10 @@ SKIP_DB_PREPARE=1 ./deploy/run_web_dev_hot_reload.sh
 
 ## 3. Start with domain + HTTPS (Caddy)
 
-Set `ARIS_DOMAIN` and `APP_BASE_URL` in `deploy/.env`, then:
+Set `ARIS_DOMAIN` and `APP_BASE_URL` in `/home/ubuntu/.config/aris/prod.env`, then:
 
 ```bash
-docker compose --env-file deploy/.env --profile edge up -d --build
+docker compose --env-file /home/ubuntu/.config/aris/prod.env --profile edge up -d --build
 ```
 
 Caddy will request and renew TLS certificates automatically after DNS points to this server.
@@ -115,10 +127,10 @@ On this host, ports `80/443` are already served by system nginx.
 ## 5. Useful commands
 
 ```bash
-docker compose --env-file deploy/.env logs -f aris-web
-docker compose --env-file deploy/.env logs -f aris-web-blue aris-web-green
-docker compose --env-file deploy/.env ps
-docker compose --env-file deploy/.env down
+docker compose --env-file /home/ubuntu/.config/aris/prod.env logs -f aris-web
+docker compose --env-file /home/ubuntu/.config/aris/prod.env logs -f aris-web-blue aris-web-green
+docker compose --env-file /home/ubuntu/.config/aris/prod.env ps
+docker compose --env-file /home/ubuntu/.config/aris/prod.env down
 docker system df -v
 pm2 logs aris-backend --lines 120
 ```
@@ -126,21 +138,21 @@ pm2 logs aris-backend --lines 120
 ### Runtime auth check (recommended after token changes)
 
 ```bash
-./deploy/check-runtime-connection.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/check-runtime-connection.sh
 ```
 
 This verifies:
 
-- `deploy/.env`와 `services/aris-backend/.env`의 `RUNTIME_API_TOKEN` 일치 여부
+- `/home/ubuntu/.config/aris/prod.env`와 `services/aris-backend/.env`의 `RUNTIME_API_TOKEN` 일치 여부
 - 백엔드 `/health` 접근성
 - `/v1/sessions`에 토큰이 없는 경우 401 반환
-- `/v1/sessions`를 `deploy/.env` 토큰으로 호출해 200이 나오는지
+- `/v1/sessions`를 `DEPLOY_ENV_FILE`의 `RUNTIME_API_TOKEN`으로 호출해 200이 나오는지
 
 `401`이 반복되면 다음 항목을 점검하세요:
 
-1. `deploy/.env`의 `RUNTIME_API_TOKEN`이 실제 PM2 백엔드 프로세스 환경으로 반영됐는지
+1. `/home/ubuntu/.config/aris/prod.env`의 `RUNTIME_API_TOKEN`이 실제 PM2 백엔드 프로세스 환경으로 반영됐는지
 2. `services/aris-backend/.env`의 `RUNTIME_API_TOKEN`이 동일한지
-3. 토큰 변경 후 백엔드 reload가 되었는지 (`./deploy/deploy_backend_zero_downtime.sh`)
+3. 토큰 변경 후 백엔드 reload가 되었는지 (`DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_backend_zero_downtime.sh`)
 
 ## 6. Scheduled Docker reclaimable cleanup (02:00 daily)
 

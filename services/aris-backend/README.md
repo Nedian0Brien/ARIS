@@ -35,7 +35,7 @@ cp .env.example .env
 ```
 
 Important values:
-- `RUNTIME_API_TOKEN` (must match web `HAPPY_SERVER_TOKEN`)
+- `RUNTIME_API_TOKEN` (must match web `RUNTIME_API_TOKEN`)
 - `RUNTIME_BACKEND=mock|happy`
 - `HAPPY_SERVER_URL` / `HAPPY_SERVER_TOKEN` (when `happy` mode)
 - `DEFAULT_PROJECT_PATH`
@@ -60,12 +60,12 @@ Default port: `4080`
 
 ## Token Wiring With aris-web
 
-Use the same token in both services:
+Use the same runtime API token in both services:
 
 - `services/aris-backend/.env`: `RUNTIME_API_TOKEN=...`
 - `services/aris-web/.env`:
-  - `HAPPY_SERVER_URL=http://localhost:4080`
-  - `HAPPY_SERVER_TOKEN=...`
+  - `RUNTIME_API_URL=http://localhost:4080`
+  - `RUNTIME_API_TOKEN=...`
 
 ## Notes
 

@@ -231,14 +231,14 @@ function toSessionSeq(value: unknown): number | null {
 }
 
 async function fetchHappy(path: string, init?: RequestInit): Promise<unknown> {
-  if (!env.HAPPY_SERVER_TOKEN) {
-    throw new Error('HAPPY_SERVER_TOKEN이 설정되어 있지 않습니다.');
+  if (!env.RUNTIME_API_TOKEN) {
+    throw new Error('RUNTIME_API_TOKEN이 설정되어 있지 않습니다.');
   }
 
-  const response = await fetch(`${env.HAPPY_SERVER_URL}${path}`, {
+  const response = await fetch(`${env.RUNTIME_API_URL}${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${env.HAPPY_SERVER_TOKEN}`,
+      Authorization: `Bearer ${env.RUNTIME_API_TOKEN}`,
       'Content-Type': 'application/json',
       ...(init?.headers ?? {}),
     },
@@ -548,7 +548,7 @@ export async function listLatestEventsByChat(input: {
 
 export async function getRuntimeHealth(): Promise<{ api: 'up' | 'down'; happy: 'up' | 'down'; lastSyncAt: string | null }> {
   try {
-    const response = await fetch(`${env.HAPPY_SERVER_URL}/health`, { cache: 'no-store' });
+    const response = await fetch(`${env.RUNTIME_API_URL}/health`, { cache: 'no-store' });
     if (!response.ok) {
       throw new Error(`healthy check failed (${response.status})`);
     }

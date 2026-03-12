@@ -2,7 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${DEPLOY_ENV_FILE:-${ROOT_DIR}/deploy/.env}"
+source "${ROOT_DIR}/deploy/lib/env.sh"
+
+ENV_FILE="$(require_deploy_env_file "deploy:web-legacy")"
 SERVICE="${SERVICE_NAME:-aris-web}"
 PRUNE_MODE="${PRUNE_MODE:-light}"            # off | light | aggressive
 CACHE_UNTIL="${CACHE_UNTIL:-168h}"           # e.g. 24h, 168h
@@ -13,10 +15,14 @@ PRUNE_ASYNC="${PRUNE_ASYNC:-1}"              # 1 to run prune in background
 STATE_DIR="${DEPLOY_STATE_DIR:-${ROOT_DIR}/deploy/.state}"
 LOG_DIR="${DEPLOY_LOG_DIR:-${ROOT_DIR}/deploy/.logs}"
 
-if [[ ! -f "$ENV_FILE" ]]; then
-  echo "[deploy] env file not found: $ENV_FILE" >&2
-  exit 1
-fi
+require_env_keys "deploy:web-legacy" "$ENV_FILE" \
+  APP_BASE_URL \
+  AUTH_JWT_SECRET \
+  ARIS_ADMIN_EMAIL \
+  ARIS_ADMIN_PASSWORD \
+  POSTGRES_PASSWORD \
+  RUNTIME_API_TOKEN \
+  SSH_KEY_ENCRYPTION_SECRET
 
 if [[ "$PRUNE_MODE" != "off" && "$PRUNE_MODE" != "light" && "$PRUNE_MODE" != "aggressive" ]]; then
   echo "[deploy] invalid PRUNE_MODE: $PRUNE_MODE (off|light|aggressive)" >&2

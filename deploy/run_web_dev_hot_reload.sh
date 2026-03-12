@@ -2,16 +2,19 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${DEPLOY_ENV_FILE:-${ROOT_DIR}/deploy/.env}"
+source "${ROOT_DIR}/deploy/lib/env.sh"
+
+ENV_FILE="$(require_deploy_env_file "web-dev")"
 WEB_DEV_PORT="${WEB_DEV_PORT:-3305}"
 WEB_DEV_HOST="${WEB_DEV_HOST:-0.0.0.0}"
 SKIP_DB_PREPARE="${SKIP_DB_PREPARE:-0}"
 
-if [[ ! -f "${ENV_FILE}" ]]; then
-  echo "[web-dev] env file not found: ${ENV_FILE}" >&2
-  echo "[web-dev] create it first: cp deploy/.env.example deploy/.env" >&2
-  exit 1
-fi
+require_env_keys "web-dev" "${ENV_FILE}" \
+  AUTH_JWT_SECRET \
+  ARIS_ADMIN_EMAIL \
+  ARIS_ADMIN_PASSWORD \
+  POSTGRES_PASSWORD \
+  RUNTIME_API_TOKEN
 
 # Load .env without executing shell code so values with spaces are handled safely.
 while IFS= read -r line || [[ -n "$line" ]]; do
@@ -49,11 +52,11 @@ fi
 
 # Route web runtime calls through aris-backend by default in dev mode.
 # This keeps API surface consistent (e.g. /v1/permissions) while backend proxies to happy runtime.
-export HAPPY_SERVER_URL="${DEV_HAPPY_SERVER_URL:-http://127.0.0.1:4080}"
-if [[ -n "${DEV_HAPPY_SERVER_TOKEN:-}" ]]; then
-  export HAPPY_SERVER_TOKEN="${DEV_HAPPY_SERVER_TOKEN}"
-elif [[ -n "${RUNTIME_API_TOKEN:-}" ]]; then
-  export HAPPY_SERVER_TOKEN="${RUNTIME_API_TOKEN}"
+export RUNTIME_API_URL="${DEV_RUNTIME_API_URL:-${DEV_HAPPY_SERVER_URL:-http://127.0.0.1:4080}}"
+if [[ -n "${DEV_RUNTIME_API_TOKEN:-}" ]]; then
+  export RUNTIME_API_TOKEN="${DEV_RUNTIME_API_TOKEN}"
+elif [[ -n "${DEV_HAPPY_SERVER_TOKEN:-}" ]]; then
+  export RUNTIME_API_TOKEN="${DEV_HAPPY_SERVER_TOKEN}"
 fi
 
 # Host dev mode does not receive Docker Compose's DATABASE_URL injection.
@@ -95,6 +98,6 @@ fi
 
 echo "[web-dev] starting Next.js dev server on http://${WEB_DEV_HOST}:${WEB_DEV_PORT}"
 echo "[web-dev] APP_BASE_URL=${APP_BASE_URL}"
-echo "[web-dev] HAPPY_SERVER_URL=${HAPPY_SERVER_URL}"
+echo "[web-dev] RUNTIME_API_URL=${RUNTIME_API_URL}"
 echo "[web-dev] save files to see immediate reload in browser"
 exec npm run dev

@@ -5,7 +5,9 @@ const envSchema = z.object({
   AUTH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   AUTH_TOKEN_REMEMBER_TTL_SECONDS: z.coerce.number().int().positive().default(60 * 60 * 24 * 30),
   AUTH_COOKIE_NAME: z.string().min(1).default('aris_session'),
-  HAPPY_SERVER_URL: z.string().url().default('http://localhost:4080'),
+  RUNTIME_API_URL: z.string().url().optional(),
+  RUNTIME_API_TOKEN: z.string().optional(),
+  HAPPY_SERVER_URL: z.string().url().optional(),
   HAPPY_SERVER_TOKEN: z.string().optional(),
   HOST_PROJECTS_ROOT: z.string().default(''),
   SSH_BASE_COMMAND: z.string().default('ssh ubuntu@your-server'),
@@ -24,10 +26,26 @@ const envSchema = z.object({
   SMTP_FROM: z.string().default('noreply@aris.local'),
 });
 
+type ParsedEnv = z.infer<typeof envSchema>;
+
+export function resolveRuntimeApiUrl(env: Pick<ParsedEnv, 'RUNTIME_API_URL' | 'HAPPY_SERVER_URL'>): string {
+  const next = env.RUNTIME_API_URL?.trim() || env.HAPPY_SERVER_URL?.trim() || '';
+  return next || 'http://localhost:4080';
+}
+
+export function resolveRuntimeApiToken(env: Pick<ParsedEnv, 'RUNTIME_API_TOKEN' | 'HAPPY_SERVER_TOKEN'>): string | undefined {
+  const next = env.RUNTIME_API_TOKEN?.trim() || env.HAPPY_SERVER_TOKEN?.trim() || '';
+  return next || undefined;
+}
+
 const parsed = envSchema.safeParse(process.env);
 if (!parsed.success) {
   const problems = parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join(', ');
   throw new Error(`Invalid environment variables: ${problems}`);
 }
 
-export const env = parsed.data;
+export const env = {
+  ...parsed.data,
+  RUNTIME_API_URL: resolveRuntimeApiUrl(parsed.data),
+  RUNTIME_API_TOKEN: resolveRuntimeApiToken(parsed.data),
+};

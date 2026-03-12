@@ -2,7 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${DEPLOY_ENV_FILE:-${ROOT_DIR}/deploy/.env}"
+source "${ROOT_DIR}/deploy/lib/env.sh"
+
+ENV_FILE="$(require_deploy_env_file "deploy:web-zd")"
 STATE_DIR="${DEPLOY_STATE_DIR:-${ROOT_DIR}/deploy/.state}"
 ACTIVE_SLOT_FILE="${STATE_DIR}/aris-web.active-slot"
 FINGERPRINT_FILE="${STATE_DIR}/aris-web.build-fingerprint"
@@ -19,11 +21,14 @@ NGINX_SITE="${ARIS_NGINX_SITE:-/etc/nginx/sites-available/aris.lawdigest.cloud}"
 NGINX_SNIPPET="${ARIS_WEB_UPSTREAM_SNIPPET:-/etc/nginx/snippets/aris-web-upstream.conf}"
 
 cd "$ROOT_DIR"
-
-if [[ ! -f "$ENV_FILE" ]]; then
-  echo "[deploy:web-zd] env file not found: $ENV_FILE" >&2
-  exit 1
-fi
+require_env_keys "deploy:web-zd" "$ENV_FILE" \
+  APP_BASE_URL \
+  AUTH_JWT_SECRET \
+  ARIS_ADMIN_EMAIL \
+  ARIS_ADMIN_PASSWORD \
+  POSTGRES_PASSWORD \
+  RUNTIME_API_TOKEN \
+  SSH_KEY_ENCRYPTION_SECRET
 
 if [[ "$WEB_SLOT_DEFAULT" != "blue" && "$WEB_SLOT_DEFAULT" != "green" ]]; then
   echo "[deploy:web-zd] invalid WEB_SLOT_DEFAULT: $WEB_SLOT_DEFAULT (blue|green)" >&2
@@ -37,26 +42,6 @@ export COMPOSE_DOCKER_CLI_BUILD=1
 
 compose() {
   docker compose --env-file "$ENV_FILE" "$@"
-}
-
-read_env_value() {
-  local file="$1"
-  local key="$2"
-  awk -F'=' -v k="$key" '
-    $0 !~ /^[[:space:]]*#/ && index($0, "=") > 0 {
-      kk=$1
-      gsub(/^[[:space:]]+|[[:space:]]+$/, "", kk)
-      if (kk==k) {
-        v=substr($0, index($0, "=")+1)
-        gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
-        if (substr(v,1,1)=="\"" && substr(v,length(v),1)=="\"") {
-          v=substr(v,2,length(v)-2)
-        }
-        print v
-        exit
-      }
-    }
-  ' "$file"
 }
 
 port_for_slot() {
