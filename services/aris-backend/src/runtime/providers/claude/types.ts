@@ -6,7 +6,9 @@ import type {
   ProviderResumeTarget,
   ProviderThreadIdSource,
 } from '../../contracts/providerRuntime.js';
-import type { ClaudeSessionContract, ClaudeSessionLaunchMode } from './claudeSessionContract.js';
+import type { ClaudeSessionLaunchMode } from './claudeSessionContract.js';
+
+export type { ClaudeRuntimeSession } from './claudeSessionContract.js';
 
 export type ClaudeResumeTarget = ProviderResumeTarget;
 export type ClaudeThreadIdSource = ProviderThreadIdSource;
@@ -28,8 +30,6 @@ export type ClaudeTurnResult = {
   threadId?: string;
   threadIdSource: ClaudeThreadIdSource;
 };
-
-export type ClaudeRuntimeSession = ClaudeSessionContract;
 
 export type ClaudeRunLifecycleMeta = {
   sessionId: string;

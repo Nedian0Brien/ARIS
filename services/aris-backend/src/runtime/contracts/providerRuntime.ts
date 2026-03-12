@@ -4,6 +4,12 @@ export type ProviderRuntimeFlavor = Exclude<AgentFlavor, 'unknown'>;
 export type ProviderActionType = 'file_read' | 'file_write' | 'file_list' | 'command_execution';
 export type ProviderThreadIdSource = 'resume' | 'observed' | 'synthetic';
 export type ProviderResumeTargetMode = 'resume' | 'session-id';
+export const PROVIDER_RUNTIME_METHODS = [
+  'sendTurn',
+  'abortTurn',
+  'recoverSession',
+  'isRunning',
+] as const;
 
 export type ProviderResumeTarget = {
   id: string;
@@ -61,6 +67,11 @@ export type ProviderLaunchRequest<TFlavor extends AgentFlavor = AgentFlavor> = {
   resumeTarget?: ProviderResumeTarget | string;
 };
 
+export type ProviderSessionScope = {
+  sessionId: string;
+  chatId?: string;
+};
+
 export type ProviderTurnRequest<TSession extends ProviderRuntimeSession = ProviderRuntimeSession> = {
   session: TSession;
   prompt: string;
@@ -81,10 +92,25 @@ export type ProviderTurnResult = {
   threadIdSource: ProviderThreadIdSource;
 };
 
+export type ProviderSessionRecovery<TSession extends ProviderRuntimeSession = ProviderRuntimeSession> = {
+  session: TSession;
+  chatId?: string;
+  recoveredThreadId?: string;
+  threadIdSource?: ProviderThreadIdSource;
+  source: 'stored' | 'messages' | 'scanner' | 'none';
+};
+
 export interface ProviderRuntime<
   TSession extends ProviderRuntimeSession = ProviderRuntimeSession,
   TResult extends ProviderTurnResult = ProviderTurnResult,
 > {
   readonly provider: TSession['metadata']['flavor'];
-  runTurn(input: ProviderTurnRequest<TSession>): Promise<TResult>;
+  sendTurn(input: ProviderTurnRequest<TSession>): Promise<TResult>;
+  abortTurn(scope: ProviderSessionScope): Promise<void> | void;
+  recoverSession(input: {
+    session: TSession;
+    chatId?: string;
+    storedThreadId?: string;
+  }): Promise<ProviderSessionRecovery<TSession>> | ProviderSessionRecovery<TSession>;
+  isRunning(scope: ProviderSessionScope): boolean;
 }
