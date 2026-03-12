@@ -200,6 +200,12 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     );
   });
 
+  it('uses a longer timeout budget for Gemini turns than generic CLI agents', () => {
+    expect(happyClientTestHooks.resolveAgentCommandTimeoutMs('gemini')).toBeGreaterThan(
+      happyClientTestHooks.resolveAgentCommandTimeoutMs('unknown'),
+    );
+  });
+
   it('does not inject --session-id for Claude when given a synthetic target', () => {
     const sessionId = happyClientTestHooks.buildClaudeSessionId('session-2', 'chat-2');
     const command = happyClientTestHooks.buildAgentCommand(
