@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { PermissionRequest, PermissionDecision } from '@/lib/happy/types';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_MS = 10000;
 const isDocumentVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
 
 function normalizePermissionChatId(permission: PermissionRequest): string | null {
@@ -58,6 +58,7 @@ export function usePermissions(
   initialPermissions: PermissionRequest[],
   activeChatId: string | null,
   includeUnassignedForActiveChat = false,
+  enabled = true,
 ) {
   const [permissions, setPermissions] = useState<PermissionRequest[]>(initialPermissions);
   const [resolvedPermissions, setResolvedPermissions] = useState<PermissionRequest[]>([]);
@@ -82,6 +83,9 @@ export function usePermissions(
   }, [sessionId, initialPermissions]);
 
   const refreshPermissions = useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
     if (!isDocumentVisible()) {
       return;
     }
@@ -140,9 +144,13 @@ export function usePermissions(
       }
       setError('권한 요청 동기화를 확인하세요.');
     }
-  }, [scopeKey, sessionId, activeChatId, includeUnassignedForActiveChat]);
+  }, [enabled, scopeKey, sessionId, activeChatId, includeUnassignedForActiveChat]);
 
   useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
+
     let aborted = false;
 
     async function sync() {
@@ -170,7 +178,7 @@ export function usePermissions(
       document.removeEventListener('visibilitychange', syncWhenVisible);
       window.removeEventListener('focus', syncWhenVisible);
     };
-  }, [refreshPermissions]);
+  }, [enabled, refreshPermissions]);
 
   const scopedPermissions = useMemo(
     () => permissions.filter((item) => isPermissionForChat(item, activeChatId, includeUnassignedForActiveChat)),

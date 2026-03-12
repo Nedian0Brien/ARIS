@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionEventsPage, UiEvent } from '@/lib/happy/types';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
-const SAFETY_RECONCILE_INTERVAL_MS = 5000;
+const SAFETY_RECONCILE_INTERVAL_MS = 15000;
+const FALLBACK_POLL_INTERVAL_MS = 4000;
 const EVENTS_PAGE_LIMIT = 40;
 const isDocumentVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
 
@@ -77,6 +78,7 @@ export function useSessionEvents(
   initialEvents: UiEvent[],
   initialHasMoreBefore = false,
   initialEventsChatId: string | null = chatId,
+  enabled = true,
 ) {
   const initialEventsMatchChat = initialEventsChatId === chatId;
   const hydratedInitialEvents = useMemo(
@@ -127,6 +129,9 @@ export function useSessionEvents(
   }, [hasMoreBefore]);
 
   const refreshEvents = useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
     if (terminalStatusRef.current === 404 || !isDocumentVisible()) {
       return;
     }
@@ -168,7 +173,7 @@ export function useSessionEvents(
       }
       setSyncError(null);
     }
-  }, [sessionId, chatId, includeUnassigned]);
+  }, [enabled, sessionId, chatId, includeUnassigned]);
 
   const loadOlder = useCallback(async (): Promise<{ loadedCount: number; hasMoreBefore: boolean }> => {
     if (loadingOlderRef.current || !hasMoreBeforeRef.current) {
@@ -231,6 +236,10 @@ export function useSessionEvents(
   }, [sessionId, chatId, includeUnassigned]);
 
   useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
+
     let disposed = false;
     let eventSource: EventSource | null = null;
     let pollTimer: number | null = null;
@@ -266,7 +275,7 @@ export function useSessionEvents(
             setSyncError('백엔드 이벤트 동기화를 확인하세요.');
           }
         });
-      }, 2000);
+      }, FALLBACK_POLL_INTERVAL_MS);
       void refreshEvents().catch((error) => {
         if (!disposed) {
           if (error instanceof SessionEventsHttpError && error.status === 404) {
@@ -477,7 +486,7 @@ export function useSessionEvents(
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', resumeRealtime);
     };
-  }, [sessionId, chatId, includeUnassigned, refreshEvents]);
+  }, [enabled, sessionId, chatId, includeUnassigned, refreshEvents]);
 
   const addEvent = (event: UiEvent) => {
     setEvents((prev) => mergeEvents([...prev, event]));
