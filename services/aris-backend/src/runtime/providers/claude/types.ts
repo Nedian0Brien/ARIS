@@ -1,47 +1,31 @@
-import type { RuntimeSession } from '../../../types.js';
+import type { SessionProtocolEnvelope } from '../../contracts/sessionProtocol.js';
+import type {
+  ProviderActionEvent,
+  ProviderCliResult,
+  ProviderCommandExecutor,
+  ProviderLaunchCommand,
+  ProviderPermissionRequest,
+  ProviderResumeTarget,
+  ProviderThreadIdSource,
+} from '../../contracts/providerRuntime.js';
+import type { ClaudeSessionLaunchMode } from './claudeSessionContract.js';
 
-export type ClaudeResumeTarget = {
-  id: string;
-  mode?: 'resume' | 'session-id';
+export type { ClaudeRuntimeSession } from './claudeSessionContract.js';
+
+export type ClaudeResumeTarget = ProviderResumeTarget;
+export type ClaudeThreadIdSource = ProviderThreadIdSource;
+export type ClaudeActionEvent = ProviderActionEvent;
+export type ClaudePermissionRequest = ProviderPermissionRequest;
+export type ClaudeCliResult = ProviderCliResult & {
+  protocolEnvelopes?: SessionProtocolEnvelope[];
 };
 
-export type ClaudeThreadIdSource = 'resume' | 'observed' | 'synthetic';
-
-export type ClaudeActionEvent = {
-  actionType: 'file_read' | 'file_write' | 'file_list' | 'command_execution';
-  title: string;
-  callId?: string;
-  command?: string;
-  path?: string;
-  output?: string;
-  additions: number;
-  deletions: number;
-  hasDiffSignal: boolean;
-};
-
-export type ClaudeCliResult = {
-  output: string;
-  cwd: string;
-  inferredActions: ClaudeActionEvent[];
-  streamedActionsPersisted: boolean;
-  threadId?: string;
-};
-
-export type ClaudeLaunchCommand = {
-  command: 'claude';
-  args: string[];
+export type ClaudeLaunchCommand = ProviderLaunchCommand<'claude'> & {
   requiresPty: boolean;
   streamJson: true;
-  fallbackArgs?: string[];
-  retryArgsOnFailure?: string[];
 };
 
-export type ClaudeCommandExecutor = (input: {
-  command: ClaudeLaunchCommand;
-  cwdHint?: string;
-  signal?: AbortSignal;
-  onAction?: (action: ClaudeActionEvent) => Promise<void>;
-}) => Promise<ClaudeCliResult>;
+export type ClaudeCommandExecutor = ProviderCommandExecutor<ClaudeLaunchCommand>;
 
 export type ClaudeTurnResult = {
   output: string;
@@ -50,15 +34,15 @@ export type ClaudeTurnResult = {
   inferredActions: ClaudeActionEvent[];
   threadId?: string;
   threadIdSource: ClaudeThreadIdSource;
+  protocolEnvelopes?: SessionProtocolEnvelope[];
 };
-
-export type ClaudeRuntimeSession = Pick<RuntimeSession, 'id' | 'metadata'>;
 
 export type ClaudeRunLifecycleMeta = {
   sessionId: string;
   chatId?: string;
   startedAt: number;
   model?: string;
+  launchMode?: ClaudeSessionLaunchMode;
 };
 
 export type ClaudeRunScope = {

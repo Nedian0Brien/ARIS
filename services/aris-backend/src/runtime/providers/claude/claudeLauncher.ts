@@ -4,9 +4,10 @@ import type {
   ClaudeCliResult,
   ClaudeCommandExecutor,
   ClaudeLaunchCommand,
+  ClaudePermissionRequest,
   ClaudeResumeTarget,
 } from './types.js';
-import type { ApprovalPolicy } from '../../../types.js';
+import type { ApprovalPolicy, PermissionDecision } from '../../../types.js';
 
 function normalizeClaudePermissionMode(value: ApprovalPolicy): 'default' | 'dontAsk' | 'bypassPermissions' {
   if (value === 'never') {
@@ -31,9 +32,11 @@ export function buildClaudeCommand(input: {
   resumeTarget?: ClaudeResumeTarget;
 }): ClaudeLaunchCommand {
   const permissionMode = normalizeClaudePermissionMode(input.approvalPolicy);
-  const normalizedResumeId = normalizeResumeId(input.resumeTarget);
+  const normalizedResumeId = input.resumeTarget?.mode === 'resume'
+    ? normalizeResumeId(input.resumeTarget)
+    : undefined;
   const claudeResumeArgs = normalizedResumeId
-    ? [input.resumeTarget?.mode === 'session-id' ? '--session-id' : '--resume', normalizedResumeId]
+    ? ['--resume', normalizedResumeId]
     : [];
   const args = [
     '--print',
@@ -74,6 +77,7 @@ export async function runClaudeCommand(input: {
   signal?: AbortSignal;
   resumeTarget?: ClaudeResumeTarget;
   onAction?: (action: ClaudeActionEvent) => Promise<void>;
+  onPermission?: (request: ClaudePermissionRequest) => Promise<PermissionDecision>;
   executeCommand: ClaudeCommandExecutor;
 }): Promise<ClaudeCliResult> {
   const command = buildClaudeCommand({
@@ -88,12 +92,16 @@ export async function runClaudeCommand(input: {
     cwdHint: input.cwdHint,
     signal: input.signal,
     onAction: input.onAction,
+    onPermission: input.onPermission,
   });
 
   try {
     return await runOnce();
   } catch (error) {
     if (!isClaudeSessionInUseError(error) || input.signal?.aborted) {
+      throw error;
+    }
+    if (input.resumeTarget?.mode === 'session-id') {
       throw error;
     }
     await delay(1500);

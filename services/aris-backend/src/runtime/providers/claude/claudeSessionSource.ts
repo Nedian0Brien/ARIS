@@ -20,17 +20,19 @@ function buildDeterministicUuid(seed: string): string {
   return formatUuidFromBytes(bytes);
 }
 
-export function buildClaudeSessionId(sessionId: string, chatId?: string): string {
+export function buildClaudeSessionId(sessionId: string, chatId?: string, variant?: string | number): string {
   const scopedChatId = typeof chatId === 'string' && chatId.trim().length > 0
     ? chatId.trim()
     : '__default__';
-  return buildDeterministicUuid(`aris:claude:${sessionId}:${scopedChatId}`);
+  const scopedVariant = variant === undefined ? '' : `:${String(variant).trim() || '0'}`;
+  return buildDeterministicUuid(`aris:claude:${sessionId}:${scopedChatId}${scopedVariant}`);
 }
 
 export function buildClaudeResumeTarget(
   preferredThreadId: string | undefined,
   sessionId: string,
   chatId?: string,
+  syntheticThreadId?: string,
 ): { resumeTarget?: ClaudeResumeTarget; actionThreadId?: string; threadIdSource: ClaudeThreadIdSource } {
   if (preferredThreadId) {
     return {
@@ -40,12 +42,38 @@ export function buildClaudeResumeTarget(
     };
   }
 
-  const generatedSessionId = buildClaudeSessionId(sessionId, chatId);
+  const generatedSessionId = typeof syntheticThreadId === 'string' && syntheticThreadId.trim().length > 0
+    ? syntheticThreadId.trim()
+    : buildClaudeSessionId(sessionId, chatId);
   return {
-    resumeTarget: { id: generatedSessionId, mode: 'session-id' },
     actionThreadId: generatedSessionId,
     threadIdSource: 'synthetic',
   };
+}
+
+export function chooseClaudePreferredThreadId(input: {
+  requestedThreadId?: string;
+  activeThreadId?: string;
+  storedThreadId?: string;
+}): string | undefined {
+  const requested = typeof input.requestedThreadId === 'string' && input.requestedThreadId.trim().length > 0
+    ? input.requestedThreadId.trim()
+    : undefined;
+  if (requested) {
+    return requested;
+  }
+
+  const active = typeof input.activeThreadId === 'string' && input.activeThreadId.trim().length > 0
+    ? input.activeThreadId.trim()
+    : undefined;
+  if (active) {
+    return active;
+  }
+
+  const stored = typeof input.storedThreadId === 'string' && input.storedThreadId.trim().length > 0
+    ? input.storedThreadId.trim()
+    : undefined;
+  return stored;
 }
 
 export function resolveClaudeThreadId(input: {

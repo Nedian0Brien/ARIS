@@ -174,7 +174,27 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     expect(first).toMatch(/^[0-9a-f-]{36}$/i);
   });
 
-  it('uses --session-id for Claude when the resume id is a UUID', () => {
+  it('treats workspace-root Claude paths as remote launch mode when host mapping exists', () => {
+    const launchMode = happyClientTestHooks.resolveClaudeLaunchMode({
+      sessionPath: '/workspace/ARIS',
+      workspaceRoot: '/workspace',
+      hostProjectsRoot: '/home/ubuntu/project',
+    });
+
+    expect(launchMode).toBe('remote');
+  });
+
+  it('keeps Claude launch mode local when no host mapping is configured', () => {
+    const launchMode = happyClientTestHooks.resolveClaudeLaunchMode({
+      sessionPath: '/workspace/ARIS',
+      workspaceRoot: '/workspace',
+      hostProjectsRoot: '',
+    });
+
+    expect(launchMode).toBe('local');
+  });
+
+  it('does not inject --session-id for Claude when given a synthetic target', () => {
     const sessionId = happyClientTestHooks.buildClaudeSessionId('session-2', 'chat-2');
     const command = happyClientTestHooks.buildAgentCommand(
       'claude',
@@ -185,8 +205,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     );
 
     expect(command).not.toBeNull();
-    expect(command?.args).toContain('--session-id');
-    expect(command?.args).toContain(sessionId);
+    expect(command?.args).not.toContain('--session-id');
     expect(command?.args).not.toContain('--resume');
     expect(command?.fallbackArgs).toBeUndefined();
   });

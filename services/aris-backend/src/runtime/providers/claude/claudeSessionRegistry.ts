@@ -1,5 +1,7 @@
+import { ClaudeSession } from './claudeSession.js';
 import { ClaudeSessionController } from './claudeSessionController.js';
 import type { ClaudeRunLifecycleMeta, ClaudeRunScope } from './types.js';
+import type { ClaudeSessionHandle, ClaudeSessionOwner, ClaudeSessionOwnerMeta } from './claudeSessionContract.js';
 
 function buildRunKey(sessionId: string, chatId?: string): string {
   if (chatId && chatId.trim().length > 0) {
@@ -12,10 +14,15 @@ function isSessionRunKey(runKey: string, sessionId: string): boolean {
   return runKey === `${sessionId}:__default__` || runKey.startsWith(`${sessionId}:`);
 }
 
-export class ClaudeSessionRegistry {
+export class ClaudeSessionRegistry implements ClaudeSessionOwner {
+  private readonly sessions = new Map<string, ClaudeSession>();
   private readonly runs = new Map<string, ClaudeSessionController>();
 
-  async start(meta: Omit<ClaudeRunLifecycleMeta, 'startedAt'> & { startedAt?: number }, waitTimeoutMs: number): Promise<ClaudeSessionController> {
+  get(scope: ClaudeRunScope): ClaudeSession | undefined {
+    return this.sessions.get(buildRunKey(scope.sessionId, scope.chatId));
+  }
+
+  async start(meta: ClaudeSessionOwnerMeta, waitTimeoutMs: number): Promise<ClaudeSessionController> {
     const runKey = buildRunKey(meta.sessionId, meta.chatId);
     const existing = this.runs.get(runKey);
     if (existing) {
@@ -23,7 +30,11 @@ export class ClaudeSessionRegistry {
       await existing.waitForCompletion(waitTimeoutMs);
     }
 
-    const controller = new ClaudeSessionController({
+    const session = this.get(meta) ?? new ClaudeSession(meta);
+    session.updateLaunchMode(meta.launchMode ?? 'local');
+    session.beginTurn();
+    this.sessions.set(runKey, session);
+    const controller = new ClaudeSessionController(session, {
       ...meta,
       startedAt: meta.startedAt ?? Date.now(),
     });
@@ -31,7 +42,7 @@ export class ClaudeSessionRegistry {
     return controller;
   }
 
-  finish(controller: ClaudeSessionController): void {
+  finish(controller: ClaudeSessionHandle): void {
     controller.finish();
     const runKey = buildRunKey(controller.sessionId, controller.chatId);
     const current = this.runs.get(runKey);
@@ -53,13 +64,14 @@ export class ClaudeSessionRegistry {
         continue;
       }
       run.abort();
+      run.finish();
       this.runs.delete(runKey);
     }
   }
 
   async cleanupStaleRuns(
     staleTimeoutMs: number,
-    onStale: (input: { runKey: string; run: ClaudeSessionController; ageMs: number }) => Promise<void>,
+    onStale: (input: { runKey: string; run: ClaudeSessionHandle; ageMs: number }) => Promise<void>,
   ): Promise<void> {
     const now = Date.now();
     const staleRuns: Array<{ runKey: string; run: ClaudeSessionController; ageMs: number }> = [];
@@ -73,6 +85,7 @@ export class ClaudeSessionRegistry {
 
     for (const stale of staleRuns) {
       stale.run.abort();
+      stale.run.finish();
       this.runs.delete(stale.runKey);
       await onStale(stale);
     }

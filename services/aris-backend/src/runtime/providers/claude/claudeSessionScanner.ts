@@ -9,6 +9,28 @@ const INTERNAL_CLAUDE_EVENT_TYPES = new Set([
   'queue-operation',
 ]);
 
+type ClaudeSessionCursor = {
+  offset: number;
+  processedKeys: Set<string>;
+};
+
+export type ClaudeSessionScanEvent = {
+  sessionId: string;
+  eventKey: string;
+  eventType?: string;
+  discoveredSessionId?: string;
+};
+
+export type ClaudeSessionScanResult = {
+  sessionId?: string;
+  source: 'hinted-log' | 'recent-log' | 'none';
+  inspectedSessionIds: string[];
+  currentSessionId?: string;
+  pendingSessionIds: string[];
+  finishedSessionIds: string[];
+  events: ClaudeSessionScanEvent[];
+};
+
 function normalizeSessionId(value: string | undefined): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
@@ -62,44 +84,12 @@ function collectNestedRecords(value: unknown): Record<string, unknown>[] {
   return records;
 }
 
-async function readSessionLog(projectDir: string, sessionId: string): Promise<{ sessionId?: string; messageCount: number }> {
-  try {
-    const contents = await readFile(join(projectDir, `${sessionId}.jsonl`), 'utf8');
-    let messageCount = 0;
-    let discoveredSessionId = '';
-    for (const line of contents.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        continue;
-      }
-      try {
-        const parsed = JSON.parse(trimmed);
-        const records = collectNestedRecords(parsed);
-        const eventType = extractFirstStringByKeys(records, ['type']);
-        if (eventType && INTERNAL_CLAUDE_EVENT_TYPES.has(eventType)) {
-          continue;
-        }
-        messageCount += 1;
-        if (!discoveredSessionId) {
-          discoveredSessionId = extractFirstStringByKeys(records, [
-            'sessionId',
-            'session_id',
-            'resumeSessionId',
-            'resume_session_id',
-          ]);
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    return {
-      ...(normalizeSessionId(discoveredSessionId || sessionId) ? { sessionId: normalizeSessionId(discoveredSessionId || sessionId) } : {}),
-      messageCount,
-    };
-  } catch {
-    return { messageCount: 0 };
+function extractEventKey(sessionId: string, line: string, records: Record<string, unknown>[]): string {
+  const uuid = extractFirstStringByKeys(records, ['uuid', 'id', 'messageId', 'message_id']);
+  if (uuid) {
+    return `${sessionId}:${uuid}`;
   }
+  return `${sessionId}:${line}`;
 }
 
 async function listRecentSessionIds(projectDir: string, maxSessions: number): Promise<string[]> {
@@ -132,37 +122,171 @@ async function listRecentSessionIds(projectDir: string, maxSessions: number): Pr
   }
 }
 
+async function readSessionLogDelta(projectDir: string, sessionId: string, cursor: ClaudeSessionCursor): Promise<ClaudeSessionScanEvent[]> {
+  try {
+    const filePath = join(projectDir, `${sessionId}.jsonl`);
+    const contents = await readFile(filePath, 'utf8');
+    if (cursor.offset > contents.length) {
+      cursor.offset = 0;
+      cursor.processedKeys.clear();
+    }
+    const delta = contents.slice(cursor.offset);
+    cursor.offset = contents.length;
+    if (!delta.trim()) {
+      return [];
+    }
+
+    const events: ClaudeSessionScanEvent[] = [];
+    for (const line of delta.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(trimmed);
+        const records = collectNestedRecords(parsed);
+        const eventType = extractFirstStringByKeys(records, ['type']);
+        if (eventType && INTERNAL_CLAUDE_EVENT_TYPES.has(eventType)) {
+          continue;
+        }
+        const discoveredSessionId = normalizeSessionId(extractFirstStringByKeys(records, [
+          'sessionId',
+          'session_id',
+          'resumeSessionId',
+          'resume_session_id',
+        ]));
+        const eventKey = extractEventKey(sessionId, trimmed, records);
+        if (cursor.processedKeys.has(eventKey)) {
+          continue;
+        }
+        cursor.processedKeys.add(eventKey);
+        events.push({
+          sessionId,
+          eventKey,
+          ...(eventType ? { eventType } : {}),
+          ...(discoveredSessionId ? { discoveredSessionId } : {}),
+        });
+      } catch {
+        continue;
+      }
+    }
+
+    return events;
+  } catch {
+    return [];
+  }
+}
+
+export class ClaudeSessionLogTracker {
+  private readonly projectDir: string;
+  private readonly maxRecentSessions: number;
+  private readonly hintedSessionIds = new Set<string>();
+  private readonly candidateSessionIds: string[] = [];
+  private readonly cursors = new Map<string, ClaudeSessionCursor>();
+  private currentSessionId?: string;
+  private readonly pendingSessionIds = new Set<string>();
+  private readonly finishedSessionIds = new Set<string>();
+
+  constructor(input: {
+    workingDirectory: string;
+    hintedSessionIds?: string[];
+    maxRecentSessions?: number;
+  }) {
+    this.projectDir = buildProjectPath(input.workingDirectory);
+    this.maxRecentSessions = input.maxRecentSessions ?? 3;
+    this.trackSessionIds(input.hintedSessionIds ?? [], { hinted: true });
+  }
+
+  trackSessionIds(sessionIds: string[], options: { hinted?: boolean } = {}): void {
+    for (const rawSessionId of sessionIds) {
+      const sessionId = normalizeSessionId(rawSessionId);
+      if (!sessionId) {
+        continue;
+      }
+      if (options.hinted) {
+        this.hintedSessionIds.add(sessionId);
+      }
+      if (!this.candidateSessionIds.includes(sessionId)) {
+        this.candidateSessionIds.push(sessionId);
+      }
+      if (!this.cursors.has(sessionId)) {
+        this.cursors.set(sessionId, {
+          offset: 0,
+          processedKeys: new Set<string>(),
+        });
+      }
+      if (this.currentSessionId && this.currentSessionId !== sessionId && !this.finishedSessionIds.has(sessionId)) {
+        this.pendingSessionIds.add(sessionId);
+      }
+    }
+  }
+
+  async poll(): Promise<ClaudeSessionScanResult> {
+    const recentSessionIds = await listRecentSessionIds(this.projectDir, this.maxRecentSessions);
+    this.trackSessionIds(recentSessionIds);
+
+    const events: ClaudeSessionScanEvent[] = [];
+    const touchedSessionIds: string[] = [];
+    const hadCurrentSession = Boolean(this.currentSessionId);
+    for (const sessionId of this.candidateSessionIds) {
+      const cursor = this.cursors.get(sessionId);
+      if (!cursor) {
+        continue;
+      }
+      const nextEvents = await readSessionLogDelta(this.projectDir, sessionId, cursor);
+      if (nextEvents.length === 0) {
+        continue;
+      }
+
+      touchedSessionIds.push(sessionId);
+      if (this.currentSessionId && this.currentSessionId !== sessionId) {
+        this.finishedSessionIds.add(this.currentSessionId);
+        this.pendingSessionIds.delete(this.currentSessionId);
+        this.currentSessionId = sessionId;
+      }
+      this.pendingSessionIds.delete(sessionId);
+      for (const event of nextEvents) {
+        if (event.discoveredSessionId && event.discoveredSessionId !== sessionId) {
+          this.trackSessionIds([event.discoveredSessionId]);
+        }
+      }
+      events.push(...nextEvents);
+    }
+
+    if (!hadCurrentSession && touchedSessionIds.length > 0) {
+      const mostRecentTouchedSession = recentSessionIds.find((sessionId) => touchedSessionIds.includes(sessionId))
+        ?? touchedSessionIds[0];
+      this.currentSessionId = mostRecentTouchedSession;
+    }
+
+    const resolvedSessionId = this.currentSessionId
+      ?? events[events.length - 1]?.discoveredSessionId
+      ?? events[events.length - 1]?.sessionId;
+    const source = !resolvedSessionId
+      ? 'none'
+      : this.hintedSessionIds.has(resolvedSessionId)
+        ? 'hinted-log'
+        : 'recent-log';
+
+    return {
+      ...(resolvedSessionId ? { sessionId: resolvedSessionId } : {}),
+      source,
+      inspectedSessionIds: [...this.candidateSessionIds],
+      ...(this.currentSessionId ? { currentSessionId: this.currentSessionId } : {}),
+      pendingSessionIds: [...this.pendingSessionIds],
+      finishedSessionIds: [...this.finishedSessionIds],
+      events,
+    };
+  }
+}
+
 export async function scanClaudeSessionLogs(input: {
   workingDirectory: string;
   hintedSessionIds?: string[];
   maxRecentSessions?: number;
-}): Promise<{ sessionId?: string; source: 'hinted-log' | 'recent-log' | 'none'; inspectedSessionIds: string[] }> {
-  const projectDir = buildProjectPath(input.workingDirectory);
-  const hintedSessionIds = [...new Set((input.hintedSessionIds || []).map(normalizeSessionId).filter((value): value is string => Boolean(value)))];
-  const recentSessionIds = await listRecentSessionIds(projectDir, input.maxRecentSessions ?? 3);
-  const candidateSessionIds = [...hintedSessionIds];
-  for (const recentSessionId of recentSessionIds) {
-    if (!candidateSessionIds.includes(recentSessionId)) {
-      candidateSessionIds.push(recentSessionId);
-    }
-  }
-
-  for (const sessionId of candidateSessionIds) {
-    const scanned = await readSessionLog(projectDir, sessionId);
-    if (scanned.messageCount === 0 || !scanned.sessionId) {
-      continue;
-    }
-    return {
-      sessionId: scanned.sessionId,
-      source: hintedSessionIds.includes(sessionId) ? 'hinted-log' : 'recent-log',
-      inspectedSessionIds: candidateSessionIds,
-    };
-  }
-
-  return {
-    source: 'none',
-    inspectedSessionIds: candidateSessionIds,
-  };
+}): Promise<ClaudeSessionScanResult> {
+  const tracker = new ClaudeSessionLogTracker(input);
+  return tracker.poll();
 }
 
 export function extractClaudeSessionHintIds(args: string[]): string[] {

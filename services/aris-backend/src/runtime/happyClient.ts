@@ -10,12 +10,20 @@ import { summarizeDiffText, summarizeFileChangeDiff } from './diffStats.js';
 import { HappyEventLogger } from './happyEventLogger.js';
 import { resolveRuntimeModelSelection } from './modelPolicy.js';
 import { recoverClaudeThreadIdFromMessages, runClaudeProviderTurn } from './providers/claude/claudeOrchestrator.js';
+import {
+  buildClaudeSessionHintMeta as buildSessionHintMeta,
+} from './providers/claude/claudeEventBridge.js';
+import { ClaudeMessageQueue } from './providers/claude/claudeMessageQueue.js';
+import { extractClaudePermissionRequest } from './providers/claude/claudePermissionBridge.js';
 import { looksLikeClaudeActionTranscript, parseClaudeStreamLine, parseClaudeStreamOutput } from './providers/claude/claudeProtocolMapper.js';
 import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.js';
-import { extractClaudeSessionHintIds, scanClaudeSessionLogs } from './providers/claude/claudeSessionScanner.js';
+import { ClaudeSessionLogTracker, extractClaudeSessionHintIds } from './providers/claude/claudeSessionScanner.js';
 import { buildClaudeSessionId } from './providers/claude/claudeSessionSource.js';
 import { buildProviderCommand, type ProviderCommand } from './providers/providerCommandFactory.js';
-import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget } from './providers/claude/types.js';
+import type { SessionProtocolEnvelope } from './contracts/sessionProtocol.js';
+import type { ProviderPermissionRequest } from './contracts/providerRuntime.js';
+import type { ClaudeSessionLaunchMode } from './providers/claude/claudeSessionContract.js';
+import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeRuntimeSession } from './providers/claude/types.js';
 import type {
   ApprovalPolicy,
   PermissionDecision,
@@ -237,6 +245,10 @@ function normalizeModelReasoningEffort(value: unknown): ModelReasoningEffort | u
     return value;
   }
   return undefined;
+}
+
+function isClaudeRuntimeSession(session: RuntimeSession): session is RuntimeSession & ClaudeRuntimeSession {
+  return session.metadata.flavor === 'claude';
 }
 
 function normalizeStatus(raw: unknown, active: unknown): SessionStatusValue {
@@ -583,46 +595,7 @@ type AgentCommand = ProviderCommand;
 
 type ParsedAgentActionEvent = ClaudeActionEvent;
 
-type SessionHintEventType = 'text' | 'tool-call-start' | 'tool-call-end' | 'turn-start' | 'turn-end';
 type RunLifecycleStatus = 'run_started' | 'waiting_for_approval' | 'completed' | 'failed' | 'aborted';
-
-function buildSessionHintMeta(input: {
-  eventType: SessionHintEventType;
-  callId?: string;
-  turnId?: string;
-  turnStatus?: string;
-}): Record<string, unknown> {
-  const event = input.eventType === 'tool-call-end'
-    ? {
-      t: 'tool-call-end',
-      ...(input.callId ? { call: input.callId } : {}),
-    }
-    : input.eventType === 'tool-call-start'
-      ? {
-        t: 'tool-call-start',
-        ...(input.callId ? { call: input.callId } : {}),
-      }
-      : input.eventType === 'turn-end'
-        ? {
-          t: 'turn-end',
-          ...(input.turnStatus ? { status: input.turnStatus } : {}),
-        }
-        : input.eventType === 'turn-start'
-          ? { t: 'turn-start' }
-          : { t: 'text' };
-
-  return {
-    sessionRole: 'agent',
-    sessionEventType: input.eventType,
-    ...(input.callId ? { sessionCallId: input.callId } : {}),
-    ...(input.turnId ? { sessionTurnId: input.turnId } : {}),
-    ...(input.turnStatus ? { sessionTurnStatus: input.turnStatus } : {}),
-    sessionEvent: {
-      role: 'agent',
-      ev: event,
-    },
-  };
-}
 
 function buildRunLifecycleMeta(input: {
   status: RunLifecycleStatus;
@@ -655,7 +628,6 @@ function buildRunLifecycleMeta(input: {
     },
   };
 }
-
 function shouldSkipDuplicateAgentMessage(
   seenKeys: Set<string>,
   turnId: string | undefined,
@@ -1115,6 +1087,23 @@ function buildScopedPermissionKey(baseKey: string, chatId?: string): string {
   return `${normalizedChatId}:${baseKey}`;
 }
 
+function resolveClaudeLaunchMode(input: {
+  sessionPath?: string;
+  workspaceRoot: string;
+  hostProjectsRoot: string;
+}): ClaudeSessionLaunchMode {
+  const raw = typeof input.sessionPath === 'string' ? input.sessionPath.trim() : '';
+  if (!raw || !input.hostProjectsRoot) {
+    return 'local';
+  }
+
+  const normalizedWorkspaceRoot = input.workspaceRoot.replace(/\/+$/, '');
+  const workspacePrefix = `${normalizedWorkspaceRoot}/`;
+  return raw === normalizedWorkspaceRoot || raw.startsWith(workspacePrefix)
+    ? 'remote'
+    : 'local';
+}
+
 function inferCodexFileWriteItem(item: Record<string, unknown>): {
   command: string;
   path?: string;
@@ -1317,15 +1306,23 @@ export const happyClientTestHooks = {
   buildClaudeSessionId,
   buildAgentCommand,
   waitForStableActivity,
+  resolveClaudeLaunchMode,
 };
 
 export class HappyRuntimeStore {
   private readonly permissions = new Map<string, PermissionRequest>();
   private readonly activeRuns = new Map<string, ActiveRun>();
   private readonly claudeSessionRegistry = new ClaudeSessionRegistry();
+  private readonly claudeSessionScanners = new Map<string, ClaudeSessionLogTracker>();
   private readonly codexThreads = new Map<string, string>();
   private readonly codexPermissionIndex = new Map<string, string>();
   private readonly codexPermissionResponders = new Map<string, (decision: PermissionDecision) => Promise<void>>();
+  private readonly providerPermissionIndex = new Map<string, string>();
+  private readonly providerPermissionWaiters = new Map<string, {
+    resolve: (decision: PermissionDecision) => void;
+    reject: (error: Error) => void;
+  }>();
+  private readonly providerPermissionDecisions = new Map<string, PermissionDecision>();
 
   private readonly serverUrl: string;
   private readonly serverToken: string;
@@ -1351,6 +1348,101 @@ export class HappyRuntimeStore {
         this.codexThreads.delete(key);
       }
     }
+  }
+
+  private async awaitProviderPermissionDecision(
+    permissionId: string,
+    signal?: AbortSignal,
+  ): Promise<PermissionDecision> {
+    const knownDecision = this.providerPermissionDecisions.get(permissionId);
+    if (knownDecision) {
+      return knownDecision;
+    }
+
+    const existing = this.permissions.get(permissionId);
+    if (existing && existing.state !== 'pending') {
+      return existing.state === 'denied' ? 'deny' : 'allow_once';
+    }
+
+    return new Promise<PermissionDecision>((resolve, reject) => {
+      const handleAbort = () => {
+        this.providerPermissionWaiters.delete(permissionId);
+        reject(new Error('The operation was aborted'));
+      };
+
+      if (signal?.aborted) {
+        handleAbort();
+        return;
+      }
+
+      const cleanup = () => {
+        signal?.removeEventListener('abort', handleAbort);
+      };
+
+      this.providerPermissionWaiters.set(permissionId, {
+        resolve: (decision) => {
+          cleanup();
+          resolve(decision);
+        },
+        reject: (error) => {
+          cleanup();
+          reject(error);
+        },
+      });
+      signal?.addEventListener('abort', handleAbort, { once: true });
+    });
+  }
+
+  private async handleProviderPermissionRequest(input: {
+    session: RuntimeSession;
+    chatId?: string;
+    agent: PermissionRequest['agent'];
+    request: ProviderPermissionRequest;
+    signal?: AbortSignal;
+  }): Promise<PermissionDecision> {
+    const permissionKey = buildScopedPermissionKey(
+      `${input.session.id}:provider:${input.request.approvalId || input.request.callId}`,
+      input.chatId,
+    );
+    const knownPermissionId = this.providerPermissionIndex.get(permissionKey);
+    if (knownPermissionId) {
+      const knownPermission = this.permissions.get(knownPermissionId);
+      if (knownPermission?.state === 'pending') {
+        return this.awaitProviderPermissionDecision(knownPermissionId, input.signal);
+      }
+      if (knownPermission) {
+        return knownPermission.state === 'denied' ? 'deny' : 'allow_once';
+      }
+      this.providerPermissionIndex.delete(permissionKey);
+    }
+
+    const created = await this.createPermission({
+      sessionId: input.session.id,
+      ...(input.chatId ? { chatId: input.chatId } : {}),
+      agent: input.agent,
+      command: input.request.command,
+      reason: input.request.reason,
+      risk: input.request.risk,
+    });
+    this.providerPermissionIndex.set(permissionKey, created.id);
+
+    const approvalPolicy = this.resolveSessionApprovalPolicy(input.session);
+    if (approvalPolicy === 'yolo') {
+      await this.decidePermission(created.id, 'allow_session');
+      return 'allow_session';
+    }
+
+    return this.awaitProviderPermissionDecision(created.id, input.signal);
+  }
+
+  private getClaudeSessionScanner(workingDirectory: string): ClaudeSessionLogTracker {
+    const scanner = this.claudeSessionScanners.get(workingDirectory);
+    if (scanner) {
+      return scanner;
+    }
+    const created = new ClaudeSessionLogTracker({ workingDirectory });
+    this.claudeSessionScanners.set(workingDirectory, created);
+    return created;
   }
 
   private buildRunKey(sessionId: string, chatId?: string): string {
@@ -1540,8 +1632,18 @@ export class HappyRuntimeStore {
     command: AgentCommand | ClaudeLaunchCommand,
     cwdHint?: string,
     signal?: AbortSignal,
-    handlers?: { onAction?: (action: ParsedAgentActionEvent) => Promise<void> },
-  ): Promise<{ output: string; cwd: string; inferredActions: ParsedAgentActionEvent[]; streamedActionsPersisted: boolean; threadId?: string }> {
+    handlers?: {
+      onAction?: (action: ParsedAgentActionEvent) => Promise<void>;
+      onPermission?: (request: ProviderPermissionRequest) => Promise<PermissionDecision>;
+    },
+  ): Promise<{
+    output: string;
+    cwd: string;
+    inferredActions: ParsedAgentActionEvent[];
+    streamedActionsPersisted: boolean;
+    threadId?: string;
+    protocolEnvelopes?: SessionProtocolEnvelope[];
+  }> {
     const safeCwd = this.resolveExecutionCwd(cwdHint);
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
     const { CLAUDECODE: _cc, ...spawnEnv } = process.env;
@@ -1569,6 +1671,7 @@ export class HappyRuntimeStore {
     const runCommandStreaming = async (
       args: string[],
       onAction?: (action: ParsedAgentActionEvent) => Promise<void>,
+      onPermission?: (request: ProviderPermissionRequest) => Promise<PermissionDecision>,
     ): Promise<{
       stdout: string;
       stderr: string;
@@ -1601,6 +1704,7 @@ export class HappyRuntimeStore {
       }
 
       const actionByKey = new Map<string, ParsedAgentActionEvent>();
+      const seenPermissionKeys = new Set<string>();
       let streamedActionsPersisted = false;
       let stdoutBuffer = '';
       let stderrBuffer = '';
@@ -1629,6 +1733,18 @@ export class HappyRuntimeStore {
         const normalized = stripAnsi(rawLine).trim();
         if (!normalized) {
           return;
+        }
+        if (agent === 'claude' && onPermission) {
+          const permissionRequest = extractClaudePermissionRequest(normalized);
+          if (permissionRequest) {
+            const permissionKey = permissionRequest.approvalId || permissionRequest.callId;
+            if (!seenPermissionKeys.has(permissionKey)) {
+              seenPermissionKeys.add(permissionKey);
+              emitChain = emitChain.then(async () => {
+                await onPermission(permissionRequest);
+              });
+            }
+          }
         }
         const parsedLine = agent === 'claude'
           ? parseClaudeStreamLine(normalized)
@@ -1713,9 +1829,9 @@ export class HappyRuntimeStore {
     let lastError: unknown = null;
     let inferredActions: ParsedAgentActionEvent[] = [];
     let streamedActionsPersisted = false;
-    if (command.streamJson && handlers?.onAction) {
+    if (command.streamJson && (handlers?.onAction || handlers?.onPermission)) {
       try {
-        const streamed = await runCommandStreaming(command.args, handlers.onAction);
+        const streamed = await runCommandStreaming(command.args, handlers.onAction, handlers.onPermission);
         result = {
           stdout: streamed.stdout,
           stderr: streamed.stderr,
@@ -1764,10 +1880,9 @@ export class HappyRuntimeStore {
       if (result.threadId) {
         hintedSessionIds.unshift(result.threadId);
       }
-      const scannedSession = await scanClaudeSessionLogs({
-        workingDirectory: safeCwd,
-        hintedSessionIds,
-      });
+      const scanner = this.getClaudeSessionScanner(safeCwd);
+      scanner.trackSessionIds(hintedSessionIds, { hinted: true });
+      const scannedSession = await scanner.poll();
       if (
         scannedSession.sessionId
         && (
@@ -1782,17 +1897,28 @@ export class HappyRuntimeStore {
     const cleanedStdout = stripAnsi(result.stdout || '');
     const cleanedStderr = stripAnsi(result.stderr || '');
     let output = '';
+    let protocolEnvelopes: SessionProtocolEnvelope[] | undefined;
     if (command.streamJson) {
-      const parsed = agent === 'claude'
-        ? parseClaudeStreamOutput(cleanedStdout)
-        : parseAgentStreamOutput(cleanedStdout);
-      if (inferredActions.length === 0) {
-        inferredActions = parsed.actions;
+      if (agent === 'claude') {
+        const parsed = parseClaudeStreamOutput(cleanedStdout);
+        if (inferredActions.length === 0) {
+          inferredActions = parsed.actions;
+        }
+        protocolEnvelopes = parsed.envelopes;
+        if (!result.threadId && parsed.sessionId) {
+          result.threadId = parsed.sessionId;
+        }
+        output = trimOutput(parsed.output || '');
+      } else {
+        const parsed = parseAgentStreamOutput(cleanedStdout);
+        if (inferredActions.length === 0) {
+          inferredActions = parsed.actions;
+        }
+        if (!result.threadId && parsed.sessionId) {
+          result.threadId = parsed.sessionId;
+        }
+        output = trimOutput(parsed.output || '');
       }
-      if (!result.threadId && parsed.sessionId) {
-        result.threadId = parsed.sessionId;
-      }
-      output = trimOutput(parsed.output || '');
       const needsFallback = !output || (agent === 'claude'
         ? looksLikeClaudeActionTranscript(output)
         : looksLikeActionTranscript(output));
@@ -1831,6 +1957,7 @@ export class HappyRuntimeStore {
       inferredActions,
       streamedActionsPersisted,
       ...(result.threadId ? { threadId: result.threadId } : {}),
+      ...(protocolEnvelopes ? { protocolEnvelopes } : {}),
     };
   }
 
@@ -1842,8 +1969,18 @@ export class HappyRuntimeStore {
     cwdHint?: string,
     signal?: AbortSignal,
     resumeTarget?: ClaudeResumeTarget | string,
-    handlers?: { onAction?: (action: ParsedAgentActionEvent) => Promise<void> },
-  ): Promise<{ output: string; cwd: string; inferredActions: ParsedAgentActionEvent[]; streamedActionsPersisted: boolean; threadId?: string }> {
+    handlers?: {
+      onAction?: (action: ParsedAgentActionEvent) => Promise<void>;
+      onPermission?: (request: ProviderPermissionRequest) => Promise<PermissionDecision>;
+    },
+  ): Promise<{
+    output: string;
+    cwd: string;
+    inferredActions: ParsedAgentActionEvent[];
+    streamedActionsPersisted: boolean;
+    threadId?: string;
+    protocolEnvelopes?: SessionProtocolEnvelope[];
+  }> {
     const command = buildAgentCommand(agent, prompt, approvalPolicy, model, resumeTarget);
     if (!command) {
       throw new Error(`Unsupported agent flavor: ${agent}`);
@@ -3238,17 +3375,29 @@ export class HappyRuntimeStore {
       });
     }
     const isClaudeRun = flavor === 'claude';
+    const claudeLaunchMode = isClaudeRun
+      ? resolveClaudeLaunchMode({
+        sessionPath: session.metadata.path,
+        workspaceRoot: this.workspaceRoot,
+        hostProjectsRoot: this.hostProjectsRoot,
+      })
+      : 'local';
     let controller: AbortController;
+    let claudeController:
+      | Awaited<ReturnType<ClaudeSessionRegistry['start']>>
+      | undefined;
     let finalizeRun = () => {};
     if (isClaudeRun) {
-      const claudeController = await this.claudeSessionRegistry.start({
+      claudeController = await this.claudeSessionRegistry.start({
         sessionId: session.id,
         ...(scopedChatId ? { chatId: scopedChatId } : {}),
         ...(selectedModel ? { model: selectedModel } : {}),
+        launchMode: claudeLaunchMode,
       }, 5000);
-      controller = claudeController.abortController;
+      const activeClaudeController = claudeController;
+      controller = activeClaudeController.abortController;
       finalizeRun = () => {
-        this.claudeSessionRegistry.finish(claudeController);
+        this.claudeSessionRegistry.finish(activeClaudeController);
       };
     } else {
       const runKey = this.buildRunKey(session.id, scopedChatId);
@@ -3303,7 +3452,12 @@ export class HappyRuntimeStore {
         ? context.threadId.trim()
         : undefined;
       const storedClaudeThreadId = isClaude
-        ? await this.resolveClaudeThreadId(session.id, scopedChatId)
+        ? (
+          claudeController?.session.resolvePreferredThreadId(
+            undefined,
+            await this.resolveClaudeThreadId(session.id, scopedChatId),
+          )
+        )
         : undefined;
       const preferredThreadId = isClaude
         ? requestedThreadId ?? storedClaudeThreadId
@@ -3318,8 +3472,15 @@ export class HappyRuntimeStore {
         threadId?: string;
         threadIdSource?: 'resume' | 'observed' | 'synthetic';
         messageMeta?: Record<string, unknown>;
+        protocolEnvelopes?: SessionProtocolEnvelope[];
         inferredActions?: ParsedAgentActionEvent[];
       };
+      let claudeMessageQueue: ClaudeMessageQueue | null = null;
+      const persistClaudeProjection = async (projection: {
+        body: string;
+        meta: Record<string, unknown>;
+        options?: { type?: string; title?: string };
+      }) => this.appendAgentMessage(session.id, projection.body, projection.meta, projection.options);
       const appendNonCodexAction = async (
         action: ParsedAgentActionEvent,
         indexSeed: number,
@@ -3394,10 +3555,25 @@ export class HappyRuntimeStore {
         }
       } else {
         const nonCodexCwd = this.resolveExecutionCwd(session.metadata.path);
+        claudeMessageQueue = isClaude
+          ? new ClaudeMessageQueue(
+            {
+              ...(scopedChatId ? { chatId: scopedChatId } : {}),
+              requestedPath: session.metadata.path,
+              ...(selectedModel ? { model: selectedModel } : {}),
+              launchMode: claudeLaunchMode,
+            },
+            persistClaudeProjection,
+          )
+          : null;
         let streamedActionIndex = 0;
         if (isClaude) {
+          if (!isClaudeRuntimeSession(session)) {
+            throw new Error(`Claude runtime type guard failed for session ${session.id}`);
+          }
           const claudeResponse = await runClaudeProviderTurn({
             session,
+            sessionOwner: claudeController?.session,
             prompt,
             chatId: scopedChatId,
             requestedThreadId,
@@ -3405,15 +3581,29 @@ export class HappyRuntimeStore {
             model: selectedModel,
             signal: controller.signal,
             onAction: async (action, meta) => {
-              await appendNonCodexAction(action, streamedActionIndex, nonCodexCwd, meta.threadId);
+              await claudeMessageQueue?.enqueueToolAction({
+                action,
+                execCwd: nonCodexCwd,
+                threadId: meta.threadId,
+              });
               streamedActionIndex += 1;
             },
-            executeCommand: async ({ command, cwdHint, signal, onAction }) => this.runAgentCommand(
+            onPermission: async (request) => this.handleProviderPermissionRequest({
+              session,
+              chatId: scopedChatId,
+              agent: 'claude',
+              request,
+              signal: controller.signal,
+            }),
+            executeCommand: async ({ command, cwdHint, signal, onAction, onPermission }) => this.runAgentCommand(
               'claude',
               command,
               cwdHint,
               signal,
-              { onAction },
+              {
+                onAction,
+                onPermission,
+              },
             ),
           });
           response = {
@@ -3426,6 +3616,7 @@ export class HappyRuntimeStore {
             threadId: claudeResponse.threadId ?? claudeResponse.actionThreadId,
             threadIdSource: claudeResponse.threadIdSource,
             messageMeta: claudeResponse.messageMeta,
+            protocolEnvelopes: claudeResponse.protocolEnvelopes,
           };
         } else {
           const nonClaude = await this.runAgentCli(
@@ -3466,25 +3657,67 @@ export class HappyRuntimeStore {
         && response.inferredActions.length > 0
       ) {
         for (const [index, action] of response.inferredActions.slice(0, 10).entries()) {
-          await appendNonCodexAction(action, index, response.cwd, response.threadId);
+          if (flavor === 'claude') {
+            claudeMessageQueue ??= new ClaudeMessageQueue(
+              {
+                ...(scopedChatId ? { chatId: scopedChatId } : {}),
+                requestedPath: session.metadata.path,
+                ...(selectedModel ? { model: selectedModel } : {}),
+                launchMode: claudeLaunchMode,
+              },
+              persistClaudeProjection,
+            );
+            await claudeMessageQueue.enqueueToolAction({
+              action,
+              execCwd: response.cwd,
+              threadId: response.threadId,
+              envelopes: response.protocolEnvelopes,
+            });
+          } else {
+            await appendNonCodexAction(action, index, response.cwd, response.threadId);
+          }
         }
       }
 
       const streamedPersisted = Boolean(response.streamedPersisted);
       const agentMessagePersisted = Boolean(response.agentMessagePersisted);
       const finalAgentOutput = sanitizeAgentMessageText(response.output);
-      if (finalAgentOutput.length > 0 && (!isCodex || !streamedPersisted || !agentMessagePersisted)) {
-        await this.appendAgentMessage(session.id, finalAgentOutput, {
-          ...(scopedChatId ? { chatId: scopedChatId } : {}),
-          requestedPath: session.metadata.path,
-          execCwd: response.cwd,
-          ...buildSessionHintMeta({ eventType: 'text' }),
-          streamEvent: 'agent_message',
+      if (!isCodex || !streamedPersisted || (!agentMessagePersisted && finalAgentOutput.length > 0)) {
+        if (flavor === 'claude') {
+          claudeMessageQueue ??= new ClaudeMessageQueue(
+            {
+              ...(scopedChatId ? { chatId: scopedChatId } : {}),
+              requestedPath: session.metadata.path,
+              ...(selectedModel ? { model: selectedModel } : {}),
+              launchMode: claudeLaunchMode,
+            },
+            persistClaudeProjection,
+          );
+          await claudeMessageQueue.enqueueText({
+            output: finalAgentOutput,
+            execCwd: response.cwd,
+            ...(response.threadId ? { threadId: response.threadId } : {}),
+            messageMeta: {
+              streamEvent: 'agent_message',
+              ...(response.threadIdSource ? { threadIdSource: response.threadIdSource } : {}),
+              ...(response.messageMeta ?? {}),
+            },
+            envelopes: response.protocolEnvelopes,
+          });
+          await claudeMessageQueue.flush();
+        } else {
+          await this.appendAgentMessage(session.id, finalAgentOutput, {
+            ...(scopedChatId ? { chatId: scopedChatId } : {}),
+            requestedPath: session.metadata.path,
+            execCwd: response.cwd,
+            ...buildSessionHintMeta({ eventType: 'text' }),
+            streamEvent: 'agent_message',
             agent: flavor,
             model: selectedModel,
             ...(response.threadId ? { threadId: response.threadId } : {}),
             ...(response.messageMeta ?? {}),
-        });
+          });
+        }
       }
       await this.appendRunLifecycleEvent(session.id, 'completed', {
         ...(scopedChatId ? { chatId: scopedChatId } : {}),
@@ -3846,6 +4079,16 @@ export class HappyRuntimeStore {
         this.codexPermissionIndex.delete(key);
       }
     }
+    for (const [key, mappedPermissionId] of this.providerPermissionIndex.entries()) {
+      if (mappedPermissionId === permissionId) {
+        this.providerPermissionIndex.delete(key);
+      }
+    }
+
+    this.providerPermissionDecisions.set(permissionId, decision);
+    const providerWaiter = this.providerPermissionWaiters.get(permissionId);
+    this.providerPermissionWaiters.delete(permissionId);
+    providerWaiter?.resolve(decision);
 
     const responder = this.codexPermissionResponders.get(permissionId);
     this.codexPermissionResponders.delete(permissionId);

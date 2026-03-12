@@ -1,18 +1,15 @@
-import type { ClaudeResumeTarget } from '../claude/types.js';
+import type { ProviderLaunchCommand, ProviderResumeTarget } from '../../contracts/providerRuntime.js';
 
-export type GeminiLaunchCommand = {
-  command: 'gemini';
-  args: string[];
+export type GeminiLaunchCommand = ProviderLaunchCommand<'gemini'> & {
   requiresPty?: false;
   streamJson: true;
   fallbackArgs: string[];
-  retryArgsOnFailure?: string[];
 };
 
 export function buildGeminiCommand(input: {
   prompt: string;
   model?: string;
-  resumeTarget?: ClaudeResumeTarget;
+  resumeTarget?: ProviderResumeTarget;
 }): GeminiLaunchCommand {
   const normalizedResumeId = typeof input.resumeTarget?.id === 'string' && input.resumeTarget.id.trim().length > 0
     ? input.resumeTarget.id.trim().slice(0, 120)
