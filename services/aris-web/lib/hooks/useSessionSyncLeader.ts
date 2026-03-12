@@ -10,12 +10,20 @@ type SessionSyncLeaderRecord = {
   focused: boolean;
 };
 
-function isTabFocusedAndVisible(): boolean {
+function isTabVisible(): boolean {
+  if (typeof document === 'undefined') {
+    return true;
+  }
+
+  return document.visibilityState === 'visible';
+}
+
+function isTabFocused(): boolean {
   if (typeof document === 'undefined' || typeof window === 'undefined') {
     return true;
   }
 
-  return document.visibilityState === 'visible' && document.hasFocus();
+  return document.hasFocus();
 }
 
 export function parseSessionSyncLeaderRecord(raw: string | null): SessionSyncLeaderRecord | null {
@@ -49,9 +57,10 @@ export function shouldClaimSessionSyncLeadership(
   record: SessionSyncLeaderRecord | null,
   now: number,
   tabId: string,
-  isEligible: boolean,
+  isVisible: boolean,
+  isFocused: boolean,
 ): boolean {
-  if (!isEligible) {
+  if (!isVisible) {
     return false;
   }
 
@@ -67,7 +76,7 @@ export function shouldClaimSessionSyncLeadership(
     return true;
   }
 
-  return record.focused === false;
+  return isFocused && record.focused === false;
 }
 
 export function useSessionSyncLeader(sessionId: string) {
@@ -113,15 +122,16 @@ export function useSessionSyncLeader(sessionId: string) {
         return;
       }
 
-      const focused = isTabFocusedAndVisible();
-      if (!focused) {
+      const visible = isTabVisible();
+      if (!visible) {
         releaseLeadership();
         return;
       }
 
+      const focused = isTabFocused();
       const now = Date.now();
       const current = parseSessionSyncLeaderRecord(readLocalStorage(storageKey));
-      if (shouldClaimSessionSyncLeadership(current, now, tabIdRef.current, focused)) {
+      if (shouldClaimSessionSyncLeadership(current, now, tabIdRef.current, visible, focused)) {
         writeLeadership(focused);
         return;
       }

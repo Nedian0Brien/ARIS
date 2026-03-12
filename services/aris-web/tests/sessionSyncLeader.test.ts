@@ -26,11 +26,11 @@ describe('session sync leader helpers', () => {
   });
 
   it('claims leadership when there is no active leader', () => {
-    expect(shouldClaimSessionSyncLeadership(null, 1_000, 'tab-a', true)).toBe(true);
+    expect(shouldClaimSessionSyncLeadership(null, 1_000, 'tab-a', true, true)).toBe(true);
   });
 
-  it('does not claim leadership when the tab is not eligible', () => {
-    expect(shouldClaimSessionSyncLeadership(null, 1_000, 'tab-a', false)).toBe(false);
+  it('does not claim leadership when the tab is hidden', () => {
+    expect(shouldClaimSessionSyncLeadership(null, 1_000, 'tab-a', false, false)).toBe(false);
   });
 
   it('keeps the current focused leader when it is still fresh', () => {
@@ -38,20 +38,30 @@ describe('session sync leader helpers', () => {
       tabId: 'tab-b',
       updatedAt: 10_000,
       focused: true,
-    }, 10_000 + SESSION_SYNC_LEADER_STALE_MS - 1, 'tab-a', true)).toBe(false);
+    }, 10_000 + SESSION_SYNC_LEADER_STALE_MS - 1, 'tab-a', true, true)).toBe(false);
   });
 
-  it('allows takeover when the current leader is stale or unfocused', () => {
+  it('allows takeover when the current leader is stale', () => {
     expect(shouldClaimSessionSyncLeadership({
       tabId: 'tab-b',
       updatedAt: 10_000,
       focused: true,
-    }, 10_000 + SESSION_SYNC_LEADER_STALE_MS + 1, 'tab-a', true)).toBe(true);
+    }, 10_000 + SESSION_SYNC_LEADER_STALE_MS + 1, 'tab-a', true, false)).toBe(true);
+  });
 
+  it('allows a focused tab to take over from an unfocused leader', () => {
     expect(shouldClaimSessionSyncLeadership({
       tabId: 'tab-b',
       updatedAt: 10_000,
       focused: false,
-    }, 10_500, 'tab-a', true)).toBe(true);
+    }, 10_500, 'tab-a', true, true)).toBe(true);
+  });
+
+  it('keeps the current leader while visible even if it temporarily loses focus', () => {
+    expect(shouldClaimSessionSyncLeadership({
+      tabId: 'tab-b',
+      updatedAt: 10_000,
+      focused: false,
+    }, 10_500, 'tab-a', true, false)).toBe(false);
   });
 });
