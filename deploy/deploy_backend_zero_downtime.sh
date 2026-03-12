@@ -59,17 +59,17 @@ wait_for_backend_health() {
 echo "[deploy:backend-zd] building backend"
 npm --prefix "$BACKEND_DIR" run build
 
-mode="$(current_exec_mode || true)"
-exec_path="$(current_exec_path || true)"
 expected_exec_path="${BACKEND_DIR}/dist/index.js"
 
+echo "[deploy:backend-zd] applying aris-backend PM2 definition via startOrReload"
+pm2 startOrReload "$ECOSYSTEM_FILE" --only aris-backend --env production --update-env
+
+mode="$(current_exec_mode || true)"
+exec_path="$(current_exec_path || true)"
 if [[ "$mode" != "cluster_mode" || "$exec_path" != "$expected_exec_path" ]]; then
-  echo "[deploy:backend-zd] reconciling aris-backend PM2 app definition"
-  pm2 delete aris-backend >/dev/null 2>&1 || true
-  pm2 start "$ECOSYSTEM_FILE" --only aris-backend --env production --update-env
-else
-  echo "[deploy:backend-zd] reloading aris-backend in cluster mode"
-  pm2 reload "$ECOSYSTEM_FILE" --only aris-backend --env production --update-env
+  echo "[deploy:backend-zd] PM2 definition did not converge" >&2
+  echo "[deploy:backend-zd] mode=${mode:-<empty>} exec_path=${exec_path:-<empty>} expected_exec_path=${expected_exec_path}" >&2
+  exit 1
 fi
 
 if ! wait_for_backend_health "$HEALTH_TIMEOUT_SECONDS"; then
