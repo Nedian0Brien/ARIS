@@ -9,8 +9,8 @@ import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
 import { useSessionSyncLeader } from '@/lib/hooks/useSessionSyncLeader';
 import { readLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
 import {
+  getLatestAgentEventTimestampSince,
   hasAgentCompletionSignal,
-  hasFinalAgentReplySince,
   readUiEventStreamEvent,
   resolveChatRunPhase as resolveRunPhaseState,
   type ResolvedChatRunPhase,
@@ -73,6 +73,7 @@ const SyntaxHighlighter = dynamic(
 // --- 1. 기본 상수 및 설정 (TDZ 방지를 위해 최상단에 배치) ---
 
 const AGENT_REPLY_TIMEOUT_MS = 90000;
+const AGENT_ACTIVITY_SETTLE_MS = 6500;
 const RUNTIME_DISCONNECT_GRACE_MS = 4000;
 const AUTO_SCROLL_THRESHOLD_PX = 80;
 const MOBILE_LAYOUT_MAX_WIDTH_PX = 960;
@@ -3656,9 +3657,6 @@ export function ChatInterface({
       return eventEpoch >= sinceEpoch;
     });
   }, [events]);
-  const hasFinalAgentReplySinceAwaiting = useCallback((since: string | null): boolean => (
-    hasFinalAgentReplySince(events, since)
-  ), [events]);
 
   useEffect(() => {
     if (!isAwaitingReply) {
@@ -3689,31 +3687,54 @@ export function ChatInterface({
   }, [awaitingReplySince, hasAgentCompletionSignalSince, updateActiveChatRuntimeUi]);
 
   useEffect(() => {
-    if (!awaitingReplySince) {
+    if (!isAwaitingReply || !awaitingReplySince || isRunActive) {
       return;
     }
-    const hasAnyAgentEvent = hasAgentEventSince(awaitingReplySince);
-    const hasFinalAgentReply = hasFinalAgentReplySinceAwaiting(awaitingReplySince);
+    const latestAgentEventAt = getLatestAgentEventTimestampSince(events, awaitingReplySince);
+    if (!latestAgentEventAt) {
+      return;
+    }
 
-    if (
-      !isRunActive
-      && (
-        (hasAnyAgentEvent && runtimeStartedSinceAwaitingRef.current)
-        || hasFinalAgentReply
-      )
-    ) {
+    const latestAgentEventEpoch = Date.parse(latestAgentEventAt);
+    const settleDeadline = (Number.isFinite(latestAgentEventEpoch) ? latestAgentEventEpoch : Date.now())
+      + AGENT_ACTIVITY_SETTLE_MS;
+    const remaining = Math.max(0, settleDeadline - Date.now());
+
+    const finalizeAwaitingReply = () => {
+      if (runtimeRunning || hasAgentCompletionSignalSince(awaitingReplySince)) {
+        return;
+      }
+      const freshestAgentEventAt = getLatestAgentEventTimestampSince(events, awaitingReplySince);
+      if (freshestAgentEventAt && freshestAgentEventAt !== latestAgentEventAt) {
+        return;
+      }
       setIsAwaitingReply(false);
       setAwaitingReplySince(null);
       setSubmitError(null);
       setShowDisconnectRetry(false);
       disconnectNoticeAwaitingRef.current = null;
       runtimeStartedSinceAwaitingRef.current = false;
+    };
+
+    if (remaining <= 0) {
+      finalizeAwaitingReply();
+      return;
     }
+
+    const timer = window.setTimeout(() => {
+      finalizeAwaitingReply();
+    }, remaining);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [
     awaitingReplySince,
-    hasAgentEventSince,
-    hasFinalAgentReplySinceAwaiting,
+    events,
+    hasAgentCompletionSignalSince,
+    isAwaitingReply,
     isRunActive,
+    runtimeRunning,
     setAwaitingReplySince,
     setIsAwaitingReply,
     setShowDisconnectRetry,

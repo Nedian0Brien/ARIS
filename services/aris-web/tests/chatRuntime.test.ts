@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getLatestAgentEventTimestampSince,
   hasAgentCompletionSignal,
   hasFinalAgentReplySince,
   isFinalAgentReplyEvent,
@@ -89,6 +90,47 @@ describe('chatRuntime helpers', () => {
     ];
 
     expect(hasFinalAgentReplySince(events, '2026-03-10T02:00:00.000Z')).toBe(false);
+  });
+
+  it('tracks the latest agent activity after the await timestamp', () => {
+    const events = [
+      buildEvent({
+        id: 'user-1',
+        timestamp: '2026-03-10T01:59:59.000Z',
+        meta: { role: 'user' },
+      }),
+      buildEvent({
+        id: 'agent-1',
+        timestamp: '2026-03-10T02:00:01.000Z',
+        meta: {
+          streamEvent: 'agent_message',
+          role: 'agent',
+        },
+      }),
+      buildEvent({
+        id: 'tool-1',
+        timestamp: '2026-03-10T02:00:05.000Z',
+        kind: 'command_execution',
+        meta: {
+          streamEvent: 'command_execution',
+          role: 'agent',
+        },
+      }),
+    ];
+
+    expect(getLatestAgentEventTimestampSince(events, '2026-03-10T02:00:00.000Z')).toBe('2026-03-10T02:00:05.000Z');
+  });
+
+  it('returns null when there is no agent activity after the await timestamp', () => {
+    const events = [
+      buildEvent({
+        id: 'user-1',
+        timestamp: '2026-03-10T01:59:59.000Z',
+        meta: { role: 'user' },
+      }),
+    ];
+
+    expect(getLatestAgentEventTimestampSince(events, '2026-03-10T02:00:00.000Z')).toBeNull();
   });
 
   it('keeps the run phase active while runtime is still running after completion signal', () => {
