@@ -24,6 +24,17 @@ Claude alignment 이후의 `providerRuntime` 경계와 Happy의 검증된 sessio
 - Gemini 전용 session owner, protocol mapper, permission bridge, event bridge, message queue, conformance fixture가 없다.
 - 최근 Claude에서 겪은 `sessionid` key variation, synthetic identity leakage, absolute timeout 문제를 Gemini는 아직 구조적으로 방지하지 못한다.
 
+## Status Snapshot
+
+- 완료: Sprint 1의 identity boundary 문서화와 resume target 경계 테스트 고정
+- 다음 우선순위:
+  1. Sprint 2로 provider subtree skeleton과 `recoverSession()` 최소 계약 도입
+  2. Sprint 3으로 protocol normalization과 trace fixture 수집
+  3. Sprint 4로 runtime extraction과 timeout policy 분리
+- 보류 판단 필요:
+  - Gemini CLI가 permission or tool-confirmation 이벤트를 실제로 노출하는지
+  - Gemini observed identity가 stdout line 외 다른 경로로 나오는지
+
 ## Prerequisites
 
 - 기준 브랜치: `feat/gemini-backend-alignment`
@@ -267,3 +278,43 @@ Claude alignment 이후의 `providerRuntime` 경계와 Happy의 검증된 sessio
 - 성공, 실패, timeout, abort trace fixture가 존재한다.
 - `happyClient`는 Gemini provider subtree 호출 중심으로 축소된다.
 - 스프린트 완료 시마다 `#87`에 결과와 남은 리스크를 댓글로 남긴다.
+
+## Testing Strategy
+
+- Sprint 2:
+  - `npm run typecheck`
+  - `npm test -- runtimeContracts`
+- Sprint 3:
+  - fixture 기반 `geminiProtocolMapper` and `geminiProtocolConformance` 테스트
+  - 실제 Gemini trace sample을 fixture에 추가할 때 mapper 결과 비교
+- Sprint 4:
+  - runtime happy path, timeout, retry, failure normalization 테스트
+  - 긴 turn 시나리오에 대한 activity-driven timeout 검증
+- Sprint 5:
+  - event bridge, queue ordering, sanitizer, duplicate suppression 테스트
+- Sprint 6:
+  - permission capability가 있으면 bridge and lifecycle 테스트
+  - capability가 없으면 out-of-scope 문서화와 abort cleanup 테스트
+- Sprint 7:
+  - `geminiAlignment.e2e.test.ts`
+  - 수동 매트릭스로 resume continuity, long turn, failure recovery 확인
+
+## Potential Risks And Gotchas
+
+- Gemini CLI raw payload shape가 버전별로 다를 수 있다.
+  - 대응: trace fixture와 protocol fields helper로 변형을 adapter 내부에 가둔다.
+- Gemini가 Claude처럼 명확한 observed session id를 항상 주지 않을 수 있다.
+  - 대응: `recoverSession()`은 stored, observed, message-derived source를 구분해 메타로 남긴다.
+- timeout 정책을 generic path에서 바로 떼어내면 다른 agent와 책임이 섞일 수 있다.
+  - 대응: Sprint 4 전에는 Gemini-specific timeout 정책을 runtime facade 안에서만 추가한다.
+- permission capability가 없는데 Claude와 같은 구조를 억지로 맞추면 불필요한 추상화가 생긴다.
+  - 대응: Sprint 6에서 capability 조사 후 in-scope 여부를 결정한다.
+- `happyClient`에서 generic parser를 너무 빨리 걷어내면 Gemini baseline이 깨질 수 있다.
+  - 대응: Sprint 3 conformance fixture와 Sprint 5 queue 테스트가 생기기 전에는 parser 제거를 미룬다.
+
+## Rollback Plan
+
+- 각 sprint는 독립 커밋으로 유지한다.
+- Gemini provider subtree가 불안정하면 해당 스프린트 커밋만 되돌리고 기존 generic path를 유지한다.
+- runtime extraction 이후 regression이 크면 `happyClient`의 기존 generic path를 feature-flag 성격의 fallback으로 잠시 남긴다.
+- `main` 병합 전에는 최신 `origin/main` 기준으로 rebase or merge validation을 다시 수행한다.
