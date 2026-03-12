@@ -1,6 +1,15 @@
 import type { UiEvent } from '@/lib/happy/types';
 
-export type ResolvedChatRunPhase = 'idle' | 'submitting' | 'waiting' | 'running' | 'aborting';
+export type RunLifecycleStatus =
+  | 'run_started'
+  | 'waiting_for_approval'
+  | 'completed'
+  | 'failed'
+  | 'aborted'
+  | 'timed_out'
+  | 'turn_incomplete'
+  | 'run_stale_cleanup';
+export type ResolvedChatRunPhase = 'idle' | 'submitting' | 'waiting' | 'running' | 'approval' | 'aborting';
 
 type ResolveChatRunPhaseInput = {
   isSubmitting: boolean;
@@ -8,7 +17,18 @@ type ResolveChatRunPhaseInput = {
   isAborting: boolean;
   hasCompletionSignal: boolean;
   runtimeRunning: boolean;
+  runStatus?: string | null;
+  hasPendingPermission?: boolean;
 };
+
+const TERMINAL_RUN_STATUSES = new Set<RunLifecycleStatus>([
+  'completed',
+  'failed',
+  'aborted',
+  'timed_out',
+  'turn_incomplete',
+  'run_stale_cleanup',
+]);
 
 function isUserEvent(event: UiEvent): boolean {
   return event.meta?.role === 'user';
@@ -65,6 +85,24 @@ export function readUiEventTurnStatus(event: UiEvent): string {
     return '';
   }
   return typeof ev.status === 'string' ? ev.status.trim().toLowerCase() : '';
+}
+
+export function readUiEventRunStatus(event: UiEvent): string {
+  const direct = typeof event.meta?.runStatus === 'string'
+    ? event.meta.runStatus.trim().toLowerCase()
+    : '';
+  if (direct) {
+    return direct;
+  }
+  return readUiEventTurnStatus(event);
+}
+
+export function isRunLifecycleEvent(event: UiEvent): boolean {
+  return readUiEventStreamEvent(event) === 'run_status';
+}
+
+export function isTerminalRunStatus(status: string | null | undefined): boolean {
+  return TERMINAL_RUN_STATUSES.has((status ?? '').trim().toLowerCase() as RunLifecycleStatus);
 }
 
 export function hasAgentCompletionSignal(event: UiEvent): boolean {
@@ -130,17 +168,40 @@ export function getLatestAgentEventTimestampSince(events: UiEvent[], since: stri
   return latestTimestamp;
 }
 
+export function getLatestRunStatusSince(events: UiEvent[], since: string | null): string {
+  if (!since) {
+    return '';
+  }
+
+  let latestStatus = '';
+  for (const event of events) {
+    if (!isRunLifecycleEvent(event) || !isOnOrAfter(event.timestamp, since)) {
+      continue;
+    }
+    latestStatus = readUiEventRunStatus(event);
+  }
+
+  return latestStatus;
+}
+
 export function resolveChatRunPhase(input: ResolveChatRunPhaseInput): ResolvedChatRunPhase {
+  const runStatus = (input.runStatus ?? '').trim().toLowerCase();
   if (input.isAborting) {
     return 'aborting';
   }
   if (input.isSubmitting) {
     return 'submitting';
   }
+  if (runStatus === 'waiting_for_approval') {
+    return input.hasPendingPermission ? 'approval' : 'running';
+  }
+  if (runStatus === 'run_started') {
+    return 'running';
+  }
   if (input.runtimeRunning) {
     return 'running';
   }
-  if (input.hasCompletionSignal) {
+  if (input.hasCompletionSignal || isTerminalRunStatus(runStatus)) {
     return 'idle';
   }
   if (input.isAwaitingReply) {

@@ -213,9 +213,15 @@ describe('happy alignment E2E', () => {
 
     const persistedMessages = await waitFor(
       async () => store.listMessages(session.id),
-      (messages) => messages.filter((message) => message.meta?.source === 'cli-agent').length >= 2,
+      (messages) => messages.filter((message) => (
+        message.meta?.source === 'cli-agent'
+        && (message.meta?.streamEvent === 'agent_stream_action' || message.meta?.streamEvent === 'agent_message')
+      )).length >= 2,
     );
-    const agentMessages = persistedMessages.filter((message) => message.meta?.source === 'cli-agent');
+    const agentMessages = persistedMessages.filter((message) => (
+      message.meta?.source === 'cli-agent'
+      && (message.meta?.streamEvent === 'agent_stream_action' || message.meta?.streamEvent === 'agent_message')
+    ));
 
     expect(agentMessages).toHaveLength(2);
     expect(agentMessages[0]?.text).toContain('$ npm install sharp');

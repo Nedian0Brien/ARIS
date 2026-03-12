@@ -128,8 +128,8 @@ export function useSessionEvents(
     hasMoreBeforeRef.current = hasMoreBefore;
   }, [hasMoreBefore]);
 
-  const refreshEvents = useCallback(async () => {
-    if (!enabled) {
+  const refreshEvents = useCallback(async (force = false) => {
+    if (!enabled && !force) {
       return;
     }
     if (terminalStatusRef.current === 404 || !isDocumentVisible()) {
@@ -236,10 +236,6 @@ export function useSessionEvents(
   }, [sessionId, chatId, includeUnassigned]);
 
   useEffect(() => {
-    if (!enabled) {
-      return undefined;
-    }
-
     let disposed = false;
     let eventSource: EventSource | null = null;
     let pollTimer: number | null = null;
@@ -254,6 +250,9 @@ export function useSessionEvents(
     };
 
     const startPolling = () => {
+      if (!enabled) {
+        return;
+      }
       if (terminalStatusRef.current === 404) {
         return;
       }
@@ -297,6 +296,9 @@ export function useSessionEvents(
     };
 
     const startSafetyReconcile = () => {
+      if (!enabled) {
+        return;
+      }
       if (reconcileTimer !== null) {
         return;
       }
@@ -441,7 +443,7 @@ export function useSessionEvents(
       }
       startSafetyReconcile();
       connect();
-      void refreshEvents().catch((error) => {
+      void refreshEvents(!enabled).catch((error) => {
         if (!disposed && error instanceof SessionEventsHttpError && error.status === 404) {
           setSyncError(error.message);
           stopPolling();
@@ -463,7 +465,7 @@ export function useSessionEvents(
 
     // Fetch initial data immediately if there is no client-side baseline
     // (e.g. when changing chats dynamically before server components re-render)
-    void refreshEvents().catch((error) => {
+    void refreshEvents(!enabled && eventsRef.current.length === 0).catch((error) => {
       if (!disposed) {
         if (error instanceof SessionEventsHttpError && error.status === 404) {
           setSyncError(error.message);

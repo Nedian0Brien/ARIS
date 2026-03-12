@@ -10,8 +10,12 @@ import { useSessionSyncLeader } from '@/lib/hooks/useSessionSyncLeader';
 import { readLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
 import {
   getLatestAgentEventTimestampSince,
+  getLatestRunStatusSince,
   hasAgentCompletionSignal,
+  isTerminalRunStatus,
+  isRunLifecycleEvent,
   readUiEventStreamEvent,
+  readUiEventRunStatus,
   resolveChatRunPhase as resolveRunPhaseState,
   type ResolvedChatRunPhase,
 } from '@/lib/happy/chatRuntime';
@@ -124,6 +128,7 @@ const CHAT_RUN_PHASE_LABELS = {
   submitting: '전송 중',
   waiting: '작업 중',
   running: '응답 생성 중',
+  approval: '승인 대기 중',
   aborting: '중단 중',
 } as const;
 const CHAT_AGENT_CHOICES: AgentFlavor[] = ['codex', 'claude', 'gemini'];
@@ -765,6 +770,16 @@ function resolveRecentSummary(event: UiEvent): string {
   return truncateSingleLine(event.title || event.kind);
 }
 
+function getLatestVisibleEvent(events: UiEvent[]): UiEvent | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (!isRunLifecycleEvent(event)) {
+      return event;
+    }
+  }
+  return null;
+}
+
 function hasChatErrorSignal(event: UiEvent | null | undefined): boolean {
   if (!event) {
     return false;
@@ -777,6 +792,10 @@ function hasChatErrorSignal(event: UiEvent | null | undefined): boolean {
     || streamEvent === 'runtime_error'
   ) {
     return true;
+  }
+  if (streamEvent === 'run_status') {
+    const runStatus = readUiEventRunStatus(event);
+    return isTerminalRunStatus(runStatus) && runStatus !== 'completed';
   }
   return false;
 }
@@ -2090,7 +2109,7 @@ export function ChatInterface({
     if (!initialActiveChatId) {
       return seeded;
     }
-    const latestInitialEvent = initialEvents[initialEvents.length - 1];
+    const latestInitialEvent = getLatestVisibleEvent(initialEvents);
     if (!latestInitialEvent) {
       return seeded;
     }
@@ -2199,15 +2218,21 @@ export function ChatInterface({
     : undefined;
   const agentMeta = resolveAgentMeta(activeAgentFlavor);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? runtimeError ?? null;
+  const latestRunStatus = useMemo(
+    () => getLatestRunStatusSince(events, awaitingReplySince),
+    [awaitingReplySince, events],
+  );
   const runPhase: ChatRunPhase = resolveRunPhaseState({
     isAborting,
     isSubmitting,
     hasCompletionSignal,
     runtimeRunning,
     isAwaitingReply,
+    runStatus: latestRunStatus,
+    hasPendingPermission: pendingPermissions.length > 0,
   });
   const runPhaseLabel = runPhase === 'idle' ? null : CHAT_RUN_PHASE_LABELS[runPhase];
-  const isRunActive = runPhase === 'submitting' || runPhase === 'running' || runPhase === 'aborting';
+  const isRunActive = runPhase === 'submitting' || runPhase === 'running' || runPhase === 'approval' || runPhase === 'aborting';
   const isAgentRunning = runPhase !== 'idle';
   const connectionState: 'running' | 'connected' | 'degraded' = isAgentRunning
     ? 'running'
@@ -2220,7 +2245,14 @@ export function ChatInterface({
       ? '정상 연결'
       : '응답 지연 또는 연결 확인 필요';
 
-  const streamItems = useMemo(() => buildStreamRenderItems(events, expandedActionRunIds), [events, expandedActionRunIds]);
+  const visibleEvents = useMemo(
+    () => events.filter((event) => !isRunLifecycleEvent(event)),
+    [events],
+  );
+  const streamItems = useMemo(
+    () => buildStreamRenderItems(visibleEvents, expandedActionRunIds),
+    [expandedActionRunIds, visibleEvents],
+  );
   const timelineItems = useMemo<TimelineRenderItem[]>(() => {
     const merged: TimelineRenderItem[] = [];
     let order = 0;
@@ -2365,8 +2397,10 @@ export function ChatInterface({
       hasCompletionSignal: runtimeUi.hasCompletionSignal,
       runtimeRunning: (isActive && runtimeRunning) || Boolean(snapshot?.isRunning),
       isAwaitingReply: runtimeUi.isAwaitingReply,
+      runStatus: isActive ? latestRunStatus : null,
+      hasPendingPermission: isActive && pendingPermissions.length > 0,
     });
-  }, [activeChatIdResolved, chatRuntimeUiByChat, chatSidebarSnapshots, runtimeRunning]);
+  }, [activeChatIdResolved, chatRuntimeUiByChat, chatSidebarSnapshots, latestRunStatus, pendingPermissions.length, runtimeRunning]);
 
   const resolveChatSidebarState = useCallback((chat: SessionChat): ChatSidebarState => {
     const isActive = chat.id === activeChatIdResolved;
@@ -2754,14 +2788,15 @@ export function ChatInterface({
     if (eventsForChatId !== activeChatIdResolved) {
       return;
     }
+    const latestVisibleEvent = getLatestVisibleEvent(visibleEvents);
     const latestEvent = events[events.length - 1];
     upsertChatSidebarSnapshot(activeChatIdResolved, {
-      preview: latestEvent ? resolveRecentSummary(latestEvent) : '',
-      hasEvents: events.length > 0,
+      preview: latestVisibleEvent ? resolveRecentSummary(latestVisibleEvent) : '',
+      hasEvents: visibleEvents.length > 0,
       hasErrorSignal: hasChatErrorSignal(latestEvent),
-      latestEventId: latestEvent?.id ?? null,
-      latestEventAt: latestEvent?.timestamp ?? null,
-      latestEventIsUser: Boolean(latestEvent ? isUserEvent(latestEvent) : false),
+      latestEventId: latestVisibleEvent?.id ?? null,
+      latestEventAt: latestVisibleEvent?.timestamp ?? null,
+      latestEventIsUser: Boolean(latestVisibleEvent ? isUserEvent(latestVisibleEvent) : false),
       isRunning: isAgentRunning,
     });
   }, [
@@ -2770,6 +2805,7 @@ export function ChatInterface({
     events,
     isAgentRunning,
     upsertChatSidebarSnapshot,
+    visibleEvents,
   ]);
 
   useEffect(() => {
@@ -2779,7 +2815,7 @@ export function ChatInterface({
     if (eventsForChatId !== activeChatIdResolved) {
       return;
     }
-    const latestEvent = events[events.length - 1];
+    const latestEvent = getLatestVisibleEvent(visibleEvents);
     if (!latestEvent || showScrollToBottom) {
       return;
     }
@@ -2791,7 +2827,7 @@ export function ChatInterface({
           [activeChatIdResolved]: latestEvent.id,
         }
     ));
-  }, [activeChatIdResolved, eventsForChatId, events, showScrollToBottom]);
+  }, [activeChatIdResolved, eventsForChatId, showScrollToBottom, visibleEvents]);
 
   useEffect(() => {
     if (!activeChatIdResolved) {
@@ -4480,6 +4516,8 @@ export function ChatInterface({
                       const chatRunStartedAt = (chatRuntimeUiByChat[chat.id]?.awaitingReplySince ?? '').trim() || null;
                       const chatRunPhaseClass = chatRunPhase === 'aborting'
                         ? styles.chatListRunPhaseBadgeAborting
+                        : chatRunPhase === 'approval'
+                          ? styles.chatListRunPhaseBadgeApproval
                         : chatRunPhase === 'waiting'
                           ? styles.chatListRunPhaseBadgeWaiting
                           : chatRunPhase === 'running'
