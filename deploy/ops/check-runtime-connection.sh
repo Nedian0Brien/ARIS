@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 DEPLOY_ENV="${1:-${ROOT_DIR}/deploy/.env}"
 BACKEND_ENV="${2:-${ROOT_DIR}/services/aris-backend/.env}"
 WEB_ENV="${3:-${ROOT_DIR}/services/aris-web/.env}"
