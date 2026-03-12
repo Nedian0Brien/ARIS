@@ -26,11 +26,14 @@ Claude alignment 이후의 `providerRuntime` 경계와 Happy의 검증된 sessio
 
 ## Status Snapshot
 
-- 완료: Sprint 1의 identity boundary 문서화와 resume target 경계 테스트 고정
+- 완료:
+  - Sprint 1의 identity boundary 문서화와 resume target 경계 테스트 고정
+  - Sprint 2의 provider subtree skeleton, session source, registry, `recoverSession()` 최소 계약 추가
+  - Sprint 3의 protocol fields helper, mapper, conformance fixture 추가
 - 다음 우선순위:
-  1. Sprint 2로 provider subtree skeleton과 `recoverSession()` 최소 계약 도입
-  2. Sprint 3으로 protocol normalization과 trace fixture 수집
-  3. Sprint 4로 runtime extraction과 timeout policy 분리
+  1. Sprint 4로 runtime extraction과 timeout policy 분리
+  2. Sprint 5로 event bridge, queue, persistence alignment 진행
+  3. Sprint 6에서 permission capability 조사와 lifecycle 정리
 - 보류 판단 필요:
   - Gemini CLI가 permission or tool-confirmation 이벤트를 실제로 노출하는지
   - Gemini observed identity가 stdout line 외 다른 경로로 나오는지

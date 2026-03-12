@@ -1,0 +1,3 @@
+{"type":"system","subtype":"init","threadId":"gemini-thread-tool"}
+{"type":"tool","subtype":"command_execution","callId":"call-tool-1","command":"pwd","output":"/workspace","threadId":"gemini-thread-tool"}
+{"type":"result","subtype":"final","result":"완료","threadId":"gemini-thread-tool"}
