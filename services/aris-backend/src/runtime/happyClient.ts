@@ -23,7 +23,7 @@ import { buildProviderCommand, type ProviderCommand } from './providers/provider
 import type { SessionProtocolEnvelope } from './contracts/sessionProtocol.js';
 import type { ProviderPermissionRequest } from './contracts/providerRuntime.js';
 import type { ClaudeSessionLaunchMode } from './providers/claude/claudeSessionContract.js';
-import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeRuntimeSession } from './providers/claude/types.js';
+import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeRuntimeSession, ClaudeTextEvent } from './providers/claude/types.js';
 import type {
   ApprovalPolicy,
   PermissionDecision,
@@ -1650,6 +1650,7 @@ export class HappyRuntimeStore {
     handlers?: {
       onAction?: (action: ParsedAgentActionEvent) => Promise<void>;
       onPermission?: (request: ProviderPermissionRequest) => Promise<PermissionDecision>;
+      onText?: (event: ClaudeTextEvent) => Promise<void>;
     },
   ): Promise<{
     output: string;
@@ -1688,6 +1689,7 @@ export class HappyRuntimeStore {
       args: string[],
       onAction?: (action: ParsedAgentActionEvent) => Promise<void>,
       onPermission?: (request: ProviderPermissionRequest) => Promise<PermissionDecision>,
+      onText?: (event: ClaudeTextEvent) => Promise<void>,
     ): Promise<{
       stdout: string;
       stderr: string;
@@ -1720,6 +1722,7 @@ export class HappyRuntimeStore {
       }
 
       const actionByKey = new Map<string, ParsedAgentActionEvent>();
+      const streamedTextKeys = new Set<string>();
       const seenPermissionKeys = new Set<string>();
       let streamedActionsPersisted = false;
       let stdoutBuffer = '';
@@ -1796,9 +1799,46 @@ export class HappyRuntimeStore {
             }
           }
         }
-        const parsedLine = agent === 'claude'
-          ? parseClaudeStreamLine(normalized)
-          : parseAgentStreamLine(normalized);
+        if (agent === 'claude') {
+          const parsedLine = parseClaudeStreamLine(normalized);
+          if (parsedLine.sessionId) {
+            resolvedSessionId = parsedLine.sessionId;
+          }
+          if (parsedLine.action && parsedLine.actionKey && !actionByKey.has(parsedLine.actionKey)) {
+            actionByKey.set(parsedLine.actionKey, parsedLine.action);
+            if (onAction) {
+              emitChain = emitChain.then(async () => {
+                await onAction(parsedLine.action!);
+                streamedActionsPersisted = true;
+              });
+            }
+          }
+          if (onText && parsedLine.assistantText) {
+            const assistantText = sanitizeAgentMessageText(parsedLine.assistantText);
+            const textKey = [
+              parsedLine.assistantSource ?? 'assistant',
+              parsedLine.sessionId ?? '',
+              assistantText,
+            ].join('|');
+            if (assistantText && !streamedTextKeys.has(textKey)) {
+              streamedTextKeys.add(textKey);
+              const textEnvelopes = parsedLine.envelopes.filter((envelope) => (
+                envelope.kind === 'text' || envelope.kind === 'turn-end'
+              ));
+              emitChain = emitChain.then(async () => {
+                await onText({
+                  text: assistantText,
+                  source: parsedLine.assistantSource ?? 'assistant',
+                  ...(parsedLine.sessionId ? { threadId: parsedLine.sessionId } : {}),
+                  ...(textEnvelopes.length > 0 ? { envelopes: textEnvelopes } : {}),
+                });
+              });
+            }
+          }
+          return;
+        }
+
+        const parsedLine = parseAgentStreamLine(normalized);
         if (parsedLine.sessionId) {
           resolvedSessionId = parsedLine.sessionId;
         }
@@ -1893,9 +1933,9 @@ export class HappyRuntimeStore {
     let lastError: unknown = null;
     let inferredActions: ParsedAgentActionEvent[] = [];
     let streamedActionsPersisted = false;
-    if (command.streamJson && (handlers?.onAction || handlers?.onPermission)) {
+    if (command.streamJson && (handlers?.onAction || handlers?.onPermission || handlers?.onText)) {
       try {
-        const streamed = await runCommandStreaming(command.args, handlers.onAction, handlers.onPermission);
+        const streamed = await runCommandStreaming(command.args, handlers.onAction, handlers.onPermission, handlers.onText);
         result = {
           stdout: streamed.stdout,
           stderr: streamed.stderr,
@@ -2036,6 +2076,7 @@ export class HappyRuntimeStore {
     handlers?: {
       onAction?: (action: ParsedAgentActionEvent) => Promise<void>;
       onPermission?: (request: ProviderPermissionRequest) => Promise<PermissionDecision>;
+      onText?: (event: ClaudeTextEvent) => Promise<void>;
     },
   ): Promise<{
     output: string;
@@ -3539,6 +3580,7 @@ export class HappyRuntimeStore {
         protocolEnvelopes?: SessionProtocolEnvelope[];
         inferredActions?: ParsedAgentActionEvent[];
       };
+      const streamedClaudeTextReplies = new Set<string>();
       let claudeMessageQueue: ClaudeMessageQueue | null = null;
       const persistClaudeProjection = async (projection: {
         body: string;
@@ -3652,6 +3694,30 @@ export class HappyRuntimeStore {
               });
               streamedActionIndex += 1;
             },
+            onText: async (event, meta) => {
+              const normalizedText = sanitizeAgentMessageText(event.text);
+              if (!normalizedText) {
+                return;
+              }
+              const textKey = [
+                event.source,
+                meta.threadId,
+                normalizedText,
+              ].join('|');
+              if (streamedClaudeTextReplies.has(textKey)) {
+                return;
+              }
+              streamedClaudeTextReplies.add(textKey);
+              await claudeMessageQueue?.enqueueText({
+                output: normalizedText,
+                execCwd: nonCodexCwd,
+                threadId: meta.threadId,
+                messageMeta: {
+                  streamEvent: 'agent_message',
+                },
+                envelopes: event.envelopes,
+              });
+            },
             onPermission: async (request) => this.handleProviderPermissionRequest({
               session,
               chatId: scopedChatId,
@@ -3659,7 +3725,7 @@ export class HappyRuntimeStore {
               request,
               signal: controller.signal,
             }),
-            executeCommand: async ({ command, cwdHint, signal, onAction, onPermission }) => this.runAgentCommand(
+            executeCommand: async ({ command, cwdHint, signal, onAction, onPermission, onText }) => this.runAgentCommand(
               'claude',
               command,
               cwdHint,
@@ -3667,6 +3733,7 @@ export class HappyRuntimeStore {
               {
                 onAction,
                 onPermission,
+                onText,
               },
             ),
           });
@@ -3743,10 +3810,23 @@ export class HappyRuntimeStore {
         }
       }
 
-      const streamedPersisted = Boolean(response.streamedPersisted);
-      const agentMessagePersisted = Boolean(response.agentMessagePersisted);
       const finalAgentOutput = sanitizeAgentMessageText(response.output);
-      if (!isCodex || !streamedPersisted || (!agentMessagePersisted && finalAgentOutput.length > 0)) {
+      const streamedPersisted = Boolean(response.streamedPersisted);
+      const agentMessagePersisted = Boolean(response.agentMessagePersisted)
+        || (
+          flavor === 'claude'
+          && finalAgentOutput.length > 0
+          && (
+            streamedClaudeTextReplies.has(['assistant', response.threadId ?? '', finalAgentOutput].join('|'))
+            || streamedClaudeTextReplies.has(['result', response.threadId ?? '', finalAgentOutput].join('|'))
+          )
+        );
+      const shouldPersistFinalAgentOutput = isCodex
+        ? (!streamedPersisted || (!agentMessagePersisted && finalAgentOutput.length > 0))
+        : flavor === 'claude'
+          ? (!agentMessagePersisted && finalAgentOutput.length > 0)
+          : true;
+      if (shouldPersistFinalAgentOutput) {
         if (flavor === 'claude') {
           claudeMessageQueue ??= new ClaudeMessageQueue(
             {

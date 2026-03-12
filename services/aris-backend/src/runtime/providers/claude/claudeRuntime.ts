@@ -24,6 +24,7 @@ export async function runClaudeTurn(input: {
   signal?: AbortSignal;
   onAction?: Parameters<ClaudeCommandExecutor>[0]['onAction'];
   onPermission?: Parameters<ClaudeCommandExecutor>[0]['onPermission'];
+  onText?: Parameters<ClaudeCommandExecutor>[0]['onText'];
   executeCommand: ClaudeCommandExecutor;
 }): Promise<ClaudeTurnResult> {
   input.sessionOwner?.beginTurn();
@@ -56,6 +57,12 @@ export async function runClaudeTurn(input: {
           input.sessionOwner?.markTurnState('streaming');
         }
         return decision;
+      }
+      : undefined,
+    onText: input.onText
+      ? async (event) => {
+        input.sessionOwner?.markTurnState('streaming');
+        await input.onText?.(event);
       }
       : undefined,
     executeCommand: input.executeCommand,

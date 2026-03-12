@@ -7,6 +7,7 @@ import type {
   ClaudeCommandExecutor,
   ClaudePermissionRequest,
   ClaudeRuntimeSession,
+  ClaudeTextEvent,
   ClaudeTurnResult,
 } from './types.js';
 import type { PermissionDecision } from '../../../types.js';
@@ -73,6 +74,7 @@ export async function runClaudeProviderTurn(input: {
   signal?: AbortSignal;
   onAction?: (action: ClaudeActionEvent, meta: { threadId: string }) => Promise<void>;
   onPermission?: (request: ClaudePermissionRequest, meta: { threadId: string }) => Promise<PermissionDecision>;
+  onText?: (event: ClaudeTextEvent, meta: { threadId: string }) => Promise<void>;
   executeCommand: ClaudeCommandExecutor;
 }): Promise<ClaudeTurnResult & { actionThreadId?: string; messageMeta: Record<string, unknown> }> {
   const preferredThreadId = input.sessionOwner?.resolvePreferredThreadId(
@@ -100,6 +102,9 @@ export async function runClaudeProviderTurn(input: {
         : undefined,
       onPermission: handlePermission
         ? async (request) => handlePermission(request, { threadId: actionThreadId })
+        : undefined,
+      onText: input.onText
+        ? async (event) => input.onText?.(event, { threadId: event.threadId ?? actionThreadId })
         : undefined,
       executeCommand: input.executeCommand,
     });

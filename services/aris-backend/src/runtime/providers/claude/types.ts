@@ -8,6 +8,7 @@ import type {
   ProviderResumeTarget,
   ProviderThreadIdSource,
 } from '../../contracts/providerRuntime.js';
+import type { PermissionDecision } from '../../../types.js';
 import type { ClaudeSessionLaunchMode } from './claudeSessionContract.js';
 
 export type { ClaudeRuntimeSession } from './claudeSessionContract.js';
@@ -20,12 +21,26 @@ export type ClaudeCliResult = ProviderCliResult & {
   protocolEnvelopes?: SessionProtocolEnvelope[];
 };
 
+export type ClaudeTextEvent = {
+  text: string;
+  source: 'assistant' | 'result';
+  threadId?: string;
+  envelopes?: SessionProtocolEnvelope[];
+};
+
 export type ClaudeLaunchCommand = ProviderLaunchCommand<'claude'> & {
   requiresPty: boolean;
   streamJson: true;
 };
 
-export type ClaudeCommandExecutor = ProviderCommandExecutor<ClaudeLaunchCommand>;
+export type ClaudeCommandExecutor = (input: {
+  command: ClaudeLaunchCommand;
+  cwdHint?: string;
+  signal?: AbortSignal;
+  onAction?: (action: ClaudeActionEvent) => Promise<void>;
+  onPermission?: (request: ClaudePermissionRequest) => Promise<PermissionDecision>;
+  onText?: (event: ClaudeTextEvent) => Promise<void>;
+}) => Promise<ClaudeCliResult>;
 
 export type ClaudeTurnResult = {
   output: string;
