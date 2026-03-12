@@ -3,6 +3,16 @@ import { GeminiSessionRegistry, buildGeminiScopeKey } from './geminiSessionRegis
 import { recoverGeminiThreadIdFromMessages } from './geminiSessionSource.js';
 import type { GeminiMessageHistoryLoader, GeminiRuntimeSession, GeminiTurnExecutor, GeminiTurnResult } from './types.js';
 
+function extractObservedThreadIdFromError(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') {
+    return undefined;
+  }
+  const candidate = (error as { threadId?: unknown }).threadId;
+  return typeof candidate === 'string' && candidate.trim().length > 0
+    ? candidate.trim()
+    : undefined;
+}
+
 export function createGeminiRuntime(input: {
   registry?: GeminiSessionRegistry;
   listMessages?: GeminiMessageHistoryLoader;
@@ -31,6 +41,12 @@ export function createGeminiRuntime(input: {
         const result = await input.executeTurn({
           ...request,
           preferredThreadId,
+        }).catch((error) => {
+          const observedThreadId = extractObservedThreadIdFromError(error);
+          if (observedThreadId) {
+            sessionOwner.observeThreadId(observedThreadId);
+          }
+          throw error;
         });
 
         if (result.threadId && result.threadIdSource === 'observed') {
@@ -46,7 +62,6 @@ export function createGeminiRuntime(input: {
     },
     abortTurn(scope) {
       runningScopes.delete(buildGeminiScopeKey(scope.sessionId, scope.chatId));
-      registry.clear(scope);
     },
     async recoverSession(request) {
       const storedThreadId = typeof request.storedThreadId === 'string' && request.storedThreadId.trim().length > 0

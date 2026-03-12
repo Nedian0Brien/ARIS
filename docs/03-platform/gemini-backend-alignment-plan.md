@@ -32,10 +32,12 @@ Claude alignment 이후의 `providerRuntime` 경계와 Happy의 검증된 sessio
   - Sprint 3의 protocol fields helper, mapper, conformance fixture 추가
   - Sprint 4의 Gemini runtime extraction과 timeout budget 분리
   - Sprint 5의 Gemini event bridge, message queue, persistence alignment 추가
+  - Sprint 6의 Gemini permission capability 조사와 no-op bridge 문서화
+  - Sprint 7의 Gemini E2E와 운영 검증 매트릭스 추가
 - 다음 우선순위:
-  1. Sprint 6에서 permission capability 조사와 lifecycle 정리
-  2. Sprint 7로 `happyClient` 축소와 Gemini E2E 정리
-  3. main 병합 전 실제 Gemini trace를 추가 수집해 fixture를 보강
+  1. main 병합 전 실제 Gemini trace를 추가 수집해 fixture를 보강
+  2. permission capability가 실제 trace에서 발견되면 bridge를 활성화
+  3. merge 직전 `main`과 충돌 가능 구간을 다시 점검
 - 보류 판단 필요:
   - Gemini CLI가 permission or tool-confirmation 이벤트를 실제로 노출하는지
   - Gemini observed identity가 stdout line 외 다른 경로로 나오는지

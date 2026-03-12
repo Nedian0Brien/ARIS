@@ -114,4 +114,103 @@ describe('geminiRuntime', () => {
     expect(result.threadId).toBe('gemini-observed-1');
     expect(runtime.isRunning({ sessionId: 'session-1', chatId: 'chat-1' })).toBe(false);
   });
+
+  it('preserves observed Gemini thread ids after abortTurn for the next turn', async () => {
+    const preferredThreadIds: Array<string | undefined> = [];
+    const runtime = createGeminiRuntime({
+      executeTurn: vi.fn().mockImplementation(async (input) => {
+        preferredThreadIds.push(input.preferredThreadId);
+        return {
+          output: 'OK',
+          cwd: '/workspace/project',
+          streamedActionsPersisted: false,
+          inferredActions: [],
+          threadId: 'gemini-observed-2',
+          threadIdSource: 'observed',
+        };
+      }),
+    });
+
+    await runtime.sendTurn({
+      session: {
+        id: 'session-1',
+        metadata: {
+          flavor: 'gemini',
+          path: '/workspace/project',
+          approvalPolicy: 'on-request',
+        },
+      },
+      chatId: 'chat-1',
+      prompt: 'First turn',
+    });
+
+    runtime.abortTurn({ sessionId: 'session-1', chatId: 'chat-1' });
+
+    await runtime.sendTurn({
+      session: {
+        id: 'session-1',
+        metadata: {
+          flavor: 'gemini',
+          path: '/workspace/project',
+          approvalPolicy: 'on-request',
+        },
+      },
+      chatId: 'chat-1',
+      prompt: 'Second turn',
+    });
+
+    expect(preferredThreadIds).toEqual([undefined, 'gemini-observed-2']);
+  });
+
+  it('keeps observed Gemini thread ids when a turn fails after the thread was discovered', async () => {
+    const preferredThreadIds: Array<string | undefined> = [];
+    let attempt = 0;
+    const runtime = createGeminiRuntime({
+      executeTurn: vi.fn().mockImplementation(async (input) => {
+        preferredThreadIds.push(input.preferredThreadId);
+        attempt += 1;
+        if (attempt === 1) {
+          const error = new Error('gemini CLI failed');
+          Object.assign(error, { threadId: 'gemini-observed-error-1' });
+          throw error;
+        }
+        return {
+          output: 'Recovered',
+          cwd: '/workspace/project',
+          streamedActionsPersisted: false,
+          inferredActions: [],
+          threadId: 'gemini-observed-error-1',
+          threadIdSource: 'observed',
+        };
+      }),
+    });
+
+    await expect(runtime.sendTurn({
+      session: {
+        id: 'session-1',
+        metadata: {
+          flavor: 'gemini',
+          path: '/workspace/project',
+          approvalPolicy: 'on-request',
+        },
+      },
+      chatId: 'chat-1',
+      prompt: 'First turn',
+    })).rejects.toThrow('gemini CLI failed');
+
+    await runtime.sendTurn({
+      session: {
+        id: 'session-1',
+        metadata: {
+          flavor: 'gemini',
+          path: '/workspace/project',
+          approvalPolicy: 'on-request',
+        },
+      },
+      chatId: 'chat-1',
+      prompt: 'Retry turn',
+    });
+
+    expect(preferredThreadIds).toEqual([undefined, 'gemini-observed-error-1']);
+  });
 });
