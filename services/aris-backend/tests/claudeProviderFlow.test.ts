@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runClaudeProviderTurn } from '../src/runtime/providers/claude/claudeOrchestrator.js';
+import { ClaudeSession } from '../src/runtime/providers/claude/claudeSession.js';
 import { buildClaudeSessionId } from '../src/runtime/providers/claude/claudeSessionSource.js';
 
 describe('Claude provider flow', () => {
@@ -12,9 +13,14 @@ describe('Claude provider flow', () => {
         path: '/tmp/claude-provider-flow',
       },
     };
+    const sessionOwner = new ClaudeSession({
+      sessionId: 'runtime-session-1',
+      chatId: 'chat-1',
+    });
 
     const result = await runClaudeProviderTurn({
       session,
+      sessionOwner,
       prompt: 'hello',
       chatId: 'chat-1',
       executeCommand: async ({ command }) => {
@@ -39,6 +45,7 @@ describe('Claude provider flow', () => {
       claudeSessionId: 'observed-session-1',
       threadIdSource: 'observed',
     });
+    expect(sessionOwner.getActiveThreadId()).toBe('observed-session-1');
   });
 
   it('resumes the next Claude turn with the stored Claude session id', async () => {
@@ -50,9 +57,15 @@ describe('Claude provider flow', () => {
         path: '/tmp/claude-provider-flow',
       },
     };
+    const sessionOwner = new ClaudeSession({
+      sessionId: 'runtime-session-1',
+      chatId: 'chat-1',
+    });
+    sessionOwner.observeThreadId('observed-session-1');
 
     const result = await runClaudeProviderTurn({
       session,
+      sessionOwner,
       prompt: 'follow up',
       chatId: 'chat-1',
       storedThreadId: 'observed-session-1',
@@ -77,6 +90,7 @@ describe('Claude provider flow', () => {
       claudeSessionId: 'observed-session-1',
       threadIdSource: 'resume',
     });
+    expect(sessionOwner.getActiveThreadId()).toBe('observed-session-1');
   });
 
   it('falls back to a fresh synthetic Claude session when a stored resume id is missing', async () => {
@@ -89,9 +103,15 @@ describe('Claude provider flow', () => {
         path: '/tmp/claude-provider-flow',
       },
     };
+    const sessionOwner = new ClaudeSession({
+      sessionId: 'runtime-session-2',
+      chatId: 'chat-2',
+    });
+    sessionOwner.restoreThreadId('bedc95ab-adf7-5709-938a-ad61199566f8');
 
     const result = await runClaudeProviderTurn({
       session,
+      sessionOwner,
       prompt: 'follow up',
       chatId: 'chat-2',
       storedThreadId: 'bedc95ab-adf7-5709-938a-ad61199566f8',
@@ -134,5 +154,6 @@ describe('Claude provider flow', () => {
       actionType: 'command_execution',
       command: 'pwd',
     }), { threadId: buildClaudeSessionId('runtime-session-2', 'chat-2') });
+    expect(sessionOwner.snapshot().sessionSource).toBe('synthetic');
   });
 });

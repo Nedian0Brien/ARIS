@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PROVIDER_RUNTIME_METHODS, type ProviderRuntime } from '../src/runtime/contracts/providerRuntime.js';
 import { isSessionProtocolEnvelopeKind, SESSION_PROTOCOL_ENVELOPE_KINDS } from '../src/runtime/contracts/sessionProtocol.js';
+import { ClaudeSession } from '../src/runtime/providers/claude/claudeSession.js';
 import { ClaudeSessionController } from '../src/runtime/providers/claude/claudeSessionController.js';
 import type { ClaudeRuntimeSession } from '../src/runtime/providers/claude/claudeSessionContract.js';
 import {
@@ -124,7 +125,12 @@ describe('runtime contracts', () => {
   });
 
   it('tracks Claude session controller snapshots through the session lifecycle', async () => {
-    const controller = new ClaudeSessionController({
+    const session = new ClaudeSession({
+      sessionId: 'session-1',
+      chatId: 'chat-1',
+      launchMode: 'remote',
+    });
+    const controller = new ClaudeSessionController(session, {
       sessionId: 'session-1',
       chatId: 'chat-1',
       startedAt: 100,

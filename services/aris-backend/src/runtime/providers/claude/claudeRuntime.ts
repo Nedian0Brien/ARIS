@@ -1,9 +1,11 @@
 import { runClaudeCommand } from './claudeLauncher.js';
 import { buildClaudeResumeTarget, resolveClaudeThreadId } from './claudeSessionSource.js';
+import type { ClaudeSessionStateOwner } from './claudeSessionContract.js';
 import type { ClaudeCommandExecutor, ClaudeRuntimeSession, ClaudeTurnResult } from './types.js';
 
 export async function runClaudeTurn(input: {
   session: ClaudeRuntimeSession;
+  sessionOwner?: ClaudeSessionStateOwner;
   prompt: string;
   chatId?: string;
   preferredThreadId?: string;
@@ -12,6 +14,7 @@ export async function runClaudeTurn(input: {
   onAction?: Parameters<ClaudeCommandExecutor>[0]['onAction'];
   executeCommand: ClaudeCommandExecutor;
 }): Promise<ClaudeTurnResult> {
+  input.sessionOwner?.beginTurn();
   const { resumeTarget, actionThreadId, threadIdSource: initialThreadIdSource } = buildClaudeResumeTarget(
     input.preferredThreadId,
     input.session.id,
@@ -25,7 +28,12 @@ export async function runClaudeTurn(input: {
     cwdHint: input.session.metadata.path,
     signal: input.signal,
     resumeTarget,
-    onAction: input.onAction,
+    onAction: input.onAction
+      ? async (action) => {
+        input.sessionOwner?.markTurnState('streaming');
+        await input.onAction?.(action);
+      }
+      : undefined,
     executeCommand: input.executeCommand,
   });
 
@@ -34,6 +42,12 @@ export async function runClaudeTurn(input: {
     actionThreadId,
     initialSource: initialThreadIdSource,
   });
+  if (resolvedThread.threadId && resolvedThread.threadIdSource === 'observed') {
+    input.sessionOwner?.observeThreadId(resolvedThread.threadId, 'observed');
+  } else if (resolvedThread.threadId && resolvedThread.threadIdSource === 'resume') {
+    input.sessionOwner?.restoreThreadId(resolvedThread.threadId, initialThreadIdSource === 'resume' ? 'resume' : 'observed');
+  }
+  input.sessionOwner?.completeTurn();
 
   return {
     output: result.output,

@@ -3164,16 +3164,20 @@ export class HappyRuntimeStore {
     }
     const isClaudeRun = flavor === 'claude';
     let controller: AbortController;
+    let claudeController:
+      | Awaited<ReturnType<ClaudeSessionRegistry['start']>>
+      | undefined;
     let finalizeRun = () => {};
     if (isClaudeRun) {
-      const claudeController = await this.claudeSessionRegistry.start({
+      claudeController = await this.claudeSessionRegistry.start({
         sessionId: session.id,
         ...(scopedChatId ? { chatId: scopedChatId } : {}),
         ...(selectedModel ? { model: selectedModel } : {}),
       }, 5000);
-      controller = claudeController.abortController;
+      const activeClaudeController = claudeController;
+      controller = activeClaudeController.abortController;
       finalizeRun = () => {
-        this.claudeSessionRegistry.finish(claudeController);
+        this.claudeSessionRegistry.finish(activeClaudeController);
       };
     } else {
       const runKey = this.buildRunKey(session.id, scopedChatId);
@@ -3221,7 +3225,12 @@ export class HappyRuntimeStore {
         ? context.threadId.trim()
         : undefined;
       const storedClaudeThreadId = isClaude
-        ? await this.resolveClaudeThreadId(session.id, scopedChatId)
+        ? (
+          claudeController?.session.resolvePreferredThreadId(
+            undefined,
+            await this.resolveClaudeThreadId(session.id, scopedChatId),
+          )
+        )
         : undefined;
       const preferredThreadId = isClaude
         ? requestedThreadId ?? storedClaudeThreadId
@@ -3319,6 +3328,7 @@ export class HappyRuntimeStore {
           }
           const claudeResponse = await runClaudeProviderTurn({
             session,
+            sessionOwner: claudeController?.session,
             prompt,
             chatId: scopedChatId,
             requestedThreadId,

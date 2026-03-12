@@ -58,4 +58,15 @@ describe('ClaudeSessionRegistry', () => {
     expect(registry.isRunning({ sessionId: 'session-3', chatId: 'chat-old' })).toBe(false);
     expect(registry.isRunning({ sessionId: 'session-3', chatId: 'chat-new' })).toBe(true);
   });
+
+  it('reuses the same session owner across turns for the same scope', async () => {
+    const registry = new ClaudeSessionRegistry();
+    const first = await registry.start({ sessionId: 'session-4', chatId: 'chat-1' }, 50);
+    first.session.observeThreadId('observed-thread-1');
+    registry.finish(first);
+
+    const second = await registry.start({ sessionId: 'session-4', chatId: 'chat-1' }, 50);
+    expect(second.session).toBe(first.session);
+    expect(second.session.getActiveThreadId()).toBe('observed-thread-1');
+  });
 });

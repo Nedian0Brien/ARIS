@@ -48,6 +48,31 @@ export function buildClaudeResumeTarget(
   };
 }
 
+export function chooseClaudePreferredThreadId(input: {
+  requestedThreadId?: string;
+  activeThreadId?: string;
+  storedThreadId?: string;
+}): string | undefined {
+  const requested = typeof input.requestedThreadId === 'string' && input.requestedThreadId.trim().length > 0
+    ? input.requestedThreadId.trim()
+    : undefined;
+  if (requested) {
+    return requested;
+  }
+
+  const active = typeof input.activeThreadId === 'string' && input.activeThreadId.trim().length > 0
+    ? input.activeThreadId.trim()
+    : undefined;
+  if (active) {
+    return active;
+  }
+
+  const stored = typeof input.storedThreadId === 'string' && input.storedThreadId.trim().length > 0
+    ? input.storedThreadId.trim()
+    : undefined;
+  return stored;
+}
+
 export function resolveClaudeThreadId(input: {
   observedThreadId?: string;
   actionThreadId?: string;

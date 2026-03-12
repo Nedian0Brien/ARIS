@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildClaudeResumeTarget,
   buildClaudeSessionId,
+  chooseClaudePreferredThreadId,
   resolveClaudeThreadId,
 } from '../src/runtime/providers/claude/claudeSessionSource.js';
 
@@ -31,5 +32,20 @@ describe('claudeSessionSource', () => {
 
     expect(resolved.threadId).toBe('session-observed-999');
     expect(resolved.threadIdSource).toBe('observed');
+  });
+
+  it('prefers requested, then active, then stored Claude thread ids', () => {
+    expect(chooseClaudePreferredThreadId({
+      requestedThreadId: 'requested-1',
+      activeThreadId: 'active-1',
+      storedThreadId: 'stored-1',
+    })).toBe('requested-1');
+    expect(chooseClaudePreferredThreadId({
+      activeThreadId: 'active-1',
+      storedThreadId: 'stored-1',
+    })).toBe('active-1');
+    expect(chooseClaudePreferredThreadId({
+      storedThreadId: 'stored-1',
+    })).toBe('stored-1');
   });
 });

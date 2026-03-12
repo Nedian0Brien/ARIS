@@ -1,3 +1,4 @@
+import { ClaudeSession } from './claudeSession.js';
 import { ClaudeSessionController } from './claudeSessionController.js';
 import type { ClaudeRunLifecycleMeta, ClaudeRunScope } from './types.js';
 import type { ClaudeSessionHandle, ClaudeSessionOwner, ClaudeSessionOwnerMeta } from './claudeSessionContract.js';
@@ -14,7 +15,12 @@ function isSessionRunKey(runKey: string, sessionId: string): boolean {
 }
 
 export class ClaudeSessionRegistry implements ClaudeSessionOwner {
+  private readonly sessions = new Map<string, ClaudeSession>();
   private readonly runs = new Map<string, ClaudeSessionController>();
+
+  get(scope: ClaudeRunScope): ClaudeSession | undefined {
+    return this.sessions.get(buildRunKey(scope.sessionId, scope.chatId));
+  }
 
   async start(meta: ClaudeSessionOwnerMeta, waitTimeoutMs: number): Promise<ClaudeSessionController> {
     const runKey = buildRunKey(meta.sessionId, meta.chatId);
@@ -24,7 +30,11 @@ export class ClaudeSessionRegistry implements ClaudeSessionOwner {
       await existing.waitForCompletion(waitTimeoutMs);
     }
 
-    const controller = new ClaudeSessionController({
+    const session = this.get(meta) ?? new ClaudeSession(meta);
+    session.updateLaunchMode(meta.launchMode ?? 'local');
+    session.beginTurn();
+    this.sessions.set(runKey, session);
+    const controller = new ClaudeSessionController(session, {
       ...meta,
       startedAt: meta.startedAt ?? Date.now(),
     });
@@ -54,6 +64,7 @@ export class ClaudeSessionRegistry implements ClaudeSessionOwner {
         continue;
       }
       run.abort();
+      run.finish();
       this.runs.delete(runKey);
     }
   }
@@ -74,6 +85,7 @@ export class ClaudeSessionRegistry implements ClaudeSessionOwner {
 
     for (const stale of staleRuns) {
       stale.run.abort();
+      stale.run.finish();
       this.runs.delete(stale.runKey);
       await onStale(stale);
     }

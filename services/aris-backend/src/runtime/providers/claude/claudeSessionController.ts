@@ -1,5 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import type { ClaudeRunLifecycleMeta } from './types.js';
+import { ClaudeSession } from './claudeSession.js';
 import type { ClaudeSessionHandle, ClaudeSessionLaunchMode, ClaudeSessionSnapshot, ClaudeSessionStatus } from './claudeSessionContract.js';
 
 export class ClaudeSessionController implements ClaudeSessionHandle {
@@ -10,11 +11,13 @@ export class ClaudeSessionController implements ClaudeSessionHandle {
   readonly model?: string;
   readonly launchMode: ClaudeSessionLaunchMode;
   readonly completed: Promise<void>;
+  readonly session: ClaudeSession;
 
   private finished = false;
   private resolveCompleted!: () => void;
 
-  constructor(meta: ClaudeRunLifecycleMeta) {
+  constructor(session: ClaudeSession, meta: ClaudeRunLifecycleMeta) {
+    this.session = session;
     this.sessionId = meta.sessionId;
     this.chatId = meta.chatId;
     this.startedAt = meta.startedAt;
@@ -44,6 +47,7 @@ export class ClaudeSessionController implements ClaudeSessionHandle {
   }
 
   abort(): void {
+    this.session.abortTurn();
     if (!this.abortController.signal.aborted) {
       this.abortController.abort();
     }
@@ -54,6 +58,11 @@ export class ClaudeSessionController implements ClaudeSessionHandle {
       return;
     }
     this.finished = true;
+    if (this.session.snapshot().turnState === 'launching' || this.session.snapshot().turnState === 'streaming') {
+      this.session.completeTurn();
+    } else if (this.session.snapshot().keepAliveState === 'draining') {
+      this.session.markTurnState('aborted');
+    }
     this.resolveCompleted();
   }
 

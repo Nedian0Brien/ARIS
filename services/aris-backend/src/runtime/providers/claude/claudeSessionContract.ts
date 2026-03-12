@@ -76,10 +76,29 @@ export interface ClaudeSessionContract {
   callbacks: ClaudeSessionCallbacks;
 }
 
+export interface ClaudeSessionStateOwner {
+  readonly sessionId: string;
+  readonly chatId?: string;
+  readonly launchMode: ClaudeSessionLaunchMode;
+  snapshot(): ClaudeSessionContract;
+  getActiveThreadId(): string | undefined;
+  resolvePreferredThreadId(requestedThreadId?: string, storedThreadId?: string): string | undefined;
+  observeThreadId(threadId: string, source?: Extract<ClaudeSessionSource, 'observed' | 'scanner' | 'hook'>): void;
+  restoreThreadId(threadId: string, source?: Extract<ClaudeSessionSource, 'resume' | 'observed' | 'scanner'>): void;
+  clearActiveThread(): void;
+  consumeOneTimeFlag(flag: ClaudeSessionOneTimeFlag): boolean;
+  beginTurn(): void;
+  markTurnState(state: ClaudeSessionTurnState): void;
+  completeTurn(): void;
+  abortTurn(): void;
+  failTurn(): void;
+}
+
 export type ClaudeSessionOwnerMeta = ClaudeSessionScope & {
   startedAt?: number;
   model?: string;
   launchMode?: ClaudeSessionLaunchMode;
+  callbacks?: ClaudeSessionCallbacks;
 };
 
 export interface ClaudeSessionHandle {
@@ -89,6 +108,7 @@ export interface ClaudeSessionHandle {
   readonly model?: string;
   readonly launchMode: ClaudeSessionLaunchMode;
   readonly signal: AbortSignal;
+  readonly session: ClaudeSessionStateOwner;
   abort(): void;
   finish(): void;
   waitForCompletion(timeoutMs: number): Promise<void>;
@@ -97,6 +117,7 @@ export interface ClaudeSessionHandle {
 
 export interface ClaudeSessionOwner {
   start(meta: ClaudeSessionOwnerMeta, waitTimeoutMs: number): Promise<ClaudeSessionHandle>;
+  get(scope: ClaudeSessionScope): ClaudeSessionStateOwner | undefined;
   finish(handle: ClaudeSessionHandle): void;
   abortSessionRuns(scope: ClaudeSessionScope): void;
   cleanupStaleRuns(
