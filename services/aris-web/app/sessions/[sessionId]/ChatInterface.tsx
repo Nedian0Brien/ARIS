@@ -292,20 +292,18 @@ function RelativeTime({ timestamp, className }: { timestamp: string; className?:
     setMounted(true);
   }, []);
 
-  return (
-    <span className={className} suppressHydrationWarning>
-      {mounted ? formatRelative(timestamp) : '--'}
-    </span>
-  );
+  if (!mounted) {
+    const date = new Date(timestamp);
+    return <span className={className}>{Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>;
+  }
+
+  return <span className={className}>{formatRelative(timestamp)}</span>;
 }
 
 function ElapsedTimer({ since, className }: { since: string; className?: string }) {
-  const [mounted, setMounted] = useState(false);
-  const [now, setNow] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    setMounted(true);
-    setNow(Date.now());
     const timerId = window.setInterval(() => {
       setNow(Date.now());
     }, 1000);
@@ -314,25 +312,7 @@ function ElapsedTimer({ since, className }: { since: string; className?: string 
     };
   }, []);
 
-  return (
-    <span className={className} suppressHydrationWarning>
-      {mounted && now !== null ? formatElapsedDuration(since, now) : '--:--'}
-    </span>
-  );
-}
-
-function ClockTime({ timestamp, className }: { timestamp: string; className?: string }) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  return (
-    <span className={className} suppressHydrationWarning>
-      {mounted ? formatClock(timestamp) : '--:--'}
-    </span>
-  );
+  return <span className={className}>{formatElapsedDuration(since, now)}</span>;
 }
 
 // --- 5. 유틸리티 함수 ---
@@ -2170,7 +2150,6 @@ export function ChatInterface({
   const chatListSentinelRef = useRef<HTMLDivElement>(null);
   const chatShellRef = useRef<HTMLDivElement>(null);
   const centerPanelRef = useRef<HTMLElement>(null);
-  const centerFrameRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerDockRef = useRef<HTMLElement>(null);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
@@ -2188,8 +2167,6 @@ export function ChatInterface({
   const isRightSidebarPinnedLayout = !isMobileLayout && (viewportWidth > CUSTOMIZATION_OVERLAY_MAX_WIDTH_PX || isCustomizationPinned);
   const isLeftSidebarOverlayLayout = isMobileLayout
     || (isRightSidebarPinnedLayout && viewportWidth < RIGHT_PIN_PREFERS_LEFT_OVERLAY_MIN_WIDTH_PX);
-  const isLeftSidebarDocked = isChatSidebarOpen && !isLeftSidebarOverlayLayout;
-  const isRightSidebarDocked = !isCustomizationOverlayLayout;
   const snapshotSyncedEventRef = useRef<Record<string, string>>(buildSnapshotSyncMap(initialChats));
 
   const defaultAgentFlavor = normalizeAgentFlavor(agentFlavor, 'codex');
@@ -3165,7 +3142,40 @@ export function ChatInterface({
     };
   }, [isCustomizationPinned]);
 
+  const restorePinnedCenterPanelView = useCallback(() => {
+    const shell = chatShellRef.current;
+    const centerPanel = centerPanelRef.current;
+    if (!shell || !centerPanel) {
+      return;
+    }
+
+    shell.scrollLeft = 0;
+    centerPanel.scrollIntoView({ block: 'nearest', inline: 'start' });
+  }, []);
+
+  useEffect(() => {
+    if (!isCustomizationPinned || !isRightSidebarPinnedLayout) {
+      return;
+    }
+
+    restorePinnedCenterPanelView();
+    let secondFrameId = 0;
+    const frameId = window.requestAnimationFrame(() => {
+      restorePinnedCenterPanelView();
+      secondFrameId = window.requestAnimationFrame(restorePinnedCenterPanelView);
+    });
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      if (secondFrameId) {
+        window.cancelAnimationFrame(secondFrameId);
+      }
+    };
+  }, [isCustomizationPinned, isRightSidebarPinnedLayout, isLeftSidebarOverlayLayout, restorePinnedCenterPanelView]);
+
   const handleToggleCustomizationPinned = useCallback(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     setIsCustomizationPinned((prev) => !prev);
   }, []);
 
@@ -3227,7 +3237,7 @@ export function ChatInterface({
 
   const syncComposerDockMetrics = useCallback(() => {
     const shell = chatShellRef.current;
-    const centerPanel = centerFrameRef.current ?? centerPanelRef.current;
+    const centerPanel = centerPanelRef.current;
     const dock = composerDockRef.current;
     if (!shell || !dock) {
       return;
@@ -3492,43 +3502,6 @@ export function ChatInterface({
       window.removeEventListener('scroll', handleResize);
       window.visualViewport?.removeEventListener('resize', handleResize);
       window.visualViewport?.removeEventListener('scroll', handleResize);
-    };
-  }, [syncComposerDockMetrics]);
-
-  useEffect(() => {
-    const rafId = window.requestAnimationFrame(() => {
-      syncComposerDockMetrics();
-    });
-
-    return () => {
-      window.cancelAnimationFrame(rafId);
-    };
-  }, [
-    isChatSidebarOpen,
-    isLeftSidebarOverlayLayout,
-    isCustomizationOverlayLayout,
-    isCustomizationSidebarOpen,
-    isCustomizationPinned,
-    isMobileLayout,
-    syncComposerDockMetrics,
-    viewportWidth,
-  ]);
-
-  useEffect(() => {
-    const centerPanel = centerFrameRef.current ?? centerPanelRef.current;
-    const dock = composerDockRef.current;
-    if (!centerPanel || !dock || typeof ResizeObserver === 'undefined') {
-      return;
-    }
-
-    const observer = new ResizeObserver(() => {
-      syncComposerDockMetrics();
-    });
-    observer.observe(centerPanel);
-    observer.observe(dock);
-
-    return () => {
-      observer.disconnect();
     };
   }, [syncComposerDockMetrics]);
 
@@ -4338,10 +4311,10 @@ export function ChatInterface({
     <>
     <div
       className={`${styles.chatShell} ${
-        isLeftSidebarDocked ? styles.chatShellLeftVisible : ''
-      } ${isRightSidebarDocked ? styles.chatShellRightVisible : ''} ${
-        isMobileLayout ? styles.chatShellMobileScroll : ''
-      }`}
+        isChatSidebarOpen ? styles.chatShellSidebarOpen : styles.chatShellSidebarClosed
+      } ${isMobileLayout ? styles.chatShellMobileScroll : ''} ${
+        isRightSidebarPinnedLayout ? styles.chatShellRightPinned : ''
+      } ${isLeftSidebarOverlayLayout ? styles.chatShellLeftOverlay : ''}`}
       ref={chatShellRef}
     >
       {isLeftSidebarOverlayLayout && isChatSidebarOpen && (
@@ -4644,10 +4617,7 @@ export function ChatInterface({
       </aside>
 
       <main className={`${styles.centerPanel} ${isMobileLayout ? styles.centerPanelMobileScroll : ''}`} ref={centerPanelRef}>
-        <section
-          className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}
-          ref={centerFrameRef}
-        >
+        <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
           <header className={styles.centerHeader}>
             <button
               type="button"
@@ -4898,7 +4868,7 @@ export function ChatInterface({
                 return (
                   <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowUser}`}>
                     <div className={`${styles.msgHeader} ${styles.msgHeaderUser}`}>
-                      <ClockTime timestamp={event.timestamp} className={styles.msgTime} />
+                      <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
                       <span className={`${styles.msgSender} ${styles.msgSenderUser}`}>YOU</span>
                     </div>
                     <div className={`${styles.messageBubble} ${styles.messageBubbleUser} ${highlightedEventId === event.id ? styles.messageBubbleHighlight : ''}`}>
@@ -4927,7 +4897,7 @@ export function ChatInterface({
                     <div className={styles.msgBody}>
                       <div className={styles.msgHeader}>
                         <span className={styles.msgSender}>{agentMeta.label}</span>
-                        <ClockTime timestamp={event.timestamp} className={styles.msgTime} />
+                        <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
                       </div>
                       <div className={`${styles.messageBubble} ${styles.messageBubbleAgent}`}>
                         {kindMeta.label ? (
