@@ -250,6 +250,28 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     expect(parsed.output).toBe('응답 완료');
   });
 
+  it('accepts Gemini session id key variations in generic stream-json parsing', () => {
+    const streamOutput = [
+      JSON.stringify({
+        type: 'system',
+        session_id: 'gemini-session-snake',
+      }),
+      JSON.stringify({
+        type: 'system',
+        sessionid: 'gemini-session-lower',
+      }),
+      JSON.stringify({
+        type: 'event',
+        event: 'agent_message',
+        content: 'Gemini 응답 완료',
+      }),
+    ].join('\n');
+
+    const parsed = happyClientTestHooks.parseAgentStreamOutput(streamOutput);
+    expect(parsed.sessionId).toBe('gemini-session-lower');
+    expect(parsed.output).toBe('Gemini 응답 완료');
+  });
+
   it('waits for a quiet window after the latest app-server activity', async () => {
     vi.useFakeTimers();
 
