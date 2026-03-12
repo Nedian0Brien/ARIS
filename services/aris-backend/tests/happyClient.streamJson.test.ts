@@ -194,6 +194,12 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     expect(launchMode).toBe('local');
   });
 
+  it('uses a longer timeout budget for Claude turns than generic CLI agents', () => {
+    expect(happyClientTestHooks.resolveAgentCommandTimeoutMs('claude')).toBeGreaterThan(
+      happyClientTestHooks.resolveAgentCommandTimeoutMs('gemini'),
+    );
+  });
+
   it('does not inject --session-id for Claude when given a synthetic target', () => {
     const sessionId = happyClientTestHooks.buildClaudeSessionId('session-2', 'chat-2');
     const command = happyClientTestHooks.buildAgentCommand(
