@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","sessionid":"gemini-session-lowercase"}
+{"type":"event","event":"agent_message","content":"Gemini 응답 완료"}

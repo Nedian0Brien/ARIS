@@ -11,7 +11,9 @@ export function buildGeminiCommand(input: {
   model?: string;
   resumeTarget?: ProviderResumeTarget;
 }): GeminiLaunchCommand {
-  const normalizedResumeId = typeof input.resumeTarget?.id === 'string' && input.resumeTarget.id.trim().length > 0
+  const normalizedResumeId = input.resumeTarget?.mode === 'resume'
+    && typeof input.resumeTarget.id === 'string'
+    && input.resumeTarget.id.trim().length > 0
     ? input.resumeTarget.id.trim().slice(0, 120)
     : undefined;
   const args = [

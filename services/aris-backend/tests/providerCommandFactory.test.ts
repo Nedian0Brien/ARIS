@@ -29,4 +29,18 @@ describe('providerCommandFactory', () => {
     expect(command?.args).toContain('--resume');
     expect(command?.fallbackArgs).toContain('-p');
   });
+
+  it('does not pass local Gemini correlation ids through provider resume flags', () => {
+    const command = buildProviderCommand({
+      agent: 'gemini',
+      prompt: 'Reply with OK',
+      approvalPolicy: 'on-request',
+      model: 'gemini-2.5-pro',
+      resumeTarget: { id: 'local-correlation-123', mode: 'session-id' },
+    });
+
+    expect(command?.command).toBe('gemini');
+    expect(command?.args).not.toContain('--resume');
+    expect(command?.fallbackArgs).not.toContain('--resume');
+  });
 });

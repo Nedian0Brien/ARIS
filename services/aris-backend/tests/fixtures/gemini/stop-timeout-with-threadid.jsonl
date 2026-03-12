@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","thread_id":"gemini-thread-timeout"}
+{"type":"error","reason":"timeout","thread_id":"gemini-thread-timeout"}

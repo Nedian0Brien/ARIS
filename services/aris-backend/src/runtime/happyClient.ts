@@ -19,11 +19,16 @@ import { looksLikeClaudeActionTranscript, parseClaudeStreamLine, parseClaudeStre
 import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.js';
 import { ClaudeSessionLogTracker, extractClaudeSessionHintIds } from './providers/claude/claudeSessionScanner.js';
 import { buildClaudeSessionId } from './providers/claude/claudeSessionSource.js';
+import { GeminiMessageQueue } from './providers/gemini/geminiMessageQueue.js';
+import { looksLikeGeminiActionTranscript, parseGeminiStreamLine, parseGeminiStreamOutput } from './providers/gemini/geminiProtocolMapper.js';
+import { createGeminiRuntime } from './providers/gemini/geminiRuntime.js';
+import { GeminiSessionRegistry } from './providers/gemini/geminiSessionRegistry.js';
 import { buildProviderCommand, type ProviderCommand } from './providers/providerCommandFactory.js';
 import type { SessionProtocolEnvelope } from './contracts/sessionProtocol.js';
 import type { ProviderPermissionRequest } from './contracts/providerRuntime.js';
 import type { ClaudeSessionLaunchMode } from './providers/claude/claudeSessionContract.js';
 import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeRuntimeSession, ClaudeTextEvent } from './providers/claude/types.js';
+import type { GeminiRuntimeSession } from './providers/gemini/types.js';
 import type {
   ApprovalPolicy,
   PermissionDecision,
@@ -42,6 +47,13 @@ const CLAUDE_TURN_TIMEOUT_MS = (() => {
     return parsed;
   }
   return 30 * 60 * 1000; // 30 minutes
+})();
+const GEMINI_TURN_TIMEOUT_MS = (() => {
+  const parsed = Number.parseInt(process.env.GEMINI_TURN_TIMEOUT_MS || '', 10);
+  if (Number.isFinite(parsed) && parsed >= 120_000) {
+    return parsed;
+  }
+  return 15 * 60 * 1000; // 15 minutes
 })();
 const AGENT_MAX_OUTPUT_CHARS = 32_000;
 const AGENT_EXTRA_PATHS = [
@@ -671,9 +683,13 @@ function stripAnsi(value: string): string {
 }
 
 function resolveAgentCommandTimeoutMs(agent: RuntimeAgent): number {
-  return agent === 'claude'
-    ? CLAUDE_TURN_TIMEOUT_MS
-    : AGENT_COMMAND_TIMEOUT_MS;
+  if (agent === 'claude') {
+    return CLAUDE_TURN_TIMEOUT_MS;
+  }
+  if (agent === 'gemini') {
+    return GEMINI_TURN_TIMEOUT_MS;
+  }
+  return AGENT_COMMAND_TIMEOUT_MS;
 }
 
 function collectNestedRecords(root: Record<string, unknown>): Record<string, unknown>[] {
@@ -1328,6 +1344,7 @@ export class HappyRuntimeStore {
   private readonly permissions = new Map<string, PermissionRequest>();
   private readonly activeRuns = new Map<string, ActiveRun>();
   private readonly claudeSessionRegistry = new ClaudeSessionRegistry();
+  private readonly geminiSessionRegistry = new GeminiSessionRegistry();
   private readonly claudeSessionScanners = new Map<string, ClaudeSessionLogTracker>();
   private readonly codexThreads = new Map<string, string>();
   private readonly codexPermissionIndex = new Map<string, string>();
@@ -1838,7 +1855,9 @@ export class HappyRuntimeStore {
           return;
         }
 
-        const parsedLine = parseAgentStreamLine(normalized);
+        const parsedLine = agent === 'gemini'
+          ? parseGeminiStreamLine(normalized)
+          : parseAgentStreamLine(normalized);
         if (parsedLine.sessionId) {
           resolvedSessionId = parsedLine.sessionId;
         }
@@ -2013,6 +2032,16 @@ export class HappyRuntimeStore {
           result.threadId = parsed.sessionId;
         }
         output = trimOutput(parsed.output || '');
+      } else if (agent === 'gemini') {
+        const parsed = parseGeminiStreamOutput(cleanedStdout);
+        if (inferredActions.length === 0) {
+          inferredActions = parsed.actions;
+        }
+        protocolEnvelopes = parsed.envelopes;
+        if (!result.threadId && parsed.sessionId) {
+          result.threadId = parsed.sessionId;
+        }
+        output = trimOutput(parsed.output || '');
       } else {
         const parsed = parseAgentStreamOutput(cleanedStdout);
         if (inferredActions.length === 0) {
@@ -2023,9 +2052,13 @@ export class HappyRuntimeStore {
         }
         output = trimOutput(parsed.output || '');
       }
-      const needsFallback = !output || (agent === 'claude'
-        ? looksLikeClaudeActionTranscript(output)
-        : looksLikeActionTranscript(output));
+      const needsFallback = !output || (
+        agent === 'claude'
+          ? looksLikeClaudeActionTranscript(output)
+          : agent === 'gemini'
+            ? looksLikeGeminiActionTranscript(output)
+            : looksLikeActionTranscript(output)
+      );
       if (needsFallback && command.fallbackArgs && command.fallbackArgs.length > 0) {
         try {
           const fallback = await runCommand(command.fallbackArgs);
@@ -3553,6 +3586,7 @@ export class HappyRuntimeStore {
     try {
       const isCodex = flavor === 'codex';
       const isClaude = flavor === 'claude';
+      const isGemini = flavor === 'gemini';
       const requestedThreadId = typeof context.threadId === 'string' && context.threadId.trim().length > 0
         ? context.threadId.trim()
         : undefined;
@@ -3582,7 +3616,13 @@ export class HappyRuntimeStore {
       };
       const streamedClaudeTextReplies = new Set<string>();
       let claudeMessageQueue: ClaudeMessageQueue | null = null;
+      let geminiMessageQueue: GeminiMessageQueue | null = null;
       const persistClaudeProjection = async (projection: {
+        body: string;
+        meta: Record<string, unknown>;
+        options?: { type?: string; title?: string };
+      }) => this.appendAgentMessage(session.id, projection.body, projection.meta, projection.options);
+      const persistGeminiProjection = async (projection: {
         body: string;
         meta: Record<string, unknown>;
         options?: { type?: string; title?: string };
@@ -3749,6 +3789,69 @@ export class HappyRuntimeStore {
             messageMeta: claudeResponse.messageMeta,
             protocolEnvelopes: claudeResponse.protocolEnvelopes,
           };
+        } else if (isGemini) {
+          if ((session.metadata.flavor !== 'gemini')) {
+            throw new Error(`Gemini runtime type guard failed for session ${session.id}`);
+          }
+          geminiMessageQueue = new GeminiMessageQueue(
+            {
+              ...(scopedChatId ? { chatId: scopedChatId } : {}),
+              requestedPath: session.metadata.path,
+              ...(selectedModel ? { model: selectedModel } : {}),
+            },
+            persistGeminiProjection,
+          );
+          const geminiRuntime = createGeminiRuntime({
+            registry: this.geminiSessionRegistry,
+            listMessages: async (sessionId) => this.listMessages(sessionId),
+            executeTurn: async (request) => {
+              const geminiTurn = await this.runAgentCli(
+                'gemini',
+                request.prompt,
+                request.session.metadata.approvalPolicy,
+                request.model,
+                request.session.metadata.path,
+                request.signal,
+                request.preferredThreadId ? { id: request.preferredThreadId, mode: 'resume' } : undefined,
+              );
+              return {
+                output: geminiTurn.output,
+                cwd: geminiTurn.cwd,
+                streamedActionsPersisted: geminiTurn.streamedActionsPersisted,
+                inferredActions: geminiTurn.inferredActions,
+                threadId: geminiTurn.threadId ?? request.preferredThreadId,
+                threadIdSource: geminiTurn.threadId ? 'observed' : request.preferredThreadId ? 'resume' : 'synthetic',
+                ...(geminiTurn.protocolEnvelopes ? { protocolEnvelopes: geminiTurn.protocolEnvelopes } : {}),
+              };
+            },
+          });
+          const recovered = await geminiRuntime.recoverSession({
+            session: session as GeminiRuntimeSession,
+            chatId: scopedChatId,
+          });
+          const geminiResponse = await geminiRuntime.sendTurn({
+            session: session as GeminiRuntimeSession,
+            prompt,
+            chatId: scopedChatId,
+            requestedThreadId,
+            storedThreadId: recovered.recoveredThreadId,
+            model: selectedModel,
+            signal: controller.signal,
+          });
+          response = {
+            output: geminiResponse.output,
+            cwd: geminiResponse.cwd,
+            streamedPersisted: false,
+            agentMessagePersisted: false,
+            streamedActionsPersisted: geminiResponse.streamedActionsPersisted,
+            inferredActions: geminiResponse.inferredActions,
+            threadId: geminiResponse.threadId,
+            threadIdSource: geminiResponse.threadIdSource,
+            protocolEnvelopes: geminiResponse.protocolEnvelopes,
+            messageMeta: {
+              ...(geminiResponse.threadId ? { geminiSessionId: geminiResponse.threadId } : {}),
+            },
+          };
         } else {
           const nonClaude = await this.runAgentCli(
             flavor,
@@ -3804,6 +3907,21 @@ export class HappyRuntimeStore {
               threadId: response.threadId,
               envelopes: response.protocolEnvelopes,
             });
+          } else if (flavor === 'gemini') {
+            geminiMessageQueue ??= new GeminiMessageQueue(
+              {
+                ...(scopedChatId ? { chatId: scopedChatId } : {}),
+                requestedPath: session.metadata.path,
+                ...(selectedModel ? { model: selectedModel } : {}),
+              },
+              persistGeminiProjection,
+            );
+            await geminiMessageQueue.enqueueToolAction({
+              action,
+              execCwd: response.cwd,
+              threadId: response.threadId,
+              envelopes: response.protocolEnvelopes,
+            });
           } else {
             await appendNonCodexAction(action, index, response.cwd, response.threadId);
           }
@@ -3849,6 +3967,27 @@ export class HappyRuntimeStore {
             envelopes: response.protocolEnvelopes,
           });
           await claudeMessageQueue.flush();
+        } else if (flavor === 'gemini') {
+          geminiMessageQueue ??= new GeminiMessageQueue(
+            {
+              ...(scopedChatId ? { chatId: scopedChatId } : {}),
+              requestedPath: session.metadata.path,
+              ...(selectedModel ? { model: selectedModel } : {}),
+            },
+            persistGeminiProjection,
+          );
+          await geminiMessageQueue.enqueueText({
+            output: finalAgentOutput,
+            execCwd: response.cwd,
+            ...(response.threadId ? { threadId: response.threadId } : {}),
+            messageMeta: {
+              streamEvent: 'agent_message',
+              ...(response.threadIdSource ? { threadIdSource: response.threadIdSource } : {}),
+              ...(response.messageMeta ?? {}),
+            },
+            envelopes: response.protocolEnvelopes,
+          });
+          await geminiMessageQueue.flush();
         } else {
           await this.appendAgentMessage(session.id, finalAgentOutput, {
             ...(scopedChatId ? { chatId: scopedChatId } : {}),

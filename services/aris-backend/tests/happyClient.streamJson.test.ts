@@ -200,6 +200,12 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     );
   });
 
+  it('uses a longer timeout budget for Gemini turns than generic CLI agents', () => {
+    expect(happyClientTestHooks.resolveAgentCommandTimeoutMs('gemini')).toBeGreaterThan(
+      happyClientTestHooks.resolveAgentCommandTimeoutMs('unknown'),
+    );
+  });
+
   it('does not inject --session-id for Claude when given a synthetic target', () => {
     const sessionId = happyClientTestHooks.buildClaudeSessionId('session-2', 'chat-2');
     const command = happyClientTestHooks.buildAgentCommand(
@@ -248,6 +254,28 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     const parsed = happyClientTestHooks.parseAgentStreamOutput(streamOutput);
     expect(parsed.sessionId).toBe('stream-session-abc');
     expect(parsed.output).toBe('응답 완료');
+  });
+
+  it('accepts Gemini session id key variations in generic stream-json parsing', () => {
+    const streamOutput = [
+      JSON.stringify({
+        type: 'system',
+        session_id: 'gemini-session-snake',
+      }),
+      JSON.stringify({
+        type: 'system',
+        sessionid: 'gemini-session-lower',
+      }),
+      JSON.stringify({
+        type: 'event',
+        event: 'agent_message',
+        content: 'Gemini 응답 완료',
+      }),
+    ].join('\n');
+
+    const parsed = happyClientTestHooks.parseAgentStreamOutput(streamOutput);
+    expect(parsed.sessionId).toBe('gemini-session-lower');
+    expect(parsed.output).toBe('Gemini 응답 완료');
   });
 
   it('waits for a quiet window after the latest app-server activity', async () => {

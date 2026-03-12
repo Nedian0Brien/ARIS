@@ -1,0 +1,152 @@
+import { describe, expect, it } from 'vitest';
+import {
+  looksLikeGeminiActionTranscript,
+  mapGeminiStreamOutputToProtocol,
+  parseGeminiStreamLine,
+  parseGeminiStreamOutput,
+} from '../src/runtime/providers/gemini/geminiProtocolMapper.js';
+
+describe('geminiProtocolMapper', () => {
+  it('extracts lowercase sessionid fields from Gemini init payloads', () => {
+    const streamOutput = [
+      JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        sessionid: 'gemini-session-lowercase',
+      }),
+      JSON.stringify({
+        type: 'event',
+        event: 'agent_message',
+        content: '응답 완료',
+      }),
+    ].join('\n');
+
+    const parsed = parseGeminiStreamOutput(streamOutput);
+    expect(parsed.sessionId).toBe('gemini-session-lowercase');
+    expect(parsed.output).toBe('응답 완료');
+    expect(parsed.envelopes[0]).toMatchObject({
+      kind: 'turn-start',
+      sessionId: 'gemini-session-lowercase',
+      threadId: 'gemini-session-lowercase',
+    });
+  });
+
+  it('keeps action extraction while dropping transcript-only Gemini output', () => {
+    const streamOutput = [
+      JSON.stringify({
+        type: 'tool',
+        subtype: 'command_execution',
+        command: 'ls -la',
+        output: 'total 8',
+      }),
+      JSON.stringify({
+        type: 'result',
+        subtype: 'final',
+        output: '$ ls -la\nexit code: 0',
+      }),
+    ].join('\n');
+
+    const parsed = parseGeminiStreamOutput(streamOutput);
+    expect(parsed.output).toBe('');
+    expect(parsed.actions[0]?.command).toBe('ls -la');
+    expect(parsed.envelopes.map((envelope) => envelope.kind)).toContain('tool-call-start');
+    expect(parsed.envelopes.map((envelope) => envelope.kind)).toContain('tool-call-end');
+    expect(looksLikeGeminiActionTranscript('$ ls -la\nexit code: 0')).toBe(true);
+  });
+
+  it('maps Gemini stream output into protocol envelopes directly', () => {
+    const streamOutput = [
+      JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        threadId: 'gemini-thread-protocol',
+      }),
+      JSON.stringify({
+        type: 'tool',
+        subtype: 'command_execution',
+        callId: 'call-protocol',
+        command: 'pwd',
+        output: '/workspace',
+        threadId: 'gemini-thread-protocol',
+      }),
+      JSON.stringify({
+        type: 'result',
+        subtype: 'final',
+        result: '완료',
+        threadId: 'gemini-thread-protocol',
+      }),
+    ].join('\n');
+
+    const mapped = mapGeminiStreamOutputToProtocol(streamOutput);
+    expect(mapped.sessionId).toBe('gemini-thread-protocol');
+    expect(mapped.envelopes.map((envelope) => envelope.kind)).toEqual([
+      'turn-start',
+      'tool-call-start',
+      'tool-call-end',
+      'text',
+      'turn-end',
+      'stop',
+    ]);
+  });
+
+  it('parses actual Gemini CLI init/message/result traces', () => {
+    const streamOutput = [
+      JSON.stringify({
+        type: 'init',
+        session_id: 'gemini-actual-session',
+        model: 'gemini-2.5-flash',
+      }),
+      JSON.stringify({
+        type: 'message',
+        role: 'user',
+        content: 'Respond with OK only.',
+      }),
+      JSON.stringify({
+        type: 'message',
+        role: 'assistant',
+        content: 'OK',
+        delta: true,
+      }),
+      JSON.stringify({
+        type: 'result',
+        status: 'success',
+      }),
+    ].join('\n');
+
+    const parsed = parseGeminiStreamOutput(streamOutput);
+    expect(parsed.sessionId).toBe('gemini-actual-session');
+    expect(parsed.output).toBe('OK');
+    expect(parsed.envelopes.map((envelope) => envelope.kind)).toEqual([
+      'turn-start',
+      'text',
+      'turn-end',
+      'stop',
+    ]);
+    expect(parsed.envelopes[2]).toMatchObject({
+      kind: 'turn-end',
+      sessionId: 'gemini-actual-session',
+      threadId: 'gemini-actual-session',
+    });
+  });
+
+  it('does not create action events from non-tool result metadata with path-like names', () => {
+    const line = JSON.stringify({
+      type: 'result',
+      result: 'OK.',
+      thread_id: 'gemini-thread-false-positive',
+      references: [
+        { name: 'Gemini CLI docs' },
+      ],
+    });
+
+    const parsed = parseGeminiStreamLine(line);
+    expect(parsed.action).toBeUndefined();
+    expect(parsed.assistantText).toBe('OK.');
+    expect(parsed.sessionId).toBe('gemini-thread-false-positive');
+    expect(parsed.envelopes.map((envelope) => envelope.kind)).toEqual([
+      'text',
+      'turn-end',
+      'stop',
+    ]);
+  });
+});

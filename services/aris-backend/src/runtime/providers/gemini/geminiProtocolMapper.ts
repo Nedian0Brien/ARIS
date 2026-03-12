@@ -1,0 +1,405 @@
+import { inferActionTypeFromCommand, titleForActionType } from '../../actionType.js';
+import { sanitizeAgentMessageText } from '../../agentMessageSanitizer.js';
+import { summarizeDiffText } from '../../diffStats.js';
+import type { SessionProtocolEnvelope, SessionProtocolStopReason } from '../../contracts/sessionProtocol.js';
+import {
+  collectGeminiNestedRecords,
+  extractFirstGeminiStringByKeys,
+  extractGeminiObservedSessionId,
+  parseGeminiJsonLine,
+} from './geminiProtocolFields.js';
+import type { GeminiActionEvent } from './types.js';
+
+type GeminiMappedLine = {
+  envelopes: SessionProtocolEnvelope[];
+  action?: GeminiActionEvent;
+  actionKey?: string;
+  assistantText?: string;
+  assistantSource?: 'assistant' | 'message' | 'result';
+  sessionId?: string;
+};
+
+function unwrapShellCommand(command: string): string {
+  let current = command.trim();
+  if (current.startsWith('$ ')) {
+    current = current.slice(2).trim();
+  }
+
+  const wrappers = [/^(?:\/bin\/)?bash\s+-lc\s+([\s\S]+)$/i, /^(?:\/bin\/)?sh\s+-lc\s+([\s\S]+)$/i];
+  for (const wrapper of wrappers) {
+    const match = current.match(wrapper);
+    if (!match) {
+      continue;
+    }
+    const inner = match[1]?.trim() ?? '';
+    if (
+      (inner.startsWith('"') && inner.endsWith('"'))
+      || (inner.startsWith("'") && inner.endsWith("'"))
+    ) {
+      current = inner.slice(1, -1).trim();
+    } else {
+      current = inner;
+    }
+  }
+
+  return current;
+}
+
+function extractPathFromCommand(command: string): string {
+  const tokens = command.split(/\s+/).filter(Boolean);
+  if (tokens.length < 2) {
+    return '';
+  }
+
+  const rawLast = tokens[tokens.length - 1] ?? '';
+  const last = rawLast.replace(/^[("'`]+|[)"'`;,]+$/g, '');
+  if (!last || last.startsWith('-')) {
+    return '';
+  }
+  if (last.includes('/') || last.includes('.') || last.startsWith('~')) {
+    return last;
+  }
+  return '';
+}
+
+function looksLikeShellCommand(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 500 || trimmed.includes('\n')) {
+    return false;
+  }
+  if (/[^\x20-\x7E]/.test(trimmed)) {
+    return false;
+  }
+  return /^(?:\$ )?[a-z0-9._/-]+(?:\s+.+)?$/i.test(trimmed);
+}
+
+export function looksLikeGeminiActionTranscript(value: string): boolean {
+  const text = value.trim().toLowerCase();
+  if (!text) {
+    return false;
+  }
+  return (
+    text.startsWith('$ ')
+    || text.includes('\n$ ')
+    || text.includes('exit code:')
+    || text.includes('diff --git')
+    || text.includes('*** update file:')
+    || text.includes('*** add file:')
+    || text.includes('*** delete file:')
+    || text.includes('@@ ')
+  );
+}
+
+function buildActionEventKey(action: GeminiActionEvent): string {
+  const callId = action.callId?.trim() ?? '';
+  const command = action.command?.trim() ?? '';
+  const path = action.path?.trim() ?? '';
+  if (callId) {
+    return `${action.actionType}|${callId}`;
+  }
+  return `${action.actionType}|${command}|${path}`;
+}
+
+function resolveStopReason(payloadType: string, payloadSubtype: string, payload: Record<string, unknown>): SessionProtocolStopReason | undefined {
+  const normalizedStopReason = String(payload.stop_reason ?? payload.stopReason ?? payload.reason ?? '').trim().toLowerCase();
+  if (normalizedStopReason.includes('abort') || payloadSubtype.includes('abort')) {
+    return 'aborted';
+  }
+  if (normalizedStopReason.includes('timeout')) {
+    return 'timeout';
+  }
+  if (normalizedStopReason.includes('error') || payloadType === 'error') {
+    return 'error';
+  }
+  if (payloadType === 'result' || payloadSubtype.includes('final')) {
+    return 'completed';
+  }
+  return undefined;
+}
+
+function buildToolName(action: GeminiActionEvent, payloadSubtype: string): string {
+  if (payloadSubtype) {
+    return payloadSubtype;
+  }
+  if (action.command) {
+    return action.command.split(/\s+/)[0] || action.actionType;
+  }
+  return action.actionType;
+}
+
+export function parseGeminiStreamLine(line: string): GeminiMappedLine {
+  const payload = parseGeminiJsonLine(line);
+  if (!payload) {
+    return { envelopes: [] };
+  }
+
+  const payloadType = String(payload.type ?? '').trim().toLowerCase();
+  const payloadSubtype = String(payload.subtype ?? '').trim().toLowerCase();
+  const lineLower = line.toLowerCase();
+  const isSystem = payloadType === 'system' || payloadType === 'init' || payloadSubtype === 'init';
+  const seemsToolEvent = (
+    payloadType === 'tool'
+    || payloadSubtype.includes('tool')
+    || lineLower.includes('"tool')
+    || lineLower.includes('commandexecution')
+    || lineLower.includes('exec_command')
+    || lineLower.includes('file_change')
+    || lineLower.includes('filechange')
+  );
+  const records = collectGeminiNestedRecords(payload);
+  const role = extractFirstGeminiStringByKeys(records, ['role']).toLowerCase();
+  const seemsAssistantEvent = (
+    (payloadType === 'message' && role === 'assistant')
+    || payloadType.includes('assistant')
+    || payloadSubtype.includes('assistant')
+    || payloadSubtype.includes('final')
+    || payloadType === 'result'
+    || lineLower.includes('"agent_message"')
+  );
+  const commandRaw = extractFirstGeminiStringByKeys(records, [
+    'command',
+    'cmd',
+    'parsed_cmd',
+    'shellCommand',
+    'shell_command',
+  ]);
+  const command = commandRaw ? unwrapShellCommand(commandRaw) : '';
+  const path = extractFirstGeminiStringByKeys(records, [
+    'path',
+    'filePath',
+    'file_path',
+    'targetPath',
+    'target_path',
+  ]);
+  const outputCandidate = extractFirstGeminiStringByKeys(records, [
+    'aggregatedOutput',
+    'aggregated_output',
+    'output',
+    'stdout',
+    'result',
+    'text',
+  ]);
+  const diffStats = summarizeDiffText(outputCandidate);
+  const normalizedPath = path && (path.includes('/') || path.includes('.') || path.startsWith('~')) ? path : '';
+  const callId = extractFirstGeminiStringByKeys(records, [
+    'callId',
+    'call_id',
+    'toolCallId',
+    'tool_call_id',
+    'call',
+  ]);
+  const sessionId = extractGeminiObservedSessionId(records);
+  const turnId = sessionId || extractFirstGeminiStringByKeys(records, ['turnId', 'turn_id']) || undefined;
+
+  let action: GeminiActionEvent | undefined;
+  let actionType: GeminiActionEvent['actionType'] | null = null;
+  if (seemsToolEvent && command && looksLikeShellCommand(command)) {
+    actionType = inferActionTypeFromCommand(command);
+  } else if (seemsToolEvent && normalizedPath && /(write|patch|modify|edit|create|delete|update|changed)/i.test(lineLower)) {
+    actionType = 'file_write';
+  } else if (seemsToolEvent && normalizedPath && /(read|open|inspect|view|cat|grep|sed -n)/i.test(lineLower)) {
+    actionType = 'file_read';
+  } else if (seemsToolEvent && /(directory listing|file list|\bls\b|\btree\b|rg --files)/i.test(lineLower)) {
+    actionType = 'file_list';
+  }
+
+  if (actionType) {
+    const resolvedPath = normalizedPath || extractPathFromCommand(command);
+    action = {
+      actionType,
+      title: titleForActionType(actionType),
+      callId: callId || undefined,
+      command: command || undefined,
+      path: resolvedPath || undefined,
+      output: outputCandidate || undefined,
+      additions: diffStats.additions,
+      deletions: diffStats.deletions,
+      hasDiffSignal: diffStats.hasDiffSignal,
+    };
+  }
+
+  const assistantText = (!isSystem && !seemsToolEvent && seemsAssistantEvent)
+    ? extractFirstGeminiStringByKeys(records, ['text', 'message', 'content', 'output', 'result'])
+    : '';
+
+  const envelopes: SessionProtocolEnvelope[] = [];
+  if (isSystem && sessionId) {
+    envelopes.push({
+      kind: 'turn-start',
+      provider: 'gemini',
+      source: 'system',
+      sessionId,
+      ...(turnId ? { turnId } : {}),
+      threadId: sessionId,
+      threadIdSource: 'observed',
+    });
+  }
+  if (action) {
+    const toolCallId = action.callId?.trim() || buildActionEventKey(action);
+    const toolName = buildToolName(action, payloadSubtype);
+    envelopes.push({
+      kind: 'tool-call-start',
+      provider: 'gemini',
+      source: 'tool',
+      ...(sessionId ? { sessionId } : {}),
+      ...(turnId ? { turnId } : {}),
+      toolCallId,
+      toolName,
+      action,
+    });
+    envelopes.push({
+      kind: 'tool-call-end',
+      provider: 'gemini',
+      source: 'tool',
+      ...(sessionId ? { sessionId } : {}),
+      ...(turnId ? { turnId } : {}),
+      toolCallId,
+      toolName,
+      action,
+      stopReason: 'completed',
+    });
+  }
+  if (
+    assistantText
+    && !looksLikeGeminiActionTranscript(assistantText)
+    && (
+      payloadType === 'result'
+      || payloadType === 'message'
+      || !looksLikeShellCommand(assistantText)
+    )
+  ) {
+    envelopes.push({
+      kind: 'text',
+      provider: 'gemini',
+      source: payloadType === 'result' ? 'result' : 'assistant',
+      ...(sessionId ? { sessionId } : {}),
+      ...(turnId ? { turnId } : {}),
+      text: assistantText,
+    });
+  }
+  const stopReason = resolveStopReason(payloadType, payloadSubtype, payload);
+  if (stopReason) {
+    envelopes.push({
+      kind: 'turn-end',
+      provider: 'gemini',
+      source: payloadType === 'result' ? 'result' : seemsToolEvent ? 'tool' : isSystem ? 'system' : 'assistant',
+      ...(sessionId ? { sessionId } : {}),
+      ...(turnId ? { turnId } : {}),
+      ...(sessionId ? { threadId: sessionId, threadIdSource: 'observed' as const } : {}),
+      stopReason,
+    });
+    envelopes.push({
+      kind: 'stop',
+      provider: 'gemini',
+      source: payloadType === 'result' ? 'result' : seemsToolEvent ? 'tool' : isSystem ? 'system' : 'assistant',
+      ...(sessionId ? { sessionId } : {}),
+      ...(turnId ? { turnId } : {}),
+      reason: stopReason,
+    });
+  }
+
+  return {
+    envelopes,
+    ...(action ? { action, actionKey: buildActionEventKey(action) } : {}),
+    ...(assistantText ? {
+      assistantText,
+      assistantSource: payloadType === 'result'
+        ? 'result' as const
+        : payloadType === 'message'
+          ? 'message' as const
+          : 'assistant' as const,
+    } : {}),
+    ...(sessionId ? { sessionId } : {}),
+  };
+}
+
+export function mapGeminiStreamOutputToProtocol(stdout: string): { envelopes: SessionProtocolEnvelope[]; sessionId?: string } {
+  const lines = stdout
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const envelopes: SessionProtocolEnvelope[] = [];
+  const envelopeKeys = new Set<string>();
+  let latestSessionId = '';
+
+  for (const line of lines) {
+    const parsedLine = parseGeminiStreamLine(line);
+    for (const envelope of parsedLine.envelopes) {
+      const hydratedEnvelope = latestSessionId && !envelope.sessionId
+        ? {
+          ...envelope,
+          sessionId: latestSessionId,
+          ...(envelope.kind === 'turn-end' && !envelope.threadId
+            ? { threadId: latestSessionId, threadIdSource: 'observed' as const }
+            : {}),
+        }
+        : envelope;
+      const envelopeKey = JSON.stringify(hydratedEnvelope);
+      if (envelope.kind === 'text' || !envelopeKeys.has(envelopeKey)) {
+        envelopes.push(hydratedEnvelope);
+        envelopeKeys.add(envelopeKey);
+      }
+    }
+    if (parsedLine.sessionId) {
+      latestSessionId = parsedLine.sessionId;
+    }
+  }
+
+  return {
+    envelopes,
+    ...(latestSessionId ? { sessionId: latestSessionId } : {}),
+  };
+}
+
+export function parseGeminiStreamOutput(stdout: string): {
+  output: string;
+  actions: GeminiActionEvent[];
+  sessionId?: string;
+  envelopes: SessionProtocolEnvelope[];
+} {
+  const lines = stdout
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const actionByKey = new Map<string, GeminiActionEvent>();
+  let latestAssistantText = '';
+  let latestSessionId = '';
+
+  for (const line of lines) {
+    const parsedLine = parseGeminiStreamLine(line);
+    if (parsedLine.action && parsedLine.actionKey && !actionByKey.has(parsedLine.actionKey)) {
+      actionByKey.set(parsedLine.actionKey, parsedLine.action);
+    }
+    const assistantText = parsedLine.assistantText
+      ? sanitizeAgentMessageText(parsedLine.assistantText)
+      : '';
+    if (
+      assistantText
+      && (
+        !looksLikeGeminiActionTranscript(assistantText)
+        && (
+          parsedLine.assistantSource === 'result'
+          || parsedLine.assistantSource === 'message'
+          || !looksLikeShellCommand(assistantText)
+        )
+      )
+      && assistantText.length >= latestAssistantText.length
+    ) {
+      latestAssistantText = assistantText;
+    }
+    if (parsedLine.sessionId) {
+      latestSessionId = parsedLine.sessionId;
+    }
+  }
+
+  const mapped = mapGeminiStreamOutputToProtocol(stdout);
+
+  return {
+    output: latestAssistantText,
+    actions: [...actionByKey.values()],
+    envelopes: mapped.envelopes,
+    ...(latestSessionId ? { sessionId: latestSessionId } : {}),
+  };
+}
