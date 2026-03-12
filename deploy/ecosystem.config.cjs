@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const DEFAULT_DEPLOY_ENV_FILE = process.env.ARIS_DEPLOY_ENV_FILE_DEFAULT || '/home/ubuntu/.config/aris/prod.env';
+
 function readEnvValue(filePath, key) {
   if (!fs.existsSync(filePath)) {
     return '';
@@ -37,14 +39,22 @@ function readEnvValue(filePath, key) {
 }
 
 function resolveEnvValue(key, defaultValue = '') {
+  const explicitDeployEnv = process.env.DEPLOY_ENV_FILE || DEFAULT_DEPLOY_ENV_FILE;
+  const sharedRepoRoot = process.env.ARIS_SHARED_REPO_ROOT || '';
   const envFiles = [
+    explicitDeployEnv,
     path.join(__dirname, '.env'),
     path.join(__dirname, '..', 'services', 'aris-backend', '.env'),
+    sharedRepoRoot ? path.join(sharedRepoRoot, 'deploy', '.env') : '',
+    sharedRepoRoot ? path.join(sharedRepoRoot, 'services', 'aris-backend', '.env') : '',
     path.join(process.cwd(), 'deploy', '.env'),
     path.join(process.cwd(), 'services', 'aris-backend', '.env'),
   ];
 
   for (const envFile of envFiles) {
+    if (!envFile) {
+      continue;
+    }
     const value = readEnvValue(envFile, key);
     if (value) {
       return value;

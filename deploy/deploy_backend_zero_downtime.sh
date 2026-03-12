@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="${ROOT_DIR}/services/aris-backend"
 ECOSYSTEM_FILE="${ROOT_DIR}/deploy/ecosystem.config.cjs"
+DEFAULT_DEPLOY_ENV_FILE="${ARIS_DEPLOY_ENV_FILE_DEFAULT:-/home/ubuntu/.config/aris/prod.env}"
 BACKEND_PORT="${BACKEND_PORT:-4080}"
 HEALTH_TIMEOUT_SECONDS="${BACKEND_HEALTH_TIMEOUT_SECONDS:-60}"
 COMMON_GIT_DIR="$(git -C "$ROOT_DIR" rev-parse --git-common-dir)"
@@ -12,6 +13,13 @@ SHARED_REPO_ROOT="${ARIS_SHARED_REPO_ROOT:-$DEFAULT_SHARED_REPO_ROOT}"
 PM2_RUNTIME_DIR="${ARIS_BACKEND_PM2_RUNTIME_DIR:-${SHARED_REPO_ROOT}/.runtime/aris-backend}"
 
 cd "$ROOT_DIR"
+
+export DEPLOY_ENV_FILE="${DEPLOY_ENV_FILE:-${DEFAULT_DEPLOY_ENV_FILE}}"
+
+if [[ ! -f "$DEPLOY_ENV_FILE" ]]; then
+  echo "[deploy:backend-zd] env file not found: $DEPLOY_ENV_FILE" >&2
+  exit 1
+fi
 
 current_exec_mode() {
   pm2 jlist | node -e "

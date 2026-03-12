@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${DEPLOY_ENV_FILE:-${ROOT_DIR}/deploy/.env}"
+DEFAULT_DEPLOY_ENV_FILE="${ARIS_DEPLOY_ENV_FILE_DEFAULT:-/home/ubuntu/.config/aris/prod.env}"
+ENV_FILE="${DEPLOY_ENV_FILE:-${DEFAULT_DEPLOY_ENV_FILE}}"
 STATE_DIR="${DEPLOY_STATE_DIR:-${ROOT_DIR}/deploy/.state}"
 ACTIVE_SLOT_FILE="${STATE_DIR}/aris-web.active-slot"
 FINGERPRINT_FILE="${STATE_DIR}/aris-web.build-fingerprint"
@@ -19,6 +20,8 @@ NGINX_SITE="${ARIS_NGINX_SITE:-/etc/nginx/sites-available/aris.lawdigest.cloud}"
 NGINX_SNIPPET="${ARIS_WEB_UPSTREAM_SNIPPET:-/etc/nginx/snippets/aris-web-upstream.conf}"
 
 cd "$ROOT_DIR"
+
+export DEPLOY_ENV_FILE="$ENV_FILE"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "[deploy:web-zd] env file not found: $ENV_FILE" >&2

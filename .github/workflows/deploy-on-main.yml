@@ -173,6 +173,7 @@ jobs:
         run: |
           set -euo pipefail
           DEPLOY_REPO_DIR="${{ steps.resolve-deploy-repo.outputs.deploy_repo_dir }}"
+          export DEPLOY_ENV_FILE="/home/ubuntu/.config/aris/prod.env"
           export ARIS_SHARED_REPO_ROOT="$DEPLOY_REPO_DIR"
           "$DEPLOY_REPO_DIR/deploy/deploy_backend_zero_downtime.sh"
 
@@ -182,4 +183,5 @@ jobs:
         run: |
           set -euo pipefail
           DEPLOY_REPO_DIR="${{ steps.resolve-deploy-repo.outputs.deploy_repo_dir }}"
+          export DEPLOY_ENV_FILE="/home/ubuntu/.config/aris/prod.env"
           "$DEPLOY_REPO_DIR/deploy/deploy_web_zero_downtime.sh"

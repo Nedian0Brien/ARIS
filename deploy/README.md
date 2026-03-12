@@ -5,7 +5,18 @@ This deployment setup runs `aris-web`, `aris-backend`, and PostgreSQL together w
 ## 1. Prepare env file
 
 ```bash
-cp deploy/.env.example deploy/.env
+mkdir -p /home/ubuntu/.config/aris
+cp deploy/.env.example /home/ubuntu/.config/aris/prod.env
+```
+
+Default production env file:
+
+- `/home/ubuntu/.config/aris/prod.env`
+
+All deploy scripts and PM2 read this file by default. You can override it explicitly when needed:
+
+```bash
+DEPLOY_ENV_FILE=/some/other/path.env ./deploy/deploy_zero_downtime.sh
 ```
 
 Set at minimum:
@@ -99,10 +110,10 @@ SKIP_DB_PREPARE=1 ./deploy/run_web_dev_hot_reload.sh
 
 ## 3. Start with domain + HTTPS (Caddy)
 
-Set `ARIS_DOMAIN` and `APP_BASE_URL` in `deploy/.env`, then:
+Set `ARIS_DOMAIN` and `APP_BASE_URL` in `/home/ubuntu/.config/aris/prod.env`, then:
 
 ```bash
-docker compose --env-file deploy/.env --profile edge up -d --build
+docker compose --env-file /home/ubuntu/.config/aris/prod.env --profile edge up -d --build
 ```
 
 Caddy will request and renew TLS certificates automatically after DNS points to this server.
@@ -115,10 +126,10 @@ On this host, ports `80/443` are already served by system nginx.
 ## 5. Useful commands
 
 ```bash
-docker compose --env-file deploy/.env logs -f aris-web
-docker compose --env-file deploy/.env logs -f aris-web-blue aris-web-green
-docker compose --env-file deploy/.env ps
-docker compose --env-file deploy/.env down
+docker compose --env-file /home/ubuntu/.config/aris/prod.env logs -f aris-web
+docker compose --env-file /home/ubuntu/.config/aris/prod.env logs -f aris-web-blue aris-web-green
+docker compose --env-file /home/ubuntu/.config/aris/prod.env ps
+docker compose --env-file /home/ubuntu/.config/aris/prod.env down
 docker system df -v
 pm2 logs aris-backend --lines 120
 ```
@@ -131,14 +142,14 @@ pm2 logs aris-backend --lines 120
 
 This verifies:
 
-- `deploy/.env`와 `services/aris-backend/.env`의 `RUNTIME_API_TOKEN` 일치 여부
+- `/home/ubuntu/.config/aris/prod.env`와 `services/aris-backend/.env`의 `RUNTIME_API_TOKEN` 일치 여부
 - 백엔드 `/health` 접근성
 - `/v1/sessions`에 토큰이 없는 경우 401 반환
-- `/v1/sessions`를 `deploy/.env` 토큰으로 호출해 200이 나오는지
+- `/v1/sessions`를 `/home/ubuntu/.config/aris/prod.env` 토큰으로 호출해 200이 나오는지
 
 `401`이 반복되면 다음 항목을 점검하세요:
 
-1. `deploy/.env`의 `RUNTIME_API_TOKEN`이 실제 PM2 백엔드 프로세스 환경으로 반영됐는지
+1. `/home/ubuntu/.config/aris/prod.env`의 `RUNTIME_API_TOKEN`이 실제 PM2 백엔드 프로세스 환경으로 반영됐는지
 2. `services/aris-backend/.env`의 `RUNTIME_API_TOKEN`이 동일한지
 3. 토큰 변경 후 백엔드 reload가 되었는지 (`./deploy/deploy_backend_zero_downtime.sh`)
 

@@ -3,7 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-DEPLOY_ENV="${1:-${ROOT_DIR}/deploy/.env}"
+DEFAULT_DEPLOY_ENV_FILE="${ARIS_DEPLOY_ENV_FILE_DEFAULT:-/home/ubuntu/.config/aris/prod.env}"
+DEPLOY_ENV="${1:-${DEPLOY_ENV_FILE:-${DEFAULT_DEPLOY_ENV_FILE}}}"
 BACKEND_ENV="${2:-${ROOT_DIR}/services/aris-backend/.env}"
 WEB_ENV="${3:-${ROOT_DIR}/services/aris-web/.env}"
 
@@ -193,7 +194,7 @@ main() {
   fi
   if [[ "$deploy_token" != "$backend_token" ]]; then
     echo "❌ mismatch: deploy RUNTIME_API_TOKEN != backend RUNTIME_API_TOKEN"
-    echo "   sync required: export RUNTIME_API_TOKEN from deploy/.env into services/aris-backend/.env"
+    echo "   sync required: export RUNTIME_API_TOKEN from ${DEPLOY_ENV} into services/aris-backend/.env"
     mismatch=1
   fi
   if (( mismatch == 1 )); then

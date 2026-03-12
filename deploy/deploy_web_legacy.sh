@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${DEPLOY_ENV_FILE:-${ROOT_DIR}/deploy/.env}"
+DEFAULT_DEPLOY_ENV_FILE="${ARIS_DEPLOY_ENV_FILE_DEFAULT:-/home/ubuntu/.config/aris/prod.env}"
+ENV_FILE="${DEPLOY_ENV_FILE:-${DEFAULT_DEPLOY_ENV_FILE}}"
 SERVICE="${SERVICE_NAME:-aris-web}"
 PRUNE_MODE="${PRUNE_MODE:-light}"            # off | light | aggressive
 CACHE_UNTIL="${CACHE_UNTIL:-168h}"           # e.g. 24h, 168h
@@ -12,6 +13,8 @@ SKIP_BUILD_IF_UNCHANGED="${SKIP_BUILD_IF_UNCHANGED:-1}"  # 1 to skip compose bui
 PRUNE_ASYNC="${PRUNE_ASYNC:-1}"              # 1 to run prune in background
 STATE_DIR="${DEPLOY_STATE_DIR:-${ROOT_DIR}/deploy/.state}"
 LOG_DIR="${DEPLOY_LOG_DIR:-${ROOT_DIR}/deploy/.logs}"
+
+export DEPLOY_ENV_FILE="$ENV_FILE"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "[deploy] env file not found: $ENV_FILE" >&2

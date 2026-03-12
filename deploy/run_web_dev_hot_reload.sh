@@ -2,14 +2,15 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${DEPLOY_ENV_FILE:-${ROOT_DIR}/deploy/.env}"
+DEFAULT_DEPLOY_ENV_FILE="${ARIS_DEPLOY_ENV_FILE_DEFAULT:-/home/ubuntu/.config/aris/prod.env}"
+ENV_FILE="${DEPLOY_ENV_FILE:-${DEFAULT_DEPLOY_ENV_FILE}}"
 WEB_DEV_PORT="${WEB_DEV_PORT:-3305}"
 WEB_DEV_HOST="${WEB_DEV_HOST:-0.0.0.0}"
 SKIP_DB_PREPARE="${SKIP_DB_PREPARE:-0}"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   echo "[web-dev] env file not found: ${ENV_FILE}" >&2
-  echo "[web-dev] create it first: cp deploy/.env.example deploy/.env" >&2
+  echo "[web-dev] create it first: mkdir -p /home/ubuntu/.config/aris && cp deploy/.env.example /home/ubuntu/.config/aris/prod.env" >&2
   exit 1
 fi
 
@@ -36,6 +37,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 done < "${ENV_FILE}"
 
 export NODE_ENV=development
+export DEPLOY_ENV_FILE="${ENV_FILE}"
 export HOST="${WEB_DEV_HOST}"
 export PORT="${WEB_DEV_PORT}"
 
