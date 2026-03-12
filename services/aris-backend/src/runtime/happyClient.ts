@@ -53,6 +53,20 @@ const CODEX_TURN_TIMEOUT_MS = (() => {
   }
   return 30 * 60 * 1000; // 30 minutes
 })();
+const CODEX_APP_SERVER_POST_TURN_QUIET_MS = (() => {
+  const parsed = Number.parseInt(process.env.CODEX_APP_SERVER_POST_TURN_QUIET_MS || '', 10);
+  if (Number.isFinite(parsed) && parsed >= 50) {
+    return parsed;
+  }
+  return 250;
+})();
+const CODEX_APP_SERVER_POST_TURN_DRAIN_TIMEOUT_MS = (() => {
+  const parsed = Number.parseInt(process.env.CODEX_APP_SERVER_POST_TURN_DRAIN_TIMEOUT_MS || '', 10);
+  if (Number.isFinite(parsed) && parsed >= 250) {
+    return parsed;
+  }
+  return 1_500;
+})();
 const STALE_RUN_TIMEOUT_MS = (() => {
   const parsed = Number.parseInt(process.env.HAPPY_STALE_RUN_TIMEOUT_MS || '', 10);
   if (Number.isFinite(parsed) && parsed >= 60_000) {
@@ -526,6 +540,42 @@ function trimOutput(value: string): string {
     return normalized;
   }
   return normalized.slice(0, AGENT_MAX_OUTPUT_CHARS);
+}
+
+async function waitForStableActivity(input: {
+  getActivityTick: () => number;
+  getLastActivityAt: () => number;
+  quietMs: number;
+  timeoutMs: number;
+}): Promise<void> {
+  const deadline = Date.now() + Math.max(0, input.timeoutMs);
+  let observedTick = input.getActivityTick();
+
+  while (Date.now() < deadline) {
+    const idleFor = Date.now() - input.getLastActivityAt();
+    if (idleFor >= input.quietMs) {
+      const currentTick = input.getActivityTick();
+      if (currentTick === observedTick) {
+        return;
+      }
+      observedTick = currentTick;
+      continue;
+    }
+
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      return;
+    }
+
+    const waitMs = Math.min(
+      Math.max(10, input.quietMs - Math.max(0, idleFor)),
+      remaining,
+    );
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, waitMs);
+    });
+    observedTick = input.getActivityTick();
+  }
 }
 
 type AgentCommand = ProviderCommand;
@@ -1229,6 +1279,7 @@ export const happyClientTestHooks = {
   shouldSkipDuplicateAgentMessage,
   buildClaudeSessionId,
   buildAgentCommand,
+  waitForStableActivity,
 };
 
 export class HappyRuntimeStore {
@@ -1879,6 +1930,8 @@ export class HappyRuntimeStore {
     let pendingAgentMessage = '';
     let streamedPersisted = false;
     let agentMessagePersisted = false;
+    let stdoutActivityTick = 0;
+    let lastStdoutActivityAt = Date.now();
     let resolvedThreadId = typeof threadId === 'string' && threadId.trim().length > 0
       ? threadId.trim()
       : '';
@@ -2334,6 +2387,8 @@ export class HappyRuntimeStore {
     });
 
     stdoutLines.on('line', (line) => {
+      stdoutActivityTick += 1;
+      lastStdoutActivityAt = Date.now();
       const rawLine = line.trim();
       this.happyEventLogger.logRaw({
         sessionId: session.id,
@@ -2415,6 +2470,37 @@ export class HappyRuntimeStore {
         childClosed,
         new Promise<void>((resolve) => setTimeout(resolve, 1_500)),
       ]).catch(() => undefined);
+    };
+
+    const waitForPostTurnDrain = async () => {
+      const drainDeadline = Date.now() + CODEX_APP_SERVER_POST_TURN_DRAIN_TIMEOUT_MS;
+
+      while (Date.now() < drainDeadline) {
+        await waitForStableActivity({
+          getActivityTick: () => stdoutActivityTick,
+          getLastActivityAt: () => lastStdoutActivityAt,
+          quietMs: CODEX_APP_SERVER_POST_TURN_QUIET_MS,
+          timeoutMs: Math.max(10, drainDeadline - Date.now()),
+        });
+
+        const activityTickSnapshot = stdoutActivityTick;
+        const appendSnapshot = appendChain;
+        const permissionSnapshot = permissionChain;
+        await appendSnapshot;
+        await permissionSnapshot;
+
+        if (
+          activityTickSnapshot === stdoutActivityTick
+          && appendSnapshot === appendChain
+          && permissionSnapshot === permissionChain
+          && Date.now() - lastStdoutActivityAt >= CODEX_APP_SERVER_POST_TURN_QUIET_MS
+        ) {
+          return;
+        }
+      }
+
+      await appendChain;
+      await permissionChain;
     };
 
     try {

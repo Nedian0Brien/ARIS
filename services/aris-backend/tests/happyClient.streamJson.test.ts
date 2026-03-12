@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { happyClientTestHooks } from '../src/runtime/happyClient.js';
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('happyClient stream-json parsing', () => {
   it('marks Claude transcript-only output as non-message while keeping action extraction', () => {
@@ -197,5 +201,57 @@ describe('happyClient stream-json parsing', () => {
     const parsed = happyClientTestHooks.parseAgentStreamOutput(streamOutput);
     expect(parsed.sessionId).toBe('claude-session-abc');
     expect(parsed.output).toBe('응답 완료');
+  });
+
+  it('waits for a quiet window after the latest app-server activity', async () => {
+    vi.useFakeTimers();
+
+    let activityTick = 0;
+    let lastActivityAt = Date.now();
+    setTimeout(() => {
+      activityTick += 1;
+      lastActivityAt = Date.now();
+    }, 100);
+
+    const waitPromise = happyClientTestHooks.waitForStableActivity({
+      getActivityTick: () => activityTick,
+      getLastActivityAt: () => lastActivityAt,
+      quietMs: 200,
+      timeoutMs: 1_000,
+    });
+
+    const settled = vi.fn();
+    void waitPromise.then(settled);
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(settled).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(60);
+    await waitPromise;
+    expect(settled).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops waiting once the drain timeout is reached', async () => {
+    vi.useFakeTimers();
+
+    let activityTick = 0;
+    let lastActivityAt = Date.now();
+    const timer = setInterval(() => {
+      activityTick += 1;
+      lastActivityAt = Date.now();
+    }, 40);
+
+    const waitPromise = happyClientTestHooks.waitForStableActivity({
+      getActivityTick: () => activityTick,
+      getLastActivityAt: () => lastActivityAt,
+      quietMs: 200,
+      timeoutMs: 150,
+    });
+
+    await vi.advanceTimersByTimeAsync(200);
+    await waitPromise;
+
+    clearInterval(timer);
+    expect(activityTick).toBeGreaterThan(0);
   });
 });
