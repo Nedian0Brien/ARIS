@@ -133,7 +133,7 @@ jobs:
           fi
 
           test -f "$deploy_repo_dir/deploy/deploy_backend_zero_downtime.sh"
-          test -f "$deploy_repo_dir/deploy/deploy_web_zero_downtime.sh"
+          test -f "$deploy_repo_dir/deploy/deploy_web.sh"
 
           echo "Resolved deploy repo: $deploy_repo_dir"
           echo "deploy_repo_dir=$deploy_repo_dir" >> "$GITHUB_OUTPUT"
@@ -182,4 +182,4 @@ jobs:
         run: |
           set -euo pipefail
           DEPLOY_REPO_DIR="${{ steps.resolve-deploy-repo.outputs.deploy_repo_dir }}"
-          "$DEPLOY_REPO_DIR/deploy/deploy_web_zero_downtime.sh"
+          "$DEPLOY_REPO_DIR/deploy/deploy_web.sh"

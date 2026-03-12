@@ -86,9 +86,14 @@ Default ports:
 ## Deployment
 
 - Main push runs `.github/workflows/deploy-on-main.yml`.
-- Workflow auto-resolves the deploy repository path and runs:
+- Official deployment entrypoints:
   - `deploy/deploy_backend_zero_downtime.sh`
-  - `deploy/deploy_web_zero_downtime.sh`
+  - `deploy/deploy_web.sh`
+  - `deploy/deploy_zero_downtime.sh`
+- Operational helpers live under:
+  - `deploy/ops/`
+  - `deploy/dev/`
+  - `deploy/legacy/`
 - Detailed operations guide: [`deploy/README.md`](deploy/README.md)
 
 ## Service Docs

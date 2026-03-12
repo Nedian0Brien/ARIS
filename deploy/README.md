@@ -1,54 +1,85 @@
-# ARIS Docker Deployment
+# ARIS Deployment Guide
 
-This deployment setup runs `aris-web`, `aris-backend`, and PostgreSQL together with Docker Compose.
+ARIS production deploy uses a hybrid model:
+- Web: Docker Compose blue/green slots (`aris-web-blue`, `aris-web-green`)
+- Backend: PM2 cluster reload on host
+- Reverse proxy: system nginx switches upstream between slot ports
 
-## 1. Prepare env file
+## Official entrypoints
+
+Use these three commands as the only standard deployment entrypoints:
 
 ```bash
-cp deploy/.env.example deploy/.env
+./deploy/deploy_backend_zero_downtime.sh
+./deploy/deploy_web.sh
+./deploy/deploy_zero_downtime.sh
 ```
 
-Set at minimum:
+- `deploy_backend_zero_downtime.sh`: backend build + PM2 zero-downtime reload
+- `deploy_web.sh`: web blue/green deploy and nginx upstream switch
+- `deploy_zero_downtime.sh`: backend then web
 
+`deploy/deploy_web_zero_downtime.sh` remains only as a compatibility wrapper. New docs and automation should use `deploy/deploy_web.sh`.
+
+## Directory layout
+
+```text
+deploy/
+├── deploy_backend_zero_downtime.sh   # official backend entrypoint
+├── deploy_web.sh                     # official web entrypoint
+├── deploy_zero_downtime.sh           # official full deploy entrypoint
+├── deploy_web_zero_downtime.sh       # compatibility wrapper
+├── internal/                         # actual deploy implementations
+├── ops/                              # runtime checks / cleanup
+├── dev/                              # local hot reload helpers
+├── legacy/                           # deprecated scripts kept for fallback
+├── ecosystem.config.cjs
+├── .env.example
+└── Caddyfile
+```
+
+## Before deploying
+
+1. Confirm you are on the expected commit and branch.
+2. Verify `deploy/.env` exists and required values are set.
+3. Ensure `deploy/.env` and `services/aris-backend/.env` use the same `RUNTIME_API_TOKEN`.
+4. Confirm nginx-managed production host is the target environment.
+
+Minimum required secrets:
 - `AUTH_JWT_SECRET`
 - `ARIS_ADMIN_EMAIL`
 - `ARIS_ADMIN_PASSWORD`
 - `RUNTIME_API_TOKEN`
 - `POSTGRES_PASSWORD`
+- `SSH_KEY_ENCRYPTION_SECRET`
 
-Use unique random values. Do not use placeholder or generic defaults.
+## Standard deployment flows
 
-## 2. Start local stack
+### Backend only
 
-ARIS uses a hybrid deployment model:
-- **Web & DB**: Docker Compose
-- **Backend**: PM2 (running on Host for OS-level control)
-
-### 2.1 Backend (Host)
 ```bash
-# In services/aris-backend
-npm install
-npm run build
-# Start with pm2 (token is read from deploy/services env files automatically)
-pm2 start deploy/ecosystem.config.cjs --env production
-
-# Zero-downtime backend deploy:
 ./deploy/deploy_backend_zero_downtime.sh
 ```
 
-### 2.2 Web & DB (Docker)
+This builds `services/aris-backend`, stages runtime files under `.runtime/aris-backend`, then reloads PM2 in cluster mode.
+
+### Web only
+
 ```bash
 ./deploy/deploy_web.sh
 ```
 
-`deploy_web.sh` now runs zero-downtime blue/green deployment:
-- Build `aris-web-blue` / `aris-web-green` slots alternately.
-- Start the inactive slot and wait for container + HTTP health checks.
-- Atomically switch nginx upstream snippet to the new slot port and reload nginx.
-- Drain a short period (`WEB_DRAIN_SECONDS`) and stop the previous slot.
-- Stop legacy single-slot `aris-web` container by default (`STOP_LEGACY_WEB=1`).
+Default behavior:
+- Builds the inactive slot image unless the web fingerprint is unchanged
+- Starts the inactive slot (`aris-web-blue` or `aris-web-green`)
+- Waits for container health and HTTP readiness on `/login`
+- Switches nginx upstream to `WEB_BLUE_PORT` or `WEB_GREEN_PORT`
+- Drains for `WEB_DRAIN_SECONDS` seconds
+- Stops the previous slot
+- Stops legacy `aris-web` by default (`STOP_LEGACY_WEB=1`)
 
 Useful overrides:
+
 ```bash
 WEB_DRAIN_SECONDS=12 ./deploy/deploy_web.sh
 PULL_BASE=1 ./deploy/deploy_web.sh
@@ -56,107 +87,72 @@ SKIP_BUILD_IF_UNCHANGED=0 ./deploy/deploy_web.sh
 STOP_LEGACY_WEB=0 ./deploy/deploy_web.sh
 ```
 
-Access web UI:
+### Full deploy
 
-- `http://localhost:3300` (legacy single-slot)
-- Blue slot port: `WEB_BLUE_PORT` (default `3301`)
-- Green slot port: `WEB_GREEN_PORT` (default `3302`)
-
-### 2.3 Backend (PM2 zero-downtime reload)
-```bash
-./deploy/deploy_backend_zero_downtime.sh
-```
-
-`deploy/ecosystem.config.cjs` runs `aris-backend` in PM2 cluster mode so `pm2 reload` performs graceful worker replacement.
-
-### 2.4 Full zero-downtime deploy (backend + web)
 ```bash
 ./deploy/deploy_zero_downtime.sh
 ```
 
-### 2.5 Web Hot Reload mode (no deploy)
-
-Use this when you want to verify frontend/backend web changes immediately without running deploy scripts.
+## Health checks after deploy
 
 ```bash
-./deploy/run_web_dev_hot_reload.sh
+docker compose --env-file deploy/.env ps aris-web-blue aris-web-green
+docker compose --env-file deploy/.env logs --tail=120 aris-web-blue aris-web-green
+pm2 logs aris-backend --lines 120 --nostream
+curl -sS http://127.0.0.1:4080/health
 ```
 
-Then open:
+Current web routing expectations:
+- Production traffic: `https://aris.lawdigest.cloud` through nginx
+- Active slot local ports: `WEB_BLUE_PORT` (default `3301`), `WEB_GREEN_PORT` (default `3302`)
+- `localhost:3300` is legacy single-slot behavior, not the standard production verification target
 
-- `http://<server-ip>:${WEB_DEV_PORT}` (default: `3305`)
-- local-only check: `http://127.0.0.1:3305`
+## Operational helpers
 
-Notes:
-- This runs `services/aris-web` in `NODE_ENV=development` with Next.js hot reload.
-- It does **not** switch nginx production upstream or blue/green slots.
-- Stop with `Ctrl+C`.
-- If DB is already prepared and you want faster restarts, skip DB prep:
+Runtime connectivity check:
 
 ```bash
-SKIP_DB_PREPARE=1 ./deploy/run_web_dev_hot_reload.sh
+./deploy/ops/check-runtime-connection.sh
 ```
 
-## 3. Start with domain + HTTPS (Caddy)
+This validates:
+- token alignment between deploy/backend env files
+- backend `/health`
+- unauthenticated `/v1/sessions` returns `401`
+- authenticated `/v1/sessions` returns `200`
 
-Set `ARIS_DOMAIN` and `APP_BASE_URL` in `deploy/.env`, then:
+Docker reclaimable cleanup:
 
 ```bash
-docker compose --env-file deploy/.env --profile edge up -d --build
+./deploy/ops/prune_docker_reclaimable.sh
 ```
 
-Caddy will request and renew TLS certificates automatically after DNS points to this server.
-
-## 4. Current production host note
-
-On this host, ports `80/443` are already served by system nginx.  
-`aris.lawdigest.cloud` is connected through nginx reverse proxy and is switched between blue/green slot ports by deployment script.
-
-## 5. Useful commands
+Daily cron example:
 
 ```bash
-docker compose --env-file deploy/.env logs -f aris-web
-docker compose --env-file deploy/.env logs -f aris-web-blue aris-web-green
-docker compose --env-file deploy/.env ps
-docker compose --env-file deploy/.env down
-docker system df -v
-pm2 logs aris-backend --lines 120
+( crontab -l 2>/dev/null; echo "0 2 * * * /home/ubuntu/project/ARIS/deploy/ops/prune_docker_reclaimable.sh >> /home/ubuntu/project/ARIS/deploy/.logs/docker-prune-cron.log 2>&1" ) | crontab -
 ```
 
-### Runtime auth check (recommended after token changes)
+## Development helper
+
+Use hot reload without touching production routing:
 
 ```bash
-./deploy/check-runtime-connection.sh
+./deploy/dev/run_web_dev_hot_reload.sh
 ```
 
-This verifies:
-
-- `deploy/.env`와 `services/aris-backend/.env`의 `RUNTIME_API_TOKEN` 일치 여부
-- 백엔드 `/health` 접근성
-- `/v1/sessions`에 토큰이 없는 경우 401 반환
-- `/v1/sessions`를 `deploy/.env` 토큰으로 호출해 200이 나오는지
-
-`401`이 반복되면 다음 항목을 점검하세요:
-
-1. `deploy/.env`의 `RUNTIME_API_TOKEN`이 실제 PM2 백엔드 프로세스 환경으로 반영됐는지
-2. `services/aris-backend/.env`의 `RUNTIME_API_TOKEN`이 동일한지
-3. 토큰 변경 후 백엔드 reload가 되었는지 (`./deploy/deploy_backend_zero_downtime.sh`)
-
-## 6. Scheduled Docker reclaimable cleanup (02:00 daily)
-
-To reclaim Docker image/build cache space automatically every day at 02:00:
+Optional fast restart:
 
 ```bash
-# one-time setup
-( crontab -l 2>/dev/null; echo "0 2 * * * /home/ubuntu/project/ARIS/deploy/prune_docker_reclaimable.sh >> /home/ubuntu/project/ARIS/deploy/.logs/docker-prune-cron.log 2>&1" ) | crontab -
+SKIP_DB_PREPARE=1 ./deploy/dev/run_web_dev_hot_reload.sh
 ```
 
-Manual run:
+## Legacy fallback
+
+The previous single-slot web deploy script is preserved at:
 
 ```bash
-./deploy/prune_docker_reclaimable.sh
+./deploy/legacy/deploy_web_legacy.sh
 ```
 
-Notes:
-- Uses `docker system prune -af` (no `--volumes`) to avoid deleting volumes.
-- Logs are appended to `deploy/.logs/docker-prune-cron.log`.
+Do not use it as the default production path unless explicitly required for rollback or incident handling.
