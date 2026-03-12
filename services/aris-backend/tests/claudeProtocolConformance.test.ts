@@ -82,4 +82,47 @@ describe('claude protocol conformance', () => {
     expect(scanned.sessionId).toBe(sessionId);
     expect(scanned.events.map((event) => event.discoveredSessionId)).toContain(sessionId);
   });
+
+  it('keeps observed session ids when Claude emits an aborted stop trace', () => {
+    const streamOutput = loadFixture('stop-abort-with-sessionid.jsonl');
+
+    const parsed = parseClaudeStreamOutput(streamOutput);
+    const mapped = mapClaudeStreamOutputToProtocol(streamOutput);
+
+    expect(parsed.sessionId).toBe('9f4a171c-4f0b-4a2a-8727-5232d07a50a0');
+    expect(mapped.sessionId).toBe('9f4a171c-4f0b-4a2a-8727-5232d07a50a0');
+    expect(mapped.envelopes.map((envelope) => envelope.kind)).toEqual([
+      'turn-start',
+      'turn-end',
+      'stop',
+    ]);
+    expect(mapped.envelopes[2]).toMatchObject({
+      kind: 'stop',
+      reason: 'aborted',
+    });
+  });
+
+  it('scans a real PrismLog project trace while ignoring queue-operation noise', async () => {
+    tempClaudeDir = await mkdtemp(join(tmpdir(), 'aris-claude-conformance-'));
+    process.env.CLAUDE_CONFIG_DIR = tempClaudeDir;
+    const workingDirectory = '/home/ubuntu/project/PrismLog';
+    const projectDir = buildProjectDir(tempClaudeDir, workingDirectory);
+    await mkdir(projectDir, { recursive: true });
+    const sessionId = '9f4a171c-4f0b-4a2a-8727-5232d07a50a0';
+    await writeFile(join(projectDir, `${sessionId}.jsonl`), loadFixture('project-log-prismlog-mixed-session.jsonl'));
+
+    const scanned = await scanClaudeSessionLogs({
+      workingDirectory,
+      hintedSessionIds: [sessionId],
+    });
+
+    expect(scanned.sessionId).toBe(sessionId);
+    expect(scanned.events).toHaveLength(3);
+    expect(scanned.events.every((event) => event.eventType !== 'queue-operation')).toBe(true);
+    expect(scanned.events.map((event) => event.discoveredSessionId)).toEqual([
+      sessionId,
+      sessionId,
+      sessionId,
+    ]);
+  });
 });
