@@ -153,6 +153,23 @@ export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
   const payloadType = String(payload.type ?? '').trim().toLowerCase();
   const payloadSubtype = String(payload.subtype ?? '').trim().toLowerCase();
   const lineLower = line.toLowerCase();
+  const isSystem = payloadType === 'system' || payloadSubtype === 'init';
+  const seemsToolEvent = (
+    payloadType === 'tool'
+    || payloadSubtype.includes('tool')
+    || lineLower.includes('"tool')
+    || lineLower.includes('commandexecution')
+    || lineLower.includes('exec_command')
+    || lineLower.includes('file_change')
+    || lineLower.includes('filechange')
+  );
+  const seemsAssistantEvent = (
+    payloadType.includes('assistant')
+    || payloadSubtype.includes('assistant')
+    || payloadSubtype.includes('final')
+    || payloadType === 'result'
+    || lineLower.includes('"agent_message"')
+  );
   const records = collectNestedRecords(payload);
   const commandRaw = extractFirstStringByKeys(records, [
     'command',
@@ -168,7 +185,6 @@ export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
     'file_path',
     'targetPath',
     'target_path',
-    'name',
   ]);
   const outputCandidate = extractFirstStringByKeys(records, [
     'aggregatedOutput',
@@ -196,13 +212,13 @@ export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
 
   let action: ClaudeActionEvent | undefined;
   let actionType: ClaudeActionEvent['actionType'] | null = null;
-  if (command && looksLikeShellCommand(command)) {
+  if (seemsToolEvent && command && looksLikeShellCommand(command)) {
     actionType = inferActionTypeFromCommand(command);
-  } else if (normalizedPath && /(write|patch|modify|edit|create|delete|update|changed)/i.test(lineLower)) {
+  } else if (seemsToolEvent && normalizedPath && /(write|patch|modify|edit|create|delete|update|changed)/i.test(lineLower)) {
     actionType = 'file_write';
-  } else if (normalizedPath && /(read|open|inspect|view|cat|grep|sed -n)/i.test(lineLower)) {
+  } else if (seemsToolEvent && normalizedPath && /(read|open|inspect|view|cat|grep|sed -n)/i.test(lineLower)) {
     actionType = 'file_read';
-  } else if (/(directory listing|file list|\bls\b|\btree\b|rg --files)/i.test(lineLower)) {
+  } else if (seemsToolEvent && /(directory listing|file list|\bls\b|\btree\b|rg --files)/i.test(lineLower)) {
     actionType = 'file_list';
   }
 
@@ -221,23 +237,6 @@ export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
     };
   }
 
-  const isSystem = payloadType === 'system' || payloadSubtype === 'init';
-  const seemsToolEvent = (
-    payloadType === 'tool'
-    || payloadSubtype.includes('tool')
-    || lineLower.includes('"tool')
-    || lineLower.includes('commandexecution')
-    || lineLower.includes('exec_command')
-    || lineLower.includes('file_change')
-    || lineLower.includes('filechange')
-  );
-  const seemsAssistantEvent = (
-    payloadType.includes('assistant')
-    || payloadSubtype.includes('assistant')
-    || payloadSubtype.includes('final')
-    || payloadType === 'result'
-    || lineLower.includes('"agent_message"')
-  );
   const assistantText = (!isSystem && !seemsToolEvent && seemsAssistantEvent)
     ? extractFirstStringByKeys(records, ['text', 'message', 'content', 'output', 'result'])
     : '';

@@ -91,6 +91,23 @@ describe('claudeProtocolMapper', () => {
     expect(parsed.output).toBe('OK.');
   });
 
+  it('does not create action events from non-tool result metadata with path-like names', () => {
+    const line = JSON.stringify({
+      type: 'result',
+      result: 'OK.',
+      session_id: 'claude-session-false-positive',
+      summary: 'updated answer',
+      references: [
+        { name: 'claude.ai Notion' },
+      ],
+    });
+
+    const parsed = parseClaudeStreamLine(line);
+    expect(parsed.action).toBeUndefined();
+    expect(parsed.assistantText).toBe('OK.');
+    expect(parsed.sessionId).toBe('claude-session-false-positive');
+  });
+
   it('maps a single Claude tool line into an action event', () => {
     const line = JSON.stringify({
       type: 'tool',
