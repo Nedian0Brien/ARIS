@@ -6,6 +6,7 @@ import type {
   ClaudeLaunchCommand,
   ClaudePermissionRequest,
   ClaudeResumeTarget,
+  ClaudeTextEvent,
 } from './types.js';
 import type { ApprovalPolicy, PermissionDecision } from '../../../types.js';
 
@@ -78,6 +79,7 @@ export async function runClaudeCommand(input: {
   resumeTarget?: ClaudeResumeTarget;
   onAction?: (action: ClaudeActionEvent) => Promise<void>;
   onPermission?: (request: ClaudePermissionRequest) => Promise<PermissionDecision>;
+  onText?: (event: ClaudeTextEvent) => Promise<void>;
   executeCommand: ClaudeCommandExecutor;
 }): Promise<ClaudeCliResult> {
   const command = buildClaudeCommand({
@@ -93,6 +95,7 @@ export async function runClaudeCommand(input: {
     signal: input.signal,
     onAction: input.onAction,
     onPermission: input.onPermission,
+    onText: input.onText,
   });
 
   try {
