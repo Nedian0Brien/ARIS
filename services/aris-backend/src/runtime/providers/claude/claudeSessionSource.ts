@@ -46,7 +46,6 @@ export function buildClaudeResumeTarget(
     ? syntheticThreadId.trim()
     : buildClaudeSessionId(sessionId, chatId);
   return {
-    resumeTarget: { id: generatedSessionId, mode: 'session-id' },
     actionThreadId: generatedSessionId,
     threadIdSource: 'synthetic',
   };

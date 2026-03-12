@@ -32,9 +32,11 @@ export function buildClaudeCommand(input: {
   resumeTarget?: ClaudeResumeTarget;
 }): ClaudeLaunchCommand {
   const permissionMode = normalizeClaudePermissionMode(input.approvalPolicy);
-  const normalizedResumeId = normalizeResumeId(input.resumeTarget);
+  const normalizedResumeId = input.resumeTarget?.mode === 'resume'
+    ? normalizeResumeId(input.resumeTarget)
+    : undefined;
   const claudeResumeArgs = normalizedResumeId
-    ? [input.resumeTarget?.mode === 'session-id' ? '--session-id' : '--resume', normalizedResumeId]
+    ? ['--resume', normalizedResumeId]
     : [];
   const args = [
     '--print',

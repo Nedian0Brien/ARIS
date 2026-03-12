@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildClaudeCommand, runClaudeCommand } from '../src/runtime/providers/claude/claudeLauncher.js';
 
 describe('claudeLauncher', () => {
-  it('builds --session-id commands for generated Claude sessions', () => {
+  it('does not inject --session-id commands for generated Claude sessions', () => {
     const command = buildClaudeCommand({
       prompt: 'Reply with OK',
       approvalPolicy: 'on-request',
@@ -12,9 +12,9 @@ describe('claudeLauncher', () => {
 
     expect(command.command).toBe('claude');
     expect(command.requiresPty).toBe(false);
-    expect(command.args).toContain('--session-id');
+    expect(command.args).not.toContain('--session-id');
     expect(command.args).not.toContain('--resume');
-    expect(command.retryArgsOnFailure).toEqual(command.args);
+    expect(command.retryArgsOnFailure).toBeUndefined();
   });
 
   it('builds --resume commands for persisted Claude session ids', () => {
@@ -54,18 +54,24 @@ describe('claudeLauncher', () => {
     expect(result.threadId).toBe('session-live-123');
   });
 
-  it('does not retry the same synthetic session-id when Claude reports it is already in use', async () => {
-    const executeCommand = vi.fn()
-      .mockRejectedValueOnce(new Error('Session ID abc is already in use.'));
+  it('strips synthetic session-id targets before executing Claude commands', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({
+      output: 'done',
+      cwd: '/tmp',
+      inferredActions: [],
+      streamedActionsPersisted: false,
+    });
 
-    await expect(runClaudeCommand({
+    await runClaudeCommand({
       prompt: 'Reply with OK',
       approvalPolicy: 'on-request',
       model: 'claude-haiku-4-5',
       resumeTarget: { id: '11111111-2222-5333-8444-555555555555', mode: 'session-id' },
       executeCommand,
-    })).rejects.toThrow('already in use');
+    });
 
     expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(executeCommand.mock.calls[0]?.[0]?.command.args).not.toContain('--session-id');
+    expect(executeCommand.mock.calls[0]?.[0]?.command.args).not.toContain('--resume');
   });
 });

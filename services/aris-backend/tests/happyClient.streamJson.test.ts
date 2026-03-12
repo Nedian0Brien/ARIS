@@ -194,7 +194,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     expect(launchMode).toBe('local');
   });
 
-  it('uses --session-id for Claude when the resume id is a UUID', () => {
+  it('does not inject --session-id for Claude when given a synthetic target', () => {
     const sessionId = happyClientTestHooks.buildClaudeSessionId('session-2', 'chat-2');
     const command = happyClientTestHooks.buildAgentCommand(
       'claude',
@@ -205,8 +205,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     );
 
     expect(command).not.toBeNull();
-    expect(command?.args).toContain('--session-id');
-    expect(command?.args).toContain(sessionId);
+    expect(command?.args).not.toContain('--session-id');
     expect(command?.args).not.toContain('--resume');
     expect(command?.fallbackArgs).toBeUndefined();
   });
