@@ -54,6 +54,29 @@ describe('happyClient stream-json parsing', () => {
     expect(parsed.actions[0]?.command).toContain('cat README.md');
   });
 
+  it('strips plan status metadata from stream-json assistant messages', () => {
+    const streamOutput = [
+      JSON.stringify({
+        type: 'event',
+        event: 'agent_message',
+        content: `Sprint 2 구현 계획은 이렇습니다.
+
+ClaudeSession 객체 추가
+status: in_progress
+
+registry/controller를 ClaudeSession 중심으로 재편
+status: pending`,
+      }),
+    ].join('\n');
+
+    const parsed = happyClientTestHooks.parseAgentStreamOutput(streamOutput);
+    expect(parsed.output).toBe(`Sprint 2 구현 계획은 이렇습니다.
+
+ClaudeSession 객체 추가
+
+registry/controller를 ClaudeSession 중심으로 재편`);
+  });
+
   it('extracts tool call ids from stream-json action events', () => {
     const streamOutput = [
       JSON.stringify({

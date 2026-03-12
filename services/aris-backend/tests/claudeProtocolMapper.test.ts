@@ -66,6 +66,37 @@ describe('claudeProtocolMapper', () => {
     expect(parsed.output).toBe('OK');
   });
 
+  it('strips plan status metadata from Claude assistant output', () => {
+    const streamOutput = [
+      JSON.stringify({
+        type: 'assistant',
+        session_id: 'claude-session-plan',
+        message: {
+          role: 'assistant',
+          content: [
+            {
+              type: 'text',
+              text: `Sprint 2 구현 계획은 이렇습니다.
+
+ClaudeSession 객체 추가
+status: in_progress
+
+session source를 observed 우선 정책으로 조정
+status: pending`,
+            },
+          ],
+        },
+      }),
+    ].join('\n');
+
+    const parsed = parseClaudeStreamOutput(streamOutput);
+    expect(parsed.output).toBe(`Sprint 2 구현 계획은 이렇습니다.
+
+ClaudeSession 객체 추가
+
+session source를 observed 우선 정책으로 조정`);
+  });
+
   it('does not misclassify assistant/result usage fields as tool events', () => {
     const streamOutput = [
       JSON.stringify({

@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 import { inferActionTypeFromCommand, titleForActionType } from './actionType.js';
+import { sanitizeAgentMessageText, shouldDisplayToolStatus } from './agentMessageSanitizer.js';
 import { summarizeDiffText, summarizeFileChangeDiff } from './diffStats.js';
 import { HappyEventLogger } from './happyEventLogger.js';
 import { resolveRuntimeModelSelection } from './modelPolicy.js';
@@ -904,13 +905,16 @@ function parseAgentStreamOutput(stdout: string): { output: string; actions: Pars
     if (parsedLine.action && parsedLine.actionKey && !actionByKey.has(parsedLine.actionKey)) {
       actionByKey.set(parsedLine.actionKey, parsedLine.action);
     }
+    const assistantText = parsedLine.assistantText
+      ? sanitizeAgentMessageText(parsedLine.assistantText)
+      : '';
     if (
-      parsedLine.assistantText
-      && !looksLikeShellCommand(parsedLine.assistantText)
-      && !looksLikeActionTranscript(parsedLine.assistantText)
-      && parsedLine.assistantText.length >= latestAssistantText.length
+      assistantText
+      && !looksLikeShellCommand(assistantText)
+      && !looksLikeActionTranscript(assistantText)
+      && assistantText.length >= latestAssistantText.length
     ) {
-      latestAssistantText = parsedLine.assistantText;
+      latestAssistantText = assistantText;
     }
     if (parsedLine.sessionId) {
       latestSessionId = parsedLine.sessionId;
@@ -2295,7 +2299,7 @@ export class HappyRuntimeStore {
 
         const itemType = asString(item.type, '');
         if (itemType === 'agentMessage') {
-          const text = asString(item.text, '').trim();
+          const text = sanitizeAgentMessageText(asString(item.text, '').trim());
           if (!text) {
             return;
           }
@@ -2330,7 +2334,7 @@ export class HappyRuntimeStore {
           if (fileWrite.detail) {
             bodyParts.push(fileWrite.detail);
           }
-          if (fileWrite.status && fileWrite.status !== 'completed' && fileWrite.status !== 'inProgress') {
+          if (shouldDisplayToolStatus(fileWrite.status)) {
             bodyParts.push(`status: ${fileWrite.status}`);
           }
 
@@ -2380,7 +2384,7 @@ export class HappyRuntimeStore {
           bodyParts.push(`exit code: ${exitCode}`);
         }
         const status = asString(item.status, '').trim();
-        if (status && status !== 'completed' && status !== 'inProgress') {
+        if (shouldDisplayToolStatus(status)) {
           bodyParts.push(`status: ${status}`);
         }
         const body = bodyParts.join('\n');
@@ -2412,7 +2416,7 @@ export class HappyRuntimeStore {
 
       if (method === 'turn/completed') {
         if (!agentMessagePersisted) {
-          const recoveredText = pendingAgentMessage.trim();
+          const recoveredText = sanitizeAgentMessageText(pendingAgentMessage.trim());
           if (recoveredText) {
             lastAgentMessage = recoveredText;
             streamedPersisted = true;
@@ -2679,7 +2683,7 @@ export class HappyRuntimeStore {
       await appendChain;
       await permissionChain;
 
-      const finalText = lastAgentMessage.trim();
+      const finalText = sanitizeAgentMessageText(lastAgentMessage.trim());
       if (signal?.aborted || completion.status === 'interrupted') {
         runStatus = 'aborted';
         return {
@@ -2959,7 +2963,7 @@ export class HappyRuntimeStore {
 
       const itemType = asString(item.type, '');
       if (itemType === 'agent_message') {
-        const text = asString(item.text, '').trim();
+        const text = sanitizeAgentMessageText(asString(item.text, '').trim());
         if (text) {
           const itemTurnId = asString(
             payload.turn_id,
@@ -2995,7 +2999,7 @@ export class HappyRuntimeStore {
         if (fileWrite.detail) {
           bodyParts.push(fileWrite.detail);
         }
-        if (fileWrite.status && fileWrite.status !== 'completed' && fileWrite.status !== 'inProgress') {
+        if (shouldDisplayToolStatus(fileWrite.status)) {
           bodyParts.push(`status: ${fileWrite.status}`);
         }
 
@@ -3078,7 +3082,7 @@ export class HappyRuntimeStore {
     await appendChain;
     await permissionChain;
 
-    const finalText = lastAgentMessage.trim();
+    const finalText = sanitizeAgentMessageText(lastAgentMessage.trim());
     if (signal?.aborted) {
       this.happyEventLogger.logParsed({
         sessionId: session.id,
@@ -3468,8 +3472,9 @@ export class HappyRuntimeStore {
 
       const streamedPersisted = Boolean(response.streamedPersisted);
       const agentMessagePersisted = Boolean(response.agentMessagePersisted);
-      if (!isCodex || !streamedPersisted || (!agentMessagePersisted && response.output.trim().length > 0)) {
-        await this.appendAgentMessage(session.id, response.output, {
+      const finalAgentOutput = sanitizeAgentMessageText(response.output);
+      if (finalAgentOutput.length > 0 && (!isCodex || !streamedPersisted || !agentMessagePersisted)) {
+        await this.appendAgentMessage(session.id, finalAgentOutput, {
           ...(scopedChatId ? { chatId: scopedChatId } : {}),
           requestedPath: session.metadata.path,
           execCwd: response.cwd,

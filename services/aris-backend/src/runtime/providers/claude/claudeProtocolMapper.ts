@@ -1,4 +1,5 @@
 import { inferActionTypeFromCommand, titleForActionType } from '../../actionType.js';
+import { sanitizeAgentMessageText } from '../../agentMessageSanitizer.js';
 import { summarizeDiffText } from '../../diffStats.js';
 import type { ClaudeActionEvent } from './types.js';
 
@@ -266,18 +267,21 @@ export function parseClaudeStreamOutput(stdout: string): { output: string; actio
     if (parsedLine.action && parsedLine.actionKey && !actionByKey.has(parsedLine.actionKey)) {
       actionByKey.set(parsedLine.actionKey, parsedLine.action);
     }
+    const assistantText = parsedLine.assistantText
+      ? sanitizeAgentMessageText(parsedLine.assistantText)
+      : '';
     if (
-      parsedLine.assistantText
+      assistantText
       && (
-        !looksLikeClaudeActionTranscript(parsedLine.assistantText)
+        !looksLikeClaudeActionTranscript(assistantText)
         && (
           parsedLine.assistantSource === 'result'
-          || !looksLikeShellCommand(parsedLine.assistantText)
+          || !looksLikeShellCommand(assistantText)
         )
       )
-      && parsedLine.assistantText.length >= latestAssistantText.length
+      && assistantText.length >= latestAssistantText.length
     ) {
-      latestAssistantText = parsedLine.assistantText;
+      latestAssistantText = assistantText;
     }
     if (parsedLine.sessionId) {
       latestSessionId = parsedLine.sessionId;
