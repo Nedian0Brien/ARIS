@@ -11,7 +11,7 @@ import { resolveRuntimeModelSelection } from './modelPolicy.js';
 import { recoverClaudeThreadIdFromMessages, runClaudeProviderTurn } from './providers/claude/claudeOrchestrator.js';
 import { looksLikeClaudeActionTranscript, parseClaudeStreamLine, parseClaudeStreamOutput } from './providers/claude/claudeProtocolMapper.js';
 import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.js';
-import { extractClaudeSessionHintIds, scanClaudeSessionLogs } from './providers/claude/claudeSessionScanner.js';
+import { ClaudeSessionLogTracker, extractClaudeSessionHintIds } from './providers/claude/claudeSessionScanner.js';
 import { buildClaudeSessionId } from './providers/claude/claudeSessionSource.js';
 import { buildProviderCommand, type ProviderCommand } from './providers/providerCommandFactory.js';
 import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeRuntimeSession } from './providers/claude/types.js';
@@ -1290,6 +1290,7 @@ export class HappyRuntimeStore {
   private readonly permissions = new Map<string, PermissionRequest>();
   private readonly activeRuns = new Map<string, ActiveRun>();
   private readonly claudeSessionRegistry = new ClaudeSessionRegistry();
+  private readonly claudeSessionScanners = new Map<string, ClaudeSessionLogTracker>();
   private readonly codexThreads = new Map<string, string>();
   private readonly codexPermissionIndex = new Map<string, string>();
   private readonly codexPermissionResponders = new Map<string, (decision: PermissionDecision) => Promise<void>>();
@@ -1318,6 +1319,16 @@ export class HappyRuntimeStore {
         this.codexThreads.delete(key);
       }
     }
+  }
+
+  private getClaudeSessionScanner(workingDirectory: string): ClaudeSessionLogTracker {
+    const scanner = this.claudeSessionScanners.get(workingDirectory);
+    if (scanner) {
+      return scanner;
+    }
+    const created = new ClaudeSessionLogTracker({ workingDirectory });
+    this.claudeSessionScanners.set(workingDirectory, created);
+    return created;
   }
 
   private buildRunKey(sessionId: string, chatId?: string): string {
@@ -1731,10 +1742,9 @@ export class HappyRuntimeStore {
       if (result.threadId) {
         hintedSessionIds.unshift(result.threadId);
       }
-      const scannedSession = await scanClaudeSessionLogs({
-        workingDirectory: safeCwd,
-        hintedSessionIds,
-      });
+      const scanner = this.getClaudeSessionScanner(safeCwd);
+      scanner.trackSessionIds(hintedSessionIds, { hinted: true });
+      const scannedSession = await scanner.poll();
       if (
         scannedSession.sessionId
         && (
