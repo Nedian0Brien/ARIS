@@ -98,6 +98,56 @@ describe('claudeProtocolMapper', () => {
     expect(parsed.envelopes.map((envelope) => envelope.kind)).toContain('stop');
   });
 
+  it('surfaces Claude error payload text instead of treating it as an empty response', () => {
+    const streamOutput = [
+      JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        session_id: 'claude-session-error',
+      }),
+      JSON.stringify({
+        type: 'error',
+        session_id: 'claude-session-error',
+        message: 'Prompt is too long',
+      }),
+    ].join('\n');
+
+    const parsed = parseClaudeStreamOutput(streamOutput);
+    expect(parsed.sessionId).toBe('claude-session-error');
+    expect(parsed.output).toBe('');
+    expect(parsed.errorText).toBe('Prompt is too long');
+    expect(parsed.envelopes).toContainEqual(expect.objectContaining({
+      kind: 'turn-end',
+      stopReason: 'error',
+      threadId: 'claude-session-error',
+    }));
+    expect(parsed.envelopes).toContainEqual(expect.objectContaining({
+      kind: 'stop',
+      reason: 'error',
+    }));
+  });
+
+  it('does not expose result error payload text as normal assistant output', () => {
+    const streamOutput = [
+      JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        session_id: 'claude-session-result-error',
+      }),
+      JSON.stringify({
+        type: 'result',
+        stop_reason: 'error',
+        session_id: 'claude-session-result-error',
+        result: 'Prompt is too long',
+      }),
+    ].join('\n');
+
+    const parsed = parseClaudeStreamOutput(streamOutput);
+    expect(parsed.output).toBe('');
+    expect(parsed.errorText).toBe('Prompt is too long');
+    expect(parsed.envelopes.some((envelope) => envelope.kind === 'text')).toBe(false);
+  });
+
   it('strips plan status metadata from Claude assistant output', () => {
     const streamOutput = [
       JSON.stringify({

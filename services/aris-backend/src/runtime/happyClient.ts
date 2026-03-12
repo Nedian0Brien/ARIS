@@ -1746,6 +1746,7 @@ export class HappyRuntimeStore {
       let stderrBuffer = '';
       let lineBuffer = '';
       let resolvedSessionId = '';
+      let providerErrorDetail = '';
       let emitChain: Promise<void> = Promise.resolve();
       let settled = false;
       let timedOut = false;
@@ -1820,6 +1821,9 @@ export class HappyRuntimeStore {
           const parsedLine = parseClaudeStreamLine(normalized);
           if (parsedLine.sessionId) {
             resolvedSessionId = parsedLine.sessionId;
+          }
+          if (parsedLine.errorText) {
+            providerErrorDetail = parsedLine.errorText;
           }
           if (parsedLine.action && parsedLine.actionKey && !actionByKey.has(parsedLine.actionKey)) {
             actionByKey.set(parsedLine.actionKey, parsedLine.action);
@@ -1926,7 +1930,7 @@ export class HappyRuntimeStore {
                 Object.assign(timeoutError, { timedOut: true });
                 throw timeoutError;
               }
-              const detail = stripAnsi(stderrBuffer || stdoutBuffer || '').slice(0, 800);
+              const detail = providerErrorDetail || stripAnsi(stderrBuffer || stdoutBuffer || '').slice(0, 800);
               const cliError = new Error(`${agent} CLI failed (${code}${closeSignal ? `/${closeSignal}` : ''}): ${detail || 'Unknown CLI error'}`);
               if (resolvedSessionId) {
                 Object.assign(cliError, { threadId: resolvedSessionId });
@@ -2030,6 +2034,14 @@ export class HappyRuntimeStore {
         protocolEnvelopes = parsed.envelopes;
         if (!result.threadId && parsed.sessionId) {
           result.threadId = parsed.sessionId;
+        }
+        if (parsed.errorText) {
+          const providerError = new Error(parsed.errorText);
+          const observedThreadId = result.threadId ?? parsed.sessionId;
+          if (observedThreadId) {
+            Object.assign(providerError, { threadId: observedThreadId });
+          }
+          throw providerError;
         }
         output = trimOutput(parsed.output || '');
       } else if (agent === 'gemini') {
