@@ -21,3 +21,7 @@ Gemini raw stream-json payload를 상위 레이어가 직접 해석하지 않도
   - tool event, result text, completed stop envelope를 동시에 검증하는 기준선
 - `stop-timeout-with-threadid.jsonl`
   - timeout stop reason과 observed thread identity 유지 기준선
+- `actual-simple-success.jsonl`
+  - 실제 Gemini CLI `type:init`, `type:message(role=assistant)`, `type:result(status=success)` shape 기준선
+- `actual-resume-success.jsonl`
+  - 실제 Gemini CLI resume trace에서도 같은 observed session identity가 유지되는지 검증하는 기준선

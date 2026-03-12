@@ -89,6 +89,46 @@ describe('geminiProtocolMapper', () => {
     ]);
   });
 
+  it('parses actual Gemini CLI init/message/result traces', () => {
+    const streamOutput = [
+      JSON.stringify({
+        type: 'init',
+        session_id: 'gemini-actual-session',
+        model: 'gemini-2.5-flash',
+      }),
+      JSON.stringify({
+        type: 'message',
+        role: 'user',
+        content: 'Respond with OK only.',
+      }),
+      JSON.stringify({
+        type: 'message',
+        role: 'assistant',
+        content: 'OK',
+        delta: true,
+      }),
+      JSON.stringify({
+        type: 'result',
+        status: 'success',
+      }),
+    ].join('\n');
+
+    const parsed = parseGeminiStreamOutput(streamOutput);
+    expect(parsed.sessionId).toBe('gemini-actual-session');
+    expect(parsed.output).toBe('OK');
+    expect(parsed.envelopes.map((envelope) => envelope.kind)).toEqual([
+      'turn-start',
+      'text',
+      'turn-end',
+      'stop',
+    ]);
+    expect(parsed.envelopes[2]).toMatchObject({
+      kind: 'turn-end',
+      sessionId: 'gemini-actual-session',
+      threadId: 'gemini-actual-session',
+    });
+  });
+
   it('does not create action events from non-tool result metadata with path-like names', () => {
     const line = JSON.stringify({
       type: 'result',

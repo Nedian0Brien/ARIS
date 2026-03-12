@@ -47,4 +47,27 @@ describe('geminiProtocolConformance', () => {
       reason: 'timeout',
     });
   });
+
+  it('keeps actual Gemini success traces canonicalized to turn-start, text, turn-end, stop', () => {
+    const mapped = mapGeminiStreamOutputToProtocol(readFixture('actual-simple-success.jsonl'));
+
+    expect(mapped.sessionId).toBe('e39a2b0c-acb5-4571-ac81-dae7ad7db13b');
+    expect(mapped.envelopes.map((envelope) => envelope.kind)).toEqual([
+      'turn-start',
+      'text',
+      'turn-end',
+      'stop',
+    ]);
+  });
+
+  it('keeps actual Gemini resume traces on the same observed session identity', () => {
+    const mapped = mapGeminiStreamOutputToProtocol(readFixture('actual-resume-success.jsonl'));
+
+    expect(mapped.sessionId).toBe('e39a2b0c-acb5-4571-ac81-dae7ad7db13b');
+    expect(mapped.envelopes[2]).toMatchObject({
+      kind: 'turn-end',
+      sessionId: 'e39a2b0c-acb5-4571-ac81-dae7ad7db13b',
+      threadId: 'e39a2b0c-acb5-4571-ac81-dae7ad7db13b',
+    });
+  });
 });

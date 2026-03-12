@@ -15,7 +15,7 @@ type GeminiMappedLine = {
   action?: GeminiActionEvent;
   actionKey?: string;
   assistantText?: string;
-  assistantSource?: 'assistant' | 'result';
+  assistantSource?: 'assistant' | 'message' | 'result';
   sessionId?: string;
 };
 
@@ -136,7 +136,7 @@ export function parseGeminiStreamLine(line: string): GeminiMappedLine {
   const payloadType = String(payload.type ?? '').trim().toLowerCase();
   const payloadSubtype = String(payload.subtype ?? '').trim().toLowerCase();
   const lineLower = line.toLowerCase();
-  const isSystem = payloadType === 'system' || payloadSubtype === 'init';
+  const isSystem = payloadType === 'system' || payloadType === 'init' || payloadSubtype === 'init';
   const seemsToolEvent = (
     payloadType === 'tool'
     || payloadSubtype.includes('tool')
@@ -146,14 +146,16 @@ export function parseGeminiStreamLine(line: string): GeminiMappedLine {
     || lineLower.includes('file_change')
     || lineLower.includes('filechange')
   );
+  const records = collectGeminiNestedRecords(payload);
+  const role = extractFirstGeminiStringByKeys(records, ['role']).toLowerCase();
   const seemsAssistantEvent = (
-    payloadType.includes('assistant')
+    (payloadType === 'message' && role === 'assistant')
+    || payloadType.includes('assistant')
     || payloadSubtype.includes('assistant')
     || payloadSubtype.includes('final')
     || payloadType === 'result'
     || lineLower.includes('"agent_message"')
   );
-  const records = collectGeminiNestedRecords(payload);
   const commandRaw = extractFirstGeminiStringByKeys(records, [
     'command',
     'cmd',
@@ -262,6 +264,7 @@ export function parseGeminiStreamLine(line: string): GeminiMappedLine {
     && !looksLikeGeminiActionTranscript(assistantText)
     && (
       payloadType === 'result'
+      || payloadType === 'message'
       || !looksLikeShellCommand(assistantText)
     )
   ) {
@@ -300,7 +303,11 @@ export function parseGeminiStreamLine(line: string): GeminiMappedLine {
     ...(action ? { action, actionKey: buildActionEventKey(action) } : {}),
     ...(assistantText ? {
       assistantText,
-      assistantSource: payloadType === 'result' ? 'result' as const : 'assistant' as const,
+      assistantSource: payloadType === 'result'
+        ? 'result' as const
+        : payloadType === 'message'
+          ? 'message' as const
+          : 'assistant' as const,
     } : {}),
     ...(sessionId ? { sessionId } : {}),
   };
@@ -319,9 +326,18 @@ export function mapGeminiStreamOutputToProtocol(stdout: string): { envelopes: Se
   for (const line of lines) {
     const parsedLine = parseGeminiStreamLine(line);
     for (const envelope of parsedLine.envelopes) {
-      const envelopeKey = JSON.stringify(envelope);
+      const hydratedEnvelope = latestSessionId && !envelope.sessionId
+        ? {
+          ...envelope,
+          sessionId: latestSessionId,
+          ...(envelope.kind === 'turn-end' && !envelope.threadId
+            ? { threadId: latestSessionId, threadIdSource: 'observed' as const }
+            : {}),
+        }
+        : envelope;
+      const envelopeKey = JSON.stringify(hydratedEnvelope);
       if (envelope.kind === 'text' || !envelopeKeys.has(envelopeKey)) {
-        envelopes.push(envelope);
+        envelopes.push(hydratedEnvelope);
         envelopeKeys.add(envelopeKey);
       }
     }
@@ -365,6 +381,7 @@ export function parseGeminiStreamOutput(stdout: string): {
         !looksLikeGeminiActionTranscript(assistantText)
         && (
           parsedLine.assistantSource === 'result'
+          || parsedLine.assistantSource === 'message'
           || !looksLikeShellCommand(assistantText)
         )
       )
