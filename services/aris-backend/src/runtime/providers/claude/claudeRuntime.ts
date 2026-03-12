@@ -3,6 +3,16 @@ import { buildClaudeResumeTarget, resolveClaudeThreadId } from './claudeSessionS
 import type { ClaudeSessionStateOwner } from './claudeSessionContract.js';
 import type { ClaudeCommandExecutor, ClaudeRuntimeSession, ClaudeTurnResult } from './types.js';
 
+function extractObservedThreadIdFromError(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') {
+    return undefined;
+  }
+  const candidate = (error as { threadId?: unknown }).threadId;
+  return typeof candidate === 'string' && candidate.trim().length > 0
+    ? candidate.trim()
+    : undefined;
+}
+
 export async function runClaudeTurn(input: {
   session: ClaudeRuntimeSession;
   sessionOwner?: ClaudeSessionStateOwner;
@@ -49,6 +59,12 @@ export async function runClaudeTurn(input: {
       }
       : undefined,
     executeCommand: input.executeCommand,
+  }).catch((error) => {
+    const observedThreadId = extractObservedThreadIdFromError(error);
+    if (observedThreadId) {
+      input.sessionOwner?.observeThreadId(observedThreadId, 'observed');
+    }
+    throw error;
   });
 
   const resolvedThread = resolveClaudeThreadId({

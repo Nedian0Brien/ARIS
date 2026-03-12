@@ -54,6 +54,29 @@ describe('claudeProtocolMapper', () => {
     ]);
   });
 
+  it('extracts lowercase sessionid fields from Claude init payloads', () => {
+    const streamOutput = [
+      JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        sessionid: 'claude-session-lowercase',
+      }),
+      JSON.stringify({
+        type: 'event',
+        event: 'agent_message',
+        content: '응답 완료',
+      }),
+    ].join('\n');
+
+    const parsed = parseClaudeStreamOutput(streamOutput);
+    expect(parsed.sessionId).toBe('claude-session-lowercase');
+    expect(parsed.envelopes[0]).toMatchObject({
+      kind: 'turn-start',
+      sessionId: 'claude-session-lowercase',
+      threadId: 'claude-session-lowercase',
+    });
+  });
+
   it('extracts result-only final output when Claude omits an assistant text event', () => {
     const streamOutput = [
       JSON.stringify({

@@ -236,6 +236,7 @@ export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
   const sessionId = extractFirstStringByKeys(records, [
     'session_id',
     'sessionId',
+    'sessionid',
     'resume_session_id',
     'resumeSessionId',
   ]);
