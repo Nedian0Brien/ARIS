@@ -1,9 +1,12 @@
 references/
 worktrees/
+.worktrees/
+
 .vscode/
 
 .env
 **/.env.bak-*
+.runtime/
 deploy/.env
 deploy/.env.bak-*
 deploy/.logs/
