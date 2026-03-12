@@ -263,4 +263,35 @@ describe('Claude provider flow', () => {
     expect(seenStates).toContain('streaming');
     expect(sessionOwner.snapshot().turnState).toBe('completed');
   });
+
+  it('preserves an observed Claude session id from a failed turn error payload', async () => {
+    const session = {
+      id: 'runtime-session-5',
+      metadata: {
+        approvalPolicy: 'never',
+        path: '/tmp/claude-provider-flow',
+      },
+    };
+    const sessionOwner = new ClaudeSession({
+      sessionId: 'runtime-session-5',
+      chatId: 'chat-5',
+    });
+    const timeoutError = Object.assign(
+      new Error('claude CLI timed out after 120000ms (session observed-session-5)'),
+      { threadId: 'observed-session-5', timedOut: true },
+    );
+
+    await expect(runClaudeProviderTurn({
+      session,
+      sessionOwner,
+      prompt: 'slow task',
+      chatId: 'chat-5',
+      executeCommand: async () => {
+        throw timeoutError;
+      },
+    })).rejects.toThrow('timed out');
+
+    expect(sessionOwner.getActiveThreadId()).toBe('observed-session-5');
+    expect(sessionOwner.snapshot().sessionSource).toBe('observed');
+  });
 });

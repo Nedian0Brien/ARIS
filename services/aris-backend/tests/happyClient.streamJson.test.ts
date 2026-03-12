@@ -245,6 +245,25 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     expect(parsed.output).toBe('응답 완료');
   });
 
+  it('extracts lowercase Claude sessionid fields from stream-json output', () => {
+    const streamOutput = [
+      JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        sessionid: 'claude-session-lowercase',
+      }),
+      JSON.stringify({
+        type: 'event',
+        event: 'agent_message',
+        content: '응답 완료',
+      }),
+    ].join('\n');
+
+    const parsed = happyClientTestHooks.parseAgentStreamOutput(streamOutput);
+    expect(parsed.sessionId).toBe('claude-session-lowercase');
+    expect(parsed.output).toBe('응답 완료');
+  });
+
   it('waits for a quiet window after the latest app-server activity', async () => {
     vi.useFakeTimers();
 

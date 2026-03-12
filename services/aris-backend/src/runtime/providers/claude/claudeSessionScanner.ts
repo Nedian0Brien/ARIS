@@ -152,6 +152,7 @@ async function readSessionLogDelta(projectDir: string, sessionId: string, cursor
         const discoveredSessionId = normalizeSessionId(extractFirstStringByKeys(records, [
           'sessionId',
           'session_id',
+          'sessionid',
           'resumeSessionId',
           'resume_session_id',
         ]));

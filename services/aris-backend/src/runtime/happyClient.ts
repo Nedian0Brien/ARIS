@@ -805,6 +805,7 @@ function parseAgentStreamLine(line: string): { action?: ParsedAgentActionEvent; 
   const sessionId = extractFirstStringByKeys(records, [
     'session_id',
     'sessionId',
+    'sessionid',
     'resume_session_id',
     'resumeSessionId',
   ]);
@@ -1712,8 +1713,10 @@ export class HappyRuntimeStore {
       let resolvedSessionId = '';
       let emitChain: Promise<void> = Promise.resolve();
       let settled = false;
+      let timedOut = false;
       let timeoutHandle: NodeJS.Timeout | null = setTimeout(() => {
         timeoutHandle = null;
+        timedOut = true;
         child.kill('SIGTERM');
       }, AGENT_COMMAND_TIMEOUT_MS);
 
@@ -1807,8 +1810,23 @@ export class HappyRuntimeStore {
               throw new Error('The operation was aborted');
             }
             if (code !== 0) {
+              if (timedOut) {
+                const timeoutError = new Error(
+                  `${agent} CLI timed out after ${AGENT_COMMAND_TIMEOUT_MS}ms`
+                  + (resolvedSessionId ? ` (session ${resolvedSessionId})` : ''),
+                );
+                if (resolvedSessionId) {
+                  Object.assign(timeoutError, { threadId: resolvedSessionId });
+                }
+                Object.assign(timeoutError, { timedOut: true });
+                throw timeoutError;
+              }
               const detail = stripAnsi(stderrBuffer || stdoutBuffer || '').slice(0, 800);
-              throw new Error(`${agent} CLI failed (${code}${closeSignal ? `/${closeSignal}` : ''}): ${detail || 'Unknown CLI error'}`);
+              const cliError = new Error(`${agent} CLI failed (${code}${closeSignal ? `/${closeSignal}` : ''}): ${detail || 'Unknown CLI error'}`);
+              if (resolvedSessionId) {
+                Object.assign(cliError, { threadId: resolvedSessionId });
+              }
+              throw cliError;
             }
             settled = true;
             resolve({
