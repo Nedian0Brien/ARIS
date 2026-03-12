@@ -19,6 +19,11 @@ All deploy scripts and PM2 read this file by default. You can override it explic
 DEPLOY_ENV_FILE=/some/other/path.env ./deploy/deploy_zero_downtime.sh
 ```
 
+Production note:
+
+- `aris-web` in Docker Compose calls `aris-backend` on `:4080`, so the web container still receives `RUNTIME_API_TOKEN` for runtime API authentication.
+- `HAPPY_SERVER_TOKEN` in `/home/ubuntu/.config/aris/prod.env` is used by `aris-backend` when it proxies to the external Happy runtime.
+
 Set at minimum:
 
 - `AUTH_JWT_SECRET`

@@ -3,10 +3,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+COMMON_GIT_DIR="$(git -C "${ROOT_DIR}" rev-parse --git-common-dir)"
+DEFAULT_SHARED_REPO_ROOT="$(cd "${COMMON_GIT_DIR}/.." && pwd)"
+SHARED_REPO_ROOT="${ARIS_SHARED_REPO_ROOT:-${DEFAULT_SHARED_REPO_ROOT}}"
 DEFAULT_DEPLOY_ENV_FILE="${ARIS_DEPLOY_ENV_FILE_DEFAULT:-/home/ubuntu/.config/aris/prod.env}"
 DEPLOY_ENV="${1:-${DEPLOY_ENV_FILE:-${DEFAULT_DEPLOY_ENV_FILE}}}"
-BACKEND_ENV="${2:-${ROOT_DIR}/services/aris-backend/.env}"
-WEB_ENV="${3:-${ROOT_DIR}/services/aris-web/.env}"
+BACKEND_ENV="${2:-${SHARED_REPO_ROOT}/services/aris-backend/.env}"
+WEB_ENV="${3:-${SHARED_REPO_ROOT}/services/aris-web/.env}"
 
 read_env_value() {
   local file="$1"
@@ -171,28 +174,33 @@ main() {
   log_section "env validation"
   echo "deploy env      : $DEPLOY_ENV"
   echo "backend env     : $BACKEND_ENV"
+  echo "shared repo root: $SHARED_REPO_ROOT"
   echo "runtime url     : $runtime_url"
   echo "runtime backend : ${runtime_backend:-unset}"
   if [[ "$runtime_backend" == "happy" ]]; then
     echo "happy server url: ${happy_server_url:-unset}"
   fi
   echo "deploy token    : $(mask_value "$deploy_token")"
-  echo "backend token   : $(mask_value "$backend_token")"
+  if [[ -f "$BACKEND_ENV" ]]; then
+    echo "backend token   : $(mask_value "$backend_token")"
+  else
+    echo "backend token   : (not configured in shared repo env)"
+  fi
   if [[ -f "$WEB_ENV" ]]; then
     echo "web token       : $(mask_value "$web_token")"
   else
-    echo "web token       : (not configured in services/aris-web/.env)"
+    echo "web token       : (not configured in shared repo env)"
   fi
 
   if [[ -z "$deploy_token" ]]; then
     echo "❌ deploy RUNTIME_API_TOKEN is empty"
     mismatch=1
   fi
-  if [[ -z "$backend_token" ]]; then
+  if [[ -f "$BACKEND_ENV" && -z "$backend_token" ]]; then
     echo "❌ backend RUNTIME_API_TOKEN is empty"
     mismatch=1
   fi
-  if [[ "$deploy_token" != "$backend_token" ]]; then
+  if [[ -f "$BACKEND_ENV" && "$deploy_token" != "$backend_token" ]]; then
     echo "❌ mismatch: deploy RUNTIME_API_TOKEN != backend RUNTIME_API_TOKEN"
     echo "   sync required: export RUNTIME_API_TOKEN from ${DEPLOY_ENV} into services/aris-backend/.env"
     mismatch=1
@@ -200,7 +208,7 @@ main() {
   if (( mismatch == 1 )); then
     echo "❗ continue check with deploy token can fail until tokens are aligned"
   else
-    echo "✅ token values are aligned between deploy and backend env"
+    echo "✅ token values are aligned for configured env files"
   fi
 
   if [[ "$runtime_backend" == "happy" ]]; then

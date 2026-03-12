@@ -20,6 +20,7 @@
 2. 환경변수 정합성(중요)
    - 운영 단일 소스 env는 `/home/ubuntu/.config/aris/prod.env`다.
    - `services/aris-backend/.env`를 병행 관리한다면 `RUNTIME_API_TOKEN`이 `/home/ubuntu/.config/aris/prod.env`와 일치해야 한다.
+   - 운영 `aris-web`은 `:4080`의 `aris-backend`를 호출하므로, 웹 컨테이너 인증은 `RUNTIME_API_TOKEN` 기준이다.
    - `AUTH_JWT_SECRET`, `ARIS_ADMIN_EMAIL`, `ARIS_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`가 값이 채워져 있는지 확인한다.
    - `HOST_PROJECTS_ROOT`는 실제 호스트 프로젝트 경로와 일치해야 한다.
 
