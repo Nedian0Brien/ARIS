@@ -14,7 +14,7 @@ import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.
 import { extractClaudeSessionHintIds, scanClaudeSessionLogs } from './providers/claude/claudeSessionScanner.js';
 import { buildClaudeSessionId } from './providers/claude/claudeSessionSource.js';
 import { buildProviderCommand, type ProviderCommand } from './providers/providerCommandFactory.js';
-import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget } from './providers/claude/types.js';
+import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeRuntimeSession } from './providers/claude/types.js';
 import type {
   ApprovalPolicy,
   PermissionDecision,
@@ -236,6 +236,10 @@ function normalizeModelReasoningEffort(value: unknown): ModelReasoningEffort | u
     return value;
   }
   return undefined;
+}
+
+function isClaudeRuntimeSession(session: RuntimeSession): session is RuntimeSession & ClaudeRuntimeSession {
+  return session.metadata.flavor === 'claude';
 }
 
 function normalizeStatus(raw: unknown, active: unknown): SessionStatusValue {
@@ -3310,6 +3314,9 @@ export class HappyRuntimeStore {
         const nonCodexCwd = this.resolveExecutionCwd(session.metadata.path);
         let streamedActionIndex = 0;
         if (isClaude) {
+          if (!isClaudeRuntimeSession(session)) {
+            throw new Error(`Claude runtime type guard failed for session ${session.id}`);
+          }
           const claudeResponse = await runClaudeProviderTurn({
             session,
             prompt,

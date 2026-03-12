@@ -1,0 +1,90 @@
+import type { AgentFlavor, ApprovalPolicy, RuntimeSession } from '../../types.js';
+
+export type ProviderRuntimeFlavor = Exclude<AgentFlavor, 'unknown'>;
+export type ProviderActionType = 'file_read' | 'file_write' | 'file_list' | 'command_execution';
+export type ProviderThreadIdSource = 'resume' | 'observed' | 'synthetic';
+export type ProviderResumeTargetMode = 'resume' | 'session-id';
+
+export type ProviderResumeTarget = {
+  id: string;
+  mode?: ProviderResumeTargetMode;
+};
+
+export type ProviderActionEvent = {
+  actionType: ProviderActionType;
+  title: string;
+  callId?: string;
+  command?: string;
+  path?: string;
+  output?: string;
+  additions: number;
+  deletions: number;
+  hasDiffSignal: boolean;
+};
+
+export type ProviderCliResult = {
+  output: string;
+  cwd: string;
+  inferredActions: ProviderActionEvent[];
+  streamedActionsPersisted: boolean;
+  threadId?: string;
+};
+
+export type ProviderLaunchCommand<TCommand extends string = string> = {
+  command: TCommand;
+  args: string[];
+  requiresPty?: boolean;
+  streamJson: boolean;
+  fallbackArgs?: string[];
+  retryArgsOnFailure?: string[];
+};
+
+export type ProviderCommandExecutor<TCommand extends ProviderLaunchCommand = ProviderLaunchCommand> = (input: {
+  command: TCommand;
+  cwdHint?: string;
+  signal?: AbortSignal;
+  onAction?: (action: ProviderActionEvent) => Promise<void>;
+}) => Promise<ProviderCliResult>;
+
+export type ProviderRuntimeSession<TFlavor extends ProviderRuntimeFlavor = ProviderRuntimeFlavor> = Pick<RuntimeSession, 'id'> & {
+  metadata: Pick<RuntimeSession['metadata'], 'path' | 'approvalPolicy'> & {
+    flavor: TFlavor;
+    model?: string;
+  };
+};
+
+export type ProviderLaunchRequest<TFlavor extends AgentFlavor = AgentFlavor> = {
+  agent: TFlavor;
+  prompt: string;
+  approvalPolicy: ApprovalPolicy;
+  model?: string;
+  resumeTarget?: ProviderResumeTarget | string;
+};
+
+export type ProviderTurnRequest<TSession extends ProviderRuntimeSession = ProviderRuntimeSession> = {
+  session: TSession;
+  prompt: string;
+  chatId?: string;
+  requestedThreadId?: string;
+  storedThreadId?: string;
+  model?: string;
+  signal?: AbortSignal;
+  onAction?: (action: ProviderActionEvent, meta: { threadId: string }) => Promise<void>;
+};
+
+export type ProviderTurnResult = {
+  output: string;
+  cwd: string;
+  streamedActionsPersisted: boolean;
+  inferredActions: ProviderActionEvent[];
+  threadId?: string;
+  threadIdSource: ProviderThreadIdSource;
+};
+
+export interface ProviderRuntime<
+  TSession extends ProviderRuntimeSession = ProviderRuntimeSession,
+  TResult extends ProviderTurnResult = ProviderTurnResult,
+> {
+  readonly provider: TSession['metadata']['flavor'];
+  runTurn(input: ProviderTurnRequest<TSession>): Promise<TResult>;
+}

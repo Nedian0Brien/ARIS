@@ -1,18 +1,13 @@
 import { buildClaudeCommand } from './claude/claudeLauncher.js';
-import type { ClaudeLaunchCommand, ClaudeResumeTarget } from './claude/types.js';
 import { buildGeminiCommand, type GeminiLaunchCommand } from './gemini/geminiLauncher.js';
-import type { ApprovalPolicy, RuntimeSession } from '../../types.js';
+import type {
+  ProviderLaunchCommand,
+  ProviderLaunchRequest,
+} from '../contracts/providerRuntime.js';
 
-export type ProviderCommand = ClaudeLaunchCommand | GeminiLaunchCommand;
-type RuntimeAgent = RuntimeSession['metadata']['flavor'];
+export type ProviderCommand = ProviderLaunchCommand<'claude'> | GeminiLaunchCommand;
 
-export function buildProviderCommand(input: {
-  agent: RuntimeAgent;
-  prompt: string;
-  approvalPolicy: ApprovalPolicy;
-  model?: string;
-  resumeTarget?: ClaudeResumeTarget | string;
-}): ProviderCommand | null {
+export function buildProviderCommand(input: ProviderLaunchRequest): ProviderCommand | null {
   const resolvedResumeTarget = typeof input.resumeTarget === 'string'
     ? { id: input.resumeTarget, mode: 'resume' as const }
     : input.resumeTarget;
