@@ -118,7 +118,8 @@ jobs:
           while IFS= read -r git_dir; do
             candidate="${git_dir%/.git}"
             [[ -d "$candidate" ]] || continue
-            [[ -f "$candidate/deploy/.env" ]] || continue
+            [[ -f "$candidate/deploy/deploy_backend_zero_downtime.sh" ]] || continue
+            [[ -f "$candidate/deploy/deploy_web_zero_downtime.sh" ]] || continue
 
             origin_url="$(git -C "$candidate" remote get-url origin 2>/dev/null || true)"
             if [[ "$origin_url" == "$expected_https" || "$origin_url" == "$expected_public_https" || "$origin_url" == "$expected_ssh" ]]; then
@@ -128,7 +129,7 @@ jobs:
           done < <(find "$HOST_PROJECTS_ROOT" -mindepth 1 -maxdepth 4 -type d -name .git 2>/dev/null)
 
           if [[ -z "$deploy_repo_dir" ]]; then
-            echo "::error::Unable to locate deploy repository with deploy/.env under ${HOST_PROJECTS_ROOT}"
+            echo "::error::Unable to locate deploy repository under ${HOST_PROJECTS_ROOT}"
             exit 1
           fi
 
@@ -173,6 +174,8 @@ jobs:
         run: |
           set -euo pipefail
           DEPLOY_REPO_DIR="${{ steps.resolve-deploy-repo.outputs.deploy_repo_dir }}"
+          export DEPLOY_ENV_FILE="/home/ubuntu/.config/aris/prod.env"
+          test -f "$DEPLOY_ENV_FILE"
           export ARIS_SHARED_REPO_ROOT="$DEPLOY_REPO_DIR"
           "$DEPLOY_REPO_DIR/deploy/deploy_backend_zero_downtime.sh"
 
@@ -182,4 +185,6 @@ jobs:
         run: |
           set -euo pipefail
           DEPLOY_REPO_DIR="${{ steps.resolve-deploy-repo.outputs.deploy_repo_dir }}"
+          export DEPLOY_ENV_FILE="/home/ubuntu/.config/aris/prod.env"
+          test -f "$DEPLOY_ENV_FILE"
           "$DEPLOY_REPO_DIR/deploy/deploy_web.sh"

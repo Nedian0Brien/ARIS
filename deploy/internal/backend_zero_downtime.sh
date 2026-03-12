@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "${ROOT_DIR}/deploy/lib/env.sh"
 BACKEND_DIR="${ROOT_DIR}/services/aris-backend"
 ECOSYSTEM_FILE="${ROOT_DIR}/deploy/ecosystem.config.cjs"
 BACKEND_PORT="${BACKEND_PORT:-4080}"
@@ -12,6 +13,14 @@ SHARED_REPO_ROOT="${ARIS_SHARED_REPO_ROOT:-$DEFAULT_SHARED_REPO_ROOT}"
 PM2_RUNTIME_DIR="${ARIS_BACKEND_PM2_RUNTIME_DIR:-${SHARED_REPO_ROOT}/.runtime/aris-backend}"
 
 cd "$ROOT_DIR"
+
+ENV_FILE="$(require_deploy_env_file "deploy:backend-zd")"
+require_env_keys "deploy:backend-zd" "$ENV_FILE" RUNTIME_API_TOKEN RUNTIME_BACKEND
+
+runtime_backend="$(read_env_value "$ENV_FILE" "RUNTIME_BACKEND" || true)"
+if [[ "$runtime_backend" == "happy" ]]; then
+  require_env_keys "deploy:backend-zd" "$ENV_FILE" HAPPY_SERVER_URL HAPPY_SERVER_TOKEN
+fi
 
 current_exec_mode() {
   pm2 jlist | node -e "

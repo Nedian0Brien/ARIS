@@ -28,8 +28,8 @@ Important values to set:
 - `AUTH_JWT_SECRET`
 - `ARIS_ADMIN_EMAIL`
 - `ARIS_ADMIN_PASSWORD`
-- `HAPPY_SERVER_URL`
-- `HAPPY_SERVER_TOKEN`
+- `RUNTIME_API_URL`
+- `RUNTIME_API_TOKEN`
 
 ## Quick Start
 
@@ -40,7 +40,7 @@ npm run seed
 npm run dev
 ```
 
-If runtime backend is local, run `services/aris-backend` and keep token/url aligned.
+If runtime backend is local, run `services/aris-backend` and keep `RUNTIME_API_URL` / `RUNTIME_API_TOKEN` aligned.
 
 Default login credentials are loaded from `.env`:
 - `ARIS_ADMIN_EMAIL`

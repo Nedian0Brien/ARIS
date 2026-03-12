@@ -22,7 +22,7 @@
 ## 3. 비밀정보 정책
 
 - 이메일/비밀번호/토큰/키는 코드/문서/git에 저장 금지
-- 운영 비밀값은 `deploy/.env` 등 gitignored 파일로만 관리
+- 운영 비밀값은 `/home/ubuntu/.config/aris/prod.env` 같은 호스트 전용 gitignored 파일로만 관리
 - 노출 사고 발생 시 즉시 회전(rotating) + 기록 정리
 
 ## 4. 암호화 정책

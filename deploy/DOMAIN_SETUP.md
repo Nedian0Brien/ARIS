@@ -19,7 +19,7 @@ Open inbound ports:
 
 ## 3. Compose env
 
-In `deploy/.env`:
+In `/home/ubuntu/.config/aris/prod.env`:
 
 - `ARIS_DOMAIN=aris.lawdigest.cloud`
 - `APP_BASE_URL=https://aris.lawdigest.cloud`
@@ -31,7 +31,7 @@ In `deploy/.env`:
 ## 4. Start edge profile
 
 ```bash
-docker compose --env-file deploy/.env --profile edge up -d --build
+docker compose --env-file /home/ubuntu/.config/aris/prod.env --profile edge up -d --build
 ```
 
 ## 5. Verify

@@ -21,8 +21,8 @@ const port = parseInt(process.env.PORT || '3000', 10);
 
 const JWT_SECRET = process.env.AUTH_JWT_SECRET || 'dev-only-jwt-secret-dev-only-jwt-secret';
 const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'aris_session';
-const HAPPY_SERVER_URL = process.env.HAPPY_SERVER_URL || 'http://localhost:4080';
-const HAPPY_SERVER_TOKEN = process.env.HAPPY_SERVER_TOKEN || '';
+const RUNTIME_API_URL = process.env.RUNTIME_API_URL || process.env.HAPPY_SERVER_URL || 'http://localhost:4080';
+const RUNTIME_API_TOKEN = process.env.RUNTIME_API_TOKEN || process.env.HAPPY_SERVER_TOKEN || '';
 const SSH_KEY_ENCRYPTION_SECRET = process.env.SSH_KEY_ENCRYPTION_SECRET || 'dev-only-ssh-enc-secret-change-me';
 const SSH_HOST = process.env.SSH_HOST || 'host.docker.internal';
 
@@ -82,11 +82,11 @@ async function getSshSettings() {
 
 // ── Happy 서버에서 세션 CWD 조회 ───────────────────────────────────────────
 async function getSessionCwd(sessionId) {
-  if (!HAPPY_SERVER_TOKEN) return null;
+  if (!RUNTIME_API_TOKEN) return null;
   try {
     const res = await fetch(
-      `${HAPPY_SERVER_URL}/v1/sessions/${encodeURIComponent(sessionId)}`,
-      { headers: { Authorization: `Bearer ${HAPPY_SERVER_TOKEN}` } },
+      `${RUNTIME_API_URL}/v1/sessions/${encodeURIComponent(sessionId)}`,
+      { headers: { Authorization: `Bearer ${RUNTIME_API_TOKEN}` } },
     );
     if (!res.ok) return null;
     const data = await res.json();

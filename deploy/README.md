@@ -7,9 +7,13 @@ ARIS production deploy uses a hybrid model:
 
 ## Official entrypoints
 
-Use these three commands as the only standard deployment entrypoints:
+Use these commands as the standard deployment entrypoints:
 
 ```bash
+mkdir -p /home/ubuntu/.config/aris
+cp deploy/.env.example /home/ubuntu/.config/aris/prod.env
+export DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env
+
 ./deploy/deploy_backend_zero_downtime.sh
 ./deploy/deploy_web.sh
 ./deploy/deploy_zero_downtime.sh
@@ -19,46 +23,45 @@ Use these three commands as the only standard deployment entrypoints:
 - `deploy_web.sh`: web blue/green deploy and nginx upstream switch
 - `deploy_zero_downtime.sh`: backend then web
 
+All deploy scripts now require `DEPLOY_ENV_FILE` and production should use `/home/ubuntu/.config/aris/prod.env` as the single source of truth.
+
+For runtime auth naming:
+- `services/aris-web` uses `RUNTIME_API_URL` / `RUNTIME_API_TOKEN`
+- `services/aris-backend` uses `HAPPY_SERVER_URL` / `HAPPY_SERVER_TOKEN` only for upstream Happy runtime access
+
 `deploy/deploy_web_zero_downtime.sh` remains only as a compatibility wrapper. New docs and automation should use `deploy/deploy_web.sh`.
 
 ## Directory layout
 
 ```text
 deploy/
-├── deploy_backend_zero_downtime.sh   # official backend entrypoint
-├── deploy_web.sh                     # official web entrypoint
-├── deploy_zero_downtime.sh           # official full deploy entrypoint
-├── deploy_web_zero_downtime.sh       # compatibility wrapper
-├── internal/                         # actual deploy implementations
-├── ops/                              # runtime checks / cleanup
-├── dev/                              # local hot reload helpers
-├── legacy/                           # deprecated scripts kept for fallback
+├── deploy_backend_zero_downtime.sh
+├── deploy_web.sh
+├── deploy_zero_downtime.sh
+├── deploy_web_zero_downtime.sh
+├── internal/
+├── ops/
+├── dev/
+├── legacy/
+├── lib/
 ├── ecosystem.config.cjs
-├── .env.example
-└── Caddyfile
+└── .env.example
 ```
 
 ## Before deploying
 
-1. Confirm you are on the expected commit and branch.
-2. Verify `deploy/.env` exists and required values are set.
-3. Ensure `deploy/.env` and `services/aris-backend/.env` use the same `RUNTIME_API_TOKEN`.
-4. Confirm nginx-managed production host is the target environment.
-
-Minimum required secrets:
-- `AUTH_JWT_SECRET`
-- `ARIS_ADMIN_EMAIL`
-- `ARIS_ADMIN_PASSWORD`
-- `RUNTIME_API_TOKEN`
-- `POSTGRES_PASSWORD`
-- `SSH_KEY_ENCRYPTION_SECRET`
+1. Confirm branch and commit are correct.
+2. Confirm `/home/ubuntu/.config/aris/prod.env` exists and export `DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env`.
+3. Ensure required keys are set: `APP_BASE_URL`, `AUTH_JWT_SECRET`, `ARIS_ADMIN_EMAIL`, `ARIS_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `RUNTIME_API_TOKEN`, `RUNTIME_BACKEND`, `SSH_KEY_ENCRYPTION_SECRET`.
+4. If `RUNTIME_BACKEND=happy`, also ensure `HAPPY_SERVER_URL`, `HAPPY_SERVER_TOKEN` are set.
+5. If `services/aris-backend/.env` is still maintained for local checks, keep its `RUNTIME_API_TOKEN` aligned with `prod.env`.
 
 ## Standard deployment flows
 
 ### Backend only
 
 ```bash
-./deploy/deploy_backend_zero_downtime.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_backend_zero_downtime.sh
 ```
 
 This builds `services/aris-backend`, stages runtime files under `.runtime/aris-backend`, then reloads PM2 in cluster mode.
@@ -66,7 +69,7 @@ This builds `services/aris-backend`, stages runtime files under `.runtime/aris-b
 ### Web only
 
 ```bash
-./deploy/deploy_web.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_web.sh
 ```
 
 Default behavior:
@@ -81,23 +84,23 @@ Default behavior:
 Useful overrides:
 
 ```bash
-WEB_DRAIN_SECONDS=12 ./deploy/deploy_web.sh
-PULL_BASE=1 ./deploy/deploy_web.sh
-SKIP_BUILD_IF_UNCHANGED=0 ./deploy/deploy_web.sh
-STOP_LEGACY_WEB=0 ./deploy/deploy_web.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env WEB_DRAIN_SECONDS=12 ./deploy/deploy_web.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env PULL_BASE=1 ./deploy/deploy_web.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env SKIP_BUILD_IF_UNCHANGED=0 ./deploy/deploy_web.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env STOP_LEGACY_WEB=0 ./deploy/deploy_web.sh
 ```
 
 ### Full deploy
 
 ```bash
-./deploy/deploy_zero_downtime.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_zero_downtime.sh
 ```
 
 ## Health checks after deploy
 
 ```bash
-docker compose --env-file deploy/.env ps aris-web-blue aris-web-green
-docker compose --env-file deploy/.env logs --tail=120 aris-web-blue aris-web-green
+docker compose --env-file /home/ubuntu/.config/aris/prod.env ps aris-web-blue aris-web-green
+docker compose --env-file /home/ubuntu/.config/aris/prod.env logs --tail=120 aris-web-blue aris-web-green
 pm2 logs aris-backend --lines 120 --nostream
 curl -sS http://127.0.0.1:4080/health
 ```
@@ -112,7 +115,7 @@ Current web routing expectations:
 Runtime connectivity check:
 
 ```bash
-./deploy/ops/check-runtime-connection.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/ops/check-runtime-connection.sh
 ```
 
 This validates:
@@ -138,13 +141,13 @@ Daily cron example:
 Use hot reload without touching production routing:
 
 ```bash
-./deploy/dev/run_web_dev_hot_reload.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/dev/run_web_dev_hot_reload.sh
 ```
 
 Optional fast restart:
 
 ```bash
-SKIP_DB_PREPARE=1 ./deploy/dev/run_web_dev_hot_reload.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env SKIP_DB_PREPARE=1 ./deploy/dev/run_web_dev_hot_reload.sh
 ```
 
 ## Legacy fallback
@@ -152,7 +155,7 @@ SKIP_DB_PREPARE=1 ./deploy/dev/run_web_dev_hot_reload.sh
 The previous single-slot web deploy script is preserved at:
 
 ```bash
-./deploy/legacy/deploy_web_legacy.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/legacy/deploy_web_legacy.sh
 ```
 
 Do not use it as the default production path unless explicitly required for rollback or incident handling.
