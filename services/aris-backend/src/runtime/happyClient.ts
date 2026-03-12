@@ -11,15 +11,15 @@ import { resolveRuntimeModelSelection } from './modelPolicy.js';
 import { recoverClaudeThreadIdFromMessages, runClaudeProviderTurn } from './providers/claude/claudeOrchestrator.js';
 import {
   buildClaudeSessionHintMeta as buildSessionHintMeta,
-  projectClaudeTextMessage,
-  projectClaudeToolActionMessage,
 } from './providers/claude/claudeEventBridge.js';
+import { ClaudeMessageQueue } from './providers/claude/claudeMessageQueue.js';
 import { looksLikeClaudeActionTranscript, parseClaudeStreamLine, parseClaudeStreamOutput } from './providers/claude/claudeProtocolMapper.js';
 import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.js';
 import { ClaudeSessionLogTracker, extractClaudeSessionHintIds } from './providers/claude/claudeSessionScanner.js';
 import { buildClaudeSessionId } from './providers/claude/claudeSessionSource.js';
 import { buildProviderCommand, type ProviderCommand } from './providers/providerCommandFactory.js';
 import type { SessionProtocolEnvelope } from './contracts/sessionProtocol.js';
+import type { ClaudeSessionLaunchMode } from './providers/claude/claudeSessionContract.js';
 import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeRuntimeSession } from './providers/claude/types.js';
 import type {
   ApprovalPolicy,
@@ -1048,6 +1048,23 @@ function buildScopedPermissionKey(baseKey: string, chatId?: string): string {
   return `${normalizedChatId}:${baseKey}`;
 }
 
+function resolveClaudeLaunchMode(input: {
+  sessionPath?: string;
+  workspaceRoot: string;
+  hostProjectsRoot: string;
+}): ClaudeSessionLaunchMode {
+  const raw = typeof input.sessionPath === 'string' ? input.sessionPath.trim() : '';
+  if (!raw || !input.hostProjectsRoot) {
+    return 'local';
+  }
+
+  const normalizedWorkspaceRoot = input.workspaceRoot.replace(/\/+$/, '');
+  const workspacePrefix = `${normalizedWorkspaceRoot}/`;
+  return raw === normalizedWorkspaceRoot || raw.startsWith(workspacePrefix)
+    ? 'remote'
+    : 'local';
+}
+
 function inferCodexFileWriteItem(item: Record<string, unknown>): {
   command: string;
   path?: string;
@@ -1250,6 +1267,7 @@ export const happyClientTestHooks = {
   buildClaudeSessionId,
   buildAgentCommand,
   waitForStableActivity,
+  resolveClaudeLaunchMode,
 };
 
 export class HappyRuntimeStore {
@@ -3165,6 +3183,13 @@ export class HappyRuntimeStore {
       });
     }
     const isClaudeRun = flavor === 'claude';
+    const claudeLaunchMode = isClaudeRun
+      ? resolveClaudeLaunchMode({
+        sessionPath: session.metadata.path,
+        workspaceRoot: this.workspaceRoot,
+        hostProjectsRoot: this.hostProjectsRoot,
+      })
+      : 'local';
     let controller: AbortController;
     let claudeController:
       | Awaited<ReturnType<ClaudeSessionRegistry['start']>>
@@ -3175,6 +3200,7 @@ export class HappyRuntimeStore {
         sessionId: session.id,
         ...(scopedChatId ? { chatId: scopedChatId } : {}),
         ...(selectedModel ? { model: selectedModel } : {}),
+        launchMode: claudeLaunchMode,
       }, 5000);
       const activeClaudeController = claudeController;
       controller = activeClaudeController.abortController;
@@ -3250,30 +3276,18 @@ export class HappyRuntimeStore {
         protocolEnvelopes?: SessionProtocolEnvelope[];
         inferredActions?: ParsedAgentActionEvent[];
       };
+      let claudeMessageQueue: ClaudeMessageQueue | null = null;
+      const persistClaudeProjection = async (projection: {
+        body: string;
+        meta: Record<string, unknown>;
+        options?: { type?: string; title?: string };
+      }) => this.appendAgentMessage(session.id, projection.body, projection.meta, projection.options);
       const appendNonCodexAction = async (
         action: ParsedAgentActionEvent,
         indexSeed: number,
         cwd: string,
         threadId?: string,
       ) => {
-        if (flavor === 'claude') {
-          const projection = projectClaudeToolActionMessage({
-            action,
-            actionIndex: indexSeed,
-            ...(scopedChatId ? { chatId: scopedChatId } : {}),
-            requestedPath: session.metadata.path,
-            execCwd: cwd,
-            ...(selectedModel ? { model: selectedModel } : {}),
-            ...(threadId ? { threadId } : {}),
-            envelopes: response?.protocolEnvelopes,
-          });
-          if (!projection) {
-            return;
-          }
-          await this.appendAgentMessage(session.id, projection.body, projection.meta, projection.options);
-          return;
-        }
-
         const sessionCallId = (action.callId || `call-${indexSeed + 1}`).trim();
         const outputPreview = action.output ? trimOutput(action.output) : '';
         const bodyParts = [
@@ -3342,6 +3356,17 @@ export class HappyRuntimeStore {
         }
       } else {
         const nonCodexCwd = this.resolveExecutionCwd(session.metadata.path);
+        claudeMessageQueue = isClaude
+          ? new ClaudeMessageQueue(
+            {
+              ...(scopedChatId ? { chatId: scopedChatId } : {}),
+              requestedPath: session.metadata.path,
+              ...(selectedModel ? { model: selectedModel } : {}),
+              launchMode: claudeLaunchMode,
+            },
+            persistClaudeProjection,
+          )
+          : null;
         let streamedActionIndex = 0;
         if (isClaude) {
           if (!isClaudeRuntimeSession(session)) {
@@ -3357,7 +3382,11 @@ export class HappyRuntimeStore {
             model: selectedModel,
             signal: controller.signal,
             onAction: async (action, meta) => {
-              await appendNonCodexAction(action, streamedActionIndex, nonCodexCwd, meta.threadId);
+              await claudeMessageQueue?.enqueueToolAction({
+                action,
+                execCwd: nonCodexCwd,
+                threadId: meta.threadId,
+              });
               streamedActionIndex += 1;
             },
             executeCommand: async ({ command, cwdHint, signal, onAction }) => this.runAgentCommand(
@@ -3419,7 +3448,25 @@ export class HappyRuntimeStore {
         && response.inferredActions.length > 0
       ) {
         for (const [index, action] of response.inferredActions.slice(0, 10).entries()) {
-          await appendNonCodexAction(action, index, response.cwd, response.threadId);
+          if (flavor === 'claude') {
+            claudeMessageQueue ??= new ClaudeMessageQueue(
+              {
+                ...(scopedChatId ? { chatId: scopedChatId } : {}),
+                requestedPath: session.metadata.path,
+                ...(selectedModel ? { model: selectedModel } : {}),
+                launchMode: claudeLaunchMode,
+              },
+              persistClaudeProjection,
+            );
+            await claudeMessageQueue.enqueueToolAction({
+              action,
+              execCwd: response.cwd,
+              threadId: response.threadId,
+              envelopes: response.protocolEnvelopes,
+            });
+          } else {
+            await appendNonCodexAction(action, index, response.cwd, response.threadId);
+          }
         }
       }
 
@@ -3427,12 +3474,18 @@ export class HappyRuntimeStore {
       const agentMessagePersisted = Boolean(response.agentMessagePersisted);
       if (!isCodex || !streamedPersisted || (!agentMessagePersisted && response.output.trim().length > 0)) {
         if (flavor === 'claude') {
-          const projection = projectClaudeTextMessage({
+          claudeMessageQueue ??= new ClaudeMessageQueue(
+            {
+              ...(scopedChatId ? { chatId: scopedChatId } : {}),
+              requestedPath: session.metadata.path,
+              ...(selectedModel ? { model: selectedModel } : {}),
+              launchMode: claudeLaunchMode,
+            },
+            persistClaudeProjection,
+          );
+          await claudeMessageQueue.enqueueText({
             output: response.output,
-            ...(scopedChatId ? { chatId: scopedChatId } : {}),
-            requestedPath: session.metadata.path,
             execCwd: response.cwd,
-            ...(selectedModel ? { model: selectedModel } : {}),
             ...(response.threadId ? { threadId: response.threadId } : {}),
             messageMeta: {
               streamEvent: 'agent_message',
@@ -3441,9 +3494,7 @@ export class HappyRuntimeStore {
             },
             envelopes: response.protocolEnvelopes,
           });
-          if (projection) {
-            await this.appendAgentMessage(session.id, projection.body, projection.meta, projection.options);
-          }
+          await claudeMessageQueue.flush();
         } else {
           await this.appendAgentMessage(session.id, response.output, {
             ...(scopedChatId ? { chatId: scopedChatId } : {}),

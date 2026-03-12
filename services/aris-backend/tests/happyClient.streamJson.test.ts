@@ -151,6 +151,26 @@ describe('happyClient stream-json parsing', () => {
     expect(first).toMatch(/^[0-9a-f-]{36}$/i);
   });
 
+  it('treats workspace-root Claude paths as remote launch mode when host mapping exists', () => {
+    const launchMode = happyClientTestHooks.resolveClaudeLaunchMode({
+      sessionPath: '/workspace/ARIS',
+      workspaceRoot: '/workspace',
+      hostProjectsRoot: '/home/ubuntu/project',
+    });
+
+    expect(launchMode).toBe('remote');
+  });
+
+  it('keeps Claude launch mode local when no host mapping is configured', () => {
+    const launchMode = happyClientTestHooks.resolveClaudeLaunchMode({
+      sessionPath: '/workspace/ARIS',
+      workspaceRoot: '/workspace',
+      hostProjectsRoot: '',
+    });
+
+    expect(launchMode).toBe('local');
+  });
+
   it('uses --session-id for Claude when the resume id is a UUID', () => {
     const sessionId = happyClientTestHooks.buildClaudeSessionId('session-2', 'chat-2');
     const command = happyClientTestHooks.buildAgentCommand(

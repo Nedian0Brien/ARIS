@@ -62,7 +62,7 @@ function findLastEnvelope<TEnvelope extends SessionProtocolEnvelope>(
   return undefined;
 }
 
-type PersistedMessageProjection = {
+export type PersistedMessageProjection = {
   body: string;
   meta: Record<string, unknown>;
   options?: { type?: string; title?: string };
