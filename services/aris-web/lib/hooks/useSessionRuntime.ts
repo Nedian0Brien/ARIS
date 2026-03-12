@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
-const RUNTIME_POLL_INTERVAL_MS = 1500;
+const RUNTIME_POLL_INTERVAL_MS = 3000;
 const runtimeStateCache = new Map<string, boolean>();
+const isDocumentVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
 
-export function useSessionRuntime(sessionId: string, chatId?: string | null) {
+export function useSessionRuntime(sessionId: string, chatId?: string | null, enabled = true) {
   const cacheKey = `${sessionId}:${chatId?.trim() || '__default__'}`;
   const [isRunning, setIsRunning] = useState(() => runtimeStateCache.get(cacheKey) ?? false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
@@ -16,8 +17,15 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null) {
     setIsRunning(runtimeStateCache.get(cacheKey) ?? false);
     setRuntimeError(null);
 
+    if (!enabled) {
+      return undefined;
+    }
+
     const refresh = async () => {
       if (disposed || inFlight || stopped) {
+        return;
+      }
+      if (!isDocumentVisible()) {
         return;
       }
       inFlight = true;
@@ -65,11 +73,22 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null) {
       void refresh();
     }, RUNTIME_POLL_INTERVAL_MS);
 
+    const syncWhenVisible = () => {
+      if (!disposed && isDocumentVisible()) {
+        void refresh();
+      }
+    };
+
+    document.addEventListener('visibilitychange', syncWhenVisible);
+    window.addEventListener('focus', syncWhenVisible);
+
     return () => {
       disposed = true;
       window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', syncWhenVisible);
+      window.removeEventListener('focus', syncWhenVisible);
     };
-  }, [cacheKey, sessionId, chatId]);
+  }, [cacheKey, sessionId, chatId, enabled]);
 
   return { isRunning, runtimeError };
 }

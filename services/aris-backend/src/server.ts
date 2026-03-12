@@ -1,7 +1,13 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { requireBearerToken } from './auth.js';
 import { RuntimeStore } from './store.js';
+
+type RequestBucket = {
+  windowStartAt: number;
+  count: number;
+  lastSeenAt: number;
+};
 
 type ServerConfig = {
   RUNTIME_API_TOKEN: string;
@@ -12,6 +18,34 @@ type ServerConfig = {
   HOST_PROJECTS_ROOT?: string;
   LOG_LEVEL: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
 };
+
+const RATE_LIMIT_WINDOW_MS = 10_000;
+const RATE_LIMIT_MAX_REQUESTS = 120;
+const RATE_LIMIT_BUCKET_TTL_MULTIPLIER = 6;
+
+function resolveRequestIp(request: FastifyRequest): string {
+  const header = request.headers['x-forwarded-for'];
+  if (typeof header === 'string' && header.trim().length > 0) {
+    return header.split(',')[0].trim();
+  }
+  if (Array.isArray(header) && header.length > 0) {
+    const first = typeof header[0] === 'string' ? header[0].trim() : '';
+    if (first) {
+      return first;
+    }
+  }
+
+  return request.ip || 'unknown';
+}
+
+function isRateLimitedPath(path: string): boolean {
+  return path.startsWith('/v1/') || path.startsWith('/v3/');
+}
+
+function getPathOnly(url: string): string {
+  const index = url.indexOf('?');
+  return index < 0 ? url : url.slice(0, index);
+}
 
 const createSessionSchema = z.object({
   path: z.string().min(1),
@@ -69,10 +103,53 @@ export function buildServer(config: ServerConfig) {
     config.HAPPY_SERVER_TOKEN,
     config.HOST_PROJECTS_ROOT,
   );
+  const rateLimitBuckets = new Map<string, RequestBucket>();
+
+  const isRateLimitExceeded = (path: string, ip: string): boolean => {
+    const now = Date.now();
+    if (rateLimitBuckets.size > 2_000) {
+      const staleBefore = now - RATE_LIMIT_WINDOW_MS * RATE_LIMIT_BUCKET_TTL_MULTIPLIER;
+      for (const [key, bucket] of rateLimitBuckets.entries()) {
+        if (bucket.lastSeenAt < staleBefore) {
+          rateLimitBuckets.delete(key);
+        }
+      }
+    }
+
+    const key = `${ip}:${path}`;
+    const bucket = rateLimitBuckets.get(key);
+    if (!bucket) {
+      rateLimitBuckets.set(key, {
+        windowStartAt: now,
+        count: 1,
+        lastSeenAt: now,
+      });
+      return false;
+    }
+
+    if (now - bucket.windowStartAt >= RATE_LIMIT_WINDOW_MS) {
+      bucket.windowStartAt = now;
+      bucket.count = 1;
+      bucket.lastSeenAt = now;
+      return false;
+    }
+
+    bucket.count += 1;
+    bucket.lastSeenAt = now;
+    return bucket.count > RATE_LIMIT_MAX_REQUESTS;
+  };
 
   app.addHook('onRequest', async (request, reply) => {
-    if (request.url.startsWith('/health')) {
+    const path = getPathOnly(request.url);
+    if (path.startsWith('/health')) {
       return;
+    }
+
+    if (isRateLimitedPath(path) && isRateLimitExceeded(path, resolveRequestIp(request))) {
+      reply.header('Retry-After', String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)));
+      return reply.code(429).send({
+        error: '요청이 너무 빠릅니다. 잠시 후 다시 시도하세요.',
+      });
     }
 
     if (config.RUNTIME_BACKEND === 'happy') {
@@ -85,7 +162,7 @@ export function buildServer(config: ServerConfig) {
       }
     }
 
-    if (request.url.startsWith('/v1/') || request.url.startsWith('/v3/')) {
+    if (isRateLimitedPath(path)) {
       await requireBearerToken(request, reply, config.RUNTIME_API_TOKEN);
       if (reply.sent) {
         return reply;

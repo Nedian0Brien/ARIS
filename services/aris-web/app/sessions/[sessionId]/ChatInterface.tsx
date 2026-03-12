@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
+import { useSessionSyncLeader } from '@/lib/hooks/useSessionSyncLeader';
 import { readLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
 import {
   hasAgentCompletionSignal,
@@ -113,10 +114,11 @@ function getFileIcon(name: string, isDirectory: boolean): React.ReactNode {
 }
 const COMPOSER_MAX_HEIGHT_PX = 180;
 const ACTION_COLLAPSE_THRESHOLD = 4;
-const READ_CURSOR_SYNC_DEBOUNCE_MS = 800;
+const READ_CURSOR_SYNC_DEBOUNCE_MS = 2000;
+const SNAPSHOT_SYNC_DEBOUNCE_MS = 1500;
 const SIDEBAR_CHAT_PAGE_SIZE = 7;
 const SIDEBAR_APPROVAL_FEEDBACK_MS = 3000;
-const SIDEBAR_STATUS_REFRESH_MS = 5000;
+const SIDEBAR_STATUS_REFRESH_MS = 10000;
 const CHAT_RUN_PHASE_LABELS = {
   submitting: '전송 중',
   waiting: '작업 중',
@@ -1955,6 +1957,7 @@ export function ChatInterface({
   );
   const activeChatIdResolved = activeChat?.id ?? null;
   const includeUnassignedEvents = Boolean(activeChat?.isDefault);
+  const { isLeader: isSessionSyncLeader } = useSessionSyncLeader(sessionId);
   const sessionTitle = alias || projectName;
   const currentChatTitle = activeChat?.title || '새 채팅';
   const displayName = activeChat?.title || alias || projectName;
@@ -1973,15 +1976,26 @@ export function ChatInterface({
     initialEvents,
     initialHasMoreBefore,
     activeChatId,
+    isSessionSyncLeader,
   );
-  const { isRunning: runtimeRunning, runtimeError } = useSessionRuntime(sessionId, activeChatIdResolved);
+  const { isRunning: runtimeRunning, runtimeError } = useSessionRuntime(
+    sessionId,
+    activeChatIdResolved,
+    isSessionSyncLeader,
+  );
   const {
     displayPermissions,
     pendingPermissions,
     loadingPermissionId,
     decidePermission,
     error: permissionError,
-  } = usePermissions(sessionId, initialPermissions, activeChatIdResolved, includeUnassignedEvents);
+  } = usePermissions(
+    sessionId,
+    initialPermissions,
+    activeChatIdResolved,
+    includeUnassignedEvents,
+    isSessionSyncLeader,
+  );
 
   const [prompt, setPrompt] = useState('');
   const [chatRuntimeUiByChat, setChatRuntimeUiByChat] = useState<Record<string, ChatRuntimeUiState>>({});
@@ -2728,7 +2742,7 @@ export function ChatInterface({
   }, [chats, chatSidebarSnapshots, upsertChatSidebarSnapshot]);
 
   useEffect(() => {
-    if (!activeChatIdResolved) {
+    if (!isSessionSyncLeader || !activeChatIdResolved) {
       return;
     }
     // Guard against stale events from the previously active chat.
@@ -2795,42 +2809,52 @@ export function ChatInterface({
     }
 
     const latestEventAt = snapshot.latestEventAt;
-    snapshotSyncInFlightRef.current[activeChatIdResolved] = true;
-    void fetch(
-      `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          latestPreview: snapshot.preview,
-          latestEventId,
-          latestEventAt,
-          latestEventIsUser: snapshot.latestEventIsUser,
-          latestHasErrorSignal: snapshot.hasErrorSignal,
-        }),
-      },
-    )
-      .then(async (response) => {
-        if (!response.ok) {
-          return;
-        }
-        snapshotSyncedEventRef.current[activeChatIdResolved] = latestEventId;
-        const payload = (await response.json().catch(() => ({}))) as { chat?: SessionChat };
-        if (!payload.chat) {
-          return;
-        }
-        setChats((prev) => sortSessionChats(prev.map((chat) => (
-          chat.id === payload.chat?.id ? payload.chat : chat
-        ))));
-      })
-      .catch(() => {
-      })
-      .finally(() => {
-        delete snapshotSyncInFlightRef.current[activeChatIdResolved];
-      });
-  }, [activeChatIdResolved, chatSidebarSnapshots, sessionId]);
+    const timer = window.setTimeout(() => {
+      snapshotSyncInFlightRef.current[activeChatIdResolved] = true;
+      void fetch(
+        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            latestPreview: snapshot.preview,
+            latestEventId,
+            latestEventAt,
+            latestEventIsUser: snapshot.latestEventIsUser,
+            latestHasErrorSignal: snapshot.hasErrorSignal,
+          }),
+        },
+      )
+        .then(async (response) => {
+          if (!response.ok) {
+            return;
+          }
+          snapshotSyncedEventRef.current[activeChatIdResolved] = latestEventId;
+          const payload = (await response.json().catch(() => ({}))) as { chat?: SessionChat };
+          if (!payload.chat) {
+            return;
+          }
+          setChats((prev) => sortSessionChats(prev.map((chat) => (
+            chat.id === payload.chat?.id ? payload.chat : chat
+          ))));
+        })
+        .catch(() => {
+        })
+        .finally(() => {
+          delete snapshotSyncInFlightRef.current[activeChatIdResolved];
+        });
+    }, SNAPSHOT_SYNC_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [activeChatIdResolved, chatSidebarSnapshots, isSessionSyncLeader, sessionId]);
 
   useEffect(() => {
+    if (!isSessionSyncLeader) {
+      return;
+    }
+
     const pending = Object.entries(chatReadMarkers).filter(([chatId, marker]) => (
       marker
       && marker !== readMarkerSyncedRef.current[chatId]
@@ -2871,11 +2895,19 @@ export function ChatInterface({
     return () => {
       cancelled = true;
     };
-  }, [chatReadMarkers, chatSidebarSnapshots, sessionId]);
+  }, [chatReadMarkers, chatSidebarSnapshots, isSessionSyncLeader, sessionId]);
 
   useEffect(() => {
+    if (!isSessionSyncLeader) {
+      return undefined;
+    }
+
     let cancelled = false;
     const refreshVisibleChats = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+
       // Limit polling to the first 15 visible chats plus the active chat
       const recentChats = renderedSidebarChats.slice(0, 15);
       const activeChat = chats.find((c) => c.id === activeChatIdResolved);
@@ -2951,7 +2983,7 @@ export function ChatInterface({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeChatIdResolved, chats, renderedSidebarChats, sessionId, upsertChatSidebarSnapshot]);
+  }, [activeChatIdResolved, chats, isSessionSyncLeader, renderedSidebarChats, sessionId, upsertChatSidebarSnapshot]);
 
   useEffect(() => {
     if (plusMenuMode === 'closed' && !isModelDropdownOpen && !isCreateChatMenuOpen) return;
@@ -3056,6 +3088,10 @@ export function ChatInterface({
   }, []);
 
   const markSessionAsRead = useCallback(async () => {
+    if (!isSessionSyncLeader) {
+      return;
+    }
+
     try {
       await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/metadata`, {
         method: 'POST',
@@ -3065,7 +3101,7 @@ export function ChatInterface({
     } catch {
       // Best-effort cursor sync.
     }
-  }, [sessionId]);
+  }, [isSessionSyncLeader, sessionId]);
 
   useEffect(() => {
     setExpandedResultIds({});
@@ -3073,6 +3109,10 @@ export function ChatInterface({
   }, [sessionId]);
 
   useEffect(() => {
+    if (!isSessionSyncLeader) {
+      return;
+    }
+
     if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
       return;
     }
@@ -3083,9 +3123,13 @@ export function ChatInterface({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [sessionId, events.length, pendingPermissions.length, markSessionAsRead]);
+  }, [sessionId, events.length, isSessionSyncLeader, pendingPermissions.length, markSessionAsRead]);
 
   useEffect(() => {
+    if (!isSessionSyncLeader) {
+      return undefined;
+    }
+
     const syncWhenVisible = () => {
       if (document.visibilityState === 'visible') {
         void markSessionAsRead();
@@ -3098,7 +3142,7 @@ export function ChatInterface({
       document.removeEventListener('visibilitychange', syncWhenVisible);
       window.removeEventListener('focus', syncWhenVisible);
     };
-  }, [markSessionAsRead]);
+  }, [isSessionSyncLeader, markSessionAsRead]);
 
   useEffect(() => {
     const mobileQuery = window.matchMedia(`(max-width: ${MOBILE_LAYOUT_MAX_WIDTH_PX}px)`);

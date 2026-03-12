@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { PermissionRequest, PermissionDecision } from '@/lib/happy/types';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
+const POLL_INTERVAL_MS = 10000;
+const isDocumentVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
+
 function normalizePermissionChatId(permission: PermissionRequest): string | null {
   const raw = typeof permission.chatId === 'string' ? permission.chatId.trim() : '';
   return raw.length > 0 ? raw : null;
@@ -55,6 +58,7 @@ export function usePermissions(
   initialPermissions: PermissionRequest[],
   activeChatId: string | null,
   includeUnassignedForActiveChat = false,
+  enabled = true,
 ) {
   const [permissions, setPermissions] = useState<PermissionRequest[]>(initialPermissions);
   const [resolvedPermissions, setResolvedPermissions] = useState<PermissionRequest[]>([]);
@@ -79,6 +83,13 @@ export function usePermissions(
   }, [sessionId, initialPermissions]);
 
   const refreshPermissions = useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
+    if (!isDocumentVisible()) {
+      return;
+    }
+
     const requestScopeKey = scopeKey;
     try {
       const params = new URLSearchParams();
@@ -133,9 +144,13 @@ export function usePermissions(
       }
       setError('권한 요청 동기화를 확인하세요.');
     }
-  }, [scopeKey, sessionId, activeChatId, includeUnassignedForActiveChat]);
+  }, [enabled, scopeKey, sessionId, activeChatId, includeUnassignedForActiveChat]);
 
   useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
+
     let aborted = false;
 
     async function sync() {
@@ -146,13 +161,24 @@ export function usePermissions(
     }
 
     void sync();
-    const timer = setInterval(sync, 5000);
+    const timer = setInterval(sync, POLL_INTERVAL_MS);
+
+    const syncWhenVisible = () => {
+      if (!aborted && isDocumentVisible()) {
+        void sync();
+      }
+    };
+
+    document.addEventListener('visibilitychange', syncWhenVisible);
+    window.addEventListener('focus', syncWhenVisible);
 
     return () => {
       aborted = true;
       clearInterval(timer);
+      document.removeEventListener('visibilitychange', syncWhenVisible);
+      window.removeEventListener('focus', syncWhenVisible);
     };
-  }, [refreshPermissions]);
+  }, [enabled, refreshPermissions]);
 
   const scopedPermissions = useMemo(
     () => permissions.filter((item) => isPermissionForChat(item, activeChatId, includeUnassignedForActiveChat)),

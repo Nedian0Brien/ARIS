@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionEventsPage, UiEvent } from '@/lib/happy/types';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
-const SAFETY_RECONCILE_INTERVAL_MS = 5000;
+const SAFETY_RECONCILE_INTERVAL_MS = 15000;
+const FALLBACK_POLL_INTERVAL_MS = 4000;
 const EVENTS_PAGE_LIMIT = 40;
+const isDocumentVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
 
 type EventsApiResponse = {
   events?: UiEvent[];
@@ -76,6 +78,7 @@ export function useSessionEvents(
   initialEvents: UiEvent[],
   initialHasMoreBefore = false,
   initialEventsChatId: string | null = chatId,
+  enabled = true,
 ) {
   const initialEventsMatchChat = initialEventsChatId === chatId;
   const hydratedInitialEvents = useMemo(
@@ -126,7 +129,10 @@ export function useSessionEvents(
   }, [hasMoreBefore]);
 
   const refreshEvents = useCallback(async () => {
-    if (terminalStatusRef.current === 404) {
+    if (!enabled) {
+      return;
+    }
+    if (terminalStatusRef.current === 404 || !isDocumentVisible()) {
       return;
     }
 
@@ -167,7 +173,7 @@ export function useSessionEvents(
       }
       setSyncError(null);
     }
-  }, [sessionId, chatId, includeUnassigned]);
+  }, [enabled, sessionId, chatId, includeUnassigned]);
 
   const loadOlder = useCallback(async (): Promise<{ loadedCount: number; hasMoreBefore: boolean }> => {
     if (loadingOlderRef.current || !hasMoreBeforeRef.current) {
@@ -230,6 +236,10 @@ export function useSessionEvents(
   }, [sessionId, chatId, includeUnassigned]);
 
   useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
+
     let disposed = false;
     let eventSource: EventSource | null = null;
     let pollTimer: number | null = null;
@@ -247,6 +257,9 @@ export function useSessionEvents(
       if (terminalStatusRef.current === 404) {
         return;
       }
+      if (!isDocumentVisible()) {
+        return;
+      }
       if (pollTimer !== null) {
         return;
       }
@@ -262,7 +275,7 @@ export function useSessionEvents(
             setSyncError('백엔드 이벤트 동기화를 확인하세요.');
           }
         });
-      }, 2000);
+      }, FALLBACK_POLL_INTERVAL_MS);
       void refreshEvents().catch((error) => {
         if (!disposed) {
           if (error instanceof SessionEventsHttpError && error.status === 404) {
@@ -304,6 +317,9 @@ export function useSessionEvents(
 
     const connect = () => {
       if (disposed || terminalStatusRef.current === 404) {
+        return;
+      }
+      if (!isDocumentVisible()) {
         return;
       }
 
@@ -402,7 +418,48 @@ export function useSessionEvents(
     };
 
     startSafetyReconcile();
-    connect();
+    if (isDocumentVisible()) {
+      connect();
+    }
+
+    const pauseRealtime = () => {
+      stopPolling();
+      closeStream();
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      if (reconcileTimer !== null) {
+        window.clearInterval(reconcileTimer);
+        reconcileTimer = null;
+      }
+    };
+
+    const resumeRealtime = () => {
+      if (disposed || terminalStatusRef.current === 404 || !isDocumentVisible()) {
+        return;
+      }
+      startSafetyReconcile();
+      connect();
+      void refreshEvents().catch((error) => {
+        if (!disposed && error instanceof SessionEventsHttpError && error.status === 404) {
+          setSyncError(error.message);
+          stopPolling();
+          closeStream();
+        }
+      });
+    };
+
+    const handleVisibilityChange = () => {
+      if (isDocumentVisible()) {
+        resumeRealtime();
+      } else {
+        pauseRealtime();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', resumeRealtime);
 
     // Fetch initial data immediately if there is no client-side baseline
     // (e.g. when changing chats dynamically before server components re-render)
@@ -426,8 +483,10 @@ export function useSessionEvents(
       if (reconnectTimer !== null) {
         window.clearTimeout(reconnectTimer);
       }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', resumeRealtime);
     };
-  }, [sessionId, chatId, includeUnassigned, refreshEvents]);
+  }, [enabled, sessionId, chatId, includeUnassigned, refreshEvents]);
 
   const addEvent = (event: UiEvent) => {
     setEvents((prev) => mergeEvents([...prev, event]));
