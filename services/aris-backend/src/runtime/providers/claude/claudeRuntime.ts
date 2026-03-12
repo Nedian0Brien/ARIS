@@ -56,5 +56,6 @@ export async function runClaudeTurn(input: {
     inferredActions: result.inferredActions,
     threadId: resolvedThread.threadId,
     threadIdSource: resolvedThread.threadIdSource,
+    ...(result.protocolEnvelopes ? { protocolEnvelopes: result.protocolEnvelopes } : {}),
   };
 }

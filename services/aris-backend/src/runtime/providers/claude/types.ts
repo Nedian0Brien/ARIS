@@ -1,3 +1,4 @@
+import type { SessionProtocolEnvelope } from '../../contracts/sessionProtocol.js';
 import type {
   ProviderActionEvent,
   ProviderCliResult,
@@ -13,7 +14,9 @@ export type { ClaudeRuntimeSession } from './claudeSessionContract.js';
 export type ClaudeResumeTarget = ProviderResumeTarget;
 export type ClaudeThreadIdSource = ProviderThreadIdSource;
 export type ClaudeActionEvent = ProviderActionEvent;
-export type ClaudeCliResult = ProviderCliResult;
+export type ClaudeCliResult = ProviderCliResult & {
+  protocolEnvelopes?: SessionProtocolEnvelope[];
+};
 
 export type ClaudeLaunchCommand = ProviderLaunchCommand<'claude'> & {
   requiresPty: boolean;
@@ -29,6 +32,7 @@ export type ClaudeTurnResult = {
   inferredActions: ClaudeActionEvent[];
   threadId?: string;
   threadIdSource: ClaudeThreadIdSource;
+  protocolEnvelopes?: SessionProtocolEnvelope[];
 };
 
 export type ClaudeRunLifecycleMeta = {

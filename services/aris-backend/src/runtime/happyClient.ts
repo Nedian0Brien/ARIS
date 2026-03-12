@@ -9,11 +9,17 @@ import { summarizeDiffText, summarizeFileChangeDiff } from './diffStats.js';
 import { HappyEventLogger } from './happyEventLogger.js';
 import { resolveRuntimeModelSelection } from './modelPolicy.js';
 import { recoverClaudeThreadIdFromMessages, runClaudeProviderTurn } from './providers/claude/claudeOrchestrator.js';
+import {
+  buildClaudeSessionHintMeta as buildSessionHintMeta,
+  projectClaudeTextMessage,
+  projectClaudeToolActionMessage,
+} from './providers/claude/claudeEventBridge.js';
 import { looksLikeClaudeActionTranscript, parseClaudeStreamLine, parseClaudeStreamOutput } from './providers/claude/claudeProtocolMapper.js';
 import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.js';
 import { ClaudeSessionLogTracker, extractClaudeSessionHintIds } from './providers/claude/claudeSessionScanner.js';
 import { buildClaudeSessionId } from './providers/claude/claudeSessionSource.js';
 import { buildProviderCommand, type ProviderCommand } from './providers/providerCommandFactory.js';
+import type { SessionProtocolEnvelope } from './contracts/sessionProtocol.js';
 import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeRuntimeSession } from './providers/claude/types.js';
 import type {
   ApprovalPolicy,
@@ -585,46 +591,6 @@ async function waitForStableActivity(input: {
 type AgentCommand = ProviderCommand;
 
 type ParsedAgentActionEvent = ClaudeActionEvent;
-
-type SessionHintEventType = 'text' | 'tool-call-start' | 'tool-call-end' | 'turn-start' | 'turn-end';
-
-function buildSessionHintMeta(input: {
-  eventType: SessionHintEventType;
-  callId?: string;
-  turnId?: string;
-  turnStatus?: string;
-}): Record<string, unknown> {
-  const event = input.eventType === 'tool-call-end'
-    ? {
-      t: 'tool-call-end',
-      ...(input.callId ? { call: input.callId } : {}),
-    }
-    : input.eventType === 'tool-call-start'
-      ? {
-        t: 'tool-call-start',
-        ...(input.callId ? { call: input.callId } : {}),
-      }
-      : input.eventType === 'turn-end'
-        ? {
-          t: 'turn-end',
-          ...(input.turnStatus ? { status: input.turnStatus } : {}),
-        }
-        : input.eventType === 'turn-start'
-          ? { t: 'turn-start' }
-          : { t: 'text' };
-
-  return {
-    sessionRole: 'agent',
-    sessionEventType: input.eventType,
-    ...(input.callId ? { sessionCallId: input.callId } : {}),
-    ...(input.turnId ? { sessionTurnId: input.turnId } : {}),
-    ...(input.turnStatus ? { sessionTurnStatus: input.turnStatus } : {}),
-    sessionEvent: {
-      role: 'agent',
-      ev: event,
-    },
-  };
-}
 
 function shouldSkipDuplicateAgentMessage(
   seenKeys: Set<string>,
@@ -1519,7 +1485,14 @@ export class HappyRuntimeStore {
     cwdHint?: string,
     signal?: AbortSignal,
     handlers?: { onAction?: (action: ParsedAgentActionEvent) => Promise<void> },
-  ): Promise<{ output: string; cwd: string; inferredActions: ParsedAgentActionEvent[]; streamedActionsPersisted: boolean; threadId?: string }> {
+  ): Promise<{
+    output: string;
+    cwd: string;
+    inferredActions: ParsedAgentActionEvent[];
+    streamedActionsPersisted: boolean;
+    threadId?: string;
+    protocolEnvelopes?: SessionProtocolEnvelope[];
+  }> {
     const safeCwd = this.resolveExecutionCwd(cwdHint);
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
     const { CLAUDECODE: _cc, ...spawnEnv } = process.env;
@@ -1759,17 +1732,28 @@ export class HappyRuntimeStore {
     const cleanedStdout = stripAnsi(result.stdout || '');
     const cleanedStderr = stripAnsi(result.stderr || '');
     let output = '';
+    let protocolEnvelopes: SessionProtocolEnvelope[] | undefined;
     if (command.streamJson) {
-      const parsed = agent === 'claude'
-        ? parseClaudeStreamOutput(cleanedStdout)
-        : parseAgentStreamOutput(cleanedStdout);
-      if (inferredActions.length === 0) {
-        inferredActions = parsed.actions;
+      if (agent === 'claude') {
+        const parsed = parseClaudeStreamOutput(cleanedStdout);
+        if (inferredActions.length === 0) {
+          inferredActions = parsed.actions;
+        }
+        protocolEnvelopes = parsed.envelopes;
+        if (!result.threadId && parsed.sessionId) {
+          result.threadId = parsed.sessionId;
+        }
+        output = trimOutput(parsed.output || '');
+      } else {
+        const parsed = parseAgentStreamOutput(cleanedStdout);
+        if (inferredActions.length === 0) {
+          inferredActions = parsed.actions;
+        }
+        if (!result.threadId && parsed.sessionId) {
+          result.threadId = parsed.sessionId;
+        }
+        output = trimOutput(parsed.output || '');
       }
-      if (!result.threadId && parsed.sessionId) {
-        result.threadId = parsed.sessionId;
-      }
-      output = trimOutput(parsed.output || '');
       const needsFallback = !output || (agent === 'claude'
         ? looksLikeClaudeActionTranscript(output)
         : looksLikeActionTranscript(output));
@@ -1808,6 +1792,7 @@ export class HappyRuntimeStore {
       inferredActions,
       streamedActionsPersisted,
       ...(result.threadId ? { threadId: result.threadId } : {}),
+      ...(protocolEnvelopes ? { protocolEnvelopes } : {}),
     };
   }
 
@@ -1820,7 +1805,14 @@ export class HappyRuntimeStore {
     signal?: AbortSignal,
     resumeTarget?: ClaudeResumeTarget | string,
     handlers?: { onAction?: (action: ParsedAgentActionEvent) => Promise<void> },
-  ): Promise<{ output: string; cwd: string; inferredActions: ParsedAgentActionEvent[]; streamedActionsPersisted: boolean; threadId?: string }> {
+  ): Promise<{
+    output: string;
+    cwd: string;
+    inferredActions: ParsedAgentActionEvent[];
+    streamedActionsPersisted: boolean;
+    threadId?: string;
+    protocolEnvelopes?: SessionProtocolEnvelope[];
+  }> {
     const command = buildAgentCommand(agent, prompt, approvalPolicy, model, resumeTarget);
     if (!command) {
       throw new Error(`Unsupported agent flavor: ${agent}`);
@@ -3255,6 +3247,7 @@ export class HappyRuntimeStore {
         threadId?: string;
         threadIdSource?: 'resume' | 'observed' | 'synthetic';
         messageMeta?: Record<string, unknown>;
+        protocolEnvelopes?: SessionProtocolEnvelope[];
         inferredActions?: ParsedAgentActionEvent[];
       };
       const appendNonCodexAction = async (
@@ -3263,6 +3256,24 @@ export class HappyRuntimeStore {
         cwd: string,
         threadId?: string,
       ) => {
+        if (flavor === 'claude') {
+          const projection = projectClaudeToolActionMessage({
+            action,
+            actionIndex: indexSeed,
+            ...(scopedChatId ? { chatId: scopedChatId } : {}),
+            requestedPath: session.metadata.path,
+            execCwd: cwd,
+            ...(selectedModel ? { model: selectedModel } : {}),
+            ...(threadId ? { threadId } : {}),
+            envelopes: response?.protocolEnvelopes,
+          });
+          if (!projection) {
+            return;
+          }
+          await this.appendAgentMessage(session.id, projection.body, projection.meta, projection.options);
+          return;
+        }
+
         const sessionCallId = (action.callId || `call-${indexSeed + 1}`).trim();
         const outputPreview = action.output ? trimOutput(action.output) : '';
         const bodyParts = [
@@ -3367,6 +3378,7 @@ export class HappyRuntimeStore {
             threadId: claudeResponse.threadId ?? claudeResponse.actionThreadId,
             threadIdSource: claudeResponse.threadIdSource,
             messageMeta: claudeResponse.messageMeta,
+            protocolEnvelopes: claudeResponse.protocolEnvelopes,
           };
         } else {
           const nonClaude = await this.runAgentCli(
@@ -3414,17 +3426,37 @@ export class HappyRuntimeStore {
       const streamedPersisted = Boolean(response.streamedPersisted);
       const agentMessagePersisted = Boolean(response.agentMessagePersisted);
       if (!isCodex || !streamedPersisted || (!agentMessagePersisted && response.output.trim().length > 0)) {
-        await this.appendAgentMessage(session.id, response.output, {
-          ...(scopedChatId ? { chatId: scopedChatId } : {}),
-          requestedPath: session.metadata.path,
-          execCwd: response.cwd,
-          ...buildSessionHintMeta({ eventType: 'text' }),
-          streamEvent: 'agent_message',
+        if (flavor === 'claude') {
+          const projection = projectClaudeTextMessage({
+            output: response.output,
+            ...(scopedChatId ? { chatId: scopedChatId } : {}),
+            requestedPath: session.metadata.path,
+            execCwd: response.cwd,
+            ...(selectedModel ? { model: selectedModel } : {}),
+            ...(response.threadId ? { threadId: response.threadId } : {}),
+            messageMeta: {
+              streamEvent: 'agent_message',
+              ...(response.threadIdSource ? { threadIdSource: response.threadIdSource } : {}),
+              ...(response.messageMeta ?? {}),
+            },
+            envelopes: response.protocolEnvelopes,
+          });
+          if (projection) {
+            await this.appendAgentMessage(session.id, projection.body, projection.meta, projection.options);
+          }
+        } else {
+          await this.appendAgentMessage(session.id, response.output, {
+            ...(scopedChatId ? { chatId: scopedChatId } : {}),
+            requestedPath: session.metadata.path,
+            execCwd: response.cwd,
+            ...buildSessionHintMeta({ eventType: 'text' }),
+            streamEvent: 'agent_message',
             agent: flavor,
             model: selectedModel,
             ...(response.threadId ? { threadId: response.threadId } : {}),
             ...(response.messageMeta ?? {}),
-        });
+          });
+        }
       }
     } catch (error) {
       const scopedChatId = typeof context.chatId === 'string' && context.chatId.trim().length > 0
