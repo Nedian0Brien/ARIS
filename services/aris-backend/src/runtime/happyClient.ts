@@ -8,7 +8,7 @@ import { inferActionTypeFromCommand, titleForActionType } from './actionType.js'
 import { summarizeDiffText, summarizeFileChangeDiff } from './diffStats.js';
 import { HappyEventLogger } from './happyEventLogger.js';
 import { resolveRuntimeModelSelection } from './modelPolicy.js';
-import { buildClaudeActionThreadId, recoverClaudeThreadIdFromMessages, runClaudeProviderTurn } from './providers/claude/claudeOrchestrator.js';
+import { recoverClaudeThreadIdFromMessages, runClaudeProviderTurn } from './providers/claude/claudeOrchestrator.js';
 import { looksLikeClaudeActionTranscript, parseClaudeStreamLine, parseClaudeStreamOutput } from './providers/claude/claudeProtocolMapper.js';
 import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.js';
 import { extractClaudeSessionHintIds, scanClaudeSessionLogs } from './providers/claude/claudeSessionScanner.js';
@@ -3310,12 +3310,6 @@ export class HappyRuntimeStore {
         const nonCodexCwd = this.resolveExecutionCwd(session.metadata.path);
         let streamedActionIndex = 0;
         if (isClaude) {
-          const claudeActionThreadId = buildClaudeActionThreadId(
-            requestedThreadId,
-            storedClaudeThreadId,
-            session.id,
-            scopedChatId,
-          );
           const claudeResponse = await runClaudeProviderTurn({
             session,
             prompt,
@@ -3324,8 +3318,8 @@ export class HappyRuntimeStore {
             storedThreadId: storedClaudeThreadId,
             model: selectedModel,
             signal: controller.signal,
-            onAction: async (action) => {
-              await appendNonCodexAction(action, streamedActionIndex, nonCodexCwd, claudeActionThreadId);
+            onAction: async (action, meta) => {
+              await appendNonCodexAction(action, streamedActionIndex, nonCodexCwd, meta.threadId);
               streamedActionIndex += 1;
             },
             executeCommand: async ({ command, cwdHint, signal, onAction }) => this.runAgentCommand(

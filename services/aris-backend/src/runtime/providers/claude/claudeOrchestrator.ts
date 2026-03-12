@@ -1,6 +1,7 @@
 import { buildClaudeSessionId } from './claudeSessionSource.js';
+import { isClaudeMissingConversationError } from './claudeLauncher.js';
 import { runClaudeTurn } from './claudeRuntime.js';
-import type { ClaudeCommandExecutor, ClaudeRuntimeSession, ClaudeTurnResult } from './types.js';
+import type { ClaudeActionEvent, ClaudeCommandExecutor, ClaudeRuntimeSession, ClaudeTurnResult } from './types.js';
 import type { RuntimeMessage } from '../../../types.js';
 
 export function buildClaudeActionThreadId(
@@ -62,34 +63,41 @@ export async function runClaudeProviderTurn(input: {
   storedThreadId?: string;
   model?: string;
   signal?: AbortSignal;
-  onAction?: Parameters<ClaudeCommandExecutor>[0]['onAction'];
+  onAction?: (action: ClaudeActionEvent, meta: { threadId: string }) => Promise<void>;
   executeCommand: ClaudeCommandExecutor;
 }): Promise<ClaudeTurnResult & { actionThreadId?: string; messageMeta: Record<string, unknown> }> {
   const preferredThreadId = input.requestedThreadId ?? input.storedThreadId;
-  const actionThreadId = buildClaudeActionThreadId(
-    input.requestedThreadId,
-    input.storedThreadId,
-    input.session.id,
-    input.chatId,
-  );
-  const result = await runClaudeTurn({
-    session: input.session,
-    prompt: input.prompt,
-    chatId: input.chatId,
-    preferredThreadId,
-    model: input.model,
-    signal: input.signal,
-    onAction: input.onAction,
-    executeCommand: input.executeCommand,
+  const executeTurn = async (attemptedThreadId?: string) => {
+    const actionThreadId = attemptedThreadId ?? buildClaudeSessionId(input.session.id, input.chatId);
+    const result = await runClaudeTurn({
+      session: input.session,
+      prompt: input.prompt,
+      chatId: input.chatId,
+      preferredThreadId: attemptedThreadId,
+      model: input.model,
+      signal: input.signal,
+      onAction: input.onAction
+        ? async (action) => input.onAction?.(action, { threadId: actionThreadId })
+        : undefined,
+      executeCommand: input.executeCommand,
+    });
+    return { actionThreadId, result };
+  };
+
+  const executed = await executeTurn(preferredThreadId).catch(async (error) => {
+    if (!preferredThreadId || !isClaudeMissingConversationError(error)) {
+      throw error;
+    }
+    return executeTurn(undefined);
   });
 
   return {
-    ...result,
-    actionThreadId,
-    messageMeta: result.threadId
+    ...executed.result,
+    actionThreadId: executed.actionThreadId,
+    messageMeta: executed.result.threadId
       ? {
-        claudeSessionId: result.threadId,
-        threadIdSource: result.threadIdSource,
+        claudeSessionId: executed.result.threadId,
+        threadIdSource: executed.result.threadIdSource,
       }
       : {},
   };

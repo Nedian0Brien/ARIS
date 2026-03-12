@@ -61,6 +61,11 @@ export function isClaudeSessionInUseError(error: unknown): boolean {
   return message.includes('session id') && message.includes('already in use');
 }
 
+export function isClaudeMissingConversationError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes('no conversation found with session id');
+}
+
 export async function runClaudeCommand(input: {
   prompt: string;
   approvalPolicy: ApprovalPolicy;
