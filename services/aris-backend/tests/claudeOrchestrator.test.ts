@@ -20,6 +20,15 @@ describe('claudeOrchestrator', () => {
     expect(threadId).toBe('session-b');
   });
 
+  it('ignores synthetic Claude bootstrap ids during message recovery', () => {
+    const threadId = recoverClaudeThreadIdFromMessages([
+      { meta: { agent: 'claude', claudeSessionId: 'synthetic-session-1', threadIdSource: 'synthetic' } },
+      { meta: { agent: 'claude', threadId: 'synthetic-session-2', threadIdSource: 'synthetic' } },
+    ]);
+
+    expect(threadId).toBeUndefined();
+  });
+
   it('builds a synthetic action thread id only when no requested or stored thread exists', () => {
     expect(buildClaudeActionThreadId('requested-1', 'stored-1', 'session-1', 'chat-1')).toBe('requested-1');
     expect(buildClaudeActionThreadId(undefined, 'stored-1', 'session-1', 'chat-1')).toBe('stored-1');

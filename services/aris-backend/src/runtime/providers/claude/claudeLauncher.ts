@@ -32,9 +32,11 @@ export function buildClaudeCommand(input: {
   resumeTarget?: ClaudeResumeTarget;
 }): ClaudeLaunchCommand {
   const permissionMode = normalizeClaudePermissionMode(input.approvalPolicy);
-  const normalizedResumeId = normalizeResumeId(input.resumeTarget);
+  const normalizedResumeId = input.resumeTarget?.mode === 'resume'
+    ? normalizeResumeId(input.resumeTarget)
+    : undefined;
   const claudeResumeArgs = normalizedResumeId
-    ? [input.resumeTarget?.mode === 'session-id' ? '--session-id' : '--resume', normalizedResumeId]
+    ? ['--resume', normalizedResumeId]
     : [];
   const args = [
     '--print',
@@ -97,6 +99,9 @@ export async function runClaudeCommand(input: {
     return await runOnce();
   } catch (error) {
     if (!isClaudeSessionInUseError(error) || input.signal?.aborted) {
+      throw error;
+    }
+    if (input.resumeTarget?.mode === 'session-id') {
       throw error;
     }
     await delay(1500);

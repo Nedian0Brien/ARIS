@@ -15,11 +15,11 @@ describe('claudeSessionSource', () => {
     expect(resolved.threadIdSource).toBe('resume');
   });
 
-  it('falls back to a deterministic synthetic session id when no stored thread exists', () => {
+  it('keeps a deterministic synthetic action thread id without creating a Claude resume target', () => {
     const resolved = buildClaudeResumeTarget(undefined, 'session-2', 'chat-2');
 
-    expect(resolved.resumeTarget?.mode).toBe('session-id');
-    expect(resolved.resumeTarget?.id).toBe(buildClaudeSessionId('session-2', 'chat-2'));
+    expect(resolved.resumeTarget).toBeUndefined();
+    expect(resolved.actionThreadId).toBe(buildClaudeSessionId('session-2', 'chat-2'));
     expect(resolved.threadIdSource).toBe('synthetic');
   });
 

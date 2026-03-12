@@ -82,6 +82,8 @@ export interface ClaudeSessionStateOwner {
   readonly launchMode: ClaudeSessionLaunchMode;
   snapshot(): ClaudeSessionContract;
   getActiveThreadId(): string | undefined;
+  getSyntheticThreadId(): string;
+  rotateSyntheticThreadId(): string;
   resolvePreferredThreadId(requestedThreadId?: string, storedThreadId?: string): string | undefined;
   observeThreadId(threadId: string, source?: Extract<ClaudeSessionSource, 'observed' | 'scanner' | 'hook'>): void;
   restoreThreadId(threadId: string, source?: Extract<ClaudeSessionSource, 'resume' | 'observed' | 'scanner'>): void;

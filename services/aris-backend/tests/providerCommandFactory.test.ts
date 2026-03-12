@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildProviderCommand } from '../src/runtime/providers/providerCommandFactory.js';
 
 describe('providerCommandFactory', () => {
-  it('dispatches Claude command building to the Claude launcher', () => {
+  it('dispatches Claude command building to the Claude launcher without injecting session-id targets', () => {
     const command = buildProviderCommand({
       agent: 'claude',
       prompt: 'Reply with OK',
@@ -12,7 +12,8 @@ describe('providerCommandFactory', () => {
     });
 
     expect(command?.command).toBe('claude');
-    expect(command?.args).toContain('--session-id');
+    expect(command?.args).not.toContain('--session-id');
+    expect(command?.args).not.toContain('--resume');
   });
 
   it('dispatches Gemini command building to the Gemini launcher', () => {

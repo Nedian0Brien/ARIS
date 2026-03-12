@@ -1,5 +1,5 @@
 import { buildClaudeSessionId, chooseClaudePreferredThreadId } from './claudeSessionSource.js';
-import { isClaudeMissingConversationError } from './claudeLauncher.js';
+import { isClaudeMissingConversationError, isClaudeSessionInUseError } from './claudeLauncher.js';
 import { runClaudeTurn } from './claudeRuntime.js';
 import type { ClaudeSessionStateOwner } from './claudeSessionContract.js';
 import type {
@@ -42,16 +42,15 @@ export function recoverClaudeThreadIdFromMessages(
       continue;
     }
 
-    const providerThreadId = typeof message?.meta?.claudeSessionId === 'string'
-      ? message.meta.claudeSessionId.trim()
-      : '';
-    if (providerThreadId) {
-      return providerThreadId;
-    }
-
     const source = typeof message?.meta?.threadIdSource === 'string'
       ? message.meta.threadIdSource.trim()
       : '';
+    const providerThreadId = typeof message?.meta?.claudeSessionId === 'string'
+      ? message.meta.claudeSessionId.trim()
+      : '';
+    if (providerThreadId && source !== 'synthetic') {
+      return providerThreadId;
+    }
     const threadId = typeof message?.meta?.threadId === 'string'
       ? message.meta.threadId.trim()
       : '';
@@ -85,14 +84,15 @@ export async function runClaudeProviderTurn(input: {
     storedThreadId: input.storedThreadId,
   });
   const handlePermission = input.onPermission;
-  const executeTurn = async (attemptedThreadId?: string) => {
-    const actionThreadId = attemptedThreadId ?? buildClaudeSessionId(input.session.id, input.chatId);
+  const executeTurn = async (attemptedThreadId?: string, syntheticThreadId?: string) => {
+    const actionThreadId = attemptedThreadId ?? syntheticThreadId ?? buildClaudeSessionId(input.session.id, input.chatId);
     const result = await runClaudeTurn({
       session: input.session,
       sessionOwner: input.sessionOwner,
       prompt: input.prompt,
       chatId: input.chatId,
       preferredThreadId: attemptedThreadId,
+      syntheticThreadId,
       model: input.model,
       signal: input.signal,
       onAction: input.onAction
@@ -106,7 +106,16 @@ export async function runClaudeProviderTurn(input: {
     return { actionThreadId, result };
   };
 
-  const executed = await executeTurn(preferredThreadId).catch(async (error) => {
+  const initialSyntheticThreadId = preferredThreadId
+    ? undefined
+    : input.sessionOwner?.getSyntheticThreadId();
+
+  const executed = await executeTurn(preferredThreadId, initialSyntheticThreadId).catch(async (error) => {
+    if (!preferredThreadId && isClaudeSessionInUseError(error)) {
+      const rotatedSyntheticThreadId = input.sessionOwner?.rotateSyntheticThreadId()
+        ?? buildClaudeSessionId(input.session.id, input.chatId, `retry:${Date.now()}`);
+      return executeTurn(undefined, rotatedSyntheticThreadId);
+    }
     if (!preferredThreadId || !isClaudeMissingConversationError(error)) {
       if (input.signal?.aborted) {
         input.sessionOwner?.abortTurn();
@@ -116,17 +125,20 @@ export async function runClaudeProviderTurn(input: {
       throw error;
     }
     input.sessionOwner?.clearActiveThread();
-    return executeTurn(undefined);
+    return executeTurn(undefined, input.sessionOwner?.getSyntheticThreadId());
   });
 
+  const shouldPersistClaudeSessionId = executed.result.threadId && executed.result.threadIdSource !== 'synthetic';
   return {
     ...executed.result,
     actionThreadId: executed.actionThreadId,
-    messageMeta: executed.result.threadId
+    messageMeta: shouldPersistClaudeSessionId
       ? {
         claudeSessionId: executed.result.threadId,
         threadIdSource: executed.result.threadIdSource,
       }
-      : {},
+      : executed.result.threadIdSource
+        ? { threadIdSource: executed.result.threadIdSource }
+        : {},
   };
 }
