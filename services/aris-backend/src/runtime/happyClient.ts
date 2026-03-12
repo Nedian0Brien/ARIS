@@ -36,6 +36,13 @@ import type {
 
 const execFileAsync = promisify(execFile);
 const AGENT_COMMAND_TIMEOUT_MS = 120_000;
+const CLAUDE_TURN_TIMEOUT_MS = (() => {
+  const parsed = Number.parseInt(process.env.CLAUDE_TURN_TIMEOUT_MS || '', 10);
+  if (Number.isFinite(parsed) && parsed >= 120_000) {
+    return parsed;
+  }
+  return 30 * 60 * 1000; // 30 minutes
+})();
 const AGENT_MAX_OUTPUT_CHARS = 32_000;
 const AGENT_EXTRA_PATHS = [
   '/home/ubuntu/.local/bin',
@@ -661,6 +668,12 @@ function stripAnsi(value: string): string {
     .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, '')
     .replace(/\n?\d+;\s*$/g, '')
     .trim();
+}
+
+function resolveAgentCommandTimeoutMs(agent: RuntimeAgent): number {
+  return agent === 'claude'
+    ? CLAUDE_TURN_TIMEOUT_MS
+    : AGENT_COMMAND_TIMEOUT_MS;
 }
 
 function collectNestedRecords(root: Record<string, unknown>): Record<string, unknown>[] {
@@ -1308,6 +1321,7 @@ export const happyClientTestHooks = {
   buildAgentCommand,
   waitForStableActivity,
   resolveClaudeLaunchMode,
+  resolveAgentCommandTimeoutMs,
 };
 
 export class HappyRuntimeStore {
@@ -1648,6 +1662,7 @@ export class HappyRuntimeStore {
     const safeCwd = this.resolveExecutionCwd(cwdHint);
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
     const { CLAUDECODE: _cc, ...spawnEnv } = process.env;
+    const timeoutMs = resolveAgentCommandTimeoutMs(agent);
     const runCommand = async (args: string[]): Promise<{ stdout: string; stderr: string }> => (
       command.requiresPty
         ? execFileAsync(
@@ -1655,7 +1670,7 @@ export class HappyRuntimeStore {
           ['-q', '-c', `${shellEscapeSingle(command.command)} ${args.map(shellEscapeSingle).join(' ')}`, '/dev/null'],
           {
             cwd: safeCwd,
-            timeout: AGENT_COMMAND_TIMEOUT_MS,
+            timeout: timeoutMs,
             maxBuffer: 8 * 1024 * 1024,
             env: { ...spawnEnv, PATH: mergedPath },
             signal,
@@ -1663,7 +1678,7 @@ export class HappyRuntimeStore {
         )
         : execFileAsync(command.command, args, {
           cwd: safeCwd,
-          timeout: AGENT_COMMAND_TIMEOUT_MS,
+          timeout: timeoutMs,
           maxBuffer: 8 * 1024 * 1024,
           env: { ...spawnEnv, PATH: mergedPath },
           signal,
@@ -1714,21 +1729,48 @@ export class HappyRuntimeStore {
       let emitChain: Promise<void> = Promise.resolve();
       let settled = false;
       let timedOut = false;
-      let timeoutHandle: NodeJS.Timeout | null = setTimeout(() => {
-        timeoutHandle = null;
-        timedOut = true;
-        child.kill('SIGTERM');
-      }, AGENT_COMMAND_TIMEOUT_MS);
+      let timeoutHandle: NodeJS.Timeout | null = null;
+      let timeoutSuspensions = 0;
+
+      const clearTimeoutHandle = () => {
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+          timeoutHandle = null;
+        }
+      };
+
+      const armTimeout = () => {
+        clearTimeoutHandle();
+        if (settled || timeoutSuspensions > 0) {
+          return;
+        }
+        timeoutHandle = setTimeout(() => {
+          timeoutHandle = null;
+          timedOut = true;
+          child.kill('SIGTERM');
+        }, timeoutMs);
+      };
+
+      const suspendTimeout = () => {
+        timeoutSuspensions += 1;
+        clearTimeoutHandle();
+      };
+
+      const resumeTimeout = () => {
+        timeoutSuspensions = Math.max(0, timeoutSuspensions - 1);
+        if (timeoutSuspensions === 0) {
+          armTimeout();
+        }
+      };
+
+      armTimeout();
 
       const settleReject = (error: unknown) => {
         if (settled) {
           return;
         }
         settled = true;
-        if (timeoutHandle) {
-          clearTimeout(timeoutHandle);
-          timeoutHandle = null;
-        }
+        clearTimeoutHandle();
         reject(error instanceof Error ? error : new Error(String(error)));
       };
 
@@ -1744,7 +1786,12 @@ export class HappyRuntimeStore {
             if (!seenPermissionKeys.has(permissionKey)) {
               seenPermissionKeys.add(permissionKey);
               emitChain = emitChain.then(async () => {
-                await onPermission(permissionRequest);
+                suspendTimeout();
+                try {
+                  await onPermission(permissionRequest);
+                } finally {
+                  resumeTimeout();
+                }
               });
             }
           }
@@ -1775,6 +1822,7 @@ export class HappyRuntimeStore {
       };
 
       child.stdout?.on('data', (chunk: Buffer | string) => {
+        armTimeout();
         const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
         stdoutBuffer += text;
         lineBuffer += text;
@@ -1788,6 +1836,7 @@ export class HappyRuntimeStore {
       });
 
       child.stderr?.on('data', (chunk: Buffer | string) => {
+        armTimeout();
         stderrBuffer += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
       });
 
@@ -1799,10 +1848,7 @@ export class HappyRuntimeStore {
         if (settled) {
           return;
         }
-        if (timeoutHandle) {
-          clearTimeout(timeoutHandle);
-          timeoutHandle = null;
-        }
+        clearTimeoutHandle();
         flushLineBuffer();
         emitChain
           .then(() => {
@@ -1812,7 +1858,7 @@ export class HappyRuntimeStore {
             if (code !== 0) {
               if (timedOut) {
                 const timeoutError = new Error(
-                  `${agent} CLI timed out after ${AGENT_COMMAND_TIMEOUT_MS}ms`
+                  `${agent} CLI timed out after ${timeoutMs}ms`
                   + (resolvedSessionId ? ` (session ${resolvedSessionId})` : ''),
                 );
                 if (resolvedSessionId) {
