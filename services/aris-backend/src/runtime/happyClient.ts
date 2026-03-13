@@ -25,10 +25,13 @@ import { createGeminiRuntime } from './providers/gemini/geminiRuntime.js';
 import { GeminiSessionRegistry } from './providers/gemini/geminiSessionRegistry.js';
 import { buildProviderCommand, type ProviderCommand } from './providers/providerCommandFactory.js';
 import type { SessionProtocolEnvelope } from './contracts/sessionProtocol.js';
-import type { ProviderPermissionRequest } from './contracts/providerRuntime.js';
+import type {
+  ProviderPermissionRequest,
+  ProviderRuntimeFlavor,
+  ProviderRuntimeSession,
+} from './contracts/providerRuntime.js';
 import type { ClaudeSessionLaunchMode } from './providers/claude/claudeSessionContract.js';
-import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeRuntimeSession, ClaudeTextEvent } from './providers/claude/types.js';
-import type { GeminiRuntimeSession } from './providers/gemini/types.js';
+import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeTextEvent } from './providers/claude/types.js';
 import type {
   ApprovalPolicy,
   PermissionDecision,
@@ -266,8 +269,19 @@ function normalizeModelReasoningEffort(value: unknown): ModelReasoningEffort | u
   return undefined;
 }
 
-function isClaudeRuntimeSession(session: RuntimeSession): session is RuntimeSession & ClaudeRuntimeSession {
-  return session.metadata.flavor === 'claude';
+function buildProviderRuntimeSession<TFlavor extends ProviderRuntimeFlavor>(
+  session: RuntimeSession,
+  flavor: TFlavor,
+): ProviderRuntimeSession<TFlavor> {
+  return {
+    id: session.id,
+    metadata: {
+      flavor,
+      path: session.metadata.path,
+      approvalPolicy: session.metadata.approvalPolicy,
+      ...(session.metadata.model ? { model: session.metadata.model } : {}),
+    },
+  };
 }
 
 function normalizeStatus(raw: unknown, active: unknown): SessionStatusValue {
@@ -3726,11 +3740,9 @@ export class HappyRuntimeStore {
           : null;
         let streamedActionIndex = 0;
         if (isClaude) {
-          if (!isClaudeRuntimeSession(session)) {
-            throw new Error(`Claude runtime type guard failed for session ${session.id}`);
-          }
+          const claudeSession = buildProviderRuntimeSession(session, 'claude');
           const claudeResponse = await runClaudeProviderTurn({
-            session,
+            session: claudeSession,
             sessionOwner: claudeController?.session,
             prompt,
             chatId: scopedChatId,
@@ -3802,9 +3814,7 @@ export class HappyRuntimeStore {
             protocolEnvelopes: claudeResponse.protocolEnvelopes,
           };
         } else if (isGemini) {
-          if ((session.metadata.flavor !== 'gemini')) {
-            throw new Error(`Gemini runtime type guard failed for session ${session.id}`);
-          }
+          const geminiSession = buildProviderRuntimeSession(session, 'gemini');
           geminiMessageQueue = new GeminiMessageQueue(
             {
               ...(scopedChatId ? { chatId: scopedChatId } : {}),
@@ -3838,11 +3848,11 @@ export class HappyRuntimeStore {
             },
           });
           const recovered = await geminiRuntime.recoverSession({
-            session: session as GeminiRuntimeSession,
+            session: geminiSession,
             chatId: scopedChatId,
           });
           const geminiResponse = await geminiRuntime.sendTurn({
-            session: session as GeminiRuntimeSession,
+            session: geminiSession,
             prompt,
             chatId: scopedChatId,
             requestedThreadId,
