@@ -822,12 +822,17 @@ function buildStreamedTextReplyKey(input: {
   ].join('|');
 }
 
-function extractGeminiStreamTextEvent(parsedLine: ReturnType<typeof parseGeminiStreamLine>): ClaudeTextEvent | null {
+function extractGeminiStreamTextEvent(parsedLine: {
+  assistantText?: string;
+  assistantSource?: 'assistant' | 'message' | 'result';
+  sessionId?: string;
+  envelopes?: SessionProtocolEnvelope[];
+}): ClaudeTextEvent | null {
   if (!parsedLine.assistantText) {
     return null;
   }
 
-  const textEnvelopes = parsedLine.envelopes.filter((envelope) => (
+  const textEnvelopes = (parsedLine.envelopes ?? []).filter((envelope) => (
     envelope.kind === 'text' || envelope.kind === 'turn-end'
   ));
   if (!textEnvelopes.some((envelope) => envelope.kind === 'text')) {
@@ -3914,23 +3919,28 @@ export class HappyRuntimeStore {
                 request.session.metadata.path,
                 request.signal,
                 request.preferredThreadId ? { id: request.preferredThreadId, mode: 'resume' } : undefined,
-                {
-                  onAction: request.onAction
-                    ? async (action) => request.onAction?.(action, {
+                (() => {
+                  const actionHandler = request.onAction;
+                  const permissionHandler = request.onPermission;
+                  const textHandler = request.onText;
+                  return {
+                  onAction: actionHandler
+                    ? async (action) => actionHandler(action, {
                       threadId: request.preferredThreadId ?? '',
                     })
                     : undefined,
-                  onPermission: request.onPermission
-                    ? async (permission) => request.onPermission?.(permission, {
+                  onPermission: permissionHandler
+                    ? async (permission) => permissionHandler(permission, {
                       threadId: request.preferredThreadId ?? '',
                     })
                     : undefined,
-                  onText: request.onText
-                    ? async (event) => request.onText?.(event, {
+                  onText: textHandler
+                    ? async (event) => textHandler(event, {
                       threadId: event.threadId ?? request.preferredThreadId ?? '',
                     })
                     : undefined,
-                },
+                  };
+                })(),
               );
               return {
                 output: geminiTurn.output,
