@@ -7,6 +7,18 @@ import styles from './OpenAiApiKeyCard.module.css';
 
 type Feedback = { ok: boolean; msg: string } | null;
 
+const PROVIDER_KEY_LABELS: Record<string, string> = {
+  codex: 'OpenAI API Key',
+  claude: 'Anthropic API Key',
+  gemini: 'Google API Key',
+};
+
+const PROVIDER_KEY_PLACEHOLDERS: Record<string, string> = {
+  codex: 'sk-...',
+  claude: 'sk-ant-...',
+  gemini: 'AIza...',
+};
+
 export function OpenAiApiKeyCard({
   providerOptions,
   activeProvider,
@@ -31,18 +43,33 @@ export function OpenAiApiKeyCard({
   const [apiKey, setApiKey] = useState('');
 
   useEffect(() => {
+    setApiKey('');
+  }, [activeProvider]);
+
+  useEffect(() => {
     if (feedback?.ok) {
       setApiKey('');
     }
   }, [feedback]);
 
   const isCodex = activeProvider === 'codex';
+  const isClaude = activeProvider === 'claude';
+  const isActiveProvider = isCodex || isClaude;
   const providerTitle = activeProvider === 'claude' ? 'Claude' : activeProvider === 'gemini' ? 'Gemini' : 'Codex';
   const themeClass = activeProvider === 'claude'
     ? styles.themeClaude
     : activeProvider === 'gemini'
       ? styles.themeGemini
       : styles.themeCodex;
+
+  const keyLabel = PROVIDER_KEY_LABELS[activeProvider] ?? 'API Key';
+  const keyPlaceholder = PROVIDER_KEY_PLACEHOLDERS[activeProvider] ?? '';
+
+  const runtimeLabel = isCodex
+    ? 'Codex 실행 인자에 미주입'
+    : isClaude
+      ? 'Claude 실행 인자에 미주입'
+      : '런타임 분리';
 
   return (
     <section className={`${styles.card} ${themeClass}`}>
@@ -55,11 +82,11 @@ export function OpenAiApiKeyCard({
             </div>
             <h3 className={styles.title}>Model Provider API Keys</h3>
             <p className={styles.description}>
-              공급자별 API 키를 분리 저장합니다. 현재는 Codex용 OpenAI 카탈로그 조회만 연결되어 있고, 키는 런타임
+              공급자별 API 키를 분리 저장합니다. 키는 AES-256-GCM으로 암호화되며 런타임
               에이전트 실행 경로에 주입하지 않습니다.
             </p>
           </div>
-          {isCodex ? (
+          {isActiveProvider ? (
             <div className={`${styles.statusPill} ${hasKey ? styles.statusActive : styles.statusInactive}`}>
               {hasKey ? '등록됨' : '미등록'}
             </div>
@@ -86,7 +113,7 @@ export function OpenAiApiKeyCard({
           })}
         </div>
 
-        {isCodex ? (
+        {isActiveProvider ? (
           <>
             <div className={styles.securityGrid}>
               <div className={styles.securityItem}>
@@ -99,7 +126,7 @@ export function OpenAiApiKeyCard({
               </div>
               <div className={styles.securityItem}>
                 <span className={styles.securityLabel}>런타임 분리</span>
-                <span className={styles.securityValue}>Codex 실행 인자에 미주입</span>
+                <span className={styles.securityValue}>{runtimeLabel}</span>
               </div>
             </div>
 
@@ -111,7 +138,7 @@ export function OpenAiApiKeyCard({
                 </div>
               ) : null}
               <div>
-                <label className={styles.label}>OpenAI API Key</label>
+                <label className={styles.label}>{keyLabel}</label>
                 <div className={styles.inputRow}>
                   <input
                     className={styles.input}
@@ -119,7 +146,7 @@ export function OpenAiApiKeyCard({
                     autoComplete="off"
                     value={apiKey}
                     onChange={(event) => setApiKey(event.target.value)}
-                    placeholder={hasKey ? '새 키를 입력하면 교체됩니다' : 'sk-...'}
+                    placeholder={hasKey ? '새 키를 입력하면 교체됩니다' : keyPlaceholder}
                   />
                 </div>
               </div>
@@ -156,8 +183,8 @@ export function OpenAiApiKeyCard({
             <div className={styles.placeholderEyebrow}>{providerTitle} Placeholder</div>
             <div className={styles.placeholderTitle}>{providerTitle} API 키 설정은 다음 단계에서 연결됩니다</div>
             <p className={styles.placeholderText}>
-              공급자별 저장 구조는 동일하게 유지하되, 현재 배포에서는 Codex(OpenAI)만 실제 카탈로그 조회와 연결되어
-              있습니다. 이 영역은 이후 Claude, Gemini 키 관리 UI로 확장될 자리입니다.
+              공급자별 저장 구조는 동일하게 유지하되, 현재 배포에서는 Codex(OpenAI)와 Claude(Anthropic)만
+              실제 카탈로그 조회와 연결되어 있습니다.
             </p>
           </div>
         )}

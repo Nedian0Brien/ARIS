@@ -47,6 +47,7 @@ export async function getUserModelSettings(userId: string): Promise<ModelSetting
       customAiModels: true,
       providerModelSelections: true,
       openAiApiKeyEncrypted: true,
+      claudeApiKeyEncrypted: true,
     },
   });
 
@@ -58,6 +59,7 @@ export async function getUserModelSettings(userId: string): Promise<ModelSetting
     legacyCustomModels,
     secrets: {
       openAiApiKeyConfigured: Boolean(preference?.openAiApiKeyEncrypted),
+      claudeApiKeyConfigured: Boolean(preference?.claudeApiKeyEncrypted),
     },
   };
 }

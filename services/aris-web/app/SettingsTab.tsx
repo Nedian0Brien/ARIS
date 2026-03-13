@@ -5,7 +5,9 @@ import { CheckCircle2, ChevronDown, ChevronUp, FileKey, KeyRound, Settings2, Upl
 import { OpenAiApiKeyCard } from '@/components/settings/OpenAiApiKeyCard';
 import { CodexModelCatalogCard } from '@/components/settings/CodexModelCatalogCard';
 import {
+  DEFAULT_CLAUDE_MODEL_SELECTIONS,
   DEFAULT_CODEX_MODEL_SELECTIONS,
+  type ClaudeCatalogItem,
   type ModelSettingsResponse,
   type OpenAiCatalogItem,
   type ProviderId,
@@ -32,6 +34,7 @@ const DEFAULT_MODEL_SETTINGS: ModelSettingsResponse = {
   },
   secrets: {
     openAiApiKeyConfigured: false,
+    claudeApiKeyConfigured: false,
   },
 };
 
@@ -47,20 +50,38 @@ export function SettingsTab() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [modelSettings, setModelSettings] = useState<ModelSettingsResponse>(DEFAULT_MODEL_SETTINGS);
-  const [catalogItems, setCatalogItems] = useState<OpenAiCatalogItem[]>([]);
-  const [selectedCodexModelIds, setSelectedCodexModelIds] = useState<string[]>([...DEFAULT_CODEX_MODEL_SELECTIONS]);
-  const [modelSaving, setModelSaving] = useState(false);
-  const [modelFeedback, setModelFeedback] = useState<Feedback>(null);
-  const [catalogLoading, setCatalogLoading] = useState(false);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [keySaving, setKeySaving] = useState(false);
-  const [keyDeleting, setKeyDeleting] = useState(false);
-  const [keyFeedback, setKeyFeedback] = useState<Feedback>(null);
   const [activeProvider, setActiveProvider] = useState<ProviderId>('codex');
+
+  // Codex 상태
+  const [codexCatalogItems, setCodexCatalogItems] = useState<OpenAiCatalogItem[]>([]);
+  const [selectedCodexModelIds, setSelectedCodexModelIds] = useState<string[]>([...DEFAULT_CODEX_MODEL_SELECTIONS]);
+  const [codexModelSaving, setCodexModelSaving] = useState(false);
+  const [codexModelFeedback, setCodexModelFeedback] = useState<Feedback>(null);
+  const [codexCatalogLoading, setCodexCatalogLoading] = useState(false);
+  const [codexCatalogError, setCodexCatalogError] = useState<string | null>(null);
+  const [codexKeySaving, setCodexKeySaving] = useState(false);
+  const [codexKeyDeleting, setCodexKeyDeleting] = useState(false);
+  const [codexKeyFeedback, setCodexKeyFeedback] = useState<Feedback>(null);
+
+  // Claude 상태
+  const [claudeCatalogItems, setClaudeCatalogItems] = useState<ClaudeCatalogItem[]>([]);
+  const [selectedClaudeModelIds, setSelectedClaudeModelIds] = useState<string[]>([...DEFAULT_CLAUDE_MODEL_SELECTIONS]);
+  const [claudeModelSaving, setClaudeModelSaving] = useState(false);
+  const [claudeModelFeedback, setClaudeModelFeedback] = useState<Feedback>(null);
+  const [claudeCatalogLoading, setClaudeCatalogLoading] = useState(false);
+  const [claudeCatalogError, setClaudeCatalogError] = useState<string | null>(null);
+  const [claudeKeySaving, setClaudeKeySaving] = useState(false);
+  const [claudeKeyDeleting, setClaudeKeyDeleting] = useState(false);
+  const [claudeKeyFeedback, setClaudeKeyFeedback] = useState<Feedback>(null);
 
   const syncCodexSelection = useCallback((settings: ModelSettingsResponse) => {
     const persisted = settings.providers.codex.selectedModelIds;
     setSelectedCodexModelIds(persisted.length > 0 ? persisted : [...DEFAULT_CODEX_MODEL_SELECTIONS]);
+  }, []);
+
+  const syncClaudeSelection = useCallback((settings: ModelSettingsResponse) => {
+    const persisted = settings.providers.claude.selectedModelIds;
+    setSelectedClaudeModelIds(persisted.length > 0 ? persisted : [...DEFAULT_CLAUDE_MODEL_SELECTIONS]);
   }, []);
 
   const loadModelSettings = useCallback(async (): Promise<ModelSettingsResponse | null> => {
@@ -72,31 +93,50 @@ export function SettingsTab() {
       }
       setModelSettings(data);
       syncCodexSelection(data);
+      syncClaudeSelection(data);
       return data;
     } catch (error) {
-      setModelFeedback({
+      setCodexModelFeedback({
         ok: false,
         msg: error instanceof Error ? error.message : '모델 설정을 불러오지 못했습니다.',
       });
       return null;
     }
-  }, [syncCodexSelection]);
+  }, [syncCodexSelection, syncClaudeSelection]);
 
-  const loadOpenAiCatalog = useCallback(async () => {
-    setCatalogLoading(true);
-    setCatalogError(null);
+  const loadCodexCatalog = useCallback(async () => {
+    setCodexCatalogLoading(true);
+    setCodexCatalogError(null);
     try {
       const response = await fetch('/api/settings/models/catalog/openai');
       const data = await response.json().catch(() => null);
       if (!response.ok || !data) {
         throw new Error('모델 카탈로그를 불러오지 못했습니다.');
       }
-      setCatalogItems(Array.isArray(data.items) ? data.items : []);
+      setCodexCatalogItems(Array.isArray(data.items) ? data.items : []);
     } catch (error) {
-      setCatalogItems([]);
-      setCatalogError(error instanceof Error ? error.message : '모델 카탈로그를 불러오지 못했습니다.');
+      setCodexCatalogItems([]);
+      setCodexCatalogError(error instanceof Error ? error.message : '모델 카탈로그를 불러오지 못했습니다.');
     } finally {
-      setCatalogLoading(false);
+      setCodexCatalogLoading(false);
+    }
+  }, []);
+
+  const loadClaudeCatalog = useCallback(async () => {
+    setClaudeCatalogLoading(true);
+    setClaudeCatalogError(null);
+    try {
+      const response = await fetch('/api/settings/models/catalog/claude');
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data) {
+        throw new Error('Claude 모델 카탈로그를 불러오지 못했습니다.');
+      }
+      setClaudeCatalogItems(Array.isArray(data.items) ? data.items : []);
+    } catch (error) {
+      setClaudeCatalogItems([]);
+      setClaudeCatalogError(error instanceof Error ? error.message : 'Claude 모델 카탈로그를 불러오지 못했습니다.');
+    } finally {
+      setClaudeCatalogLoading(false);
     }
   }, []);
 
@@ -111,10 +151,13 @@ export function SettingsTab() {
 
     void loadModelSettings().then((settings) => {
       if (settings?.secrets.openAiApiKeyConfigured) {
-        void loadOpenAiCatalog();
+        void loadCodexCatalog();
+      }
+      if (settings?.secrets.claudeApiKeyConfigured) {
+        void loadClaudeCatalog();
       }
     });
-  }, [loadModelSettings, loadOpenAiCatalog]);
+  }, [loadModelSettings, loadCodexCatalog, loadClaudeCatalog]);
 
   const loadFile = useCallback((file: File) => {
     if (!file) {
@@ -174,13 +217,14 @@ export function SettingsTab() {
     }
   };
 
-  const handleSaveOpenAiKey = useCallback(async (apiKey: string) => {
+  // Codex 키 핸들러
+  const handleSaveCodexKey = useCallback(async (apiKey: string) => {
     if (apiKey.trim().length < 20) {
-      setKeyFeedback({ ok: false, msg: '유효한 OpenAI API 키를 입력해 주세요.' });
+      setCodexKeyFeedback({ ok: false, msg: '유효한 OpenAI API 키를 입력해 주세요.' });
       return;
     }
-    setKeySaving(true);
-    setKeyFeedback(null);
+    setCodexKeySaving(true);
+    setCodexKeyFeedback(null);
     try {
       const response = await fetch('/api/settings/openai-key', {
         method: 'POST',
@@ -191,82 +235,123 @@ export function SettingsTab() {
       if (!response.ok) {
         throw new Error(typeof data.error === 'string' ? data.error : 'OpenAI API 키 저장에 실패했습니다.');
       }
-      setKeyFeedback({ ok: true, msg: 'OpenAI API 키가 저장되었습니다.' });
+      setCodexKeyFeedback({ ok: true, msg: 'OpenAI API 키가 저장되었습니다.' });
       const settings = await loadModelSettings();
       if (settings?.secrets.openAiApiKeyConfigured) {
-        await loadOpenAiCatalog();
+        await loadCodexCatalog();
       }
     } catch (error) {
-      setKeyFeedback({ ok: false, msg: error instanceof Error ? error.message : 'OpenAI API 키 저장에 실패했습니다.' });
+      setCodexKeyFeedback({ ok: false, msg: error instanceof Error ? error.message : 'OpenAI API 키 저장에 실패했습니다.' });
     } finally {
-      setKeySaving(false);
+      setCodexKeySaving(false);
     }
-  }, [loadModelSettings, loadOpenAiCatalog]);
+  }, [loadModelSettings, loadCodexCatalog]);
 
-  const handleDeleteOpenAiKey = useCallback(async () => {
-    setKeyDeleting(true);
-    setKeyFeedback(null);
+  const handleDeleteCodexKey = useCallback(async () => {
+    setCodexKeyDeleting(true);
+    setCodexKeyFeedback(null);
     try {
-      const response = await fetch('/api/settings/openai-key', {
-        method: 'DELETE',
-      });
+      const response = await fetch('/api/settings/openai-key', { method: 'DELETE' });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(typeof data.error === 'string' ? data.error : 'OpenAI API 키 제거에 실패했습니다.');
       }
-      setCatalogItems([]);
-      setCatalogError(null);
-      setKeyFeedback({ ok: true, msg: '등록된 OpenAI API 키를 제거했습니다.' });
+      setCodexCatalogItems([]);
+      setCodexCatalogError(null);
+      setCodexKeyFeedback({ ok: true, msg: '등록된 OpenAI API 키를 제거했습니다.' });
       await loadModelSettings();
     } catch (error) {
-      setKeyFeedback({ ok: false, msg: error instanceof Error ? error.message : 'OpenAI API 키 제거에 실패했습니다.' });
+      setCodexKeyFeedback({ ok: false, msg: error instanceof Error ? error.message : 'OpenAI API 키 제거에 실패했습니다.' });
     } finally {
-      setKeyDeleting(false);
+      setCodexKeyDeleting(false);
     }
   }, [loadModelSettings]);
 
+  // Claude 키 핸들러
+  const handleSaveClaudeKey = useCallback(async (apiKey: string) => {
+    if (apiKey.trim().length < 20) {
+      setClaudeKeyFeedback({ ok: false, msg: '유효한 Anthropic API 키를 입력해 주세요.' });
+      return;
+    }
+    setClaudeKeySaving(true);
+    setClaudeKeyFeedback(null);
+    try {
+      const response = await fetch('/api/settings/claude-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof data.error === 'string' ? data.error : 'Anthropic API 키 저장에 실패했습니다.');
+      }
+      setClaudeKeyFeedback({ ok: true, msg: 'Anthropic API 키가 저장되었습니다.' });
+      const settings = await loadModelSettings();
+      if (settings?.secrets.claudeApiKeyConfigured) {
+        await loadClaudeCatalog();
+      }
+    } catch (error) {
+      setClaudeKeyFeedback({ ok: false, msg: error instanceof Error ? error.message : 'Anthropic API 키 저장에 실패했습니다.' });
+    } finally {
+      setClaudeKeySaving(false);
+    }
+  }, [loadModelSettings, loadClaudeCatalog]);
+
+  const handleDeleteClaudeKey = useCallback(async () => {
+    setClaudeKeyDeleting(true);
+    setClaudeKeyFeedback(null);
+    try {
+      const response = await fetch('/api/settings/claude-key', { method: 'DELETE' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof data.error === 'string' ? data.error : 'Anthropic API 키 제거에 실패했습니다.');
+      }
+      setClaudeCatalogItems([]);
+      setClaudeCatalogError(null);
+      setClaudeKeyFeedback({ ok: true, msg: '등록된 Anthropic API 키를 제거했습니다.' });
+      await loadModelSettings();
+    } catch (error) {
+      setClaudeKeyFeedback({ ok: false, msg: error instanceof Error ? error.message : 'Anthropic API 키 제거에 실패했습니다.' });
+    } finally {
+      setClaudeKeyDeleting(false);
+    }
+  }, [loadModelSettings]);
+
+  // Codex 모델 토글 / 권장 / 저장
   const handleToggleCodexModel = useCallback((modelId: string) => {
     setSelectedCodexModelIds((prev) => {
       if (prev.includes(modelId)) {
         return prev.filter((item) => item !== modelId);
       }
-
       const next = [...prev, modelId];
-      const order = new Map(catalogItems.map((item, index) => [item.id, index]));
+      const order = new Map(codexCatalogItems.map((item, index) => [item.id, index]));
       next.sort((left, right) => (order.get(left) ?? Number.MAX_SAFE_INTEGER) - (order.get(right) ?? Number.MAX_SAFE_INTEGER));
       return next;
     });
-  }, [catalogItems]);
+  }, [codexCatalogItems]);
 
   const handleApplyRecommendedCodexModels = useCallback(() => {
-    if (catalogItems.length === 0) {
+    if (codexCatalogItems.length === 0) {
       setSelectedCodexModelIds([...DEFAULT_CODEX_MODEL_SELECTIONS]);
       return;
     }
-    const available = new Set(catalogItems.map((item) => item.id));
+    const available = new Set(codexCatalogItems.map((item) => item.id));
     const recommended = DEFAULT_CODEX_MODEL_SELECTIONS.filter((modelId) => available.has(modelId));
     setSelectedCodexModelIds(recommended.length > 0 ? [...recommended] : [...DEFAULT_CODEX_MODEL_SELECTIONS]);
-  }, [catalogItems]);
+  }, [codexCatalogItems]);
 
-  const handleModelSave = useCallback(async () => {
+  const handleCodexModelSave = useCallback(async () => {
     if (selectedCodexModelIds.length === 0) {
-      setModelFeedback({ ok: false, msg: '최소 1개 이상의 Codex 모델을 선택해 주세요.' });
+      setCodexModelFeedback({ ok: false, msg: '최소 1개 이상의 Codex 모델을 선택해 주세요.' });
       return;
     }
-
-    setModelSaving(true);
-    setModelFeedback(null);
+    setCodexModelSaving(true);
+    setCodexModelFeedback(null);
     try {
       const response = await fetch('/api/settings/models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          providers: {
-            codex: {
-              selectedModelIds: selectedCodexModelIds,
-            },
-          },
-        }),
+        body: JSON.stringify({ providers: { codex: { selectedModelIds: selectedCodexModelIds } } }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok || !data) {
@@ -274,16 +359,102 @@ export function SettingsTab() {
       }
       setModelSettings(data);
       syncCodexSelection(data);
-      setModelFeedback({ ok: true, msg: 'Codex 사용할 모델 목록이 저장되었습니다.' });
+      setCodexModelFeedback({ ok: true, msg: 'Codex 사용할 모델 목록이 저장되었습니다.' });
     } catch (error) {
-      setModelFeedback({ ok: false, msg: error instanceof Error ? error.message : 'Codex 모델 목록 저장에 실패했습니다.' });
+      setCodexModelFeedback({ ok: false, msg: error instanceof Error ? error.message : 'Codex 모델 목록 저장에 실패했습니다.' });
     } finally {
-      setModelSaving(false);
+      setCodexModelSaving(false);
     }
   }, [selectedCodexModelIds, syncCodexSelection]);
 
+  // Claude 모델 토글 / 권장 / 저장
+  const handleToggleClaudeModel = useCallback((modelId: string) => {
+    setSelectedClaudeModelIds((prev) => {
+      if (prev.includes(modelId)) {
+        return prev.filter((item) => item !== modelId);
+      }
+      const next = [...prev, modelId];
+      const order = new Map(claudeCatalogItems.map((item, index) => [item.id, index]));
+      next.sort((left, right) => (order.get(left) ?? Number.MAX_SAFE_INTEGER) - (order.get(right) ?? Number.MAX_SAFE_INTEGER));
+      return next;
+    });
+  }, [claudeCatalogItems]);
+
+  const handleApplyRecommendedClaudeModels = useCallback(() => {
+    if (claudeCatalogItems.length === 0) {
+      setSelectedClaudeModelIds([...DEFAULT_CLAUDE_MODEL_SELECTIONS]);
+      return;
+    }
+    const available = new Set(claudeCatalogItems.map((item) => item.id));
+    const recommended = DEFAULT_CLAUDE_MODEL_SELECTIONS.filter((modelId) => available.has(modelId));
+    setSelectedClaudeModelIds(recommended.length > 0 ? [...recommended] : [...DEFAULT_CLAUDE_MODEL_SELECTIONS]);
+  }, [claudeCatalogItems]);
+
+  const handleClaudeModelSave = useCallback(async () => {
+    if (selectedClaudeModelIds.length === 0) {
+      setClaudeModelFeedback({ ok: false, msg: '최소 1개 이상의 Claude 모델을 선택해 주세요.' });
+      return;
+    }
+    setClaudeModelSaving(true);
+    setClaudeModelFeedback(null);
+    try {
+      const response = await fetch('/api/settings/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providers: { claude: { selectedModelIds: selectedClaudeModelIds } } }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data) {
+        throw new Error('사용할 Claude 모델 목록을 저장하지 못했습니다.');
+      }
+      setModelSettings(data);
+      syncClaudeSelection(data);
+      setClaudeModelFeedback({ ok: true, msg: 'Claude 사용할 모델 목록이 저장되었습니다.' });
+    } catch (error) {
+      setClaudeModelFeedback({ ok: false, msg: error instanceof Error ? error.message : 'Claude 모델 목록 저장에 실패했습니다.' });
+    } finally {
+      setClaudeModelSaving(false);
+    }
+  }, [selectedClaudeModelIds, syncClaudeSelection]);
+
+  // 활성 provider에 따라 카드에 전달할 props 결정
+  const isCodex = activeProvider === 'codex';
+  const isClaude = activeProvider === 'claude';
+
+  const activeHasApiKey = isCodex
+    ? modelSettings.secrets.openAiApiKeyConfigured
+    : isClaude
+      ? modelSettings.secrets.claudeApiKeyConfigured
+      : false;
+
+  const activeKeyHasKey = isCodex
+    ? modelSettings.secrets.openAiApiKeyConfigured
+    : isClaude
+      ? modelSettings.secrets.claudeApiKeyConfigured
+      : false;
+
+  const activeKeySaving = isCodex ? codexKeySaving : isClaude ? claudeKeySaving : false;
+  const activeKeyDeleting = isCodex ? codexKeyDeleting : isClaude ? claudeKeyDeleting : false;
+  const activeKeyFeedback = isCodex ? codexKeyFeedback : isClaude ? claudeKeyFeedback : null;
+  const handleActiveKeySave = isCodex ? handleSaveCodexKey : isClaude ? handleSaveClaudeKey : async (_: string) => {};
+  const handleActiveKeyDelete = isCodex ? handleDeleteCodexKey : isClaude ? handleDeleteClaudeKey : async () => {};
+
+  const activeCatalogItems = isCodex ? codexCatalogItems : isClaude ? claudeCatalogItems : [];
+  const activeSelectedModelIds = isCodex ? selectedCodexModelIds : isClaude ? selectedClaudeModelIds : [];
+  const activeCatalogLoading = isCodex ? codexCatalogLoading : isClaude ? claudeCatalogLoading : false;
+  const activeModelSaving = isCodex ? codexModelSaving : isClaude ? claudeModelSaving : false;
+  const activeCatalogError = isCodex ? codexCatalogError : isClaude ? claudeCatalogError : null;
+  const activeModelFeedback = isCodex ? codexModelFeedback : isClaude ? claudeModelFeedback : null;
+  const handleActiveToggle = isCodex ? handleToggleCodexModel : isClaude ? handleToggleClaudeModel : (_: string) => {};
+  const handleActiveRefresh = isCodex ? loadCodexCatalog : isClaude ? loadClaudeCatalog : async () => {};
+  const handleActiveModelSave = isCodex ? handleCodexModelSave : isClaude ? handleClaudeModelSave : async () => {};
+  const handleActiveApplyRecommended = isCodex
+    ? handleApplyRecommendedCodexModels
+    : isClaude
+      ? handleApplyRecommendedClaudeModels
+      : () => {};
+
   const isFileLoaded = Boolean(sshPrivateKey && fileName);
-  const hasOpenAiApiKey = modelSettings.secrets.openAiApiKeyConfigured;
 
   return (
     <div className={`animate-in ${styles.settingsShell}`}>
@@ -294,7 +465,8 @@ export function SettingsTab() {
         </div>
         <h2 className={styles.heroTitle}>모델 카탈로그와 인프라 자격증명을 한 화면에서 관리</h2>
         <p className={styles.heroDescription}>
-          OpenAI 모델 선택은 동적 카탈로그 기반으로 관리하고, SSH 자격증명은 별도 보안 영역에서 유지합니다.
+          OpenAI(Codex)와 Anthropic(Claude) 모델 선택은 동적 카탈로그 기반으로 관리하고, SSH 자격증명은 별도 보안
+          영역에서 유지합니다.
         </p>
       </div>
 
@@ -303,29 +475,29 @@ export function SettingsTab() {
           providerOptions={PROVIDER_OPTIONS}
           activeProvider={activeProvider}
           onProviderChange={setActiveProvider}
-          hasKey={hasOpenAiApiKey}
-          saving={keySaving}
-          deleting={keyDeleting}
-          feedback={keyFeedback}
-          onSave={handleSaveOpenAiKey}
-          onDelete={handleDeleteOpenAiKey}
+          hasKey={activeKeyHasKey}
+          saving={activeKeySaving}
+          deleting={activeKeyDeleting}
+          feedback={activeKeyFeedback}
+          onSave={handleActiveKeySave}
+          onDelete={handleActiveKeyDelete}
         />
 
         <CodexModelCatalogCard
           providerOptions={PROVIDER_OPTIONS}
           activeProvider={activeProvider}
           onProviderChange={setActiveProvider}
-          hasApiKey={hasOpenAiApiKey}
-          items={catalogItems}
-          selectedModelIds={selectedCodexModelIds}
-          loading={catalogLoading}
-          saving={modelSaving}
-          error={catalogError}
-          feedback={modelFeedback}
-          onToggle={handleToggleCodexModel}
-          onRefresh={loadOpenAiCatalog}
-          onSave={handleModelSave}
-          onApplyRecommended={handleApplyRecommendedCodexModels}
+          hasApiKey={activeHasApiKey}
+          items={activeCatalogItems}
+          selectedModelIds={activeSelectedModelIds}
+          loading={activeCatalogLoading}
+          saving={activeModelSaving}
+          error={activeCatalogError}
+          feedback={activeModelFeedback}
+          onToggle={handleActiveToggle}
+          onRefresh={handleActiveRefresh}
+          onSave={handleActiveModelSave}
+          onApplyRecommended={handleActiveApplyRecommended}
         />
 
         <div className={styles.section}>
