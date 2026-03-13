@@ -24,12 +24,22 @@ export type ClaudeCatalogItem = {
   tags: string[];
 };
 
+export type GeminiCatalogItem = {
+  id: string;
+  family: string;
+  label: string;
+  created: number;
+  createdAt: string | null;
+  tags: string[];
+};
+
 export type ModelSettingsResponse = {
   providers: ProviderModelSelections;
   legacyCustomModels: Record<ProviderId, string>;
   secrets: {
     openAiApiKeyConfigured: boolean;
     claudeApiKeyConfigured: boolean;
+    geminiApiKeyConfigured: boolean;
   };
 };
 
@@ -44,6 +54,12 @@ export const DEFAULT_CLAUDE_MODEL_SELECTIONS = [
   'claude-opus-4-6',
   'claude-sonnet-4-6',
   'claude-haiku-4-5-20251001',
+] as const;
+
+export const DEFAULT_GEMINI_MODEL_SELECTIONS = [
+  'gemini-2.5-pro',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
 ] as const;
 
 const PROVIDERS: ProviderId[] = ['codex', 'claude', 'gemini'];
@@ -248,6 +264,61 @@ export function deriveClaudeModelTags(modelId: string): string[] {
   }
   if (/\d{8}/.test(normalized)) {
     tags.push('Snapshot');
+  }
+  return tags;
+}
+
+export function isGeminiModelId(modelId: string): boolean {
+  const normalized = modelId.trim().toLowerCase();
+  return normalized.startsWith('gemini-');
+}
+
+export function deriveGeminiModelFamily(modelId: string): string {
+  const normalized = modelId.toLowerCase();
+  if (normalized.includes('gemini-2.5')) {
+    return 'Gemini 2.5';
+  }
+  if (normalized.includes('gemini-2.0')) {
+    return 'Gemini 2.0';
+  }
+  if (normalized.includes('gemini-1.5')) {
+    return 'Gemini 1.5';
+  }
+  if (normalized.includes('gemini-1.0') || normalized.match(/^gemini-1\b/)) {
+    return 'Gemini 1.0';
+  }
+  return 'Gemini';
+}
+
+export function deriveGeminiModelLabel(modelId: string, displayName?: string): string {
+  if (displayName) {
+    return displayName;
+  }
+  return modelId
+    .replace(/^gemini-/, 'Gemini ')
+    .replace(/-/g, ' ');
+}
+
+export function deriveGeminiModelTags(modelId: string): string[] {
+  const tags: string[] = [];
+  const normalized = modelId.toLowerCase();
+  if (normalized.includes('pro')) {
+    tags.push('Pro');
+  }
+  if (normalized.includes('flash')) {
+    tags.push('Flash');
+  }
+  if (normalized.includes('lite')) {
+    tags.push('Lite');
+  }
+  if (normalized.includes('nano')) {
+    tags.push('Nano');
+  }
+  if (normalized.includes('ultra')) {
+    tags.push('Ultra');
+  }
+  if (normalized.includes('exp') || normalized.includes('preview')) {
+    tags.push('Preview');
   }
   return tags;
 }

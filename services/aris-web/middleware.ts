@@ -20,7 +20,13 @@ function resolveRequestIp(request: NextRequest): string {
   if (forwarded && forwarded.trim().length > 0) {
     return forwarded.split(',')[0].trim();
   }
-  return request.ip || 'unknown';
+
+  const realIp = request.headers.get('x-real-ip');
+  if (realIp && realIp.trim().length > 0) {
+    return realIp.trim();
+  }
+
+  return 'unknown';
 }
 
 function isRuntimeApiPath(pathname: string): boolean {

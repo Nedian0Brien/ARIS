@@ -12,6 +12,13 @@ import {
 } from '@/lib/settings/providerModels';
 
 type CustomModelMap = Record<ProviderId, string>;
+type UiPreferenceSecretRecord = {
+  customAiModels?: unknown;
+  providerModelSelections?: unknown;
+  openAiApiKeyEncrypted?: string | null;
+  claudeApiKeyEncrypted?: string | null;
+  geminiApiKeyEncrypted?: string | null;
+};
 
 export function parseLegacyCustomModels(raw: unknown): CustomModelMap {
   const record = (!raw || typeof raw !== 'object' || Array.isArray(raw))
@@ -48,8 +55,9 @@ export async function getUserModelSettings(userId: string): Promise<ModelSetting
       providerModelSelections: true,
       openAiApiKeyEncrypted: true,
       claudeApiKeyEncrypted: true,
-    },
-  });
+      geminiApiKeyEncrypted: true,
+    } as never,
+  }) as UiPreferenceSecretRecord | null;
 
   const legacyCustomModels = parseLegacyCustomModels(preference?.customAiModels);
   const providers = sanitizeProviderModelSelections(preference?.providerModelSelections);
@@ -60,6 +68,7 @@ export async function getUserModelSettings(userId: string): Promise<ModelSetting
     secrets: {
       openAiApiKeyConfigured: Boolean(preference?.openAiApiKeyEncrypted),
       claudeApiKeyConfigured: Boolean(preference?.claudeApiKeyEncrypted),
+      geminiApiKeyConfigured: Boolean(preference?.geminiApiKeyEncrypted),
     },
   };
 }

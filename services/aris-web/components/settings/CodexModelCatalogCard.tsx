@@ -5,14 +5,16 @@ import { Bot, CheckCircle2, LoaderCircle, RefreshCw, Search, Sparkles, Stars } f
 import {
   DEFAULT_CLAUDE_MODEL_SELECTIONS,
   DEFAULT_CODEX_MODEL_SELECTIONS,
+  DEFAULT_GEMINI_MODEL_SELECTIONS,
   type ClaudeCatalogItem,
+  type GeminiCatalogItem,
   type OpenAiCatalogItem,
   type ProviderId,
 } from '@/lib/settings/providerModels';
 import styles from './CodexModelCatalogCard.module.css';
 
 type Feedback = { ok: boolean; msg: string } | null;
-type CatalogItem = OpenAiCatalogItem | ClaudeCatalogItem;
+type CatalogItem = OpenAiCatalogItem | ClaudeCatalogItem | GeminiCatalogItem;
 
 type ModelVersionGroup = {
   key: string;
@@ -65,6 +67,23 @@ function deriveVersionGroup(item: CatalogItem): { key: string; label: string } {
   }
   if (normalized.startsWith('claude')) {
     return { key: 'claude', label: 'Claude' };
+  }
+
+  // Gemini models
+  if (normalized.startsWith('gemini-2.5')) {
+    return { key: 'gemini-2.5', label: '2.5' };
+  }
+  if (normalized.startsWith('gemini-2.0')) {
+    return { key: 'gemini-2.0', label: '2.0' };
+  }
+  if (normalized.startsWith('gemini-1.5')) {
+    return { key: 'gemini-1.5', label: '1.5' };
+  }
+  if (normalized.startsWith('gemini-1.0') || normalized.match(/^gemini-1\b/)) {
+    return { key: 'gemini-1.0', label: '1.0' };
+  }
+  if (normalized.startsWith('gemini')) {
+    return { key: 'gemini', label: 'Gemini' };
   }
 
   return {
@@ -173,7 +192,8 @@ export function CodexModelCatalogCard({
   const selectedCount = selectedModelIds.length;
   const isCodex = activeProvider === 'codex';
   const isClaude = activeProvider === 'claude';
-  const isActiveProvider = isCodex || isClaude;
+  const isGemini = activeProvider === 'gemini';
+  const isActiveProvider = isCodex || isClaude || isGemini;
   const providerTitle = activeProvider === 'claude' ? 'Claude' : activeProvider === 'gemini' ? 'Gemini' : 'Codex';
   const themeClass = activeProvider === 'claude'
     ? styles.themeClaude
@@ -183,11 +203,15 @@ export function CodexModelCatalogCard({
 
   const defaultSelectionsCount = isCodex
     ? DEFAULT_CODEX_MODEL_SELECTIONS.length
-    : DEFAULT_CLAUDE_MODEL_SELECTIONS.length;
+    : isClaude
+      ? DEFAULT_CLAUDE_MODEL_SELECTIONS.length
+      : DEFAULT_GEMINI_MODEL_SELECTIONS.length;
 
   const noApiKeyMessage = isCodex
     ? '키가 등록되면 `/v1/models` 기준으로 Codex용 텍스트 모델 카탈로그를 불러와 버전 그룹 기반 선택 UI로 표시합니다.'
-    : '키가 등록되면 Anthropic `/v1/models` 기준으로 Claude 모델 카탈로그를 불러와 표시합니다.';
+    : isClaude
+      ? '키가 등록되면 Anthropic `/v1/models` 기준으로 Claude 모델 카탈로그를 불러와 표시합니다.'
+      : '키가 등록되면 Google AI `/v1beta/models` 기준으로 Gemini 모델 카탈로그를 불러와 표시합니다.';
 
   return (
     <section className={`${styles.card} ${themeClass}`}>
