@@ -810,6 +810,55 @@ function buildActionEventKey(action: ParsedAgentActionEvent): string {
   return `${actionType}|${command}|${path}`;
 }
 
+function buildStreamedTextReplyKey(input: {
+  source: 'assistant' | 'result';
+  threadId?: string;
+  text: string;
+}): string {
+  return [
+    input.source,
+    input.threadId ?? '',
+    input.text,
+  ].join('|');
+}
+
+function extractGeminiStreamTextEvent(parsedLine: ReturnType<typeof parseGeminiStreamLine>): ClaudeTextEvent | null {
+  if (!parsedLine.assistantText) {
+    return null;
+  }
+
+  const textEnvelopes = parsedLine.envelopes.filter((envelope) => (
+    envelope.kind === 'text' || envelope.kind === 'turn-end'
+  ));
+  if (!textEnvelopes.some((envelope) => envelope.kind === 'text')) {
+    return null;
+  }
+
+  const normalizedText = sanitizeAgentMessageText(parsedLine.assistantText);
+  if (!normalizedText) {
+    return null;
+  }
+
+  return {
+    text: normalizedText,
+    source: parsedLine.assistantSource === 'result' ? 'result' : 'assistant',
+    ...(parsedLine.sessionId ? { threadId: parsedLine.sessionId } : {}),
+    ...(textEnvelopes.length > 0 ? { envelopes: textEnvelopes } : {}),
+  };
+}
+
+function shouldPersistFinalAgentOutput(input: {
+  flavor: RuntimeAgent;
+  streamedPersisted: boolean;
+  agentMessagePersisted: boolean;
+  finalAgentOutput: string;
+}): boolean {
+  if (input.flavor === 'codex') {
+    return !input.streamedPersisted || (!input.agentMessagePersisted && input.finalAgentOutput.length > 0);
+  }
+  return !input.agentMessagePersisted && input.finalAgentOutput.length > 0;
+}
+
 function parseAgentStreamLine(line: string): { action?: ParsedAgentActionEvent; actionKey?: string; assistantText?: string; sessionId?: string } {
   const payload = parseJsonLine(line);
   if (!payload) {
@@ -1352,8 +1401,11 @@ export const happyClientTestHooks = {
   parseAgentStreamLine,
   parseAgentStreamOutput,
   looksLikeActionTranscript,
+  buildStreamedTextReplyKey,
+  extractGeminiStreamTextEvent,
   parseMessagePayloadText,
   buildSessionHintMeta,
+  shouldPersistFinalAgentOutput,
   shouldSkipDuplicateAgentMessage,
   buildClaudeSessionId,
   buildAgentCommand,
@@ -1858,11 +1910,11 @@ export class HappyRuntimeStore {
           }
           if (onText && parsedLine.assistantText) {
             const assistantText = sanitizeAgentMessageText(parsedLine.assistantText);
-            const textKey = [
-              parsedLine.assistantSource ?? 'assistant',
-              parsedLine.sessionId ?? '',
-              assistantText,
-            ].join('|');
+            const textKey = buildStreamedTextReplyKey({
+              source: parsedLine.assistantSource === 'result' ? 'result' : 'assistant',
+              threadId: parsedLine.sessionId,
+              text: assistantText,
+            });
             if (assistantText && !streamedTextKeys.has(textKey)) {
               streamedTextKeys.add(textKey);
               const textEnvelopes = parsedLine.envelopes.filter((envelope) => (
@@ -1895,6 +1947,24 @@ export class HappyRuntimeStore {
               streamedActionsPersisted = true;
             });
           }
+        }
+        if (agent === 'gemini' && onText) {
+          const textEvent = extractGeminiStreamTextEvent(parsedLine);
+          if (!textEvent) {
+            return;
+          }
+          const textKey = buildStreamedTextReplyKey({
+            source: textEvent.source,
+            threadId: textEvent.threadId,
+            text: textEvent.text,
+          });
+          if (streamedTextKeys.has(textKey)) {
+            return;
+          }
+          streamedTextKeys.add(textKey);
+          emitChain = emitChain.then(async () => {
+            await onText(textEvent);
+          });
         }
       };
 
@@ -3649,6 +3719,7 @@ export class HappyRuntimeStore {
         inferredActions?: ParsedAgentActionEvent[];
       };
       const streamedClaudeTextReplies = new Set<string>();
+      const streamedGeminiTextReplies = new Set<string>();
       let claudeMessageQueue: ClaudeMessageQueue | null = null;
       let geminiMessageQueue: GeminiMessageQueue | null = null;
       const persistClaudeProjection = async (projection: {
@@ -3843,6 +3914,23 @@ export class HappyRuntimeStore {
                 request.session.metadata.path,
                 request.signal,
                 request.preferredThreadId ? { id: request.preferredThreadId, mode: 'resume' } : undefined,
+                {
+                  onAction: request.onAction
+                    ? async (action) => request.onAction?.(action, {
+                      threadId: request.preferredThreadId ?? '',
+                    })
+                    : undefined,
+                  onPermission: request.onPermission
+                    ? async (permission) => request.onPermission?.(permission, {
+                      threadId: request.preferredThreadId ?? '',
+                    })
+                    : undefined,
+                  onText: request.onText
+                    ? async (event) => request.onText?.(event, {
+                      threadId: event.threadId ?? request.preferredThreadId ?? '',
+                    })
+                    : undefined,
+                },
               );
               return {
                 output: geminiTurn.output,
@@ -3867,6 +3955,44 @@ export class HappyRuntimeStore {
             storedThreadId: recovered.recoveredThreadId,
             model: selectedModel,
             signal: controller.signal,
+            onAction: async (action, meta) => {
+              await geminiMessageQueue?.enqueueToolAction({
+                action,
+                execCwd: nonCodexCwd,
+                threadId: meta.threadId,
+              });
+            },
+            onPermission: async (request) => this.handleProviderPermissionRequest({
+              session,
+              chatId: scopedChatId,
+              agent: 'gemini',
+              request,
+              signal: controller.signal,
+            }),
+            onText: async (event, meta) => {
+              const normalizedText = sanitizeAgentMessageText(event.text);
+              if (!normalizedText) {
+                return;
+              }
+              const textKey = buildStreamedTextReplyKey({
+                source: event.source,
+                threadId: meta.threadId,
+                text: normalizedText,
+              });
+              if (streamedGeminiTextReplies.has(textKey)) {
+                return;
+              }
+              streamedGeminiTextReplies.add(textKey);
+              await geminiMessageQueue?.enqueueText({
+                output: normalizedText,
+                execCwd: nonCodexCwd,
+                threadId: meta.threadId,
+                messageMeta: {
+                  streamEvent: 'agent_message',
+                },
+                envelopes: event.envelopes,
+              });
+            },
           });
           response = {
             output: geminiResponse.output,
@@ -3965,16 +4091,41 @@ export class HappyRuntimeStore {
           flavor === 'claude'
           && finalAgentOutput.length > 0
           && (
-            streamedClaudeTextReplies.has(['assistant', response.threadId ?? '', finalAgentOutput].join('|'))
-            || streamedClaudeTextReplies.has(['result', response.threadId ?? '', finalAgentOutput].join('|'))
+            streamedClaudeTextReplies.has(buildStreamedTextReplyKey({
+              source: 'assistant',
+              threadId: response.threadId,
+              text: finalAgentOutput,
+            }))
+            || streamedClaudeTextReplies.has(buildStreamedTextReplyKey({
+              source: 'result',
+              threadId: response.threadId,
+              text: finalAgentOutput,
+            }))
+          )
+        )
+        || (
+          flavor === 'gemini'
+          && finalAgentOutput.length > 0
+          && (
+            streamedGeminiTextReplies.has(buildStreamedTextReplyKey({
+              source: 'assistant',
+              threadId: response.threadId,
+              text: finalAgentOutput,
+            }))
+            || streamedGeminiTextReplies.has(buildStreamedTextReplyKey({
+              source: 'result',
+              threadId: response.threadId,
+              text: finalAgentOutput,
+            }))
           )
         );
-      const shouldPersistFinalAgentOutput = isCodex
-        ? (!streamedPersisted || (!agentMessagePersisted && finalAgentOutput.length > 0))
-        : flavor === 'claude'
-          ? (!agentMessagePersisted && finalAgentOutput.length > 0)
-          : true;
-      if (shouldPersistFinalAgentOutput) {
+      const persistFinalAgentOutput = shouldPersistFinalAgentOutput({
+        flavor,
+        streamedPersisted,
+        agentMessagePersisted,
+        finalAgentOutput,
+      });
+      if (persistFinalAgentOutput) {
         if (flavor === 'claude') {
           claudeMessageQueue ??= new ClaudeMessageQueue(
             {

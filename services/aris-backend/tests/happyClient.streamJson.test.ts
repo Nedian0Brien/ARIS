@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { happyClientTestHooks } from '../src/runtime/happyClient.js';
+import { parseGeminiStreamLine } from '../src/runtime/providers/gemini/geminiProtocolMapper.js';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -52,6 +53,58 @@ describe('happyClient stream-json parsing', () => {
     expect(parsed.output).toBe('README 내용을 확인했고 핵심만 요약했습니다.');
     expect(parsed.actions.length).toBeGreaterThan(0);
     expect(parsed.actions[0]?.command).toContain('cat README.md');
+  });
+
+  it('emits Gemini streamed text only for non-commentary text envelopes', () => {
+    const commentaryLine = JSON.stringify({
+      method: 'item/completed',
+      params: {
+        item: {
+          type: 'agentMessage',
+          id: 'msg-commentary',
+          text: '먼저 코드를 살펴보겠습니다.',
+          phase: 'commentary',
+        },
+        threadId: 'gemini-thread',
+        turnId: 'turn-1',
+      },
+    });
+    const finalLine = JSON.stringify({
+      method: 'item/completed',
+      params: {
+        item: {
+          type: 'agentMessage',
+          id: 'msg-final',
+          text: '최종 답변입니다.',
+          phase: 'final_answer',
+        },
+        threadId: 'gemini-thread',
+        turnId: 'turn-1',
+      },
+    });
+
+    expect(happyClientTestHooks.extractGeminiStreamTextEvent(parseGeminiStreamLine(commentaryLine))).toBeNull();
+    expect(happyClientTestHooks.extractGeminiStreamTextEvent(parseGeminiStreamLine(finalLine))).toMatchObject({
+      text: '최종 답변입니다.',
+      source: 'assistant',
+      threadId: 'gemini-thread',
+    });
+  });
+
+  it('skips Gemini final fallback persistence when the same text was already streamed', () => {
+    expect(happyClientTestHooks.shouldPersistFinalAgentOutput({
+      flavor: 'gemini',
+      streamedPersisted: false,
+      agentMessagePersisted: true,
+      finalAgentOutput: '최종 답변',
+    })).toBe(false);
+
+    expect(happyClientTestHooks.shouldPersistFinalAgentOutput({
+      flavor: 'gemini',
+      streamedPersisted: false,
+      agentMessagePersisted: false,
+      finalAgentOutput: '최종 답변',
+    })).toBe(true);
   });
 
   it('strips plan status metadata from stream-json assistant messages', () => {

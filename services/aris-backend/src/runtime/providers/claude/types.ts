@@ -6,6 +6,7 @@ import type {
   ProviderLaunchCommand,
   ProviderPermissionRequest,
   ProviderResumeTarget,
+  ProviderTextEvent,
   ProviderThreadIdSource,
 } from '../../contracts/providerRuntime.js';
 import type { PermissionDecision } from '../../../types.js';
@@ -21,12 +22,7 @@ export type ClaudeCliResult = ProviderCliResult & {
   protocolEnvelopes?: SessionProtocolEnvelope[];
 };
 
-export type ClaudeTextEvent = {
-  text: string;
-  source: 'assistant' | 'result';
-  threadId?: string;
-  envelopes?: SessionProtocolEnvelope[];
-};
+export type ClaudeTextEvent = ProviderTextEvent;
 
 export type ClaudeLaunchCommand = ProviderLaunchCommand<'claude'> & {
   requiresPty: boolean;

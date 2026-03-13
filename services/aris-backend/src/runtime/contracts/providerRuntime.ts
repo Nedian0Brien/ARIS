@@ -1,4 +1,5 @@
 import type { AgentFlavor, ApprovalPolicy, PermissionDecision, PermissionRisk, RuntimeSession } from '../../types.js';
+import type { SessionProtocolEnvelope } from './sessionProtocol.js';
 
 export type ProviderRuntimeFlavor = Exclude<AgentFlavor, 'unknown'>;
 export type ProviderActionType = 'file_read' | 'file_write' | 'file_list' | 'command_execution';
@@ -36,6 +37,13 @@ export type ProviderActionEvent = {
   hasDiffSignal: boolean;
 };
 
+export type ProviderTextEvent = {
+  text: string;
+  source: 'assistant' | 'result';
+  threadId?: string;
+  envelopes?: SessionProtocolEnvelope[];
+};
+
 export type ProviderCliResult = {
   output: string;
   cwd: string;
@@ -59,6 +67,7 @@ export type ProviderCommandExecutor<TCommand extends ProviderLaunchCommand = Pro
   signal?: AbortSignal;
   onAction?: (action: ProviderActionEvent) => Promise<void>;
   onPermission?: (request: ProviderPermissionRequest) => Promise<PermissionDecision>;
+  onText?: (event: ProviderTextEvent) => Promise<void>;
 }) => Promise<ProviderCliResult>;
 
 export type ProviderRuntimeSession<TFlavor extends ProviderRuntimeFlavor = ProviderRuntimeFlavor> = Pick<RuntimeSession, 'id'> & {
@@ -91,6 +100,7 @@ export type ProviderTurnRequest<TSession extends ProviderRuntimeSession = Provid
   signal?: AbortSignal;
   onAction?: (action: ProviderActionEvent, meta: { threadId: string }) => Promise<void>;
   onPermission?: (request: ProviderPermissionRequest, meta: { threadId: string }) => Promise<PermissionDecision>;
+  onText?: (event: ProviderTextEvent, meta: { threadId: string }) => Promise<void>;
 };
 
 export type ProviderTurnResult = {

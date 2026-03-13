@@ -119,6 +119,20 @@ function createFakeGeminiStore() {
     agent: string,
     command: { args?: string[] },
     cwdHint?: string,
+    _signal?: AbortSignal,
+    handlers?: {
+      onAction?: (action: {
+        actionType: 'command_execution';
+        title: string;
+        callId: string;
+        command: string;
+        output: string;
+        additions: number;
+        deletions: number;
+        hasDiffSignal: boolean;
+      }) => Promise<void>;
+      onText?: (event: { text: string; source: 'assistant' | 'result'; threadId?: string }) => Promise<void>;
+    },
   ) => {
     expect(agent).toBe('gemini');
     expect(cwdHint).toBe('/workspace/ARIS');
@@ -130,6 +144,22 @@ function createFakeGeminiStore() {
       expect(command.args ?? []).toContain('--resume');
       expect(command.args ?? []).toContain('gemini-observed-thread');
     }
+
+    await handlers?.onAction?.({
+      actionType: 'command_execution',
+      title: 'Run command',
+      callId: `call-gemini-${turnNumber}`,
+      command: 'pwd',
+      output: '/workspace/ARIS',
+      additions: 0,
+      deletions: 0,
+      hasDiffSignal: false,
+    });
+    await handlers?.onText?.({
+      text: turnNumber === 1 ? '첫 번째 Gemini 응답' : '두 번째 Gemini 응답',
+      source: 'assistant',
+      threadId: 'gemini-observed-thread',
+    });
 
     return {
       output: turnNumber === 1 ? '첫 번째 Gemini 응답' : '두 번째 Gemini 응답',
@@ -146,7 +176,7 @@ function createFakeGeminiStore() {
           hasDiffSignal: false,
         },
       ],
-      streamedActionsPersisted: false,
+      streamedActionsPersisted: true,
       threadId: 'gemini-observed-thread',
       protocolEnvelopes: [
         {
