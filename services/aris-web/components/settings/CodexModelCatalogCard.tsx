@@ -2,21 +2,29 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Bot, CheckCircle2, LoaderCircle, RefreshCw, Search, Sparkles, Stars } from 'lucide-react';
-import { DEFAULT_CODEX_MODEL_SELECTIONS, type OpenAiCatalogItem, type ProviderId } from '@/lib/settings/providerModels';
+import {
+  DEFAULT_CLAUDE_MODEL_SELECTIONS,
+  DEFAULT_CODEX_MODEL_SELECTIONS,
+  type ClaudeCatalogItem,
+  type OpenAiCatalogItem,
+  type ProviderId,
+} from '@/lib/settings/providerModels';
 import styles from './CodexModelCatalogCard.module.css';
 
 type Feedback = { ok: boolean; msg: string } | null;
+type CatalogItem = OpenAiCatalogItem | ClaudeCatalogItem;
 
 type ModelVersionGroup = {
   key: string;
   label: string;
-  items: OpenAiCatalogItem[];
+  items: CatalogItem[];
   latestCreated: number;
 };
 
-function deriveVersionGroup(item: OpenAiCatalogItem): { key: string; label: string } {
+function deriveVersionGroup(item: CatalogItem): { key: string; label: string } {
   const normalized = item.id.toLowerCase();
 
+  // OpenAI GPT models
   const dottedVersionMatch = normalized.match(/^gpt-(\d+\.\d+)/);
   if (dottedVersionMatch) {
     return {
@@ -45,13 +53,27 @@ function deriveVersionGroup(item: OpenAiCatalogItem): { key: string; label: stri
     return { key: 'chatgpt', label: 'ChatGPT' };
   }
 
+  // Claude models
+  if (normalized.includes('claude') && normalized.includes('opus')) {
+    return { key: 'claude-opus', label: 'Opus' };
+  }
+  if (normalized.includes('claude') && normalized.includes('sonnet')) {
+    return { key: 'claude-sonnet', label: 'Sonnet' };
+  }
+  if (normalized.includes('claude') && normalized.includes('haiku')) {
+    return { key: 'claude-haiku', label: 'Haiku' };
+  }
+  if (normalized.startsWith('claude')) {
+    return { key: 'claude', label: 'Claude' };
+  }
+
   return {
     key: item.family.toLowerCase().replace(/\s+/g, '-'),
     label: item.family,
   };
 }
 
-function buildVersionGroups(items: OpenAiCatalogItem[]): ModelVersionGroup[] {
+function buildVersionGroups(items: CatalogItem[]): ModelVersionGroup[] {
   const groups = new Map<string, ModelVersionGroup>();
 
   for (const item of items) {
@@ -98,7 +120,7 @@ export function CodexModelCatalogCard({
   activeProvider: ProviderId;
   onProviderChange: (provider: ProviderId) => void;
   hasApiKey: boolean;
-  items: OpenAiCatalogItem[];
+  items: CatalogItem[];
   selectedModelIds: string[];
   loading: boolean;
   saving: boolean;
@@ -112,6 +134,11 @@ export function CodexModelCatalogCard({
   const [query, setQuery] = useState('');
   const [selectedGroupKey, setSelectedGroupKey] = useState<string>('');
   const deferredQuery = useDeferredValue(query);
+
+  useEffect(() => {
+    setQuery('');
+    setSelectedGroupKey('');
+  }, [activeProvider]);
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = deferredQuery.trim().toLowerCase();
@@ -145,12 +172,22 @@ export function CodexModelCatalogCard({
 
   const selectedCount = selectedModelIds.length;
   const isCodex = activeProvider === 'codex';
+  const isClaude = activeProvider === 'claude';
+  const isActiveProvider = isCodex || isClaude;
   const providerTitle = activeProvider === 'claude' ? 'Claude' : activeProvider === 'gemini' ? 'Gemini' : 'Codex';
   const themeClass = activeProvider === 'claude'
     ? styles.themeClaude
     : activeProvider === 'gemini'
       ? styles.themeGemini
       : styles.themeCodex;
+
+  const defaultSelectionsCount = isCodex
+    ? DEFAULT_CODEX_MODEL_SELECTIONS.length
+    : DEFAULT_CLAUDE_MODEL_SELECTIONS.length;
+
+  const noApiKeyMessage = isCodex
+    ? '키가 등록되면 `/v1/models` 기준으로 Codex용 텍스트 모델 카탈로그를 불러와 버전 그룹 기반 선택 UI로 표시합니다.'
+    : '키가 등록되면 Anthropic `/v1/models` 기준으로 Claude 모델 카탈로그를 불러와 표시합니다.';
 
   return (
     <section className={`${styles.card} ${themeClass}`}>
@@ -163,8 +200,8 @@ export function CodexModelCatalogCard({
             </div>
             <h3 className={styles.title}>사용할 모델 목록</h3>
             <p className={styles.description}>
-              {isCodex
-                ? 'OpenAI 계정에서 실제 조회한 텍스트 생성 모델만 표시합니다. 버전 그룹을 먼저 고른 뒤 실제 모델을 선택하는 2단계 브라우저로 구성했습니다.'
+              {isActiveProvider
+                ? `${providerTitle} 계정에서 실제 조회한 모델만 표시합니다. 버전 그룹을 먼저 고른 뒤 실제 모델을 선택하는 2단계 브라우저로 구성했습니다.`
                 : `${providerTitle}용 모델 카탈로그 UI는 이 위치에 연결됩니다. 현재는 provider 전환 구조와 플레이스홀더만 준비된 상태입니다.`}
             </p>
           </div>
@@ -187,7 +224,7 @@ export function CodexModelCatalogCard({
           </div>
         </div>
 
-        {isCodex ? (
+        {isActiveProvider ? (
           <>
             <div className={styles.toolbar}>
               <input
@@ -196,7 +233,7 @@ export function CodexModelCatalogCard({
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="모델 이름, 버전, 태그로 검색"
-                aria-label="OpenAI 모델 검색"
+                aria-label={`${providerTitle} 모델 검색`}
               />
               <div className={styles.toolbarActions}>
                 <button
@@ -240,7 +277,7 @@ export function CodexModelCatalogCard({
               </span>
               <span className={styles.statPill}>
                 <Stars size={14} />
-                기본 권장 {DEFAULT_CODEX_MODEL_SELECTIONS.length}개
+                기본 권장 {defaultSelectionsCount}개
               </span>
               {feedback ? (
                 <span className={`${styles.feedback} ${feedback.ok ? styles.feedbackOk : styles.feedbackErr}`}>
@@ -253,7 +290,7 @@ export function CodexModelCatalogCard({
       </div>
 
       <div className={styles.listWrap}>
-        {!isCodex ? (
+        {!isActiveProvider ? (
           <div className={styles.emptyState}>
             <div className={styles.emptyStateTitle}>{providerTitle} 모델 선택 UI 준비됨</div>
             <p className={styles.emptyStateText}>
@@ -263,11 +300,8 @@ export function CodexModelCatalogCard({
           </div>
         ) : !hasApiKey ? (
           <div className={styles.emptyState}>
-            <div className={styles.emptyStateTitle}>먼저 OpenAI API 키를 등록하세요</div>
-            <p className={styles.emptyStateText}>
-              키가 등록되면 `/v1/models` 기준으로 Codex용 텍스트 모델 카탈로그를 불러와 버전 그룹 기반 선택 UI로
-              표시합니다.
-            </p>
+            <div className={styles.emptyStateTitle}>먼저 {providerTitle} API 키를 등록하세요</div>
+            <p className={styles.emptyStateText}>{noApiKeyMessage}</p>
           </div>
         ) : loading ? (
           <div className={styles.skeletonGrid}>

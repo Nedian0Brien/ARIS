@@ -15,11 +15,21 @@ export type OpenAiCatalogItem = {
   tags: string[];
 };
 
+export type ClaudeCatalogItem = {
+  id: string;
+  family: string;
+  label: string;
+  created: number;
+  createdAt: string | null;
+  tags: string[];
+};
+
 export type ModelSettingsResponse = {
   providers: ProviderModelSelections;
   legacyCustomModels: Record<ProviderId, string>;
   secrets: {
     openAiApiKeyConfigured: boolean;
+    claudeApiKeyConfigured: boolean;
   };
 };
 
@@ -28,6 +38,12 @@ export const DEFAULT_CODEX_MODEL_SELECTIONS = [
   'gpt-5.3-codex',
   'gpt-5',
   'gpt-5-mini',
+] as const;
+
+export const DEFAULT_CLAUDE_MODEL_SELECTIONS = [
+  'claude-opus-4-6',
+  'claude-sonnet-4-6',
+  'claude-haiku-4-5-20251001',
 ] as const;
 
 const PROVIDERS: ProviderId[] = ['codex', 'claude', 'gemini'];
@@ -186,6 +202,52 @@ export function deriveOpenAiModelTags(modelId: string): string[] {
   }
   if (normalized.includes('pro')) {
     tags.push('Pro');
+  }
+  return tags;
+}
+
+export function isClaudeModelId(modelId: string): boolean {
+  const normalized = modelId.trim().toLowerCase();
+  return normalized.startsWith('claude-');
+}
+
+export function deriveClaudeModelFamily(modelId: string): string {
+  const normalized = modelId.toLowerCase();
+  if (normalized.includes('opus')) {
+    return 'Claude Opus';
+  }
+  if (normalized.includes('sonnet')) {
+    return 'Claude Sonnet';
+  }
+  if (normalized.includes('haiku')) {
+    return 'Claude Haiku';
+  }
+  return 'Claude';
+}
+
+export function deriveClaudeModelLabel(modelId: string, displayName?: string): string {
+  if (displayName) {
+    return displayName;
+  }
+  return modelId
+    .replace(/^claude-/, 'Claude ')
+    .replace(/-/g, ' ');
+}
+
+export function deriveClaudeModelTags(modelId: string): string[] {
+  const tags: string[] = [];
+  const normalized = modelId.toLowerCase();
+  if (normalized.includes('opus')) {
+    tags.push('Opus');
+  }
+  if (normalized.includes('sonnet')) {
+    tags.push('Sonnet');
+  }
+  if (normalized.includes('haiku')) {
+    tags.push('Haiku');
+  }
+  if (/\d{8}/.test(normalized)) {
+    tags.push('Snapshot');
   }
   return tags;
 }
