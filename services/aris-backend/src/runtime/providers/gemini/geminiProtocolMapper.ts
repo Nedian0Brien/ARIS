@@ -16,6 +16,7 @@ type GeminiMappedLine = {
   actionKey?: string;
   assistantText?: string;
   assistantSource?: 'assistant' | 'message' | 'result';
+  assistantPhase?: string;
   assistantIsDelta?: boolean;
   assistantTurnId?: string;
   assistantItemId?: string;
@@ -115,6 +116,10 @@ export function looksLikeGeminiActionTranscript(value: string): boolean {
   );
 }
 
+function isGeminiCommentaryPhase(phase: string | undefined): boolean {
+  return phase?.trim().toLowerCase() === 'commentary';
+}
+
 function buildActionEventKey(action: GeminiActionEvent): string {
   const callId = action.callId?.trim() ?? '';
   const command = action.command?.trim() ?? '';
@@ -173,6 +178,10 @@ function accumulateGeminiAssistantText(
   state: GeminiAssistantAccumulatorState,
   sequence: number,
 ): void {
+  if (isGeminiCommentaryPhase(parsedLine.assistantPhase)) {
+    return;
+  }
+
   const assistantText = parsedLine.assistantText ?? '';
   if (!assistantText) {
     return;
@@ -331,6 +340,7 @@ export function parseGeminiStreamLine(line: string): GeminiMappedLine {
   const role = extractFirstGeminiStringByKeys(records, ['role']).toLowerCase();
   const msgType = String(msg?.type ?? '').trim().toLowerCase();
   const itemType = String(item?.type ?? '').trim().toLowerCase();
+  const assistantPhase = String(msg?.phase ?? item?.phase ?? '').trim().toLowerCase() || undefined;
   const seemsAssistantEvent = (
     (payloadType === 'message' && role === 'assistant')
     || payloadType.includes('assistant')
@@ -473,6 +483,7 @@ export function parseGeminiStreamLine(line: string): GeminiMappedLine {
   }
   if (
     assistantText
+    && !isGeminiCommentaryPhase(assistantPhase)
     && !assistantIsDelta
     && !looksLikeGeminiActionTranscript(assistantText)
     && (
@@ -523,6 +534,7 @@ export function parseGeminiStreamLine(line: string): GeminiMappedLine {
         : payloadType === 'message'
           ? 'message' as const
           : 'assistant' as const,
+      ...(assistantPhase ? { assistantPhase } : {}),
       ...(assistantIsDelta ? { assistantIsDelta: true } : {}),
       ...(turnId ? { assistantTurnId: turnId } : {}),
       ...(assistantItemId ? { assistantItemId } : {}),
