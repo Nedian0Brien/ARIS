@@ -11,6 +11,7 @@ type ClaudeMappedLine = {
   actionKey?: string;
   assistantText?: string;
   assistantSource?: 'assistant' | 'result';
+  errorText?: string;
   sessionId?: string;
 };
 
@@ -112,6 +113,33 @@ function resolveStopReason(payloadType: string, payloadSubtype: string, payload:
   return undefined;
 }
 
+function extractClaudeErrorText(
+  payloadType: string,
+  payloadSubtype: string,
+  payload: Record<string, unknown>,
+  records: Record<string, unknown>[],
+): string {
+  const normalizedStopReason = String(payload.stop_reason ?? payload.stopReason ?? payload.reason ?? '').trim().toLowerCase();
+  const looksLikeError = (
+    payloadType === 'error'
+    || payloadSubtype.includes('error')
+    || normalizedStopReason.includes('error')
+  );
+  if (!looksLikeError) {
+    return '';
+  }
+
+  return extractFirstClaudeStringByKeys(records, [
+    'message',
+    'error',
+    'details',
+    'text',
+    'content',
+    'result',
+    'output',
+  ]);
+}
+
 function buildToolName(action: ClaudeActionEvent, payloadSubtype: string): string {
   if (payloadSubtype) {
     return payloadSubtype;
@@ -183,6 +211,7 @@ export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
   ]);
   const sessionId = extractClaudeObservedSessionId(records);
   const turnId = sessionId || extractFirstClaudeStringByKeys(records, ['turnId', 'turn_id']) || undefined;
+  const errorText = extractClaudeErrorText(payloadType, payloadSubtype, payload, records);
 
   let action: ClaudeActionEvent | undefined;
   let actionType: ClaudeActionEvent['actionType'] | null = null;
@@ -211,7 +240,7 @@ export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
     };
   }
 
-  const assistantText = (!isSystem && !seemsToolEvent && seemsAssistantEvent)
+  const assistantText = (!errorText && !isSystem && !seemsToolEvent && seemsAssistantEvent)
     ? extractFirstClaudeStringByKeys(records, ['text', 'message', 'content', 'output', 'result'])
     : '';
 
@@ -297,6 +326,7 @@ export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
       assistantText,
       assistantSource: payloadType === 'result' ? 'result' as const : 'assistant' as const,
     } : {}),
+    ...(errorText ? { errorText } : {}),
     ...(sessionId ? { sessionId } : {}),
   };
 }
@@ -331,7 +361,13 @@ export function mapClaudeStreamOutputToProtocol(stdout: string): { envelopes: Se
   };
 }
 
-export function parseClaudeStreamOutput(stdout: string): { output: string; actions: ClaudeActionEvent[]; sessionId?: string; envelopes: SessionProtocolEnvelope[] } {
+export function parseClaudeStreamOutput(stdout: string): {
+  output: string;
+  actions: ClaudeActionEvent[];
+  errorText?: string;
+  sessionId?: string;
+  envelopes: SessionProtocolEnvelope[];
+} {
   const lines = stdout
     .replace(/\r\n/g, '\n')
     .split('\n')
@@ -339,6 +375,7 @@ export function parseClaudeStreamOutput(stdout: string): { output: string; actio
     .filter(Boolean);
   const actionByKey = new Map<string, ClaudeActionEvent>();
   let latestAssistantText = '';
+  let latestErrorText = '';
   let latestSessionId = '';
 
   for (const line of lines) {
@@ -362,6 +399,9 @@ export function parseClaudeStreamOutput(stdout: string): { output: string; actio
     ) {
       latestAssistantText = assistantText;
     }
+    if (parsedLine.errorText) {
+      latestErrorText = sanitizeAgentMessageText(parsedLine.errorText);
+    }
     if (parsedLine.sessionId) {
       latestSessionId = parsedLine.sessionId;
     }
@@ -373,6 +413,7 @@ export function parseClaudeStreamOutput(stdout: string): { output: string; actio
     output: latestAssistantText,
     actions: [...actionByKey.values()],
     envelopes: mapped.envelopes,
+    ...(latestErrorText ? { errorText: latestErrorText } : {}),
     ...(latestSessionId ? { sessionId: latestSessionId } : {}),
   };
 }
