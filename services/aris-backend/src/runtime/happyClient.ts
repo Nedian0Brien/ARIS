@@ -2092,7 +2092,7 @@ export class HappyRuntimeStore {
           .map((line) => line.trim())
           .filter((line) => line && !parseJsonLine(line))
           .join('\n');
-        output = trimOutput(nonJsonStdout || cleanedStderr || '');
+        output = trimOutput(nonJsonStdout || cleanedStdout || cleanedStderr || '');
       }
     } else {
       output = trimOutput(cleanedStdout || cleanedStderr || '');
