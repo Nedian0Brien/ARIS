@@ -246,6 +246,39 @@ describe('gemini alignment E2E', () => {
     expect(await store.isSessionRunning(session.id, 'chat-gemini')).toBe(false);
   });
 
+  it('passes the chat-selected Gemini model through to the CLI command args', async () => {
+    const { store, seenCommands } = createFakeGeminiStore();
+
+    const session = await store.createSession({
+      path: '/workspace/ARIS',
+      flavor: 'gemini',
+      approvalPolicy: 'on-request',
+    });
+
+    await store.appendMessage(session.id, {
+      type: 'message',
+      text: 'Gemini 모델 전달 검증',
+      meta: {
+        role: 'user',
+        agent: 'gemini',
+        chatId: 'chat-gemini-model',
+        model: 'gemini-2.5-pro',
+      },
+    });
+
+    await waitFor(
+      async () => store.listMessages(session.id),
+      (messages) => messages.some((message) => (
+        message.meta?.source === 'cli-agent'
+        && message.meta?.streamEvent === 'agent_message'
+      )),
+    );
+
+    expect(seenCommands).toHaveLength(1);
+    expect(seenCommands[0]).toContain('-m');
+    expect(seenCommands[0]).toContain('gemini-2.5-pro');
+  });
+
   it('allows a Gemini chat override even when the parent session flavor differs', async () => {
     const { store, seenCommands } = createFakeGeminiStore();
 
