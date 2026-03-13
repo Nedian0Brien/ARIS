@@ -4,7 +4,10 @@ import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
 const SAFETY_RECONCILE_INTERVAL_MS = 15000;
 const FALLBACK_POLL_INTERVAL_MS = 4000;
+const MAX_POLL_INTERVAL_MS = 30000;
 const EVENTS_PAGE_LIMIT = 40;
+const STREAM_RECONNECT_DELAY_MS = 1500;
+const RATE_LIMIT_RETRY_DEFAULT_MS = 10_000;
 const isDocumentVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
 
 type EventsApiResponse = {
@@ -14,12 +17,33 @@ type EventsApiResponse = {
 
 class SessionEventsHttpError extends Error {
   readonly status: number;
+  readonly retryAfterMs: number | null;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, retryAfterMs: number | null = null) {
     super(message);
     this.name = 'SessionEventsHttpError';
     this.status = status;
+    this.retryAfterMs = retryAfterMs;
   }
+}
+
+function parseRetryAfterHeader(value: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const asSeconds = Number(trimmed);
+  if (Number.isFinite(asSeconds) && asSeconds > 0) {
+    return Math.ceil(asSeconds) * 1000;
+  }
+  const asDate = Date.parse(trimmed);
+  if (Number.isFinite(asDate)) {
+    return Math.max(0, asDate - Date.now());
+  }
+  return null;
 }
 
 function mergeEvents(events: UiEvent[]): UiEvent[] {
@@ -100,6 +124,8 @@ export function useSessionEvents(
   const hasMoreBeforeRef = useRef<boolean>(hydratedInitialHasMoreBefore);
   const loadingOlderRef = useRef<boolean>(false);
   const terminalStatusRef = useRef<number | null>(null);
+  const pollBackoffMsRef = useRef<number>(FALLBACK_POLL_INTERVAL_MS);
+  const rateLimitUntilMsRef = useRef<number | null>(null);
 
   useEffect(() => {
     setEvents(hydratedInitialEvents);
@@ -158,7 +184,14 @@ export function useSessionEvents(
       throw new SessionEventsHttpError(404, '워크스페이스가 종료되었거나 삭제되었습니다.');
     }
     if (!response.ok) {
-      throw new SessionEventsHttpError(response.status, `백엔드 이벤트 API 응답 오류 (${response.status})`);
+      const retryAfterMs = response.status === 429
+        ? parseRetryAfterHeader(response.headers.get('Retry-After'))
+        : null;
+      throw new SessionEventsHttpError(
+        response.status,
+        `백엔드 이벤트 API 응답 오류 (${response.status})`,
+        retryAfterMs,
+      );
     }
 
     const body = (await response.json()) as EventsApiResponse;
@@ -171,6 +204,8 @@ export function useSessionEvents(
       if (!latestId && typeof body.page?.hasMoreBefore === 'boolean') {
         setHasMoreBefore(body.page.hasMoreBefore);
       }
+      pollBackoffMsRef.current = FALLBACK_POLL_INTERVAL_MS;
+      rateLimitUntilMsRef.current = null;
       setSyncError(null);
     }
   }, [enabled, sessionId, chatId, includeUnassigned]);
@@ -208,7 +243,10 @@ export function useSessionEvents(
         throw new SessionEventsHttpError(404, '워크스페이스가 종료되었거나 삭제되었습니다.');
       }
       if (!response.ok) {
-        throw new SessionEventsHttpError(response.status, `이전 이벤트 API 응답 오류 (${response.status})`);
+        const retryAfterMs = response.status === 429
+          ? parseRetryAfterHeader(response.headers.get('Retry-After'))
+          : null;
+        throw new SessionEventsHttpError(response.status, `이전 이벤트 API 응답 오류 (${response.status})`, retryAfterMs);
       }
 
       const body = (await response.json()) as EventsApiResponse;
@@ -222,12 +260,22 @@ export function useSessionEvents(
         return areEventsEqual(prev, merged) ? prev : merged;
       });
       setHasMoreBefore(nextHasMoreBefore);
+      pollBackoffMsRef.current = FALLBACK_POLL_INTERVAL_MS;
+      rateLimitUntilMsRef.current = null;
       setSyncError(null);
 
       return { loadedCount: olderEvents.length, hasMoreBefore: nextHasMoreBefore };
     } catch (error) {
-      const message = error instanceof Error ? error.message : '이전 이벤트를 불러오지 못했습니다.';
-      setSyncError(message);
+      if (error instanceof SessionEventsHttpError && error.status === 429) {
+        const retryAfterMs = error.retryAfterMs ?? RATE_LIMIT_RETRY_DEFAULT_MS;
+        const nextRetryAt = Date.now() + Math.max(retryAfterMs, FALLBACK_POLL_INTERVAL_MS);
+        rateLimitUntilMsRef.current = Math.max(rateLimitUntilMsRef.current ?? 0, nextRetryAt);
+        pollBackoffMsRef.current = Math.max(FALLBACK_POLL_INTERVAL_MS, retryAfterMs);
+        setSyncError(null);
+      } else {
+        const message = error instanceof Error ? error.message : '이전 이벤트를 불러오지 못했습니다.';
+        setSyncError(message);
+      }
       throw error;
     } finally {
       loadingOlderRef.current = false;
@@ -239,6 +287,7 @@ export function useSessionEvents(
     let disposed = false;
     let eventSource: EventSource | null = null;
     let pollTimer: number | null = null;
+    let pollDelayTimer: number | null = null;
     let reconnectTimer: number | null = null;
     let reconcileTimer: number | null = null;
 
@@ -247,6 +296,75 @@ export function useSessionEvents(
         window.clearInterval(pollTimer);
         pollTimer = null;
       }
+      if (pollDelayTimer !== null) {
+        window.clearTimeout(pollDelayTimer);
+        pollDelayTimer = null;
+      }
+    };
+
+    const getRateLimitRemainingMs = () => {
+      if (rateLimitUntilMsRef.current === null) {
+        return 0;
+      }
+      return Math.max(0, rateLimitUntilMsRef.current - Date.now());
+    };
+
+    const applyRateLimit = (retryAfterMs: number | null) => {
+      const retryMs = Math.max(retryAfterMs ?? RATE_LIMIT_RETRY_DEFAULT_MS, FALLBACK_POLL_INTERVAL_MS);
+      const nextRetryAt = Date.now() + retryMs;
+      rateLimitUntilMsRef.current = Math.max(rateLimitUntilMsRef.current ?? 0, nextRetryAt);
+      pollBackoffMsRef.current = Math.min(
+        Math.max(pollBackoffMsRef.current, retryMs),
+        MAX_POLL_INTERVAL_MS,
+      );
+    };
+
+    const getPollIntervalMs = () => {
+      const rateLimitMs = getRateLimitRemainingMs();
+      return Math.max(
+        FALLBACK_POLL_INTERVAL_MS,
+        pollBackoffMsRef.current,
+        rateLimitMs,
+      );
+    };
+
+    const nextReconnectDelayMs = () => {
+      return Math.max(STREAM_RECONNECT_DELAY_MS, getRateLimitRemainingMs());
+    };
+
+    const handleRefreshError = (error: unknown, fallbackMessage: string) => {
+      if (disposed) {
+        return;
+      }
+
+      if (error instanceof SessionEventsHttpError && error.status === 404) {
+        setSyncError(error.message);
+        stopPolling();
+        closeStream();
+        return;
+      }
+
+      if (error instanceof SessionEventsHttpError && error.status === 429) {
+        stopPolling();
+        applyRateLimit(error.retryAfterMs);
+        startPolling();
+        setSyncError(null);
+        return;
+      }
+
+      pollBackoffMsRef.current = Math.min(
+        Math.max(pollBackoffMsRef.current * 2, FALLBACK_POLL_INTERVAL_MS * 2),
+        MAX_POLL_INTERVAL_MS,
+      );
+      stopPolling();
+      startPolling();
+      setSyncError(fallbackMessage);
+    };
+
+    const runRefresh = () => {
+      void refreshEvents().catch((error) => {
+        handleRefreshError(error, '백엔드 이벤트 동기화를 확인하세요.');
+      });
     };
 
     const startPolling = () => {
@@ -259,33 +377,24 @@ export function useSessionEvents(
       if (!isDocumentVisible()) {
         return;
       }
-      if (pollTimer !== null) {
+      if (getRateLimitRemainingMs() > 0) {
+        if (reconnectTimer === null) {
+          reconnectTimer = window.setTimeout(() => {
+            reconnectTimer = null;
+            connect();
+          }, nextReconnectDelayMs());
+        }
         return;
       }
-      pollTimer = window.setInterval(() => {
-        void refreshEvents().catch((error) => {
-          if (!disposed) {
-            if (error instanceof SessionEventsHttpError && error.status === 404) {
-              setSyncError(error.message);
-              stopPolling();
-              closeStream();
-              return;
-            }
-            setSyncError('백엔드 이벤트 동기화를 확인하세요.');
-          }
-        });
-      }, FALLBACK_POLL_INTERVAL_MS);
-      void refreshEvents().catch((error) => {
-        if (!disposed) {
-          if (error instanceof SessionEventsHttpError && error.status === 404) {
-            setSyncError(error.message);
-            stopPolling();
-            closeStream();
-            return;
-          }
-          setSyncError('백엔드 이벤트 동기화를 확인하세요.');
-        }
-      });
+      if (pollTimer !== null || pollDelayTimer !== null) {
+        return;
+      }
+      const pollIntervalMs = getPollIntervalMs();
+      pollDelayTimer = window.setTimeout(() => {
+        pollDelayTimer = null;
+        runRefresh();
+        pollTimer = window.setInterval(runRefresh, pollIntervalMs);
+      }, pollIntervalMs);
     };
 
     const closeStream = () => {
@@ -304,15 +413,7 @@ export function useSessionEvents(
       }
       reconcileTimer = window.setInterval(() => {
         void refreshEvents().catch((error) => {
-          if (!disposed) {
-            if (error instanceof SessionEventsHttpError && error.status === 404) {
-              setSyncError(error.message);
-              stopPolling();
-              closeStream();
-              return;
-            }
-            setSyncError('백엔드 이벤트 동기화를 확인하세요.');
-          }
+          handleRefreshError(error, '백엔드 이벤트 동기화를 확인하세요.');
         });
       }, SAFETY_RECONCILE_INTERVAL_MS);
     };
@@ -366,8 +467,12 @@ export function useSessionEvents(
           return;
         }
         try {
-          const payload = JSON.parse((raw as MessageEvent).data) as { status?: number; message?: string };
-          if (payload.status === 401) {
+          const payload = JSON.parse((raw as MessageEvent).data) as {
+            status?: number;
+            message?: string;
+            retryAfterMs?: number;
+          };
+          if (payload.status === 401 || payload.status === 403) {
             redirectToLoginWithNext();
             return;
           }
@@ -378,19 +483,23 @@ export function useSessionEvents(
             closeStream();
             return;
           }
+          if (payload.status === 429) {
+            applyRateLimit(payload.retryAfterMs ?? null);
+            closeStream();
+            startPolling();
+            if (reconnectTimer === null) {
+              reconnectTimer = window.setTimeout(() => {
+                reconnectTimer = null;
+                connect();
+              }, nextReconnectDelayMs());
+            }
+            return;
+          }
         } catch {
           // Fall through to the regular sync fallback.
         }
         void refreshEvents().catch((error) => {
-          if (!disposed) {
-            if (error instanceof SessionEventsHttpError && error.status === 404) {
-              setSyncError(error.message);
-              stopPolling();
-              closeStream();
-              return;
-            }
-            setSyncError('실시간 스트림 처리 중 일시 오류가 발생했습니다.');
-          }
+          handleRefreshError(error, '실시간 스트림 처리 중 일시 오류가 발생했습니다.');
         });
       });
 
@@ -414,7 +523,7 @@ export function useSessionEvents(
           reconnectTimer = window.setTimeout(() => {
             reconnectTimer = null;
             connect();
-          }, 1500);
+          }, nextReconnectDelayMs());
         }
       });
     };
@@ -444,11 +553,7 @@ export function useSessionEvents(
       startSafetyReconcile();
       connect();
       void refreshEvents(!enabled).catch((error) => {
-        if (!disposed && error instanceof SessionEventsHttpError && error.status === 404) {
-          setSyncError(error.message);
-          stopPolling();
-          closeStream();
-        }
+        handleRefreshError(error, '백엔드 이벤트 동기화를 확인하세요.');
       });
     };
 
@@ -466,13 +571,7 @@ export function useSessionEvents(
     // Fetch initial data immediately if there is no client-side baseline
     // (e.g. when changing chats dynamically before server components re-render)
     void refreshEvents(!enabled && eventsRef.current.length === 0).catch((error) => {
-      if (!disposed) {
-        if (error instanceof SessionEventsHttpError && error.status === 404) {
-          setSyncError(error.message);
-          stopPolling();
-          closeStream();
-        }
-      }
+      handleRefreshError(error, '백엔드 이벤트 동기화를 확인하세요.');
     });
 
     return () => {
@@ -484,6 +583,9 @@ export function useSessionEvents(
       }
       if (reconnectTimer !== null) {
         window.clearTimeout(reconnectTimer);
+      }
+      if (pollDelayTimer !== null) {
+        window.clearTimeout(pollDelayTimer);
       }
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', resumeRealtime);

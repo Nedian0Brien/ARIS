@@ -5,7 +5,7 @@ import { getSessionEvents, HappyHttpError } from '@/lib/happy/client';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const STREAM_POLL_INTERVAL_MS = 900;
+const STREAM_POLL_INTERVAL_MS = 1500;
 const HEARTBEAT_INTERVAL_MS = 15000;
 
 function sleep(ms: number): Promise<void> {
@@ -88,13 +88,15 @@ export async function GET(
             }
           } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to stream events';
+            const status = error instanceof HappyHttpError ? error.status : undefined;
+            const retryAfterMs = error instanceof HappyHttpError ? error.retryAfterMs : null;
             // Avoid colliding with native EventSource "error" events.
-            if (error instanceof HappyHttpError && [401, 403, 404].includes(error.status)) {
-              writeEvent('stream_error', { message, status: error.status });
+            if (status === 401 || status === 403 || status === 404) {
+              writeEvent('stream_error', { message, status, retryAfterMs });
               closeSafely();
               return;
             }
-            writeEvent('stream_error', { message });
+            writeEvent('stream_error', { message, status, retryAfterMs });
           }
 
           await sleep(STREAM_POLL_INTERVAL_MS);
