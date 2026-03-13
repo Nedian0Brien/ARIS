@@ -16,11 +16,13 @@ import type {
 type JsonObject = Record<string, unknown>;
 export class HappyHttpError extends Error {
   readonly status: number;
+  readonly retryAfterMs: number | null;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, retryAfterMs: number | null = null) {
     super(message);
     this.name = 'HappyHttpError';
     this.status = status;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 
@@ -246,6 +248,22 @@ async function fetchHappy(path: string, init?: RequestInit): Promise<unknown> {
   });
 
   if (!response.ok) {
+    const retryAfterHeader = response.headers.get('Retry-After');
+    const retryAfterMs = (() => {
+      if (!retryAfterHeader) {
+        return null;
+      }
+      const headerAsNumber = Number(retryAfterHeader);
+      if (Number.isFinite(headerAsNumber) && headerAsNumber > 0) {
+        return headerAsNumber * 1000;
+      }
+      const headerAsDate = Date.parse(retryAfterHeader);
+      if (Number.isFinite(headerAsDate)) {
+        return Math.max(0, headerAsDate - Date.now());
+      }
+      return null;
+    })();
+
     const body = (await response.text().catch(() => '')).trim();
     const message = (() => {
       if (!body) {
@@ -273,7 +291,7 @@ async function fetchHappy(path: string, init?: RequestInit): Promise<unknown> {
       }
     })();
 
-    throw new HappyHttpError(response.status, `백엔드 응답 오류 (${response.status}): ${message}`);
+    throw new HappyHttpError(response.status, `백엔드 응답 오류 (${response.status}): ${message}`, retryAfterMs);
   }
 
   return response.json();
