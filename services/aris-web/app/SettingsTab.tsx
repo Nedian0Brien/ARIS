@@ -7,7 +7,9 @@ import { CodexModelCatalogCard } from '@/components/settings/CodexModelCatalogCa
 import {
   DEFAULT_CLAUDE_MODEL_SELECTIONS,
   DEFAULT_CODEX_MODEL_SELECTIONS,
+  DEFAULT_GEMINI_MODEL_SELECTIONS,
   type ClaudeCatalogItem,
+  type GeminiCatalogItem,
   type ModelSettingsResponse,
   type OpenAiCatalogItem,
   type ProviderId,
@@ -35,6 +37,7 @@ const DEFAULT_MODEL_SETTINGS: ModelSettingsResponse = {
   secrets: {
     openAiApiKeyConfigured: false,
     claudeApiKeyConfigured: false,
+    geminiApiKeyConfigured: false,
   },
 };
 
@@ -74,6 +77,17 @@ export function SettingsTab() {
   const [claudeKeyDeleting, setClaudeKeyDeleting] = useState(false);
   const [claudeKeyFeedback, setClaudeKeyFeedback] = useState<Feedback>(null);
 
+  // Gemini 상태
+  const [geminiCatalogItems, setGeminiCatalogItems] = useState<GeminiCatalogItem[]>([]);
+  const [selectedGeminiModelIds, setSelectedGeminiModelIds] = useState<string[]>([...DEFAULT_GEMINI_MODEL_SELECTIONS]);
+  const [geminiModelSaving, setGeminiModelSaving] = useState(false);
+  const [geminiModelFeedback, setGeminiModelFeedback] = useState<Feedback>(null);
+  const [geminiCatalogLoading, setGeminiCatalogLoading] = useState(false);
+  const [geminiCatalogError, setGeminiCatalogError] = useState<string | null>(null);
+  const [geminiKeySaving, setGeminiKeySaving] = useState(false);
+  const [geminiKeyDeleting, setGeminiKeyDeleting] = useState(false);
+  const [geminiKeyFeedback, setGeminiKeyFeedback] = useState<Feedback>(null);
+
   const syncCodexSelection = useCallback((settings: ModelSettingsResponse) => {
     const persisted = settings.providers.codex.selectedModelIds;
     setSelectedCodexModelIds(persisted.length > 0 ? persisted : [...DEFAULT_CODEX_MODEL_SELECTIONS]);
@@ -82,6 +96,11 @@ export function SettingsTab() {
   const syncClaudeSelection = useCallback((settings: ModelSettingsResponse) => {
     const persisted = settings.providers.claude.selectedModelIds;
     setSelectedClaudeModelIds(persisted.length > 0 ? persisted : [...DEFAULT_CLAUDE_MODEL_SELECTIONS]);
+  }, []);
+
+  const syncGeminiSelection = useCallback((settings: ModelSettingsResponse) => {
+    const persisted = settings.providers.gemini.selectedModelIds;
+    setSelectedGeminiModelIds(persisted.length > 0 ? persisted : [...DEFAULT_GEMINI_MODEL_SELECTIONS]);
   }, []);
 
   const loadModelSettings = useCallback(async (): Promise<ModelSettingsResponse | null> => {
@@ -94,6 +113,7 @@ export function SettingsTab() {
       setModelSettings(data);
       syncCodexSelection(data);
       syncClaudeSelection(data);
+      syncGeminiSelection(data);
       return data;
     } catch (error) {
       setCodexModelFeedback({
@@ -102,7 +122,7 @@ export function SettingsTab() {
       });
       return null;
     }
-  }, [syncCodexSelection, syncClaudeSelection]);
+  }, [syncClaudeSelection, syncCodexSelection, syncGeminiSelection]);
 
   const loadCodexCatalog = useCallback(async () => {
     setCodexCatalogLoading(true);
@@ -140,6 +160,24 @@ export function SettingsTab() {
     }
   }, []);
 
+  const loadGeminiCatalog = useCallback(async () => {
+    setGeminiCatalogLoading(true);
+    setGeminiCatalogError(null);
+    try {
+      const response = await fetch('/api/settings/models/catalog/gemini');
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data) {
+        throw new Error('Gemini 모델 카탈로그를 불러오지 못했습니다.');
+      }
+      setGeminiCatalogItems(Array.isArray(data.items) ? data.items : []);
+    } catch (error) {
+      setGeminiCatalogItems([]);
+      setGeminiCatalogError(error instanceof Error ? error.message : 'Gemini 모델 카탈로그를 불러오지 못했습니다.');
+    } finally {
+      setGeminiCatalogLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetch('/api/settings/ssh')
       .then((response) => response.json())
@@ -156,8 +194,11 @@ export function SettingsTab() {
       if (settings?.secrets.claudeApiKeyConfigured) {
         void loadClaudeCatalog();
       }
+      if (settings?.secrets.geminiApiKeyConfigured) {
+        void loadGeminiCatalog();
+      }
     });
-  }, [loadModelSettings, loadCodexCatalog, loadClaudeCatalog]);
+  }, [loadClaudeCatalog, loadCodexCatalog, loadGeminiCatalog, loadModelSettings]);
 
   const loadFile = useCallback((file: File) => {
     if (!file) {
@@ -317,6 +358,62 @@ export function SettingsTab() {
     }
   }, [loadModelSettings]);
 
+  // Gemini 키 핸들러
+  const handleSaveGeminiKey = useCallback(async (apiKey: string) => {
+    if (apiKey.trim().length < 20) {
+      setGeminiKeyFeedback({ ok: false, msg: '유효한 Google AI Studio API 키를 입력해 주세요.' });
+      return;
+    }
+    setGeminiKeySaving(true);
+    setGeminiKeyFeedback(null);
+    try {
+      const response = await fetch('/api/settings/gemini-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof data.error === 'string' ? data.error : 'Google AI Studio API 키 저장에 실패했습니다.');
+      }
+      setGeminiKeyFeedback({ ok: true, msg: 'Google AI Studio API 키가 저장되었습니다.' });
+      const settings = await loadModelSettings();
+      if (settings?.secrets.geminiApiKeyConfigured) {
+        await loadGeminiCatalog();
+      }
+    } catch (error) {
+      setGeminiKeyFeedback({
+        ok: false,
+        msg: error instanceof Error ? error.message : 'Google AI Studio API 키 저장에 실패했습니다.',
+      });
+    } finally {
+      setGeminiKeySaving(false);
+    }
+  }, [loadGeminiCatalog, loadModelSettings]);
+
+  const handleDeleteGeminiKey = useCallback(async () => {
+    setGeminiKeyDeleting(true);
+    setGeminiKeyFeedback(null);
+    try {
+      const response = await fetch('/api/settings/gemini-key', { method: 'DELETE' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof data.error === 'string' ? data.error : 'Google AI Studio API 키 제거에 실패했습니다.');
+      }
+      setGeminiCatalogItems([]);
+      setGeminiCatalogError(null);
+      setGeminiKeyFeedback({ ok: true, msg: '등록된 Google AI Studio API 키를 제거했습니다.' });
+      await loadModelSettings();
+    } catch (error) {
+      setGeminiKeyFeedback({
+        ok: false,
+        msg: error instanceof Error ? error.message : 'Google AI Studio API 키 제거에 실패했습니다.',
+      });
+    } finally {
+      setGeminiKeyDeleting(false);
+    }
+  }, [loadModelSettings]);
+
   // Codex 모델 토글 / 권장 / 저장
   const handleToggleCodexModel = useCallback((modelId: string) => {
     setSelectedCodexModelIds((prev) => {
@@ -417,6 +514,56 @@ export function SettingsTab() {
     }
   }, [selectedClaudeModelIds, syncClaudeSelection]);
 
+  // Gemini 모델 토글 / 권장 / 저장
+  const handleToggleGeminiModel = useCallback((modelId: string) => {
+    setSelectedGeminiModelIds((prev) => {
+      if (prev.includes(modelId)) {
+        return prev.filter((item) => item !== modelId);
+      }
+      const next = [...prev, modelId];
+      const order = new Map(geminiCatalogItems.map((item, index) => [item.id, index]));
+      next.sort((left, right) => (order.get(left) ?? Number.MAX_SAFE_INTEGER) - (order.get(right) ?? Number.MAX_SAFE_INTEGER));
+      return next;
+    });
+  }, [geminiCatalogItems]);
+
+  const handleApplyRecommendedGeminiModels = useCallback(() => {
+    if (geminiCatalogItems.length === 0) {
+      setSelectedGeminiModelIds([...DEFAULT_GEMINI_MODEL_SELECTIONS]);
+      return;
+    }
+    const available = new Set(geminiCatalogItems.map((item) => item.id));
+    const recommended = DEFAULT_GEMINI_MODEL_SELECTIONS.filter((modelId) => available.has(modelId));
+    setSelectedGeminiModelIds(recommended.length > 0 ? [...recommended] : [...DEFAULT_GEMINI_MODEL_SELECTIONS]);
+  }, [geminiCatalogItems]);
+
+  const handleGeminiModelSave = useCallback(async () => {
+    if (selectedGeminiModelIds.length === 0) {
+      setGeminiModelFeedback({ ok: false, msg: '최소 1개 이상의 Gemini 모델을 선택해 주세요.' });
+      return;
+    }
+    setGeminiModelSaving(true);
+    setGeminiModelFeedback(null);
+    try {
+      const response = await fetch('/api/settings/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providers: { gemini: { selectedModelIds: selectedGeminiModelIds } } }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data) {
+        throw new Error('사용할 Gemini 모델 목록을 저장하지 못했습니다.');
+      }
+      setModelSettings(data);
+      syncGeminiSelection(data);
+      setGeminiModelFeedback({ ok: true, msg: 'Gemini 사용할 모델 목록이 저장되었습니다.' });
+    } catch (error) {
+      setGeminiModelFeedback({ ok: false, msg: error instanceof Error ? error.message : 'Gemini 모델 목록 저장에 실패했습니다.' });
+    } finally {
+      setGeminiModelSaving(false);
+    }
+  }, [selectedGeminiModelIds, syncGeminiSelection]);
+
   // 활성 provider에 따라 카드에 전달할 props 결정
   const isCodex = activeProvider === 'codex';
   const isClaude = activeProvider === 'claude';
@@ -425,34 +572,34 @@ export function SettingsTab() {
     ? modelSettings.secrets.openAiApiKeyConfigured
     : isClaude
       ? modelSettings.secrets.claudeApiKeyConfigured
-      : false;
+      : modelSettings.secrets.geminiApiKeyConfigured;
 
   const activeKeyHasKey = isCodex
     ? modelSettings.secrets.openAiApiKeyConfigured
     : isClaude
       ? modelSettings.secrets.claudeApiKeyConfigured
-      : false;
+      : modelSettings.secrets.geminiApiKeyConfigured;
 
-  const activeKeySaving = isCodex ? codexKeySaving : isClaude ? claudeKeySaving : false;
-  const activeKeyDeleting = isCodex ? codexKeyDeleting : isClaude ? claudeKeyDeleting : false;
-  const activeKeyFeedback = isCodex ? codexKeyFeedback : isClaude ? claudeKeyFeedback : null;
-  const handleActiveKeySave = isCodex ? handleSaveCodexKey : isClaude ? handleSaveClaudeKey : async (_: string) => {};
-  const handleActiveKeyDelete = isCodex ? handleDeleteCodexKey : isClaude ? handleDeleteClaudeKey : async () => {};
+  const activeKeySaving = isCodex ? codexKeySaving : isClaude ? claudeKeySaving : geminiKeySaving;
+  const activeKeyDeleting = isCodex ? codexKeyDeleting : isClaude ? claudeKeyDeleting : geminiKeyDeleting;
+  const activeKeyFeedback = isCodex ? codexKeyFeedback : isClaude ? claudeKeyFeedback : geminiKeyFeedback;
+  const handleActiveKeySave = isCodex ? handleSaveCodexKey : isClaude ? handleSaveClaudeKey : handleSaveGeminiKey;
+  const handleActiveKeyDelete = isCodex ? handleDeleteCodexKey : isClaude ? handleDeleteClaudeKey : handleDeleteGeminiKey;
 
-  const activeCatalogItems = isCodex ? codexCatalogItems : isClaude ? claudeCatalogItems : [];
-  const activeSelectedModelIds = isCodex ? selectedCodexModelIds : isClaude ? selectedClaudeModelIds : [];
-  const activeCatalogLoading = isCodex ? codexCatalogLoading : isClaude ? claudeCatalogLoading : false;
-  const activeModelSaving = isCodex ? codexModelSaving : isClaude ? claudeModelSaving : false;
-  const activeCatalogError = isCodex ? codexCatalogError : isClaude ? claudeCatalogError : null;
-  const activeModelFeedback = isCodex ? codexModelFeedback : isClaude ? claudeModelFeedback : null;
-  const handleActiveToggle = isCodex ? handleToggleCodexModel : isClaude ? handleToggleClaudeModel : (_: string) => {};
-  const handleActiveRefresh = isCodex ? loadCodexCatalog : isClaude ? loadClaudeCatalog : async () => {};
-  const handleActiveModelSave = isCodex ? handleCodexModelSave : isClaude ? handleClaudeModelSave : async () => {};
+  const activeCatalogItems = isCodex ? codexCatalogItems : isClaude ? claudeCatalogItems : geminiCatalogItems;
+  const activeSelectedModelIds = isCodex ? selectedCodexModelIds : isClaude ? selectedClaudeModelIds : selectedGeminiModelIds;
+  const activeCatalogLoading = isCodex ? codexCatalogLoading : isClaude ? claudeCatalogLoading : geminiCatalogLoading;
+  const activeModelSaving = isCodex ? codexModelSaving : isClaude ? claudeModelSaving : geminiModelSaving;
+  const activeCatalogError = isCodex ? codexCatalogError : isClaude ? claudeCatalogError : geminiCatalogError;
+  const activeModelFeedback = isCodex ? codexModelFeedback : isClaude ? claudeModelFeedback : geminiModelFeedback;
+  const handleActiveToggle = isCodex ? handleToggleCodexModel : isClaude ? handleToggleClaudeModel : handleToggleGeminiModel;
+  const handleActiveRefresh = isCodex ? loadCodexCatalog : isClaude ? loadClaudeCatalog : loadGeminiCatalog;
+  const handleActiveModelSave = isCodex ? handleCodexModelSave : isClaude ? handleClaudeModelSave : handleGeminiModelSave;
   const handleActiveApplyRecommended = isCodex
     ? handleApplyRecommendedCodexModels
     : isClaude
       ? handleApplyRecommendedClaudeModels
-      : () => {};
+      : handleApplyRecommendedGeminiModels;
 
   const isFileLoaded = Boolean(sshPrivateKey && fileName);
 
@@ -465,8 +612,8 @@ export function SettingsTab() {
         </div>
         <h2 className={styles.heroTitle}>모델 카탈로그와 인프라 자격증명을 한 화면에서 관리</h2>
         <p className={styles.heroDescription}>
-          OpenAI(Codex)와 Anthropic(Claude) 모델 선택은 동적 카탈로그 기반으로 관리하고, SSH 자격증명은 별도 보안
-          영역에서 유지합니다.
+          OpenAI(Codex), Anthropic(Claude), Google AI Studio(Gemini) 모델 선택은 동적 카탈로그 기반으로 관리하고,
+          SSH 자격증명은 별도 보안 영역에서 유지합니다.
         </p>
       </div>
 
