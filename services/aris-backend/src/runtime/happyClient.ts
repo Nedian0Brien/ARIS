@@ -3,6 +3,7 @@ import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { createInterface } from 'node:readline';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { inferActionTypeFromCommand, titleForActionType } from './actionType.js';
 import { sanitizeAgentMessageText, shouldDisplayToolStatus } from './agentMessageSanitizer.js';
@@ -69,7 +70,14 @@ const CODEX_RUNTIME_MODE = (process.env.CODEX_RUNTIME_MODE || 'app-server').trim
 const HAPPY_MESSAGES_BATCH_LIMIT = 500;
 const HAPPY_MESSAGES_PAGE_MAX_LIMIT = 2000;
 const HAPPY_MESSAGES_MAX_PAGES = 1000;
-const HAPPY_EVENT_LOG_DIR = path.resolve(process.cwd(), 'logs');
+const HAPPY_EVENT_LOG_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+  '..',
+  'logs',
+);
 const HAPPY_EVENT_LOG_MAX_BYTES = (() => {
   const parsed = Number.parseInt(process.env.HAPPY_EVENT_LOG_MAX_BYTES || '', 10);
   if (Number.isFinite(parsed) && parsed > 0) {

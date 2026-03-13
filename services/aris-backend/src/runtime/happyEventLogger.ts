@@ -83,8 +83,11 @@ export class HappyEventLogger {
   }
 
   private getDateFolder(): string {
-    const date = new Date().toISOString().slice(0, 10);
-    return path.join(this.logsDir, date);
+    const now = new Date();
+    const year = String(now.getFullYear()).padStart(4, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return path.join(this.logsDir, year, month, day);
   }
 
   private getLogFilePath(type: LogRecordType, record: unknown): string {

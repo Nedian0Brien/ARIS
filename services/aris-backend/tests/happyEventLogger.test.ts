@@ -12,10 +12,24 @@ function createTempLogsDir(): string {
   return dir;
 }
 
+function collectNdjsonFilesRecursively(dir: string, collector: string[] = []): string[] {
+  const entries = readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      collectNdjsonFilesRecursively(fullPath, collector);
+      continue;
+    }
+    if (entry.isFile() && entry.name.endsWith('.ndjson')) {
+      collector.push(fullPath);
+    }
+  }
+  return collector;
+}
+
 function collectNdjsonFiles(dir: string): string[] {
-  return readdirSync(dir)
-    .filter((name) => name.endsWith('.ndjson'))
-    .map((name) => path.join(dir, name));
+  const files: string[] = [];
+  return collectNdjsonFilesRecursively(dir, files);
 }
 
 describe('HappyEventLogger', () => {
@@ -44,8 +58,15 @@ describe('HappyEventLogger', () => {
       payload: { type: 'item.completed' },
     });
 
-    const raw = readFileSync(path.join(logsDir, 'happy-raw.ndjson'), 'utf8').trim().split('\n');
-    const parsed = readFileSync(path.join(logsDir, 'happy-parsed.ndjson'), 'utf8').trim().split('\n');
+    const files = collectNdjsonFiles(logsDir);
+    const rawPath = files.find((entry) => entry.endsWith('-raw.ndjson'));
+    const parsedPath = files.find((entry) => entry.endsWith('-parsed.ndjson'));
+
+    expect(rawPath).toBeDefined();
+    expect(parsedPath).toBeDefined();
+
+    const raw = readFileSync(rawPath as string, 'utf8').trim().split('\n');
+    const parsed = readFileSync(parsedPath as string, 'utf8').trim().split('\n');
 
     expect(raw).toHaveLength(1);
     expect(parsed).toHaveLength(1);
@@ -80,7 +101,7 @@ describe('HappyEventLogger', () => {
       });
     }
 
-    const files = collectNdjsonFiles(logsDir);
+    const files = collectNdjsonFiles(logsDir).filter((filePath) => !filePath.endsWith('happy-prune-events.ndjson'));
     const total = files.reduce((sum, filePath) => sum + statSync(filePath).size, 0);
 
     expect(total).toBeLessThanOrEqual(350);
