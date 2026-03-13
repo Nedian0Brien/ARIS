@@ -16,4 +16,5 @@
 - 동일한 워킹 디렉터리를 여러 에이전트가 공유해서 동시에 수정하는 것을 금지한다.
 - 모든 작업은 시작 전 `git worktree add <path> <branch>`로 전용 작업 디렉터리를 생성하고, 해당 경로에서만 커밋/푸쉬를 수행한다.
 - 작업 완료 후 `main` 브랜치에 머지가 완료되면, 사용했던 전용 `git worktree`를 `git worktree remove <path>`로 제거하고, 작업에 사용된 로컬 및 원격 브랜치도 함께 삭제하여 환경을 청결하게 유지한다.
-- 백엔드 로그는 services/aris-backend/logs 디렉토리 안에 저장되어 있으므로 필요시 이를 참고한다.
+- 런타임 로그 조회가 필요하면 먼저 `scripts/lookup_runtime_logs_by_id.sh <id>` 를 사용해 `SessionChat` / `SessionMessage` / 관련 ndjson 로그를 함께 조회한다. 기본은 exact match 기준이며, 세션 단위까지 넓혀야 하면 `--include-session-id` 를 추가한다.
+- 로그는 주로 `logs/`, `.runtime/aris-backend/logs/`, `services/aris-backend/logs/` 경로를 우선 확인한다.
