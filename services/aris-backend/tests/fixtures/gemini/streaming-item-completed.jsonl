@@ -1,0 +1,6 @@
+{"type":"init","timestamp":"2026-03-13T13:05:10.000Z","session_id":"gemini-stream-thread","model":"gemini-2.5-pro"}
+{"method":"item/completed","params":{"item":{"type":"commandExecution","id":"call-read-1","command":"/bin/bash -lc 'cat README.md'","cwd":"/workspace/ARIS","status":"completed","commandActions":[{"type":"read","command":"cat README.md","name":"README.md","path":"README.md"}],"aggregatedOutput":"# README\n","exitCode":0,"durationMs":12},"threadId":"gemini-stream-thread","turnId":"gemini-turn-1"}}
+{"method":"codex/event/agent_message_content_delta","params":{"id":"gemini-turn-1","msg":{"type":"agent_message_content_delta","thread_id":"gemini-stream-thread","turn_id":"gemini-turn-1","item_id":"msg_1","delta":"분석 "},"conversationId":"gemini-stream-thread"}}
+{"method":"codex/event/agent_message_content_delta","params":{"id":"gemini-turn-1","msg":{"type":"agent_message_content_delta","thread_id":"gemini-stream-thread","turn_id":"gemini-turn-1","item_id":"msg_1","delta":"내용"},"conversationId":"gemini-stream-thread"}}
+{"method":"item/completed","params":{"item":{"type":"agentMessage","id":"msg_1","text":"분석 내용 전체"},"threadId":"gemini-stream-thread","turnId":"gemini-turn-1"}}
+{"type":"result","subtype":"final","status":"success","threadId":"gemini-stream-thread"}
