@@ -44,6 +44,17 @@ describe('providerModels', () => {
       gemini: { selectedModelIds: ['gemini-2.5-pro'] },
     });
     expect(isAllowedGeminiSelectionModelId('gemini-2.5-flash')).toBe(true);
+    expect(isAllowedGeminiSelectionModelId('auto-gemini-3')).toBe(true);
     expect(isAllowedGeminiSelectionModelId('gemini-3.1-pro-preview')).toBe(false);
+  });
+
+  it('upgrades the legacy Gemini default trio to include auto-gemini-3 first', () => {
+    expect(normalizeProviderModelSelections({
+      gemini: { selectedModelIds: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'] },
+    })).toEqual({
+      codex: { selectedModelIds: [] },
+      claude: { selectedModelIds: [] },
+      gemini: { selectedModelIds: ['auto-gemini-3', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'] },
+    });
   });
 });

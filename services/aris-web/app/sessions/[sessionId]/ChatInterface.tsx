@@ -149,6 +149,7 @@ const COMPOSER_MODELS_BY_AGENT: Record<'codex' | 'claude' | 'gemini', ComposerMo
     { id: 'claude-haiku-4-5', shortLabel: 'Haiku 4.5', badge: '빠름' },
   ],
   gemini: [
+    { id: 'auto-gemini-3', shortLabel: 'Gemini 3 Auto', badge: '권장' },
     { id: 'gemini-2.5-pro', shortLabel: 'Gemini 2.5 Pro', badge: '권장' },
     { id: 'gemini-2.5-flash', shortLabel: 'Gemini 2.5 Flash', badge: '빠름' },
     { id: 'gemini-2.0-flash', shortLabel: 'Gemini 2.0 Flash', badge: '경량' },

@@ -3,6 +3,7 @@ import { requireOperatorApiUser } from '@/lib/auth/guard';
 import { prisma } from '@/lib/db/prisma';
 import { decryptScopedSetting } from '@/lib/crypto/settings';
 import {
+  DEFAULT_GEMINI_MODEL_SELECTIONS,
   deriveGeminiModelFamily,
   deriveGeminiModelLabel,
   deriveGeminiModelTags,
@@ -53,6 +54,19 @@ export async function GET(request: NextRequest) {
 
   try {
     const itemsById = new Map<string, GeminiCatalogItem>();
+    for (const id of DEFAULT_GEMINI_MODEL_SELECTIONS) {
+      if (!isAllowedGeminiSelectionModelId(id)) {
+        continue;
+      }
+      itemsById.set(id, {
+        id,
+        family: deriveGeminiModelFamily(id),
+        label: deriveGeminiModelLabel(id),
+        created: 0,
+        createdAt: null,
+        tags: deriveGeminiModelTags(id),
+      } satisfies GeminiCatalogItem);
+    }
     let nextPageToken: string | null = null;
 
     do {

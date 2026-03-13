@@ -57,6 +57,13 @@ export const DEFAULT_CLAUDE_MODEL_SELECTIONS = [
 ] as const;
 
 export const DEFAULT_GEMINI_MODEL_SELECTIONS = [
+  'auto-gemini-3',
+  'gemini-2.5-pro',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+] as const;
+
+const LEGACY_DEFAULT_GEMINI_MODEL_SELECTIONS = [
   'gemini-2.5-pro',
   'gemini-2.5-flash',
   'gemini-2.0-flash',
@@ -165,7 +172,14 @@ export function normalizeProviderModelSelectionList(provider: ProviderId, input:
   if (provider !== 'gemini') {
     return normalized;
   }
-  return normalized.filter((modelId) => isAllowedGeminiSelectionModelId(modelId));
+  const filtered = normalized.filter((modelId) => isAllowedGeminiSelectionModelId(modelId));
+  if (
+    filtered.length === LEGACY_DEFAULT_GEMINI_MODEL_SELECTIONS.length
+    && LEGACY_DEFAULT_GEMINI_MODEL_SELECTIONS.every((modelId, index) => filtered[index] === modelId)
+  ) {
+    return [...DEFAULT_GEMINI_MODEL_SELECTIONS];
+  }
+  return filtered;
 }
 
 export function isOpenAiTextGenerationModelId(modelId: string): boolean {
@@ -291,6 +305,9 @@ export function isGeminiModelId(modelId: string): boolean {
 
 export function deriveGeminiModelFamily(modelId: string): string {
   const normalized = modelId.toLowerCase();
+  if (normalized === 'auto-gemini-3') {
+    return 'Gemini 3 Auto';
+  }
   if (normalized.includes('gemini-2.5')) {
     return 'Gemini 2.5';
   }
@@ -307,6 +324,9 @@ export function deriveGeminiModelFamily(modelId: string): string {
 }
 
 export function deriveGeminiModelLabel(modelId: string, displayName?: string): string {
+  if (modelId.trim().toLowerCase() === 'auto-gemini-3') {
+    return 'Gemini 3 Auto';
+  }
   if (displayName) {
     return displayName;
   }
@@ -318,6 +338,11 @@ export function deriveGeminiModelLabel(modelId: string, displayName?: string): s
 export function deriveGeminiModelTags(modelId: string): string[] {
   const tags: string[] = [];
   const normalized = modelId.toLowerCase();
+  if (normalized === 'auto-gemini-3') {
+    tags.push('Auto');
+    tags.push('Recommended');
+    return tags;
+  }
   if (normalized.includes('pro')) {
     tags.push('Pro');
   }
