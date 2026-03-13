@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   looksLikeGeminiActionTranscript,
@@ -5,6 +6,10 @@ import {
   parseGeminiStreamLine,
   parseGeminiStreamOutput,
 } from '../src/runtime/providers/gemini/geminiProtocolMapper.js';
+
+function readFixture(name: string): string {
+  return readFileSync(new URL(`./fixtures/gemini/${name}`, import.meta.url), 'utf8');
+}
 
 describe('geminiProtocolMapper', () => {
   it('extracts lowercase sessionid fields from Gemini init payloads', () => {
@@ -148,5 +153,34 @@ describe('geminiProtocolMapper', () => {
       'turn-end',
       'stop',
     ]);
+  });
+
+  it('prefers completed Gemini item payloads over delta fragments for final text and actions', () => {
+    const fixture = readFixture('streaming-item-completed.jsonl');
+
+    const parsed = parseGeminiStreamOutput(fixture);
+    const mapped = mapGeminiStreamOutputToProtocol(fixture);
+
+    expect(parsed.output).toBe('분석 내용 전체');
+    expect(parsed.actions).toHaveLength(1);
+    expect(parsed.actions[0]).toMatchObject({
+      actionType: 'file_read',
+      command: 'cat README.md',
+      path: 'README.md',
+      output: '# README',
+    });
+    expect(mapped.sessionId).toBe('gemini-stream-thread');
+    expect(mapped.envelopes.map((envelope) => envelope.kind)).toEqual([
+      'turn-start',
+      'tool-call-start',
+      'tool-call-end',
+      'text',
+      'turn-end',
+      'stop',
+    ]);
+    expect(mapped.envelopes.find((envelope) => envelope.kind === 'text')).toMatchObject({
+      kind: 'text',
+      text: '분석 내용 전체',
+    });
   });
 });
