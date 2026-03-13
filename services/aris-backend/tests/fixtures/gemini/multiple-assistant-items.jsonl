@@ -1,0 +1,6 @@
+{"type":"system","subtype":"init","threadId":"gemini-collapse-thread"}
+{"method":"codex/event/agent_message_content_delta","params":{"conversationId":"gemini-collapse-thread","msg":{"type":"agent_message_content_delta","item_id":"item-1","delta":"현재 채팅의 구현 방식을 조사하고, "}}}
+{"method":"codex/event/agent_message_content_delta","params":{"conversationId":"gemini-collapse-thread","msg":{"type":"agent_message_content_delta","item_id":"item-1","delta":"스트림 기반 수신 구조를 확인했다."}}}
+{"method":"codex/event/agent_message_content_delta","params":{"conversationId":"gemini-collapse-thread","msg":{"type":"agent_message_content_delta","item_id":"item-2","delta":"도입 방안은 "}}}
+{"method":"codex/event/agent_message_content_delta","params":{"conversationId":"gemini-collapse-thread","msg":{"type":"agent_message_content_delta","item_id":"item-2","delta":"다음과 같다."}}}
+{"type":"result","subtype":"final","threadId":"gemini-collapse-thread","status":"success"}

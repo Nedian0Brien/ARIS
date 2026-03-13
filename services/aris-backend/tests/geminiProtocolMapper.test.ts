@@ -183,4 +183,26 @@ describe('geminiProtocolMapper', () => {
       text: '분석 내용 전체',
     });
   });
+
+  it('keeps only the latest Gemini assistant item when multiple delta-only items appear in one turn', () => {
+    const fixture = readFixture('multiple-assistant-items.jsonl');
+
+    const parsed = parseGeminiStreamOutput(fixture);
+    const mapped = mapGeminiStreamOutputToProtocol(fixture);
+
+    expect(parsed.output).toBe('도입 방안은 다음과 같다.');
+    expect(parsed.output).not.toContain('현재 채팅의 구현 방식을 조사하고');
+    expect(mapped.envelopes.map((envelope) => envelope.kind)).toEqual([
+      'turn-start',
+      'text',
+      'turn-end',
+      'stop',
+    ]);
+    expect(mapped.envelopes.find((envelope) => envelope.kind === 'text')).toMatchObject({
+      kind: 'text',
+      text: '도입 방안은 다음과 같다.',
+      turnId: 'gemini-collapse-thread',
+      sessionId: 'gemini-collapse-thread',
+    });
+  });
 });

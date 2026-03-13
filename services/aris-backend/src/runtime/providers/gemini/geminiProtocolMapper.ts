@@ -22,6 +22,22 @@ type GeminiMappedLine = {
   sessionId?: string;
 };
 
+type GeminiAssistantAggregate = {
+  key: string;
+  text: string;
+  sequence: number;
+  source?: GeminiMappedLine['assistantSource'];
+  turnId?: string;
+  sessionId?: string;
+};
+
+type GeminiAssistantAccumulatorState = {
+  aggregates: Map<string, GeminiAssistantAggregate>;
+  latestKeyByTurn: Map<string, string>;
+  latestKey?: string;
+  nextSyntheticKey: number;
+};
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -107,6 +123,87 @@ function buildActionEventKey(action: GeminiActionEvent): string {
     return `${action.actionType}|${callId}`;
   }
   return `${action.actionType}|${command}|${path}`;
+}
+
+function createGeminiAssistantAccumulatorState(): GeminiAssistantAccumulatorState {
+  return {
+    aggregates: new Map<string, GeminiAssistantAggregate>(),
+    latestKeyByTurn: new Map<string, string>(),
+    nextSyntheticKey: 0,
+  };
+}
+
+function resolveGeminiAssistantAggregateKey(
+  parsedLine: GeminiMappedLine,
+  state: GeminiAssistantAccumulatorState,
+): string {
+  if (parsedLine.assistantItemId) {
+    const key = `item:${parsedLine.assistantItemId}`;
+    if (parsedLine.assistantTurnId) {
+      state.latestKeyByTurn.set(parsedLine.assistantTurnId, key);
+    }
+    state.latestKey = key;
+    return key;
+  }
+
+  if (parsedLine.assistantTurnId) {
+    const turnKey = state.latestKeyByTurn.get(parsedLine.assistantTurnId);
+    if (parsedLine.assistantIsDelta && turnKey) {
+      state.latestKey = turnKey;
+      return turnKey;
+    }
+
+    const key = `turn:${parsedLine.assistantTurnId}:message:${state.nextSyntheticKey += 1}`;
+    state.latestKeyByTurn.set(parsedLine.assistantTurnId, key);
+    state.latestKey = key;
+    return key;
+  }
+
+  if (parsedLine.assistantIsDelta && state.latestKey) {
+    return state.latestKey;
+  }
+
+  const key = `message:${state.nextSyntheticKey += 1}`;
+  state.latestKey = key;
+  return key;
+}
+
+function accumulateGeminiAssistantText(
+  parsedLine: GeminiMappedLine,
+  state: GeminiAssistantAccumulatorState,
+  sequence: number,
+): void {
+  const assistantText = parsedLine.assistantText ?? '';
+  if (!assistantText) {
+    return;
+  }
+
+  const key = resolveGeminiAssistantAggregateKey(parsedLine, state);
+  const existing = state.aggregates.get(key);
+  const nextText = parsedLine.assistantIsDelta
+    ? `${existing?.text ?? ''}${assistantText}`
+    : assistantText;
+
+  state.aggregates.set(key, {
+    key,
+    text: nextText,
+    sequence,
+    source: parsedLine.assistantSource ?? existing?.source,
+    turnId: parsedLine.assistantTurnId ?? existing?.turnId,
+    sessionId: parsedLine.sessionId ?? existing?.sessionId,
+  });
+}
+
+function getLatestGeminiAssistantAggregate(
+  state: GeminiAssistantAccumulatorState,
+): GeminiAssistantAggregate | undefined {
+  let latest: GeminiAssistantAggregate | undefined;
+  for (const aggregate of state.aggregates.values()) {
+    if (!latest || aggregate.sequence >= latest.sequence) {
+      latest = aggregate;
+    }
+  }
+  return latest;
 }
 
 function resolveStopReason(payloadType: string, payloadSubtype: string, payload: Record<string, unknown>): SessionProtocolStopReason | undefined {
@@ -442,11 +539,10 @@ export function mapGeminiStreamOutputToProtocol(stdout: string): { envelopes: Se
     .filter(Boolean);
   const envelopes: SessionProtocolEnvelope[] = [];
   const envelopeKeys = new Set<string>();
-  let latestAssistantText = '';
-  let latestAssistantTurnId = '';
+  const assistantState = createGeminiAssistantAccumulatorState();
   let latestSessionId = '';
 
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     const parsedLine = parseGeminiStreamLine(line);
     for (const envelope of parsedLine.envelopes) {
       const hydratedEnvelope = latestSessionId && !envelope.sessionId
@@ -465,28 +561,22 @@ export function mapGeminiStreamOutputToProtocol(stdout: string): { envelopes: Se
       }
     }
     if (parsedLine.assistantText) {
-      if (parsedLine.assistantIsDelta) {
-        latestAssistantText += parsedLine.assistantText;
-      } else {
-        latestAssistantText = parsedLine.assistantText;
-      }
-      if (parsedLine.assistantTurnId) {
-        latestAssistantTurnId = parsedLine.assistantTurnId;
-      }
+      accumulateGeminiAssistantText(parsedLine, assistantState, index);
     }
     if (parsedLine.sessionId) {
       latestSessionId = parsedLine.sessionId;
     }
   }
 
-  const normalizedAssistantText = sanitizeAgentMessageText(latestAssistantText);
+  const latestAssistant = getLatestGeminiAssistantAggregate(assistantState);
+  const normalizedAssistantText = sanitizeAgentMessageText(latestAssistant?.text ?? '');
   if (normalizedAssistantText && !envelopes.some((envelope) => envelope.kind === 'text')) {
     const synthesizedTextEnvelope: SessionProtocolEnvelope = {
       kind: 'text',
       provider: 'gemini',
       source: 'assistant',
-      ...(latestSessionId ? { sessionId: latestSessionId } : {}),
-      ...(latestAssistantTurnId ? { turnId: latestAssistantTurnId } : {}),
+      ...((latestAssistant?.sessionId ?? latestSessionId) ? { sessionId: latestAssistant?.sessionId ?? latestSessionId } : {}),
+      ...(latestAssistant?.turnId ? { turnId: latestAssistant.turnId } : {}),
       text: normalizedAssistantText,
     };
     const insertIndex = envelopes.findIndex((envelope) => envelope.kind === 'turn-end' || envelope.kind === 'stop');
@@ -515,10 +605,10 @@ export function parseGeminiStreamOutput(stdout: string): {
     .map((line) => line.trim())
     .filter(Boolean);
   const actionByKey = new Map<string, GeminiActionEvent>();
-  let latestAssistantText = '';
+  const assistantState = createGeminiAssistantAccumulatorState();
   let latestSessionId = '';
 
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     const parsedLine = parseGeminiStreamLine(line);
     if (parsedLine.action && parsedLine.actionKey && !actionByKey.has(parsedLine.actionKey)) {
       actionByKey.set(parsedLine.actionKey, parsedLine.action);
@@ -543,7 +633,7 @@ export function parseGeminiStreamOutput(stdout: string): {
         || parsedLine.assistantSource === 'message'
       )
     ) {
-      latestAssistantText += assistantText;
+      accumulateGeminiAssistantText(parsedLine, assistantState, index);
     } else if (
       !looksLikeShellCommand(assistantText)
       && (
@@ -552,7 +642,7 @@ export function parseGeminiStreamOutput(stdout: string): {
         || parsedLine.assistantSource === 'assistant'
       )
     ) {
-      latestAssistantText = assistantText;
+      accumulateGeminiAssistantText(parsedLine, assistantState, index);
     }
     if (parsedLine.sessionId) {
       latestSessionId = parsedLine.sessionId;
@@ -560,9 +650,10 @@ export function parseGeminiStreamOutput(stdout: string): {
   }
 
   const mapped = mapGeminiStreamOutputToProtocol(stdout);
+  const latestAssistant = getLatestGeminiAssistantAggregate(assistantState);
 
   return {
-    output: sanitizeAgentMessageText(latestAssistantText),
+    output: sanitizeAgentMessageText(latestAssistant?.text ?? ''),
     actions: [...actionByKey.values()],
     envelopes: mapped.envelopes,
     ...(latestSessionId ? { sessionId: latestSessionId } : {}),
