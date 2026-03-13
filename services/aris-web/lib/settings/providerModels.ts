@@ -62,6 +62,10 @@ export const DEFAULT_GEMINI_MODEL_SELECTIONS = [
   'gemini-2.0-flash',
 ] as const;
 
+const ALLOWED_GEMINI_SELECTION_IDS = new Set(
+  DEFAULT_GEMINI_MODEL_SELECTIONS.map((modelId) => modelId.toLowerCase()),
+);
+
 const PROVIDERS: ProviderId[] = ['codex', 'claude', 'gemini'];
 
 const OPENAI_TEXT_MODEL_REJECT_SEGMENTS = [
@@ -120,7 +124,7 @@ export function normalizeProviderModelSelections(input: unknown): ProviderModelS
     }
     const providerRecord = rawProvider as Record<string, unknown>;
     base[provider] = {
-      selectedModelIds: normalizeModelSelectionList(providerRecord.selectedModelIds),
+      selectedModelIds: normalizeProviderModelSelectionList(provider, providerRecord.selectedModelIds),
     };
   }
 
@@ -145,11 +149,23 @@ export function normalizePartialProviderModelSelections(input: unknown): Partial
     }
     const providerRecord = rawProvider as Record<string, unknown>;
     partial[provider] = {
-      selectedModelIds: normalizeModelSelectionList(providerRecord.selectedModelIds),
+      selectedModelIds: normalizeProviderModelSelectionList(provider, providerRecord.selectedModelIds),
     };
   }
 
   return partial;
+}
+
+export function isAllowedGeminiSelectionModelId(modelId: string): boolean {
+  return ALLOWED_GEMINI_SELECTION_IDS.has(modelId.trim().toLowerCase());
+}
+
+export function normalizeProviderModelSelectionList(provider: ProviderId, input: unknown): string[] {
+  const normalized = normalizeModelSelectionList(input);
+  if (provider !== 'gemini') {
+    return normalized;
+  }
+  return normalized.filter((modelId) => isAllowedGeminiSelectionModelId(modelId));
 }
 
 export function isOpenAiTextGenerationModelId(modelId: string): boolean {

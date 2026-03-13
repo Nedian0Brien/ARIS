@@ -6,7 +6,7 @@ import {
   deriveGeminiModelFamily,
   deriveGeminiModelLabel,
   deriveGeminiModelTags,
-  isGeminiModelId,
+  isAllowedGeminiSelectionModelId,
   type GeminiCatalogItem,
 } from '@/lib/settings/providerModels';
 
@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
         const id = baseModelId || rawName.replace(/^models\//, '');
         const displayName = typeof item.displayName === 'string' ? item.displayName : undefined;
 
-        if (!isGeminiModelId(id)) {
+        if (!isAllowedGeminiSelectionModelId(id)) {
           continue;
         }
 
