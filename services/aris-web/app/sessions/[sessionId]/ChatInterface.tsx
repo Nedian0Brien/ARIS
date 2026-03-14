@@ -1,8 +1,7 @@
 'use client';
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, startTransition } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
@@ -358,6 +357,37 @@ function normalizeWorkspaceClientPath(input: string): string {
   const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
   const normalized = withLeadingSlash.replace(/\/+/g, '/').replace(/\/$/, '');
   return normalized || '/';
+}
+
+function buildChatUrl(sessionId: string, chatId: string): string {
+  return `/sessions/${encodeURIComponent(sessionId)}?chat=${encodeURIComponent(chatId)}`;
+}
+
+function readChatIdFromLocation(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const raw = new URL(window.location.href).searchParams.get('chat');
+  if (typeof raw !== 'string') {
+    return null;
+  }
+  const trimmed = raw.trim();
+  return trimmed || null;
+}
+
+function writeChatIdToHistory(url: string, mode: 'push' | 'replace' = 'push') {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  const current = `${window.location.pathname}${window.location.search}`;
+  if (current === url) {
+    return;
+  }
+  if (mode === 'replace') {
+    window.history.replaceState({}, '', url);
+    return;
+  }
+  window.history.pushState({}, '', url);
 }
 
 function isWorkspacePathWithinRoot(targetPath: string, rootPath: string): boolean {
@@ -1958,7 +1988,6 @@ export function ChatInterface({
   sessionModel?: string | null;
   approvalPolicy?: ApprovalPolicy;
 }) {
-  const router = useRouter();
   const [modelSettings, setModelSettings] = useState<ModelSettingsResponse | null>(null);
   
   useEffect(() => {
@@ -1979,6 +2008,40 @@ export function ChatInterface({
     [chats, selectedChatId],
   );
   const activeChatIdResolved = activeChat?.id ?? null;
+  useEffect(() => {
+    if (selectedChatId && chats.some((chat) => chat.id === selectedChatId)) {
+      return;
+    }
+    const requestedChatId = readChatIdFromLocation();
+    if (requestedChatId && chats.some((chat) => chat.id === requestedChatId)) {
+      setSelectedChatId(requestedChatId);
+      return;
+    }
+    const fallbackChatId = chats[0]?.id ?? null;
+    if (fallbackChatId !== selectedChatId) {
+      setSelectedChatId(fallbackChatId);
+    }
+  }, [chats, selectedChatId]);
+  useEffect(() => {
+    const syncFromHistory = () => {
+      const requestedChatId = readChatIdFromLocation();
+      if (requestedChatId && chats.some((chat) => chat.id === requestedChatId)) {
+        setSelectedChatId(requestedChatId);
+        return;
+      }
+      setSelectedChatId(chats[0]?.id ?? null);
+    };
+    window.addEventListener('popstate', syncFromHistory);
+    return () => {
+      window.removeEventListener('popstate', syncFromHistory);
+    };
+  }, [chats]);
+  useEffect(() => {
+    if (!activeChatIdResolved) {
+      return;
+    }
+    writeChatIdToHistory(buildChatUrl(sessionId, activeChatIdResolved), 'replace');
+  }, [activeChatIdResolved, sessionId]);
   const includeUnassignedEvents = Boolean(activeChat?.isDefault);
   const { isLeader: isSessionSyncLeader } = useSessionSyncLeader(sessionId);
   const [chatRuntimeUiByChat, setChatRuntimeUiByChat] = useState<Record<string, ChatRuntimeUiState>>({});
@@ -3945,22 +4008,14 @@ export function ChatInterface({
     };
   }, [eventsForChatId, events, sessionId, activeChatIdResolved, activeChat?.threadId]);
 
-  const buildChatUrl = useCallback((chatId: string) => {
-    return `/sessions/${encodeURIComponent(sessionId)}?chat=${encodeURIComponent(chatId)}`;
-  }, [sessionId]);
+  const buildChatUrlForChat = useCallback((chatId: string) => buildChatUrl(sessionId, chatId), [sessionId]);
 
   const goToChat = useCallback((chatId: string) => {
     setChatActionMenuId(null);
     setRenamingChatId(null);
     setChatTitleDraft('');
     setSelectedChatId(chatId);
-    
-    // Defer the expensive server-side navigation to keep the UI responsive.
-    // The client-side state will immediately render the selected chat
-    // while the RSC payload fetches in the background.
-    startTransition(() => {
-      router.push(buildChatUrl(chatId));
-    });
+    writeChatIdToHistory(buildChatUrlForChat(chatId));
 
     if (isMobileLayout) {
       setIsChatSidebarOpen(false);
@@ -3968,7 +4023,7 @@ export function ChatInterface({
     if (isCustomizationOverlayLayout) {
       setIsCustomizationSidebarOpen(false);
     }
-  }, [router, buildChatUrl, isCustomizationOverlayLayout, isMobileLayout]);
+  }, [buildChatUrlForChat, isCustomizationOverlayLayout, isMobileLayout]);
 
   const handleSelectModel = useCallback(async (modelId: string) => {
     const normalizedModelId = normalizeModelId(modelId);

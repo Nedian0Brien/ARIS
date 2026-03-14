@@ -67,6 +67,8 @@ describe('chat sidebar route', () => {
 
     expect(mocks.getSessionRuntimeState).toHaveBeenCalledTimes(1);
     expect(mocks.getSessionRuntimeState).toHaveBeenCalledWith('session-1', { chatId: 'chat-2' });
+    expect(mocks.listLatestEventsByChat).not.toHaveBeenCalled();
+    expect(mocks.updateSessionChat).not.toHaveBeenCalled();
     expect(payload.snapshots).toEqual([
       expect.objectContaining({ chatId: 'chat-1', isRunning: false }),
       expect.objectContaining({ chatId: 'chat-2', isRunning: true }),
