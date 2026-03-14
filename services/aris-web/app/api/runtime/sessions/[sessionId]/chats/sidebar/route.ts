@@ -63,6 +63,15 @@ function parseRequestedChatIds(request: NextRequest): string[] {
   return [...new Set(all)];
 }
 
+function parseActiveChatId(request: NextRequest): string | null {
+  const raw = request.nextUrl.searchParams.get('activeChatId');
+  if (typeof raw !== 'string') {
+    return null;
+  }
+  const trimmed = raw.trim();
+  return trimmed || null;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> },
@@ -79,6 +88,7 @@ export async function GET(
       userId: auth.user.id,
       ensureDefault: true,
     });
+    const activeChatId = parseActiveChatId(request);
     const allowedIds = new Set(chats.map((chat) => chat.id));
     const requestedIds = parseRequestedChatIds(request);
     const targetChatIds = (requestedIds.length > 0 ? requestedIds : chats.map((chat) => chat.id))
@@ -105,8 +115,9 @@ export async function GET(
         defaultChatId: chats.find((chat) => chat.isDefault)?.id ?? null,
       })
       : {};
+    const runtimeTargetChatIds = targetChatIds.filter((chatId) => chatId === activeChatId);
     const runningByChat = Object.fromEntries(
-      await Promise.all(targetChatIds.map(async (chatId) => {
+      await Promise.all(runtimeTargetChatIds.map(async (chatId) => {
         try {
           const runtime = await getSessionRuntimeState(sessionId, { chatId });
           return [chatId, runtime.isRunning] as const;

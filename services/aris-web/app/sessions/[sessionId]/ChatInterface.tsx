@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, startTransition } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
@@ -124,6 +124,8 @@ const SNAPSHOT_SYNC_DEBOUNCE_MS = 1500;
 const SIDEBAR_CHAT_PAGE_SIZE = 7;
 const SIDEBAR_APPROVAL_FEEDBACK_MS = 3000;
 const SIDEBAR_STATUS_REFRESH_MS = 10000;
+const AUX_SYNC_INITIAL_DELAY_MS = 900;
+const SIDEBAR_VISIBLE_CHAT_LIMIT = 8;
 const CHAT_RUN_PHASE_LABELS = {
   submitting: '전송 중',
   waiting: '작업 중',
@@ -1979,6 +1981,27 @@ export function ChatInterface({
   const activeChatIdResolved = activeChat?.id ?? null;
   const includeUnassignedEvents = Boolean(activeChat?.isDefault);
   const { isLeader: isSessionSyncLeader } = useSessionSyncLeader(sessionId);
+  const [chatRuntimeUiByChat, setChatRuntimeUiByChat] = useState<Record<string, ChatRuntimeUiState>>({});
+  const activeChatRuntimeUi = activeChatIdResolved
+    ? (chatRuntimeUiByChat[activeChatIdResolved] ?? DEFAULT_CHAT_RUNTIME_UI_STATE)
+    : DEFAULT_CHAT_RUNTIME_UI_STATE;
+  const [isAuxSyncReady, setIsAuxSyncReady] = useState(false);
+  useEffect(() => {
+    setIsAuxSyncReady(false);
+    const complete = () => {
+      setIsAuxSyncReady(true);
+    };
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      const handle = window.requestIdleCallback(complete, { timeout: AUX_SYNC_INITIAL_DELAY_MS });
+      return () => {
+        window.cancelIdleCallback(handle);
+      };
+    }
+    const timer = setTimeout(complete, AUX_SYNC_INITIAL_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [sessionId, activeChatIdResolved]);
   const sessionTitle = alias || projectName;
   const currentChatTitle = activeChat?.title || '새 채팅';
   const displayName = activeChat?.title || alias || projectName;
@@ -2002,7 +2025,12 @@ export function ChatInterface({
   const { isRunning: runtimeRunning, runtimeError } = useSessionRuntime(
     sessionId,
     activeChatIdResolved,
-    isSessionSyncLeader,
+    isSessionSyncLeader && (
+      isAuxSyncReady
+      || activeChatRuntimeUi.isAwaitingReply
+      || activeChatRuntimeUi.isSubmitting
+      || activeChatRuntimeUi.isAborting
+    ),
   );
   const {
     displayPermissions,
@@ -2015,14 +2043,10 @@ export function ChatInterface({
     initialPermissions,
     activeChatIdResolved,
     includeUnassignedEvents,
-    isSessionSyncLeader,
+    isSessionSyncLeader && (isAuxSyncReady || initialPermissions.length > 0),
   );
 
   const [prompt, setPrompt] = useState('');
-  const [chatRuntimeUiByChat, setChatRuntimeUiByChat] = useState<Record<string, ChatRuntimeUiState>>({});
-  const activeChatRuntimeUi = activeChatIdResolved
-    ? (chatRuntimeUiByChat[activeChatIdResolved] ?? DEFAULT_CHAT_RUNTIME_UI_STATE)
-    : DEFAULT_CHAT_RUNTIME_UI_STATE;
   const isSubmitting = activeChatRuntimeUi.isSubmitting;
   const isAwaitingReply = activeChatRuntimeUi.isAwaitingReply;
   const isAborting = activeChatRuntimeUi.isAborting;
@@ -2250,9 +2274,11 @@ export function ChatInterface({
     () => events.filter((event) => !isRunLifecycleEvent(event)),
     [events],
   );
+  const deferredVisibleEvents = useDeferredValue(visibleEvents);
+  const deferredDisplayPermissions = useDeferredValue(displayPermissions);
   const streamItems = useMemo(
-    () => buildStreamRenderItems(visibleEvents, expandedActionRunIds),
-    [expandedActionRunIds, visibleEvents],
+    () => buildStreamRenderItems(deferredVisibleEvents, expandedActionRunIds),
+    [deferredVisibleEvents, expandedActionRunIds],
   );
   const timelineItems = useMemo<TimelineRenderItem[]>(() => {
     const merged: TimelineRenderItem[] = [];
@@ -2272,7 +2298,7 @@ export function ChatInterface({
     }
 
     if (showPermissionQueue) {
-      for (const permission of displayPermissions) {
+      for (const permission of deferredDisplayPermissions) {
         const parsed = Date.parse(permission.requestedAt);
         merged.push({
           type: 'permission',
@@ -2290,7 +2316,7 @@ export function ChatInterface({
       }
       return a.order - b.order;
     });
-  }, [displayPermissions, showPermissionQueue, streamItems]);
+  }, [deferredDisplayPermissions, showPermissionQueue, streamItems]);
   const firstPendingPermissionId = pendingPermissions[0]?.id ?? null;
 
   useEffect(() => {
@@ -2936,7 +2962,7 @@ export function ChatInterface({
   }, [chatReadMarkers, chatSidebarSnapshots, isSessionSyncLeader, sessionId]);
 
   useEffect(() => {
-    if (!isSessionSyncLeader) {
+    if (!isSessionSyncLeader || (!isAuxSyncReady && !isAwaitingReply && !isSubmitting && !isAborting)) {
       return undefined;
     }
 
@@ -2947,7 +2973,7 @@ export function ChatInterface({
       }
 
       // Limit polling to the first 15 visible chats plus the active chat
-      const recentChats = renderedSidebarChats.slice(0, 15);
+      const recentChats = renderedSidebarChats.slice(0, SIDEBAR_VISIBLE_CHAT_LIMIT);
       const activeChat = chats.find((c) => c.id === activeChatIdResolved);
       if (activeChat && !recentChats.some((c) => c.id === activeChat.id)) {
         recentChats.push(activeChat);
@@ -2966,6 +2992,9 @@ export function ChatInterface({
         const params = new URLSearchParams();
         for (const chat of targets) {
           params.append('chatId', chat.id);
+        }
+        if (activeChatIdResolved) {
+          params.set('activeChatId', activeChatIdResolved);
         }
         const response = await fetch(
           `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/sidebar?${params.toString()}`,
@@ -3021,7 +3050,18 @@ export function ChatInterface({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeChatIdResolved, chats, isSessionSyncLeader, renderedSidebarChats, sessionId, upsertChatSidebarSnapshot]);
+  }, [
+    activeChatIdResolved,
+    chats,
+    isAborting,
+    isAuxSyncReady,
+    isAwaitingReply,
+    isSessionSyncLeader,
+    isSubmitting,
+    renderedSidebarChats,
+    sessionId,
+    upsertChatSidebarSnapshot,
+  ]);
 
   useEffect(() => {
     if (plusMenuMode === 'closed' && !isModelDropdownOpen && !isCreateChatMenuOpen) return;
