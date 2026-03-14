@@ -41,6 +41,9 @@ export type ProviderTextEvent = {
   text: string;
   source: 'assistant' | 'result';
   threadId?: string;
+  turnId?: string;
+  itemId?: string;
+  partial?: boolean;
   envelopes?: SessionProtocolEnvelope[];
 };
 

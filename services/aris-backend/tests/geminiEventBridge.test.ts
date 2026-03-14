@@ -50,6 +50,7 @@ describe('geminiEventBridge', () => {
         source: 'assistant',
         sessionId: 'gemini-session-2',
         turnId: 'gemini-session-2',
+        itemId: 'msg-2',
         text: '응답 완료',
       },
       {
@@ -80,6 +81,7 @@ describe('geminiEventBridge', () => {
     expect(projection?.body).toBe('응답 완료');
     expect(projection?.meta.sessionEventType).toBe('text');
     expect(projection?.meta.sessionTurnStatus).toBe('completed');
+    expect(projection?.meta.sessionItemId).toBe('msg-2');
     expect(projection?.meta.geminiSessionId).toBe('gemini-session-2');
   });
 });

@@ -51,7 +51,56 @@ function mergeEvents(events: UiEvent[]): UiEvent[] {
   for (const event of events) {
     dedup.set(event.id, event);
   }
-  return [...dedup.values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  return collapseRealtimeGeminiPartialEvents(
+    [...dedup.values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
+  );
+}
+
+export function buildGeminiTextIdentity(event: UiEvent): string | null {
+  const meta = event.meta ?? {};
+  if (meta.agent !== 'gemini') {
+    return null;
+  }
+  const turnId = typeof meta.sessionTurnId === 'string' ? meta.sessionTurnId.trim() : '';
+  const itemId = typeof meta.sessionItemId === 'string' ? meta.sessionItemId.trim() : '';
+  const threadId = typeof meta.threadId === 'string' ? meta.threadId.trim() : '';
+  if (!turnId && !itemId && !threadId) {
+    return null;
+  }
+  return [threadId || '__thread__', turnId || '__turn__', itemId || '__item__'].join('|');
+}
+
+function isGeminiPartialTextEvent(event: UiEvent): boolean {
+  return event.meta?.streamEvent === 'agent_message_partial';
+}
+
+function isGeminiFinalTextEvent(event: UiEvent): boolean {
+  return event.meta?.agent === 'gemini'
+    && (event.meta?.streamEvent === 'agent_message' || event.meta?.streamEvent === 'agent_message_recovered');
+}
+
+export function collapseRealtimeGeminiPartialEvents(events: UiEvent[]): UiEvent[] {
+  const finalized = new Set<string>();
+  for (const event of events) {
+    if (!isGeminiFinalTextEvent(event)) {
+      continue;
+    }
+    const identity = buildGeminiTextIdentity(event);
+    if (identity) {
+      finalized.add(identity);
+    }
+  }
+
+  return events.filter((event) => {
+    if (!isGeminiPartialTextEvent(event)) {
+      return true;
+    }
+    const identity = buildGeminiTextIdentity(event);
+    if (!identity) {
+      return true;
+    }
+    return !finalized.has(identity);
+  });
 }
 
 function areEventsEqual(prev: UiEvent[], next: UiEvent[]): boolean {

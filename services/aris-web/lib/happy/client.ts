@@ -698,6 +698,34 @@ export async function appendSessionMessage(input: {
   throw new Error('백엔드 응답에서 이벤트를 읽을 수 없습니다.');
 }
 
+export async function getSessionRealtimeEvents(input: {
+  sessionId: string;
+  afterCursor?: number;
+  limit?: number;
+  chatId?: string;
+}): Promise<{ events: UiEvent[]; cursor: number }> {
+  const query = new URLSearchParams();
+  if (Number.isFinite(input.afterCursor)) {
+    query.set('after_cursor', String(Math.max(0, Math.floor(Number(input.afterCursor)))));
+  }
+  if (Number.isFinite(input.limit)) {
+    query.set('limit', String(Math.max(1, Math.floor(Number(input.limit)))));
+  }
+  if (typeof input.chatId === 'string' && input.chatId.trim().length > 0) {
+    query.set('chatId', input.chatId.trim());
+  }
+
+  const raw = await fetchHappy(
+    `/v1/sessions/${encodeURIComponent(input.sessionId)}/realtime-events${query.toString() ? `?${query.toString()}` : ''}`,
+  );
+  const obj = asObject(raw);
+  const events = normalizeEvents(extractArrayPayload(obj, 'events'));
+  const cursor = typeof obj?.cursor === 'number' && Number.isFinite(obj.cursor)
+    ? Math.max(0, Math.floor(obj.cursor))
+    : 0;
+  return { events, cursor };
+}
+
 export async function listPermissionRequests(
   input: string | {
     sessionId?: string;

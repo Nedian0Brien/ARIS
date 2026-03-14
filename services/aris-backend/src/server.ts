@@ -296,6 +296,38 @@ export function buildServer(config: ServerConfig) {
     }
   });
 
+  app.get('/v1/sessions/:sessionId/realtime-events', async (request, reply) => {
+    try {
+      const { sessionId } = request.params as { sessionId: string };
+      const query = request.query as {
+        after_cursor?: string;
+        limit?: string;
+        chatId?: string;
+      };
+      const afterCursor = Number.isFinite(Number(query.after_cursor))
+        ? Math.max(0, Math.floor(Number(query.after_cursor)))
+        : 0;
+      const limit = Number.isFinite(Number(query.limit))
+        ? Math.max(1, Math.min(200, Math.floor(Number(query.limit))))
+        : 100;
+      const chatId = typeof query.chatId === 'string' && query.chatId.trim().length > 0
+        ? query.chatId.trim()
+        : undefined;
+      const payload = await store.listRealtimeEvents(sessionId, {
+        afterCursor,
+        limit,
+        chatId,
+      });
+      return payload;
+    } catch (error) {
+      const message = toErrorMessage(error, 'Failed to list session realtime events');
+      if (message.includes('SESSION_NOT_FOUND')) {
+        return reply.code(404).send({ error: 'Session not found' });
+      }
+      return reply.code(502).send({ error: message });
+    }
+  });
+
   app.get('/v3/sessions/:sessionId/messages', async (request, reply) => {
     try {
       const { sessionId } = request.params as { sessionId: string };
