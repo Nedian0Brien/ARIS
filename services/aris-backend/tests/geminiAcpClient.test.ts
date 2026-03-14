@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
-import { runGeminiAcpTurn } from '../src/runtime/providers/gemini/geminiAcpClient.js';
+import { inspectGeminiAcpSessionCapabilities, runGeminiAcpTurn } from '../src/runtime/providers/gemini/geminiAcpClient.js';
 
 class FakeAcpChild extends EventEmitter {
   stdin = new PassThrough();
@@ -128,7 +128,24 @@ class FakeAcpChild extends EventEmitter {
       this.send({
         jsonrpc: '2.0',
         id: msg.id,
-        result: { sessionId: 'gemini-session-new' },
+        result: {
+          sessionId: 'gemini-session-new',
+          modes: {
+            currentModeId: 'default',
+            availableModes: [
+              { id: 'default', label: 'Default' },
+              { id: 'plan', label: 'Plan' },
+              { id: 'yolo', label: 'YOLO' },
+            ],
+          },
+          models: {
+            currentModelId: 'auto-gemini-3',
+            availableModels: [
+              { id: 'auto-gemini-3', label: 'Gemini 3 Auto' },
+              { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+            ],
+          },
+        },
       });
       return;
     }
@@ -335,6 +352,19 @@ function createFakeSpawn() {
 }
 
 describe('runGeminiAcpTurn', () => {
+  it('reads Gemini ACP mode and model catalogs from a fresh session', async () => {
+    const capabilities = await inspectGeminiAcpSessionCapabilities({
+      cwd: '/tmp',
+      spawnProcess: createFakeSpawn(),
+    });
+
+    expect(capabilities.sessionId).toBe('gemini-session-new');
+    expect(capabilities.modes.currentModeId).toBe('default');
+    expect(capabilities.modes.availableModes.map((mode) => mode.id)).toEqual(['default', 'plan', 'yolo']);
+    expect(capabilities.models.currentModelId).toBe('auto-gemini-3');
+    expect(capabilities.models.availableModels.map((model) => model.id)).toEqual(['auto-gemini-3', 'gemini-2.5-pro']);
+  });
+
   it('streams partial text and emits a completed final message for a new ACP session', async () => {
     const seen: string[] = [];
 

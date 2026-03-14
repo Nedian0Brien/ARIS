@@ -21,7 +21,7 @@ import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.
 import { ClaudeSessionLogTracker, extractClaudeSessionHintIds } from './providers/claude/claudeSessionScanner.js';
 import { buildClaudeSessionId } from './providers/claude/claudeSessionSource.js';
 import { GeminiMessageQueue } from './providers/gemini/geminiMessageQueue.js';
-import { runGeminiAcpTurn } from './providers/gemini/geminiAcpClient.js';
+import { inspectGeminiAcpSessionCapabilities, runGeminiAcpTurn } from './providers/gemini/geminiAcpClient.js';
 import { buildGeminiProviderTextEvent } from './providers/gemini/geminiEventBridgeV2.js';
 import { looksLikeGeminiActionTranscript, parseGeminiStreamLine, parseGeminiStreamOutput } from './providers/gemini/geminiProtocolMapper.js';
 import { createGeminiRuntime } from './providers/gemini/geminiRuntime.js';
@@ -40,6 +40,7 @@ import type { ClaudeSessionLaunchMode } from './providers/claude/claudeSessionCo
 import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeTextEvent } from './providers/claude/types.js';
 import type {
   ApprovalPolicy,
+  GeminiSessionCapabilities,
   PermissionDecision,
   PermissionRequest,
   PermissionRisk,
@@ -301,6 +302,17 @@ function normalizeModelReasoningEffort(value: unknown): ModelReasoningEffort | u
     return value;
   }
   return undefined;
+}
+
+function normalizeGeminiMode(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return trimmed.slice(0, 120);
 }
 
 function buildProviderRuntimeSession<TFlavor extends ProviderRuntimeFlavor>(
@@ -2470,6 +2482,7 @@ export class HappyRuntimeStore {
     prompt: string;
     preferredThreadId?: string;
     model?: string;
+    mode?: string;
     signal?: AbortSignal;
     onAction?: (action: ProviderActionEvent, meta: { threadId: string }) => Promise<void>;
     onPermission?: (request: ProviderPermissionRequest, meta: { threadId: string }) => Promise<PermissionDecision>;
@@ -2481,6 +2494,7 @@ export class HappyRuntimeStore {
       prompt: input.prompt,
       approvalPolicy: input.session.metadata.approvalPolicy,
       model: normalizeModel(input.model) ?? undefined,
+      mode: normalizeGeminiMode(input.mode),
       preferredSessionId: input.preferredThreadId,
       signal: input.signal,
       onPermission: input.onPermission
@@ -3837,6 +3851,7 @@ export class HappyRuntimeStore {
       threadId?: string;
       agent?: RuntimeAgent;
       model?: string;
+      geminiMode?: string;
       customModel?: string;
       modelReasoningEffort?: ModelReasoningEffort;
     } = {},
@@ -3865,6 +3880,9 @@ export class HappyRuntimeStore {
       customModel: context.customModel,
     });
     const selectedModel = modelSelection.model;
+    const selectedGeminiMode = flavor === 'gemini'
+      ? normalizeGeminiMode(context.geminiMode)
+      : undefined;
     const selectedModelReasoningEffort = flavor === 'codex'
       ? normalizeModelReasoningEffort(context.modelReasoningEffort)
       : undefined;
@@ -3873,6 +3891,7 @@ export class HappyRuntimeStore {
         sessionId: session.id,
         ...(scopedChatId ? { chatId: scopedChatId } : {}),
         model: selectedModel,
+        ...(selectedGeminiMode ? { geminiMode: selectedGeminiMode } : {}),
         turnStatus: 'model_normalized',
         channel: flavor === 'codex' && CODEX_RUNTIME_MODE !== 'exec' ? 'app_server' : 'exec_cli',
         stage: 'run_status',
@@ -3935,6 +3954,7 @@ export class HappyRuntimeStore {
         startedAt: Date.now(),
         agent: flavor,
         ...(selectedModel ? { model: selectedModel } : {}),
+        ...(selectedGeminiMode ? { geminiMode: selectedGeminiMode } : {}),
         ...(selectedModelReasoningEffort ? { modelReasoningEffort: selectedModelReasoningEffort } : {}),
         completed,
       });
@@ -3953,6 +3973,7 @@ export class HappyRuntimeStore {
       requestedPath: session.metadata.path,
       agent: flavor,
       ...(selectedModel ? { model: selectedModel } : {}),
+      ...(selectedGeminiMode ? { geminiMode: selectedGeminiMode } : {}),
     });
 
     try {
@@ -4187,6 +4208,7 @@ export class HappyRuntimeStore {
             requestedThreadId,
             storedThreadId: recovered.recoveredThreadId,
             model: selectedModel,
+            mode: selectedGeminiMode,
             signal: controller.signal,
             onAction: async (action, meta) => {
               await geminiMessageQueue?.enqueueToolAction({
@@ -4520,6 +4542,19 @@ export class HappyRuntimeStore {
     return sessions.find((session) => session.id === sessionId) ?? null;
   }
 
+  async getGeminiSessionCapabilities(sessionId: string): Promise<GeminiSessionCapabilities> {
+    const session = await this.getSession(sessionId);
+    if (!session) {
+      throw new Error('SESSION_NOT_FOUND');
+    }
+    if (session.metadata.flavor !== 'gemini') {
+      throw new Error('GEMINI_SESSION_REQUIRED');
+    }
+    return inspectGeminiAcpSessionCapabilities({
+      cwd: this.resolveExecutionCwd(session.metadata.path),
+    });
+  }
+
   async createSession(input: HappyRuntimeCreateInput): Promise<RuntimeSession> {
     const approvalPolicy = normalizeApprovalPolicy(input.approvalPolicy, DEFAULT_APPROVAL_POLICY);
     const model = normalizeModel(input.model);
@@ -4732,6 +4767,7 @@ export class HappyRuntimeStore {
         : undefined;
       const requestedAgent = normalizeAgent(input.meta?.agent);
       const requestedModel = normalizeModel(input.meta?.model);
+      const requestedGeminiMode = normalizeGeminiMode(input.meta?.geminiMode);
       const customModel = normalizeModel(input.meta?.customModel);
       const modelReasoningEffort = normalizeModelReasoningEffort(
         input.meta?.modelReasoningEffort ?? input.meta?.model_reasoning_effort,
@@ -4741,6 +4777,7 @@ export class HappyRuntimeStore {
         threadId,
         ...(requestedAgent !== 'unknown' ? { agent: requestedAgent } : {}),
         ...(requestedModel ? { model: requestedModel } : {}),
+        ...(requestedGeminiMode ? { geminiMode: requestedGeminiMode } : {}),
         ...(customModel ? { customModel } : {}),
         ...(modelReasoningEffort ? { modelReasoningEffort } : {}),
       });

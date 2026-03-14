@@ -3,6 +3,7 @@ import { normalizeEvents, normalizeSessionDetail, normalizeSessions } from '@/li
 import { getWorkspaceById, syncWorkspacesForUser } from '@/lib/happy/workspaces';
 import type {
   ApprovalPolicy,
+  GeminiSessionCapabilities,
   PermissionDecision,
   PermissionRequest,
   SessionAction,
@@ -737,6 +738,47 @@ export async function getSessionRealtimeEvents(input: {
     ? Math.max(0, Math.floor(obj.cursor))
     : 0;
   return { events, cursor };
+}
+
+export async function getGeminiSessionCapabilities(sessionId: string): Promise<GeminiSessionCapabilities> {
+  const raw = await fetchHappy(`/v1/sessions/${encodeURIComponent(sessionId)}/providers/gemini/capabilities`);
+  const obj = asObject(raw);
+  const capabilities = asObject(obj?.capabilities);
+  if (!capabilities) {
+    throw new Error('Gemini capability 응답이 올바르지 않습니다.');
+  }
+
+  const modesRecord = asObject(capabilities.modes);
+  const modelsRecord = asObject(capabilities.models);
+  const normalizeOptions = (value: unknown) => {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value.flatMap((item) => {
+      const rec = asObject(item);
+      const id = typeof rec?.id === 'string' ? rec.id.trim() : '';
+      if (!id) {
+        return [];
+      }
+      const label = typeof rec?.label === 'string' && rec.label.trim().length > 0
+        ? rec.label.trim()
+        : id;
+      return [{ id, label }];
+    });
+  };
+
+  return {
+    sessionId: typeof capabilities.sessionId === 'string' ? capabilities.sessionId : sessionId,
+    fetchedAt: typeof capabilities.fetchedAt === 'string' ? capabilities.fetchedAt : new Date().toISOString(),
+    modes: {
+      currentModeId: typeof modesRecord?.currentModeId === 'string' ? modesRecord.currentModeId : null,
+      availableModes: normalizeOptions(modesRecord?.availableModes),
+    },
+    models: {
+      currentModelId: typeof modelsRecord?.currentModelId === 'string' ? modelsRecord.currentModelId : null,
+      availableModels: normalizeOptions(modelsRecord?.availableModels),
+    },
+  };
 }
 
 export async function listPermissionRequests(

@@ -22,6 +22,24 @@ export type RuntimeSession = {
   riskScore: number;
 };
 
+export type GeminiCapabilityOption = {
+  id: string;
+  label: string;
+};
+
+export type GeminiSessionCapabilities = {
+  sessionId: string;
+  fetchedAt: string;
+  modes: {
+    currentModeId?: string | null;
+    availableModes: GeminiCapabilityOption[];
+  };
+  models: {
+    currentModelId?: string | null;
+    availableModels: GeminiCapabilityOption[];
+  };
+};
+
 export type RuntimeMessage = {
   id: string;
   sessionId: string;

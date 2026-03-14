@@ -1,7 +1,12 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { createInterface } from 'node:readline';
 import { spawn, type ChildProcess } from 'node:child_process';
-import type { ApprovalPolicy, PermissionDecision } from '../../../types.js';
+import type {
+  ApprovalPolicy,
+  GeminiCapabilityOption,
+  GeminiSessionCapabilities,
+  PermissionDecision,
+} from '../../../types.js';
 import { inferActionTypeFromCommand, titleForActionType } from '../../actionType.js';
 import { sanitizeAgentMessageText } from '../../agentMessageSanitizer.js';
 import { summarizeDiffText, summarizeFileChangeDiff } from '../../diffStats.js';
@@ -25,6 +30,7 @@ type GeminiAcpClientOptions = {
   prompt: string;
   approvalPolicy: ApprovalPolicy;
   model?: string;
+  mode?: string;
   preferredSessionId?: string;
   signal?: AbortSignal;
   onAction?: (action: ProviderActionEvent, meta: { threadId: string }) => Promise<void>;
@@ -39,6 +45,19 @@ type GeminiAcpClientOptions = {
   }) => ChildProcess;
   historyQuietMs?: number;
   postPromptQuietMs?: number;
+};
+
+type GeminiAcpCapabilityDiscoveryOptions = {
+  cwd: string;
+  preferredSessionId?: string;
+  signal?: AbortSignal;
+  launchCommand?: GeminiAcpLaunchCommand;
+  spawnProcess?: (command: string, args: string[], options: {
+    cwd: string;
+    env: NodeJS.ProcessEnv;
+    signal?: AbortSignal;
+    stdio: ['pipe', 'pipe', 'pipe'];
+  }) => ChildProcess;
 };
 
 type PendingJsonRpcRequest = {
@@ -108,6 +127,47 @@ function stringifyUnknown(value: unknown): string {
 
 function normalizeGeminiAcpMode(approvalPolicy: ApprovalPolicy): string {
   return approvalPolicy === 'yolo' ? 'yolo' : 'default';
+}
+
+function normalizeCapabilityOption(
+  value: unknown,
+  fallbackPrefix: string,
+  index: number,
+): GeminiCapabilityOption | null {
+  if (typeof value === 'string') {
+    const id = value.trim();
+    if (!id) {
+      return null;
+    }
+    return { id, label: id };
+  }
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+  const id = asString(record.id ?? record.modeId ?? record.modelId ?? record.name, '').trim();
+  if (!id) {
+    return null;
+  }
+  const label = asString(record.label ?? record.displayName ?? record.title, '').trim() || id;
+  return { id, label: label || `${fallbackPrefix}-${index + 1}` };
+}
+
+function normalizeCapabilityOptions(value: unknown, fallbackPrefix: string): GeminiCapabilityOption[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const normalized: GeminiCapabilityOption[] = [];
+  for (const [index, entry] of value.entries()) {
+    const option = normalizeCapabilityOption(entry, fallbackPrefix, index);
+    if (!option || seen.has(option.id)) {
+      continue;
+    }
+    seen.add(option.id);
+    normalized.push(option);
+  }
+  return normalized;
 }
 
 function mapStopReason(value: string): SessionProtocolStopReason {
@@ -476,12 +536,162 @@ async function waitForQuiet(input: {
   }
 }
 
+export async function inspectGeminiAcpSessionCapabilities(
+  input: GeminiAcpCapabilityDiscoveryOptions,
+): Promise<GeminiSessionCapabilities> {
+  const launchCommand = input.launchCommand ?? {
+    command: 'gemini',
+    args: ['--acp'],
+  };
+  const spawnProcess = input.spawnProcess ?? spawn;
+  const child = spawnProcess(launchCommand.command, launchCommand.args, {
+    cwd: input.cwd,
+    env: {
+      ...process.env,
+      ...(launchCommand.env ?? {}),
+    },
+    stdio: ['pipe', 'pipe', 'pipe'],
+    signal: input.signal,
+  });
+
+  if (!child.stdin || !child.stdout || !child.stderr) {
+    throw new Error('gemini ACP stdio streams are unavailable');
+  }
+
+  const stdoutLines = createInterface({ input: child.stdout });
+  const pendingRequests = new Map<string, PendingJsonRpcRequest>();
+  let requestSequence = 0;
+  let stderr = '';
+
+  const childClosed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (code, signal) => resolve({ code, signal }));
+  });
+
+  const sendRequest = <TResult extends Record<string, unknown> = Record<string, unknown>>(
+    method: string,
+    params?: Record<string, unknown>,
+  ): Promise<TResult> => {
+    if (!child.stdin || child.stdin.destroyed) {
+      return Promise.reject(new Error('gemini ACP stdin is closed'));
+    }
+    const id = `cap-${++requestSequence}`;
+    const payload = {
+      jsonrpc: '2.0',
+      id,
+      method,
+      ...(params ? { params } : {}),
+    };
+    return new Promise<TResult>((resolve, reject) => {
+      pendingRequests.set(id, {
+        method,
+        resolve: (value) => resolve(value as TResult),
+        reject,
+      });
+      child.stdin!.write(`${JSON.stringify(payload)}\n`, (error) => {
+        if (error) {
+          pendingRequests.delete(id);
+          reject(error);
+        }
+      });
+    });
+  };
+
+  stdoutLines.on('line', (line) => {
+    const message = parseJsonLine(line);
+    if (!message) {
+      return;
+    }
+    const id = message.id;
+    if (typeof id !== 'string' && typeof id !== 'number') {
+      return;
+    }
+    const key = String(id);
+    const pending = pendingRequests.get(key);
+    if (!pending) {
+      return;
+    }
+    pendingRequests.delete(key);
+    const errorRecord = asRecord(message.error);
+    if (errorRecord) {
+      const detail = asString(errorRecord.message, '').trim() || stringifyUnknown(errorRecord);
+      pending.reject(new Error(detail || `gemini ACP ${pending.method} failed`));
+      return;
+    }
+    pending.resolve(asRecord(message.result) ?? {});
+  });
+
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk.toString();
+  });
+
+  try {
+    await sendRequest('initialize', {
+      protocolVersion: ACP_PROTOCOL_VERSION,
+      clientCapabilities: {},
+    });
+
+    const response = input.preferredSessionId
+      ? await sendRequest<Record<string, unknown>>('session/load', {
+          sessionId: input.preferredSessionId,
+          cwd: input.cwd,
+          mcpServers: [],
+        })
+      : await sendRequest<Record<string, unknown>>('session/new', {
+          cwd: input.cwd,
+          mcpServers: [],
+        });
+
+    const responseSessionId = asString(response.sessionId, '').trim() || input.preferredSessionId || '';
+    if (!responseSessionId) {
+      throw new Error('gemini ACP did not return a session id');
+    }
+
+    const modesRecord = asRecord(response.modes);
+    const modelsRecord = asRecord(response.models);
+
+    return {
+      sessionId: responseSessionId,
+      fetchedAt: new Date().toISOString(),
+      modes: {
+        currentModeId: asString(modesRecord?.currentModeId, '').trim() || null,
+        availableModes: normalizeCapabilityOptions(modesRecord?.availableModes, 'mode'),
+      },
+      models: {
+        currentModelId: asString(modelsRecord?.currentModelId, '').trim() || null,
+        availableModels: normalizeCapabilityOptions(modelsRecord?.availableModels, 'model'),
+      },
+    };
+  } finally {
+    stdoutLines.close();
+    for (const pending of pendingRequests.values()) {
+      pending.reject(new Error('gemini ACP capability discovery interrupted'));
+    }
+    pendingRequests.clear();
+    if (child.stdin && !child.stdin.destroyed) {
+      child.stdin.end();
+    }
+    if (!child.killed) {
+      child.kill('SIGTERM');
+    }
+    const closed = await Promise.race([
+      childClosed,
+      delay(1_000).then(() => null),
+    ]);
+    if (!closed && stderr.trim()) {
+      throw new Error(stderr.trim());
+    }
+  }
+}
+
 export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<GeminiTurnResult> {
   const launchCommand = input.launchCommand ?? {
     command: 'gemini',
     args: ['--acp'],
   };
-  const modeId = normalizeGeminiAcpMode(input.approvalPolicy);
+  const modeId = typeof input.mode === 'string' && input.mode.trim().length > 0
+    ? input.mode.trim()
+    : normalizeGeminiAcpMode(input.approvalPolicy);
   const spawnProcess = input.spawnProcess ?? spawn;
   const child = spawnProcess(launchCommand.command, launchCommand.args, {
     cwd: input.cwd,

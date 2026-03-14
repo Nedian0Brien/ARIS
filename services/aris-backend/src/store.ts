@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type {
   ApprovalPolicy,
+  GeminiSessionCapabilities,
   PermissionDecision,
   PermissionRequest,
   PermissionRisk,
@@ -52,6 +53,7 @@ type CreatePermissionInput = {
 interface RuntimeStoreBackend {
   listSessions(): Promise<RuntimeSession[]>;
   getSession(sessionId: string): Promise<RuntimeSession | null>;
+  getGeminiSessionCapabilities?(sessionId: string): Promise<GeminiSessionCapabilities>;
   createSession(input: CreateSessionInput): Promise<RuntimeSession>;
   listMessages(sessionId: string, options?: { afterSeq?: number; limit?: number }): Promise<RuntimeMessage[]>;
   listRealtimeEvents?(sessionId: string, options?: { afterCursor?: number; limit?: number; chatId?: string }): Promise<{ events: RuntimeMessage[]; cursor: number }>;
@@ -81,6 +83,30 @@ class MockRuntimeStore implements RuntimeStoreBackend {
 
   async getSession(sessionId: string): Promise<RuntimeSession | null> {
     return this.sessions.get(sessionId) ?? null;
+  }
+
+  async getGeminiSessionCapabilities(sessionId: string): Promise<GeminiSessionCapabilities> {
+    const session = await this.getSession(sessionId);
+    if (!session) {
+      throw new Error('SESSION_NOT_FOUND');
+    }
+    return {
+      sessionId,
+      fetchedAt: new Date().toISOString(),
+      modes: {
+        currentModeId: session.metadata.approvalPolicy === 'yolo' ? 'yolo' : 'default',
+        availableModes: [
+          { id: 'default', label: 'Default' },
+          { id: 'yolo', label: 'YOLO' },
+        ],
+      },
+      models: {
+        currentModelId: session.metadata.model ?? null,
+        availableModels: session.metadata.model
+          ? [{ id: session.metadata.model, label: session.metadata.model }]
+          : [],
+      },
+    };
   }
 
   async createSession(input: CreateSessionInput): Promise<RuntimeSession> {
@@ -323,6 +349,13 @@ export class RuntimeStore {
 
   async getSession(sessionId: string) {
     return this.delegate.getSession(sessionId);
+  }
+
+  async getGeminiSessionCapabilities(sessionId: string) {
+    if ('getGeminiSessionCapabilities' in this.delegate && typeof this.delegate.getGeminiSessionCapabilities === 'function') {
+      return this.delegate.getGeminiSessionCapabilities(sessionId);
+    }
+    throw new Error('GEMINI_CAPABILITIES_NOT_SUPPORTED');
   }
 
   async createSession(input: CreateSessionInput) {
