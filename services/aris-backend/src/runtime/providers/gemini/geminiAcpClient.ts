@@ -80,8 +80,8 @@ type GeminiAcpToolCallState = {
 const ACP_PROTOCOL_VERSION = 1;
 const DEFAULT_HISTORY_QUIET_MS = 150;
 const DEFAULT_HISTORY_TIMEOUT_MS = 3_000;
-const DEFAULT_POST_PROMPT_QUIET_MS = 80;
-const DEFAULT_POST_PROMPT_TIMEOUT_MS = 1_500;
+const DEFAULT_POST_PROMPT_QUIET_MS = 300;
+const DEFAULT_POST_PROMPT_TIMEOUT_MS = 5_000;
 
 function parseJsonLine(line: string): Record<string, unknown> | null {
   try {
@@ -533,6 +533,40 @@ async function waitForQuiet(input: {
       return;
     }
     observedTick = currentTick;
+  }
+}
+
+async function waitForPostPromptSettle(input: {
+  getActivityTick: () => number;
+  getLastActivityAt: () => number;
+  quietMs: number;
+  timeoutMs: number;
+  getEmitChain: () => Promise<void>;
+}): Promise<void> {
+  const startedAt = Date.now();
+
+  for (;;) {
+    const beforeTick = input.getActivityTick();
+    const beforeChain = input.getEmitChain();
+    const remainingTimeoutMs = Math.max(input.quietMs, input.timeoutMs - (Date.now() - startedAt));
+
+    await waitForQuiet({
+      getActivityTick: input.getActivityTick,
+      getLastActivityAt: input.getLastActivityAt,
+      quietMs: input.quietMs,
+      timeoutMs: remainingTimeoutMs,
+    });
+    await beforeChain;
+
+    const afterTick = input.getActivityTick();
+    const afterChain = input.getEmitChain();
+    if (afterTick === beforeTick && afterChain === beforeChain) {
+      return;
+    }
+
+    if (Date.now() - startedAt >= input.timeoutMs) {
+      return;
+    }
   }
 }
 
@@ -1075,11 +1109,12 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
       ],
     });
 
-    await waitForQuiet({
+    await waitForPostPromptSettle({
       getActivityTick: () => stdoutActivityTick,
       getLastActivityAt: () => lastStdoutActivityAt,
       quietMs: input.postPromptQuietMs ?? DEFAULT_POST_PROMPT_QUIET_MS,
       timeoutMs: DEFAULT_POST_PROMPT_TIMEOUT_MS,
+      getEmitChain: () => emitChain,
     });
     emitChain = emitChain.then(() => flushThoughtBuffer());
     await emitChain;

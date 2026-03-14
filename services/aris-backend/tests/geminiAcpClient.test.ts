@@ -322,6 +322,63 @@ class FakeAcpChild extends EventEmitter {
         });
         return;
       }
+      if (promptText.includes('Late action')) {
+        this.send({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId,
+            update: {
+              sessionUpdate: 'agent_message_chunk',
+              content: { type: 'text', text: 'done' },
+            },
+          },
+        });
+        this.send({
+          jsonrpc: '2.0',
+          id: msg.id,
+          result: { stopReason: 'end_turn' },
+        });
+        setTimeout(() => {
+          this.send({
+            jsonrpc: '2.0',
+            method: 'session/update',
+            params: {
+              sessionId,
+              update: {
+                sessionUpdate: 'tool_call',
+                toolCallId: 'tool-late-1',
+                status: 'in_progress',
+                title: 'Read delayed file',
+                kind: 'read',
+                locations: [{ path: '/tmp/delayed.txt' }],
+              },
+            },
+          });
+          this.send({
+            jsonrpc: '2.0',
+            method: 'session/update',
+            params: {
+              sessionId,
+              update: {
+                sessionUpdate: 'tool_call_update',
+                toolCallId: 'tool-late-1',
+                status: 'completed',
+                content: [
+                  {
+                    type: 'content',
+                    content: {
+                      type: 'text',
+                      text: 'late output',
+                    },
+                  },
+                ],
+              },
+            },
+          });
+        }, 120);
+        return;
+      }
       const chunks = sessionId === 'gemini-session-loaded'
         ? ['New', ' reply']
         : ['Hello', ' ACP'];
@@ -536,5 +593,30 @@ describe('runGeminiAcpTurn', () => {
     ]);
     expect(result.output).toBe('approved run');
     expect(result.streamedActionsPersisted).toBe(true);
+  });
+
+  it('waits for late Gemini tool updates before finalizing the turn', async () => {
+    const seen: string[] = [];
+
+    const result = await runGeminiAcpTurn({
+      cwd: '/tmp',
+      prompt: 'Late action',
+      approvalPolicy: 'on-request',
+      spawnProcess: createFakeSpawn(),
+      onAction: async (action) => {
+        seen.push(`action:${action.path}:${action.output}`);
+      },
+      onText: async (event) => {
+        if (!event.partial && event.phase === 'final') {
+          seen.push(`final:${event.text}`);
+        }
+      },
+    });
+
+    expect(result.output).toBe('done');
+    expect(seen).toEqual([
+      'action:/tmp/delayed.txt:late output',
+      'final:done',
+    ]);
   });
 });

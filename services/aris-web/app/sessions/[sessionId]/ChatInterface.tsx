@@ -299,6 +299,16 @@ function getEventKindMeta(kind: UiEventKind): { label: string; tone: Tone; Icon:
   return map[kind] || map.unknown;
 }
 
+function isCommentaryEvent(event: UiEvent): boolean {
+  const streamEvent = typeof event.meta?.streamEvent === 'string'
+    ? event.meta.streamEvent.trim()
+    : '';
+  const phase = typeof event.meta?.messagePhase === 'string'
+    ? event.meta.messagePhase.trim()
+    : '';
+  return streamEvent === 'agent_commentary' || streamEvent === 'agent_commentary_partial' || phase === 'commentary';
+}
+
 // --- 4. Hydration 안전 컴포넌트 ---
 
 function RelativeTime({ timestamp, className }: { timestamp: string; className?: string }) {
@@ -5304,6 +5314,7 @@ export function ChatInterface({
               const actionEvent = !userEvent && isActionKind(event.kind);
               const kindMeta = getEventKindMeta(event.kind);
               const KindIcon = kindMeta.Icon;
+              const commentaryEvent = isCommentaryEvent(event);
 
               if (userEvent) {
                 return (
@@ -5346,6 +5357,14 @@ export function ChatInterface({
                             <span className={`${styles.kindChip} ${getToneClass(kindMeta.tone)}`}>
                               <KindIcon size={14} />
                               {kindMeta.label}
+                            </span>
+                          </div>
+                        ) : null}
+                        {commentaryEvent ? (
+                          <div className={styles.messageKindRow}>
+                            <span className={`${styles.kindChip} ${getToneClass('cyan')}`}>
+                              <MessageSquareText size={14} />
+                              COMMENTARY
                             </span>
                           </div>
                         ) : null}
