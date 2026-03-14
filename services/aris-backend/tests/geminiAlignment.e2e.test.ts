@@ -115,80 +115,43 @@ function createFakeGeminiStore() {
     throw new Error(`Unhandled fake happy request: ${method} ${requestPath}`);
   };
 
-  (store as any).runAgentCommand = async (
-    agent: string,
-    command: { args?: string[] },
-    cwdHint?: string,
-    _signal?: AbortSignal,
-    handlers?: {
-      onAction?: (action: {
-        actionType: 'command_execution';
-        title: string;
-        callId: string;
-        command: string;
-        output: string;
-        additions: number;
-        deletions: number;
-        hasDiffSignal: boolean;
-      }) => Promise<void>;
-      onText?: (event: { text: string; source: 'assistant' | 'result'; threadId?: string }) => Promise<void>;
-    },
-  ) => {
-    expect(agent).toBe('gemini');
-    expect(cwdHint).toBe('/workspace/ARIS');
-    seenCommands.push([...(command.args ?? [])]);
+  (store as any).runGeminiAcpTurn = async (input: {
+    session: {
+      metadata: {
+        path: string;
+      };
+    };
+    preferredThreadId?: string;
+    model?: string;
+    onText?: (event: { text: string; source: 'assistant' | 'result'; threadId?: string }, meta: { threadId: string }) => Promise<void>;
+  }) => {
+    expect(input.session.metadata.path).toBe('/workspace/ARIS');
+    seenCommands.push([
+      input.preferredThreadId ? '--resume' : '--new-session',
+      ...(input.preferredThreadId ? [input.preferredThreadId] : []),
+      ...(input.model ? ['-m', input.model] : []),
+    ]);
     const turnNumber = seenCommands.length;
     if (turnNumber === 1) {
-      expect(command.args ?? []).not.toContain('--resume');
+      expect(input.preferredThreadId).toBeUndefined();
     } else {
-      expect(command.args ?? []).toContain('--resume');
-      expect(command.args ?? []).toContain('gemini-observed-thread');
+      expect(input.preferredThreadId).toBe('gemini-observed-thread');
     }
 
-    await handlers?.onAction?.({
-      actionType: 'command_execution',
-      title: 'Run command',
-      callId: `call-gemini-${turnNumber}`,
-      command: 'pwd',
-      output: '/workspace/ARIS',
-      additions: 0,
-      deletions: 0,
-      hasDiffSignal: false,
-    });
-    await handlers?.onText?.({
+    await input.onText?.({
       text: turnNumber === 1 ? '첫 번째 Gemini 응답' : '두 번째 Gemini 응답',
       source: 'assistant',
       threadId: 'gemini-observed-thread',
-    });
+    }, { threadId: 'gemini-observed-thread' });
 
     return {
       output: turnNumber === 1 ? '첫 번째 Gemini 응답' : '두 번째 Gemini 응답',
       cwd: '/home/ubuntu/project/ARIS',
-      inferredActions: [
-        {
-          actionType: 'command_execution',
-          title: 'Run command',
-          callId: `call-gemini-${turnNumber}`,
-          command: 'pwd',
-          output: '/workspace/ARIS',
-          additions: 0,
-          deletions: 0,
-          hasDiffSignal: false,
-        },
-      ],
-      streamedActionsPersisted: true,
+      inferredActions: [],
+      streamedActionsPersisted: false,
       threadId: 'gemini-observed-thread',
+      threadIdSource: turnNumber === 1 ? 'observed' : 'resume',
       protocolEnvelopes: [
-        {
-          kind: 'tool-call-end',
-          provider: 'gemini',
-          source: 'tool',
-          sessionId: 'gemini-observed-thread',
-          turnId: `turn-${turnNumber}`,
-          toolCallId: `call-gemini-${turnNumber}`,
-          toolName: 'command_execution',
-          stopReason: 'completed',
-        },
         {
           kind: 'text',
           provider: 'gemini',
@@ -239,7 +202,7 @@ describe('gemini alignment E2E', () => {
       (messages) => messages.filter((message) => (
         message.meta?.source === 'cli-agent'
         && (message.meta?.streamEvent === 'agent_stream_action' || message.meta?.streamEvent === 'agent_message')
-      )).length >= 2,
+      )).length >= 1,
     );
 
     await store.appendMessage(session.id, {
@@ -257,7 +220,7 @@ describe('gemini alignment E2E', () => {
       (messages) => messages.filter((message) => (
         message.meta?.source === 'cli-agent'
         && (message.meta?.streamEvent === 'agent_stream_action' || message.meta?.streamEvent === 'agent_message')
-      )).length >= 4,
+      )).length >= 2,
     );
 
     const agentMessages = persistedMessages.filter((message) => (
@@ -266,13 +229,11 @@ describe('gemini alignment E2E', () => {
     ));
 
     expect(seenCommands).toHaveLength(2);
-    expect(agentMessages).toHaveLength(4);
-    expect(agentMessages[0]?.text).toContain('$ pwd');
-    expect(agentMessages[1]?.text).toBe('첫 번째 Gemini 응답');
-    expect(agentMessages[2]?.text).toContain('$ pwd');
-    expect(agentMessages[3]?.text).toBe('두 번째 Gemini 응답');
+    expect(agentMessages).toHaveLength(2);
+    expect(agentMessages[0]?.text).toBe('첫 번째 Gemini 응답');
+    expect(agentMessages[1]?.text).toBe('두 번째 Gemini 응답');
+    expect(agentMessages[0]?.meta?.geminiSessionId).toBe('gemini-observed-thread');
     expect(agentMessages[1]?.meta?.geminiSessionId).toBe('gemini-observed-thread');
-    expect(agentMessages[3]?.meta?.geminiSessionId).toBe('gemini-observed-thread');
     expect(await store.isSessionRunning(session.id, 'chat-gemini')).toBe(false);
   });
 
