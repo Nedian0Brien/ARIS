@@ -25,6 +25,11 @@ import {
   type ModelSettingsResponse,
   type ProviderModelSelections,
 } from '@/lib/settings/providerModels';
+import {
+  hydratePersistedPermissions,
+  mergeRenderablePermissions,
+  type RenderablePermissionRequest,
+} from '@/lib/happy/permissions';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import {
   Activity,
@@ -182,7 +187,7 @@ type StreamRenderItem =
   | { type: 'action_overflow'; id: string; runId: string; kind: ActionKind; hiddenCount: number; expanded: boolean; timestamp: string };
 type TimelineRenderItem =
   | { type: 'stream'; item: StreamRenderItem; sortKey: number; order: number }
-  | { type: 'permission'; permission: PermissionRequest; sortKey: number; order: number };
+  | { type: 'permission'; permission: RenderablePermissionRequest; sortKey: number; order: number };
 type ResourceLabel =
   | { kind: 'folder'; name: FolderLabel; sourcePath?: string }
   | { kind: 'file'; name: string; extension: string; sourcePath?: string };
@@ -307,6 +312,13 @@ function isCommentaryEvent(event: UiEvent): boolean {
     ? event.meta.messagePhase.trim()
     : '';
   return streamEvent === 'agent_commentary' || streamEvent === 'agent_commentary_partial' || phase === 'commentary';
+}
+
+function isPersistedPermissionEvent(event: UiEvent): boolean {
+  const streamEvent = typeof event.meta?.streamEvent === 'string'
+    ? event.meta.streamEvent.trim()
+    : '';
+  return streamEvent === 'permission_request' || streamEvent === 'permission_decision';
 }
 
 // --- 4. Hydration 안전 컴포넌트 ---
@@ -2435,35 +2447,29 @@ export function ChatInterface({
     () => getLatestRunStatusSince(events, awaitingReplySince),
     [awaitingReplySince, events],
   );
-  const runPhase: ChatRunPhase = resolveRunPhaseState({
-    isAborting,
-    isSubmitting,
-    hasCompletionSignal,
-    runtimeRunning,
-    isAwaitingReply,
-    runStatus: latestRunStatus,
-    hasPendingPermission: pendingPermissions.length > 0,
-  });
-  const runPhaseLabel = runPhase === 'idle' ? null : CHAT_RUN_PHASE_LABELS[runPhase];
-  const isRunActive = runPhase === 'submitting' || runPhase === 'running' || runPhase === 'approval' || runPhase === 'aborting';
-  const isAgentRunning = runPhase !== 'idle';
-  const connectionState: 'running' | 'connected' | 'degraded' = isAgentRunning
-    ? 'running'
-    : runtimeNotice
-      ? 'degraded'
-      : 'connected';
-  const connectionLabel = connectionState === 'running'
-    ? (runPhaseLabel ?? '실행 중')
-    : connectionState === 'connected'
-      ? '정상 연결'
-      : '응답 지연 또는 연결 확인 필요';
 
-  const visibleEvents = useMemo(
+  const nonLifecycleEvents = useMemo(
     () => events.filter((event) => !isRunLifecycleEvent(event)),
     [events],
   );
+  const visibleEvents = useMemo(
+    () => nonLifecycleEvents.filter((event) => !isPersistedPermissionEvent(event)),
+    [nonLifecycleEvents],
+  );
   const deferredVisibleEvents = useDeferredValue(visibleEvents);
-  const deferredDisplayPermissions = useDeferredValue(displayPermissions);
+  const persistedPermissions = useMemo(
+    () => hydratePersistedPermissions(nonLifecycleEvents),
+    [nonLifecycleEvents],
+  );
+  const mergedDisplayPermissions = useMemo(
+    () => mergeRenderablePermissions(displayPermissions, persistedPermissions),
+    [displayPermissions, persistedPermissions],
+  );
+  const effectivePendingPermissions = useMemo(
+    () => mergedDisplayPermissions.filter((permission) => permission.state === 'pending'),
+    [mergedDisplayPermissions],
+  );
+  const deferredDisplayPermissions = useDeferredValue(mergedDisplayPermissions);
   const streamItems = useMemo(
     () => buildStreamRenderItems(deferredVisibleEvents, expandedActionRunIds),
     [deferredVisibleEvents, expandedActionRunIds],
@@ -2505,7 +2511,29 @@ export function ChatInterface({
       return a.order - b.order;
     });
   }, [deferredDisplayPermissions, showPermissionQueue, streamItems]);
-  const firstPendingPermissionId = pendingPermissions[0]?.id ?? null;
+  const firstPendingPermissionId = effectivePendingPermissions[0]?.id ?? null;
+  const runPhase: ChatRunPhase = resolveRunPhaseState({
+    isAborting,
+    isSubmitting,
+    hasCompletionSignal,
+    runtimeRunning,
+    isAwaitingReply,
+    runStatus: latestRunStatus,
+    hasPendingPermission: effectivePendingPermissions.length > 0,
+  });
+  const runPhaseLabel = runPhase === 'idle' ? null : CHAT_RUN_PHASE_LABELS[runPhase];
+  const isRunActive = runPhase === 'submitting' || runPhase === 'running' || runPhase === 'approval' || runPhase === 'aborting';
+  const isAgentRunning = runPhase !== 'idle';
+  const connectionState: 'running' | 'connected' | 'degraded' = isAgentRunning
+    ? 'running'
+    : runtimeNotice
+      ? 'degraded'
+      : 'connected';
+  const connectionLabel = connectionState === 'running'
+    ? (runPhaseLabel ?? '실행 중')
+    : connectionState === 'connected'
+      ? '정상 연결'
+      : '응답 지연 또는 연결 확인 필요';
 
   useEffect(() => {
     const sessionModelFallback = activeAgentFlavor === defaultAgentFlavor
@@ -2631,16 +2659,16 @@ export function ChatInterface({
       runtimeRunning: (isActive && runtimeRunning) || Boolean(snapshot?.isRunning),
       isAwaitingReply: runtimeUi.isAwaitingReply,
       runStatus: isActive ? latestRunStatus : null,
-      hasPendingPermission: isActive && pendingPermissions.length > 0,
+      hasPendingPermission: isActive && effectivePendingPermissions.length > 0,
     });
-  }, [activeChatIdResolved, chatRuntimeUiByChat, chatSidebarSnapshots, latestRunStatus, pendingPermissions.length, runtimeRunning]);
+  }, [activeChatIdResolved, chatRuntimeUiByChat, chatSidebarSnapshots, effectivePendingPermissions.length, latestRunStatus, runtimeRunning]);
 
   const resolveChatSidebarState = useCallback((chat: SessionChat): ChatSidebarState => {
     const isActive = chat.id === activeChatIdResolved;
     const snapshot = chatSidebarSnapshots[chat.id];
     const chatRunPhase = resolveSidebarChatRunPhase(chat);
     const hasFeedback = Boolean(approvalFeedbackByChat[chat.id]);
-    const hasPendingApproval = isActive && pendingPermissions.length > 0;
+    const hasPendingApproval = isActive && effectivePendingPermissions.length > 0;
     const hasUnread = hasUnreadMessages(chat.id);
     const isRunningState = chatRunPhase !== 'idle';
     const hasErrorState = isActive
@@ -2671,7 +2699,7 @@ export function ChatInterface({
     approvalFeedbackByChat,
     hasUnreadMessages,
     chatSidebarSnapshots,
-    pendingPermissions.length,
+    effectivePendingPermissions.length,
     resolveSidebarChatRunPhase,
     runtimeError,
     submitError,
@@ -3410,7 +3438,7 @@ export function ChatInterface({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [sessionId, events.length, isSessionSyncLeader, pendingPermissions.length, markSessionAsRead]);
+  }, [sessionId, events.length, isSessionSyncLeader, effectivePendingPermissions.length, markSessionAsRead]);
 
   useEffect(() => {
     if (!isSessionSyncLeader) {
@@ -3884,7 +3912,7 @@ export function ChatInterface({
 
   useEffect(() => {
     syncScrollToBottomButton();
-  }, [events.length, pendingPermissions.length, showPermissionQueue, syncScrollToBottomButton]);
+  }, [events.length, effectivePendingPermissions.length, showPermissionQueue, syncScrollToBottomButton]);
 
   useEffect(() => {
     if (!shouldStickToBottomRef.current) {
@@ -3907,7 +3935,7 @@ export function ChatInterface({
       window.cancelAnimationFrame(rafId);
       window.clearTimeout(timeoutId);
     };
-  }, [events, isAwaitingReply, pendingPermissions.length, scrollConversationToBottom]);
+  }, [events, isAwaitingReply, effectivePendingPermissions.length, scrollConversationToBottom]);
 
   const hasAgentEventSince = useCallback((since: string | null): boolean => {
     if (!since) {
@@ -4872,7 +4900,7 @@ export function ChatInterface({
                             ? styles.chatListRunPhaseBadgeRunning
                             : styles.chatListRunPhaseBadgeSubmitting;
                       const approvalFeedback = approvalFeedbackByChat[chat.id];
-                      const hasPendingApproval = isActive && pendingPermissions.length > 0;
+                      const hasPendingApproval = isActive && effectivePendingPermissions.length > 0;
                       const showApprovalPanel = isActive && (
                         hasPendingApproval
                         || sidebarApprovalLoadingChatId === chat.id
@@ -5147,7 +5175,7 @@ export function ChatInterface({
                   <div className={styles.contextMenuPanel} role="menu">
                     <div className={styles.contextMenuMeta}>
                       <span>Policy: {approvalPolicyLabel(approvalPolicy)}</span>
-                      <span>Pending: {pendingPermissions.length}</span>
+                      <span>Pending: {effectivePendingPermissions.length}</span>
                     </div>
                     <button
                       type="button"
@@ -5195,7 +5223,7 @@ export function ChatInterface({
                         setIsContextMenuOpen(false);
                         jumpToPendingPermission();
                       }}
-                      disabled={pendingPermissions.length === 0}
+                      disabled={effectivePendingPermissions.length === 0}
                     >
                       대기 승인 바로 이동
                     </button>
@@ -5236,9 +5264,12 @@ export function ChatInterface({
             </div>
           )}
 
-          {pendingPermissions.length > 0 && (
+          {effectivePendingPermissions.length > 0 && (
             <div className={styles.permissionNoticeBar} role="status" aria-live="polite">
-              <span>승인 요청 {pendingPermissions.length}건이 대기 중입니다.</span>
+              <span>
+                승인 요청 {effectivePendingPermissions.length}건이 대기 중입니다.
+                {pendingPermissions.length === 0 ? ' 실시간 승인 세션이 없어 재실행이 필요할 수 있습니다.' : ''}
+              </span>
               <button type="button" className={styles.permissionNoticeAction} onClick={jumpToPendingPermission}>
                 바로 보기
               </button>
@@ -5256,6 +5287,10 @@ export function ChatInterface({
                     permission={permission}
                     disabled={!isOperator}
                     loading={loadingPermissionId === permission.id}
+                    interactive={permission.availability === 'live'}
+                    pendingHint={permission.availability === 'live'
+                      ? null
+                      : '실시간 승인 세션을 찾을 수 없습니다. 같은 요청을 다시 실행해 주세요.'}
                     onDecide={(permissionId, decision) => {
                       void decidePermission(permissionId, decision);
                     }}

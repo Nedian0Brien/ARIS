@@ -9,6 +9,8 @@ type PermissionRequestMessageProps = {
   permission: PermissionRequest;
   disabled: boolean;
   loading: boolean;
+  interactive?: boolean;
+  pendingHint?: string | null;
   anchorId?: string;
   onDecide: (permissionId: string, decision: PermissionDecision) => void;
 };
@@ -45,6 +47,8 @@ export function PermissionRequestMessage({
   permission,
   disabled,
   loading,
+  interactive = true,
+  pendingHint = null,
   anchorId,
   onDecide,
 }: PermissionRequestMessageProps) {
@@ -98,7 +102,11 @@ export function PermissionRequestMessage({
         <p className={styles.permissionReason}>{permission.reason}</p>
 
         {isPending ? (
-          disabled ? (
+          !interactive ? (
+            <p className={styles.permissionViewerHint}>
+              {pendingHint ?? '실시간 승인 세션을 찾을 수 없습니다. 에이전트를 다시 실행해 주세요.'}
+            </p>
+          ) : disabled ? (
             <p className={styles.permissionViewerHint}>Operator 권한이 필요합니다.</p>
           ) : (
             <div className={styles.permissionActions}>

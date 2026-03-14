@@ -4868,6 +4868,7 @@ export class HappyRuntimeStore {
     };
 
     this.permissions.set(permission.id, permission);
+    await this.persistPermissionEvent(permission, 'permission_request');
     await this.appendRunLifecycleEvent(input.sessionId, 'waiting_for_approval', {
       ...(permission.chatId ? { chatId: permission.chatId } : {}),
       requestedPath: session.metadata.path,
@@ -4887,6 +4888,7 @@ export class HappyRuntimeStore {
     const state: PermissionState = decision === 'deny' ? 'denied' : 'approved';
     const updated = { ...permission, state };
     this.permissions.set(permissionId, updated);
+    await this.persistPermissionEvent(updated, 'permission_decision', decision);
 
     for (const [key, mappedPermissionId] of this.codexPermissionIndex.entries()) {
       if (mappedPermissionId === permissionId) {
@@ -4922,5 +4924,35 @@ export class HappyRuntimeStore {
     }
 
     return updated;
+  }
+
+  private async persistPermissionEvent(
+    permission: PermissionRequest,
+    streamEvent: 'permission_request' | 'permission_decision',
+    decision?: PermissionDecision,
+  ): Promise<void> {
+    try {
+      await this.appendAgentMessage(
+        permission.sessionId,
+        permission.command,
+        {
+          sessionId: permission.sessionId,
+          ...(permission.chatId ? { chatId: permission.chatId } : {}),
+          agent: permission.agent,
+          streamEvent,
+          permissionId: permission.id,
+          permissionState: permission.state,
+          command: permission.command,
+          reason: permission.reason,
+          risk: permission.risk,
+          requestedAt: permission.requestedAt,
+          ...(decision ? { permissionDecision: decision } : {}),
+        },
+        { type: 'message', title: 'Permission Request' },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`failed to persist permission event (${streamEvent}): ${message}`);
+    }
   }
 }

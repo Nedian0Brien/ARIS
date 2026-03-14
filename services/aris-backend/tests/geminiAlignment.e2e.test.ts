@@ -542,6 +542,21 @@ describe('gemini alignment E2E', () => {
     expect(permission?.command).toBe('Run pwd');
     expect(await store.isSessionRunning(session.id, 'chat-gemini-permission')).toBe(true);
 
+    const pendingPermissionMessages = await waitFor(
+      async () => store.listMessages(session.id),
+      (messages) => messages.some((message) => (
+        message.meta?.source === 'cli-agent'
+        && message.meta?.streamEvent === 'permission_request'
+        && message.meta?.permissionId === permission?.id
+      )),
+    );
+    expect(pendingPermissionMessages.some((message) => (
+      message.meta?.source === 'cli-agent'
+      && message.meta?.streamEvent === 'permission_request'
+      && message.meta?.permissionState === 'pending'
+      && message.meta?.permissionId === permission?.id
+    ))).toBe(true);
+
     await store.decidePermission(permission!.id, 'allow_once');
 
     const persistedMessages = await waitFor(
@@ -559,6 +574,12 @@ describe('gemini alignment E2E', () => {
 
     expect(agentMessages[0]?.meta?.streamEvent).toBe('agent_stream_action');
     expect(agentMessages[1]?.meta?.streamEvent).toBe('agent_message');
+    expect(persistedMessages.some((message) => (
+      message.meta?.source === 'cli-agent'
+      && message.meta?.streamEvent === 'permission_decision'
+      && message.meta?.permissionState === 'approved'
+      && message.meta?.permissionId === permission?.id
+    ))).toBe(true);
     expect(await store.listPermissions('pending')).toHaveLength(0);
     expect(await store.isSessionRunning(session.id, 'chat-gemini-permission')).toBe(false);
   });

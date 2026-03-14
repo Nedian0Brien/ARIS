@@ -1,33 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { PermissionRequest, PermissionDecision } from '@/lib/happy/types';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
+import { isPermissionForChat, normalizePermissionChatId } from '@/lib/happy/permissions';
 
 const POLL_INTERVAL_MS = 10000;
 const isDocumentVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
-
-function normalizePermissionChatId(permission: PermissionRequest): string | null {
-  const raw = typeof permission.chatId === 'string' ? permission.chatId.trim() : '';
-  return raw.length > 0 ? raw : null;
-}
-
-function isPermissionForChat(
-  permission: PermissionRequest,
-  activeChatId: string | null,
-  includeUnassignedForActiveChat: boolean,
-): boolean {
-  const permissionChatId = normalizePermissionChatId(permission);
-  const normalizedActiveChatId = typeof activeChatId === 'string' && activeChatId.trim().length > 0
-    ? activeChatId.trim()
-    : null;
-
-  if (permissionChatId && normalizedActiveChatId) {
-    return permissionChatId === normalizedActiveChatId;
-  }
-  if (!permissionChatId) {
-    return includeUnassignedForActiveChat || !normalizedActiveChatId;
-  }
-  return false;
-}
 
 function arePermissionsEqual(prev: PermissionRequest[], next: PermissionRequest[]): boolean {
   if (prev.length !== next.length) {
