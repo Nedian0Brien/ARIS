@@ -112,7 +112,8 @@ type GetSessionEventsOptions = {
 
 const DEFAULT_EVENTS_PAGE_LIMIT = 40;
 const MAX_EVENTS_PAGE_LIMIT = 200;
-const HAPPY_MESSAGES_BATCH_LIMIT = 500;
+const HAPPY_MESSAGES_API_LIMIT = 500;
+const HAPPY_MESSAGES_BATCH_LIMIT = HAPPY_MESSAGES_API_LIMIT;
 const HAPPY_MESSAGES_MAX_PAGES = 1000;
 const RECENT_WINDOW_MIN = 240;
 const RECENT_WINDOW_MAX = 1400;
@@ -128,6 +129,10 @@ function clampEventsLimit(limit?: number): number {
     return MAX_EVENTS_PAGE_LIMIT;
   }
   return next;
+}
+
+function clampHappyMessagesWindow(limit: number): number {
+  return Math.min(HAPPY_MESSAGES_API_LIMIT, Math.max(1, Math.floor(limit)));
 }
 
 function sortEventsChronologically(events: UiEvent[]): UiEvent[] {
@@ -306,7 +311,7 @@ async function fetchSessionMessagesPage(
 ): Promise<{ messages: unknown[]; hasMore: boolean; lastSeq: number }> {
   const query = new URLSearchParams({
     after_seq: String(Math.max(0, Math.floor(options.afterSeq))),
-    limit: String(Math.max(1, Math.floor(options.limit))),
+    limit: String(clampHappyMessagesWindow(options.limit)),
   });
   const raw = await fetchHappy(`/v3/sessions/${encodeURIComponent(sessionId)}/messages?${query.toString()}`);
   const batch = extractArrayPayload(raw, 'messages');
@@ -365,7 +370,9 @@ async function listRecentSessionMessages(
   const pageLimit = clampEventsLimit(options.limit);
   const chatId = typeof options.chatId === 'string' ? options.chatId.trim() : '';
   if (!chatId) {
-    const recentWindow = Math.min(RECENT_WINDOW_MAX, Math.max(RECENT_WINDOW_MIN, pageLimit * 6));
+    const recentWindow = clampHappyMessagesWindow(
+      Math.min(RECENT_WINDOW_MAX, Math.max(RECENT_WINDOW_MIN, pageLimit * 6)),
+    );
     const afterSeq = Math.max(0, latestSeq - recentWindow);
     const page = await fetchSessionMessagesPage(sessionId, {
       afterSeq,
@@ -377,7 +384,9 @@ async function listRecentSessionMessages(
     return page.messages;
   }
 
-  const scanWindow = Math.min(1000, Math.max(HAPPY_MESSAGES_BATCH_LIMIT, pageLimit * 20));
+  const scanWindow = clampHappyMessagesWindow(
+    Math.min(1000, Math.max(HAPPY_MESSAGES_BATCH_LIMIT, pageLimit * 20)),
+  );
   const maxScans = 8;
   let cursor = latestSeq;
   let collected: unknown[] = [];
@@ -423,7 +432,9 @@ async function listMessagesForAfterCursor(
     return null;
   }
   const pageLimit = clampEventsLimit(options.limit);
-  const recentWindow = Math.min(1000, Math.max(RECENT_WINDOW_MIN, pageLimit * 10));
+  const recentWindow = clampHappyMessagesWindow(
+    Math.min(1000, Math.max(RECENT_WINDOW_MIN, pageLimit * 10)),
+  );
   const maxScans = 6;
   let cursor = latestSeq;
   let collected: unknown[] = [];
@@ -458,9 +469,11 @@ async function listRecentMessagesForSidebar(
   latestSeq: number,
   chatCount: number,
 ): Promise<unknown[] | null> {
-  const windowSize = Math.min(
-    SIDEBAR_RECENT_SCAN_MAX,
-    Math.max(SIDEBAR_RECENT_SCAN_MIN, chatCount * 240),
+  const windowSize = clampHappyMessagesWindow(
+    Math.min(
+      SIDEBAR_RECENT_SCAN_MAX,
+      Math.max(SIDEBAR_RECENT_SCAN_MIN, chatCount * 240),
+    ),
   );
   const afterSeq = Math.max(0, latestSeq - windowSize);
   const page = await fetchSessionMessagesPage(sessionId, {
