@@ -21,8 +21,10 @@ import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.
 import { ClaudeSessionLogTracker, extractClaudeSessionHintIds } from './providers/claude/claudeSessionScanner.js';
 import { buildClaudeSessionId } from './providers/claude/claudeSessionSource.js';
 import { GeminiMessageQueue } from './providers/gemini/geminiMessageQueue.js';
+import { buildGeminiProviderTextEvent } from './providers/gemini/geminiEventBridgeV2.js';
 import { looksLikeGeminiActionTranscript, parseGeminiStreamLine, parseGeminiStreamOutput } from './providers/gemini/geminiProtocolMapper.js';
 import { createGeminiRuntime } from './providers/gemini/geminiRuntime.js';
+import { GeminiStreamAdapter } from './providers/gemini/geminiStreamAdapter.js';
 import { GeminiSessionRegistry } from './providers/gemini/geminiSessionRegistry.js';
 import { buildProviderCommand, type ProviderCommand } from './providers/providerCommandFactory.js';
 import type { SessionProtocolEnvelope } from './contracts/sessionProtocol.js';
@@ -59,6 +61,10 @@ const GEMINI_TURN_TIMEOUT_MS = (() => {
   }
   return 15 * 60 * 1000; // 15 minutes
 })();
+function resolveGeminiStreamBackendV2Enabled(value?: string): boolean {
+  return !['0', 'false', 'off'].includes((value || '1').trim().toLowerCase());
+}
+const GEMINI_STREAM_BACKEND_V2 = resolveGeminiStreamBackendV2Enabled(process.env.GEMINI_STREAM_BACKEND_V2);
 const AGENT_MAX_OUTPUT_CHARS = 32_000;
 const AGENT_EXTRA_PATHS = [
   '/home/ubuntu/.local/bin',
@@ -1438,6 +1444,7 @@ export const happyClientTestHooks = {
   waitForStableActivity,
   resolveClaudeLaunchMode,
   resolveAgentCommandTimeoutMs,
+  resolveGeminiStreamBackendV2Enabled,
 };
 
 export class HappyRuntimeStore {
@@ -1979,6 +1986,9 @@ export class HappyRuntimeStore {
       let resolvedSessionId = '';
       let providerErrorDetail = '';
       let emitChain: Promise<void> = Promise.resolve();
+      const geminiStreamAdapter = agent === 'gemini' && GEMINI_STREAM_BACKEND_V2
+        ? new GeminiStreamAdapter()
+        : null;
       let settled = false;
       let timedOut = false;
       let timeoutHandle: NodeJS.Timeout | null = null;
@@ -2084,6 +2094,49 @@ export class HappyRuntimeStore {
                   ...(parsedLine.sessionId ? { threadId: parsedLine.sessionId } : {}),
                   ...(textEnvelopes.length > 0 ? { envelopes: textEnvelopes } : {}),
                 });
+              });
+            }
+          }
+          return;
+        }
+
+        if (agent === 'gemini' && geminiStreamAdapter) {
+          const canonicalEvents = geminiStreamAdapter.processLine(normalized);
+          for (const event of canonicalEvents) {
+            if (event.threadId) {
+              resolvedSessionId = event.threadId;
+            }
+            if (event.type === 'turn_failed' && event.errorText) {
+              providerErrorDetail = event.errorText;
+            }
+            if (event.type === 'tool_completed') {
+              const actionKey = buildActionEventKey(event.action);
+              if (!actionByKey.has(actionKey)) {
+                actionByKey.set(actionKey, event.action);
+                if (onAction) {
+                  emitChain = emitChain.then(async () => {
+                    await onAction(event.action);
+                    streamedActionsPersisted = true;
+                  });
+                }
+              }
+            }
+            if (onText) {
+              const textEvent = buildGeminiProviderTextEvent(event);
+              if (!textEvent) {
+                continue;
+              }
+              const textKey = buildStreamedTextReplyKey({
+                source: textEvent.source,
+                threadId: textEvent.threadId,
+                text: textEvent.text,
+              });
+              if (streamedTextKeys.has(textKey)) {
+                continue;
+              }
+              streamedTextKeys.add(textKey);
+              emitChain = emitChain.then(async () => {
+                await onText(textEvent);
               });
             }
           }
@@ -2301,6 +2354,14 @@ export class HappyRuntimeStore {
         protocolEnvelopes = parsed.envelopes;
         if (!result.threadId && parsed.sessionId) {
           result.threadId = parsed.sessionId;
+        }
+        if (parsed.errorText) {
+          const providerError = new Error(parsed.errorText);
+          const observedThreadId = result.threadId ?? parsed.sessionId;
+          if (observedThreadId) {
+            Object.assign(providerError, { threadId: observedThreadId });
+          }
+          throw providerError;
         }
         output = trimOutput(parsed.output || '');
       } else {
@@ -3883,6 +3944,7 @@ export class HappyRuntimeStore {
       };
       const streamedClaudeTextReplies = new Set<string>();
       const streamedGeminiTextReplies = new Set<string>();
+      let streamedGeminiCompletedTextPersisted = false;
       let claudeMessageQueue: ClaudeMessageQueue | null = null;
       let geminiMessageQueue: GeminiMessageQueue | null = null;
       const persistClaudeProjection = async (projection: {
@@ -4167,6 +4229,7 @@ export class HappyRuntimeStore {
                 return;
               }
               streamedGeminiTextReplies.add(textKey);
+              streamedGeminiCompletedTextPersisted = true;
               this.clearGeminiRealtimePartial({
                 sessionId: session.id,
                 chatId: scopedChatId,
@@ -4296,8 +4359,11 @@ export class HappyRuntimeStore {
         )
         || (
           flavor === 'gemini'
-          && finalAgentOutput.length > 0
           && (
+            streamedGeminiCompletedTextPersisted
+            || (
+              finalAgentOutput.length > 0
+              && (
             streamedGeminiTextReplies.has(buildStreamedTextReplyKey({
               source: 'assistant',
               threadId: response.threadId,
@@ -4308,6 +4374,8 @@ export class HappyRuntimeStore {
               threadId: response.threadId,
               text: finalAgentOutput,
             }))
+              )
+            )
           )
         );
       const persistFinalAgentOutput = shouldPersistFinalAgentOutput({

@@ -23,6 +23,23 @@
 - `references/claudecodeui/server/gemini-response-handler.js`
 - `references/claudecodeui/src/components/chat/hooks/useChatRealtimeHandlers.ts`
 
+## Reference vs ARIS Delta
+| Concern | `claudecodeui` baseline | 기존 ARIS 문제 지점 | 이번 재구성 방향 |
+| --- | --- | --- | --- |
+| Raw parsing | NDJSON line을 즉시 parse | `happyClient.ts` 안에서 parser/partial/persist가 결합 | `geminiStreamAdapter.ts`로 분리 |
+| Identity | socket message 단위로 단순 append | `threadId`/`turnId`/`itemId`가 payload 변형마다 흔들림 | `geminiIdentityAssembler.ts`로 복원 |
+| Realtime lane | assistant delta를 즉시 push | delta와 final fallback이 서로 덮어씀 | `text_delta`는 realtime 전용으로 유지 |
+| Persist lane | partial finalize 후 최종 bubble 확정 | commentary/final이 마지막에 한 번에 저장될 수 있음 | `text_completed`만 persist 대상으로 사용 |
+| Abort cleanup | streaming state만 정리 | 완료된 commentary까지 증발 가능 | 미완료 partial만 정리, completed text는 보존 |
+| Web contract | streaming bubble append/finalize | backend 이벤트 불안정성으로 UI가 빈 상태가 되거나 마지막에 뭉침 | 기존 SSE/UI 계약 유지, backend shim으로 호환 |
+
+## Implementation Status
+- Sprint 1 완료: 운영 transcript 기반 fixture와 canonical contract 타입 정의 추가
+- Sprint 2 완료: `geminiStreamAdapter.ts`, `geminiIdentityAssembler.ts` 추가 및 `happyClient.ts`에서 Gemini line parsing 분리
+- Sprint 3 완료: `geminiEventBridgeV2.ts` 추가, realtime partial과 completed persistence 경로 분리, final fallback 최소화
+- Sprint 4 완료: `GEMINI_STREAM_BACKEND_V2` 플래그 추가, web 기존 이벤트 계약과 호환 검증 완료
+- Sprint 5 진행: automated verification 완료, 실제 운영 수동 Gemini 시나리오 재확인만 남음
+
 ## Sprint 1: Raw Event Taxonomy 확정
 **Goal**: 실제 Gemini payload 변형을 수집하고 ARIS 내부 표준 이벤트 계약을 정의한다.
 **Demo/Validation**:

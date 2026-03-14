@@ -236,6 +236,26 @@ describe('geminiProtocolMapper', () => {
     ]);
   });
 
+  it('keeps the last completed Gemini commentary when the turn aborts after a later partial', () => {
+    const fixture = readFixture('commentary-completed-then-abort.jsonl');
+
+    const parsed = parseGeminiStreamOutput(fixture);
+    const mapped = mapGeminiStreamOutputToProtocol(fixture);
+
+    expect(parsed.output).toBe('먼저 상황을 확인하겠습니다.');
+    expect(mapped.envelopes.map((envelope) => envelope.kind)).toEqual([
+      'turn-start',
+      'text',
+      'turn-end',
+      'stop',
+    ]);
+    expect(mapped.envelopes.at(-2)).toMatchObject({
+      kind: 'turn-end',
+      stopReason: 'aborted',
+      sessionId: 'gemini-abort-thread',
+    });
+  });
+
   it('parses item/agentMessage/delta payloads as Gemini assistant partials', () => {
     const line = JSON.stringify({
       method: 'item/agentMessage/delta',

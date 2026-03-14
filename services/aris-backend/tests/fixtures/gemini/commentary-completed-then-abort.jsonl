@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","threadId":"gemini-abort-thread"}
+{"method":"item/agentMessage/delta","params":{"threadId":"gemini-abort-thread","turnId":"turn-abort","itemId":"msg-commentary","delta":"먼저 상황을 "}}
+{"method":"item/completed","params":{"threadId":"gemini-abort-thread","turnId":"turn-abort","item":{"type":"agentMessage","id":"msg-commentary","phase":"commentary","text":"먼저 상황을 확인하겠습니다."}}}
+{"method":"codex/event/agent_message_content_delta","params":{"conversationId":"gemini-abort-thread","msg":{"type":"agent_message_content_delta","thread_id":"gemini-abort-thread","turn_id":"turn-abort","item_id":"msg-final","delta":"최종 답변을 작성하","phase":"final_answer"}}}
+{"type":"result","subtype":"abort","threadId":"gemini-abort-thread","status":"aborted"}

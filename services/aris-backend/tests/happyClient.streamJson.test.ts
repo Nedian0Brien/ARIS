@@ -313,6 +313,14 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     );
   });
 
+  it('enables Gemini stream backend v2 by default and supports explicit rollback values', () => {
+    expect(happyClientTestHooks.resolveGeminiStreamBackendV2Enabled()).toBe(true);
+    expect(happyClientTestHooks.resolveGeminiStreamBackendV2Enabled('1')).toBe(true);
+    expect(happyClientTestHooks.resolveGeminiStreamBackendV2Enabled('false')).toBe(false);
+    expect(happyClientTestHooks.resolveGeminiStreamBackendV2Enabled('off')).toBe(false);
+    expect(happyClientTestHooks.resolveGeminiStreamBackendV2Enabled('0')).toBe(false);
+  });
+
   it('does not inject --session-id for Claude when given a synthetic target', () => {
     const sessionId = happyClientTestHooks.buildClaudeSessionId('session-2', 'chat-2');
     const command = happyClientTestHooks.buildAgentCommand(
