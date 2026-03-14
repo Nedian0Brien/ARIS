@@ -4547,9 +4547,6 @@ export class HappyRuntimeStore {
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
     }
-    if (session.metadata.flavor !== 'gemini') {
-      throw new Error('GEMINI_SESSION_REQUIRED');
-    }
     return inspectGeminiAcpSessionCapabilities({
       cwd: this.resolveExecutionCwd(session.metadata.path),
     });

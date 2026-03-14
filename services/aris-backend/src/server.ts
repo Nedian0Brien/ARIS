@@ -305,9 +305,6 @@ export function buildServer(config: ServerConfig) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
         return reply.code(404).send({ error: 'Session not found' });
       }
-      if (error instanceof Error && error.message === 'GEMINI_SESSION_REQUIRED') {
-        return reply.code(400).send({ error: 'Gemini session required' });
-      }
       const message = toErrorMessage(error, 'Failed to load Gemini capabilities');
       return reply.code(502).send({ error: message });
     }

@@ -72,6 +72,47 @@ describe('aris-backend API', () => {
     await app.close();
   });
 
+  it('returns Gemini capabilities even when the session flavor is not gemini', async () => {
+    const app = buildServer({
+      RUNTIME_API_TOKEN: TOKEN,
+      DEFAULT_PROJECT_PATH: '/tmp/project',
+      LOG_LEVEL: 'silent',
+    });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: {
+        ...authHeader(),
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        path: '/tmp/project',
+        flavor: 'claude',
+      }),
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const sessionId = (createResponse.json() as { session: { id: string } }).session.id;
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/v1/sessions/${sessionId}/providers/gemini/capabilities`,
+      headers: authHeader(),
+    });
+
+    expect(response.statusCode).toBe(200);
+    const payload = response.json() as {
+      capabilities?: {
+        sessionId?: string;
+        modes?: { availableModes?: Array<{ id: string }> };
+      };
+    };
+    expect(payload.capabilities?.sessionId).toBe(sessionId);
+    expect(Array.isArray(payload.capabilities?.modes?.availableModes)).toBe(true);
+    await app.close();
+  });
+
   it('returns 429 when API request frequency exceeds rate limit', async () => {
     const app = buildServer({
       RUNTIME_API_TOKEN: TOKEN,
