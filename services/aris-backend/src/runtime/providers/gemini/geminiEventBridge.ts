@@ -12,6 +12,7 @@ export function buildGeminiSessionHintMeta(input: {
   eventType: SessionHintEventType;
   callId?: string;
   turnId?: string;
+  itemId?: string;
   turnStatus?: string;
 }): Record<string, unknown> {
   const event = input.eventType === 'tool-call-end'
@@ -38,10 +39,14 @@ export function buildGeminiSessionHintMeta(input: {
     sessionEventType: input.eventType,
     ...(input.callId ? { sessionCallId: input.callId } : {}),
     ...(input.turnId ? { sessionTurnId: input.turnId } : {}),
+    ...(input.itemId ? { sessionItemId: input.itemId } : {}),
     ...(input.turnStatus ? { sessionTurnStatus: input.turnStatus } : {}),
     sessionEvent: {
       role: 'agent',
-      ev: event,
+      ev: {
+        ...event,
+        ...(input.itemId ? { item: input.itemId } : {}),
+      },
     },
   };
 }
@@ -161,6 +166,7 @@ export function projectGeminiTextMessage(input: {
       ...buildGeminiSessionHintMeta({
         eventType: 'text',
         ...(textEnvelope?.turnId ? { turnId: textEnvelope.turnId } : turnEndEnvelope?.turnId ? { turnId: turnEndEnvelope.turnId } : {}),
+        ...(textEnvelope?.itemId ? { itemId: textEnvelope.itemId } : {}),
         ...(turnEndEnvelope?.stopReason ? { turnStatus: turnEndEnvelope.stopReason } : {}),
       }),
       agent: 'gemini',

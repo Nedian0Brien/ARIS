@@ -51,6 +51,8 @@ export type SessionProtocolToolCallEndEnvelope = SessionProtocolEnvelopeBase & {
 export type SessionProtocolTextEnvelope = SessionProtocolEnvelopeBase & {
   kind: 'text';
   text: string;
+  itemId?: string;
+  partial?: boolean;
 };
 
 export type SessionProtocolStopEnvelope = SessionProtocolEnvelopeBase & {

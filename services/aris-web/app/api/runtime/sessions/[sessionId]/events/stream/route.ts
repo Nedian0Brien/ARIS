@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
-import { getSessionEvents, HappyHttpError } from '@/lib/happy/client';
+import { getSessionEvents, getSessionRealtimeEvents, HappyHttpError } from '@/lib/happy/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,6 +30,7 @@ export async function GET(
   const chatId = typeof chatIdRaw === 'string' && chatIdRaw.trim().length > 0 ? chatIdRaw.trim() : undefined;
   const includeUnassigned = includeUnassignedRaw === '1' || includeUnassignedRaw === 'true';
   let cursor = typeof after === 'string' && after.trim().length > 0 ? after.trim() : null;
+  let realtimeCursor = 0;
 
   const encoder = new TextEncoder();
   let aborted = false;
@@ -80,6 +81,16 @@ export async function GET(
                 cursor = event.id;
               }
             }
+
+            const realtime = await getSessionRealtimeEvents({
+              sessionId,
+              afterCursor: realtimeCursor,
+              chatId,
+            });
+            for (const event of realtime.events) {
+              writeEvent('event', { event });
+            }
+            realtimeCursor = realtime.cursor;
 
             const now = Date.now();
             if (now - lastHeartbeatAt >= HEARTBEAT_INTERVAL_MS) {

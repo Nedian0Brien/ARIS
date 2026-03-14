@@ -166,6 +166,22 @@ type HappyRuntimePermissionInput = {
   risk: PermissionRisk;
 };
 
+type SessionRealtimeEventRecord = {
+  cursor: number;
+  event: RuntimeMessage;
+};
+
+type GeminiPartialTextState = {
+  eventId: string;
+  sessionId: string;
+  chatId?: string;
+  turnId?: string;
+  itemId?: string;
+  threadId?: string;
+  text: string;
+  createdAt: string;
+};
+
 type HappyBackendSession = {
   id: string;
   seq?: number;
@@ -825,29 +841,37 @@ function buildStreamedTextReplyKey(input: {
 function extractGeminiStreamTextEvent(parsedLine: {
   assistantText?: string;
   assistantSource?: 'assistant' | 'message' | 'result';
+  assistantPhase?: string;
+  assistantIsDelta?: boolean;
+  assistantTurnId?: string;
+  assistantItemId?: string;
   sessionId?: string;
   envelopes?: SessionProtocolEnvelope[];
 }): ClaudeTextEvent | null {
   if (!parsedLine.assistantText) {
     return null;
   }
+  if ((parsedLine.assistantPhase ?? '').trim().toLowerCase() === 'commentary') {
+    return null;
+  }
 
   const textEnvelopes = (parsedLine.envelopes ?? []).filter((envelope) => (
     envelope.kind === 'text' || envelope.kind === 'turn-end'
   ));
-  if (!textEnvelopes.some((envelope) => envelope.kind === 'text')) {
-    return null;
-  }
-
-  const normalizedText = sanitizeAgentMessageText(parsedLine.assistantText);
-  if (!normalizedText) {
+  const isPartial = parsedLine.assistantIsDelta === true;
+  if (!textEnvelopes.some((envelope) => envelope.kind === 'text') && !isPartial) {
     return null;
   }
 
   return {
-    text: normalizedText,
+    text: isPartial
+      ? parsedLine.assistantText
+      : sanitizeAgentMessageText(parsedLine.assistantText),
     source: parsedLine.assistantSource === 'result' ? 'result' : 'assistant',
     ...(parsedLine.sessionId ? { threadId: parsedLine.sessionId } : {}),
+    ...(parsedLine.assistantTurnId ? { turnId: parsedLine.assistantTurnId } : {}),
+    ...(parsedLine.assistantItemId ? { itemId: parsedLine.assistantItemId } : {}),
+    ...(isPartial ? { partial: true } : {}),
     ...(textEnvelopes.length > 0 ? { envelopes: textEnvelopes } : {}),
   };
 }
@@ -1434,6 +1458,9 @@ export class HappyRuntimeStore {
     reject: (error: Error) => void;
   }>();
   private readonly providerPermissionDecisions = new Map<string, PermissionDecision>();
+  private readonly sessionRealtimeEvents = new Map<string, SessionRealtimeEventRecord[]>();
+  private readonly sessionRealtimeCursor = new Map<string, number>();
+  private readonly geminiPartialTextStates = new Map<string, GeminiPartialTextState>();
 
   private readonly serverUrl: string;
   private readonly serverToken: string;
@@ -1458,6 +1485,134 @@ export class HappyRuntimeStore {
       if (key === sessionId || key.startsWith(`${sessionId}:`)) {
         this.codexThreads.delete(key);
       }
+    }
+  }
+
+  private appendSessionRealtimeEvent(sessionId: string, event: RuntimeMessage): RuntimeMessage {
+    const nextCursor = (this.sessionRealtimeCursor.get(sessionId) ?? 0) + 1;
+    this.sessionRealtimeCursor.set(sessionId, nextCursor);
+    const bucket = this.sessionRealtimeEvents.get(sessionId) ?? [];
+    bucket.push({ cursor: nextCursor, event });
+    if (bucket.length > 500) {
+      bucket.splice(0, bucket.length - 500);
+    }
+    this.sessionRealtimeEvents.set(sessionId, bucket);
+    return event;
+  }
+
+  private buildGeminiPartialIdentity(input: {
+    sessionId: string;
+    chatId?: string;
+    turnId?: string;
+    itemId?: string;
+    threadId?: string;
+  }): string | null {
+    const scope = input.chatId?.trim() || '__default__';
+    const turn = input.turnId?.trim() || input.threadId?.trim() || '';
+    const item = input.itemId?.trim() || '';
+    if (!turn && !item) {
+      return null;
+    }
+    return [
+      input.sessionId,
+      scope,
+      turn || '__turn__',
+      item || '__item__',
+    ].join(':');
+  }
+
+  private appendGeminiRealtimePartial(input: {
+    session: RuntimeSession;
+    chatId?: string;
+    model?: string;
+    event: ClaudeTextEvent;
+  }): void {
+    const identity = this.buildGeminiPartialIdentity({
+      sessionId: input.session.id,
+      chatId: input.chatId,
+      turnId: input.event.turnId,
+      itemId: input.event.itemId,
+      threadId: input.event.threadId,
+    });
+    if (!identity) {
+      return;
+    }
+
+    const existing = this.geminiPartialTextStates.get(identity);
+    const nextState: GeminiPartialTextState = existing
+      ? {
+        ...existing,
+        threadId: input.event.threadId ?? existing.threadId,
+        text: `${existing.text}${input.event.text}`,
+      }
+      : {
+        eventId: `gemini-partial:${identity}`,
+        sessionId: input.session.id,
+        ...(input.chatId ? { chatId: input.chatId } : {}),
+        ...(input.event.turnId ? { turnId: input.event.turnId } : {}),
+        ...(input.event.itemId ? { itemId: input.event.itemId } : {}),
+        ...(input.event.threadId ? { threadId: input.event.threadId } : {}),
+        text: input.event.text,
+        createdAt: new Date().toISOString(),
+      };
+    this.geminiPartialTextStates.set(identity, nextState);
+
+    this.appendSessionRealtimeEvent(input.session.id, {
+      id: nextState.eventId,
+      sessionId: input.session.id,
+      type: 'message',
+      title: 'Text Reply',
+      text: nextState.text,
+      createdAt: new Date().toISOString(),
+      meta: {
+        role: 'agent',
+        agent: 'gemini',
+        streamEvent: 'agent_message_partial',
+        sessionRole: 'agent',
+        sessionEventType: 'text',
+        sessionEvent: {
+          role: 'agent',
+          ev: {
+            t: 'text',
+            ...(nextState.itemId ? { item: nextState.itemId } : {}),
+          },
+        },
+        requestedPath: input.session.metadata.path,
+        ...(input.chatId ? { chatId: input.chatId } : {}),
+        ...(input.model ? { model: input.model } : {}),
+        ...(nextState.threadId ? { threadId: nextState.threadId, geminiSessionId: nextState.threadId } : {}),
+        ...(nextState.turnId ? { sessionTurnId: nextState.turnId } : {}),
+        ...(nextState.itemId ? { sessionItemId: nextState.itemId } : {}),
+        partial: true,
+      },
+    });
+  }
+
+  private clearGeminiRealtimePartial(input: {
+    sessionId: string;
+    chatId?: string;
+    turnId?: string;
+    itemId?: string;
+    threadId?: string;
+  }): void {
+    const identity = this.buildGeminiPartialIdentity(input);
+    if (!identity) {
+      return;
+    }
+    this.geminiPartialTextStates.delete(identity);
+  }
+
+  private clearGeminiRealtimePartialsForScope(input: {
+    sessionId: string;
+    chatId?: string;
+  }): void {
+    const chatScope = input.chatId?.trim() || '__default__';
+    for (const [identity, state] of this.geminiPartialTextStates.entries()) {
+      const stateChatScope = state.chatId?.trim() || '__default__';
+      if (state.sessionId !== input.sessionId || stateChatScope !== chatScope) {
+        continue;
+      }
+      this.geminiPartialTextStates.delete(identity);
     }
   }
 
@@ -3594,6 +3749,12 @@ export class HappyRuntimeStore {
     const scopedChatId = typeof context.chatId === 'string' && context.chatId.trim().length > 0
       ? context.chatId.trim()
       : undefined;
+    if (flavor === 'gemini') {
+      this.clearGeminiRealtimePartialsForScope({
+        sessionId: session.id,
+        chatId: scopedChatId,
+      });
+    }
     await this.cleanupStaleRuns('before_new_run');
     const modelSelection = resolveRuntimeModelSelection({
       agent: flavor,
@@ -3980,6 +4141,22 @@ export class HappyRuntimeStore {
               signal: controller.signal,
             }),
             onText: async (event, meta) => {
+              if (event.partial) {
+                if (!event.text) {
+                  return;
+                }
+                this.appendGeminiRealtimePartial({
+                  session,
+                  chatId: scopedChatId,
+                  model: selectedModel,
+                  event: {
+                    ...event,
+                    threadId: meta.threadId,
+                  },
+                });
+                return;
+              }
+
               const normalizedText = sanitizeAgentMessageText(event.text);
               if (!normalizedText) {
                 return;
@@ -3993,6 +4170,13 @@ export class HappyRuntimeStore {
                 return;
               }
               streamedGeminiTextReplies.add(textKey);
+              this.clearGeminiRealtimePartial({
+                sessionId: session.id,
+                chatId: scopedChatId,
+                turnId: event.turnId,
+                itemId: event.itemId,
+                threadId: meta.threadId,
+              });
               await geminiMessageQueue?.enqueueText({
                 output: normalizedText,
                 execCwd: nonCodexCwd,
@@ -4236,6 +4420,12 @@ export class HappyRuntimeStore {
         ...(selectedModel ? { model: selectedModel } : {}),
       });
     } finally {
+      if (flavor === 'gemini') {
+        this.clearGeminiRealtimePartialsForScope({
+          sessionId: session.id,
+          chatId: scopedChatId,
+        });
+      }
       finalizeRun();
     }
   }
@@ -4343,6 +4533,47 @@ export class HappyRuntimeStore {
       .filter((message) => typeof message.id === 'string')
       .map((message) => toRuntimeMessage(sessionId, message))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  async listRealtimeEvents(
+    sessionId: string,
+    options: {
+      afterCursor?: number;
+      limit?: number;
+      chatId?: string;
+    } = {},
+  ): Promise<{ events: RuntimeMessage[]; cursor: number }> {
+    const session = await this.getSession(sessionId);
+    if (!session) {
+      throw new Error('SESSION_NOT_FOUND');
+    }
+
+    const bucket = this.sessionRealtimeEvents.get(sessionId) ?? [];
+    const normalizedAfterCursor = Number.isFinite(options.afterCursor)
+      ? Math.max(0, Math.floor(Number(options.afterCursor)))
+      : 0;
+    const normalizedLimit = Number.isFinite(options.limit)
+      ? Math.max(1, Math.floor(Number(options.limit)))
+      : 100;
+
+    const events = bucket
+      .filter((entry) => entry.cursor > normalizedAfterCursor)
+      .filter((entry) => {
+        if (!options.chatId) {
+          return true;
+        }
+        const chatId = typeof entry.event.meta?.chatId === 'string'
+          ? entry.event.meta.chatId.trim()
+          : '';
+        return chatId === options.chatId;
+      })
+      .slice(-normalizedLimit)
+      .map((entry) => entry.event);
+
+    return {
+      events,
+      cursor: this.sessionRealtimeCursor.get(sessionId) ?? 0,
+    };
   }
 
   private async listAllMessages(sessionId: string): Promise<HappyBackendMessage[]> {

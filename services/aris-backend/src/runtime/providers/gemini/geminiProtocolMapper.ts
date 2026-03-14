@@ -29,6 +29,7 @@ type GeminiAssistantAggregate = {
   sequence: number;
   source?: GeminiMappedLine['assistantSource'];
   turnId?: string;
+  itemId?: string;
   sessionId?: string;
 };
 
@@ -199,6 +200,7 @@ function accumulateGeminiAssistantText(
     sequence,
     source: parsedLine.assistantSource ?? existing?.source,
     turnId: parsedLine.assistantTurnId ?? existing?.turnId,
+    itemId: parsedLine.assistantItemId ?? existing?.itemId,
     sessionId: parsedLine.sessionId ?? existing?.sessionId,
   });
 }
@@ -500,6 +502,7 @@ export function parseGeminiStreamLine(line: string): GeminiMappedLine {
       source: payloadType === 'result' ? 'result' : 'assistant',
       ...(sessionId ? { sessionId } : {}),
       ...(turnId ? { turnId } : {}),
+      ...(assistantItemId ? { itemId: assistantItemId } : {}),
       text: assistantText,
     });
   }
@@ -589,6 +592,7 @@ export function mapGeminiStreamOutputToProtocol(stdout: string): { envelopes: Se
       source: 'assistant',
       ...((latestAssistant?.sessionId ?? latestSessionId) ? { sessionId: latestAssistant?.sessionId ?? latestSessionId } : {}),
       ...(latestAssistant?.turnId ? { turnId: latestAssistant.turnId } : {}),
+      ...(latestAssistant?.itemId ? { itemId: latestAssistant.itemId } : {}),
       text: normalizedAssistantText,
     };
     const insertIndex = envelopes.findIndex((envelope) => envelope.kind === 'turn-end' || envelope.kind === 'stop');

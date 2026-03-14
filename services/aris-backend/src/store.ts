@@ -54,6 +54,7 @@ interface RuntimeStoreBackend {
   getSession(sessionId: string): Promise<RuntimeSession | null>;
   createSession(input: CreateSessionInput): Promise<RuntimeSession>;
   listMessages(sessionId: string, options?: { afterSeq?: number; limit?: number }): Promise<RuntimeMessage[]>;
+  listRealtimeEvents?(sessionId: string, options?: { afterCursor?: number; limit?: number; chatId?: string }): Promise<{ events: RuntimeMessage[]; cursor: number }>;
   appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage>;
   applySessionAction(sessionId: string, action: SessionAction, chatId?: string): Promise<{ accepted: boolean; message: string; at: string }>;
   isSessionRunning(sessionId: string, chatId?: string): Promise<boolean>;
@@ -334,6 +335,13 @@ export class RuntimeStore {
 
   async appendMessage(sessionId: string, input: AppendMessageInput) {
     return this.delegate.appendMessage(sessionId, input);
+  }
+
+  async listRealtimeEvents(sessionId: string, options?: { afterCursor?: number; limit?: number; chatId?: string }) {
+    if ('listRealtimeEvents' in this.delegate && typeof this.delegate.listRealtimeEvents === 'function') {
+      return this.delegate.listRealtimeEvents(sessionId, options);
+    }
+    return { events: [], cursor: 0 };
   }
 
   async applySessionAction(sessionId: string, action: SessionAction, chatId?: string) {
