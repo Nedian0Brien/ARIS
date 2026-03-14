@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 
 const STREAM_POLL_INTERVAL_MS = 1500;
 const HEARTBEAT_INTERVAL_MS = 15000;
+const INITIAL_STREAM_PAGE_LIMIT = 40;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -64,10 +65,13 @@ export async function GET(
             if (!cursor) {
               const { events } = await getSessionEvents(sessionId, {
                 userId: auth.user.id,
-                limit: 1,
+                limit: INITIAL_STREAM_PAGE_LIMIT,
                 chatId,
                 includeUnassigned,
               });
+              for (const event of events) {
+                writeEvent('event', { event });
+              }
               cursor = events[events.length - 1]?.id ?? null;
             } else {
               const { events } = await getSessionEvents(sessionId, {
