@@ -61,6 +61,7 @@ import {
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import type { AgentFlavor, ApprovalPolicy, PermissionRequest, SessionChat, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
+import type { GeminiSessionCapabilities } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '@/components/ui/AgentIcons';
 import { CustomizationSidebar } from './CustomizationSidebar';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
@@ -136,6 +137,7 @@ const CHAT_AGENT_CHOICES: AgentFlavor[] = ['codex', 'claude', 'gemini'];
 
 const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
 type ComposerModelOption = { id: string; shortLabel: string; badge: string };
+type GeminiModeOption = { id: string; shortLabel: string; badge: string };
 type ModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 const COMPOSER_MODELS_BY_AGENT: Record<'codex' | 'claude' | 'gemini', ComposerModelOption[]> = {
   codex: [
@@ -212,6 +214,7 @@ type ChatSubmittedPayload = {
   chatId: string;
   agent: AgentFlavor;
   model: string;
+  geminiMode?: string;
   modelReasoningEffort?: ModelReasoningEffort;
   threadId?: string;
 };
@@ -482,6 +485,17 @@ function normalizeModelId(value: unknown): string | null {
   return canonical.slice(0, 120);
 }
 
+function normalizeGeminiModeId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.slice(0, 120);
+}
+
 function normalizeModelReasoningEffort(value: unknown, fallback: ModelReasoningEffort = 'medium'): ModelReasoningEffort {
   if (value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh') {
     return value;
@@ -495,11 +509,60 @@ function isSupportedAgentFlavor(value: AgentFlavor): value is 'codex' | 'claude'
 
 type LegacyCustomModels = Record<string, string>;
 
+function deriveGeminiModeLabel(modeId: string): string {
+  const normalized = modeId.trim().toLowerCase();
+  if (normalized === 'default') {
+    return 'Default';
+  }
+  if (normalized === 'yolo') {
+    return 'YOLO';
+  }
+  if (normalized === 'plan') {
+    return 'Plan';
+  }
+  if (normalized === 'autoedit' || normalized === 'auto_edit') {
+    return 'Auto Edit';
+  }
+  return modeId
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function resolveGeminiModeOptions(
+  capabilities?: GeminiSessionCapabilities | null,
+  approvalPolicy?: ApprovalPolicy,
+): GeminiModeOption[] {
+  const options = capabilities?.modes.availableModes ?? [];
+  if (options.length === 0) {
+    return [
+      { id: 'default', shortLabel: 'Default', badge: '기본' },
+      ...(approvalPolicy === 'yolo' ? [{ id: 'yolo', shortLabel: 'YOLO', badge: '무승인' }] : []),
+    ];
+  }
+  return options.map((option, index) => ({
+    id: option.id,
+    shortLabel: option.label || deriveGeminiModeLabel(option.id),
+    badge: option.id === 'yolo'
+      ? '무승인'
+      : index === 0
+        ? 'ACP'
+        : '사용 가능',
+  }));
+}
+
 function resolveComposerModels(
   agent: AgentFlavor,
   providerSelections?: ProviderModelSelections,
   legacyCustomModels?: LegacyCustomModels,
+  geminiCapabilities?: GeminiSessionCapabilities | null,
 ): ComposerModelOption[] {
+  if (agent === 'gemini' && (geminiCapabilities?.models.availableModels?.length ?? 0) > 0) {
+    return geminiCapabilities!.models.availableModels.map((model, index) => ({
+      id: model.id,
+      shortLabel: model.label,
+      badge: index === 0 ? 'ACP' : '사용 가능',
+    }));
+  }
   const baseModels = isSupportedAgentFlavor(agent)
     ? COMPOSER_MODELS_BY_AGENT[agent]
     : COMPOSER_MODELS_BY_AGENT.codex;
@@ -538,8 +601,9 @@ function resolveDefaultModelId(
   agent: AgentFlavor,
   providerSelections?: ProviderModelSelections,
   legacyCustomModels?: LegacyCustomModels,
+  geminiCapabilities?: GeminiSessionCapabilities | null,
 ): string {
-  return resolveComposerModels(agent, providerSelections, legacyCustomModels)[0]?.id ?? 'gpt-5.4';
+  return resolveComposerModels(agent, providerSelections, legacyCustomModels, geminiCapabilities)[0]?.id ?? 'gpt-5.4';
 }
 
 function resolveAvailableComposerModelId(input: {
@@ -548,8 +612,14 @@ function resolveAvailableComposerModelId(input: {
   sessionModelFallback?: unknown;
   providerSelections?: ProviderModelSelections;
   legacyCustomModels?: LegacyCustomModels;
+  geminiCapabilities?: GeminiSessionCapabilities | null;
 }): string {
-  const availableModels = resolveComposerModels(input.agent, input.providerSelections, input.legacyCustomModels);
+  const availableModels = resolveComposerModels(
+    input.agent,
+    input.providerSelections,
+    input.legacyCustomModels,
+    input.geminiCapabilities,
+  );
   const availableIds = new Set(availableModels.map((model) => model.id));
   const requestedModel = normalizeModelId(input.requestedModel);
   if (requestedModel && availableIds.has(requestedModel)) {
@@ -560,6 +630,36 @@ function resolveAvailableComposerModelId(input: {
     return sessionModelFallback;
   }
   return availableModels[0]?.id ?? 'gpt-5.4';
+}
+
+function resolveDefaultGeminiModeId(
+  approvalPolicy?: ApprovalPolicy,
+  capabilities?: GeminiSessionCapabilities | null,
+): string {
+  const availableModes = resolveGeminiModeOptions(capabilities, approvalPolicy);
+  if (approvalPolicy === 'yolo' && availableModes.some((mode) => mode.id === 'yolo')) {
+    return 'yolo';
+  }
+  return normalizeGeminiModeId(capabilities?.modes.currentModeId)
+    ?? availableModes[0]?.id
+    ?? 'default';
+}
+
+function resolveAvailableGeminiModeId(input: {
+  requestedMode?: unknown;
+  approvalPolicy?: ApprovalPolicy;
+  capabilities?: GeminiSessionCapabilities | null;
+}): string {
+  const availableModes = resolveGeminiModeOptions(input.capabilities, input.approvalPolicy);
+  const availableIds = new Set(availableModes.map((mode) => mode.id));
+  const requestedMode = normalizeGeminiModeId(input.requestedMode);
+  if (requestedMode && availableIds.has(requestedMode)) {
+    if (requestedMode === 'yolo' && input.approvalPolicy !== 'yolo') {
+      return resolveDefaultGeminiModeId(input.approvalPolicy, input.capabilities);
+    }
+    return requestedMode;
+  }
+  return resolveDefaultGeminiModeId(input.approvalPolicy, input.capabilities);
 }
 
 function isUserEvent(event: UiEvent): boolean {
@@ -2248,7 +2348,21 @@ export function ChatInterface({
     }
     return normalizeModelReasoningEffort(initialChat?.modelReasoningEffort, 'medium');
   });
+  const [geminiCapabilities, setGeminiCapabilities] = useState<GeminiSessionCapabilities | null>(null);
+  const [geminiCapabilitiesError, setGeminiCapabilitiesError] = useState<string | null>(null);
+  const [geminiCapabilitiesLoading, setGeminiCapabilitiesLoading] = useState(false);
+  const [selectedGeminiModeId, setSelectedGeminiModeId] = useState<string>(() => {
+    const sortedInitialChats = sortSessionChats(initialChats);
+    const initialChat = (activeChatId && activeChatId.trim().length > 0
+      ? sortedInitialChats.find((chat) => chat.id === activeChatId.trim())
+      : null) ?? sortedInitialChats[0] ?? null;
+    return resolveAvailableGeminiModeId({
+      requestedMode: initialChat?.geminiMode,
+      approvalPolicy,
+    });
+  });
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const [isGeminiModeDropdownOpen, setIsGeminiModeDropdownOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const normalizedWorkspaceRootPath = useMemo(
     () => normalizeWorkspaceClientPath(workspaceRootPath),
@@ -2277,6 +2391,7 @@ export function ChatInterface({
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
+  const geminiModeDropdownRef = useRef<HTMLDivElement>(null);
   const shouldStickToBottomRef = useRef(true);
   const disconnectNoticeAwaitingRef = useRef<string | null>(null);
   const runtimeStartedSinceAwaitingRef = useRef(false);
@@ -2295,15 +2410,23 @@ export function ChatInterface({
   const providerSelections = modelSettings?.providers;
   const legacyCustomModels = modelSettings?.legacyCustomModels;
   const activeAgentFlavor = normalizeAgentFlavor(activeChat?.agent, defaultAgentFlavor);
+  const activeGeminiModeOptions = useMemo(
+    () => resolveGeminiModeOptions(geminiCapabilities, approvalPolicy),
+    [approvalPolicy, geminiCapabilities],
+  );
   const activeComposerModels = useMemo(
-    () => resolveComposerModels(activeAgentFlavor, providerSelections, legacyCustomModels),
-    [activeAgentFlavor, legacyCustomModels, providerSelections],
+    () => resolveComposerModels(activeAgentFlavor, providerSelections, legacyCustomModels, geminiCapabilities),
+    [activeAgentFlavor, geminiCapabilities, legacyCustomModels, providerSelections],
   );
   const activeModelId = normalizeModelId(selectedModelId)
-    ?? resolveDefaultModelId(activeAgentFlavor, providerSelections, legacyCustomModels);
+    ?? resolveDefaultModelId(activeAgentFlavor, providerSelections, legacyCustomModels, geminiCapabilities);
+  const activeGeminiModeId = normalizeGeminiModeId(selectedGeminiModeId)
+    ?? resolveDefaultGeminiModeId(approvalPolicy, geminiCapabilities);
   const codexReasoningEffort = activeAgentFlavor === 'codex'
     ? selectedModelReasoningEffort
     : undefined;
+  const activeGeminiMode = activeGeminiModeOptions.find((mode) => mode.id === activeGeminiModeId)
+    ?? { id: activeGeminiModeId, shortLabel: deriveGeminiModeLabel(activeGeminiModeId), badge: '현재' };
   const agentMeta = resolveAgentMeta(activeAgentFlavor);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? runtimeError ?? null;
   const latestRunStatus = useMemo(
@@ -2383,6 +2506,52 @@ export function ChatInterface({
   const firstPendingPermissionId = pendingPermissions[0]?.id ?? null;
 
   useEffect(() => {
+    if (activeAgentFlavor !== 'gemini') {
+      if (geminiCapabilities !== null) {
+        setGeminiCapabilities(null);
+      }
+      if (geminiCapabilitiesError !== null) {
+        setGeminiCapabilitiesError(null);
+      }
+      if (geminiCapabilitiesLoading) {
+        setGeminiCapabilitiesLoading(false);
+      }
+      return;
+    }
+
+    let cancelled = false;
+    setGeminiCapabilitiesLoading(true);
+    setGeminiCapabilitiesError(null);
+    void fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/gemini/capabilities`, { cache: 'no-store' })
+      .then((response) => response.json().then((payload) => ({ response, payload })))
+      .then(({ response, payload }) => {
+        if (cancelled) {
+          return;
+        }
+        if (!response.ok || !payload?.capabilities) {
+          throw new Error(payload?.error ?? 'Gemini capability를 불러오지 못했습니다.');
+        }
+        setGeminiCapabilities(payload.capabilities as GeminiSessionCapabilities);
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        setGeminiCapabilities(null);
+        setGeminiCapabilitiesError(error instanceof Error ? error.message : 'Gemini capability를 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setGeminiCapabilitiesLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeAgentFlavor, sessionId]);
+
+  useEffect(() => {
     const sessionModelFallback = activeAgentFlavor === defaultAgentFlavor
       ? normalizeModelId(sessionModel)
       : null;
@@ -2392,12 +2561,31 @@ export function ChatInterface({
       sessionModelFallback,
       providerSelections,
       legacyCustomModels,
+      geminiCapabilities,
     });
     if (nextModelId === selectedModelId) {
       return;
     }
     setSelectedModelId(nextModelId);
-  }, [activeAgentFlavor, activeChat?.id, activeChat?.model, defaultAgentFlavor, legacyCustomModels, providerSelections, selectedModelId, sessionModel]);
+  }, [activeAgentFlavor, activeChat?.id, activeChat?.model, defaultAgentFlavor, geminiCapabilities, legacyCustomModels, providerSelections, selectedModelId, sessionModel]);
+
+  useEffect(() => {
+    if (activeAgentFlavor !== 'gemini') {
+      if (selectedGeminiModeId !== 'default') {
+        setSelectedGeminiModeId('default');
+      }
+      return;
+    }
+    const nextModeId = resolveAvailableGeminiModeId({
+      requestedMode: activeChat?.geminiMode,
+      approvalPolicy,
+      capabilities: geminiCapabilities,
+    });
+    if (nextModeId === selectedGeminiModeId) {
+      return;
+    }
+    setSelectedGeminiModeId(nextModeId);
+  }, [activeAgentFlavor, activeChat?.geminiMode, activeChat?.id, approvalPolicy, geminiCapabilities, selectedGeminiModeId]);
 
   useEffect(() => {
     if (activeAgentFlavor !== 'codex') {
@@ -3127,7 +3315,7 @@ export function ChatInterface({
   ]);
 
   useEffect(() => {
-    if (plusMenuMode === 'closed' && !isModelDropdownOpen && !isCreateChatMenuOpen) return;
+    if (plusMenuMode === 'closed' && !isModelDropdownOpen && !isGeminiModeDropdownOpen && !isCreateChatMenuOpen) return;
     function handleOutsideClick(e: MouseEvent) {
       if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
         setPlusMenuMode('closed');
@@ -3135,13 +3323,16 @@ export function ChatInterface({
       if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
         setIsModelDropdownOpen(false);
       }
+      if (geminiModeDropdownRef.current && !geminiModeDropdownRef.current.contains(e.target as Node)) {
+        setIsGeminiModeDropdownOpen(false);
+      }
       if (createChatMenuRef.current && !createChatMenuRef.current.contains(e.target as Node)) {
         setIsCreateChatMenuOpen(false);
       }
     }
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, [plusMenuMode, isModelDropdownOpen, isCreateChatMenuOpen]);
+  }, [plusMenuMode, isModelDropdownOpen, isGeminiModeDropdownOpen, isCreateChatMenuOpen]);
 
   const removeContextItem = useCallback((id: string) => {
     setContextItems((prev) => prev.filter((item) => item.id !== id));
@@ -4059,6 +4250,51 @@ export function ChatInterface({
     }
   }, [activeChatIdResolved, sessionId]);
 
+  const handleSelectGeminiMode = useCallback(async (modeId: string) => {
+    const normalizedModeId = normalizeGeminiModeId(modeId);
+    if (!activeChatIdResolved || !normalizedModeId || activeAgentFlavor !== 'gemini') {
+      return;
+    }
+    if (normalizedModeId === 'yolo' && approvalPolicy !== 'yolo') {
+      setChatMutationError('YOLO 모드는 세션 승인 정책이 yolo일 때만 사용할 수 있습니다.');
+      return;
+    }
+    const previousModeId = normalizeGeminiModeId(activeChat?.geminiMode) ?? 'default';
+    setSelectedGeminiModeId(normalizedModeId);
+    setIsGeminiModeDropdownOpen(false);
+    setChatMutationError(null);
+    setChats((prev) => sortSessionChats(prev.map((chat) => (
+      chat.id === activeChatIdResolved
+        ? { ...chat, geminiMode: normalizedModeId }
+        : chat
+    ))));
+    try {
+      const response = await fetch(
+        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ geminiMode: normalizedModeId }),
+        },
+      );
+      const payload = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
+      if (!response.ok || !payload.chat) {
+        throw new Error(payload.error ?? 'Gemini mode 저장에 실패했습니다.');
+      }
+      setChats((prev) => sortSessionChats(prev.map((chat) => (
+        chat.id === payload.chat?.id ? payload.chat : chat
+      ))));
+    } catch (error) {
+      setSelectedGeminiModeId(previousModeId);
+      setChats((prev) => sortSessionChats(prev.map((chat) => (
+        chat.id === activeChatIdResolved
+          ? { ...chat, geminiMode: previousModeId }
+          : chat
+      ))));
+      setChatMutationError(error instanceof Error ? error.message : 'Gemini mode 저장에 실패했습니다.');
+    }
+  }, [activeAgentFlavor, activeChat?.geminiMode, activeChatIdResolved, approvalPolicy, sessionId]);
+
   const handleSelectModelReasoningEffort = useCallback(async (value: unknown) => {
     const normalizedEffort = normalizeModelReasoningEffort(value, 'medium');
     setSelectedModelReasoningEffort(normalizedEffort);
@@ -4106,7 +4342,10 @@ export function ChatInterface({
     setIsCreatingChat(true);
     setChatMutationError(null);
     setIsCreateChatMenuOpen(false);
-    const defaultModelId = resolveDefaultModelId(agent, providerSelections, legacyCustomModels);
+    const defaultModelId = resolveDefaultModelId(agent, providerSelections, legacyCustomModels, geminiCapabilities);
+    const defaultGeminiModeId = agent === 'gemini'
+      ? resolveDefaultGeminiModeId(approvalPolicy, geminiCapabilities)
+      : undefined;
     try {
       const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`, {
         method: 'POST',
@@ -4114,6 +4353,7 @@ export function ChatInterface({
         body: JSON.stringify({
           agent,
           model: defaultModelId,
+          ...(defaultGeminiModeId ? { geminiMode: defaultGeminiModeId } : {}),
           ...(agent === 'codex' ? { modelReasoningEffort: selectedModelReasoningEffort } : {}),
         }),
       });
@@ -4128,7 +4368,7 @@ export function ChatInterface({
     } finally {
       setIsCreatingChat(false);
     }
-  }, [goToChat, isCreatingChat, legacyCustomModels, providerSelections, selectedModelReasoningEffort, sessionId]);
+  }, [approvalPolicy, geminiCapabilities, goToChat, isCreatingChat, legacyCustomModels, providerSelections, selectedModelReasoningEffort, sessionId]);
 
   const handleToggleChatPin = useCallback(async (chat: SessionChat) => {
     setChatMutationLoadingId(chat.id);
@@ -4253,7 +4493,14 @@ export function ChatInterface({
       : '';
     const finalText = contextPrefix + promptText;
     const submitModelId = normalizeModelId(selectedModelId)
-      ?? resolveDefaultModelId(activeAgentFlavor, providerSelections, legacyCustomModels);
+      ?? resolveDefaultModelId(activeAgentFlavor, providerSelections, legacyCustomModels, geminiCapabilities);
+    const submitGeminiModeId = activeAgentFlavor === 'gemini'
+      ? resolveAvailableGeminiModeId({
+          requestedMode: selectedGeminiModeId,
+          approvalPolicy,
+          capabilities: geminiCapabilities,
+        })
+      : undefined;
     const submitModelReasoningEffort = codexReasoningEffort;
 
     const awaitingSince = new Date().toISOString();
@@ -4271,6 +4518,7 @@ export function ChatInterface({
           ? activeChat.agent
           : 'codex',
         model: submitModelId,
+        ...(submitGeminiModeId ? { geminiMode: submitGeminiModeId } : {}),
         ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
         ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
       },
@@ -4291,6 +4539,7 @@ export function ChatInterface({
             chatId: scopedChatId,
             agent: activeChat?.agent ?? 'codex',
             model: submitModelId,
+            ...(submitGeminiModeId ? { geminiMode: submitGeminiModeId } : {}),
             ...(submitModelReasoningEffort
               ? {
                   modelReasoningEffort: submitModelReasoningEffort,
@@ -4404,6 +4653,7 @@ export function ChatInterface({
             chatId: lastSubmittedPayload.chatId,
             agent: lastSubmittedPayload.agent,
             model: lastSubmittedPayload.model,
+            ...(lastSubmittedPayload.geminiMode ? { geminiMode: lastSubmittedPayload.geminiMode } : {}),
             ...(lastSubmittedPayload.modelReasoningEffort
               ? {
                   modelReasoningEffort: lastSubmittedPayload.modelReasoningEffort,
@@ -5162,6 +5412,45 @@ export function ChatInterface({
                       </div>
                     )}
                   </div>
+                  {activeAgentFlavor === 'gemini' && (
+                    <div className={styles.modelSelectorWrap} ref={geminiModeDropdownRef}>
+                      <button
+                        type="button"
+                        className={styles.modelSelectorBtn}
+                        onClick={() => setIsGeminiModeDropdownOpen((v) => !v)}
+                        aria-haspopup="listbox"
+                        aria-expanded={isGeminiModeDropdownOpen}
+                      >
+                        <span>Mode</span>
+                        <span>{activeGeminiMode.shortLabel}</span>
+                        <ChevronDown size={11} />
+                      </button>
+                      {isGeminiModeDropdownOpen && (
+                        <div className={styles.modelDropdown} role="listbox">
+                          {activeGeminiModeOptions.map((mode) => {
+                            const disabled = mode.id === 'yolo' && approvalPolicy !== 'yolo';
+                            return (
+                              <button
+                                key={mode.id}
+                                type="button"
+                                role="option"
+                                aria-selected={activeGeminiModeId === mode.id}
+                                className={`${styles.modelOption} ${activeGeminiModeId === mode.id ? styles.modelOptionActive : ''}`}
+                                onClick={() => { void handleSelectGeminiMode(mode.id); }}
+                                disabled={disabled}
+                                title={disabled ? '세션 승인 정책이 yolo일 때만 사용할 수 있습니다.' : undefined}
+                              >
+                                <span>{mode.shortLabel}</span>
+                                <span className={styles.modelOptionBadge}>
+                                  {disabled ? '잠김' : mode.badge}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {activeAgentFlavor === 'codex' && (
                     <label className={styles.modelEffortWrap}>
                       <span className={styles.modelEffortLabel}>Effort</span>
@@ -5190,7 +5479,17 @@ export function ChatInterface({
                       )}
                     </div>
                   )}
+                  {activeAgentFlavor === 'gemini' && geminiCapabilitiesLoading && !isAgentRunning && (
+                    <div className={styles.composerRunningBadge} role="status" aria-live="polite">
+                      Gemini ACP 확인 중
+                    </div>
+                  )}
                 </div>
+                {activeAgentFlavor === 'gemini' && geminiCapabilitiesError && !geminiCapabilitiesLoading && (
+                  <div className={styles.composerHint} role="status" aria-live="polite">
+                    {geminiCapabilitiesError}
+                  </div>
+                )}
 
                 {contextItems.length > 0 && (
                   <div className={styles.composerChips}>

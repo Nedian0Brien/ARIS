@@ -21,6 +21,7 @@ import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.
 import { ClaudeSessionLogTracker, extractClaudeSessionHintIds } from './providers/claude/claudeSessionScanner.js';
 import { buildClaudeSessionId } from './providers/claude/claudeSessionSource.js';
 import { GeminiMessageQueue } from './providers/gemini/geminiMessageQueue.js';
+import { inspectGeminiAcpSessionCapabilities, runGeminiAcpTurn } from './providers/gemini/geminiAcpClient.js';
 import { buildGeminiProviderTextEvent } from './providers/gemini/geminiEventBridgeV2.js';
 import { looksLikeGeminiActionTranscript, parseGeminiStreamLine, parseGeminiStreamOutput } from './providers/gemini/geminiProtocolMapper.js';
 import { createGeminiRuntime } from './providers/gemini/geminiRuntime.js';
@@ -29,14 +30,17 @@ import { GeminiSessionRegistry } from './providers/gemini/geminiSessionRegistry.
 import { buildProviderCommand, type ProviderCommand } from './providers/providerCommandFactory.js';
 import type { SessionProtocolEnvelope } from './contracts/sessionProtocol.js';
 import type {
+  ProviderActionEvent,
   ProviderPermissionRequest,
   ProviderRuntimeFlavor,
   ProviderRuntimeSession,
+  ProviderTextEvent,
 } from './contracts/providerRuntime.js';
 import type { ClaudeSessionLaunchMode } from './providers/claude/claudeSessionContract.js';
 import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeTextEvent } from './providers/claude/types.js';
 import type {
   ApprovalPolicy,
+  GeminiSessionCapabilities,
   PermissionDecision,
   PermissionRequest,
   PermissionRisk,
@@ -181,6 +185,7 @@ type GeminiPartialTextState = {
   eventId: string;
   sessionId: string;
   chatId?: string;
+  phase?: 'commentary' | 'final';
   turnId?: string;
   itemId?: string;
   threadId?: string;
@@ -297,6 +302,17 @@ function normalizeModelReasoningEffort(value: unknown): ModelReasoningEffort | u
     return value;
   }
   return undefined;
+}
+
+function normalizeGeminiMode(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return trimmed.slice(0, 120);
 }
 
 function buildProviderRuntimeSession<TFlavor extends ProviderRuntimeFlavor>(
@@ -834,11 +850,13 @@ function buildActionEventKey(action: ParsedAgentActionEvent): string {
 
 function buildStreamedTextReplyKey(input: {
   source: 'assistant' | 'result';
+  phase?: 'commentary' | 'final';
   threadId?: string;
   text: string;
 }): string {
   return [
     input.source,
+    input.phase ?? 'final',
     input.threadId ?? '',
     input.text,
   ].join('|');
@@ -1507,11 +1525,13 @@ export class HappyRuntimeStore {
   private buildGeminiPartialIdentity(input: {
     sessionId: string;
     chatId?: string;
+    phase?: 'commentary' | 'final';
     turnId?: string;
     itemId?: string;
     threadId?: string;
   }): string | null {
     const scope = input.chatId?.trim() || '__default__';
+    const phase = input.phase ?? 'final';
     const turn = input.turnId?.trim() || input.threadId?.trim() || '';
     const item = input.itemId?.trim() || '';
     if (!turn && !item) {
@@ -1520,6 +1540,7 @@ export class HappyRuntimeStore {
     return [
       input.sessionId,
       scope,
+      phase,
       turn || '__turn__',
       item || '__item__',
     ].join(':');
@@ -1534,6 +1555,7 @@ export class HappyRuntimeStore {
     const identity = this.buildGeminiPartialIdentity({
       sessionId: input.session.id,
       chatId: input.chatId,
+      phase: input.event.phase,
       turnId: input.event.turnId,
       itemId: input.event.itemId,
       threadId: input.event.threadId,
@@ -1553,6 +1575,7 @@ export class HappyRuntimeStore {
         eventId: `gemini-partial:${identity}`,
         sessionId: input.session.id,
         ...(input.chatId ? { chatId: input.chatId } : {}),
+        ...(input.event.phase ? { phase: input.event.phase } : {}),
         ...(input.event.turnId ? { turnId: input.event.turnId } : {}),
         ...(input.event.itemId ? { itemId: input.event.itemId } : {}),
         ...(input.event.threadId ? { threadId: input.event.threadId } : {}),
@@ -1565,13 +1588,13 @@ export class HappyRuntimeStore {
       id: nextState.eventId,
       sessionId: input.session.id,
       type: 'message',
-      title: 'Text Reply',
+      title: nextState.phase === 'commentary' ? 'Commentary' : 'Text Reply',
       text: nextState.text,
       createdAt: new Date().toISOString(),
       meta: {
         role: 'agent',
         agent: 'gemini',
-        streamEvent: 'agent_message_partial',
+        streamEvent: nextState.phase === 'commentary' ? 'agent_commentary_partial' : 'agent_message_partial',
         sessionRole: 'agent',
         sessionEventType: 'text',
         sessionEvent: {
@@ -1584,6 +1607,7 @@ export class HappyRuntimeStore {
         requestedPath: input.session.metadata.path,
         ...(input.chatId ? { chatId: input.chatId } : {}),
         ...(input.model ? { model: input.model } : {}),
+        ...(nextState.phase ? { messagePhase: nextState.phase } : {}),
         ...(nextState.threadId ? { threadId: nextState.threadId, geminiSessionId: nextState.threadId } : {}),
         ...(nextState.turnId ? { sessionTurnId: nextState.turnId } : {}),
         ...(nextState.itemId ? { sessionItemId: nextState.itemId } : {}),
@@ -1595,6 +1619,7 @@ export class HappyRuntimeStore {
   private clearGeminiRealtimePartial(input: {
     sessionId: string;
     chatId?: string;
+    phase?: 'commentary' | 'final';
     turnId?: string;
     itemId?: string;
     threadId?: string;
@@ -2450,6 +2475,35 @@ export class HappyRuntimeStore {
       throw new Error(`Unsupported agent flavor: ${agent}`);
     }
     return this.runAgentCommand(agent, command, cwdHint, signal, handlers);
+  }
+
+  private async runGeminiAcpTurn(input: {
+    session: ProviderRuntimeSession<'gemini'>;
+    prompt: string;
+    preferredThreadId?: string;
+    model?: string;
+    mode?: string;
+    signal?: AbortSignal;
+    onAction?: (action: ProviderActionEvent, meta: { threadId: string }) => Promise<void>;
+    onPermission?: (request: ProviderPermissionRequest, meta: { threadId: string }) => Promise<PermissionDecision>;
+    onText?: (event: ProviderTextEvent, meta: { threadId: string }) => Promise<void>;
+  }) {
+    const safeCwd = this.resolveExecutionCwd(input.session.metadata.path);
+    return runGeminiAcpTurn({
+      cwd: safeCwd,
+      prompt: input.prompt,
+      approvalPolicy: input.session.metadata.approvalPolicy,
+      model: normalizeModel(input.model) ?? undefined,
+      mode: normalizeGeminiMode(input.mode),
+      preferredSessionId: input.preferredThreadId,
+      signal: input.signal,
+      onPermission: input.onPermission
+        ? ((request, meta) => input.onPermission!(request, meta))
+        : undefined,
+      onText: input.onText
+        ? ((event, meta) => input.onText!(event, meta))
+        : undefined,
+    });
   }
 
   private async appendAgentMessage(
@@ -3797,6 +3851,7 @@ export class HappyRuntimeStore {
       threadId?: string;
       agent?: RuntimeAgent;
       model?: string;
+      geminiMode?: string;
       customModel?: string;
       modelReasoningEffort?: ModelReasoningEffort;
     } = {},
@@ -3825,6 +3880,9 @@ export class HappyRuntimeStore {
       customModel: context.customModel,
     });
     const selectedModel = modelSelection.model;
+    const selectedGeminiMode = flavor === 'gemini'
+      ? normalizeGeminiMode(context.geminiMode)
+      : undefined;
     const selectedModelReasoningEffort = flavor === 'codex'
       ? normalizeModelReasoningEffort(context.modelReasoningEffort)
       : undefined;
@@ -3833,6 +3891,7 @@ export class HappyRuntimeStore {
         sessionId: session.id,
         ...(scopedChatId ? { chatId: scopedChatId } : {}),
         model: selectedModel,
+        ...(selectedGeminiMode ? { geminiMode: selectedGeminiMode } : {}),
         turnStatus: 'model_normalized',
         channel: flavor === 'codex' && CODEX_RUNTIME_MODE !== 'exec' ? 'app_server' : 'exec_cli',
         stage: 'run_status',
@@ -3895,6 +3954,7 @@ export class HappyRuntimeStore {
         startedAt: Date.now(),
         agent: flavor,
         ...(selectedModel ? { model: selectedModel } : {}),
+        ...(selectedGeminiMode ? { geminiMode: selectedGeminiMode } : {}),
         ...(selectedModelReasoningEffort ? { modelReasoningEffort: selectedModelReasoningEffort } : {}),
         completed,
       });
@@ -3913,6 +3973,7 @@ export class HappyRuntimeStore {
       requestedPath: session.metadata.path,
       agent: flavor,
       ...(selectedModel ? { model: selectedModel } : {}),
+      ...(selectedGeminiMode ? { geminiMode: selectedGeminiMode } : {}),
     });
 
     try {
@@ -4134,48 +4195,7 @@ export class HappyRuntimeStore {
           const geminiRuntime = createGeminiRuntime({
             registry: this.geminiSessionRegistry,
             listMessages: async (sessionId) => this.listMessages(sessionId),
-            executeTurn: async (request) => {
-              const geminiTurn = await this.runAgentCli(
-                'gemini',
-                request.prompt,
-                request.session.metadata.approvalPolicy,
-                request.model,
-                request.session.metadata.path,
-                request.signal,
-                request.preferredThreadId ? { id: request.preferredThreadId, mode: 'resume' } : undefined,
-                (() => {
-                  const actionHandler = request.onAction;
-                  const permissionHandler = request.onPermission;
-                  const textHandler = request.onText;
-                  return {
-                  onAction: actionHandler
-                    ? async (action) => actionHandler(action, {
-                      threadId: request.preferredThreadId ?? '',
-                    })
-                    : undefined,
-                  onPermission: permissionHandler
-                    ? async (permission) => permissionHandler(permission, {
-                      threadId: request.preferredThreadId ?? '',
-                    })
-                    : undefined,
-                  onText: textHandler
-                    ? async (event) => textHandler(event, {
-                      threadId: event.threadId ?? request.preferredThreadId ?? '',
-                    })
-                    : undefined,
-                  };
-                })(),
-              );
-              return {
-                output: geminiTurn.output,
-                cwd: geminiTurn.cwd,
-                streamedActionsPersisted: geminiTurn.streamedActionsPersisted,
-                inferredActions: geminiTurn.inferredActions,
-                threadId: geminiTurn.threadId ?? request.preferredThreadId,
-                threadIdSource: geminiTurn.threadId ? 'observed' : request.preferredThreadId ? 'resume' : 'synthetic',
-                ...(geminiTurn.protocolEnvelopes ? { protocolEnvelopes: geminiTurn.protocolEnvelopes } : {}),
-              };
-            },
+            executeTurn: async (request) => this.runGeminiAcpTurn(request),
           });
           const recovered = await geminiRuntime.recoverSession({
             session: geminiSession,
@@ -4188,6 +4208,7 @@ export class HappyRuntimeStore {
             requestedThreadId,
             storedThreadId: recovered.recoveredThreadId,
             model: selectedModel,
+            mode: selectedGeminiMode,
             signal: controller.signal,
             onAction: async (action, meta) => {
               await geminiMessageQueue?.enqueueToolAction({
@@ -4226,6 +4247,7 @@ export class HappyRuntimeStore {
               }
               const textKey = buildStreamedTextReplyKey({
                 source: event.source,
+                phase: event.phase,
                 threadId: meta.threadId,
                 text: normalizedText,
               });
@@ -4233,10 +4255,13 @@ export class HappyRuntimeStore {
                 return;
               }
               streamedGeminiTextReplies.add(textKey);
-              streamedGeminiCompletedTextPersisted = true;
+              if (event.phase !== 'commentary') {
+                streamedGeminiCompletedTextPersisted = true;
+              }
               this.clearGeminiRealtimePartial({
                 sessionId: session.id,
                 chatId: scopedChatId,
+                phase: event.phase,
                 turnId: event.turnId,
                 itemId: event.itemId,
                 threadId: meta.threadId,
@@ -4246,7 +4271,8 @@ export class HappyRuntimeStore {
                 execCwd: nonCodexCwd,
                 threadId: meta.threadId,
                 messageMeta: {
-                  streamEvent: 'agent_message',
+                  streamEvent: event.phase === 'commentary' ? 'agent_commentary' : 'agent_message',
+                  ...(event.phase ? { messagePhase: event.phase } : {}),
                 },
                 envelopes: event.envelopes,
               });
@@ -4370,11 +4396,13 @@ export class HappyRuntimeStore {
               && (
             streamedGeminiTextReplies.has(buildStreamedTextReplyKey({
               source: 'assistant',
+              phase: 'final',
               threadId: response.threadId,
               text: finalAgentOutput,
             }))
             || streamedGeminiTextReplies.has(buildStreamedTextReplyKey({
               source: 'result',
+              phase: 'final',
               threadId: response.threadId,
               text: finalAgentOutput,
             }))
@@ -4512,6 +4540,19 @@ export class HappyRuntimeStore {
   async getSession(sessionId: string): Promise<RuntimeSession | null> {
     const sessions = await this.listSessions();
     return sessions.find((session) => session.id === sessionId) ?? null;
+  }
+
+  async getGeminiSessionCapabilities(sessionId: string): Promise<GeminiSessionCapabilities> {
+    const session = await this.getSession(sessionId);
+    if (!session) {
+      throw new Error('SESSION_NOT_FOUND');
+    }
+    if (session.metadata.flavor !== 'gemini') {
+      throw new Error('GEMINI_SESSION_REQUIRED');
+    }
+    return inspectGeminiAcpSessionCapabilities({
+      cwd: this.resolveExecutionCwd(session.metadata.path),
+    });
   }
 
   async createSession(input: HappyRuntimeCreateInput): Promise<RuntimeSession> {
@@ -4726,6 +4767,7 @@ export class HappyRuntimeStore {
         : undefined;
       const requestedAgent = normalizeAgent(input.meta?.agent);
       const requestedModel = normalizeModel(input.meta?.model);
+      const requestedGeminiMode = normalizeGeminiMode(input.meta?.geminiMode);
       const customModel = normalizeModel(input.meta?.customModel);
       const modelReasoningEffort = normalizeModelReasoningEffort(
         input.meta?.modelReasoningEffort ?? input.meta?.model_reasoning_effort,
@@ -4735,6 +4777,7 @@ export class HappyRuntimeStore {
         threadId,
         ...(requestedAgent !== 'unknown' ? { agent: requestedAgent } : {}),
         ...(requestedModel ? { model: requestedModel } : {}),
+        ...(requestedGeminiMode ? { geminiMode: requestedGeminiMode } : {}),
         ...(customModel ? { customModel } : {}),
         ...(modelReasoningEffort ? { modelReasoningEffort } : {}),
       });

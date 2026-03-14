@@ -47,6 +47,7 @@ export async function POST(
       title?: string;
       agent?: string;
       model?: string | null;
+      geminiMode?: string | null;
       modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh' | null;
     };
     const normalizedAgent = body.agent === 'claude' || body.agent === 'codex' || body.agent === 'gemini'
@@ -58,6 +59,7 @@ export async function POST(
       title: body.title,
       agent: normalizedAgent,
       model: body.model,
+      geminiMode: body.geminiMode,
       modelReasoningEffort: body.modelReasoningEffort,
     });
 

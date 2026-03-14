@@ -26,6 +26,7 @@ export async function PATCH(
     threadId?: string | null;
     touchActivity?: boolean;
     model?: string | null;
+    geminiMode?: string | null;
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh' | null;
     lastReadAt?: string | null;
     lastReadEventId?: string | null;
@@ -49,6 +50,7 @@ export async function PATCH(
       threadId: body.threadId,
       touchActivity: body.touchActivity,
       model: body.model,
+      geminiMode: body.geminiMode,
       modelReasoningEffort: body.modelReasoningEffort,
       lastReadAt: body.lastReadAt,
       lastReadEventId: body.lastReadEventId,

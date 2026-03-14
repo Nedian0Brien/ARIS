@@ -22,6 +22,7 @@ export type SessionChat = {
   sessionId: string;
   agent: AgentFlavor;
   model?: string | null;
+  geminiMode?: string | null;
   modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh' | null;
   title: string;
   isPinned: boolean;
@@ -109,6 +110,24 @@ export type SessionDetail = {
   approvalPolicy?: ApprovalPolicy;
   alias?: string | null;
   isPinned?: boolean;
+};
+
+export type GeminiCapabilityOption = {
+  id: string;
+  label: string;
+};
+
+export type GeminiSessionCapabilities = {
+  sessionId: string;
+  fetchedAt: string;
+  modes: {
+    currentModeId?: string | null;
+    availableModes: GeminiCapabilityOption[];
+  };
+  models: {
+    currentModelId?: string | null;
+    availableModels: GeminiCapabilityOption[];
+  };
 };
 
 export type PermissionRisk = 'low' | 'medium' | 'high';

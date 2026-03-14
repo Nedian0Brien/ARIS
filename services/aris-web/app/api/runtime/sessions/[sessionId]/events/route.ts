@@ -93,7 +93,7 @@ export async function POST(
       const chat = chatId
         ? await prisma.sessionChat.findFirst({
             where: { id: chatId, sessionId },
-            select: { agent: true, model: true },
+            select: { agent: true, model: true, geminiMode: true },
           })
         : null;
       const requestedAgent = normalizeSupportedAgent(meta.agent, normalizeSupportedAgent(chat?.agent, 'codex'));
@@ -109,6 +109,17 @@ export async function POST(
       });
       meta.agent = resolved.agent;
       meta.model = resolved.model;
+      if (requestedAgent === 'gemini') {
+        const explicitGeminiMode = typeof meta.geminiMode === 'string' && meta.geminiMode.trim().length > 0
+          ? meta.geminiMode.trim()
+          : null;
+        const storedGeminiMode = typeof chat?.geminiMode === 'string' && chat.geminiMode.trim().length > 0
+          ? chat.geminiMode.trim()
+          : null;
+        if (explicitGeminiMode || storedGeminiMode) {
+          meta.geminiMode = explicitGeminiMode ?? storedGeminiMode;
+        }
+      }
       const reasoningEffort = normalizeModelReasoningEffort(
         meta.modelReasoningEffort ?? meta.model_reasoning_effort,
       );

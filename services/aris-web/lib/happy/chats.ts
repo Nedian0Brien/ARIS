@@ -8,6 +8,7 @@ function toSessionChat(record: {
   sessionId: string;
   agent: string;
   model: string | null;
+  geminiMode: string | null;
   modelReasoningEffort: string | null;
   title: string;
   isPinned: boolean;
@@ -29,6 +30,7 @@ function toSessionChat(record: {
     sessionId: record.sessionId,
     agent: resolveAgentFlavor(record.agent),
     model: record.model,
+    geminiMode: record.geminiMode,
     modelReasoningEffort: normalizeModelReasoningEffort(record.modelReasoningEffort),
     title: record.title,
     isPinned: record.isPinned,
@@ -64,6 +66,17 @@ function normalizeChatModel(input: unknown): string | null {
   }
   const canonical = trimmed === 'gpt-5-codex' ? 'gpt-5.3-codex' : trimmed;
   return canonical.slice(0, 120);
+}
+
+function normalizeGeminiMode(input: unknown): string | null {
+  if (typeof input !== 'string') {
+    return null;
+  }
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.slice(0, 120);
 }
 
 function normalizeModelReasoningEffort(input: unknown): 'low' | 'medium' | 'high' | 'xhigh' | null {
@@ -159,6 +172,7 @@ export async function createSessionChat(input: {
   userId: string;
   agent?: AgentFlavor;
   model?: string | null;
+  geminiMode?: string | null;
   modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh' | null;
   title?: string;
 }): Promise<SessionChat> {
@@ -180,6 +194,7 @@ export async function createSessionChat(input: {
       userId: input.userId,
       agent: input.agent && input.agent !== 'unknown' ? input.agent : 'codex',
       ...(input.model !== undefined && { model: normalizeChatModel(input.model) }),
+      ...(input.geminiMode !== undefined && { geminiMode: normalizeGeminiMode(input.geminiMode) }),
       ...(input.modelReasoningEffort !== undefined && {
         modelReasoningEffort: normalizeModelReasoningEffort(input.modelReasoningEffort),
       }),
@@ -201,6 +216,7 @@ export async function updateSessionChat(input: {
   threadId?: string | null;
   touchActivity?: boolean;
   model?: string | null;
+  geminiMode?: string | null;
   modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh' | null;
   lastReadAt?: string | null;
   lastReadEventId?: string | null;
@@ -256,6 +272,7 @@ export async function updateSessionChat(input: {
     || input.threadId !== undefined
     || Boolean(input.touchActivity)
     || input.model !== undefined
+    || input.geminiMode !== undefined
     || input.modelReasoningEffort !== undefined
     || parsedLastReadAt !== undefined
     || input.lastReadEventId !== undefined
@@ -286,6 +303,7 @@ export async function updateSessionChat(input: {
       ...(input.threadId !== undefined && { threadId: input.threadId && input.threadId.trim() ? input.threadId.trim() : null }),
       ...(input.touchActivity && { lastActivityAt: new Date() }),
       ...(input.model !== undefined && { model: normalizeChatModel(input.model) }),
+      ...(input.geminiMode !== undefined && { geminiMode: normalizeGeminiMode(input.geminiMode) }),
       ...(input.modelReasoningEffort !== undefined && {
         modelReasoningEffort: normalizeModelReasoningEffort(input.modelReasoningEffort),
       }),

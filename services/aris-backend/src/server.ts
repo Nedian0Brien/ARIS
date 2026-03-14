@@ -296,6 +296,23 @@ export function buildServer(config: ServerConfig) {
     }
   });
 
+  app.get('/v1/sessions/:sessionId/providers/gemini/capabilities', async (request, reply) => {
+    const { sessionId } = request.params as { sessionId: string };
+    try {
+      const capabilities = await store.getGeminiSessionCapabilities(sessionId);
+      return { capabilities };
+    } catch (error) {
+      if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
+        return reply.code(404).send({ error: 'Session not found' });
+      }
+      if (error instanceof Error && error.message === 'GEMINI_SESSION_REQUIRED') {
+        return reply.code(400).send({ error: 'Gemini session required' });
+      }
+      const message = toErrorMessage(error, 'Failed to load Gemini capabilities');
+      return reply.code(502).send({ error: message });
+    }
+  });
+
   app.get('/v1/sessions/:sessionId/realtime-events', async (request, reply) => {
     try {
       const { sessionId } = request.params as { sessionId: string };

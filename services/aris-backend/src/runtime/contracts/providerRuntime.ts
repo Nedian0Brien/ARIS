@@ -40,6 +40,7 @@ export type ProviderActionEvent = {
 export type ProviderTextEvent = {
   text: string;
   source: 'assistant' | 'result';
+  phase?: 'commentary' | 'final';
   threadId?: string;
   turnId?: string;
   itemId?: string;
@@ -77,6 +78,7 @@ export type ProviderRuntimeSession<TFlavor extends ProviderRuntimeFlavor = Provi
   metadata: Pick<RuntimeSession['metadata'], 'path' | 'approvalPolicy'> & {
     flavor: TFlavor;
     model?: string;
+    mode?: string;
   };
 };
 
@@ -100,6 +102,7 @@ export type ProviderTurnRequest<TSession extends ProviderRuntimeSession = Provid
   requestedThreadId?: string;
   storedThreadId?: string;
   model?: string;
+  mode?: string;
   signal?: AbortSignal;
   onAction?: (action: ProviderActionEvent, meta: { threadId: string }) => Promise<void>;
   onPermission?: (request: ProviderPermissionRequest, meta: { threadId: string }) => Promise<PermissionDecision>;
