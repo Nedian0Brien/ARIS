@@ -109,6 +109,87 @@ class FakeAcpChild extends EventEmitter {
 
     if (msg.method === 'session/prompt') {
       const sessionId = String(msg.params?.sessionId ?? '');
+      const promptText = Array.isArray(msg.params?.prompt)
+        ? String((msg.params?.prompt as Array<Record<string, unknown>>)[0]?.text ?? '')
+        : '';
+      if (promptText.includes('Read package.json')) {
+        this.send({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId,
+            update: {
+              sessionUpdate: 'tool_call',
+              toolCallId: 'tool-read-1',
+              status: 'in_progress',
+              title: 'Read package.json',
+              kind: 'read',
+              locations: [{ path: '/tmp/package.json' }],
+            },
+          },
+        });
+        this.send({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId,
+            update: {
+              sessionUpdate: 'tool_call_update',
+              toolCallId: 'tool-read-1',
+              status: 'completed',
+              content: [
+                {
+                  type: 'content',
+                  content: {
+                    type: 'text',
+                    text: '{\"name\":\"aris\"}',
+                  },
+                },
+              ],
+            },
+          },
+        });
+      }
+      if (promptText.includes('Run pwd')) {
+        this.send({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId,
+            update: {
+              sessionUpdate: 'tool_call',
+              toolCallId: 'tool-cmd-1',
+              status: 'in_progress',
+              title: 'Run pwd',
+              kind: 'execute',
+              rawInput: {
+                command: 'pwd',
+              },
+            },
+          },
+        });
+        this.send({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId,
+            update: {
+              sessionUpdate: 'tool_call_update',
+              toolCallId: 'tool-cmd-1',
+              status: 'completed',
+              content: [
+                {
+                  type: 'content',
+                  content: {
+                    type: 'text',
+                    text: '/tmp',
+                  },
+                },
+              ],
+            },
+          },
+        });
+      }
       const chunks = sessionId === 'gemini-session-loaded'
         ? ['New', ' reply']
         : ['Hello', ' ACP'];
@@ -185,5 +266,64 @@ describe('runGeminiAcpTurn', () => {
     expect(result.output).toBe('New reply');
     expect(result.threadId).toBe('gemini-session-loaded');
     expect(result.threadIdSource).toBe('resume');
+  });
+
+  it('emits completed ACP file-read actions and records tool envelopes', async () => {
+    const seenActions: Array<{
+      actionType: string;
+      path?: string;
+      output?: string;
+    }> = [];
+
+    const result = await runGeminiAcpTurn({
+      cwd: '/tmp',
+      prompt: 'Read package.json and answer briefly',
+      approvalPolicy: 'on-request',
+      spawnProcess: createFakeSpawn(),
+      onAction: async (action) => {
+        seenActions.push({
+          actionType: action.actionType,
+          path: action.path,
+          output: action.output,
+        });
+      },
+    });
+
+    expect(seenActions).toEqual([
+      {
+        actionType: 'file_read',
+        path: '/tmp/package.json',
+        output: '{"name":"aris"}',
+      },
+    ]);
+    expect(result.streamedActionsPersisted).toBe(true);
+    expect(result.inferredActions).toEqual([]);
+    expect(result.protocolEnvelopes?.map((envelope) => envelope.kind)).toEqual([
+      'turn-start',
+      'tool-call-start',
+      'tool-call-end',
+      'text',
+      'turn-end',
+      'stop',
+    ]);
+  });
+
+  it('falls back to inferredActions when no onAction handler is provided', async () => {
+    const result = await runGeminiAcpTurn({
+      cwd: '/tmp',
+      prompt: 'Run pwd',
+      approvalPolicy: 'on-request',
+      spawnProcess: createFakeSpawn(),
+    });
+
+    expect(result.streamedActionsPersisted).toBe(false);
+    expect(result.inferredActions).toEqual([
+      expect.objectContaining({
+        actionType: 'command_execution',
+        command: 'pwd',
+        output: '/tmp',
+        callId: 'tool-cmd-1',
+      }),
+    ]);
   });
 });

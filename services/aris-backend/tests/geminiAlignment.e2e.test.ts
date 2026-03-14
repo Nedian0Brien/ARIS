@@ -32,7 +32,7 @@ async function waitFor<T>(read: () => Promise<T>, predicate: (value: T) => boole
   }
 }
 
-function createFakeGeminiStore() {
+function createFakeGeminiStore(options: { emitAction?: boolean } = {}) {
   const store = new HappyRuntimeStore({
     serverUrl: 'http://fake-happy',
     token: 'fake-token',
@@ -123,6 +123,17 @@ function createFakeGeminiStore() {
     };
     preferredThreadId?: string;
     model?: string;
+    onAction?: (action: {
+      actionType: string;
+      title: string;
+      callId?: string;
+      command?: string;
+      path?: string;
+      output?: string;
+      additions: number;
+      deletions: number;
+      hasDiffSignal: boolean;
+    }, meta: { threadId: string }) => Promise<void>;
     onText?: (event: { text: string; source: 'assistant' | 'result'; threadId?: string }, meta: { threadId: string }) => Promise<void>;
   }) => {
     expect(input.session.metadata.path).toBe('/workspace/ARIS');
@@ -136,6 +147,19 @@ function createFakeGeminiStore() {
       expect(input.preferredThreadId).toBeUndefined();
     } else {
       expect(input.preferredThreadId).toBe('gemini-observed-thread');
+    }
+
+    if (options.emitAction) {
+      await input.onAction?.({
+        actionType: 'file_read',
+        title: 'File Read',
+        callId: `call-${turnNumber}`,
+        path: '/workspace/ARIS/README.md',
+        output: `README body ${turnNumber}`,
+        additions: 0,
+        deletions: 0,
+        hasDiffSignal: false,
+      }, { threadId: 'gemini-observed-thread' });
     }
 
     await input.onText?.({
@@ -152,6 +176,18 @@ function createFakeGeminiStore() {
       threadId: 'gemini-observed-thread',
       threadIdSource: turnNumber === 1 ? 'observed' : 'resume',
       protocolEnvelopes: [
+        ...(options.emitAction
+          ? [{
+            kind: 'tool-call-end' as const,
+            provider: 'gemini' as const,
+            source: 'tool' as const,
+            sessionId: 'gemini-observed-thread',
+            turnId: `turn-${turnNumber}`,
+            toolCallId: `call-${turnNumber}`,
+            toolName: 'file_read',
+            stopReason: 'completed' as const,
+          }]
+          : []),
         {
           kind: 'text',
           provider: 'gemini',
@@ -333,5 +369,45 @@ describe('gemini alignment E2E', () => {
     expect(seenCommands).toHaveLength(1);
     expect(persistedMessages.some((message) => message.text.includes('Gemini runtime type guard failed'))).toBe(false);
     expect(persistedMessages.some((message) => message.text === '첫 번째 Gemini 응답')).toBe(true);
+  });
+
+  it('persists Gemini streamed tool actions before the final assistant text', async () => {
+    const { store } = createFakeGeminiStore({ emitAction: true });
+
+    const session = await store.createSession({
+      path: '/workspace/ARIS',
+      flavor: 'gemini',
+      approvalPolicy: 'on-request',
+    });
+
+    await store.appendMessage(session.id, {
+      type: 'message',
+      text: 'README를 읽고 요약해줘',
+      meta: {
+        role: 'user',
+        agent: 'gemini',
+        chatId: 'chat-gemini-action',
+      },
+    });
+
+    const persistedMessages = await waitFor(
+      async () => store.listMessages(session.id),
+      (messages) => messages.filter((message) => (
+        message.meta?.source === 'cli-agent'
+        && (message.meta?.streamEvent === 'agent_stream_action' || message.meta?.streamEvent === 'agent_message')
+      )).length >= 2,
+    );
+
+    const agentMessages = persistedMessages.filter((message) => (
+      message.meta?.source === 'cli-agent'
+      && (message.meta?.streamEvent === 'agent_stream_action' || message.meta?.streamEvent === 'agent_message')
+    ));
+
+    expect(agentMessages).toHaveLength(2);
+    expect(agentMessages[0]?.meta?.streamEvent).toBe('agent_stream_action');
+    expect(agentMessages[0]?.meta?.actionType).toBe('file_read');
+    expect(agentMessages[0]?.meta?.path).toBe('/workspace/ARIS/README.md');
+    expect(agentMessages[1]?.meta?.streamEvent).toBe('agent_message');
+    expect(agentMessages[1]?.text).toBe('첫 번째 Gemini 응답');
   });
 });

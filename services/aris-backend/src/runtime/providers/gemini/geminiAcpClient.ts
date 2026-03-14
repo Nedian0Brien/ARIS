@@ -2,8 +2,10 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { createInterface } from 'node:readline';
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { ApprovalPolicy, PermissionDecision } from '../../../types.js';
+import { inferActionTypeFromCommand, titleForActionType } from '../../actionType.js';
 import { sanitizeAgentMessageText } from '../../agentMessageSanitizer.js';
-import type { ProviderPermissionRequest, ProviderTextEvent } from '../../contracts/providerRuntime.js';
+import { summarizeDiffText, summarizeFileChangeDiff } from '../../diffStats.js';
+import type { ProviderActionEvent, ProviderPermissionRequest, ProviderTextEvent } from '../../contracts/providerRuntime.js';
 import type {
   SessionProtocolEnvelope,
   SessionProtocolStopReason,
@@ -25,6 +27,7 @@ type GeminiAcpClientOptions = {
   model?: string;
   preferredSessionId?: string;
   signal?: AbortSignal;
+  onAction?: (action: ProviderActionEvent, meta: { threadId: string }) => Promise<void>;
   onText?: (event: ProviderTextEvent, meta: { threadId: string }) => Promise<void>;
   onPermission?: (request: ProviderPermissionRequest, meta: { threadId: string }) => Promise<PermissionDecision>;
   launchCommand?: GeminiAcpLaunchCommand;
@@ -42,6 +45,17 @@ type PendingJsonRpcRequest = {
   method: string;
   resolve: (value: Record<string, unknown>) => void;
   reject: (error: Error) => void;
+};
+
+type GeminiAcpToolCallState = {
+  toolCallId: string;
+  title: string;
+  kind?: string;
+  status?: string;
+  locations: Array<{ path: string; line?: number }>;
+  content: Array<Record<string, unknown>>;
+  rawInput?: unknown;
+  rawOutput?: unknown;
 };
 
 const ACP_PROTOCOL_VERSION = 1;
@@ -69,6 +83,27 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
+}
+
+function asNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function stringifyUnknown(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (value === null || value === undefined) {
+    return '';
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
 }
 
 function normalizeGeminiAcpMode(approvalPolicy: ApprovalPolicy): string {
@@ -125,6 +160,220 @@ function updateFinalTextEnvelope(
       ? { ...envelope, text }
       : envelope
   ));
+}
+
+function buildTurnStartEnvelope(sessionId: string): SessionProtocolEnvelope {
+  return {
+    kind: 'turn-start',
+    provider: 'gemini',
+    source: 'system',
+    sessionId,
+    threadId: sessionId,
+    threadIdSource: 'observed',
+  };
+}
+
+function normalizeToolLocations(value: unknown): Array<{ path: string; line?: number }> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => {
+      const record = asRecord(entry);
+      const path = asString(record?.path, '').trim();
+      if (!path) {
+        return null;
+      }
+      const line = asNumber(record?.line);
+      return line !== undefined ? { path, line } : { path };
+    })
+    .filter((entry): entry is { path: string; line?: number } => Boolean(entry));
+}
+
+function normalizeToolContent(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => asRecord(entry))
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+}
+
+function mergeToolCallState(
+  previous: GeminiAcpToolCallState | undefined,
+  update: Record<string, unknown>,
+): GeminiAcpToolCallState | null {
+  const toolCallId = asString(update.toolCallId, previous?.toolCallId ?? '').trim();
+  if (!toolCallId) {
+    return null;
+  }
+  return {
+    toolCallId,
+    title: asString(update.title, previous?.title ?? '').trim() || previous?.title || 'Gemini ACP tool',
+    kind: asString(update.kind, previous?.kind ?? '').trim() || previous?.kind,
+    status: asString(update.status, previous?.status ?? '').trim() || previous?.status,
+    locations: Object.prototype.hasOwnProperty.call(update, 'locations')
+      ? normalizeToolLocations(update.locations)
+      : previous?.locations ?? [],
+    content: Object.prototype.hasOwnProperty.call(update, 'content')
+      ? normalizeToolContent(update.content)
+      : previous?.content ?? [],
+    rawInput: Object.prototype.hasOwnProperty.call(update, 'rawInput')
+      ? update.rawInput
+      : previous?.rawInput,
+    rawOutput: Object.prototype.hasOwnProperty.call(update, 'rawOutput')
+      ? update.rawOutput
+      : previous?.rawOutput,
+  };
+}
+
+function formatDiffPreview(entry: Record<string, unknown>): string {
+  const path = asString(entry.path, '').trim();
+  const oldText = asString(entry.oldText, '');
+  const newText = asString(entry.newText, '');
+  const kind = asString(asRecord(entry._meta)?.kind, '').trim().toLowerCase();
+  const header = kind === 'add'
+    ? '*** Add File'
+    : kind === 'delete'
+      ? '*** Delete File'
+      : '*** Update File';
+  const oldLines = oldText.replace(/\r\n/g, '\n').split('\n').filter((line) => line.length > 0);
+  const newLines = newText.replace(/\r\n/g, '\n').split('\n').filter((line) => line.length > 0);
+  return [
+    path ? `${header}: ${path}` : header,
+    ...oldLines.map((line) => `-${line}`),
+    ...newLines.map((line) => `+${line}`),
+  ].join('\n').trim();
+}
+
+function extractToolOutput(state: GeminiAcpToolCallState): string {
+  const contentParts = state.content
+    .map((entry) => {
+      const type = asString(entry.type, '').trim();
+      if (type === 'content') {
+        const content = asRecord(entry.content);
+        if (asString(content?.type, '').trim() === 'text') {
+          return asString(content?.text, '');
+        }
+        return stringifyUnknown(content);
+      }
+      if (type === 'diff') {
+        return formatDiffPreview(entry);
+      }
+      if (type === 'terminal') {
+        const terminalId = asString(entry.terminalId, '').trim();
+        return terminalId ? `terminal: ${terminalId}` : 'terminal';
+      }
+      return stringifyUnknown(entry);
+    })
+    .filter((part) => part.trim().length > 0);
+
+  if (contentParts.length > 0) {
+    return contentParts.join('\n\n').trim();
+  }
+  return stringifyUnknown(state.rawOutput).trim();
+}
+
+function extractToolCommand(state: GeminiAcpToolCallState): string | undefined {
+  const rawInput = asRecord(state.rawInput);
+  const direct = [
+    rawInput?.command,
+    rawInput?.cmd,
+    rawInput?.shellCommand,
+    rawInput?.bashCommand,
+  ]
+    .map((entry) => asString(entry, '').trim())
+    .find(Boolean);
+  return direct || undefined;
+}
+
+function inferActionTypeFromToolState(state: GeminiAcpToolCallState, output: string): ProviderActionEvent['actionType'] {
+  const command = extractToolCommand(state);
+  if (command) {
+    return inferActionTypeFromCommand(command);
+  }
+
+  const loweredTitle = state.title.trim().toLowerCase();
+  const loweredKind = (state.kind ?? '').trim().toLowerCase();
+  const hasDiffContent = state.content.some((entry) => asString(entry.type, '').trim() === 'diff');
+
+  if (hasDiffContent || loweredKind === 'edit' || loweredKind === 'write') {
+    return 'file_write';
+  }
+  if (loweredKind === 'read' || loweredTitle.includes('read')) {
+    return 'file_read';
+  }
+  if (
+    loweredKind === 'search'
+    || loweredKind === 'list'
+    || loweredTitle.includes('list')
+    || loweredTitle.includes('glob')
+    || loweredTitle.includes('search')
+  ) {
+    return 'file_list';
+  }
+  if (state.locations.length > 0 && output && !hasDiffContent) {
+    return 'file_read';
+  }
+  return 'command_execution';
+}
+
+function buildProviderActionFromToolState(state: GeminiAcpToolCallState): ProviderActionEvent {
+  const output = extractToolOutput(state);
+  const actionType = inferActionTypeFromToolState(state, output);
+  const diffStats = actionType === 'file_write'
+    ? summarizeFileChangeDiff(output, asString(asRecord(state.content[0]?._meta)?.kind, ''))
+    : summarizeDiffText(output);
+  const command = extractToolCommand(state);
+  const primaryPath = state.locations[0]?.path?.trim() || undefined;
+
+  return {
+    actionType,
+    title: state.title.trim() || titleForActionType(actionType),
+    callId: state.toolCallId,
+    ...(command ? { command } : {}),
+    ...(primaryPath ? { path: primaryPath } : {}),
+    ...(output ? { output } : {}),
+    additions: diffStats.additions,
+    deletions: diffStats.deletions,
+    hasDiffSignal: diffStats.hasDiffSignal,
+  };
+}
+
+function buildToolStartEnvelope(input: {
+  sessionId: string;
+  state: GeminiAcpToolCallState;
+  action: ProviderActionEvent;
+}): SessionProtocolEnvelope {
+  return {
+    kind: 'tool-call-start',
+    provider: 'gemini',
+    source: 'tool',
+    sessionId: input.sessionId,
+    turnId: input.sessionId,
+    toolCallId: input.state.toolCallId,
+    toolName: input.state.kind?.trim() || input.action.actionType,
+    action: input.action,
+  };
+}
+
+function buildToolEndEnvelope(input: {
+  sessionId: string;
+  state: GeminiAcpToolCallState;
+  action: ProviderActionEvent;
+  stopReason: SessionProtocolStopReason;
+}): SessionProtocolEnvelope {
+  return {
+    kind: 'tool-call-end',
+    provider: 'gemini',
+    source: 'tool',
+    sessionId: input.sessionId,
+    turnId: input.sessionId,
+    toolCallId: input.state.toolCallId,
+    toolName: input.state.kind?.trim() || input.action.actionType,
+    action: input.action,
+    stopReason: input.stopReason,
+  };
 }
 
 function buildPermissionRequest(params: Record<string, unknown>, requestId: string): ProviderPermissionRequest {
@@ -226,6 +475,11 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
   let currentText = '';
   let ignoringHistoryReplay = false;
   let emitChain: Promise<void> = Promise.resolve();
+  let streamedActionCount = 0;
+  const inferredActions: ProviderActionEvent[] = [];
+  const protocolEnvelopes: SessionProtocolEnvelope[] = [];
+  const toolCalls = new Map<string, GeminiAcpToolCallState>();
+  const emittedToolStarts = new Set<string>();
 
   const childClosed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
     child.once('error', reject);
@@ -323,6 +577,44 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
     if (ignoringHistoryReplay) {
       return;
     }
+    if (!sessionId) {
+      return;
+    }
+
+    if (updateType === 'tool_call' || updateType === 'tool_call_update') {
+      const nextState = mergeToolCallState(toolCalls.get(asString(update.toolCallId, '').trim()), update);
+      if (!nextState) {
+        return;
+      }
+      toolCalls.set(nextState.toolCallId, nextState);
+      const action = buildProviderActionFromToolState(nextState);
+      if (!emittedToolStarts.has(nextState.toolCallId)) {
+        emittedToolStarts.add(nextState.toolCallId);
+        protocolEnvelopes.push(buildToolStartEnvelope({
+          sessionId,
+          state: nextState,
+          action,
+        }));
+      }
+      const normalizedStatus = (nextState.status ?? '').trim().toLowerCase();
+      if (normalizedStatus === 'completed' || normalizedStatus === 'failed') {
+        const stopReason: SessionProtocolStopReason = normalizedStatus === 'failed' ? 'error' : 'completed';
+        protocolEnvelopes.push(buildToolEndEnvelope({
+          sessionId,
+          state: nextState,
+          action,
+          stopReason,
+        }));
+        if (input.onAction) {
+          emitChain = emitChain.then(() => input.onAction?.(action, { threadId: sessionId }));
+          streamedActionCount += 1;
+        } else {
+          inferredActions.push(action);
+        }
+      }
+      return;
+    }
+
     if (updateType !== 'agent_message_chunk') {
       return;
     }
@@ -447,6 +739,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
     if (!sessionId) {
       throw new Error('gemini ACP did not return a session id');
     }
+    protocolEnvelopes.push(buildTurnStartEnvelope(sessionId));
 
     await sendRequest('session/set_mode', {
       sessionId,
@@ -480,17 +773,20 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
 
     const output = sanitizeAgentMessageText(currentText);
     const stopReason = mapStopReason(asString(promptResult.stopReason, 'unknown').trim());
-    const envelopes = updateFinalTextEnvelope(buildTurnEndEnvelopes({
-      sessionId,
-      stopReason,
-    }), output);
+    const finalEnvelopes = [
+      ...protocolEnvelopes,
+      ...updateFinalTextEnvelope(buildTurnEndEnvelopes({
+        sessionId,
+        stopReason,
+      }), output),
+    ];
 
     if (output && input.onText) {
       await input.onText({
         text: output,
         source: 'assistant',
         threadId: sessionId,
-        envelopes,
+        envelopes: finalEnvelopes,
       }, { threadId: sessionId });
     }
 
@@ -501,11 +797,11 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
     return {
       output,
       cwd: input.cwd,
-      inferredActions: [],
-      streamedActionsPersisted: false,
+      inferredActions,
+      streamedActionsPersisted: streamedActionCount > 0,
       threadId: sessionId,
       threadIdSource: input.preferredSessionId ? 'resume' : 'observed',
-      protocolEnvelopes: envelopes,
+      protocolEnvelopes: finalEnvelopes,
     };
   } finally {
     input.signal?.removeEventListener('abort', abortHandler);
