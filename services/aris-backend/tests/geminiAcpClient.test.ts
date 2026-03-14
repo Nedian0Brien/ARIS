@@ -9,6 +9,7 @@ class FakeAcpChild extends EventEmitter {
   stderr = new PassThrough();
   killed = false;
   private buffer = '';
+  private pendingPermission: { promptRequestId: string; sessionId: string } | null = null;
 
   constructor() {
     super();
@@ -46,7 +47,70 @@ class FakeAcpChild extends EventEmitter {
       id?: string;
       method?: string;
       params?: Record<string, unknown>;
+      result?: Record<string, unknown>;
     };
+
+    if (!msg.method && msg.id === 'permission-request-1' && this.pendingPermission) {
+      const outcome = String(msg.result?.outcome?.outcome ?? '');
+      if (outcome === 'selected') {
+        this.send({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId: this.pendingPermission.sessionId,
+            update: {
+              sessionUpdate: 'tool_call',
+              toolCallId: 'tool-permission-1',
+              status: 'in_progress',
+              title: 'Run pwd',
+              kind: 'execute',
+              rawInput: {
+                command: 'pwd',
+              },
+            },
+          },
+        });
+        this.send({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId: this.pendingPermission.sessionId,
+            update: {
+              sessionUpdate: 'tool_call_update',
+              toolCallId: 'tool-permission-1',
+              status: 'completed',
+              content: [
+                {
+                  type: 'content',
+                  content: {
+                    type: 'text',
+                    text: '/tmp',
+                  },
+                },
+              ],
+            },
+          },
+        });
+        this.send({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId: this.pendingPermission.sessionId,
+            update: {
+              sessionUpdate: 'agent_message_chunk',
+              content: { type: 'text', text: 'approved run' },
+            },
+          },
+        });
+        this.send({
+          jsonrpc: '2.0',
+          id: this.pendingPermission.promptRequestId,
+          result: { stopReason: 'end_turn' },
+        });
+      }
+      this.pendingPermission = null;
+      return;
+    }
 
     if (msg.method === 'initialize') {
       this.send({
@@ -112,6 +176,30 @@ class FakeAcpChild extends EventEmitter {
       const promptText = Array.isArray(msg.params?.prompt)
         ? String((msg.params?.prompt as Array<Record<string, unknown>>)[0]?.text ?? '')
         : '';
+      if (promptText.includes('Need commentary')) {
+        this.send({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId,
+            update: {
+              sessionUpdate: 'agent_thought_chunk',
+              content: { type: 'text', text: '먼저 ' },
+            },
+          },
+        });
+        this.send({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId,
+            update: {
+              sessionUpdate: 'agent_thought_chunk',
+              content: { type: 'text', text: '구성을 확인합니다.' },
+            },
+          },
+        });
+      }
       if (promptText.includes('Read package.json')) {
         this.send({
           jsonrpc: '2.0',
@@ -189,6 +277,33 @@ class FakeAcpChild extends EventEmitter {
             },
           },
         });
+      }
+      if (promptText.includes('Need permission')) {
+        this.pendingPermission = {
+          promptRequestId: String(msg.id ?? ''),
+          sessionId,
+        };
+        this.send({
+          jsonrpc: '2.0',
+          id: 'permission-request-1',
+          method: 'session/request_permission',
+          params: {
+            sessionId,
+            options: [
+              { optionId: 'allow-once', kind: 'allow_once' },
+              { optionId: 'allow-always', kind: 'allow_always' },
+              { optionId: 'reject-once', kind: 'reject_once' },
+            ],
+            toolCall: {
+              toolCallId: 'tool-permission-1',
+              status: 'pending',
+              title: 'Run pwd',
+              kind: 'execute',
+              locations: [],
+            },
+          },
+        });
+        return;
       }
       const chunks = sessionId === 'gemini-session-loaded'
         ? ['New', ' reply']
@@ -325,5 +440,71 @@ describe('runGeminiAcpTurn', () => {
         callId: 'tool-cmd-1',
       }),
     ]);
+  });
+
+  it('flushes agent_thought_chunk into separate commentary events before the final answer', async () => {
+    const seen: string[] = [];
+
+    const result = await runGeminiAcpTurn({
+      cwd: '/tmp',
+      prompt: 'Need commentary',
+      approvalPolicy: 'on-request',
+      spawnProcess: createFakeSpawn(),
+      onText: async (event) => {
+        seen.push(`${event.phase ?? 'final'}:${event.partial ? 'partial' : 'final'}:${event.text}`);
+      },
+    });
+
+    expect(seen).toEqual([
+      'commentary:partial:먼저 ',
+      'commentary:partial:구성을 확인합니다.',
+      'commentary:final:먼저 구성을 확인합니다.',
+      'final:partial:Hello',
+      'final:partial: ACP',
+      'final:final:Hello ACP',
+    ]);
+    expect(result.protocolEnvelopes?.map((envelope) => envelope.kind)).toEqual([
+      'turn-start',
+      'text',
+      'text',
+      'turn-end',
+      'stop',
+    ]);
+  });
+
+  it('bridges Gemini ACP permission requests through onPermission and resumes the turn', async () => {
+    const seenPermissions: Array<{ approvalId?: string; callId: string; risk: string }> = [];
+    const seenActions: string[] = [];
+
+    const result = await runGeminiAcpTurn({
+      cwd: '/tmp',
+      prompt: 'Need permission',
+      approvalPolicy: 'on-request',
+      spawnProcess: createFakeSpawn(),
+      onPermission: async (request) => {
+        seenPermissions.push({
+          approvalId: request.approvalId,
+          callId: request.callId,
+          risk: request.risk,
+        });
+        return 'allow_once';
+      },
+      onAction: async (action) => {
+        seenActions.push(`${action.actionType}:${action.command}:${action.output}`);
+      },
+    });
+
+    expect(seenPermissions).toEqual([
+      {
+        approvalId: 'permission-request-1',
+        callId: 'tool-permission-1',
+        risk: 'high',
+      },
+    ]);
+    expect(seenActions).toEqual([
+      'command_execution:pwd:/tmp',
+    ]);
+    expect(result.output).toBe('approved run');
+    expect(result.streamedActionsPersisted).toBe(true);
   });
 });

@@ -61,6 +61,58 @@ describe('collapseRealtimeGeminiPartialEvents', () => {
 
     expect(collapseRealtimeGeminiPartialEvents([partial, final])).toEqual([final]);
   });
+
+  it('keeps commentary partials separate from the final answer stream and drops them only after commentary persists', () => {
+    const commentaryPartial = buildEvent({
+      id: 'gemini-partial:session:commentary-turn-1:thought-1',
+      timestamp: '2026-03-14T04:00:00.000Z',
+      title: 'Commentary',
+      body: '먼저 README를 확인하겠습니다.',
+      meta: {
+        agent: 'gemini',
+        streamEvent: 'agent_commentary_partial',
+        messagePhase: 'commentary',
+        sessionTurnId: 'turn-1',
+        sessionItemId: 'thought-1',
+        threadId: 'thread-1',
+      },
+    });
+    const commentaryFinal = buildEvent({
+      id: 'persisted-commentary-1',
+      timestamp: '2026-03-14T04:00:01.000Z',
+      title: 'Commentary',
+      body: '먼저 README를 확인하겠습니다.',
+      meta: {
+        agent: 'gemini',
+        streamEvent: 'agent_commentary',
+        messagePhase: 'commentary',
+        sessionTurnId: 'turn-1',
+        sessionItemId: 'thought-1',
+        threadId: 'thread-1',
+      },
+    });
+    const finalAnswer = buildEvent({
+      id: 'persisted-final-2',
+      timestamp: '2026-03-14T04:00:02.000Z',
+      body: 'README 요약입니다.',
+      meta: {
+        agent: 'gemini',
+        streamEvent: 'agent_message',
+        sessionTurnId: 'turn-1',
+        sessionItemId: 'answer-1',
+        threadId: 'thread-1',
+      },
+    });
+
+    expect(collapseRealtimeGeminiPartialEvents([commentaryPartial, finalAnswer])).toEqual([
+      commentaryPartial,
+      finalAnswer,
+    ]);
+    expect(collapseRealtimeGeminiPartialEvents([commentaryPartial, commentaryFinal, finalAnswer])).toEqual([
+      commentaryFinal,
+      finalAnswer,
+    ]);
+  });
 });
 
 describe('findLatestPersistedCursorEventId', () => {

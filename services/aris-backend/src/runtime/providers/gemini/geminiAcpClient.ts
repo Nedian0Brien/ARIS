@@ -376,6 +376,37 @@ function buildToolEndEnvelope(input: {
   };
 }
 
+function buildTextEnvelope(input: {
+  sessionId: string;
+  text: string;
+  itemId?: string;
+}): SessionProtocolEnvelope {
+  return {
+    kind: 'text',
+    provider: 'gemini',
+    source: 'assistant',
+    sessionId: input.sessionId,
+    turnId: input.sessionId,
+    ...(input.itemId ? { itemId: input.itemId } : {}),
+    text: sanitizeAgentMessageText(input.text),
+  };
+}
+
+function inferPermissionRisk(toolCall: Record<string, unknown> | null): ProviderPermissionRequest['risk'] {
+  const kind = asString(toolCall?.kind, '').trim().toLowerCase();
+  const title = asString(toolCall?.title, '').trim().toLowerCase();
+  if (kind === 'execute' || title.includes('run') || title.includes('command')) {
+    return 'high';
+  }
+  if (kind === 'edit' || kind === 'write' || title.includes('write') || title.includes('edit')) {
+    return 'high';
+  }
+  if (kind === 'read' || kind === 'search' || title.includes('read') || title.includes('search')) {
+    return 'low';
+  }
+  return 'medium';
+}
+
 function buildPermissionRequest(params: Record<string, unknown>, requestId: string): ProviderPermissionRequest {
   const toolCall = asRecord(params.toolCall);
   const title = asString(toolCall?.title, 'Gemini ACP tool');
@@ -389,9 +420,10 @@ function buildPermissionRequest(params: Record<string, unknown>, requestId: stri
   const locationSuffix = locationList.length > 0 ? ` (${locationList.join(', ')})` : '';
   return {
     callId: toolCallId,
+    approvalId: requestId,
     command: `${title}${locationSuffix}`,
     reason: `Gemini ACP requested permission for ${kind || 'tool'} execution.`,
-    risk: 'medium',
+    risk: inferPermissionRisk(toolCall),
   };
 }
 
@@ -473,6 +505,9 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
   let lastStdoutActivityAt = Date.now();
   let sessionId = '';
   let currentText = '';
+  let thoughtText = '';
+  let thoughtItemId: string | undefined;
+  let thoughtSequence = 0;
   let ignoringHistoryReplay = false;
   let emitChain: Promise<void> = Promise.resolve();
   let streamedActionCount = 0;
@@ -552,6 +587,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
     const id = payload.id as JsonRpcId;
     const params = asRecord(payload.params) ?? {};
     if (method === 'session/request_permission') {
+      await flushThoughtBuffer();
       const permissionRequest = buildPermissionRequest(params, asString(id, 'permission-request'));
       const decision = input.onPermission
         ? await input.onPermission(permissionRequest, { threadId: sessionId || input.preferredSessionId || '' })
@@ -567,6 +603,39 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
     await sendError(id, -32601, `Unsupported Gemini ACP client method: ${method}`);
   };
 
+  const flushThoughtBuffer = async () => {
+    if (!sessionId || !thoughtText.trim()) {
+      thoughtText = '';
+      thoughtItemId = undefined;
+      return;
+    }
+    const finalizedThought = sanitizeAgentMessageText(thoughtText);
+    if (!finalizedThought) {
+      thoughtText = '';
+      thoughtItemId = undefined;
+      return;
+    }
+    const envelope = buildTextEnvelope({
+      sessionId,
+      text: finalizedThought,
+      ...(thoughtItemId ? { itemId: thoughtItemId } : {}),
+    });
+    protocolEnvelopes.push(envelope);
+    if (input.onText) {
+      await input.onText({
+        text: finalizedThought,
+        source: 'assistant',
+        phase: 'commentary',
+        threadId: sessionId,
+        turnId: sessionId,
+        ...(thoughtItemId ? { itemId: thoughtItemId } : {}),
+        envelopes: [envelope],
+      }, { threadId: sessionId });
+    }
+    thoughtText = '';
+    thoughtItemId = undefined;
+  };
+
   const handleUpdate = (payload: Record<string, unknown>) => {
     const params = asRecord(payload.params) ?? {};
     const update = asRecord(params.update) ?? {};
@@ -578,6 +647,38 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
       return;
     }
     if (!sessionId) {
+      return;
+    }
+
+    if (updateType !== 'agent_thought_chunk' && thoughtText.trim()) {
+      emitChain = emitChain.then(() => flushThoughtBuffer());
+    }
+
+    if (updateType === 'agent_thought_chunk') {
+      const content = asRecord(update.content);
+      if (asString(content?.type, '').trim() !== 'text') {
+        return;
+      }
+      const chunk = asString(content?.text, '');
+      if (!chunk) {
+        return;
+      }
+      if (!thoughtItemId) {
+        thoughtSequence += 1;
+        thoughtItemId = `gemini-thought-${thoughtSequence}`;
+      }
+      thoughtText += chunk;
+      if (input.onText) {
+        emitChain = emitChain.then(() => input.onText?.({
+          text: chunk,
+          source: 'assistant',
+          phase: 'commentary',
+          threadId: sessionId,
+          turnId: sessionId,
+          itemId: thoughtItemId,
+          partial: true,
+        }, { threadId: sessionId }));
+      }
       return;
     }
 
@@ -631,6 +732,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
       emitChain = emitChain.then(() => input.onText?.({
         text: chunk,
         source: 'assistant',
+        phase: 'final',
         threadId: sessionId,
         partial: true,
       }, { threadId: sessionId }));
@@ -769,6 +871,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
       quietMs: input.postPromptQuietMs ?? DEFAULT_POST_PROMPT_QUIET_MS,
       timeoutMs: DEFAULT_POST_PROMPT_TIMEOUT_MS,
     });
+    emitChain = emitChain.then(() => flushThoughtBuffer());
     await emitChain;
 
     const output = sanitizeAgentMessageText(currentText);
@@ -785,6 +888,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
       await input.onText({
         text: output,
         source: 'assistant',
+        phase: 'final',
         threadId: sessionId,
         envelopes: finalEnvelopes,
       }, { threadId: sessionId });

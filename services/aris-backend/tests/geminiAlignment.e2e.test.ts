@@ -32,7 +32,7 @@ async function waitFor<T>(read: () => Promise<T>, predicate: (value: T) => boole
   }
 }
 
-function createFakeGeminiStore(options: { emitAction?: boolean } = {}) {
+function createFakeGeminiStore(options: { emitAction?: boolean; emitCommentary?: boolean; requirePermission?: boolean } = {}) {
   const store = new HappyRuntimeStore({
     serverUrl: 'http://fake-happy',
     token: 'fake-token',
@@ -134,7 +134,21 @@ function createFakeGeminiStore(options: { emitAction?: boolean } = {}) {
       deletions: number;
       hasDiffSignal: boolean;
     }, meta: { threadId: string }) => Promise<void>;
-    onText?: (event: { text: string; source: 'assistant' | 'result'; threadId?: string }, meta: { threadId: string }) => Promise<void>;
+    onPermission?: (request: {
+      callId: string;
+      approvalId?: string;
+      command: string;
+      reason: string;
+      risk: 'low' | 'medium' | 'high';
+    }, meta: { threadId: string }) => Promise<'allow_once' | 'allow_session' | 'deny'>;
+    onText?: (event: {
+      text: string;
+      source: 'assistant' | 'result';
+      phase?: 'commentary' | 'final';
+      threadId?: string;
+      itemId?: string;
+      envelopes?: Array<Record<string, unknown>>;
+    }, meta: { threadId: string }) => Promise<void>;
   }) => {
     expect(input.session.metadata.path).toBe('/workspace/ARIS');
     seenCommands.push([
@@ -147,6 +161,38 @@ function createFakeGeminiStore(options: { emitAction?: boolean } = {}) {
       expect(input.preferredThreadId).toBeUndefined();
     } else {
       expect(input.preferredThreadId).toBe('gemini-observed-thread');
+    }
+
+    if (options.emitCommentary) {
+      await input.onText?.({
+        text: '먼저 구조를 확인하겠습니다.',
+        source: 'assistant',
+        phase: 'commentary',
+        threadId: 'gemini-observed-thread',
+        itemId: `thought-${turnNumber}`,
+        envelopes: [
+          {
+            kind: 'text',
+            provider: 'gemini',
+            source: 'assistant',
+            sessionId: 'gemini-observed-thread',
+            turnId: `turn-${turnNumber}`,
+            itemId: `thought-${turnNumber}`,
+            text: '먼저 구조를 확인하겠습니다.',
+          },
+        ],
+      }, { threadId: 'gemini-observed-thread' });
+    }
+
+    if (options.requirePermission) {
+      const decision = await input.onPermission?.({
+        callId: `approval-${turnNumber}`,
+        approvalId: `approval-${turnNumber}`,
+        command: 'Run pwd',
+        reason: 'Gemini ACP requested permission for execute execution.',
+        risk: 'high',
+      }, { threadId: 'gemini-observed-thread' });
+      expect(decision).toBe('allow_once');
     }
 
     if (options.emitAction) {
@@ -165,6 +211,7 @@ function createFakeGeminiStore(options: { emitAction?: boolean } = {}) {
     await input.onText?.({
       text: turnNumber === 1 ? '첫 번째 Gemini 응답' : '두 번째 Gemini 응답',
       source: 'assistant',
+      phase: 'final',
       threadId: 'gemini-observed-thread',
     }, { threadId: 'gemini-observed-thread' });
 
@@ -176,6 +223,17 @@ function createFakeGeminiStore(options: { emitAction?: boolean } = {}) {
       threadId: 'gemini-observed-thread',
       threadIdSource: turnNumber === 1 ? 'observed' : 'resume',
       protocolEnvelopes: [
+        ...(options.emitCommentary
+          ? [{
+            kind: 'text' as const,
+            provider: 'gemini' as const,
+            source: 'assistant' as const,
+            sessionId: 'gemini-observed-thread',
+            turnId: `turn-${turnNumber}`,
+            itemId: `thought-${turnNumber}`,
+            text: '먼저 구조를 확인하겠습니다.',
+          }]
+          : []),
         ...(options.emitAction
           ? [{
             kind: 'tool-call-end' as const,
@@ -409,5 +467,99 @@ describe('gemini alignment E2E', () => {
     expect(agentMessages[0]?.meta?.path).toBe('/workspace/ARIS/README.md');
     expect(agentMessages[1]?.meta?.streamEvent).toBe('agent_message');
     expect(agentMessages[1]?.text).toBe('첫 번째 Gemini 응답');
+  });
+
+  it('persists Gemini commentary before the final assistant text', async () => {
+    const { store } = createFakeGeminiStore({ emitCommentary: true });
+
+    const session = await store.createSession({
+      path: '/workspace/ARIS',
+      flavor: 'gemini',
+      approvalPolicy: 'on-request',
+    });
+
+    await store.appendMessage(session.id, {
+      type: 'message',
+      text: '중간 생각과 최종 답변을 모두 보여줘',
+      meta: {
+        role: 'user',
+        agent: 'gemini',
+        chatId: 'chat-gemini-commentary',
+      },
+    });
+
+    const persistedMessages = await waitFor(
+      async () => store.listMessages(session.id),
+      (messages) => messages.filter((message) => (
+        message.meta?.source === 'cli-agent'
+        && (
+          message.meta?.streamEvent === 'agent_commentary'
+          || message.meta?.streamEvent === 'agent_message'
+        )
+      )).length >= 2,
+    );
+
+    const agentMessages = persistedMessages.filter((message) => (
+      message.meta?.source === 'cli-agent'
+      && (
+        message.meta?.streamEvent === 'agent_commentary'
+        || message.meta?.streamEvent === 'agent_message'
+      )
+    ));
+
+    expect(agentMessages).toHaveLength(2);
+    expect(agentMessages[0]?.title).toBe('Commentary');
+    expect(agentMessages[0]?.meta?.streamEvent).toBe('agent_commentary');
+    expect(agentMessages[0]?.text).toBe('먼저 구조를 확인하겠습니다.');
+    expect(agentMessages[1]?.meta?.streamEvent).toBe('agent_message');
+    expect(agentMessages[1]?.text).toBe('첫 번째 Gemini 응답');
+  });
+
+  it('creates a Gemini permission request and resumes after approval', async () => {
+    const { store } = createFakeGeminiStore({ requirePermission: true, emitAction: true });
+
+    const session = await store.createSession({
+      path: '/workspace/ARIS',
+      flavor: 'gemini',
+      approvalPolicy: 'on-request',
+    });
+
+    await store.appendMessage(session.id, {
+      type: 'message',
+      text: 'pwd를 실행해서 알려줘',
+      meta: {
+        role: 'user',
+        agent: 'gemini',
+        chatId: 'chat-gemini-permission',
+      },
+    });
+
+    const pendingPermissions = await waitFor(
+      async () => store.listPermissions('pending'),
+      (permissions) => permissions.length === 1,
+    );
+    const permission = pendingPermissions[0];
+    expect(permission?.command).toBe('Run pwd');
+    expect(await store.isSessionRunning(session.id, 'chat-gemini-permission')).toBe(true);
+
+    await store.decidePermission(permission!.id, 'allow_once');
+
+    const persistedMessages = await waitFor(
+      async () => store.listMessages(session.id),
+      (messages) => messages.filter((message) => (
+        message.meta?.source === 'cli-agent'
+        && (message.meta?.streamEvent === 'agent_stream_action' || message.meta?.streamEvent === 'agent_message')
+      )).length >= 2,
+    );
+
+    const agentMessages = persistedMessages.filter((message) => (
+      message.meta?.source === 'cli-agent'
+      && (message.meta?.streamEvent === 'agent_stream_action' || message.meta?.streamEvent === 'agent_message')
+    ));
+
+    expect(agentMessages[0]?.meta?.streamEvent).toBe('agent_stream_action');
+    expect(agentMessages[1]?.meta?.streamEvent).toBe('agent_message');
+    expect(await store.listPermissions('pending')).toHaveLength(0);
+    expect(await store.isSessionRunning(session.id, 'chat-gemini-permission')).toBe(false);
   });
 });

@@ -40,6 +40,7 @@ export type ProviderActionEvent = {
 export type ProviderTextEvent = {
   text: string;
   source: 'assistant' | 'result';
+  phase?: 'commentary' | 'final';
   threadId?: string;
   turnId?: string;
   itemId?: string;

@@ -173,5 +173,11 @@ export function projectGeminiTextMessage(input: {
       ...(input.threadId ? { threadId: input.threadId, geminiSessionId: input.threadId } : {}),
       ...(input.messageMeta ?? {}),
     },
+    options: input.messageMeta?.streamEvent === 'agent_commentary'
+      ? {
+        type: 'message',
+        title: 'Commentary',
+      }
+      : undefined,
   };
 }

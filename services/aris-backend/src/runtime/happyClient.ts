@@ -184,6 +184,7 @@ type GeminiPartialTextState = {
   eventId: string;
   sessionId: string;
   chatId?: string;
+  phase?: 'commentary' | 'final';
   turnId?: string;
   itemId?: string;
   threadId?: string;
@@ -837,11 +838,13 @@ function buildActionEventKey(action: ParsedAgentActionEvent): string {
 
 function buildStreamedTextReplyKey(input: {
   source: 'assistant' | 'result';
+  phase?: 'commentary' | 'final';
   threadId?: string;
   text: string;
 }): string {
   return [
     input.source,
+    input.phase ?? 'final',
     input.threadId ?? '',
     input.text,
   ].join('|');
@@ -1510,11 +1513,13 @@ export class HappyRuntimeStore {
   private buildGeminiPartialIdentity(input: {
     sessionId: string;
     chatId?: string;
+    phase?: 'commentary' | 'final';
     turnId?: string;
     itemId?: string;
     threadId?: string;
   }): string | null {
     const scope = input.chatId?.trim() || '__default__';
+    const phase = input.phase ?? 'final';
     const turn = input.turnId?.trim() || input.threadId?.trim() || '';
     const item = input.itemId?.trim() || '';
     if (!turn && !item) {
@@ -1523,6 +1528,7 @@ export class HappyRuntimeStore {
     return [
       input.sessionId,
       scope,
+      phase,
       turn || '__turn__',
       item || '__item__',
     ].join(':');
@@ -1537,6 +1543,7 @@ export class HappyRuntimeStore {
     const identity = this.buildGeminiPartialIdentity({
       sessionId: input.session.id,
       chatId: input.chatId,
+      phase: input.event.phase,
       turnId: input.event.turnId,
       itemId: input.event.itemId,
       threadId: input.event.threadId,
@@ -1556,6 +1563,7 @@ export class HappyRuntimeStore {
         eventId: `gemini-partial:${identity}`,
         sessionId: input.session.id,
         ...(input.chatId ? { chatId: input.chatId } : {}),
+        ...(input.event.phase ? { phase: input.event.phase } : {}),
         ...(input.event.turnId ? { turnId: input.event.turnId } : {}),
         ...(input.event.itemId ? { itemId: input.event.itemId } : {}),
         ...(input.event.threadId ? { threadId: input.event.threadId } : {}),
@@ -1568,13 +1576,13 @@ export class HappyRuntimeStore {
       id: nextState.eventId,
       sessionId: input.session.id,
       type: 'message',
-      title: 'Text Reply',
+      title: nextState.phase === 'commentary' ? 'Commentary' : 'Text Reply',
       text: nextState.text,
       createdAt: new Date().toISOString(),
       meta: {
         role: 'agent',
         agent: 'gemini',
-        streamEvent: 'agent_message_partial',
+        streamEvent: nextState.phase === 'commentary' ? 'agent_commentary_partial' : 'agent_message_partial',
         sessionRole: 'agent',
         sessionEventType: 'text',
         sessionEvent: {
@@ -1587,6 +1595,7 @@ export class HappyRuntimeStore {
         requestedPath: input.session.metadata.path,
         ...(input.chatId ? { chatId: input.chatId } : {}),
         ...(input.model ? { model: input.model } : {}),
+        ...(nextState.phase ? { messagePhase: nextState.phase } : {}),
         ...(nextState.threadId ? { threadId: nextState.threadId, geminiSessionId: nextState.threadId } : {}),
         ...(nextState.turnId ? { sessionTurnId: nextState.turnId } : {}),
         ...(nextState.itemId ? { sessionItemId: nextState.itemId } : {}),
@@ -1598,6 +1607,7 @@ export class HappyRuntimeStore {
   private clearGeminiRealtimePartial(input: {
     sessionId: string;
     chatId?: string;
+    phase?: 'commentary' | 'final';
     turnId?: string;
     itemId?: string;
     threadId?: string;
@@ -4215,6 +4225,7 @@ export class HappyRuntimeStore {
               }
               const textKey = buildStreamedTextReplyKey({
                 source: event.source,
+                phase: event.phase,
                 threadId: meta.threadId,
                 text: normalizedText,
               });
@@ -4222,10 +4233,13 @@ export class HappyRuntimeStore {
                 return;
               }
               streamedGeminiTextReplies.add(textKey);
-              streamedGeminiCompletedTextPersisted = true;
+              if (event.phase !== 'commentary') {
+                streamedGeminiCompletedTextPersisted = true;
+              }
               this.clearGeminiRealtimePartial({
                 sessionId: session.id,
                 chatId: scopedChatId,
+                phase: event.phase,
                 turnId: event.turnId,
                 itemId: event.itemId,
                 threadId: meta.threadId,
@@ -4235,7 +4249,8 @@ export class HappyRuntimeStore {
                 execCwd: nonCodexCwd,
                 threadId: meta.threadId,
                 messageMeta: {
-                  streamEvent: 'agent_message',
+                  streamEvent: event.phase === 'commentary' ? 'agent_commentary' : 'agent_message',
+                  ...(event.phase ? { messagePhase: event.phase } : {}),
                 },
                 envelopes: event.envelopes,
               });
@@ -4359,11 +4374,13 @@ export class HappyRuntimeStore {
               && (
             streamedGeminiTextReplies.has(buildStreamedTextReplyKey({
               source: 'assistant',
+              phase: 'final',
               threadId: response.threadId,
               text: finalAgentOutput,
             }))
             || streamedGeminiTextReplies.has(buildStreamedTextReplyKey({
               source: 'result',
+              phase: 'final',
               threadId: response.threadId,
               text: finalAgentOutput,
             }))
