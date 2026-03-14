@@ -30,6 +30,19 @@ describe('providerCommandFactory', () => {
     expect(command?.fallbackArgs).toContain('-p');
   });
 
+  it('passes yolo approval policy through to the Gemini launcher', () => {
+    const command = buildProviderCommand({
+      agent: 'gemini',
+      prompt: 'Reply with OK',
+      approvalPolicy: 'yolo',
+      model: 'gemini-2.5-pro',
+    });
+
+    expect(command?.command).toBe('gemini');
+    expect(command?.args).toContain('--approval-mode');
+    expect(command?.args).toContain('yolo');
+  });
+
   it('does not pass local Gemini correlation ids through provider resume flags', () => {
     const command = buildProviderCommand({
       agent: 'gemini',

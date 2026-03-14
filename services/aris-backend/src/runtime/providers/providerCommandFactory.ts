@@ -24,6 +24,7 @@ export function buildProviderCommand(input: ProviderLaunchRequest): ProviderComm
   if (input.agent === 'gemini') {
     return buildGeminiCommand({
       prompt: input.prompt,
+      approvalPolicy: input.approvalPolicy,
       model: input.model,
       resumeTarget: resolvedResumeTarget,
     });

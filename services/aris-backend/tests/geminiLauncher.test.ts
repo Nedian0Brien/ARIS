@@ -5,6 +5,7 @@ describe('geminiLauncher', () => {
   it('does not inject provider resume flags for non-resume targets', () => {
     const command = buildGeminiCommand({
       prompt: 'Reply with OK',
+      approvalPolicy: 'on-request',
       model: 'gemini-2.5-pro',
       resumeTarget: { id: 'local-correlation-123', mode: 'session-id' },
     });
@@ -17,6 +18,7 @@ describe('geminiLauncher', () => {
   it('uses --resume only for stored Gemini provider identities', () => {
     const command = buildGeminiCommand({
       prompt: 'Reply with OK',
+      approvalPolicy: 'on-request',
       model: 'gemini-2.5-pro',
       resumeTarget: { id: 'gemini-session-123', mode: 'resume' },
     });
@@ -25,5 +27,18 @@ describe('geminiLauncher', () => {
     expect(command.args).toContain('gemini-session-123');
     expect(command.fallbackArgs).toContain('--resume');
     expect(command.retryArgsOnFailure).not.toContain('--resume');
+  });
+
+  it('adds yolo approval mode only when the session policy is yolo', () => {
+    const command = buildGeminiCommand({
+      prompt: 'Reply with OK',
+      approvalPolicy: 'yolo',
+      model: 'gemini-2.5-pro',
+    });
+
+    expect(command.args).toContain('--approval-mode');
+    expect(command.args).toContain('yolo');
+    expect(command.fallbackArgs).toContain('--approval-mode');
+    expect(command.fallbackArgs).toContain('yolo');
   });
 });
