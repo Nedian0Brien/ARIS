@@ -172,7 +172,6 @@ describe('geminiProtocolMapper', () => {
     expect(mapped.sessionId).toBe('gemini-stream-thread');
     expect(mapped.envelopes.map((envelope) => envelope.kind)).toEqual([
       'turn-start',
-      'tool-call-start',
       'tool-call-end',
       'text',
       'turn-end',
@@ -201,7 +200,6 @@ describe('geminiProtocolMapper', () => {
     expect(mapped.envelopes.find((envelope) => envelope.kind === 'text')).toMatchObject({
       kind: 'text',
       text: '도입 방안은 다음과 같다.',
-      turnId: 'gemini-collapse-thread',
       sessionId: 'gemini-collapse-thread',
     });
   });

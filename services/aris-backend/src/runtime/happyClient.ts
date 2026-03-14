@@ -2126,15 +2126,17 @@ export class HappyRuntimeStore {
               if (!textEvent) {
                 continue;
               }
-              const textKey = buildStreamedTextReplyKey({
-                source: textEvent.source,
-                threadId: textEvent.threadId,
-                text: textEvent.text,
-              });
-              if (streamedTextKeys.has(textKey)) {
-                continue;
+              if (!textEvent.partial) {
+                const textKey = buildStreamedTextReplyKey({
+                  source: textEvent.source,
+                  threadId: textEvent.threadId,
+                  text: textEvent.text,
+                });
+                if (streamedTextKeys.has(textKey)) {
+                  continue;
+                }
+                streamedTextKeys.add(textKey);
               }
-              streamedTextKeys.add(textKey);
               emitChain = emitChain.then(async () => {
                 await onText(textEvent);
               });
@@ -2163,15 +2165,17 @@ export class HappyRuntimeStore {
           if (!textEvent) {
             return;
           }
-          const textKey = buildStreamedTextReplyKey({
-            source: textEvent.source,
-            threadId: textEvent.threadId,
-            text: textEvent.text,
-          });
-          if (streamedTextKeys.has(textKey)) {
-            return;
+          if (!textEvent.partial) {
+            const textKey = buildStreamedTextReplyKey({
+              source: textEvent.source,
+              threadId: textEvent.threadId,
+              text: textEvent.text,
+            });
+            if (streamedTextKeys.has(textKey)) {
+              return;
+            }
+            streamedTextKeys.add(textKey);
           }
-          streamedTextKeys.add(textKey);
           emitChain = emitChain.then(async () => {
             await onText(textEvent);
           });

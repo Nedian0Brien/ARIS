@@ -45,4 +45,52 @@ describe('geminiStreamAdapter', () => {
       turnId: 'turn-abort',
     });
   });
+
+  it('synthesizes completed Gemini commentary blocks from delta-only message streams', () => {
+    const events = parseGeminiStreamToCanonicalEvents(readFixture('delta-only-message-tool-boundaries.jsonl'));
+
+    expect(events.map((event) => event.type)).toEqual([
+      'turn_started',
+      'text_delta',
+      'text_completed',
+      'tool_started',
+      'tool_completed',
+      'text_delta',
+      'text_delta',
+      'text_completed',
+      'tool_started',
+      'tool_completed',
+      'text_delta',
+      'text_delta',
+      'text_completed',
+      'turn_completed',
+    ]);
+
+    const completedTexts = events
+      .filter((event) => event.type === 'text_completed')
+      .map((event) => event.text);
+    expect(completedTexts).toEqual([
+      '`AGENTS.md` 파일을 읽어 프로젝트 운영 규칙과 협업 가이드라인을 확인하겠습니다.',
+      '`services/aris-web/app/SessionDashboard.tsx` 파일을 읽어 대시보드 컴포넌트의 구현 내용을 확인하겠습니다.',
+      '`AGENTS.md`와 `services/aris-web/app/SessionDashboard.tsx` 파일을 모두 읽었습니다.\n\n### 작업 요약\n\n1.  **`AGENTS.md` 확인**: 프로젝트의 운영 규칙과 협업 가이드라인을 확인했습니다.',
+    ]);
+
+    const toolEvents = events.filter((event) => event.type === 'tool_completed');
+    expect(toolEvents).toMatchObject([
+      {
+        type: 'tool_completed',
+        action: {
+          actionType: 'file_read',
+          path: 'AGENTS.md',
+        },
+      },
+      {
+        type: 'tool_completed',
+        action: {
+          actionType: 'file_read',
+          path: 'services/aris-web/app/SessionDashboard.tsx',
+        },
+      },
+    ]);
+  });
 });

@@ -26,6 +26,23 @@ type GeminiTextAggregate = {
   itemId?: string;
 };
 
+type GeminiPendingTextBlock = {
+  itemId: string;
+  text: string;
+  source: 'assistant';
+  phase?: GeminiCanonicalTextDeltaEvent['phase'];
+  threadId?: string;
+  turnId?: string;
+  rawLine: string;
+};
+
+type GeminiPendingToolCall = {
+  callId: string;
+  action: GeminiActionEvent;
+  threadId?: string;
+  turnId?: string;
+};
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -182,6 +199,9 @@ function extractStructuredGeminiAction(payload: Record<string, unknown>): Gemini
 }
 
 function resolveStopReason(payloadType: string, payloadSubtype: string, payload: Record<string, unknown>): 'completed' | 'aborted' | 'timeout' | 'error' | undefined {
+  if (payloadType === 'tool_use' || payloadType === 'tool_result') {
+    return undefined;
+  }
   const normalizedStopReason = String(payload.stop_reason ?? payload.stopReason ?? payload.reason ?? payload.status ?? '').trim().toLowerCase();
   if (normalizedStopReason.includes('abort') || payloadSubtype.includes('abort')) {
     return 'aborted';
@@ -263,11 +283,14 @@ export class GeminiStreamAdapter {
   private readonly emittedKeys = new Set<string>();
   private readonly actionsByKey = new Map<string, GeminiActionEvent>();
   private readonly textAggregates = new Map<string, GeminiTextAggregate>();
+  private readonly pendingToolCalls = new Map<string, GeminiPendingToolCall>();
   private readonly completedTexts: GeminiCanonicalTextCompletedEvent[] = [];
   private readonly events: GeminiCanonicalEvent[] = [];
   private latestThreadId?: string;
   private sequence = 0;
   private errorText?: string;
+  private pendingTextBlock: GeminiPendingTextBlock | null = null;
+  private syntheticItemSequence = 0;
 
   processLine(line: string): GeminiCanonicalEvent[] {
     const payload = parseGeminiJsonLine(line);
@@ -332,6 +355,8 @@ export class GeminiStreamAdapter {
     const seemsToolPayload = (
       Boolean(structuredAction)
       || payloadType === 'tool'
+      || payloadType === 'tool_use'
+      || payloadType === 'tool_result'
       || payloadSubtype.includes('tool')
       || method.includes('exec_command')
       || method === 'item/started'
@@ -340,6 +365,70 @@ export class GeminiStreamAdapter {
       || itemType === 'filechange'
     );
     let action = structuredAction;
+    if (!action && payloadType === 'tool_use') {
+      action = this.buildGeminiToolActionFromToolUse(payload, records);
+    }
+    if (!action && payloadType === 'tool_result') {
+      action = this.buildGeminiToolActionFromToolResult(payload, records);
+    }
+
+    const deltaText = (() => {
+      if (method === 'codex/event/agent_message_content_delta' && typeof msg?.delta === 'string') {
+        return msg.delta;
+      }
+      if (method === 'codex/event/agent_message_delta' && typeof msg?.delta === 'string') {
+        return msg.delta;
+      }
+      if (method === 'item/agentmessage/delta' && typeof params?.delta === 'string') {
+        return params.delta;
+      }
+      if (payloadType === 'message' && role === 'assistant' && payload.delta === true) {
+        return normalizeAssistantContent(payload.content);
+      }
+      return '';
+    })();
+    const safeDeltaText = !looksLikeGeminiActionTranscript(deltaText) ? deltaText : '';
+    const completedText = (() => {
+      if (method === 'item/completed' && itemType === 'agentmessage' && typeof item?.text === 'string') {
+        return item.text.trim();
+      }
+      if (method === 'codex/event/agent_message' && typeof msg?.message === 'string') {
+        return msg.message.trim();
+      }
+      if (payloadType === 'message' && role === 'assistant' && payload.delta !== true) {
+        return normalizeAssistantContent(payload.content);
+      }
+      if (payloadType === 'event' && String(payload.event ?? '').trim().toLowerCase() === 'agent_message') {
+        return normalizeAssistantContent(payload.content);
+      }
+      if (payloadType === 'result') {
+        const resultText = extractFirstGeminiStringByKeys(records, ['result', 'output', 'text', 'content']);
+        if (resultText && !looksLikeGeminiActionTranscript(resultText) && !looksLikeShellCommand(resultText)) {
+          return resultText;
+        }
+      }
+      return '';
+    })();
+    const stopReason = resolveStopReason(payloadType, payloadSubtype, payload);
+
+    if (!safeDeltaText) {
+      if (completedText) {
+        this.discardPendingTextBlockIfSameContext({
+          threadId,
+          turnId,
+          itemId,
+        });
+      }
+      if (stopReason === 'aborted' || stopReason === 'timeout' || stopReason === 'error') {
+        this.pendingTextBlock = null;
+      } else {
+        const flushed = this.flushPendingTextBlock();
+        if (flushed) {
+          events.push(flushed);
+        }
+      }
+    }
+
     if (!action && seemsToolPayload && command && looksLikeShellCommand(command)) {
       const actionType = inferActionTypeFromCommand(command);
       action = {
@@ -377,84 +466,82 @@ export class GeminiStreamAdapter {
     }
 
     if (action) {
-      const toolName = buildToolName(action, payloadSubtype);
-      const isStarted = method === 'item/started' || method === 'codex/event/exec_command_begin';
-      const isCompleted = method === 'item/completed' || method === 'codex/event/exec_command_end';
-      if (isStarted || isCompleted || payloadType === 'tool') {
+      const resolvedCallId = callId ?? action.callId;
+      const toolName = payloadType === 'tool_use' || payloadType === 'tool_result'
+        ? this.resolveGeminiToolName(payload, records)
+        : buildToolName(action, payloadSubtype);
+      const isStarted = (
+        method === 'item/started'
+        || method === 'codex/event/exec_command_begin'
+        || payloadType === 'tool_use'
+      );
+      const isCompleted = (
+        method === 'item/completed'
+        || method === 'codex/event/exec_command_end'
+        || payloadType === 'tool_result'
+      );
+      if (isStarted || payloadType === 'tool') {
+        if (resolvedCallId && isStarted) {
+          this.pendingToolCalls.set(resolvedCallId, {
+            callId: resolvedCallId,
+            action: {
+              ...action,
+              ...(resolvedCallId ? { callId: resolvedCallId } : {}),
+            },
+            threadId,
+            turnId,
+          });
+        }
         events.push({
           type: 'tool_started',
           threadId,
           turnId,
-          callId: action.callId,
+          callId: resolvedCallId,
           rawLine: line,
           action,
           toolName,
         });
       }
       if (isCompleted || payloadType === 'tool') {
+        const completedAction = resolvedCallId
+          ? this.pendingToolCalls.get(resolvedCallId)?.action ?? action
+          : action;
+        if (resolvedCallId) {
+          this.pendingToolCalls.delete(resolvedCallId);
+        }
         events.push({
           type: 'tool_completed',
           threadId,
           turnId,
-          callId: action.callId,
+          callId: resolvedCallId,
           rawLine: line,
-          action,
+          action: completedAction,
           toolName,
-          stopReason: 'completed',
+          stopReason: this.resolveToolStopReason(payload),
         });
       }
     }
 
-    const deltaText = (() => {
-      if (method === 'codex/event/agent_message_content_delta' && typeof msg?.delta === 'string') {
-        return msg.delta;
-      }
-      if (method === 'codex/event/agent_message_delta' && typeof msg?.delta === 'string') {
-        return msg.delta;
-      }
-      if (method === 'item/agentmessage/delta' && typeof params?.delta === 'string') {
-        return params.delta;
-      }
-      if (payloadType === 'message' && role === 'assistant' && payload.delta === true) {
-        return normalizeAssistantContent(payload.content);
-      }
-      return '';
-    })();
-
-    if (deltaText && !looksLikeGeminiActionTranscript(deltaText)) {
-      events.push({
-        type: 'text_delta',
+    if (safeDeltaText) {
+      const pendingBlock = this.startOrContinuePendingTextBlock({
         threadId,
         turnId,
         itemId,
         phase,
         rawLine: line,
-        source: 'assistant',
-        text: deltaText,
+      });
+      pendingBlock.text += deltaText;
+      events.push({
+        type: 'text_delta',
+        threadId: pendingBlock.threadId,
+        turnId: pendingBlock.turnId,
+        itemId: pendingBlock.itemId,
+        phase: pendingBlock.phase,
+        rawLine: line,
+        source: pendingBlock.source,
+        text: safeDeltaText,
       });
     }
-
-    const completedText = (() => {
-      if (method === 'item/completed' && itemType === 'agentmessage' && typeof item?.text === 'string') {
-        return item.text.trim();
-      }
-      if (method === 'codex/event/agent_message' && typeof msg?.message === 'string') {
-        return msg.message.trim();
-      }
-      if (payloadType === 'message' && role === 'assistant' && payload.delta !== true) {
-        return normalizeAssistantContent(payload.content);
-      }
-      if (payloadType === 'event' && String(payload.event ?? '').trim().toLowerCase() === 'agent_message') {
-        return normalizeAssistantContent(payload.content);
-      }
-      if (payloadType === 'result') {
-        const resultText = extractFirstGeminiStringByKeys(records, ['result', 'output', 'text', 'content']);
-        if (resultText && !looksLikeGeminiActionTranscript(resultText) && !looksLikeShellCommand(resultText)) {
-          return resultText;
-        }
-      }
-      return '';
-    })();
 
     if (completedText) {
       events.push({
@@ -469,7 +556,6 @@ export class GeminiStreamAdapter {
       });
     }
 
-    const stopReason = resolveStopReason(payloadType, payloadSubtype, payload);
     if (stopReason === 'completed') {
       events.push({
         type: 'turn_completed',
@@ -603,6 +689,12 @@ export class GeminiStreamAdapter {
     if (latestCompleted?.text) {
       return latestCompleted.text;
     }
+    const latestTerminalEvent = [...this.events].reverse().find((event) => (
+      event.type === 'turn_aborted' || event.type === 'turn_failed'
+    ));
+    if (latestTerminalEvent) {
+      return '';
+    }
     let latestAggregate: GeminiTextAggregate | undefined;
     for (const aggregate of this.textAggregates.values()) {
       if (!latestAggregate || aggregate.updatedAt >= latestAggregate.updatedAt) {
@@ -640,6 +732,185 @@ export class GeminiStreamAdapter {
           : {}),
       ...(latestAggregate?.itemId ? { outputItemId: latestAggregate.itemId } : {}),
     };
+  }
+
+  private startOrContinuePendingTextBlock(input: {
+    threadId?: string;
+    turnId?: string;
+    itemId?: string;
+    phase?: GeminiCanonicalTextDeltaEvent['phase'];
+    rawLine: string;
+  }): GeminiPendingTextBlock {
+    const matchesExisting = this.pendingTextBlock
+      && this.pendingTextBlock.threadId === input.threadId
+      && this.pendingTextBlock.turnId === input.turnId
+      && this.pendingTextBlock.phase === input.phase
+      && (!input.itemId || this.pendingTextBlock.itemId === input.itemId);
+    if (matchesExisting && this.pendingTextBlock) {
+      this.pendingTextBlock.rawLine = input.rawLine;
+      return this.pendingTextBlock;
+    }
+
+    const itemId = input.itemId?.trim()
+      || `gemini-msg-${++this.syntheticItemSequence}`;
+    this.pendingTextBlock = {
+      itemId,
+      text: '',
+      source: 'assistant',
+      phase: input.phase,
+      threadId: input.threadId,
+      turnId: input.turnId,
+      rawLine: input.rawLine,
+    };
+    return this.pendingTextBlock;
+  }
+
+  private flushPendingTextBlock(): GeminiCanonicalTextCompletedEvent | null {
+    const pending = this.pendingTextBlock;
+    if (!pending) {
+      return null;
+    }
+    this.pendingTextBlock = null;
+    const text = sanitizeAgentMessageText(pending.text);
+    if (!text) {
+      return null;
+    }
+    return {
+      type: 'text_completed',
+      threadId: pending.threadId,
+      turnId: pending.turnId,
+      itemId: pending.itemId,
+      phase: pending.phase,
+      rawLine: pending.rawLine,
+      source: pending.source,
+      text,
+    };
+  }
+
+  private discardPendingTextBlockIfSameContext(input: {
+    threadId?: string;
+    turnId?: string;
+    itemId?: string;
+  }): void {
+    const pending = this.pendingTextBlock;
+    if (!pending) {
+      return;
+    }
+    const sameThread = (pending.threadId ?? '') === (input.threadId ?? '');
+    const sameTurn = (pending.turnId ?? '') === (input.turnId ?? '');
+    const sameItem = input.itemId ? pending.itemId === input.itemId : true;
+    if (!sameThread || !sameTurn || !sameItem) {
+      return;
+    }
+    this.pendingTextBlock = null;
+  }
+
+  private resolveGeminiToolName(
+    payload: Record<string, unknown>,
+    records: Record<string, unknown>[],
+  ): string {
+    const direct = String(payload.tool_name ?? payload.toolName ?? '').trim();
+    if (direct) {
+      return direct;
+    }
+    return extractFirstGeminiStringByKeys(records, ['tool_name', 'toolName', 'name']) || 'tool';
+  }
+
+  private buildGeminiToolActionFromToolUse(
+    payload: Record<string, unknown>,
+    records: Record<string, unknown>[],
+  ): GeminiActionEvent | undefined {
+    const toolName = this.resolveGeminiToolName(payload, records).toLowerCase();
+    const params = asRecord(payload.parameters);
+    const callId = String(payload.tool_id ?? payload.toolId ?? '').trim() || undefined;
+    const filePath = String(
+      params?.file_path
+      ?? params?.path
+      ?? params?.target_path
+      ?? '',
+    ).trim();
+    const command = String(params?.command ?? params?.cmd ?? '').trim();
+    if (toolName === 'read_file') {
+      return {
+        actionType: 'file_read',
+        title: titleForActionType('file_read'),
+        ...(callId ? { callId } : {}),
+        ...(filePath ? { path: filePath } : {}),
+        additions: 0,
+        deletions: 0,
+        hasDiffSignal: false,
+      };
+    }
+    if (toolName === 'write_file' || toolName === 'edit_file') {
+      return {
+        actionType: 'file_write',
+        title: titleForActionType('file_write'),
+        ...(callId ? { callId } : {}),
+        ...(filePath ? { path: filePath } : {}),
+        additions: 0,
+        deletions: 0,
+        hasDiffSignal: false,
+      };
+    }
+    if (toolName === 'list_directory' || toolName === 'glob') {
+      return {
+        actionType: 'file_list',
+        title: titleForActionType('file_list'),
+        ...(callId ? { callId } : {}),
+        ...(filePath ? { path: filePath } : {}),
+        additions: 0,
+        deletions: 0,
+        hasDiffSignal: false,
+      };
+    }
+    if (toolName === 'run_shell_command' && command) {
+      const actionType = inferActionTypeFromCommand(command);
+      return {
+        actionType,
+        title: titleForActionType(actionType),
+        ...(callId ? { callId } : {}),
+        command: unwrapShellCommand(command),
+        ...(filePath ? { path: filePath } : {}),
+        additions: 0,
+        deletions: 0,
+        hasDiffSignal: false,
+      };
+    }
+    return undefined;
+  }
+
+  private buildGeminiToolActionFromToolResult(
+    payload: Record<string, unknown>,
+    records: Record<string, unknown>[],
+  ): GeminiActionEvent | undefined {
+    const callId = String(payload.tool_id ?? payload.toolId ?? '').trim();
+    const output = extractFirstGeminiStringByKeys(records, ['output', 'text', 'result']);
+    const diffStats = summarizeDiffText(output);
+    const existing = callId ? this.pendingToolCalls.get(callId) : undefined;
+    if (existing) {
+      return {
+        ...existing.action,
+        ...(output ? { output } : {}),
+        additions: diffStats.additions,
+        deletions: diffStats.deletions,
+        hasDiffSignal: diffStats.hasDiffSignal,
+      };
+    }
+    return undefined;
+  }
+
+  private resolveToolStopReason(payload: Record<string, unknown>): 'completed' | 'aborted' | 'timeout' | 'error' {
+    const status = String(payload.status ?? payload.stopReason ?? '').trim().toLowerCase();
+    if (status.includes('abort')) {
+      return 'aborted';
+    }
+    if (status.includes('timeout')) {
+      return 'timeout';
+    }
+    if (status.includes('error') || status.includes('fail')) {
+      return 'error';
+    }
+    return 'completed';
   }
 }
 
