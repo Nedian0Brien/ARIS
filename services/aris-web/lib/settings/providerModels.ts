@@ -58,6 +58,7 @@ export const DEFAULT_CLAUDE_MODEL_SELECTIONS = [
 
 export const DEFAULT_GEMINI_MODEL_SELECTIONS = [
   'auto-gemini-3',
+  'gemini-3-flash',
   'gemini-2.5-pro',
   'gemini-2.5-flash',
   'gemini-2.0-flash',
@@ -307,6 +308,9 @@ export function deriveGeminiModelFamily(modelId: string): string {
   const normalized = modelId.toLowerCase();
   if (normalized === 'auto-gemini-3') {
     return 'Gemini 3 Auto';
+  }
+  if (normalized.includes('gemini-3')) {
+    return 'Gemini 3';
   }
   if (normalized.includes('gemini-2.5')) {
     return 'Gemini 2.5';
