@@ -65,7 +65,9 @@ npm --prefix services/aris-web run dev
 
 If you use dedicated `git worktree` directories, you can reuse the main
 checkout's installed dependencies instead of running `npm install` in every
-worktree.
+worktree. The helper also bootstraps missing shared dev dependencies with
+`npm ci --include=dev`, so tools like `vitest` and `tsc` are available inside
+new worktrees even when the shell default is `NODE_ENV=production`.
 
 Create a new worktree and auto-link shared `node_modules`:
 
