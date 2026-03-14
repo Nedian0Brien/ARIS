@@ -37,12 +37,13 @@ describe('providerModels', () => {
 
   it('filters Gemini selections down to runtime-safe models only', () => {
     expect(normalizeProviderModelSelections({
-      gemini: { selectedModelIds: ['gemini-3.1-pro-preview', 'gemini-2.5-pro', 'gemini-2.5-pro'] },
+      gemini: { selectedModelIds: ['gemini-3.1-pro-preview', 'gemini-3-flash', 'gemini-2.5-pro', 'gemini-2.5-pro'] },
     })).toEqual({
       codex: { selectedModelIds: [] },
       claude: { selectedModelIds: [] },
-      gemini: { selectedModelIds: ['gemini-2.5-pro'] },
+      gemini: { selectedModelIds: ['gemini-3-flash', 'gemini-2.5-pro'] },
     });
+    expect(isAllowedGeminiSelectionModelId('gemini-3-flash')).toBe(true);
     expect(isAllowedGeminiSelectionModelId('gemini-2.5-flash')).toBe(true);
     expect(isAllowedGeminiSelectionModelId('auto-gemini-3')).toBe(true);
     expect(isAllowedGeminiSelectionModelId('gemini-3.1-pro-preview')).toBe(false);
@@ -54,7 +55,7 @@ describe('providerModels', () => {
     })).toEqual({
       codex: { selectedModelIds: [] },
       claude: { selectedModelIds: [] },
-      gemini: { selectedModelIds: ['auto-gemini-3', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'] },
+      gemini: { selectedModelIds: ['auto-gemini-3', 'gemini-3-flash', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'] },
     });
   });
 });
