@@ -124,6 +124,27 @@ describe('happyClient stream-json parsing', () => {
     });
   });
 
+  it('emits Gemini item/agentMessage/delta text as partial realtime events', () => {
+    const deltaLine = JSON.stringify({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'gemini-thread',
+        turnId: 'turn-43',
+        itemId: 'msg-43',
+        delta: '중간 코멘터리 ',
+      },
+    });
+
+    expect(happyClientTestHooks.extractGeminiStreamTextEvent(parseGeminiStreamLine(deltaLine))).toMatchObject({
+      text: '중간 코멘터리 ',
+      source: 'assistant',
+      threadId: 'gemini-thread',
+      turnId: 'turn-43',
+      itemId: 'msg-43',
+      partial: true,
+    });
+  });
+
   it('skips Gemini final fallback persistence when the same text was already streamed', () => {
     expect(happyClientTestHooks.shouldPersistFinalAgentOutput({
       flavor: 'gemini',

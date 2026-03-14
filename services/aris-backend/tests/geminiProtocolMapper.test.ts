@@ -235,4 +235,45 @@ describe('geminiProtocolMapper', () => {
       }),
     ]);
   });
+
+  it('parses item/agentMessage/delta payloads as Gemini assistant partials', () => {
+    const line = JSON.stringify({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'gemini-delta-thread',
+        turnId: 'gemini-delta-turn',
+        itemId: 'msg-delta-1',
+        delta: '실시간 코멘터리',
+      },
+    });
+
+    const parsed = parseGeminiStreamLine(line);
+
+    expect(parsed.assistantText).toBe('실시간 코멘터리');
+    expect(parsed.assistantIsDelta).toBe(true);
+    expect(parsed.assistantTurnId).toBe('gemini-delta-turn');
+    expect(parsed.assistantItemId).toBe('msg-delta-1');
+    expect(parsed.sessionId).toBe('gemini-delta-thread');
+  });
+
+  it('parses codex/event/agent_message_delta payloads as Gemini assistant partials', () => {
+    const line = JSON.stringify({
+      method: 'codex/event/agent_message_delta',
+      params: {
+        id: 'gemini-delta-turn',
+        conversationId: 'gemini-delta-thread',
+        msg: {
+          type: 'agent_message_delta',
+          delta: '추가 텍스트',
+        },
+      },
+    });
+
+    const parsed = parseGeminiStreamLine(line);
+
+    expect(parsed.assistantText).toBe('추가 텍스트');
+    expect(parsed.assistantIsDelta).toBe(true);
+    expect(parsed.assistantTurnId).toBe('gemini-delta-turn');
+    expect(parsed.sessionId).toBe('gemini-delta-thread');
+  });
 });

@@ -415,16 +415,27 @@ export function parseGeminiStreamLine(line: string): GeminiMappedLine {
 
   const assistantItemId = typeof msg?.item_id === 'string' && msg.item_id.trim()
     ? msg.item_id.trim()
-    : typeof item?.id === 'string' && item.id.trim()
-      ? item.id.trim()
-      : undefined;
+    : typeof params?.itemId === 'string' && params.itemId.trim()
+      ? params.itemId.trim()
+      : typeof item?.id === 'string' && item.id.trim()
+        ? item.id.trim()
+        : undefined;
   const assistantIsDelta = (
     msgType === 'agent_message_content_delta'
+    || msgType === 'agent_message_delta'
+    || method === 'item/agentmessage/delta'
+    || method === 'codex/event/agent_message_delta'
     || (payloadType === 'message' && payload.delta === true)
   );
   const assistantText = (() => {
     if (method === 'codex/event/agent_message_content_delta' && typeof msg?.delta === 'string') {
       return msg.delta;
+    }
+    if (method === 'codex/event/agent_message_delta' && typeof msg?.delta === 'string') {
+      return msg.delta;
+    }
+    if (method === 'item/agentmessage/delta' && typeof params?.delta === 'string') {
+      return params.delta;
     }
     if (method === 'codex/event/agent_message' && typeof msg?.message === 'string') {
       return msg.message.trim();
