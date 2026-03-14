@@ -1,3 +1,4 @@
+import type { ApprovalPolicy } from '../../../types.js';
 import type { ProviderLaunchCommand, ProviderResumeTarget } from '../../contracts/providerRuntime.js';
 
 export type GeminiLaunchCommand = ProviderLaunchCommand<'gemini'> & {
@@ -8,6 +9,7 @@ export type GeminiLaunchCommand = ProviderLaunchCommand<'gemini'> & {
 
 export function buildGeminiCommand(input: {
   prompt: string;
+  approvalPolicy: ApprovalPolicy;
   model?: string;
   resumeTarget?: ProviderResumeTarget;
 }): GeminiLaunchCommand {
@@ -16,8 +18,10 @@ export function buildGeminiCommand(input: {
     && input.resumeTarget.id.trim().length > 0
     ? input.resumeTarget.id.trim().slice(0, 120)
     : undefined;
+  const approvalArgs = input.approvalPolicy === 'yolo' ? ['--approval-mode', 'yolo'] : [];
   const args = [
     ...(input.model ? ['-m', input.model] : []),
+    ...approvalArgs,
     '--output-format',
     'stream-json',
     ...(normalizedResumeId ? ['--resume', normalizedResumeId] : []),
@@ -26,6 +30,7 @@ export function buildGeminiCommand(input: {
   ];
   const fallbackArgs = [
     ...(input.model ? ['-m', input.model] : []),
+    ...approvalArgs,
     ...(normalizedResumeId ? ['--resume', normalizedResumeId] : []),
     '-p',
     input.prompt,
@@ -39,6 +44,7 @@ export function buildGeminiCommand(input: {
       ? {
         retryArgsOnFailure: [
           ...(input.model ? ['-m', input.model] : []),
+          ...approvalArgs,
           '--output-format',
           'stream-json',
           '-p',
