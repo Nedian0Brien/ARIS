@@ -556,6 +556,13 @@
   box-shadow: var(--dashboard-shadow-hover);
 }
 
+.sessionCard:active {
+  transform: translateY(-1px);
+  box-shadow: var(--dashboard-shadow-card);
+  background: var(--dashboard-card-bg-hover);
+  transition: transform 0.1s ease;
+}
+
 .sessionSelectToggle {
   position: absolute;
   top: 0.7rem;

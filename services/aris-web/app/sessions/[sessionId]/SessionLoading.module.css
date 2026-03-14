@@ -1,0 +1,116 @@
+.skeletonWrapper {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 1rem;
+  height: calc(100vh - 64px);
+  padding: 1rem;
+  overflow: hidden;
+  background: var(--bg-subtle);
+}
+
+.skeletonSidebar {
+  background: var(--dashboard-card-bg-strong);
+  border-radius: 1rem;
+  border: 1px solid var(--dashboard-border-soft);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.skeletonMain {
+  background: var(--dashboard-card-bg-strong);
+  border-radius: 1rem;
+  border: 1px solid var(--dashboard-border-soft);
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  gap: 1.5rem;
+  position: relative;
+}
+
+.skeletonRight {
+  background: var(--dashboard-card-bg-strong);
+  border-radius: 1rem;
+  border: 1px solid var(--dashboard-border-soft);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--dashboard-border-soft) 25%,
+    var(--dashboard-card-bg-hover) 50%,
+    var(--dashboard-border-soft) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: 0.5rem;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeletonItem {
+  height: 2rem;
+  width: 100%;
+}
+
+.skeletonCircle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.skeletonChat {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: auto;
+}
+
+.skeletonMessage {
+  height: 80px;
+  width: 80%;
+  border-radius: 1rem;
+}
+
+.skeletonMessageAgent {
+  align-self: flex-start;
+}
+
+.skeletonMessageUser {
+  align-self: flex-end;
+  width: 60%;
+}
+
+.skeletonComposer {
+  height: 100px;
+  width: 100%;
+  border-radius: 1rem;
+  margin-top: auto;
+}
+
+@media (max-width: 1024px) {
+  .skeletonRight {
+    display: none;
+  }
+  .skeletonWrapper {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .skeletonSidebar {
+    display: none;
+  }
+  .skeletonWrapper {
+    grid-template-columns: 1fr;
+  }
+}
