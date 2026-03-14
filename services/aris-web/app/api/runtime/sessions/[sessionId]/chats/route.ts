@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
 import { createSessionChat, listSessionChats } from '@/lib/happy/chats';
+import { getUserModelSettings } from '@/lib/settings/providerPreferences';
 
 function isSessionChatConstraintError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
@@ -53,13 +54,17 @@ export async function POST(
     const normalizedAgent = body.agent === 'claude' || body.agent === 'codex' || body.agent === 'gemini'
       ? body.agent
       : 'codex';
+    const settings = await getUserModelSettings(auth.user.id);
+    const providerDefaults = settings.providers[normalizedAgent];
     const chat = await createSessionChat({
       sessionId,
       userId: auth.user.id,
       title: body.title,
       agent: normalizedAgent,
-      model: body.model,
-      geminiMode: body.geminiMode,
+      model: body.model ?? providerDefaults.defaultModelId ?? providerDefaults.selectedModelIds[0] ?? null,
+      geminiMode: normalizedAgent === 'gemini'
+        ? (body.geminiMode ?? settings.providers.gemini.defaultModeId ?? null)
+        : body.geminiMode,
       modelReasoningEffort: body.modelReasoningEffort,
     });
 

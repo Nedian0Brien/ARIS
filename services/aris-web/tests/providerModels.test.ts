@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_GEMINI_MODE_ID,
   isAllowedGeminiSelectionModelId,
+  normalizeGeminiModeSelectionId,
   isOpenAiTextGenerationModelId,
   normalizeProviderModelSelections,
   normalizePartialProviderModelSelections,
@@ -21,9 +23,9 @@ describe('providerModels', () => {
     expect(normalizeProviderModelSelections({
       codex: { selectedModelIds: ['gpt-5.4', 'gpt-5.4', 'gpt-5.3-codex'] },
     })).toEqual({
-      codex: { selectedModelIds: ['gpt-5.4', 'gpt-5.3-codex'] },
-      claude: { selectedModelIds: [] },
-      gemini: { selectedModelIds: [] },
+      codex: { selectedModelIds: ['gpt-5.4', 'gpt-5.3-codex'], defaultModelId: 'gpt-5.4', defaultModeId: null },
+      claude: { selectedModelIds: [], defaultModelId: null, defaultModeId: null },
+      gemini: { selectedModelIds: [], defaultModelId: null, defaultModeId: DEFAULT_GEMINI_MODE_ID },
     });
   });
 
@@ -31,7 +33,7 @@ describe('providerModels', () => {
     expect(normalizePartialProviderModelSelections({
       codex: { selectedModelIds: ['gpt-5.4'] },
     })).toEqual({
-      codex: { selectedModelIds: ['gpt-5.4'] },
+      codex: { selectedModelIds: ['gpt-5.4'], defaultModelId: 'gpt-5.4', defaultModeId: null },
     });
   });
 
@@ -39,9 +41,13 @@ describe('providerModels', () => {
     expect(normalizeProviderModelSelections({
       gemini: { selectedModelIds: ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-2.5-pro'] },
     })).toEqual({
-      codex: { selectedModelIds: [] },
-      claude: { selectedModelIds: [] },
-      gemini: { selectedModelIds: ['gemini-3-flash-preview', 'gemini-2.5-pro'] },
+      codex: { selectedModelIds: [], defaultModelId: null, defaultModeId: null },
+      claude: { selectedModelIds: [], defaultModelId: null, defaultModeId: null },
+      gemini: {
+        selectedModelIds: ['gemini-3-flash-preview', 'gemini-2.5-pro'],
+        defaultModelId: 'gemini-3-flash-preview',
+        defaultModeId: DEFAULT_GEMINI_MODE_ID,
+      },
     });
     expect(isAllowedGeminiSelectionModelId('gemini-3-flash-preview')).toBe(true);
     expect(isAllowedGeminiSelectionModelId('gemini-2.5-flash')).toBe(true);
@@ -53,9 +59,33 @@ describe('providerModels', () => {
     expect(normalizeProviderModelSelections({
       gemini: { selectedModelIds: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'] },
     })).toEqual({
-      codex: { selectedModelIds: [] },
-      claude: { selectedModelIds: [] },
-      gemini: { selectedModelIds: ['auto-gemini-3', 'gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'] },
+      codex: { selectedModelIds: [], defaultModelId: null, defaultModeId: null },
+      claude: { selectedModelIds: [], defaultModelId: null, defaultModeId: null },
+      gemini: {
+        selectedModelIds: ['auto-gemini-3', 'gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
+        defaultModelId: 'auto-gemini-3',
+        defaultModeId: DEFAULT_GEMINI_MODE_ID,
+      },
     });
+  });
+
+  it('normalizes Gemini default model and mode selections', () => {
+    expect(normalizeProviderModelSelections({
+      gemini: {
+        selectedModelIds: ['gemini-3-flash-preview', 'gemini-2.5-pro'],
+        defaultModelId: 'gemini-2.5-pro',
+        defaultModeId: 'auto_edit',
+      },
+    })).toEqual({
+      codex: { selectedModelIds: [], defaultModelId: null, defaultModeId: null },
+      claude: { selectedModelIds: [], defaultModelId: null, defaultModeId: null },
+      gemini: {
+        selectedModelIds: ['gemini-3-flash-preview', 'gemini-2.5-pro'],
+        defaultModelId: 'gemini-2.5-pro',
+        defaultModeId: 'autoEdit',
+      },
+    });
+    expect(normalizeGeminiModeSelectionId('auto_edit')).toBe('autoEdit');
+    expect(normalizeGeminiModeSelectionId('yolo')).toBe('yolo');
   });
 });

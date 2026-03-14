@@ -42,6 +42,7 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null, ena
         }
         if (response.status === 404) {
           if (!disposed) {
+            runtimeStateCache.set(cacheKey, false);
             setIsRunning(false);
             setRuntimeError('워크스페이스가 종료되었거나 삭제되었습니다.');
           }
@@ -61,6 +62,8 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null, ena
       } catch (error) {
         if (!disposed) {
           const message = error instanceof Error ? error.message : 'Failed to sync runtime status';
+          runtimeStateCache.set(cacheKey, false);
+          setIsRunning(false);
           setRuntimeError(message);
         }
       } finally {

@@ -1,13 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronUp, FileKey, KeyRound, Settings2, UploadCloud } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronUp, Cpu, FileKey, KeyRound, Settings2, UploadCloud } from 'lucide-react';
 import { OpenAiApiKeyCard } from '@/components/settings/OpenAiApiKeyCard';
 import { CodexModelCatalogCard } from '@/components/settings/CodexModelCatalogCard';
 import {
+  DEFAULT_GEMINI_MODE_ID,
   DEFAULT_CLAUDE_MODEL_SELECTIONS,
   DEFAULT_CODEX_MODEL_SELECTIONS,
   DEFAULT_GEMINI_MODEL_SELECTIONS,
+  GEMINI_MODE_SELECTION_OPTIONS,
   type ClaudeCatalogItem,
   type GeminiCatalogItem,
   type ModelSettingsResponse,
@@ -25,9 +27,9 @@ const PROVIDER_OPTIONS: Array<{ id: ProviderId; label: string }> = [
 
 const DEFAULT_MODEL_SETTINGS: ModelSettingsResponse = {
   providers: {
-    codex: { selectedModelIds: [] },
-    claude: { selectedModelIds: [] },
-    gemini: { selectedModelIds: [] },
+    codex: { selectedModelIds: [], defaultModelId: null, defaultModeId: null },
+    claude: { selectedModelIds: [], defaultModelId: null, defaultModeId: null },
+    gemini: { selectedModelIds: [], defaultModelId: null, defaultModeId: DEFAULT_GEMINI_MODE_ID },
   },
   legacyCustomModels: {
     codex: '',
@@ -80,6 +82,8 @@ export function SettingsTab() {
   // Gemini 상태
   const [geminiCatalogItems, setGeminiCatalogItems] = useState<GeminiCatalogItem[]>([]);
   const [selectedGeminiModelIds, setSelectedGeminiModelIds] = useState<string[]>([...DEFAULT_GEMINI_MODEL_SELECTIONS]);
+  const [selectedGeminiDefaultModelId, setSelectedGeminiDefaultModelId] = useState<string>(DEFAULT_GEMINI_MODEL_SELECTIONS[0]);
+  const [selectedGeminiDefaultModeId, setSelectedGeminiDefaultModeId] = useState<string>(DEFAULT_GEMINI_MODE_ID);
   const [geminiModelSaving, setGeminiModelSaving] = useState(false);
   const [geminiModelFeedback, setGeminiModelFeedback] = useState<Feedback>(null);
   const [geminiCatalogLoading, setGeminiCatalogLoading] = useState(false);
@@ -100,7 +104,10 @@ export function SettingsTab() {
 
   const syncGeminiSelection = useCallback((settings: ModelSettingsResponse) => {
     const persisted = settings.providers.gemini.selectedModelIds;
-    setSelectedGeminiModelIds(persisted.length > 0 ? persisted : [...DEFAULT_GEMINI_MODEL_SELECTIONS]);
+    const nextSelected = persisted.length > 0 ? persisted : [...DEFAULT_GEMINI_MODEL_SELECTIONS];
+    setSelectedGeminiModelIds(nextSelected);
+    setSelectedGeminiDefaultModelId(settings.providers.gemini.defaultModelId ?? nextSelected[0] ?? DEFAULT_GEMINI_MODEL_SELECTIONS[0]);
+    setSelectedGeminiDefaultModeId(settings.providers.gemini.defaultModeId ?? DEFAULT_GEMINI_MODE_ID);
   }, []);
 
   const loadModelSettings = useCallback(async (): Promise<ModelSettingsResponse | null> => {
@@ -518,11 +525,14 @@ export function SettingsTab() {
   const handleToggleGeminiModel = useCallback((modelId: string) => {
     setSelectedGeminiModelIds((prev) => {
       if (prev.includes(modelId)) {
-        return prev.filter((item) => item !== modelId);
+        const next = prev.filter((item) => item !== modelId);
+        setSelectedGeminiDefaultModelId((current) => (current === modelId ? (next[0] ?? DEFAULT_GEMINI_MODEL_SELECTIONS[0]) : current));
+        return next;
       }
       const next = [...prev, modelId];
       const order = new Map(geminiCatalogItems.map((item, index) => [item.id, index]));
       next.sort((left, right) => (order.get(left) ?? Number.MAX_SAFE_INTEGER) - (order.get(right) ?? Number.MAX_SAFE_INTEGER));
+      setSelectedGeminiDefaultModelId((current) => current || next[0] || DEFAULT_GEMINI_MODEL_SELECTIONS[0]);
       return next;
     });
   }, [geminiCatalogItems]);
@@ -530,11 +540,14 @@ export function SettingsTab() {
   const handleApplyRecommendedGeminiModels = useCallback(() => {
     if (geminiCatalogItems.length === 0) {
       setSelectedGeminiModelIds([...DEFAULT_GEMINI_MODEL_SELECTIONS]);
+      setSelectedGeminiDefaultModelId(DEFAULT_GEMINI_MODEL_SELECTIONS[0]);
       return;
     }
     const available = new Set(geminiCatalogItems.map((item) => item.id));
     const recommended = DEFAULT_GEMINI_MODEL_SELECTIONS.filter((modelId) => available.has(modelId));
-    setSelectedGeminiModelIds(recommended.length > 0 ? [...recommended] : [...DEFAULT_GEMINI_MODEL_SELECTIONS]);
+    const nextSelected = recommended.length > 0 ? [...recommended] : [...DEFAULT_GEMINI_MODEL_SELECTIONS];
+    setSelectedGeminiModelIds(nextSelected);
+    setSelectedGeminiDefaultModelId(nextSelected[0] ?? DEFAULT_GEMINI_MODEL_SELECTIONS[0]);
   }, [geminiCatalogItems]);
 
   const handleGeminiModelSave = useCallback(async () => {
@@ -548,7 +561,15 @@ export function SettingsTab() {
       const response = await fetch('/api/settings/models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providers: { gemini: { selectedModelIds: selectedGeminiModelIds } } }),
+        body: JSON.stringify({
+          providers: {
+            gemini: {
+              selectedModelIds: selectedGeminiModelIds,
+              defaultModelId: selectedGeminiDefaultModelId,
+              defaultModeId: selectedGeminiDefaultModeId,
+            },
+          },
+        }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok || !data) {
@@ -562,7 +583,7 @@ export function SettingsTab() {
     } finally {
       setGeminiModelSaving(false);
     }
-  }, [selectedGeminiModelIds, syncGeminiSelection]);
+  }, [selectedGeminiDefaultModelId, selectedGeminiDefaultModeId, selectedGeminiModelIds, syncGeminiSelection]);
 
   // 활성 provider에 따라 카드에 전달할 props 결정
   const isCodex = activeProvider === 'codex';
@@ -646,6 +667,47 @@ export function SettingsTab() {
           onSave={handleActiveModelSave}
           onApplyRecommended={handleActiveApplyRecommended}
         />
+
+        {activeProvider === 'gemini' && (
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>
+              <Cpu size={16} />
+              Gemini 기본 실행값
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>기본 모델</label>
+              <select
+                className={styles.input}
+                value={selectedGeminiDefaultModelId}
+                onChange={(event) => setSelectedGeminiDefaultModelId(event.target.value)}
+                disabled={selectedGeminiModelIds.length === 0}
+              >
+                {selectedGeminiModelIds.map((modelId) => (
+                  <option key={modelId} value={modelId}>
+                    {modelId}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>기본 모드</label>
+              <select
+                className={styles.input}
+                value={selectedGeminiDefaultModeId}
+                onChange={(event) => setSelectedGeminiDefaultModeId(event.target.value)}
+              >
+                {GEMINI_MODE_SELECTION_OPTIONS.map((mode) => (
+                  <option key={mode.id} value={mode.id}>
+                    {mode.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className={styles.keyHint}>
+              새 Gemini 채팅은 여기서 저장한 기본 모델과 모드로 시작합니다. 채팅 화면에서는 ACP capability를 다시 조회하지 않습니다.
+            </p>
+          </div>
+        )}
 
         <div className={styles.section}>
           <div className={styles.sectionTitle}>

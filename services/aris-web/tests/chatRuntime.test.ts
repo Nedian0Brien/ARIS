@@ -43,6 +43,17 @@ describe('chatRuntime helpers', () => {
     expect(hasAgentCompletionSignal(event)).toBe(true);
   });
 
+  it('treats runtime restart notices as a completion signal for stuck runs', () => {
+    const event = buildEvent({
+      meta: {
+        streamEvent: 'runtime_restarted',
+        role: 'agent',
+      },
+    });
+
+    expect(hasAgentCompletionSignal(event)).toBe(true);
+  });
+
   it('recognizes persisted final agent replies', () => {
     const event = buildEvent({
       meta: {
@@ -201,6 +212,17 @@ describe('chatRuntime helpers', () => {
       runtimeRunning: false,
       runStatus: 'run_started',
     })).toBe('running');
+  });
+
+  it('drops back to idle when a restart notice arrived even if the last run status was run_started', () => {
+    expect(resolveChatRunPhase({
+      isSubmitting: false,
+      isAwaitingReply: false,
+      isAborting: false,
+      hasCompletionSignal: true,
+      runtimeRunning: false,
+      runStatus: 'run_started',
+    })).toBe('idle');
   });
 
   it('surfaces approval phase while waiting for a permission decision', () => {

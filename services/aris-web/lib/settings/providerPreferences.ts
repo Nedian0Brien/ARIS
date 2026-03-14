@@ -4,6 +4,8 @@ import { prisma } from '@/lib/db/prisma';
 import { sanitizeCustomModel } from '@/lib/happy/modelPolicy';
 import {
   createEmptyProviderModelSelections,
+  DEFAULT_GEMINI_MODE_ID,
+  normalizeGeminiModeSelectionId,
   normalizeModelSelectionList,
   normalizeProviderModelSelections,
   type ModelSettingsResponse,
@@ -35,9 +37,21 @@ export function parseLegacyCustomModels(raw: unknown): CustomModelMap {
 export function sanitizeProviderModelSelections(raw: unknown): ProviderModelSelections {
   const normalized = normalizeProviderModelSelections(raw);
   return {
-    codex: { selectedModelIds: sanitizeModelSelectionList(normalized.codex.selectedModelIds) },
-    claude: { selectedModelIds: sanitizeModelSelectionList(normalized.claude.selectedModelIds) },
-    gemini: { selectedModelIds: sanitizeModelSelectionList(normalized.gemini.selectedModelIds) },
+    codex: {
+      selectedModelIds: sanitizeModelSelectionList(normalized.codex.selectedModelIds),
+      defaultModelId: normalized.codex.defaultModelId ?? null,
+      defaultModeId: null,
+    },
+    claude: {
+      selectedModelIds: sanitizeModelSelectionList(normalized.claude.selectedModelIds),
+      defaultModelId: normalized.claude.defaultModelId ?? null,
+      defaultModeId: null,
+    },
+    gemini: {
+      selectedModelIds: sanitizeModelSelectionList(normalized.gemini.selectedModelIds),
+      defaultModelId: normalized.gemini.defaultModelId ?? null,
+      defaultModeId: normalizeGeminiModeSelectionId(normalized.gemini.defaultModeId) ?? DEFAULT_GEMINI_MODE_ID,
+    },
   };
 }
 
@@ -83,12 +97,24 @@ export async function saveUserModelSettings(input: {
   nextProviders.codex.selectedModelIds = input.providers && Object.prototype.hasOwnProperty.call(input.providers, 'codex')
     ? sanitizeModelSelectionList(input.providers.codex?.selectedModelIds)
     : existing.providers.codex.selectedModelIds;
+  nextProviders.codex.defaultModelId = input.providers && Object.prototype.hasOwnProperty.call(input.providers, 'codex')
+    ? (input.providers.codex?.defaultModelId ?? nextProviders.codex.selectedModelIds[0] ?? null)
+    : existing.providers.codex.defaultModelId ?? existing.providers.codex.selectedModelIds[0] ?? null;
   nextProviders.claude.selectedModelIds = input.providers && Object.prototype.hasOwnProperty.call(input.providers, 'claude')
     ? sanitizeModelSelectionList(input.providers.claude?.selectedModelIds)
     : existing.providers.claude.selectedModelIds;
+  nextProviders.claude.defaultModelId = input.providers && Object.prototype.hasOwnProperty.call(input.providers, 'claude')
+    ? (input.providers.claude?.defaultModelId ?? nextProviders.claude.selectedModelIds[0] ?? null)
+    : existing.providers.claude.defaultModelId ?? existing.providers.claude.selectedModelIds[0] ?? null;
   nextProviders.gemini.selectedModelIds = input.providers && Object.prototype.hasOwnProperty.call(input.providers, 'gemini')
     ? sanitizeModelSelectionList(input.providers.gemini?.selectedModelIds)
     : existing.providers.gemini.selectedModelIds;
+  nextProviders.gemini.defaultModelId = input.providers && Object.prototype.hasOwnProperty.call(input.providers, 'gemini')
+    ? (sanitizeModelSelectionList([input.providers.gemini?.defaultModelId])[0] ?? nextProviders.gemini.selectedModelIds[0] ?? null)
+    : existing.providers.gemini.defaultModelId ?? existing.providers.gemini.selectedModelIds[0] ?? null;
+  nextProviders.gemini.defaultModeId = input.providers && Object.prototype.hasOwnProperty.call(input.providers, 'gemini')
+    ? (normalizeGeminiModeSelectionId(input.providers.gemini?.defaultModeId) ?? DEFAULT_GEMINI_MODE_ID)
+    : normalizeGeminiModeSelectionId(existing.providers.gemini.defaultModeId) ?? DEFAULT_GEMINI_MODE_ID;
 
   const nextLegacyCustomModels: CustomModelMap = {
     codex: sanitizeCustomModel(input.legacyCustomModels?.codex) ?? existing.legacyCustomModels.codex,

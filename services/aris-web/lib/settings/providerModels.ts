@@ -2,6 +2,8 @@ export type ProviderId = 'codex' | 'claude' | 'gemini';
 
 export type ProviderModelSelection = {
   selectedModelIds: string[];
+  defaultModelId?: string | null;
+  defaultModeId?: string | null;
 };
 
 export type ProviderModelSelections = Record<ProviderId, ProviderModelSelection>;
@@ -64,6 +66,15 @@ export const DEFAULT_GEMINI_MODEL_SELECTIONS = [
   'gemini-2.0-flash',
 ] as const;
 
+export const DEFAULT_GEMINI_MODE_ID = 'default' as const;
+
+export const GEMINI_MODE_SELECTION_OPTIONS = [
+  { id: 'default', label: 'Default' },
+  { id: 'autoEdit', label: 'Auto Edit' },
+  { id: 'plan', label: 'Plan' },
+  { id: 'yolo', label: 'YOLO' },
+] as const;
+
 const LEGACY_DEFAULT_GEMINI_MODEL_SELECTIONS = [
   'gemini-2.5-pro',
   'gemini-2.5-flash',
@@ -72,6 +83,9 @@ const LEGACY_DEFAULT_GEMINI_MODEL_SELECTIONS = [
 
 const ALLOWED_GEMINI_SELECTION_IDS = new Set(
   DEFAULT_GEMINI_MODEL_SELECTIONS.map((modelId) => modelId.toLowerCase()),
+);
+const ALLOWED_GEMINI_MODE_IDS = new Set(
+  GEMINI_MODE_SELECTION_OPTIONS.map((mode) => mode.id.toLowerCase()),
 );
 
 const PROVIDERS: ProviderId[] = ['codex', 'claude', 'gemini'];
@@ -88,9 +102,9 @@ const OPENAI_TEXT_MODEL_REJECT_SEGMENTS = [
 
 export function createEmptyProviderModelSelections(): ProviderModelSelections {
   return {
-    codex: { selectedModelIds: [] },
-    claude: { selectedModelIds: [] },
-    gemini: { selectedModelIds: [] },
+    codex: { selectedModelIds: [], defaultModelId: null, defaultModeId: null },
+    claude: { selectedModelIds: [], defaultModelId: null, defaultModeId: null },
+    gemini: { selectedModelIds: [], defaultModelId: null, defaultModeId: DEFAULT_GEMINI_MODE_ID },
   };
 }
 
@@ -131,8 +145,11 @@ export function normalizeProviderModelSelections(input: unknown): ProviderModelS
       continue;
     }
     const providerRecord = rawProvider as Record<string, unknown>;
+    const selectedModelIds = normalizeProviderModelSelectionList(provider, providerRecord.selectedModelIds);
     base[provider] = {
-      selectedModelIds: normalizeProviderModelSelectionList(provider, providerRecord.selectedModelIds),
+      selectedModelIds,
+      defaultModelId: normalizeProviderDefaultModelId(provider, providerRecord.defaultModelId, selectedModelIds),
+      defaultModeId: normalizeProviderDefaultModeId(provider, providerRecord.defaultModeId),
     };
   }
 
@@ -152,12 +169,19 @@ export function normalizePartialProviderModelSelections(input: unknown): Partial
     }
     const rawProvider = record[provider];
     if (!rawProvider || typeof rawProvider !== 'object' || Array.isArray(rawProvider)) {
-      partial[provider] = { selectedModelIds: [] };
+      partial[provider] = {
+        selectedModelIds: [],
+        defaultModelId: null,
+        defaultModeId: provider === 'gemini' ? DEFAULT_GEMINI_MODE_ID : null,
+      };
       continue;
     }
     const providerRecord = rawProvider as Record<string, unknown>;
+    const selectedModelIds = normalizeProviderModelSelectionList(provider, providerRecord.selectedModelIds);
     partial[provider] = {
-      selectedModelIds: normalizeProviderModelSelectionList(provider, providerRecord.selectedModelIds),
+      selectedModelIds,
+      defaultModelId: normalizeProviderDefaultModelId(provider, providerRecord.defaultModelId, selectedModelIds),
+      defaultModeId: normalizeProviderDefaultModeId(provider, providerRecord.defaultModeId),
     };
   }
 
@@ -166,6 +190,52 @@ export function normalizePartialProviderModelSelections(input: unknown): Partial
 
 export function isAllowedGeminiSelectionModelId(modelId: string): boolean {
   return ALLOWED_GEMINI_SELECTION_IDS.has(modelId.trim().toLowerCase());
+}
+
+export function normalizeGeminiModeSelectionId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const normalized = trimmed.toLowerCase();
+  if (normalized === 'auto_edit' || normalized === 'autoedit') {
+    return 'autoEdit';
+  }
+  if (!ALLOWED_GEMINI_MODE_IDS.has(normalized)) {
+    return null;
+  }
+  if (normalized === 'plan') {
+    return 'plan';
+  }
+  if (normalized === 'yolo') {
+    return 'yolo';
+  }
+  return DEFAULT_GEMINI_MODE_ID;
+}
+
+export function isAllowedGeminiModeSelectionId(modeId: string): boolean {
+  return normalizeGeminiModeSelectionId(modeId) !== null;
+}
+
+function normalizeProviderDefaultModelId(provider: ProviderId, value: unknown, selectedModelIds: string[]): string | null {
+  const normalized = normalizeModelSelectionList([value])[0] ?? null;
+  if (!normalized) {
+    return selectedModelIds[0] ?? null;
+  }
+  if (provider === 'gemini' && !isAllowedGeminiSelectionModelId(normalized)) {
+    return selectedModelIds[0] ?? null;
+  }
+  return selectedModelIds.includes(normalized) ? normalized : (selectedModelIds[0] ?? null);
+}
+
+function normalizeProviderDefaultModeId(provider: ProviderId, value: unknown): string | null {
+  if (provider !== 'gemini') {
+    return null;
+  }
+  return normalizeGeminiModeSelectionId(value) ?? DEFAULT_GEMINI_MODE_ID;
 }
 
 export function normalizeProviderModelSelectionList(provider: ProviderId, input: unknown): string[] {

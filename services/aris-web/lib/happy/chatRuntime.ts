@@ -113,6 +113,7 @@ export function hasAgentCompletionSignal(event: UiEvent): boolean {
   const streamEvent = readUiEventStreamEvent(event);
   if (
     streamEvent === 'runtime_disconnected'
+    || streamEvent === 'runtime_restarted'
     || streamEvent === 'stream_error'
     || streamEvent === 'runtime_error'
   ) {
@@ -191,6 +192,9 @@ export function resolveChatRunPhase(input: ResolveChatRunPhaseInput): ResolvedCh
   }
   if (input.isSubmitting) {
     return 'submitting';
+  }
+  if (input.hasCompletionSignal && !input.runtimeRunning) {
+    return 'idle';
   }
   if (runStatus === 'waiting_for_approval') {
     return input.hasPendingPermission ? 'approval' : 'running';
