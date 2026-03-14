@@ -58,7 +58,7 @@ export const DEFAULT_CLAUDE_MODEL_SELECTIONS = [
 
 export const DEFAULT_GEMINI_MODEL_SELECTIONS = [
   'auto-gemini-3',
-  'gemini-3-flash',
+  'gemini-3-flash-preview',
   'gemini-2.5-pro',
   'gemini-2.5-flash',
   'gemini-2.0-flash',
