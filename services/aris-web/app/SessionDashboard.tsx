@@ -1596,7 +1596,22 @@ export function SessionDashboard({
                       <div 
                         key={session.id} 
                         className={`${styles.sessionCard} ${isSelected ? styles.sessionCardSelected : ''}`}
-                        style={{ zIndex: isMenuOpen ? 100 : 1 }}
+                        style={{ zIndex: isMenuOpen ? 100 : 1, cursor: 'pointer' }}
+                        onClick={(e) => {
+                          const target = e.target as HTMLElement;
+                          if (
+                            target.closest('button') ||
+                            target.closest('a') ||
+                            target.closest('[data-session-menu-anchor]')
+                          ) {
+                            return;
+                          }
+                          if (isSelectionMode) {
+                            toggleSessionSelection(session.id, e as React.MouseEvent);
+                            return;
+                          }
+                          router.push(`/sessions/${session.id}`);
+                        }}
                       >
                         {isSelectionMode && (
                           <button
