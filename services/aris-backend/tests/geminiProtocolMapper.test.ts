@@ -206,25 +206,33 @@ describe('geminiProtocolMapper', () => {
     });
   });
 
-  it('ignores Gemini commentary-phase assistant text and persists only the final answer', () => {
+  it('keeps Gemini commentary-phase assistant text alongside the final answer', () => {
     const fixture = readFixture('commentary-and-final-answer.jsonl');
 
     const parsed = parseGeminiStreamOutput(fixture);
     const mapped = mapGeminiStreamOutputToProtocol(fixture);
 
     expect(parsed.output).toBe('ARIS 프로젝트의 루트 디렉터리를 조사한 결과입니다.');
-    expect(parsed.output).not.toContain('현재 디렉터리의 구성을 확인하여 프로젝트의 전반적인 구조를 파악하겠습니다.');
     expect(mapped.envelopes.map((envelope) => envelope.kind)).toEqual([
       'turn-start',
+      'text',
       'text',
       'turn-end',
       'stop',
     ]);
-    expect(mapped.envelopes.find((envelope) => envelope.kind === 'text')).toMatchObject({
-      kind: 'text',
-      text: 'ARIS 프로젝트의 루트 디렉터리를 조사한 결과입니다.',
-      turnId: 'gemini-commentary-turn',
-      sessionId: 'gemini-commentary-thread',
-    });
+    expect(mapped.envelopes.filter((envelope) => envelope.kind === 'text')).toEqual([
+      expect.objectContaining({
+        kind: 'text',
+        text: '현재 디렉터리의 구성을 확인하여 프로젝트의 전반적인 구조를 파악하겠습니다.',
+        turnId: 'gemini-commentary-turn',
+        sessionId: 'gemini-commentary-thread',
+      }),
+      expect.objectContaining({
+        kind: 'text',
+        text: 'ARIS 프로젝트의 루트 디렉터리를 조사한 결과입니다.',
+        turnId: 'gemini-commentary-turn',
+        sessionId: 'gemini-commentary-thread',
+      }),
+    ]);
   });
 });

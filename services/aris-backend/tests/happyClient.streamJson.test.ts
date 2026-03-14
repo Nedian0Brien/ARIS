@@ -55,7 +55,7 @@ describe('happyClient stream-json parsing', () => {
     expect(parsed.actions[0]?.command).toContain('cat README.md');
   });
 
-  it('emits Gemini streamed text only for non-commentary text envelopes', () => {
+  it('emits Gemini streamed text for commentary and final Gemini text envelopes', () => {
     const commentaryLine = JSON.stringify({
       method: 'item/completed',
       params: {
@@ -83,7 +83,13 @@ describe('happyClient stream-json parsing', () => {
       },
     });
 
-    expect(happyClientTestHooks.extractGeminiStreamTextEvent(parseGeminiStreamLine(commentaryLine))).toBeNull();
+    expect(happyClientTestHooks.extractGeminiStreamTextEvent(parseGeminiStreamLine(commentaryLine))).toMatchObject({
+      text: '먼저 코드를 살펴보겠습니다.',
+      source: 'assistant',
+      threadId: 'gemini-thread',
+      turnId: 'turn-1',
+      itemId: 'msg-commentary',
+    });
     expect(happyClientTestHooks.extractGeminiStreamTextEvent(parseGeminiStreamLine(finalLine))).toMatchObject({
       text: '최종 답변입니다.',
       source: 'assistant',

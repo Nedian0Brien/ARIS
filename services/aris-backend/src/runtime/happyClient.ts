@@ -851,9 +851,6 @@ function extractGeminiStreamTextEvent(parsedLine: {
   if (!parsedLine.assistantText) {
     return null;
   }
-  if ((parsedLine.assistantPhase ?? '').trim().toLowerCase() === 'commentary') {
-    return null;
-  }
 
   const textEnvelopes = (parsedLine.envelopes ?? []).filter((envelope) => (
     envelope.kind === 'text' || envelope.kind === 'turn-end'

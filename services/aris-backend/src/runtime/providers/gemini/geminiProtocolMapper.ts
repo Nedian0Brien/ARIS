@@ -117,10 +117,6 @@ export function looksLikeGeminiActionTranscript(value: string): boolean {
   );
 }
 
-function isGeminiCommentaryPhase(phase: string | undefined): boolean {
-  return phase?.trim().toLowerCase() === 'commentary';
-}
-
 function buildActionEventKey(action: GeminiActionEvent): string {
   const callId = action.callId?.trim() ?? '';
   const command = action.command?.trim() ?? '';
@@ -179,10 +175,6 @@ function accumulateGeminiAssistantText(
   state: GeminiAssistantAccumulatorState,
   sequence: number,
 ): void {
-  if (isGeminiCommentaryPhase(parsedLine.assistantPhase)) {
-    return;
-  }
-
   const assistantText = parsedLine.assistantText ?? '';
   if (!assistantText) {
     return;
@@ -485,7 +477,6 @@ export function parseGeminiStreamLine(line: string): GeminiMappedLine {
   }
   if (
     assistantText
-    && !isGeminiCommentaryPhase(assistantPhase)
     && !assistantIsDelta
     && !looksLikeGeminiActionTranscript(assistantText)
     && (
