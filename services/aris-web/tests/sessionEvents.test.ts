@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { UiEvent } from '@/lib/happy/types';
-import { collapseRealtimeGeminiPartialEvents } from '@/lib/hooks/useSessionEvents';
+import {
+  collapseRealtimeGeminiPartialEvents,
+  findLatestPersistedCursorEventId,
+} from '@/lib/hooks/useSessionEvents';
 
 function buildEvent(overrides: Partial<UiEvent> = {}): UiEvent {
   return {
@@ -57,5 +60,33 @@ describe('collapseRealtimeGeminiPartialEvents', () => {
     });
 
     expect(collapseRealtimeGeminiPartialEvents([partial, final])).toEqual([final]);
+  });
+});
+
+describe('findLatestPersistedCursorEventId', () => {
+  it('skips realtime-only Gemini partial events when choosing the after cursor', () => {
+    const persisted = buildEvent({
+      id: 'persisted-read-1',
+      kind: 'file_read',
+      title: 'File Read',
+      body: 'services/aris-web/app/SessionDashboard.tsx',
+      meta: {
+        chatId: 'chat-1',
+      },
+    });
+    const partial = buildEvent({
+      id: 'gemini-partial:session:turn-1:msg-2',
+      timestamp: '2026-03-14T04:00:01.000Z',
+      body: '다음 파일을 읽겠습니다.',
+      meta: {
+        agent: 'gemini',
+        streamEvent: 'agent_message_partial',
+        sessionTurnId: 'turn-1',
+        sessionItemId: 'msg-2',
+        threadId: 'thread-1',
+      },
+    });
+
+    expect(findLatestPersistedCursorEventId([persisted, partial])).toBe('persisted-read-1');
   });
 });

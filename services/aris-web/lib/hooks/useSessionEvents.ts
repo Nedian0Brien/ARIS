@@ -79,6 +79,29 @@ function isGeminiFinalTextEvent(event: UiEvent): boolean {
     && (event.meta?.streamEvent === 'agent_message' || event.meta?.streamEvent === 'agent_message_recovered');
 }
 
+function isRealtimeOnlyEvent(event: UiEvent): boolean {
+  const streamEvent = typeof event.meta?.streamEvent === 'string'
+    ? event.meta.streamEvent.trim()
+    : '';
+  return (
+    streamEvent === 'agent_message_partial'
+    || streamEvent === 'runtime_disconnected'
+    || streamEvent === 'stream_error'
+    || streamEvent === 'runtime_error'
+  );
+}
+
+export function findLatestPersistedCursorEventId(events: UiEvent[]): string | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const candidate = events[index];
+    if (!candidate?.id || isRealtimeOnlyEvent(candidate)) {
+      continue;
+    }
+    return candidate.id;
+  }
+  return null;
+}
+
 export function collapseRealtimeGeminiPartialEvents(events: UiEvent[]): UiEvent[] {
   const finalized = new Set<string>();
   for (const event of events) {
@@ -214,7 +237,7 @@ export function useSessionEvents(
     const params = new URLSearchParams();
     params.set('limit', String(EVENTS_PAGE_LIMIT));
     appendChatFilters(params, chatId, includeUnassigned);
-    const latestId = eventsRef.current[eventsRef.current.length - 1]?.id;
+    const latestId = findLatestPersistedCursorEventId(eventsRef.current);
     if (latestId) {
       params.set('after', latestId);
     }
@@ -476,7 +499,7 @@ export function useSessionEvents(
       }
 
       closeStream();
-      const latestId = eventsRef.current[eventsRef.current.length - 1]?.id;
+      const latestId = findLatestPersistedCursorEventId(eventsRef.current);
       const params = new URLSearchParams();
       appendChatFilters(params, chatId, includeUnassigned);
       if (latestId) {
