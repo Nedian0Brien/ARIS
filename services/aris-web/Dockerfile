@@ -25,6 +25,8 @@ RUN npm prune --omit=dev
 
 FROM node:20-alpine AS runner
 WORKDIR /app
+ARG APP_VERSION=unknown
+LABEL app_version=${APP_VERSION}
 ENV NODE_ENV=production
 RUN apk add --no-cache libc6-compat openssl bash openssh-client git
 COPY --link --from=builder /app/.next ./.next

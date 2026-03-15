@@ -11,6 +11,8 @@ RUN npm run build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
+ARG APP_VERSION=unknown
+LABEL app_version=${APP_VERSION}
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist

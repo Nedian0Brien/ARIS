@@ -163,6 +163,11 @@ wait_for_http_ready() {
 }
 
 compute_context_fingerprint() {
+  if git rev-parse HEAD >/dev/null 2>&1; then
+    git rev-parse HEAD
+    return
+  fi
+
   local service_dir="${ROOT_DIR}/services/aris-web"
   find "$service_dir" -type f \
     ! -path '*/node_modules/*' \
@@ -228,12 +233,12 @@ old_service="aris-web-${active_slot}"
 target_port="$(port_for_slot "$target_slot")"
 
 if [[ "$build_required" == "1" ]]; then
-  echo "[deploy:web-zd] building image for slot: ${target_slot}"
+  echo "[deploy:web-zd] building image for slot: ${target_slot} (version: ${current_fingerprint})"
   build_args=(build "$target_service")
   if [[ "$PULL_BASE" == "1" ]]; then
     build_args+=(--pull)
   fi
-  compose "${build_args[@]}"
+  compose "${build_args[@]}" --build-arg APP_VERSION="${current_fingerprint}"
 fi
 
 echo "[deploy:web-zd] starting target slot: ${target_slot} (${target_service})"
@@ -249,6 +254,7 @@ reload_nginx
 
 echo "$target_slot" > "$ACTIVE_SLOT_FILE"
 
+# Only update fingerprint/version file after successful health check and nginx switch
 if [[ -n "$current_fingerprint" ]]; then
   echo "$current_fingerprint" > "$FINGERPRINT_FILE"
 fi

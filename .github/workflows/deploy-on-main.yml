@@ -104,37 +104,17 @@ jobs:
       - name: Resolve deployment repository path
         id: resolve-deploy-repo
         env:
-          REPO_SLUG: ${{ github.repository }}
-          REPO_SERVER_URL: ${{ github.server_url }}
-          HOST_PROJECTS_ROOT: /home/ubuntu/project
+          HOST_PROJECTS_ROOT: /home/ubuntu/project/ARIS
         shell: bash
         run: |
           set -euo pipefail
-          deploy_repo_dir=""
-          expected_https="${REPO_SERVER_URL}/${REPO_SLUG}.git"
-          expected_public_https="https://github.com/${REPO_SLUG}.git"
-          expected_ssh="git@github.com:${REPO_SLUG}.git"
+          # Use fixed path for production deployment to avoid worktree confusion
+          deploy_repo_dir="$HOST_PROJECTS_ROOT"
 
-          while IFS= read -r git_dir; do
-            candidate="${git_dir%/.git}"
-            [[ -d "$candidate" ]] || continue
-            [[ -f "$candidate/deploy/deploy_backend_zero_downtime.sh" ]] || continue
-            [[ -f "$candidate/deploy/deploy_web_zero_downtime.sh" ]] || continue
-
-            origin_url="$(git -C "$candidate" remote get-url origin 2>/dev/null || true)"
-            if [[ "$origin_url" == "$expected_https" || "$origin_url" == "$expected_public_https" || "$origin_url" == "$expected_ssh" ]]; then
-              deploy_repo_dir="$candidate"
-              break
-            fi
-          done < <(find "$HOST_PROJECTS_ROOT" -mindepth 1 -maxdepth 4 -type d -name .git 2>/dev/null)
-
-          if [[ -z "$deploy_repo_dir" ]]; then
-            echo "::error::Unable to locate deploy repository under ${HOST_PROJECTS_ROOT}"
+          if [[ ! -d "$deploy_repo_dir" ]]; then
+            echo "::error::Fixed deploy repository path not found at ${deploy_repo_dir}"
             exit 1
           fi
-
-          test -f "$deploy_repo_dir/deploy/deploy_backend_zero_downtime.sh"
-          test -f "$deploy_repo_dir/deploy/deploy_web.sh"
 
           echo "Resolved deploy repo: $deploy_repo_dir"
           echo "deploy_repo_dir=$deploy_repo_dir" >> "$GITHUB_OUTPUT"
