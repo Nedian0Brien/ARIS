@@ -1584,19 +1584,22 @@ export class HappyRuntimeStore {
       };
     this.geminiPartialTextStates.set(identity, nextState);
 
+    const isCommentary = nextState.phase === 'commentary';
+
     this.appendSessionRealtimeEvent(input.session.id, {
       id: nextState.eventId,
       sessionId: input.session.id,
-      type: 'message',
-      title: nextState.phase === 'commentary' ? 'Commentary' : 'Text Reply',
+      type: isCommentary ? 'tool' : 'message',
+      title: isCommentary ? 'Thinking' : 'Text Reply',
       text: nextState.text,
       createdAt: new Date().toISOString(),
       meta: {
         role: 'agent',
         agent: 'gemini',
-        streamEvent: nextState.phase === 'commentary' ? 'agent_commentary_partial' : 'agent_message_partial',
+        streamEvent: isCommentary ? 'agent_commentary_partial' : 'agent_message_partial',
         sessionRole: 'agent',
         sessionEventType: 'text',
+        ...(isCommentary ? { isThoughtCard: true, kind: 'think' } : {}),
         sessionEvent: {
           role: 'agent',
           ev: {
