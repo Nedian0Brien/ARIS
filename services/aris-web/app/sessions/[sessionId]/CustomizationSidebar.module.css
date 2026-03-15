@@ -1078,6 +1078,51 @@
   gap: 0.5rem;
 }
 
+.gitSectionTabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.gitSectionTab {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--chat-text-muted);
+  padding: 0.28rem 0.54rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  font-size: 0.64rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.gitSectionTab:hover {
+  background: var(--git-control-bg);
+  border-color: var(--git-control-border);
+  color: var(--chat-text-primary);
+}
+
+.gitSectionTabActive {
+  background: var(--sidebar-accent-bg);
+  border-color: var(--git-panel-border-strong);
+  color: var(--chat-accent);
+}
+
+.gitSectionTabCount {
+  min-width: 1.25rem;
+  padding: 0.02rem 0.26rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--git-control-bg) 88%, transparent);
+  color: inherit;
+  text-align: center;
+  font-size: 0.58rem;
+  line-height: 1.2;
+}
+
 .gitSectionTitle {
   font-size: 0.66rem;
   font-weight: 800;
@@ -1717,6 +1762,15 @@
   .gitSectionHeader {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .gitSectionTabs {
+    width: 100%;
+  }
+
+  .gitSectionTab {
+    flex: 1;
+    justify-content: center;
   }
 
   .gitToolbar,
