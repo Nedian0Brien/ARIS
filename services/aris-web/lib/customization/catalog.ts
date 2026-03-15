@@ -47,7 +47,7 @@ type SkillEntry = SkillSummary & {
   fullPath: string;
 };
 
-type ResolvedWorkspace = {
+export type ResolvedWorkspace = {
   displayPath: string;
   runtimePath: string;
 };
@@ -65,7 +65,7 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
-async function resolveWorkspacePath(projectPath: string): Promise<ResolvedWorkspace> {
+export async function resolveWorkspacePath(projectPath: string): Promise<ResolvedWorkspace> {
   const trimmed = projectPath.trim();
   if (!trimmed) {
     throw new Error('워크스페이스 경로가 비어 있습니다.');
