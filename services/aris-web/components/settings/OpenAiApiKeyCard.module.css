@@ -3,26 +3,26 @@
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
   border-radius: 24px;
-  box-shadow: 0 22px 44px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 22px 44px rgba(0, 0, 0, 0.2);
 }
 
 .themeCodex {
   background:
-    radial-gradient(circle at top left, rgba(20, 184, 166, 0.18), transparent 34%),
+    radial-gradient(circle at top left, rgba(20, 184, 166, 0.12), transparent 34%),
     radial-gradient(circle at bottom right, rgba(45, 212, 191, 0.1), transparent 32%),
     linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, white 6%), color-mix(in srgb, var(--surface) 98%, #f0fdfa 2%));
 }
 
 .themeClaude {
   background:
-    radial-gradient(circle at top left, rgba(249, 115, 22, 0.18), transparent 34%),
+    radial-gradient(circle at top left, rgba(249, 115, 22, 0.12), transparent 34%),
     radial-gradient(circle at bottom right, rgba(251, 191, 36, 0.1), transparent 32%),
     linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, white 6%), color-mix(in srgb, var(--surface) 98%, #fff7ed 2%));
 }
 
 .themeGemini {
   background:
-    radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 34%),
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 34%),
     radial-gradient(circle at bottom right, rgba(99, 102, 241, 0.1), transparent 32%),
     linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, white 6%), color-mix(in srgb, var(--surface) 98%, #eff6ff 2%));
 }
@@ -88,7 +88,7 @@
 }
 
 .statusActive {
-  color: #047857;
+  color: var(--accent-emerald);
   background: rgba(16, 185, 129, 0.12);
   border-color: rgba(16, 185, 129, 0.16);
 }
@@ -98,7 +98,7 @@
 }
 
 .statusPlanned {
-  color: #9a3412;
+  color: var(--accent-amber);
   background: rgba(251, 191, 36, 0.12);
   border-color: rgba(251, 191, 36, 0.18);
 }
@@ -109,7 +109,7 @@
   gap: 0.45rem;
   padding: 0.34rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
+  background: color-mix(in srgb, var(--surface-soft) 42%, transparent);
   border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
   width: fit-content;
   max-width: 100%;
@@ -136,23 +136,23 @@
 }
 
 .providerButtonActive {
-  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.12);
 }
 
 .providerCodexTone.providerButtonActive {
-  color: #0f766e;
+  color: var(--accent-emerald);
   background: rgba(20, 184, 166, 0.14);
   border-color: rgba(20, 184, 166, 0.22);
 }
 
 .providerClaudeTone.providerButtonActive {
-  color: #b45309;
+  color: var(--accent-amber);
   background: rgba(251, 191, 36, 0.16);
   border-color: rgba(251, 191, 36, 0.24);
 }
 
 .providerGeminiTone.providerButtonActive {
-  color: #1d4ed8;
+  color: var(--accent-sky);
   background: rgba(96, 165, 250, 0.16);
   border-color: rgba(96, 165, 250, 0.24);
 }
@@ -169,7 +169,7 @@
   padding: 0.92rem 1rem;
   border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
-  background: rgba(255, 255, 255, 0.72);
+  background: color-mix(in srgb, var(--surface-soft) 42%, transparent);
 }
 
 .securityLabel {
@@ -217,7 +217,7 @@
   padding: 0.88rem 1rem;
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
-  background: rgba(255, 255, 255, 0.76);
+  background: color-mix(in srgb, var(--surface-subtle) 86%, transparent);
   color: var(--text);
   font-size: 0.92rem;
   outline: none;
@@ -256,14 +256,14 @@
 }
 
 .primaryButton {
-  color: #042f2e;
-  background: linear-gradient(135deg, #99f6e4, #5eead4);
-  box-shadow: 0 12px 24px rgba(20, 184, 166, 0.18);
+  color: var(--text-on-accent);
+  background: linear-gradient(135deg, #2dd4bf, #14b8a6);
+  box-shadow: 0 12px 24px rgba(20, 184, 166, 0.12);
 }
 
 .ghostButton {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.74);
+  background: color-mix(in srgb, var(--surface-subtle) 84%, transparent);
   border-color: color-mix(in srgb, var(--line) 72%, transparent);
 }
 
@@ -299,7 +299,7 @@
   padding: 1.2rem 1.25rem;
   border-radius: 20px;
   border: 1px dashed color-mix(in srgb, var(--line) 74%, transparent);
-  background: rgba(255, 255, 255, 0.66);
+  background: color-mix(in srgb, var(--surface-subtle) 76%, transparent);
 }
 
 .placeholderEyebrow {
