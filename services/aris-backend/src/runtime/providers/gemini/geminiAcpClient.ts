@@ -751,6 +751,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
   let currentText = '';
   let thoughtText = '';
   let accumulatedOutput = '';
+  let streamedTextPersisted = false;
   let thoughtItemId: string | undefined;
   let thoughtSequence = 0;
   let ignoringHistoryReplay = false;
@@ -906,6 +907,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
         turnId: sessionId,
         envelopes: [envelope],
       }, { threadId: sessionId });
+      streamedTextPersisted = true;
     }
     currentText = '';
     return finalizedMessage;
@@ -1180,6 +1182,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
       cwd: input.cwd,
       inferredActions,
       streamedActionsPersisted: streamedActionCount > 0,
+      agentMessagePersisted: streamedTextPersisted,
       threadId: sessionId,
       threadIdSource: input.preferredSessionId ? 'resume' : 'observed',
       protocolEnvelopes: finalEnvelopes,

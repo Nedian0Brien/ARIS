@@ -21,6 +21,7 @@ export type GeminiCliResult = ProviderCliResult & {
 
 export type GeminiTurnResult = ProviderTurnResult & {
   protocolEnvelopes?: SessionProtocolEnvelope[];
+  agentMessagePersisted?: boolean;
 };
 
 export type GeminiSessionSnapshot = {

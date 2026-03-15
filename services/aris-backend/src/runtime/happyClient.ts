@@ -4282,7 +4282,7 @@ export class HappyRuntimeStore {
             output: geminiResponse.output,
             cwd: geminiResponse.cwd,
             streamedPersisted: false,
-            agentMessagePersisted: false,
+            agentMessagePersisted: Boolean(geminiResponse.agentMessagePersisted),
             streamedActionsPersisted: geminiResponse.streamedActionsPersisted,
             inferredActions: geminiResponse.inferredActions,
             threadId: geminiResponse.threadId,
