@@ -156,6 +156,8 @@ export function projectGeminiTextMessage(input: {
     (envelope): envelope is SessionProtocolTurnEndEnvelope => envelope.kind === 'turn-end',
   );
 
+  const isCommentary = input.messageMeta?.streamEvent === 'agent_commentary';
+
   return {
     body: textEnvelope?.text?.trim() || trimmedOutput,
     meta: {
@@ -172,11 +174,12 @@ export function projectGeminiTextMessage(input: {
       agent: 'gemini',
       ...(input.threadId ? { threadId: input.threadId, geminiSessionId: input.threadId } : {}),
       ...(input.messageMeta ?? {}),
+      ...(isCommentary ? { isThoughtCard: true } : {}),
     },
-    options: input.messageMeta?.streamEvent === 'agent_commentary'
+    options: isCommentary
       ? {
-        type: 'message',
-        title: 'Commentary',
+        type: 'tool',
+        title: '생각 중...',
       }
       : undefined,
   };

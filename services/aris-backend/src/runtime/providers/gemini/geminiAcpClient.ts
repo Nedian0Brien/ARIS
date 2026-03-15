@@ -750,6 +750,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
   let sessionId = '';
   let currentText = '';
   let thoughtText = '';
+  let accumulatedOutput = '';
   let thoughtItemId: string | undefined;
   let thoughtSequence = 0;
   let ignoringHistoryReplay = false;
@@ -832,6 +833,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
     const params = asRecord(payload.params) ?? {};
     if (method === 'session/request_permission') {
       await flushThoughtBuffer();
+      await flushMessageBuffer();
       const permissionRequest = buildPermissionRequest(params, asString(id, 'permission-request'));
       const decision = input.onPermission
         ? await input.onPermission(permissionRequest, { threadId: sessionId || input.preferredSessionId || '' })
@@ -880,6 +882,35 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
     thoughtItemId = undefined;
   };
 
+  const flushMessageBuffer = async (): Promise<string> => {
+    if (!sessionId || !currentText.trim()) {
+      currentText = '';
+      return '';
+    }
+    const finalizedMessage = sanitizeAgentMessageText(currentText);
+    if (!finalizedMessage) {
+      currentText = '';
+      return '';
+    }
+    const envelope = buildTextEnvelope({
+      sessionId,
+      text: finalizedMessage,
+    });
+    protocolEnvelopes.push(envelope);
+    if (input.onText) {
+      await input.onText({
+        text: finalizedMessage,
+        source: 'assistant',
+        phase: 'final',
+        threadId: sessionId,
+        turnId: sessionId,
+        envelopes: [envelope],
+      }, { threadId: sessionId });
+    }
+    currentText = '';
+    return finalizedMessage;
+  };
+
   const handleUpdate = (payload: Record<string, unknown>) => {
     const params = asRecord(payload.params) ?? {};
     const update = asRecord(params.update) ?? {};
@@ -896,6 +927,13 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
 
     if (updateType !== 'agent_thought_chunk' && thoughtText.trim()) {
       emitChain = emitChain.then(() => flushThoughtBuffer());
+    }
+    if (updateType !== 'agent_message_chunk' && currentText.trim()) {
+      emitChain = emitChain.then(() => flushMessageBuffer().then((flushed) => {
+        if (flushed) {
+          accumulatedOutput += (accumulatedOutput ? '\n' : '') + flushed;
+        }
+      }));
     }
 
     if (updateType === 'agent_thought_chunk') {
@@ -1117,34 +1155,28 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
       getEmitChain: () => emitChain,
     });
     emitChain = emitChain.then(() => flushThoughtBuffer());
+    emitChain = emitChain.then(() => flushMessageBuffer().then((flushed) => {
+      if (flushed) {
+        accumulatedOutput += (accumulatedOutput ? '\n' : '') + flushed;
+      }
+    }));
     await emitChain;
 
-    const output = sanitizeAgentMessageText(currentText);
     const stopReason = mapStopReason(asString(promptResult.stopReason, 'unknown').trim());
     const finalEnvelopes = [
       ...protocolEnvelopes,
       ...updateFinalTextEnvelope(buildTurnEndEnvelopes({
         sessionId,
         stopReason,
-      }), output),
+      }), accumulatedOutput),
     ];
 
-    if (output && input.onText) {
-      await input.onText({
-        text: output,
-        source: 'assistant',
-        phase: 'final',
-        threadId: sessionId,
-        envelopes: finalEnvelopes,
-      }, { threadId: sessionId });
-    }
-
-    if (!output && stopReason !== 'aborted') {
+    if (!accumulatedOutput && stopReason !== 'aborted') {
       throw new Error('gemini ACP returned an empty response');
     }
 
     return {
-      output,
+      output: accumulatedOutput,
       cwd: input.cwd,
       inferredActions,
       streamedActionsPersisted: streamedActionCount > 0,

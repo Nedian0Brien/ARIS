@@ -5377,15 +5377,16 @@ export function ChatInterface({
               }
 
               if (actionEvent) {
+                const isThoughtCard = Boolean(event.meta?.isThoughtCard);
+                const expanded = expandedResultIds[event.id] ?? !isThoughtCard;
                 return (
                   <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
                     <div className={`${styles.messageBubble} ${styles.messageBubbleAction}`}>
-                      {renderEventPayload(event, false, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id))}
+                      {renderEventPayload(event, false, expanded, () => toggleResult(event.id))}
                     </div>
                   </article>
                 );
               }
-
               return (
                 <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
                   <div className={styles.messageWithAvatar}>
@@ -5414,7 +5415,7 @@ export function ChatInterface({
                             </span>
                           </div>
                         ) : null}
-                        {renderEventPayload(event, false, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id))}
+                        {renderEventPayload(event, false, expandedResultIds[event.id] ?? !event.meta?.isThoughtCard, () => toggleResult(event.id))}
                       </div>
                     </div>
                   </div>
