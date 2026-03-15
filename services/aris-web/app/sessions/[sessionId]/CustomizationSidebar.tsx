@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
+  ArrowDownCircle,
   ArrowUpCircle,
   Blocks,
   CheckCircle2,
@@ -16,6 +17,7 @@ import {
   FolderOpen,
   FolderPlus,
   GitBranch,
+  GitCommitHorizontal,
   type LucideIcon,
   Loader2,
   MoreVertical,
@@ -87,6 +89,34 @@ type WorkspaceFileEntry = {
   isFile: boolean;
 };
 
+type GitDiffScope = 'working' | 'staged';
+type GitActionName = 'stage' | 'unstage' | 'commit' | 'fetch' | 'pull' | 'push';
+
+type GitFileEntry = {
+  path: string;
+  originalPath: string | null;
+  indexStatus: string;
+  workTreeStatus: string;
+  staged: boolean;
+  unstaged: boolean;
+  untracked: boolean;
+  conflicted: boolean;
+};
+
+type GitOverview = {
+  workspacePath: string;
+  branch: string | null;
+  upstreamBranch: string | null;
+  ahead: number;
+  behind: number;
+  isClean: boolean;
+  stagedCount: number;
+  unstagedCount: number;
+  untrackedCount: number;
+  conflictedCount: number;
+  files: GitFileEntry[];
+};
+
 type FilePreviewBlock = {
   reason: 'binary' | 'large';
   sizeBytes: number;
@@ -130,9 +160,28 @@ const SURFACE_ITEMS: Array<{
 }> = [
   { id: 'customization', label: 'Customization', hint: '활성', Icon: Wrench },
   { id: 'files', label: 'Files', hint: '활성', Icon: FolderKanban },
-  { id: 'git', label: 'Git', hint: '다음 단계', Icon: GitBranch, disabled: true },
+  { id: 'git', label: 'Git', hint: '활성', Icon: GitBranch },
   { id: 'terminal', label: 'Terminal', hint: '다음 단계', Icon: TerminalSquare, disabled: true },
 ];
+
+const SURFACE_COPY: Record<SidebarSurface, { title: string; subtle: string }> = {
+  customization: {
+    title: 'Customization',
+    subtle: '지침 문서, Skills, MCP 상태를 한 곳에서 확인하고 조정합니다.',
+  },
+  files: {
+    title: 'Files',
+    subtle: '워크스페이스 파일을 탐색하고 바로 열어 수정합니다.',
+  },
+  git: {
+    title: 'Git Workspace',
+    subtle: '브랜치 상태, 변경 파일, diff, 커밋과 동기화를 우측 사이드바에서 처리합니다.',
+  },
+  terminal: {
+    title: 'Terminal',
+    subtle: '다음 단계에서 연결될 터미널 패널입니다.',
+  },
+};
 
 function formatTimestamp(value: string | null): string {
   if (!value) return '시간 정보 없음';
@@ -153,6 +202,17 @@ function formatBytes(value: number | null): string {
   if (value < 1024) return `${value}B`;
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)}KB`;
   return `${(value / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+function formatGitStatusLabel(code: string): string | null {
+  if (code === 'M') return '수정';
+  if (code === 'A') return '추가';
+  if (code === 'D') return '삭제';
+  if (code === 'R') return '이름 변경';
+  if (code === 'C') return '복사';
+  if (code === 'U') return '충돌';
+  if (code === '?') return '추적 안 됨';
+  return null;
 }
 
 function getMcpStatusClass(status: MpcServerSummary['status']): string {
@@ -257,6 +317,17 @@ export function CustomizationSidebar({
   const [filePreviewBlock, setFilePreviewBlock] = useState<FilePreviewBlock | null>(null);
   const [fileActionDialog, setFileActionDialog] = useState<FileActionDialog | null>(null);
   const [fileActionMenuPath, setFileActionMenuPath] = useState<string | null>(null);
+  const [gitOverview, setGitOverview] = useState<GitOverview | null>(null);
+  const [gitLoading, setGitLoading] = useState(false);
+  const [gitError, setGitError] = useState<string | null>(null);
+  const [gitActionBusy, setGitActionBusy] = useState<GitActionName | null>(null);
+  const [gitActionStatus, setGitActionStatus] = useState<string | null>(null);
+  const [gitCommitMessage, setGitCommitMessage] = useState('');
+  const [selectedGitPath, setSelectedGitPath] = useState<string | null>(null);
+  const [selectedGitDiffScope, setSelectedGitDiffScope] = useState<GitDiffScope>('working');
+  const [gitDiffText, setGitDiffText] = useState('');
+  const [gitDiffLoading, setGitDiffLoading] = useState(false);
+  const [gitDiffError, setGitDiffError] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<CustomizationModal>(null);
   const [isMounted, setIsMounted] = useState(false);
   const handledRequestedFileNonceRef = useRef<number | null>(null);
@@ -275,6 +346,10 @@ export function CustomizationSidebar({
   const activeFileModal = activeModalKind === 'file' && selectedFilePath
     ? { path: selectedFilePath, name: selectedFileName ?? selectedFilePath.split('/').pop() ?? selectedFilePath }
     : null;
+  const selectedGitFile = useMemo(
+    () => gitOverview?.files.find((file) => file.path === selectedGitPath) ?? null,
+    [gitOverview, selectedGitPath],
+  );
 
   const loadOverview = useCallback(async () => {
     setOverviewLoading(true);
@@ -476,6 +551,100 @@ export function CustomizationSidebar({
     }
   }, []);
 
+  const applyGitOverview = useCallback((nextOverview: GitOverview) => {
+    setGitOverview(nextOverview);
+    setGitError(null);
+    setSelectedGitPath((currentPath) => (
+      currentPath && nextOverview.files.some((file) => file.path === currentPath)
+        ? currentPath
+        : nextOverview.files[0]?.path ?? null
+    ));
+  }, []);
+
+  const loadGitOverview = useCallback(async () => {
+    setGitLoading(true);
+    setGitError(null);
+    try {
+      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/git`, {
+        cache: 'no-store',
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data) {
+        throw new Error(typeof data?.error === 'string' ? data.error : 'Git 정보를 불러오지 못했습니다.');
+      }
+
+      applyGitOverview(data as GitOverview);
+    } catch (error) {
+      setGitError(error instanceof Error ? error.message : 'Git 정보를 불러오지 못했습니다.');
+      setGitOverview(null);
+      setSelectedGitPath(null);
+    } finally {
+      setGitLoading(false);
+    }
+  }, [applyGitOverview, sessionId]);
+
+  const loadGitDiff = useCallback(async (filePath: string, scope: GitDiffScope) => {
+    setGitDiffLoading(true);
+    setGitDiffError(null);
+    try {
+      const response = await fetch(
+        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/git?kind=diff&path=${encodeURIComponent(filePath)}&scope=${encodeURIComponent(scope)}`,
+        { cache: 'no-store' },
+      );
+      const data = await response.json().catch(() => null) as { diff?: string; error?: string } | null;
+      if (!response.ok || !data) {
+        throw new Error(typeof data?.error === 'string' ? data.error : 'diff를 불러오지 못했습니다.');
+      }
+
+      setGitDiffText(data.diff ?? '');
+    } catch (error) {
+      setGitDiffError(error instanceof Error ? error.message : 'diff를 불러오지 못했습니다.');
+      setGitDiffText('');
+    } finally {
+      setGitDiffLoading(false);
+    }
+  }, [sessionId]);
+
+  const runGitAction = useCallback(async (
+    action: GitActionName,
+    payload?: { paths?: string[]; message?: string },
+  ) => {
+    setGitActionBusy(action);
+    setGitActionStatus(null);
+    setGitError(null);
+    try {
+      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/git`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          ...(payload?.paths ? { paths: payload.paths } : {}),
+          ...(payload?.message ? { message: payload.message } : {}),
+        }),
+      });
+      const data = await response.json().catch(() => null) as {
+        overview?: GitOverview;
+        output?: string;
+        error?: string;
+      } | null;
+      if (!response.ok || !data) {
+        throw new Error(typeof data?.error === 'string' ? data.error : 'Git 작업을 완료하지 못했습니다.');
+      }
+
+      if (data.overview) {
+        applyGitOverview(data.overview);
+      }
+      setGitActionStatus(data.output ?? 'Git 작업을 완료했습니다.');
+      if (action === 'commit') {
+        setGitCommitMessage('');
+      }
+    } catch (error) {
+      setGitActionStatus(error instanceof Error ? error.message : 'Git 작업을 완료하지 못했습니다.');
+    } finally {
+      setGitActionBusy(null);
+    }
+  }, [applyGitOverview, sessionId]);
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -490,6 +659,14 @@ export function CustomizationSidebar({
     setExpandedDirectories({});
     setFilesSearchQuery('');
     setFilesSearchResults(null);
+    setGitOverview(null);
+    setGitError(null);
+    setGitActionStatus(null);
+    setGitCommitMessage('');
+    setSelectedGitPath(null);
+    setSelectedGitDiffScope('working');
+    setGitDiffText('');
+    setGitDiffError(null);
   }, [normalizedWorkspaceRootPath]);
 
   useEffect(() => {
@@ -515,6 +692,55 @@ export function CustomizationSidebar({
     }
     void loadFilesDirectory(filesPath);
   }, [activeSurface, filesEntriesByPath, filesError, filesLoading, filesPath, loadFilesDirectory]);
+
+  useEffect(() => {
+    if (activeSurface !== 'git') {
+      return;
+    }
+    if (gitOverview || gitLoading || gitError) {
+      return;
+    }
+    void loadGitOverview();
+  }, [activeSurface, gitError, gitLoading, gitOverview, loadGitOverview]);
+
+  useEffect(() => {
+    if (!selectedGitFile) {
+      setGitDiffText('');
+      setGitDiffError(null);
+      return;
+    }
+
+    if (selectedGitDiffScope === 'staged' && !selectedGitFile.staged) {
+      setSelectedGitDiffScope(selectedGitFile.unstaged || selectedGitFile.untracked ? 'working' : 'staged');
+      return;
+    }
+
+    if (selectedGitDiffScope === 'working' && !selectedGitFile.unstaged && !selectedGitFile.untracked && selectedGitFile.staged) {
+      setSelectedGitDiffScope('staged');
+    }
+  }, [selectedGitDiffScope, selectedGitFile]);
+
+  useEffect(() => {
+    if (activeSurface !== 'git' || !selectedGitFile) {
+      return;
+    }
+
+    if (selectedGitDiffScope === 'working' && selectedGitFile.untracked && !selectedGitFile.staged) {
+      setGitDiffText('');
+      setGitDiffError(null);
+      return;
+    }
+
+    if (selectedGitDiffScope === 'staged' && !selectedGitFile.staged) {
+      return;
+    }
+
+    if (selectedGitDiffScope === 'working' && !selectedGitFile.unstaged && !selectedGitFile.untracked) {
+      return;
+    }
+
+    void loadGitDiff(selectedGitFile.path, selectedGitDiffScope);
+  }, [activeSurface, loadGitDiff, selectedGitDiffScope, selectedGitFile]);
 
   useEffect(() => {
     if (!activeModal) {
@@ -712,7 +938,9 @@ export function CustomizationSidebar({
     }
   }, [fileActionDialog, filesPath, normalizedWorkspaceRootPath, openFileModal, refreshFocusedFiles, selectedFilePath]);
 
-  const headerWorkspacePath = overview?.workspacePath ?? projectName;
+  const headerWorkspacePath = overview?.workspacePath ?? gitOverview?.workspacePath ?? projectName;
+  const activeSurfaceItem = SURFACE_ITEMS.find((item) => item.id === activeSurface) ?? SURFACE_ITEMS[0];
+  const headerCopy = SURFACE_COPY[activeSurface];
   const isMobileMode = mode === 'mobile';
   const openInstructionModal = useCallback((instructionId: string) => {
     setSelectedInstructionId(instructionId);
@@ -865,11 +1093,11 @@ export function CustomizationSidebar({
         <div className={styles.headerTop}>
           <div>
             <div className={styles.eyebrow}>
-              <Wrench size={13} />
-              Workspace Sidebar
+              <activeSurfaceItem.Icon size={13} />
+              {activeSurfaceItem.label}
             </div>
-            <h3 className={styles.title}>Customization</h3>
-            <p className={styles.subtle}>지침 문서, Skills, MCP 상태를 한 곳에서 확인하고 조정합니다.</p>
+            <h3 className={styles.title}>{headerCopy.title}</h3>
+            <p className={styles.subtle}>{headerCopy.subtle}</p>
           </div>
           <div className={styles.headerActions}>
             {!isMobileMode && onTogglePinned ? (
@@ -901,18 +1129,30 @@ export function CustomizationSidebar({
                   }
                   return;
                 }
+                if (activeSurface === 'git') {
+                  void loadGitOverview();
+                  return;
+                }
                 void loadOverview();
               }}
-              disabled={activeSurface === 'files' ? filesLoading || filesSearchLoading : overviewLoading}
-              aria-label="Customization 새로고침"
-              title="Customization 새로고침"
+              disabled={
+                activeSurface === 'files'
+                  ? filesLoading || filesSearchLoading
+                  : activeSurface === 'git'
+                    ? gitLoading || gitActionBusy !== null
+                    : overviewLoading
+              }
+              aria-label={`${activeSurfaceItem.label} 새로고침`}
+              title={`${activeSurfaceItem.label} 새로고침`}
             >
               <RefreshCw
                 size={15}
                 className={
                   activeSurface === 'files'
                     ? (filesLoading || filesSearchLoading ? styles.rotate : '')
-                    : (overviewLoading ? styles.rotate : '')
+                    : activeSurface === 'git'
+                      ? (gitLoading || gitActionBusy !== null ? styles.rotate : '')
+                      : (overviewLoading ? styles.rotate : '')
                 }
               />
             </button>
@@ -1191,6 +1431,295 @@ export function CustomizationSidebar({
                 )}
               </div>
             </div>
+          </div>
+        ) : activeSurface === 'git' ? (
+          <div className={styles.content}>
+            {gitLoading && !gitOverview ? (
+              <div className={styles.loadingState}>
+                <Loader2 size={18} className={styles.rotate} />
+                <p>Git 정보를 불러오는 중입니다.</p>
+              </div>
+            ) : gitError ? (
+              <div className={styles.errorState}>
+                <GitBranch size={18} />
+                <p>{gitError}</p>
+              </div>
+            ) : gitOverview ? (
+              <>
+                <div className={`${styles.statsRow} ${styles.gitStatsRow}`}>
+                  <div className={styles.statCard}>
+                    <span className={styles.statValue}>{gitOverview.branch ?? 'detached'}</span>
+                    <span className={styles.statLabel}>현재 브랜치</span>
+                  </div>
+                  <div className={styles.statCard}>
+                    <span className={styles.statValue}>{gitOverview.stagedCount}</span>
+                    <span className={styles.statLabel}>Staged</span>
+                  </div>
+                  <div className={styles.statCard}>
+                    <span className={styles.statValue}>{gitOverview.unstagedCount}</span>
+                    <span className={styles.statLabel}>Working</span>
+                  </div>
+                  <div className={styles.statCard}>
+                    <span className={styles.statValue}>{gitOverview.ahead}/{gitOverview.behind}</span>
+                    <span className={styles.statLabel}>Ahead / Behind</span>
+                  </div>
+                </div>
+
+                <div className={styles.listCard}>
+                  <div className={styles.cardHeader}>
+                    <span className={styles.cardTitle}>Repository 상태</span>
+                    <span className={styles.cardMeta}>{gitOverview.upstreamBranch ?? 'upstream 없음'}</span>
+                  </div>
+                  <div className={styles.gitSummaryBody}>
+                    <div className={styles.gitSummaryHeader}>
+                      <div className={styles.gitBranchTitleRow}>
+                        <GitBranch size={14} />
+                        <span className={styles.itemTitle}>{gitOverview.branch ?? 'detached HEAD'}</span>
+                      </div>
+                      <div className={styles.gitTagRow}>
+                        <span className={`${styles.tag} ${gitOverview.isClean ? styles.tagGood : styles.tagWarn}`}>
+                          {gitOverview.isClean ? '깨끗함' : '변경 있음'}
+                        </span>
+                        {gitOverview.untrackedCount > 0 ? (
+                          <span className={`${styles.tag} ${styles.tagWarn}`}>Untracked {gitOverview.untrackedCount}</span>
+                        ) : null}
+                        {gitOverview.conflictedCount > 0 ? (
+                          <span className={`${styles.tag} ${styles.tagDanger}`}>Conflict {gitOverview.conflictedCount}</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className={styles.filesActionRow}>
+                      <button
+                        type="button"
+                        className={styles.pathButton}
+                        onClick={() => { void runGitAction('fetch'); }}
+                        disabled={gitActionBusy !== null}
+                      >
+                        <RefreshCw size={14} className={gitActionBusy === 'fetch' ? styles.rotate : ''} />
+                        Fetch
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.pathButton}
+                        onClick={() => { void runGitAction('pull'); }}
+                        disabled={gitActionBusy !== null}
+                      >
+                        <ArrowDownCircle size={14} />
+                        Pull
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.pathButton}
+                        onClick={() => { void runGitAction('push'); }}
+                        disabled={gitActionBusy !== null}
+                      >
+                        <ArrowUpCircle size={14} />
+                        Push
+                      </button>
+                    </div>
+                    {gitActionStatus ? (
+                      <div className={styles.gitStatusBanner}>{gitActionStatus}</div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className={styles.listCard}>
+                  <div className={styles.cardHeader}>
+                    <span className={styles.cardTitle}>변경 파일</span>
+                    <span className={styles.cardMeta}>{gitOverview.files.length}개</span>
+                  </div>
+                  <div className={styles.filesToolbar}>
+                    <div className={styles.filesActionRow}>
+                      <button
+                        type="button"
+                        className={styles.pathButton}
+                        onClick={() => { void runGitAction('stage'); }}
+                        disabled={gitActionBusy !== null || gitOverview.files.length === 0}
+                      >
+                        Stage All
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.pathButton}
+                        onClick={() => { void runGitAction('unstage'); }}
+                        disabled={gitActionBusy !== null || gitOverview.stagedCount === 0}
+                      >
+                        Unstage All
+                      </button>
+                    </div>
+                  </div>
+                  <div className={styles.itemList}>
+                    {gitOverview.files.length === 0 ? (
+                      <div className={styles.emptyState}>
+                        <CheckCircle2 size={18} />
+                        <p>현재 워크스페이스에는 커밋되지 않은 변경사항이 없습니다.</p>
+                      </div>
+                    ) : (
+                      gitOverview.files.map((file) => {
+                        const isActive = selectedGitPath === file.path;
+                        const stagedLabel = file.staged ? formatGitStatusLabel(file.indexStatus) : null;
+                        const workingLabel = file.untracked
+                          ? formatGitStatusLabel('?')
+                          : file.unstaged
+                            ? formatGitStatusLabel(file.workTreeStatus)
+                            : null;
+
+                        return (
+                          <article
+                            key={file.path}
+                            className={`${styles.gitFileCard} ${isActive ? styles.gitFileCardActive : ''}`}
+                          >
+                            <button
+                              type="button"
+                              className={styles.gitFileMain}
+                              onClick={() => {
+                                setSelectedGitPath(file.path);
+                                setGitDiffError(null);
+                                setSelectedGitDiffScope(file.staged && !file.unstaged && !file.untracked ? 'staged' : 'working');
+                              }}
+                            >
+                              <span className={styles.itemTitle}>{file.path}</span>
+                              <span className={styles.itemDescription}>
+                                {file.originalPath ? `${file.originalPath} -> ${file.path}` : '워크스페이스 변경사항'}
+                              </span>
+                              <div className={styles.gitTagRow}>
+                                {stagedLabel ? <span className={`${styles.tag} ${styles.tagGood}`}>Staged · {stagedLabel}</span> : null}
+                                {workingLabel ? <span className={`${styles.tag} ${file.conflicted ? styles.tagDanger : styles.tagWarn}`}>Working · {workingLabel}</span> : null}
+                              </div>
+                            </button>
+                            <div className={styles.gitFileActions}>
+                              {(file.unstaged || file.untracked) ? (
+                                <button
+                                  type="button"
+                                  className={styles.pathButton}
+                                  onClick={() => { void runGitAction('stage', { paths: [file.path] }); }}
+                                  disabled={gitActionBusy !== null}
+                                >
+                                  Stage
+                                </button>
+                              ) : null}
+                              {file.staged ? (
+                                <button
+                                  type="button"
+                                  className={styles.pathButton}
+                                  onClick={() => { void runGitAction('unstage', { paths: [file.path] }); }}
+                                  disabled={gitActionBusy !== null}
+                                >
+                                  Unstage
+                                </button>
+                              ) : null}
+                            </div>
+                          </article>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                <div className={styles.listCard}>
+                  <div className={styles.cardHeader}>
+                    <span className={styles.cardTitle}>Diff</span>
+                    <span className={styles.cardMeta}>{selectedGitFile?.path ?? '파일을 선택하세요'}</span>
+                  </div>
+                  {selectedGitFile ? (
+                    <>
+                      <div className={styles.gitDiffToolbar}>
+                        <div className={styles.gitScopeTabs}>
+                          <button
+                            type="button"
+                            className={`${styles.sectionTab} ${selectedGitDiffScope === 'working' ? styles.sectionTabActive : ''}`}
+                            onClick={() => setSelectedGitDiffScope('working')}
+                            disabled={!selectedGitFile.unstaged && !selectedGitFile.untracked}
+                          >
+                            Working
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.sectionTab} ${selectedGitDiffScope === 'staged' ? styles.sectionTabActive : ''}`}
+                            onClick={() => setSelectedGitDiffScope('staged')}
+                            disabled={!selectedGitFile.staged}
+                          >
+                            Staged
+                          </button>
+                        </div>
+                      </div>
+                      <div className={styles.gitDiffPanel}>
+                        {gitDiffLoading ? (
+                          <div className={styles.loadingState}>
+                            <Loader2 size={16} className={styles.rotate} />
+                            <p>diff를 불러오는 중입니다.</p>
+                          </div>
+                        ) : gitDiffError ? (
+                          <div className={styles.errorState}>
+                            <AlertTriangle size={18} />
+                            <p>{gitDiffError}</p>
+                          </div>
+                        ) : selectedGitDiffScope === 'working' && selectedGitFile.untracked && !selectedGitFile.staged ? (
+                          <div className={styles.emptyState}>
+                            <FilePlus size={18} />
+                            <p>새 파일입니다. Stage 하면 커밋에 포함됩니다.</p>
+                          </div>
+                        ) : gitDiffText ? (
+                          <pre className={styles.gitDiffPre}>{gitDiffText}</pre>
+                        ) : (
+                          <div className={styles.emptyState}>
+                            <FileText size={18} />
+                            <p>선택한 범위에 표시할 diff가 없습니다.</p>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className={styles.emptyState}>
+                      <GitBranch size={18} />
+                      <p>diff를 보려면 변경 파일을 선택해 주세요.</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className={styles.listCard}>
+                  <div className={styles.cardHeader}>
+                    <span className={styles.cardTitle}>Commit</span>
+                    <span className={styles.cardMeta}>staged {gitOverview.stagedCount}개</span>
+                  </div>
+                  <div className={styles.gitCommitBody}>
+                    <textarea
+                      className={styles.gitCommitInput}
+                      value={gitCommitMessage}
+                      onChange={(event) => {
+                        setGitCommitMessage(event.target.value);
+                        setGitActionStatus(null);
+                      }}
+                      placeholder="커밋 메시지를 입력하세요"
+                      rows={3}
+                    />
+                    <div className={styles.actions}>
+                      <span className={styles.statusText}>
+                        {gitOverview.stagedCount > 0
+                          ? '스테이지된 변경사항만 커밋됩니다.'
+                          : '먼저 변경 파일을 Stage 해 주세요.'}
+                      </span>
+                      <button
+                        type="button"
+                        className={styles.saveButton}
+                        onClick={() => { void runGitAction('commit', { message: gitCommitMessage }); }}
+                        disabled={gitActionBusy !== null || gitOverview.stagedCount === 0 || !gitCommitMessage.trim()}
+                      >
+                        {gitActionBusy === 'commit'
+                          ? <Loader2 size={14} className={styles.rotate} />
+                          : <GitCommitHorizontal size={14} />}
+                        Commit
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className={styles.emptyState}>
+                <GitBranch size={18} />
+                <p>표시할 Git 데이터가 없습니다.</p>
+              </div>
+            )}
           </div>
         ) : (
           <div className={styles.content}>

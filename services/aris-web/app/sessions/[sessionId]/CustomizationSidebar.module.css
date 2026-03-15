@@ -819,6 +819,147 @@
   color: var(--chat-text-muted);
 }
 
+.gitStatsRow {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.gitSummaryBody {
+  padding: 0.78rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.72rem;
+}
+
+.gitSummaryHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.gitBranchTitleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+}
+
+.gitTagRow {
+  display: flex;
+  align-items: center;
+  gap: 0.32rem;
+  flex-wrap: wrap;
+}
+
+.gitStatusBanner {
+  border: 1px solid var(--sidebar-border);
+  border-radius: 12px;
+  background: var(--sidebar-surface-soft);
+  padding: 0.64rem 0.72rem;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: var(--chat-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+}
+
+.gitFileCard {
+  border: 1px solid var(--sidebar-border);
+  border-radius: 14px;
+  background: var(--sidebar-surface-soft);
+  padding: 0.58rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.72rem;
+}
+
+.gitFileCardActive {
+  border-color: var(--sidebar-accent-border);
+  background: linear-gradient(155deg, color-mix(in srgb, var(--sidebar-accent-bg) 92%, var(--surface) 8%) 0%, color-mix(in srgb, var(--sidebar-accent-bg) 72%, var(--surface) 28%) 100%);
+}
+
+.gitFileMain {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.28rem;
+  text-align: left;
+  color: var(--chat-text-primary);
+  cursor: pointer;
+}
+
+.gitFileActions {
+  display: inline-flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.gitDiffToolbar {
+  padding: 0.72rem 0.78rem 0;
+}
+
+.gitScopeTabs {
+  display: flex;
+  gap: 0.42rem;
+  flex-wrap: wrap;
+}
+
+.gitDiffPanel {
+  min-height: 220px;
+  padding: 0.78rem;
+}
+
+.gitDiffPre {
+  margin: 0;
+  min-height: 220px;
+  border: 1px solid var(--sidebar-border);
+  border-radius: 14px;
+  background: var(--sidebar-surface-strong);
+  padding: 0.82rem 0.88rem;
+  overflow: auto;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: var(--chat-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+}
+
+.gitCommitBody {
+  padding: 0.78rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.72rem;
+}
+
+.gitCommitInput {
+  width: 100%;
+  resize: vertical;
+  min-height: 92px;
+  border: 1px solid var(--sidebar-border);
+  border-radius: 12px;
+  background: var(--sidebar-surface-strong);
+  color: var(--chat-text-primary);
+  padding: 0.78rem 0.82rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  font-family: var(--font-mono);
+  outline: none;
+}
+
+.gitCommitInput:focus {
+  border-color: var(--sidebar-accent-border);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--chat-accent) 12%, transparent);
+}
+
 .modalOverlay {
   position: fixed;
   inset: 0;
@@ -1055,6 +1196,10 @@
     gap: 0.42rem;
   }
 
+  .gitStatsRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .statCard {
     padding: 0.56rem;
   }
@@ -1133,6 +1278,20 @@
   .actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .gitFileCard {
+    flex-direction: column;
+  }
+
+  .gitFileActions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .gitFileActions .pathButton {
+    flex: 1;
+    justify-content: center;
   }
 
   .saveButton {
