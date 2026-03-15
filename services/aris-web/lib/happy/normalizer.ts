@@ -339,6 +339,7 @@ function toUiEventKind(value: string): UiEventKind | null {
     || value === 'file_list'
     || value === 'file_read'
     || value === 'file_write'
+    || value === 'think'
   ) {
     return value;
   }
@@ -415,6 +416,9 @@ function classifySessionEventKind(input: {
     || input.sessionEventType === 'start'
     || input.sessionEventType === 'stop'
   ) {
+    if (input.kindFromMeta === 'think') {
+      return 'think';
+    }
     return 'text_reply';
   }
 
@@ -842,6 +846,7 @@ export function classifyEventKind(input: { type?: string; text?: string; command
     || kindFromType === 'command_execution'
     || kindFromType === 'run_execution'
     || kindFromType === 'exec_execution'
+    || kindFromType === 'think'
     || type.includes('tool')
     || type.includes('command')
     || text.includes('$ ')
