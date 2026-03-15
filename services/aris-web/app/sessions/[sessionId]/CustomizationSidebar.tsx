@@ -174,8 +174,8 @@ const SURFACE_COPY: Record<SidebarSurface, { title: string; subtle: string }> = 
     subtle: '워크스페이스 파일을 탐색하고 바로 열어 수정합니다.',
   },
   git: {
-    title: 'Git Workspace',
-    subtle: '브랜치 상태, 변경 파일, diff, 커밋과 동기화를 우측 사이드바에서 처리합니다.',
+    title: 'Source Control',
+    subtle: 'VS Code처럼 변경 파일, 스테이징, diff, 커밋과 동기화를 한 흐름으로 처리합니다.',
   },
   terminal: {
     title: 'Terminal',
@@ -969,6 +969,8 @@ export function CustomizationSidebar({
   }, []);
   const visibleFiles = filesSearchResults ?? (filesEntriesByPath[filesPath] ?? filesEntries);
   const filesCountLabel = filesSearchResults ? `검색 ${visibleFiles.length}개` : `${visibleFiles.length}개`;
+  const stagedGitFiles = gitOverview?.files.filter((file) => file.staged) ?? [];
+  const workingGitFiles = gitOverview?.files.filter((file) => file.unstaged || file.untracked) ?? [];
   const renderFileTree = useCallback((entries: WorkspaceFileEntry[], depth = 0) => (
     entries.map((item) => {
       const isExpanded = Boolean(expandedDirectories[item.path]);
@@ -1445,244 +1447,57 @@ export function CustomizationSidebar({
                 <p>{gitError}</p>
               </div>
             ) : gitOverview ? (
-              <>
-                <div className={`${styles.statsRow} ${styles.gitStatsRow}`}>
-                  <div className={styles.statCard}>
-                    <span className={styles.statValue}>{gitOverview.branch ?? 'detached'}</span>
-                    <span className={styles.statLabel}>현재 브랜치</span>
-                  </div>
-                  <div className={styles.statCard}>
-                    <span className={styles.statValue}>{gitOverview.stagedCount}</span>
-                    <span className={styles.statLabel}>Staged</span>
-                  </div>
-                  <div className={styles.statCard}>
-                    <span className={styles.statValue}>{gitOverview.unstagedCount}</span>
-                    <span className={styles.statLabel}>Working</span>
-                  </div>
-                  <div className={styles.statCard}>
-                    <span className={styles.statValue}>{gitOverview.ahead}/{gitOverview.behind}</span>
-                    <span className={styles.statLabel}>Ahead / Behind</span>
-                  </div>
-                </div>
-
-                <div className={styles.listCard}>
-                  <div className={styles.cardHeader}>
-                    <span className={styles.cardTitle}>Repository 상태</span>
-                    <span className={styles.cardMeta}>{gitOverview.upstreamBranch ?? 'upstream 없음'}</span>
-                  </div>
-                  <div className={styles.gitSummaryBody}>
-                    <div className={styles.gitSummaryHeader}>
+              <div className={styles.gitWorkbench}>
+                <section className={styles.gitPanel}>
+                  <div className={styles.gitTopbar}>
+                    <div className={styles.gitTopbarMeta}>
                       <div className={styles.gitBranchTitleRow}>
                         <GitBranch size={14} />
                         <span className={styles.itemTitle}>{gitOverview.branch ?? 'detached HEAD'}</span>
+                        <span className={styles.gitInlineMeta}>{gitOverview.upstreamBranch ?? 'upstream 없음'}</span>
                       </div>
-                      <div className={styles.gitTagRow}>
-                        <span className={`${styles.tag} ${gitOverview.isClean ? styles.tagGood : styles.tagWarn}`}>
-                          {gitOverview.isClean ? '깨끗함' : '변경 있음'}
-                        </span>
-                        {gitOverview.untrackedCount > 0 ? (
-                          <span className={`${styles.tag} ${styles.tagWarn}`}>Untracked {gitOverview.untrackedCount}</span>
-                        ) : null}
-                        {gitOverview.conflictedCount > 0 ? (
-                          <span className={`${styles.tag} ${styles.tagDanger}`}>Conflict {gitOverview.conflictedCount}</span>
-                        ) : null}
+                      <div className={styles.gitTopbarStats}>
+                        <span>{workingGitFiles.length} changes</span>
+                        <span>{stagedGitFiles.length} staged</span>
+                        <span>{gitOverview.ahead} ahead</span>
+                        <span>{gitOverview.behind} behind</span>
                       </div>
                     </div>
-                    <div className={styles.filesActionRow}>
+                    <div className={styles.gitToolbar}>
                       <button
                         type="button"
-                        className={styles.pathButton}
+                        className={styles.gitToolbarButton}
                         onClick={() => { void runGitAction('fetch'); }}
                         disabled={gitActionBusy !== null}
+                        title="Fetch"
                       >
-                        <RefreshCw size={14} className={gitActionBusy === 'fetch' ? styles.rotate : ''} />
-                        Fetch
+                        <RefreshCw size={13} className={gitActionBusy === 'fetch' ? styles.rotate : ''} />
+                        <span>Fetch</span>
                       </button>
                       <button
                         type="button"
-                        className={styles.pathButton}
+                        className={styles.gitToolbarButton}
                         onClick={() => { void runGitAction('pull'); }}
                         disabled={gitActionBusy !== null}
+                        title="Pull"
                       >
-                        <ArrowDownCircle size={14} />
-                        Pull
+                        <ArrowDownCircle size={13} />
+                        <span>Pull</span>
                       </button>
                       <button
                         type="button"
-                        className={styles.pathButton}
+                        className={styles.gitToolbarButton}
                         onClick={() => { void runGitAction('push'); }}
                         disabled={gitActionBusy !== null}
+                        title="Push"
                       >
-                        <ArrowUpCircle size={14} />
-                        Push
-                      </button>
-                    </div>
-                    {gitActionStatus ? (
-                      <div className={styles.gitStatusBanner}>{gitActionStatus}</div>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className={styles.listCard}>
-                  <div className={styles.cardHeader}>
-                    <span className={styles.cardTitle}>변경 파일</span>
-                    <span className={styles.cardMeta}>{gitOverview.files.length}개</span>
-                  </div>
-                  <div className={styles.filesToolbar}>
-                    <div className={styles.filesActionRow}>
-                      <button
-                        type="button"
-                        className={styles.pathButton}
-                        onClick={() => { void runGitAction('stage'); }}
-                        disabled={gitActionBusy !== null || gitOverview.files.length === 0}
-                      >
-                        Stage All
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.pathButton}
-                        onClick={() => { void runGitAction('unstage'); }}
-                        disabled={gitActionBusy !== null || gitOverview.stagedCount === 0}
-                      >
-                        Unstage All
+                        <ArrowUpCircle size={13} />
+                        <span>Push</span>
                       </button>
                     </div>
                   </div>
-                  <div className={styles.itemList}>
-                    {gitOverview.files.length === 0 ? (
-                      <div className={styles.emptyState}>
-                        <CheckCircle2 size={18} />
-                        <p>현재 워크스페이스에는 커밋되지 않은 변경사항이 없습니다.</p>
-                      </div>
-                    ) : (
-                      gitOverview.files.map((file) => {
-                        const isActive = selectedGitPath === file.path;
-                        const stagedLabel = file.staged ? formatGitStatusLabel(file.indexStatus) : null;
-                        const workingLabel = file.untracked
-                          ? formatGitStatusLabel('?')
-                          : file.unstaged
-                            ? formatGitStatusLabel(file.workTreeStatus)
-                            : null;
 
-                        return (
-                          <article
-                            key={file.path}
-                            className={`${styles.gitFileCard} ${isActive ? styles.gitFileCardActive : ''}`}
-                          >
-                            <button
-                              type="button"
-                              className={styles.gitFileMain}
-                              onClick={() => {
-                                setSelectedGitPath(file.path);
-                                setGitDiffError(null);
-                                setSelectedGitDiffScope(file.staged && !file.unstaged && !file.untracked ? 'staged' : 'working');
-                              }}
-                            >
-                              <span className={styles.itemTitle}>{file.path}</span>
-                              <span className={styles.itemDescription}>
-                                {file.originalPath ? `${file.originalPath} -> ${file.path}` : '워크스페이스 변경사항'}
-                              </span>
-                              <div className={styles.gitTagRow}>
-                                {stagedLabel ? <span className={`${styles.tag} ${styles.tagGood}`}>Staged · {stagedLabel}</span> : null}
-                                {workingLabel ? <span className={`${styles.tag} ${file.conflicted ? styles.tagDanger : styles.tagWarn}`}>Working · {workingLabel}</span> : null}
-                              </div>
-                            </button>
-                            <div className={styles.gitFileActions}>
-                              {(file.unstaged || file.untracked) ? (
-                                <button
-                                  type="button"
-                                  className={styles.pathButton}
-                                  onClick={() => { void runGitAction('stage', { paths: [file.path] }); }}
-                                  disabled={gitActionBusy !== null}
-                                >
-                                  Stage
-                                </button>
-                              ) : null}
-                              {file.staged ? (
-                                <button
-                                  type="button"
-                                  className={styles.pathButton}
-                                  onClick={() => { void runGitAction('unstage', { paths: [file.path] }); }}
-                                  disabled={gitActionBusy !== null}
-                                >
-                                  Unstage
-                                </button>
-                              ) : null}
-                            </div>
-                          </article>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-
-                <div className={styles.listCard}>
-                  <div className={styles.cardHeader}>
-                    <span className={styles.cardTitle}>Diff</span>
-                    <span className={styles.cardMeta}>{selectedGitFile?.path ?? '파일을 선택하세요'}</span>
-                  </div>
-                  {selectedGitFile ? (
-                    <>
-                      <div className={styles.gitDiffToolbar}>
-                        <div className={styles.gitScopeTabs}>
-                          <button
-                            type="button"
-                            className={`${styles.sectionTab} ${selectedGitDiffScope === 'working' ? styles.sectionTabActive : ''}`}
-                            onClick={() => setSelectedGitDiffScope('working')}
-                            disabled={!selectedGitFile.unstaged && !selectedGitFile.untracked}
-                          >
-                            Working
-                          </button>
-                          <button
-                            type="button"
-                            className={`${styles.sectionTab} ${selectedGitDiffScope === 'staged' ? styles.sectionTabActive : ''}`}
-                            onClick={() => setSelectedGitDiffScope('staged')}
-                            disabled={!selectedGitFile.staged}
-                          >
-                            Staged
-                          </button>
-                        </div>
-                      </div>
-                      <div className={styles.gitDiffPanel}>
-                        {gitDiffLoading ? (
-                          <div className={styles.loadingState}>
-                            <Loader2 size={16} className={styles.rotate} />
-                            <p>diff를 불러오는 중입니다.</p>
-                          </div>
-                        ) : gitDiffError ? (
-                          <div className={styles.errorState}>
-                            <AlertTriangle size={18} />
-                            <p>{gitDiffError}</p>
-                          </div>
-                        ) : selectedGitDiffScope === 'working' && selectedGitFile.untracked && !selectedGitFile.staged ? (
-                          <div className={styles.emptyState}>
-                            <FilePlus size={18} />
-                            <p>새 파일입니다. Stage 하면 커밋에 포함됩니다.</p>
-                          </div>
-                        ) : gitDiffText ? (
-                          <pre className={styles.gitDiffPre}>{gitDiffText}</pre>
-                        ) : (
-                          <div className={styles.emptyState}>
-                            <FileText size={18} />
-                            <p>선택한 범위에 표시할 diff가 없습니다.</p>
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <div className={styles.emptyState}>
-                      <GitBranch size={18} />
-                      <p>diff를 보려면 변경 파일을 선택해 주세요.</p>
-                    </div>
-                  )}
-                </div>
-
-                <div className={styles.listCard}>
-                  <div className={styles.cardHeader}>
-                    <span className={styles.cardTitle}>Commit</span>
-                    <span className={styles.cardMeta}>staged {gitOverview.stagedCount}개</span>
-                  </div>
-                  <div className={styles.gitCommitBody}>
+                  <div className={styles.gitCommitBox}>
                     <textarea
                       className={styles.gitCommitInput}
                       value={gitCommitMessage}
@@ -1690,18 +1505,24 @@ export function CustomizationSidebar({
                         setGitCommitMessage(event.target.value);
                         setGitActionStatus(null);
                       }}
-                      placeholder="커밋 메시지를 입력하세요"
+                      placeholder="Message (Ctrl+Enter to commit)"
                       rows={3}
                     />
-                    <div className={styles.actions}>
-                      <span className={styles.statusText}>
-                        {gitOverview.stagedCount > 0
-                          ? '스테이지된 변경사항만 커밋됩니다.'
-                          : '먼저 변경 파일을 Stage 해 주세요.'}
-                      </span>
+                    <div className={styles.gitCommitFooter}>
+                      <div className={styles.gitTagRow}>
+                        <span className={`${styles.tag} ${gitOverview.isClean ? styles.tagGood : styles.tagMuted}`}>
+                          {gitOverview.isClean ? 'CLEAN' : 'DIRTY'}
+                        </span>
+                        {gitOverview.conflictedCount > 0 ? (
+                          <span className={`${styles.tag} ${styles.tagDanger}`}>CONFLICT {gitOverview.conflictedCount}</span>
+                        ) : null}
+                        {gitOverview.untrackedCount > 0 ? (
+                          <span className={`${styles.tag} ${styles.tagWarn}`}>UNTRACKED {gitOverview.untrackedCount}</span>
+                        ) : null}
+                      </div>
                       <button
                         type="button"
-                        className={styles.saveButton}
+                        className={styles.gitPrimaryButton}
                         onClick={() => { void runGitAction('commit', { message: gitCommitMessage }); }}
                         disabled={gitActionBusy !== null || gitOverview.stagedCount === 0 || !gitCommitMessage.trim()}
                       >
@@ -1711,9 +1532,173 @@ export function CustomizationSidebar({
                         Commit
                       </button>
                     </div>
+                    {gitActionStatus ? <div className={styles.gitStatusBanner}>{gitActionStatus}</div> : null}
                   </div>
-                </div>
-              </>
+                </section>
+
+                <section className={styles.gitPanel}>
+                  <div className={styles.gitSectionHeader}>
+                    <span className={styles.gitSectionTitle}>Changes</span>
+                    <div className={styles.gitSectionMeta}>
+                      <span>{workingGitFiles.length}</span>
+                      <button
+                        type="button"
+                        className={styles.gitLinkButton}
+                        onClick={() => { void runGitAction('stage'); }}
+                        disabled={gitActionBusy !== null || workingGitFiles.length === 0}
+                      >
+                        Stage All
+                      </button>
+                    </div>
+                  </div>
+                  {workingGitFiles.length === 0 ? (
+                    <div className={styles.gitEmptyState}>No working tree changes.</div>
+                  ) : (
+                    <div className={styles.gitFileList}>
+                      {workingGitFiles.map((file) => {
+                        const isActive = selectedGitPath === file.path && selectedGitDiffScope === 'working';
+                        const badgeLabel = file.untracked ? '?' : file.workTreeStatus;
+
+                        return (
+                          <article key={`working-${file.path}`} className={`${styles.gitFileRow} ${isActive ? styles.gitFileRowActive : ''}`}>
+                            <button
+                              type="button"
+                              className={styles.gitFileMain}
+                              onClick={() => {
+                                setSelectedGitPath(file.path);
+                                setGitDiffError(null);
+                                setSelectedGitDiffScope('working');
+                              }}
+                            >
+                              <span className={`${styles.gitStatusPill} ${file.conflicted ? styles.gitStatusPillDanger : file.untracked ? styles.gitStatusPillWarn : ''}`}>
+                                {badgeLabel}
+                              </span>
+                              <span className={styles.gitFileCopy}>
+                                <span className={styles.itemTitle}>{file.path}</span>
+                                <span className={styles.itemDescription}>
+                                  {file.originalPath ? `${file.originalPath} -> ${file.path}` : formatGitStatusLabel(file.untracked ? '?' : file.workTreeStatus)}
+                                </span>
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.gitIconButton}
+                              onClick={() => { void runGitAction('stage', { paths: [file.path] }); }}
+                              disabled={gitActionBusy !== null}
+                              title="Stage"
+                            >
+                              <ArrowUpCircle size={13} />
+                            </button>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+
+                <section className={styles.gitPanel}>
+                  <div className={styles.gitSectionHeader}>
+                    <span className={styles.gitSectionTitle}>Staged Changes</span>
+                    <div className={styles.gitSectionMeta}>
+                      <span>{stagedGitFiles.length}</span>
+                      <button
+                        type="button"
+                        className={styles.gitLinkButton}
+                        onClick={() => { void runGitAction('unstage'); }}
+                        disabled={gitActionBusy !== null || stagedGitFiles.length === 0}
+                      >
+                        Unstage All
+                      </button>
+                    </div>
+                  </div>
+                  {stagedGitFiles.length === 0 ? (
+                    <div className={styles.gitEmptyState}>No staged changes.</div>
+                  ) : (
+                    <div className={styles.gitFileList}>
+                      {stagedGitFiles.map((file) => (
+                        <article
+                          key={`staged-${file.path}`}
+                          className={`${styles.gitFileRow} ${selectedGitPath === file.path && selectedGitDiffScope === 'staged' ? styles.gitFileRowActive : ''}`}
+                        >
+                          <button
+                            type="button"
+                            className={styles.gitFileMain}
+                            onClick={() => {
+                              setSelectedGitPath(file.path);
+                              setGitDiffError(null);
+                              setSelectedGitDiffScope('staged');
+                            }}
+                          >
+                            <span className={styles.gitStatusPill}>{file.indexStatus}</span>
+                            <span className={styles.gitFileCopy}>
+                              <span className={styles.itemTitle}>{file.path}</span>
+                              <span className={styles.itemDescription}>
+                                {file.originalPath ? `${file.originalPath} -> ${file.path}` : formatGitStatusLabel(file.indexStatus)}
+                              </span>
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.gitIconButton}
+                            onClick={() => { void runGitAction('unstage', { paths: [file.path] }); }}
+                            disabled={gitActionBusy !== null}
+                            title="Unstage"
+                          >
+                            <ArrowDownCircle size={13} />
+                          </button>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                <section className={styles.gitPanel}>
+                  <div className={styles.gitSectionHeader}>
+                    <span className={styles.gitSectionTitle}>Diff</span>
+                    <div className={styles.gitScopeTabs}>
+                      <button
+                        type="button"
+                        className={`${styles.gitScopeButton} ${selectedGitDiffScope === 'working' ? styles.gitScopeButtonActive : ''}`}
+                        onClick={() => setSelectedGitDiffScope('working')}
+                        disabled={!selectedGitFile || (!selectedGitFile.unstaged && !selectedGitFile.untracked)}
+                      >
+                        Working
+                      </button>
+                      <button
+                        type="button"
+                        className={`${styles.gitScopeButton} ${selectedGitDiffScope === 'staged' ? styles.gitScopeButtonActive : ''}`}
+                        onClick={() => setSelectedGitDiffScope('staged')}
+                        disabled={!selectedGitFile || !selectedGitFile.staged}
+                      >
+                        Staged
+                      </button>
+                    </div>
+                  </div>
+                  <div className={styles.gitDiffPanel}>
+                    {selectedGitFile ? (
+                      gitDiffLoading ? (
+                        <div className={styles.loadingState}>
+                          <Loader2 size={16} className={styles.rotate} />
+                          <p>diff를 불러오는 중입니다.</p>
+                        </div>
+                      ) : gitDiffError ? (
+                        <div className={styles.errorState}>
+                          <AlertTriangle size={18} />
+                          <p>{gitDiffError}</p>
+                        </div>
+                      ) : selectedGitDiffScope === 'working' && selectedGitFile.untracked && !selectedGitFile.staged ? (
+                        <div className={styles.gitEmptyState}>새 파일입니다. Stage 하면 diff와 함께 커밋할 수 있습니다.</div>
+                      ) : gitDiffText ? (
+                        <pre className={styles.gitDiffPre}>{gitDiffText}</pre>
+                      ) : (
+                        <div className={styles.gitEmptyState}>선택한 범위에 표시할 diff가 없습니다.</div>
+                      )
+                    ) : (
+                      <div className={styles.gitEmptyState}>파일을 선택하면 diff가 표시됩니다.</div>
+                    )}
+                  </div>
+                </section>
+              </div>
             ) : (
               <div className={styles.emptyState}>
                 <GitBranch size={18} />
