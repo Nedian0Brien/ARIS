@@ -156,6 +156,13 @@ async function runGitCommand(cwd: string, args: string[]): Promise<RunGitResult>
   } catch (error) {
     const failure = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
     const stderr = failure.stderr?.trim() ?? '';
+    if (failure.code === 'ENOENT') {
+      throw new GitCommandError('Git CLI를 찾을 수 없습니다. 런타임 이미지에 git이 설치되어 있는지 확인해 주세요.', {
+        stdout: failure.stdout,
+        stderr: failure.stderr,
+        cause: error,
+      });
+    }
     if (/not a git repository/i.test(stderr)) {
       throw new GitCommandError('Git 저장소를 찾을 수 없습니다.', {
         stdout: failure.stdout,
