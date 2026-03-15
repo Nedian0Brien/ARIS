@@ -50,6 +50,7 @@ import {
   FileText,
   Folder,
   FolderTree,
+  Brain,
   MessageSquarePlus,
   MessageSquareText,
   MoreVertical,
@@ -1974,7 +1975,11 @@ function ActionEventCard({
   }
 
   const kindMeta = getEventKindMeta(event.kind);
-  const KindIcon = kindMeta.Icon;
+  const isThoughtCard = Boolean(event.meta?.isThoughtCard);
+  const KindIcon = isThoughtCard ? Brain : kindMeta.Icon;
+  const label = isThoughtCard ? 'THINKING' : kindMeta.label;
+  const tone = isThoughtCard ? 'cyan' : kindMeta.tone;
+
   const fullPrimary = resolveActionPrimary(event).replace(/\s+/g, ' ').trim();
   const compactPrimary = truncateSingleLine(fullPrimary, 88);
   const resourceLabels = extractResourceLabelsFromEvent(event);
@@ -1986,9 +1991,9 @@ function ActionEventCard({
       <div className={styles.actionCompact}>
         <div className={styles.actionCompactMain}>
           <div className={styles.actionCompactTopRow}>
-            <span className={`${styles.kindChip} ${getToneClass(kindMeta.tone)}`}>
+            <span className={`${styles.kindChip} ${getToneClass(tone)}`}>
               <KindIcon size={12} />
-              {kindMeta.label}
+              {label}
             </span>
             <span className={styles.actionFileLabelSeparator}>-</span>
             {hasResource ? (
@@ -2022,9 +2027,9 @@ function ActionEventCard({
       <div className={styles.actionHeader}>
         <div className={styles.actionHeaderMain}>
           <div className={styles.actionCompactTopRow}>
-            <span className={`${styles.kindChip} ${getToneClass(kindMeta.tone)}`}>
+            <span className={`${styles.kindChip} ${getToneClass(tone)}`}>
               <KindIcon size={13} />
-              {kindMeta.label}
+              {label}
             </span>
             <span className={styles.actionFileLabelSeparator}>-</span>
             {hasResource ? (

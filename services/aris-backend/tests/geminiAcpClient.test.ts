@@ -39,7 +39,11 @@ class FakeAcpChild extends EventEmitter {
   }
 
   private send(payload: Record<string, unknown>) {
-    this.stdout.write(`${JSON.stringify(payload)}\n`);
+    setImmediate(() => {
+      if (!this.killed) {
+        this.stdout.write(`${JSON.stringify(payload)}\n`);
+      }
+    });
   }
 
   private handleLine(line: string) {
@@ -193,6 +197,64 @@ class FakeAcpChild extends EventEmitter {
       const promptText = Array.isArray(msg.params?.prompt)
         ? String((msg.params?.prompt as Array<Record<string, unknown>>)[0]?.text ?? '')
         : '';
+      if (promptText.includes('Interleave')) {
+        this.send({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId,
+            update: {
+              sessionUpdate: 'agent_message_chunk',
+              content: { type: 'text', text: 'Step 1' },
+            },
+          },
+        });
+        this.send({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId,
+            update: {
+              sessionUpdate: 'tool_call',
+              toolCallId: 'tool-interleave-1',
+              status: 'in_progress',
+              title: 'Check',
+              kind: 'execute',
+              rawInput: { command: 'check' },
+            },
+          },
+        });
+        this.send({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId,
+            update: {
+              sessionUpdate: 'tool_call_update',
+              toolCallId: 'tool-interleave-1',
+              status: 'completed',
+              content: [{ type: 'content', content: { type: 'text', text: 'ok' } }],
+            },
+          },
+        });
+        this.send({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId,
+            update: {
+              sessionUpdate: 'agent_message_chunk',
+              content: { type: 'text', text: 'Step 2' },
+            },
+          },
+        });
+        this.send({
+          jsonrpc: '2.0',
+          id: msg.id,
+          result: { stopReason: 'end_turn' },
+        });
+        return;
+      }
       if (promptText.includes('Need commentary')) {
         this.send({
           jsonrpc: '2.0',
@@ -505,6 +567,7 @@ describe('runGeminiAcpTurn', () => {
       'tool-call-start',
       'tool-call-end',
       'text',
+      'text',
       'turn-end',
       'stop',
     ]);
@@ -552,6 +615,7 @@ describe('runGeminiAcpTurn', () => {
     ]);
     expect(result.protocolEnvelopes?.map((envelope) => envelope.kind)).toEqual([
       'turn-start',
+      'text',
       'text',
       'text',
       'turn-end',
@@ -615,8 +679,34 @@ describe('runGeminiAcpTurn', () => {
 
     expect(result.output).toBe('done');
     expect(seen).toEqual([
-      'action:/tmp/delayed.txt:late output',
       'final:done',
+      'action:/tmp/delayed.txt:late output',
     ]);
+  });
+
+  it('interleaves text chunks and tool calls correctly in the output stream', async () => {
+    const seen: string[] = [];
+
+    const result = await runGeminiAcpTurn({
+      cwd: '/tmp',
+      prompt: 'Interleave message and tool',
+      approvalPolicy: 'on-request',
+      spawnProcess: createFakeSpawn(),
+      onText: async (event) => {
+        if (!event.partial) {
+          seen.push(`text:${event.text}`);
+        }
+      },
+      onAction: async (action) => {
+        seen.push(`action:${action.title}:${action.output}`);
+      },
+    });
+
+    expect(seen).toEqual([
+      'text:Step 1',
+      'action:Check:ok',
+      'text:Step 2',
+    ]);
+    expect(result.output).toBe('Step 1\nStep 2');
   });
 });

@@ -179,7 +179,7 @@ export function projectGeminiTextMessage(input: {
     options: isCommentary
       ? {
         type: 'tool',
-        title: '생각 중...',
+        title: 'Thinking',
       }
       : undefined,
   };
