@@ -386,6 +386,12 @@ function normalizeWorkspaceClientPath(input: string): string {
   return normalized || '/';
 }
 
+function joinWorkspacePath(dirPath: string, name: string): string {
+  const normalizedDir = normalizeWorkspaceClientPath(dirPath);
+  const trimmedName = name.trim().replace(/^\/+/, '');
+  return normalizedDir === '/' ? `/${trimmedName}` : `${normalizedDir}/${trimmedName}`;
+}
+
 function buildChatUrl(sessionId: string, chatId: string): string {
   return `/sessions/${encodeURIComponent(sessionId)}?chat=${encodeURIComponent(chatId)}`;
 }
@@ -2842,9 +2848,14 @@ export function ChatInterface({
         return;
       }
 
+      const normalizedTarget = normalizeWorkspaceClientPath(detail.path);
+      const finalPath = isWorkspacePathWithinRoot(normalizedTarget, normalizedWorkspaceRootPath)
+        ? normalizedTarget
+        : joinWorkspacePath(normalizedWorkspaceRootPath, normalizedTarget);
+
       sidebarFileRequestNonceRef.current += 1;
       setSidebarFileRequest({
-        path: normalizeWorkspaceClientPath(detail.path),
+        path: finalPath,
         name: detail.name,
         nonce: sidebarFileRequestNonceRef.current,
       });
@@ -2861,7 +2872,7 @@ export function ChatInterface({
     return () => {
       window.removeEventListener(WORKSPACE_FILE_OPEN_EVENT, handleWorkspaceFileOpen as EventListener);
     };
-  }, [isCustomizationOverlayLayout, isLeftSidebarOverlayLayout]);
+  }, [isCustomizationOverlayLayout, isLeftSidebarOverlayLayout, normalizedWorkspaceRootPath]);
 
   useEffect(() => {
     const sortedInitialChats = sortSessionChats(initialChats);
