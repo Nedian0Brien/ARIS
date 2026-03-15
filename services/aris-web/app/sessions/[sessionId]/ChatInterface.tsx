@@ -5404,22 +5404,6 @@ export function ChatInterface({
                         <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
                       </div>
                       <div className={`${styles.messageBubble} ${styles.messageBubbleAgent}`}>
-                        {kindMeta.label ? (
-                          <div className={styles.messageKindRow}>
-                            <span className={`${styles.kindChip} ${getToneClass(kindMeta.tone)}`}>
-                              <KindIcon size={14} />
-                              {kindMeta.label}
-                            </span>
-                          </div>
-                        ) : null}
-                        {commentaryEvent ? (
-                          <div className={styles.messageKindRow}>
-                            <span className={`${styles.kindChip} ${getToneClass('cyan')}`}>
-                              <MessageSquareText size={14} />
-                              COMMENTARY
-                            </span>
-                          </div>
-                        ) : null}
                         {renderEventPayload(event, false, expandedResultIds[event.id] ?? !event.meta?.isThoughtCard, () => toggleResult(event.id))}
                       </div>
                     </div>
