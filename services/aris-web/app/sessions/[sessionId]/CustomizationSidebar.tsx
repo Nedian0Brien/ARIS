@@ -360,6 +360,7 @@ export function CustomizationSidebar({
   const [gitActionStatus, setGitActionStatus] = useState<string | null>(null);
   const [gitCommitMessage, setGitCommitMessage] = useState('');
   const [selectedGitPath, setSelectedGitPath] = useState<string | null>(null);
+  const [gitListTab, setGitListTab] = useState<GitDiffScope>('working');
   const [selectedGitDiffScope, setSelectedGitDiffScope] = useState<GitDiffScope>('working');
   const [gitExpandedFolders, setGitExpandedFolders] = useState<Record<string, boolean>>({});
   const [gitDiffText, setGitDiffText] = useState('');
@@ -701,6 +702,7 @@ export function CustomizationSidebar({
     setGitActionStatus(null);
     setGitCommitMessage('');
     setSelectedGitPath(null);
+    setGitListTab('working');
     setSelectedGitDiffScope('working');
     setGitExpandedFolders({});
     setGitDiffText('');
@@ -1011,16 +1013,41 @@ export function CustomizationSidebar({
   const workingGitFiles = gitOverview?.files.filter((file) => file.unstaged || file.untracked) ?? [];
   const workingGitTree = useMemo(() => buildGitFileTree(workingGitFiles), [workingGitFiles]);
   const stagedGitTree = useMemo(() => buildGitFileTree(stagedGitFiles), [stagedGitFiles]);
+  const activeGitFiles = gitListTab === 'working' ? workingGitFiles : stagedGitFiles;
+  const activeGitTree = gitListTab === 'working' ? workingGitTree : stagedGitTree;
   const parsedGitDiff = useMemo(
     () => parseGitUnifiedDiff(gitDiffText, selectedGitFile?.path ?? selectedGitPath ?? 'diff.txt'),
     [gitDiffText, selectedGitFile?.path, selectedGitPath],
   );
   const selectGitFile = useCallback((path: string, scope: GitDiffScope) => {
     setSelectedGitPath(path);
+    setGitListTab(scope);
     setGitDiffError(null);
     setSelectedGitDiffScope(scope);
     setGitExpandedFolders((current) => expandGitTreeAncestors(current, scope, path));
   }, []);
+  const handleGitListTabChange = useCallback((scope: GitDiffScope) => {
+    setGitListTab(scope);
+    const nextFiles = scope === 'working' ? workingGitFiles : stagedGitFiles;
+    const nextSelected = selectedGitPath
+      ? nextFiles.find((file) => file.path === selectedGitPath)
+      : null;
+
+    if (nextSelected) {
+      setSelectedGitDiffScope(scope);
+      return;
+    }
+
+    if (nextFiles[0]) {
+      selectGitFile(nextFiles[0].path, scope);
+      return;
+    }
+
+    setSelectedGitPath(null);
+    setSelectedGitDiffScope(scope);
+    setGitDiffText('');
+    setGitDiffError(null);
+  }, [selectedGitPath, selectGitFile, stagedGitFiles, workingGitFiles]);
   const toggleGitFolder = useCallback((scope: GitDiffScope, path: string) => {
     const key = gitTreeExpansionKey(scope, path);
     setGitExpandedFolders((current) => ({
@@ -1229,6 +1256,20 @@ export function CustomizationSidebar({
       );
     })
   ), [gitActionBusy, gitExpandedFolders, runGitAction, selectGitFile, selectedGitDiffScope, selectedGitPath, toggleGitFolder]);
+
+  useEffect(() => {
+    const nextFiles = gitListTab === 'working' ? workingGitFiles : stagedGitFiles;
+    if (nextFiles.length === 0) {
+      if (selectedGitPath && !nextFiles.some((file) => file.path === selectedGitPath)) {
+        setSelectedGitPath(null);
+      }
+      return;
+    }
+
+    if (!selectedGitPath || !nextFiles.some((file) => file.path === selectedGitPath)) {
+      selectGitFile(nextFiles[0].path, gitListTab);
+    }
+  }, [gitListTab, selectGitFile, selectedGitPath, stagedGitFiles, workingGitFiles]);
 
   return (
     <section className={`${styles.sidebarRoot} ${isMobileMode ? styles.sidebarRootMobile : ''}`}>
@@ -1679,48 +1720,42 @@ export function CustomizationSidebar({
 
                 <section className={styles.gitPanel}>
                   <div className={styles.gitSectionHeader}>
-                    <span className={styles.gitSectionTitle}>Changes</span>
+                    <div className={styles.gitSectionTabs}>
+                      <button
+                        type="button"
+                        className={`${styles.gitSectionTab} ${gitListTab === 'working' ? styles.gitSectionTabActive : ''}`}
+                        onClick={() => handleGitListTabChange('working')}
+                      >
+                        <span>Changes</span>
+                        <span className={styles.gitSectionTabCount}>{workingGitFiles.length}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`${styles.gitSectionTab} ${gitListTab === 'staged' ? styles.gitSectionTabActive : ''}`}
+                        onClick={() => handleGitListTabChange('staged')}
+                      >
+                        <span>Staged Changes</span>
+                        <span className={styles.gitSectionTabCount}>{stagedGitFiles.length}</span>
+                      </button>
+                    </div>
                     <div className={styles.gitSectionMeta}>
-                      <span>{workingGitFiles.length}</span>
                       <button
                         type="button"
                         className={styles.gitLinkButton}
-                        onClick={() => { void runGitAction('stage'); }}
-                        disabled={gitActionBusy !== null || workingGitFiles.length === 0}
+                        onClick={() => { void runGitAction(gitListTab === 'working' ? 'stage' : 'unstage'); }}
+                        disabled={gitActionBusy !== null || activeGitFiles.length === 0}
                       >
-                        Stage All
+                        {gitListTab === 'working' ? 'Stage All' : 'Unstage All'}
                       </button>
                     </div>
                   </div>
-                  {workingGitFiles.length === 0 ? (
-                    <div className={styles.gitEmptyState}>No working tree changes.</div>
+                  {activeGitFiles.length === 0 ? (
+                    <div className={styles.gitEmptyState}>
+                      {gitListTab === 'working' ? 'No working tree changes.' : 'No staged changes.'}
+                    </div>
                   ) : (
                     <div className={styles.gitFileList}>
-                      {renderGitTree(workingGitTree, 'working')}
-                    </div>
-                  )}
-                </section>
-
-                <section className={styles.gitPanel}>
-                  <div className={styles.gitSectionHeader}>
-                    <span className={styles.gitSectionTitle}>Staged Changes</span>
-                    <div className={styles.gitSectionMeta}>
-                      <span>{stagedGitFiles.length}</span>
-                      <button
-                        type="button"
-                        className={styles.gitLinkButton}
-                        onClick={() => { void runGitAction('unstage'); }}
-                        disabled={gitActionBusy !== null || stagedGitFiles.length === 0}
-                      >
-                        Unstage All
-                      </button>
-                    </div>
-                  </div>
-                  {stagedGitFiles.length === 0 ? (
-                    <div className={styles.gitEmptyState}>No staged changes.</div>
-                  ) : (
-                    <div className={styles.gitFileList}>
-                      {renderGitTree(stagedGitTree, 'staged')}
+                      {renderGitTree(activeGitTree, gitListTab)}
                     </div>
                   )}
                 </section>
