@@ -4,6 +4,14 @@ set -eu
 tries=0
 max_tries=30
 
+if command -v git >/dev/null 2>&1 && [ -d /workspace ]; then
+  find /workspace -mindepth 1 -maxdepth 2 \( -type d -name .git -o -type f -name .git \) 2>/dev/null \
+    | while IFS= read -r git_meta_path; do
+      repo_dir=$(dirname "$git_meta_path")
+      git config --global --add safe.directory "$repo_dir" >/dev/null 2>&1 || true
+    done
+fi
+
 until npm run prisma:deploy; do
   tries=$((tries + 1))
   if [ "$tries" -ge "$max_tries" ]; then
