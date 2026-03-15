@@ -174,7 +174,7 @@ export function projectGeminiTextMessage(input: {
       agent: 'gemini',
       ...(input.threadId ? { threadId: input.threadId, geminiSessionId: input.threadId } : {}),
       ...(input.messageMeta ?? {}),
-      ...(isCommentary ? { isThoughtCard: true, kind: 'unknown' } : {}),
+      ...(isCommentary ? { isThoughtCard: true, kind: 'think' } : {}),
     },
     options: isCommentary
       ? {

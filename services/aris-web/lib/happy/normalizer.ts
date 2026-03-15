@@ -318,7 +318,7 @@ function resolveEventId(
   return `evt-${idx}`;
 }
 
-function isActionKind(kind: UiEventKind): kind is 'run_execution' | 'exec_execution' | 'git_execution' | 'docker_execution' | 'command_execution' | 'file_list' | 'file_read' | 'file_write' {
+function isActionKind(kind: UiEventKind): kind is 'run_execution' | 'exec_execution' | 'git_execution' | 'docker_execution' | 'command_execution' | 'file_list' | 'file_read' | 'file_write' | 'think' {
   return kind === 'run_execution'
     || kind === 'exec_execution'
     || kind === 'git_execution'
@@ -326,7 +326,8 @@ function isActionKind(kind: UiEventKind): kind is 'run_execution' | 'exec_execut
     || kind === 'command_execution'
     || kind === 'file_list'
     || kind === 'file_read'
-    || kind === 'file_write';
+    || kind === 'file_write'
+    || kind === 'think';
 }
 
 function toUiEventKind(value: string): UiEventKind | null {

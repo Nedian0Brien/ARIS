@@ -50,6 +50,7 @@ export type UiEventKind =
   | 'file_list'
   | 'file_read'
   | 'file_write'
+  | 'think'
   | 'unknown';
 
 export type UiEventSnippet = {

@@ -182,7 +182,7 @@ type AgentMeta = {
 };
 
 type Tone = 'sky' | 'amber' | 'cyan' | 'emerald' | 'violet' | 'red' | 'git' | 'docker';
-type ActionKind = 'run_execution' | 'exec_execution' | 'git_execution' | 'docker_execution' | 'command_execution' | 'file_list' | 'file_read' | 'file_write';
+type ActionKind = 'run_execution' | 'exec_execution' | 'git_execution' | 'docker_execution' | 'command_execution' | 'file_list' | 'file_read' | 'file_write' | 'think';
 type StreamRenderItem =
   | { type: 'event'; event: UiEvent }
   | { type: 'action_overflow'; id: string; runId: string; kind: ActionKind; hiddenCount: number; expanded: boolean; timestamp: string };
@@ -300,6 +300,7 @@ function getEventKindMeta(kind: UiEventKind): { label: string; tone: Tone; Icon:
     file_list: { label: 'LIST', tone: 'cyan', Icon: FolderTree },
     file_read: { label: 'READ', tone: 'violet', Icon: FileSearch },
     file_write: { label: 'WRITE', tone: 'emerald', Icon: FilePenLine },
+    think: { label: 'THINK', tone: 'cyan', Icon: Brain },
     unknown: { label: 'EVENT', tone: 'red', Icon: CircleAlert },
   };
   return map[kind] || map.unknown;
@@ -697,7 +698,8 @@ function isActionKind(kind: UiEventKind): kind is ActionKind {
     || kind === 'command_execution'
     || kind === 'file_list'
     || kind === 'file_read'
-    || kind === 'file_write';
+    || kind === 'file_write'
+    || kind === 'think';
 }
 
 function formatClock(timestamp: string): string {
