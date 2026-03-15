@@ -34,6 +34,7 @@ import {
   X,
 } from 'lucide-react';
 import { WorkspaceFileEditor } from '@/components/files/WorkspaceFileEditor';
+import { buildGitFileTree, parseGitUnifiedDiff, type GitTreeNode } from '@/lib/git/sidebarUi';
 import styles from './CustomizationSidebar.module.css';
 
 type SidebarSurface = 'customization' | 'files' | 'git' | 'terminal';
@@ -215,6 +216,41 @@ function formatGitStatusLabel(code: string): string | null {
   return null;
 }
 
+function gitTreeExpansionKey(scope: GitDiffScope, path: string): string {
+  return `${scope}:${path}`;
+}
+
+function expandGitTreeAncestors(
+  current: Record<string, boolean>,
+  scope: GitDiffScope,
+  path: string,
+): Record<string, boolean> {
+  const segments = path.split('/').filter(Boolean);
+  if (segments.length <= 1) {
+    return current;
+  }
+
+  const next = { ...current };
+  let partial = '';
+  for (let index = 0; index < segments.length - 1; index += 1) {
+    partial = partial ? `${partial}/${segments[index]}` : (segments[index] ?? '');
+    next[gitTreeExpansionKey(scope, partial)] = true;
+  }
+  return next;
+}
+
+function getGitFileName(path: string): string {
+  return path.split('/').pop() ?? path;
+}
+
+function getGitParentLabel(path: string): string {
+  const segments = path.split('/');
+  if (segments.length <= 1) {
+    return '루트';
+  }
+  return segments.slice(0, -1).join('/');
+}
+
 function getMcpStatusClass(status: MpcServerSummary['status']): string {
   if (status === 'connected') return styles.tagGood;
   if (status === 'needs_auth') return styles.tagWarn;
@@ -325,6 +361,7 @@ export function CustomizationSidebar({
   const [gitCommitMessage, setGitCommitMessage] = useState('');
   const [selectedGitPath, setSelectedGitPath] = useState<string | null>(null);
   const [selectedGitDiffScope, setSelectedGitDiffScope] = useState<GitDiffScope>('working');
+  const [gitExpandedFolders, setGitExpandedFolders] = useState<Record<string, boolean>>({});
   const [gitDiffText, setGitDiffText] = useState('');
   const [gitDiffLoading, setGitDiffLoading] = useState(false);
   const [gitDiffError, setGitDiffError] = useState<string | null>(null);
@@ -665,6 +702,7 @@ export function CustomizationSidebar({
     setGitCommitMessage('');
     setSelectedGitPath(null);
     setSelectedGitDiffScope('working');
+    setGitExpandedFolders({});
     setGitDiffText('');
     setGitDiffError(null);
   }, [normalizedWorkspaceRootPath]);
@@ -971,6 +1009,25 @@ export function CustomizationSidebar({
   const filesCountLabel = filesSearchResults ? `검색 ${visibleFiles.length}개` : `${visibleFiles.length}개`;
   const stagedGitFiles = gitOverview?.files.filter((file) => file.staged) ?? [];
   const workingGitFiles = gitOverview?.files.filter((file) => file.unstaged || file.untracked) ?? [];
+  const workingGitTree = useMemo(() => buildGitFileTree(workingGitFiles), [workingGitFiles]);
+  const stagedGitTree = useMemo(() => buildGitFileTree(stagedGitFiles), [stagedGitFiles]);
+  const parsedGitDiff = useMemo(
+    () => parseGitUnifiedDiff(gitDiffText, selectedGitFile?.path ?? selectedGitPath ?? 'diff.txt'),
+    [gitDiffText, selectedGitFile?.path, selectedGitPath],
+  );
+  const selectGitFile = useCallback((path: string, scope: GitDiffScope) => {
+    setSelectedGitPath(path);
+    setGitDiffError(null);
+    setSelectedGitDiffScope(scope);
+    setGitExpandedFolders((current) => expandGitTreeAncestors(current, scope, path));
+  }, []);
+  const toggleGitFolder = useCallback((scope: GitDiffScope, path: string) => {
+    const key = gitTreeExpansionKey(scope, path);
+    setGitExpandedFolders((current) => ({
+      ...current,
+      [key]: !(current[key] ?? true),
+    }));
+  }, []);
   const renderFileTree = useCallback((entries: WorkspaceFileEntry[], depth = 0) => (
     entries.map((item) => {
       const isExpanded = Boolean(expandedDirectories[item.path]);
@@ -1088,6 +1145,90 @@ export function CustomizationSidebar({
       );
     })
   ), [expandedDirectories, fileActionMenuPath, filesEntriesByPath, filesErrorByPath, filesLoadingByPath, handleToggleDirectory, openFileModal]);
+  const renderGitTree = useCallback((
+    nodes: Array<GitTreeNode<GitFileEntry>>,
+    scope: GitDiffScope,
+    depth = 0,
+  ) => (
+    nodes.map((node) => {
+      if (node.kind === 'folder') {
+        const expansionKey = gitTreeExpansionKey(scope, node.path);
+        const isExpanded = gitExpandedFolders[expansionKey] ?? true;
+
+        return (
+          <div key={`${scope}-folder-${node.path}`} className={styles.gitTreeBranch}>
+            <button
+              type="button"
+              className={styles.gitFolderRow}
+              style={{ paddingLeft: `${0.5 + depth * 0.78}rem` }}
+              onClick={() => toggleGitFolder(scope, node.path)}
+              aria-label={isExpanded ? `${node.name} 폴더 접기` : `${node.name} 폴더 펼치기`}
+            >
+              {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+              {isExpanded ? <FolderOpen size={13} /> : <Folder size={13} />}
+              <span className={styles.gitFolderName}>{node.name}</span>
+              <span className={styles.gitFolderCount}>{node.fileCount}</span>
+            </button>
+            {isExpanded ? (
+              <div className={styles.gitTreeChildren}>
+                {renderGitTree(node.children, scope, depth + 1)}
+              </div>
+            ) : null}
+          </div>
+        );
+      }
+
+      const file = node.file;
+      const isWorkingScope = scope === 'working';
+      const isActive = selectedGitPath === file.path && selectedGitDiffScope === scope;
+      const badgeLabel = file.untracked
+        ? '?'
+        : isWorkingScope
+          ? file.workTreeStatus
+          : file.indexStatus;
+      const statusLabel = file.originalPath
+        ? `${file.originalPath} -> ${file.path}`
+        : formatGitStatusLabel(file.untracked ? '?' : isWorkingScope ? file.workTreeStatus : file.indexStatus);
+
+      return (
+        <article
+          key={`${scope}-${file.path}`}
+          className={`${styles.gitFileRow} ${isActive ? styles.gitFileRowActive : ''}`}
+          style={{ paddingLeft: `${0.5 + depth * 0.78}rem` }}
+        >
+          <button
+            type="button"
+            className={styles.gitFileMain}
+            onClick={() => selectGitFile(file.path, scope)}
+          >
+            <span className={`${styles.gitStatusPill} ${file.conflicted ? styles.gitStatusPillDanger : file.untracked ? styles.gitStatusPillWarn : ''}`}>
+              {badgeLabel}
+            </span>
+            <span className={styles.gitFileCopy}>
+              <span className={styles.itemTitle}>{getGitFileName(file.path)}</span>
+              <span className={styles.itemDescription}>
+                {getGitParentLabel(file.path)}
+                {' · '}
+                {statusLabel}
+              </span>
+            </span>
+          </button>
+          <button
+            type="button"
+            className={styles.gitInlineActionButton}
+            onClick={() => {
+              void runGitAction(isWorkingScope ? 'stage' : 'unstage', { paths: [file.path] });
+            }}
+            disabled={gitActionBusy !== null}
+            title={isWorkingScope ? 'Stage' : 'Unstage'}
+            aria-label={isWorkingScope ? `${file.path} 스테이징` : `${file.path} 스테이징 해제`}
+          >
+            {isWorkingScope ? '+' : '-'}
+          </button>
+        </article>
+      );
+    })
+  ), [gitActionBusy, gitExpandedFolders, runGitAction, selectGitFile, selectedGitDiffScope, selectedGitPath, toggleGitFolder]);
 
   return (
     <section className={`${styles.sidebarRoot} ${isMobileMode ? styles.sidebarRootMobile : ''}`}>
@@ -1555,43 +1696,7 @@ export function CustomizationSidebar({
                     <div className={styles.gitEmptyState}>No working tree changes.</div>
                   ) : (
                     <div className={styles.gitFileList}>
-                      {workingGitFiles.map((file) => {
-                        const isActive = selectedGitPath === file.path && selectedGitDiffScope === 'working';
-                        const badgeLabel = file.untracked ? '?' : file.workTreeStatus;
-
-                        return (
-                          <article key={`working-${file.path}`} className={`${styles.gitFileRow} ${isActive ? styles.gitFileRowActive : ''}`}>
-                            <button
-                              type="button"
-                              className={styles.gitFileMain}
-                              onClick={() => {
-                                setSelectedGitPath(file.path);
-                                setGitDiffError(null);
-                                setSelectedGitDiffScope('working');
-                              }}
-                            >
-                              <span className={`${styles.gitStatusPill} ${file.conflicted ? styles.gitStatusPillDanger : file.untracked ? styles.gitStatusPillWarn : ''}`}>
-                                {badgeLabel}
-                              </span>
-                              <span className={styles.gitFileCopy}>
-                                <span className={styles.itemTitle}>{file.path}</span>
-                                <span className={styles.itemDescription}>
-                                  {file.originalPath ? `${file.originalPath} -> ${file.path}` : formatGitStatusLabel(file.untracked ? '?' : file.workTreeStatus)}
-                                </span>
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              className={styles.gitIconButton}
-                              onClick={() => { void runGitAction('stage', { paths: [file.path] }); }}
-                              disabled={gitActionBusy !== null}
-                              title="Stage"
-                            >
-                              <ArrowUpCircle size={13} />
-                            </button>
-                          </article>
-                        );
-                      })}
+                      {renderGitTree(workingGitTree, 'working')}
                     </div>
                   )}
                 </section>
@@ -1615,39 +1720,7 @@ export function CustomizationSidebar({
                     <div className={styles.gitEmptyState}>No staged changes.</div>
                   ) : (
                     <div className={styles.gitFileList}>
-                      {stagedGitFiles.map((file) => (
-                        <article
-                          key={`staged-${file.path}`}
-                          className={`${styles.gitFileRow} ${selectedGitPath === file.path && selectedGitDiffScope === 'staged' ? styles.gitFileRowActive : ''}`}
-                        >
-                          <button
-                            type="button"
-                            className={styles.gitFileMain}
-                            onClick={() => {
-                              setSelectedGitPath(file.path);
-                              setGitDiffError(null);
-                              setSelectedGitDiffScope('staged');
-                            }}
-                          >
-                            <span className={styles.gitStatusPill}>{file.indexStatus}</span>
-                            <span className={styles.gitFileCopy}>
-                              <span className={styles.itemTitle}>{file.path}</span>
-                              <span className={styles.itemDescription}>
-                                {file.originalPath ? `${file.originalPath} -> ${file.path}` : formatGitStatusLabel(file.indexStatus)}
-                              </span>
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            className={styles.gitIconButton}
-                            onClick={() => { void runGitAction('unstage', { paths: [file.path] }); }}
-                            disabled={gitActionBusy !== null}
-                            title="Unstage"
-                          >
-                            <ArrowDownCircle size={13} />
-                          </button>
-                        </article>
-                      ))}
+                      {renderGitTree(stagedGitTree, 'staged')}
                     </div>
                   )}
                 </section>
@@ -1688,8 +1761,57 @@ export function CustomizationSidebar({
                         </div>
                       ) : selectedGitDiffScope === 'working' && selectedGitFile.untracked && !selectedGitFile.staged ? (
                         <div className={styles.gitEmptyState}>새 파일입니다. Stage 하면 diff와 함께 커밋할 수 있습니다.</div>
-                      ) : gitDiffText ? (
-                        <pre className={styles.gitDiffPre}>{gitDiffText}</pre>
+                      ) : gitDiffText && parsedGitDiff.sections.length > 0 ? (
+                        <div className={styles.gitDiffViewer}>
+                          {parsedGitDiff.sections.map((section, sectionIndex) => (
+                            section.type === 'meta' ? (
+                              <div key={`meta-${sectionIndex}`} className={styles.gitDiffMetaBlock}>
+                                {section.lines.map((line, lineIndex) => (
+                                  <span key={`meta-line-${lineIndex}`} className={styles.gitDiffMetaLine}>{line || ' '}</span>
+                                ))}
+                              </div>
+                            ) : (
+                              <section key={`hunk-${sectionIndex}`} className={styles.gitDiffHunk}>
+                                <div className={styles.gitDiffHunkHeader}>
+                                  <span className={styles.gitDiffHunkAt}>@@</span>
+                                  <span className={styles.gitDiffHunkRangeOld}>-{section.oldRange}</span>
+                                  <span className={styles.gitDiffHunkRangeNew}>+{section.newRange}</span>
+                                </div>
+                                <div className={styles.gitDiffCodeTable}>
+                                  {section.lines.map((line, lineIndex) => (
+                                    <div
+                                      key={`diff-line-${sectionIndex}-${lineIndex}`}
+                                      className={[
+                                        styles.gitDiffCodeRow,
+                                        line.type === 'add'
+                                          ? styles.gitDiffCodeRowAdd
+                                          : line.type === 'del'
+                                            ? styles.gitDiffCodeRowDel
+                                            : line.type === 'note'
+                                              ? styles.gitDiffCodeRowNote
+                                              : styles.gitDiffCodeRowContext,
+                                      ].join(' ')}
+                                    >
+                                      {line.type === 'note' ? (
+                                        <div className={styles.gitDiffCodeNote}>{line.content || ' '}</div>
+                                      ) : (
+                                        <>
+                                          <span className={styles.gitDiffLineNumber}>{line.oldLineNumber ?? ''}</span>
+                                          <span className={styles.gitDiffLineNumber}>{line.newLineNumber ?? ''}</span>
+                                          <span className={styles.gitDiffLineMarker}>{line.prefix || ' '}</span>
+                                          <code
+                                            className={styles.gitDiffCodeContent}
+                                            dangerouslySetInnerHTML={{ __html: line.highlightedHtml || '&nbsp;' }}
+                                          />
+                                        </>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </section>
+                            )
+                          ))}
+                        </div>
                       ) : (
                         <div className={styles.gitEmptyState}>선택한 범위에 표시할 diff가 없습니다.</div>
                       )
