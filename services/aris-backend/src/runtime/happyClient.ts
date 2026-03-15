@@ -4280,6 +4280,7 @@ export class HappyRuntimeStore {
                 },
                 envelopes: event.envelopes,
               });
+              await geminiMessageQueue?.flush();
             },
           });
           response = {
