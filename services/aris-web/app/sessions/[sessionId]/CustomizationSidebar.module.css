@@ -879,7 +879,7 @@
 
 .gitToolbarButton,
 .gitPrimaryButton,
-.gitIconButton,
+.gitInlineActionButton,
 .gitLinkButton,
 .gitScopeButton {
   border: 1px solid var(--sidebar-border);
@@ -900,7 +900,7 @@
 
 .gitToolbarButton:hover,
 .gitPrimaryButton:hover,
-.gitIconButton:hover,
+.gitInlineActionButton:hover,
 .gitLinkButton:hover,
 .gitScopeButton:hover {
   border-color: var(--sidebar-border-strong);
@@ -964,7 +964,7 @@
 
 .gitPrimaryButton:disabled,
 .gitToolbarButton:disabled,
-.gitIconButton:disabled,
+.gitInlineActionButton:disabled,
 .gitLinkButton:disabled,
 .gitScopeButton:disabled {
   opacity: 0.45;
@@ -1021,15 +1021,62 @@
   flex-direction: column;
 }
 
+.gitTreeBranch {
+  display: flex;
+  flex-direction: column;
+}
+
+.gitTreeChildren {
+  display: flex;
+  flex-direction: column;
+}
+
+.gitFolderRow {
+  width: 100%;
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 58%, transparent);
+  background: transparent;
+  color: var(--chat-text-muted);
+  padding: 0.34rem 0.52rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  text-align: left;
+  font-size: 0.66rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.gitFolderName {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gitFolderCount {
+  min-width: 1.4rem;
+  padding: 0.06rem 0.34rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sidebar-surface-soft) 78%, transparent);
+  color: var(--chat-text-muted);
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-align: center;
+}
+
 .gitFileRow {
   display: flex;
   align-items: stretch;
   gap: 0.46rem;
-  padding: 0.2rem 0.42rem;
+  padding: 0.2rem 0.42rem 0.2rem 0.5rem;
   border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 62%, transparent);
 }
 
-.gitFileRow:first-child {
+.gitFileList > .gitFileRow:first-child,
+.gitTreeBranch:first-child > .gitFolderRow,
+.gitTreeBranch:first-child > .gitFileRow {
   border-top: none;
 }
 
@@ -1082,7 +1129,7 @@
   gap: 0.12rem;
 }
 
-.gitIconButton {
+.gitInlineActionButton {
   width: 28px;
   height: 28px;
   border-radius: 8px;
@@ -1091,6 +1138,10 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  font-size: 0.86rem;
+  line-height: 1;
+  font-weight: 800;
+  font-family: var(--font-mono);
 }
 
 .gitScopeTabs {
@@ -1116,20 +1167,129 @@
   padding: 0.74rem;
 }
 
-.gitDiffPre {
-  margin: 0;
+.gitDiffViewer {
   min-height: 220px;
   border: 1px solid var(--sidebar-border);
   border-radius: 10px;
   background: color-mix(in srgb, black 14%, var(--surface));
-  padding: 0.76rem 0.82rem;
   overflow: auto;
-  font-size: 0.66rem;
-  line-height: 1.5;
-  color: var(--chat-text-primary);
+}
+
+.gitDiffMetaBlock {
+  padding: 0.72rem 0.82rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 64%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.14rem;
+}
+
+.gitDiffMetaLine {
+  font-size: 0.64rem;
+  line-height: 1.45;
+  color: var(--chat-text-muted);
   white-space: pre-wrap;
   word-break: break-word;
   font-family: var(--font-mono);
+}
+
+.gitDiffHunk {
+  display: flex;
+  flex-direction: column;
+}
+
+.gitDiffHunk + .gitDiffHunk {
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 64%, transparent);
+}
+
+.gitDiffHunkHeader {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.48rem 0.7rem;
+  background: color-mix(in srgb, var(--accent-sky-bg) 62%, var(--surface) 38%);
+  border-bottom: 1px solid color-mix(in srgb, var(--chat-accent) 18%, transparent);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--chat-accent);
+  font-family: var(--font-mono);
+}
+
+.gitDiffHunkAt {
+  color: var(--chat-text-primary);
+}
+
+.gitDiffHunkRangeOld {
+  color: var(--accent-red);
+}
+
+.gitDiffHunkRangeNew {
+  color: var(--accent-emerald);
+}
+
+.gitDiffCodeTable {
+  display: flex;
+  flex-direction: column;
+}
+
+.gitDiffCodeRow {
+  display: grid;
+  grid-template-columns: 44px 44px 20px minmax(0, 1fr);
+  align-items: stretch;
+  font-size: 0.66rem;
+  line-height: 1.5;
+  font-family: var(--font-mono);
+}
+
+.gitDiffCodeRowContext {
+  background: transparent;
+}
+
+.gitDiffCodeRowAdd {
+  background: color-mix(in srgb, var(--accent-emerald-bg) 62%, transparent);
+}
+
+.gitDiffCodeRowDel {
+  background: color-mix(in srgb, var(--accent-red-bg) 58%, transparent);
+}
+
+.gitDiffCodeRowNote {
+  background: color-mix(in srgb, var(--sidebar-surface-soft) 72%, transparent);
+}
+
+.gitDiffLineNumber,
+.gitDiffLineMarker {
+  padding: 0.08rem 0.4rem;
+  border-right: 1px solid color-mix(in srgb, var(--sidebar-border) 48%, transparent);
+  color: var(--chat-text-muted);
+  text-align: right;
+  user-select: none;
+}
+
+.gitDiffLineMarker {
+  text-align: center;
+}
+
+.gitDiffCodeContent {
+  margin: 0;
+  padding: 0.08rem 0.7rem 0.08rem 0.56rem;
+  font-size: 0.66rem;
+  line-height: 1.5;
+  color: var(--chat-text-primary);
+  white-space: pre;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+}
+
+.gitDiffCodeNote {
+  grid-column: 1 / -1;
+  padding: 0.12rem 0.7rem;
+  color: var(--chat-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .gitEmptyState {
@@ -1479,9 +1639,17 @@
     padding-inline: 0.22rem;
   }
 
-  .gitIconButton {
+  .gitInlineActionButton {
     align-self: stretch;
     height: auto;
+  }
+
+  .gitDiffCodeRow {
+    grid-template-columns: 36px 36px 18px minmax(0, 1fr);
+  }
+
+  .gitDiffCodeContent {
+    padding-right: 0.52rem;
   }
 
   .saveButton {
