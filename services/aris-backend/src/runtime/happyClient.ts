@@ -1599,7 +1599,7 @@ export class HappyRuntimeStore {
         streamEvent: isCommentary ? 'agent_commentary_partial' : 'agent_message_partial',
         sessionRole: 'agent',
         sessionEventType: 'text',
-        ...(isCommentary ? { isThoughtCard: true, kind: 'think' } : {}),
+        ...(isCommentary ? { isThoughtCard: true, actionType: 'think' } : {}),
         sessionEvent: {
           role: 'agent',
           ev: {
@@ -4219,6 +4219,7 @@ export class HappyRuntimeStore {
                 execCwd: nonCodexCwd,
                 threadId: meta.threadId,
               });
+              await geminiMessageQueue?.flush();
             },
             onPermission: async (request) => this.handleProviderPermissionRequest({
               session,

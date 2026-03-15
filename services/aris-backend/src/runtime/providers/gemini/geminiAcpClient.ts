@@ -1018,6 +1018,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
         source: 'assistant',
         phase: 'final',
         threadId: sessionId,
+        turnId: sessionId,
         partial: true,
       }, { threadId: sessionId }));
     }
