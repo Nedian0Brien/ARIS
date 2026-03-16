@@ -115,6 +115,72 @@ describe('collapseRealtimeGeminiPartialEvents', () => {
   });
 });
 
+describe('collapseRealtimeGeminiPartialEvents - pending actions', () => {
+  it('keeps pending action visible while DB event has not arrived yet', () => {
+    const pending = buildEvent({
+      id: 'gemini-action-pending:call-1',
+      kind: 'run_execution',
+      title: 'Run',
+      body: '$ ls -la',
+      meta: {
+        agent: 'gemini',
+        streamEvent: 'gemini_action_pending',
+        sessionCallId: 'call-1',
+      },
+    });
+
+    expect(collapseRealtimeGeminiPartialEvents([pending])).toEqual([pending]);
+  });
+
+  it('drops pending action once the final persisted action for the same callId arrives', () => {
+    const pending = buildEvent({
+      id: 'gemini-action-pending:call-1',
+      kind: 'run_execution',
+      title: 'Run',
+      body: '$ ls -la',
+      meta: {
+        agent: 'gemini',
+        streamEvent: 'gemini_action_pending',
+        sessionCallId: 'call-1',
+      },
+    });
+    const persisted = buildEvent({
+      id: 'db-action-1',
+      kind: 'run_execution',
+      title: 'Run',
+      body: '$ ls -la\nfile1.txt',
+      meta: {
+        agent: 'gemini',
+        streamEvent: 'agent_stream_action',
+        sessionCallId: 'call-1',
+      },
+    });
+
+    expect(collapseRealtimeGeminiPartialEvents([pending, persisted])).toEqual([persisted]);
+  });
+
+  it('skips pending action event when choosing the after cursor', () => {
+    const persisted = buildEvent({
+      id: 'persisted-read-1',
+      kind: 'file_read',
+      title: 'File Read',
+      body: 'some/file.ts',
+    });
+    const pending = buildEvent({
+      id: 'gemini-action-pending:call-2',
+      kind: 'run_execution',
+      title: 'Run',
+      meta: {
+        agent: 'gemini',
+        streamEvent: 'gemini_action_pending',
+        sessionCallId: 'call-2',
+      },
+    });
+
+    expect(findLatestPersistedCursorEventId([persisted, pending])).toBe('persisted-read-1');
+  });
+});
+
 describe('findLatestPersistedCursorEventId', () => {
   it('skips realtime-only Gemini partial events when choosing the after cursor', () => {
     const persisted = buildEvent({
