@@ -82,7 +82,7 @@ prepare_pm2_runtime_dir() {
 }
 
 echo "[deploy:backend-zd] building backend"
-npm --prefix "$BACKEND_DIR" run build
+PATH="$(dirname "$(which node)"):$PATH" npm --prefix "$BACKEND_DIR" run build
 
 echo "[deploy:backend-zd] staging backend runtime files"
 prepare_pm2_runtime_dir "$PM2_RUNTIME_DIR"
