@@ -3663,3 +3663,141 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+/* Agent Selector (New Chat Placeholder) */
+.agentSelectorContainer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  gap: 2.5rem;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.agentSelectorTitle {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--chat-text-primary);
+  text-align: center;
+}
+
+.agentSelectorGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 800px;
+}
+
+.agentSelectorCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1.5rem;
+  border-radius: 1.5rem;
+  background: var(--chat-popover-bg);
+  border: 1px solid var(--chat-popover-border);
+  box-shadow: var(--chat-popover-shadow);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: center;
+  gap: 1.25rem;
+}
+
+.agentSelectorCard:hover {
+  transform: translateY(-8px);
+  border-color: var(--agent-color);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+  background: var(--agent-bg);
+}
+
+.agentSelectorIconWrap {
+  width: 56px;
+  height: 56px;
+  border-radius: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--agent-bg);
+  color: var(--agent-color);
+  transition: transform 0.3s ease;
+}
+
+.agentSelectorCard:hover .agentSelectorIconWrap {
+  transform: scale(1.1) rotate(5deg);
+}
+
+.agentSelectorLabel {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--chat-text-primary);
+}
+
+.agentSelectorDesc {
+  font-size: 0.875rem;
+  color: var(--chat-text-muted);
+  line-height: 1.4;
+}
+
+/* Background Logo Watermark */
+.backgroundLogoContainer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.06;
+  animation: logoFadeIn 1s ease-out;
+}
+
+:global(html[data-theme='dark']) .backgroundLogoContainer {
+  opacity: 0.08;
+}
+
+.backgroundLogoIcon {
+  width: 240px;
+  height: 240px;
+  color: var(--agent-color, var(--chat-text-primary));
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes logoFadeIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 0.06; transform: scale(1); }
+}
+
+@media (max-width: 768px) {
+  .agentSelectorGrid {
+    grid-template-columns: 1fr;
+    max-width: 320px;
+  }
+  
+  .agentSelectorCard {
+    padding: 1.5rem;
+    flex-direction: row;
+    text-align: left;
+    gap: 1rem;
+  }
+  
+  .agentSelectorIconWrap {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+  }
+  
+  .agentSelectorDesc {
+    display: none;
+  }
+}
