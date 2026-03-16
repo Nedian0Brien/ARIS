@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
-import { getSessionEvents, getSessionRealtimeEvents, HappyHttpError } from '@/lib/happy/client';
+import { getSessionRealtimeEvents, streamSessionEvents, HappyHttpError } from '@/lib/happy/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,7 +31,9 @@ export async function GET(
   const chatId = typeof chatIdRaw === 'string' && chatIdRaw.trim().length > 0 ? chatIdRaw.trim() : undefined;
   const includeUnassigned = includeUnassignedRaw === '1' || includeUnassignedRaw === 'true';
   let cursor = typeof after === 'string' && after.trim().length > 0 ? after.trim() : null;
+  let initialLoadDone = cursor !== null;
   let realtimeCursor = 0;
+  let latestSeqHint: number | undefined = undefined;
 
   const encoder = new TextEncoder();
   let aborted = false;
@@ -62,28 +64,20 @@ export async function GET(
       void (async () => {
         while (!aborted) {
           try {
-            if (!cursor) {
-              const { events } = await getSessionEvents(sessionId, {
-                userId: auth.user.id,
-                limit: INITIAL_STREAM_PAGE_LIMIT,
+            {
+              const result = await streamSessionEvents(sessionId, {
+                after: initialLoadDone ? (cursor ?? undefined) : undefined,
+                limit: initialLoadDone ? undefined : INITIAL_STREAM_PAGE_LIMIT,
                 chatId,
                 includeUnassigned,
+                latestSeqHint,
               });
-              for (const event of events) {
-                writeEvent('event', { event });
-              }
-              cursor = events[events.length - 1]?.id ?? null;
-            } else {
-              const { events } = await getSessionEvents(sessionId, {
-                userId: auth.user.id,
-                after: cursor,
-                chatId,
-                includeUnassigned,
-              });
-              for (const event of events) {
+              latestSeqHint = result.latestSeq;
+              for (const event of result.events) {
                 writeEvent('event', { event });
                 cursor = event.id;
               }
+              initialLoadDone = true;
             }
 
             const realtime = await getSessionRealtimeEvents({

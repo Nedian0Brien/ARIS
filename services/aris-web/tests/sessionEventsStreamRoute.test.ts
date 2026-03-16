@@ -4,7 +4,7 @@ import type { UiEvent } from '@/lib/happy/types';
 
 const mocks = vi.hoisted(() => ({
   requireApiUser: vi.fn(),
-  getSessionEvents: vi.fn(),
+  streamSessionEvents: vi.fn(),
   getSessionRealtimeEvents: vi.fn(),
   HappyHttpError: class MockHappyHttpError extends Error {
     readonly status: number;
@@ -23,7 +23,7 @@ vi.mock('@/lib/auth/guard', () => ({
 }));
 
 vi.mock('@/lib/happy/client', () => ({
-  getSessionEvents: mocks.getSessionEvents,
+  streamSessionEvents: mocks.streamSessionEvents,
   getSessionRealtimeEvents: mocks.getSessionRealtimeEvents,
   HappyHttpError: mocks.HappyHttpError,
 }));
@@ -54,10 +54,9 @@ describe('session events stream route', () => {
   it('replays the initial event page when the stream starts without an after cursor', async () => {
     const initialEvent = buildEvent();
 
-    mocks.getSessionEvents.mockResolvedValueOnce({
-      session: { id: 'session-1' },
+    mocks.streamSessionEvents.mockResolvedValueOnce({
       events: [initialEvent],
-      page: { hasMoreBefore: false, hasMoreAfter: false },
+      latestSeq: 42,
     });
     mocks.getSessionRealtimeEvents.mockRejectedValueOnce(new mocks.HappyHttpError(404, 'stream closed'));
 
@@ -68,11 +67,12 @@ describe('session events stream route', () => {
 
     const payload = await response.text();
 
-    expect(mocks.getSessionEvents).toHaveBeenCalledWith('session-1', {
-      userId: 'user-1',
+    expect(mocks.streamSessionEvents).toHaveBeenCalledWith('session-1', {
+      after: undefined,
       limit: 40,
       chatId: 'chat-1',
       includeUnassigned: false,
+      latestSeqHint: undefined,
     });
     expect(payload).toContain('event: event');
     expect(payload).toContain(`"id":"${initialEvent.id}"`);

@@ -685,6 +685,54 @@ export async function getSessionEvents(
   };
 }
 
+type StreamSessionEventsOptions = {
+  after?: string;
+  limit?: number;
+  chatId?: string;
+  includeUnassigned?: boolean;
+  latestSeqHint?: number;
+};
+
+export async function streamSessionEvents(
+  sessionId: string,
+  options: StreamSessionEventsOptions = {},
+): Promise<{ events: UiEvent[]; latestSeq: number }> {
+  let latestSeq = typeof options.latestSeqHint === 'number' && options.latestSeqHint > 0
+    ? options.latestSeqHint
+    : null;
+
+  if (latestSeq === null) {
+    const sessionRaw = await fetchHappy('/v1/sessions');
+    const sessions = extractArrayPayload(sessionRaw, 'sessions');
+    const found = findSessionById(sessions, sessionId) ?? sessions[0] ?? null;
+    latestSeq = toSessionSeq(found) ?? 0;
+  }
+
+  let messages: unknown[];
+  if (options.after) {
+    const recentAfter = await listMessagesForAfterCursor(sessionId, latestSeq, options);
+    messages = recentAfter ?? await listAllSessionMessages(sessionId);
+  } else {
+    const recent = await listRecentSessionMessages(sessionId, latestSeq, options);
+    messages = recent ?? await listAllSessionMessages(sessionId);
+  }
+
+  const filteredOptions: GetSessionEventsOptions = {
+    after: options.after,
+    limit: options.limit,
+    chatId: options.chatId,
+    includeUnassigned: options.includeUnassigned,
+  };
+  const { events } = paginateEvents(filterEventsByChat(normalizeEvents(messages), filteredOptions), filteredOptions);
+
+  const nextSeq = messages.reduce((max: number, msg) => {
+    const seq = toMessageSeq(msg);
+    return seq !== null && seq > max ? seq : max;
+  }, latestSeq);
+
+  return { events, latestSeq: nextSeq };
+}
+
 export async function appendSessionMessage(input: {
   sessionId: string;
   type: 'message' | 'tool' | 'read' | 'write';
