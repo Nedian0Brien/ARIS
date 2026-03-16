@@ -4223,6 +4223,20 @@ export class HappyRuntimeStore {
             session: geminiSession,
             chatId: scopedChatId,
           });
+          this.happyEventLogger.logParsed({
+            sessionId: session.id,
+            agent: 'gemini',
+            ...(scopedChatId ? { chatId: scopedChatId } : {}),
+            model: selectedModel,
+            turnStatus: 'run_started',
+            channel: 'exec_cli',
+            stage: 'run_status',
+            payload: {
+              mode: 'acp',
+              storedThreadId: recovered.recoveredThreadId,
+              requestedThreadId,
+            },
+          });
           const geminiResponse = await geminiRuntime.sendTurn({
             session: geminiSession,
             prompt,
@@ -4249,6 +4263,23 @@ export class HappyRuntimeStore {
                   command: action.command,
                   path: action.path,
                   threadId: meta.threadId,
+                },
+              });
+              this.happyEventLogger.logParsed({
+                sessionId: session.id,
+                agent: 'gemini',
+                ...(scopedChatId ? { chatId: scopedChatId } : {}),
+                threadId: meta.threadId,
+                model: selectedModel,
+                channel: 'exec_cli',
+                stage: 'parsed_append',
+                payload: {
+                  streamEvent: 'gemini_action_pending',
+                  callId: action.callId,
+                  actionType: action.actionType,
+                  title: action.title,
+                  command: action.command,
+                  path: action.path,
                 },
               });
               await geminiMessageQueue?.enqueueToolAction({
@@ -4326,6 +4357,22 @@ export class HappyRuntimeStore {
                   partial: false,
                 },
               });
+              this.happyEventLogger.logParsed({
+                sessionId: session.id,
+                agent: 'gemini',
+                ...(scopedChatId ? { chatId: scopedChatId } : {}),
+                threadId: meta.threadId,
+                model: selectedModel,
+                channel: 'exec_cli',
+                stage: 'parsed_append',
+                payload: {
+                  streamEvent: isCommentaryText ? 'agent_commentary' : 'agent_message',
+                  phase: event.phase,
+                  turnId: event.turnId,
+                  itemId: event.itemId,
+                  textLength: normalizedText.length,
+                },
+              });
               await geminiMessageQueue?.enqueueText({
                 output: normalizedText,
                 execCwd: nonCodexCwd,
@@ -4337,6 +4384,21 @@ export class HappyRuntimeStore {
                 envelopes: event.envelopes,
               });
               await geminiMessageQueue?.flush();
+            },
+          });
+          this.happyEventLogger.logParsed({
+            sessionId: session.id,
+            agent: 'gemini',
+            ...(scopedChatId ? { chatId: scopedChatId } : {}),
+            ...(geminiResponse.threadId ? { threadId: geminiResponse.threadId } : {}),
+            model: selectedModel,
+            turnStatus: 'run_completed',
+            channel: 'exec_cli',
+            stage: 'run_status',
+            payload: {
+              agentMessagePersisted: geminiResponse.agentMessagePersisted,
+              streamedActionsPersisted: geminiResponse.streamedActionsPersisted,
+              threadIdSource: geminiResponse.threadIdSource,
             },
           });
           response = {
