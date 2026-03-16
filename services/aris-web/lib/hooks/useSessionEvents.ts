@@ -105,6 +105,7 @@ function isRealtimeOnlyEvent(event: UiEvent): boolean {
   return (
     streamEvent === 'agent_message_partial'
     || streamEvent === 'agent_commentary_partial'
+    || streamEvent === 'gemini_action_pending'
     || streamEvent === 'runtime_disconnected'
     || streamEvent === 'stream_error'
     || streamEvent === 'runtime_error'

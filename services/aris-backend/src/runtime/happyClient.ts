@@ -4214,6 +4214,24 @@ export class HappyRuntimeStore {
             mode: selectedGeminiMode,
             signal: controller.signal,
             onAction: async (action, meta) => {
+              this.appendSessionRealtimeEvent(session.id, {
+                id: `gemini-action-pending:${action.callId ?? String(Date.now())}`,
+                sessionId: session.id,
+                type: 'tool',
+                title: action.title,
+                text: [action.command, action.path].filter(Boolean).join('\n'),
+                createdAt: new Date().toISOString(),
+                meta: {
+                  agent: 'gemini',
+                  chatId: scopedChatId,
+                  streamEvent: 'gemini_action_pending',
+                  sessionCallId: action.callId ?? '',
+                  actionType: action.actionType,
+                  command: action.command,
+                  path: action.path,
+                  threadId: meta.threadId,
+                },
+              });
               await geminiMessageQueue?.enqueueToolAction({
                 action,
                 execCwd: nonCodexCwd,
@@ -4269,6 +4287,25 @@ export class HappyRuntimeStore {
                 turnId: event.turnId,
                 itemId: event.itemId,
                 threadId: meta.threadId,
+              });
+              const isCommentaryText = event.phase === 'commentary';
+              this.appendSessionRealtimeEvent(session.id, {
+                id: `gemini-final-text:${meta.threadId ?? ''}:${event.turnId ?? ''}:${event.itemId ?? ''}:${event.phase ?? 'final'}`,
+                sessionId: session.id,
+                type: isCommentaryText ? 'tool' : 'message',
+                title: isCommentaryText ? 'Thinking' : 'Text Reply',
+                text: normalizedText,
+                createdAt: new Date().toISOString(),
+                meta: {
+                  agent: 'gemini',
+                  chatId: scopedChatId,
+                  streamEvent: isCommentaryText ? 'agent_commentary' : 'agent_message',
+                  messagePhase: event.phase ?? 'final',
+                  sessionTurnId: event.turnId ?? '',
+                  sessionItemId: event.itemId ?? '',
+                  threadId: meta.threadId,
+                  partial: false,
+                },
               });
               await geminiMessageQueue?.enqueueText({
                 output: normalizedText,
