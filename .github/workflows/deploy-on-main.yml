@@ -146,6 +146,7 @@ jobs:
         run: |
           set -euo pipefail
           DEPLOY_REPO_DIR="${{ steps.resolve-deploy-repo.outputs.deploy_repo_dir }}"
+          sudo rm -rf "$DEPLOY_REPO_DIR/services/aris-backend/node_modules/.vite"
           npm --prefix "$DEPLOY_REPO_DIR/services/aris-backend" ci
 
       - name: Deploy backend (PM2 zero-downtime)
