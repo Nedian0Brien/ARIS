@@ -21,5 +21,6 @@
 - 4) 링크 이후 필요한 바이너리가 보이지 않으면 메인 체크아웃에서 의존성을 다시 설치한 뒤 `scripts/link_shared_node_modules.sh <worktree_path>` 를 다시 실행한다.
 - 5) 수정, 테스트, 커밋, 푸쉬, 머지는 모두 해당 전용 `git worktree` 내부에서만 수행한다.
 - 작업 완료 후 `main` 브랜치에 머지가 완료되면, 사용했던 전용 `git worktree`를 `git worktree remove <path>`로 제거하고, 작업에 사용된 로컬 및 원격 브랜치도 함께 삭제하여 환경을 청결하게 유지한다.
-- 런타임 로그 조회가 필요하면 먼저 `scripts/lookup_runtime_logs_by_id.sh <id>` 를 사용해 `SessionChat` / `SessionMessage` / 관련 ndjson 로그를 함께 조회한다. 기본은 exact match 기준이며, 세션 단위까지 넓혀야 하면 `--include-session-id` 를 추가한다.
-- 로그는 주로 `logs/`, `.runtime/aris-backend/logs/`, `services/aris-backend/logs/` 경로를 우선 확인한다.
+- 런타임 로그는 `logs/{YYYY}/{MM}/{DD}/` 경로에 저장된다. 파일명 형식: `chat-{agent}-{chatId}-{threadId}-parsed.ndjson` / `chat-{agent}-{chatId}-{threadId}-raw.ndjson`. `{agent}` 는 `gemini` | `claude` | `codex` | `unknown`.
+- 특정 chatId/threadId 로그 조회: `find /home/ubuntu/project/ARIS/logs -name "*<chatId>*"` 또는 `ls logs/<YYYY>/<MM>/<DD>/ | grep <chatId>`.
+- 로그 내용 확인(pretty print): `cat <파일경로> | python3 -c "import json,sys; [print(f'{o.get(\"loggedAt\",\"\")[-15:]} [{o.get(\"stage\",o.get(\"turnStatus\",\"?\"))}] {json.dumps(o.get(\"payload\",{}),ensure_ascii=False)[:120]}') for o in map(json.loads,sys.stdin)]"`
