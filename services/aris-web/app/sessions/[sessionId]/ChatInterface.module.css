@@ -1986,6 +1986,12 @@
   min-width: 0;
 }
 
+.actionCompactPrimaryBold {
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--chat-text);
+}
+
 .actionCompactResult {
   min-width: 0;
   font-size: 0.72rem;

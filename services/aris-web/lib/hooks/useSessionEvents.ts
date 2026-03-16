@@ -56,38 +56,6 @@ function mergeEvents(events: UiEvent[]): UiEvent[] {
   );
 }
 
-export function buildGeminiTextIdentity(event: UiEvent): string | null {
-  const meta = event.meta ?? {};
-  if (meta.agent !== 'gemini') {
-    return null;
-  }
-  const phase = typeof meta.messagePhase === 'string'
-    ? meta.messagePhase.trim()
-    : typeof meta.streamEvent === 'string' && meta.streamEvent.includes('commentary')
-      ? 'commentary'
-      : 'final';
-  const turnId = typeof meta.sessionTurnId === 'string' ? meta.sessionTurnId.trim() : '';
-  const itemId = typeof meta.sessionItemId === 'string' ? meta.sessionItemId.trim() : '';
-  const threadId = typeof meta.threadId === 'string' ? meta.threadId.trim() : '';
-  if (!turnId && !itemId && !threadId) {
-    return null;
-  }
-  return [phase, threadId || '__thread__', turnId || '__turn__', itemId || '__item__'].join('|');
-}
-
-function isGeminiPartialTextEvent(event: UiEvent): boolean {
-  return event.meta?.streamEvent === 'agent_message_partial'
-    || event.meta?.streamEvent === 'agent_commentary_partial';
-}
-
-function isGeminiFinalTextEvent(event: UiEvent): boolean {
-  return event.meta?.agent === 'gemini'
-    && (
-      event.meta?.streamEvent === 'agent_message'
-      || event.meta?.streamEvent === 'agent_message_recovered'
-      || event.meta?.streamEvent === 'agent_commentary'
-    );
-}
 
 function isGeminiPendingActionEvent(event: UiEvent): boolean {
   return event.meta?.streamEvent === 'gemini_action_pending';
@@ -103,9 +71,7 @@ function isRealtimeOnlyEvent(event: UiEvent): boolean {
     ? event.meta.streamEvent.trim()
     : '';
   return (
-    streamEvent === 'agent_message_partial'
-    || streamEvent === 'agent_commentary_partial'
-    || streamEvent === 'gemini_action_pending'
+    streamEvent === 'gemini_action_pending'
     || streamEvent === 'runtime_disconnected'
     || streamEvent === 'stream_error'
     || streamEvent === 'runtime_error'
@@ -124,17 +90,6 @@ export function findLatestPersistedCursorEventId(events: UiEvent[]): string | nu
 }
 
 export function collapseRealtimeGeminiPartialEvents(events: UiEvent[]): UiEvent[] {
-  const finalizedText = new Set<string>();
-  for (const event of events) {
-    if (!isGeminiFinalTextEvent(event)) {
-      continue;
-    }
-    const identity = buildGeminiTextIdentity(event);
-    if (identity) {
-      finalizedText.add(identity);
-    }
-  }
-
   const finalizedActionCallIds = new Set<string>();
   for (const event of events) {
     if (!isGeminiFinalActionEvent(event)) {
@@ -147,13 +102,6 @@ export function collapseRealtimeGeminiPartialEvents(events: UiEvent[]): UiEvent[
   }
 
   return events.filter((event) => {
-    if (isGeminiPartialTextEvent(event)) {
-      const identity = buildGeminiTextIdentity(event);
-      if (!identity) {
-        return true;
-      }
-      return !finalizedText.has(identity);
-    }
     if (isGeminiPendingActionEvent(event)) {
       const callId = typeof event.meta?.sessionCallId === 'string' ? event.meta.sessionCallId.trim() : '';
       if (!callId) {
