@@ -4215,18 +4215,14 @@ export class HappyRuntimeStore {
             signal: controller.signal,
             onAction: async (action, meta) => {
               const callId = (action.callId ?? '').trim();
-              this.appendSessionRealtimeEvent(session.id, {
-                id: callId ? `gemini-action-pending:${callId}` : `gemini-action-pending:${randomUUID()}`,
-                sessionId: session.id,
-                type: 'tool',
-                title: action.title,
-                text: [
+              await this.appendAgentMessage(
+                session.id,
+                [
                   action.command ? `$ ${action.command}` : '',
                   action.path ? `path: ${action.path}` : '',
                   action.output?.replace(/\n?0;\s*$/g, '').trim() ?? '',
                 ].filter(Boolean).join('\n').trim(),
-                createdAt: new Date().toISOString(),
-                meta: {
+                {
                   ...(scopedChatId ? { chatId: scopedChatId } : {}),
                   requestedPath: session.metadata.path,
                   actionType: action.actionType,
@@ -4239,7 +4235,8 @@ export class HappyRuntimeStore {
                   ...(meta.threadId ? { threadId: meta.threadId } : {}),
                   ...(callId ? { sessionCallId: callId } : {}),
                 },
-              });
+                { type: 'tool', title: action.title },
+              );
               await geminiMessageQueue?.enqueueToolAction({
                 action,
                 execCwd: nonCodexCwd,

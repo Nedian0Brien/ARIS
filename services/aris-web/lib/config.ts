@@ -29,6 +29,8 @@ const envSchema = z.object({
 type ParsedEnv = z.infer<typeof envSchema>;
 
 export function resolveRuntimeApiUrl(env: Pick<ParsedEnv, 'RUNTIME_API_URL' | 'HAPPY_SERVER_URL'>): string {
+  // RUNTIME_API_URL takes precedence. HAPPY_SERVER_URL is kept for legacy compatibility
+  // but should point to aris-backend (4080), not the happy server (3005).
   const next = env.RUNTIME_API_URL?.trim() || env.HAPPY_SERVER_URL?.trim() || '';
   return next || 'http://localhost:4080';
 }
