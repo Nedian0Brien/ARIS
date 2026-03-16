@@ -21,7 +21,8 @@ import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.
 import { ClaudeSessionLogTracker, extractClaudeSessionHintIds } from './providers/claude/claudeSessionScanner.js';
 import { buildClaudeSessionId } from './providers/claude/claudeSessionSource.js';
 import { GeminiMessageQueue } from './providers/gemini/geminiMessageQueue.js';
-import { inspectGeminiAcpSessionCapabilities, runGeminiAcpTurn } from './providers/gemini/geminiAcpClient.js';
+import { inspectGeminiAcpSessionCapabilities } from './providers/gemini/geminiAcpClient.js';
+import { runGeminiHeadlessTurn } from './providers/gemini/geminiHeadlessClient.js';
 import { buildGeminiProviderTextEvent } from './providers/gemini/geminiEventBridgeV2.js';
 import { looksLikeGeminiActionTranscript, parseGeminiStreamLine, parseGeminiStreamOutput } from './providers/gemini/geminiProtocolMapper.js';
 import { createGeminiRuntime } from './providers/gemini/geminiRuntime.js';
@@ -2481,31 +2482,25 @@ export class HappyRuntimeStore {
     return this.runAgentCommand(agent, command, cwdHint, signal, handlers);
   }
 
-  private async runGeminiAcpTurn(input: {
+  private async runGeminiHeadlessTurn(input: {
     session: ProviderRuntimeSession<'gemini'>;
     prompt: string;
     preferredThreadId?: string;
     model?: string;
-    mode?: string;
     signal?: AbortSignal;
     onAction?: (action: ProviderActionEvent, meta: { threadId: string }) => Promise<void>;
-    onPermission?: (request: ProviderPermissionRequest, meta: { threadId: string }) => Promise<PermissionDecision>;
     onText?: (event: ProviderTextEvent, meta: { threadId: string }) => Promise<void>;
   }) {
     const safeCwd = this.resolveExecutionCwd(input.session.metadata.path);
-    return runGeminiAcpTurn({
+    return runGeminiHeadlessTurn({
       cwd: safeCwd,
       prompt: input.prompt,
       approvalPolicy: input.session.metadata.approvalPolicy,
       model: normalizeModel(input.model) ?? undefined,
-      mode: normalizeGeminiMode(input.mode),
       preferredSessionId: input.preferredThreadId,
       signal: input.signal,
       onAction: input.onAction
         ? ((action, meta) => input.onAction!(action, meta))
-        : undefined,
-      onPermission: input.onPermission
-        ? ((request, meta) => input.onPermission!(request, meta))
         : undefined,
       onText: input.onText
         ? ((event, meta) => input.onText!(event, meta))
@@ -4220,7 +4215,7 @@ export class HappyRuntimeStore {
           const geminiRuntime = createGeminiRuntime({
             registry: this.geminiSessionRegistry,
             listMessages: async (sessionId) => this.listMessages(sessionId),
-            executeTurn: async (request) => this.runGeminiAcpTurn(request),
+            executeTurn: async (request) => this.runGeminiHeadlessTurn(request),
           });
           const recovered = await geminiRuntime.recoverSession({
             session: geminiSession,
@@ -4235,7 +4230,7 @@ export class HappyRuntimeStore {
             channel: 'exec_cli',
             stage: 'run_status',
             payload: {
-              mode: 'acp',
+              mode: 'headless',
               storedThreadId: recovered.recoveredThreadId,
               requestedThreadId,
             },
@@ -4303,13 +4298,6 @@ export class HappyRuntimeStore {
               });
               await geminiMessageQueue?.flush();
             },
-            onPermission: async (request) => this.handleProviderPermissionRequest({
-              session,
-              chatId: scopedChatId,
-              agent: 'gemini',
-              request,
-              signal: controller.signal,
-            }),
             onText: async (event, meta) => {
               if (event.partial) {
                 return;
