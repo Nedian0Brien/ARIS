@@ -4612,15 +4612,34 @@ export class HappyRuntimeStore {
 
   async listMessages(
     sessionId: string,
-    options: { afterSeq?: number; limit?: number } = {},
+    options: { afterSeq?: number; afterId?: string; limit?: number } = {},
   ): Promise<RuntimeMessage[]> {
     const session = await this.getSession(sessionId);
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
     }
 
-    const hasPaginatedRequest = options.afterSeq !== undefined || options.limit !== undefined;
+    const hasPaginatedRequest = options.afterSeq !== undefined || options.afterId !== undefined || options.limit !== undefined;
     if (hasPaginatedRequest) {
+      // afterId path: single DB-level query — no backward scan needed
+      if (typeof options.afterId === 'string' && options.afterId) {
+        const normalizedLimit = Number.isFinite(options.limit)
+          ? Math.max(1, Math.min(HAPPY_MESSAGES_PAGE_MAX_LIMIT, Math.floor(Number(options.limit))))
+          : HAPPY_MESSAGES_BATCH_LIMIT;
+        const query = new URLSearchParams({
+          after_id: options.afterId,
+          limit: String(normalizedLimit),
+        });
+        const response = await this.request<HappyMessageResponse>(
+          `/v3/sessions/${encodeURIComponent(sessionId)}/messages?${query.toString()}`,
+        );
+        const batch = Array.isArray(response.messages) ? response.messages : [];
+        return batch
+          .filter((message) => typeof message.id === 'string')
+          .map((message) => toRuntimeMessage(sessionId, message))
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      }
+
       const normalizedAfterSeq = Number.isFinite(options.afterSeq)
         ? Math.max(0, Math.floor(Number(options.afterSeq)))
         : 0;

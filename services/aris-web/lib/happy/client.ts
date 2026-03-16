@@ -306,14 +306,20 @@ async function fetchHappy(path: string, init?: RequestInit): Promise<unknown> {
 async function fetchSessionMessagesPage(
   sessionId: string,
   options: {
-    afterSeq: number;
+    afterSeq?: number;
+    afterId?: string;
     limit: number;
   },
 ): Promise<{ messages: unknown[]; hasMore: boolean; lastSeq: number }> {
-  const query = new URLSearchParams({
-    after_seq: String(Math.max(0, Math.floor(options.afterSeq))),
+  const params: Record<string, string> = {
     limit: String(clampHappyMessagesWindow(options.limit)),
-  });
+  };
+  if (typeof options.afterId === 'string' && options.afterId) {
+    params.after_id = options.afterId;
+  } else {
+    params.after_seq = String(Math.max(0, Math.floor(options.afterSeq ?? 0)));
+  }
+  const query = new URLSearchParams(params);
   const raw = await fetchHappy(`/v3/sessions/${encodeURIComponent(sessionId)}/messages?${query.toString()}`);
   const batch = extractArrayPayload(raw, 'messages');
   const response = asObject(raw);
@@ -436,6 +442,18 @@ async function listMessagesForAfterCursor(
   const recentWindow = clampHappyMessagesWindow(
     Math.min(1000, Math.max(RECENT_WINDOW_MIN, pageLimit * 10)),
   );
+
+  // Fast path: use after_id for a single DB-level query when the cursor is a UUID
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(options.after);
+  if (isUuid) {
+    const page = await fetchSessionMessagesPage(sessionId, {
+      afterId: options.after,
+      limit: recentWindow,
+    });
+    return page.messages.length > 0 ? page.messages : [];
+  }
+
+  // Fallback: seq-based backward scan (legacy cursors)
   const maxScans = 6;
   let cursor = latestSeq;
   let collected: unknown[] = [];

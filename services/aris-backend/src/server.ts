@@ -345,7 +345,7 @@ export function buildServer(config: ServerConfig) {
   app.get('/v3/sessions/:sessionId/messages', async (request, reply) => {
     try {
       const { sessionId } = request.params as { sessionId: string };
-      const { after_seq, limit } = request.query as { after_seq?: string; limit?: string };
+      const { after_seq, after_id, limit } = request.query as { after_seq?: string; after_id?: string; limit?: string };
       const session = await store.getSession(sessionId);
       if (!session) {
         return reply.code(404).send({ error: 'Session not found' });
@@ -356,13 +356,14 @@ export function buildServer(config: ServerConfig) {
       const afterSeq = Number.isFinite(parsedAfterSeq) && parsedAfterSeq >= 0
         ? parsedAfterSeq
         : undefined;
+      const afterId = typeof after_id === 'string' && after_id ? after_id : undefined;
       const pageLimit = Number.isFinite(parsedLimit) && parsedLimit > 0
         ? Math.min(1000, parsedLimit)
         : undefined;
 
       const readLimit = pageLimit ? pageLimit + 1 : undefined;
       const rawMessages = await store.listMessages(sessionId, {
-        ...(afterSeq !== undefined ? { afterSeq } : {}),
+        ...(afterId !== undefined ? { afterId } : afterSeq !== undefined ? { afterSeq } : {}),
         ...(readLimit !== undefined ? { limit: readLimit } : {}),
       });
       const hasMore = pageLimit ? rawMessages.length > pageLimit : undefined;

@@ -55,7 +55,7 @@ interface RuntimeStoreBackend {
   getSession(sessionId: string): Promise<RuntimeSession | null>;
   getGeminiSessionCapabilities?(sessionId: string): Promise<GeminiSessionCapabilities>;
   createSession(input: CreateSessionInput): Promise<RuntimeSession>;
-  listMessages(sessionId: string, options?: { afterSeq?: number; limit?: number }): Promise<RuntimeMessage[]>;
+  listMessages(sessionId: string, options?: { afterSeq?: number; afterId?: string; limit?: number }): Promise<RuntimeMessage[]>;
   listRealtimeEvents?(sessionId: string, options?: { afterCursor?: number; limit?: number; chatId?: string }): Promise<{ events: RuntimeMessage[]; cursor: number }>;
   appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage>;
   applySessionAction(sessionId: string, action: SessionAction, chatId?: string): Promise<{ accepted: boolean; message: string; at: string }>;
@@ -132,7 +132,7 @@ class MockRuntimeStore implements RuntimeStoreBackend {
     return session;
   }
 
-  async listMessages(sessionId: string, options: { afterSeq?: number; limit?: number } = {}): Promise<RuntimeMessage[]> {
+  async listMessages(sessionId: string, options: { afterSeq?: number; afterId?: string; limit?: number } = {}): Promise<RuntimeMessage[]> {
     const base = this.messages.get(sessionId) ?? [];
     const sorted = [...base].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const withSeq = sorted.map((message, index) => ({
@@ -142,6 +142,17 @@ class MockRuntimeStore implements RuntimeStoreBackend {
         seq: index + 1,
       },
     }));
+
+    // afterId: find the index of that message and slice everything after it
+    if (typeof options.afterId === 'string' && options.afterId) {
+      const idx = withSeq.findIndex((m) => m.id === options.afterId);
+      const afterIdFiltered = idx >= 0 ? withSeq.slice(idx + 1) : withSeq;
+      const normalizedLimit = Number.isFinite(options.limit)
+        ? Math.max(1, Math.floor(Number(options.limit)))
+        : null;
+      return normalizedLimit === null ? afterIdFiltered : afterIdFiltered.slice(0, normalizedLimit);
+    }
+
     const normalizedAfterSeq = Number.isFinite(options.afterSeq)
       ? Math.max(0, Math.floor(Number(options.afterSeq)))
       : 0;
@@ -362,7 +373,7 @@ export class RuntimeStore {
     return this.delegate.createSession(input);
   }
 
-  async listMessages(sessionId: string, options?: { afterSeq?: number; limit?: number }) {
+  async listMessages(sessionId: string, options?: { afterSeq?: number; afterId?: string; limit?: number }) {
     return this.delegate.listMessages(sessionId, options);
   }
 
