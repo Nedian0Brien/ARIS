@@ -913,7 +913,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
     return finalizedMessage;
   };
 
-  const handleUpdate = (payload: Record<string, unknown>) => {
+  const handleUpdate = async (payload: Record<string, unknown>) => {
     const params = asRecord(payload.params) ?? {};
     const update = asRecord(params.update) ?? {};
     const updateType = asString(update.sessionUpdate, '').trim();
@@ -991,7 +991,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
           stopReason,
         }));
         if (input.onAction) {
-          emitChain = emitChain.then(() => input.onAction?.(action, { threadId: sessionId }));
+          await input.onAction(action, { threadId: sessionId });
           streamedActionCount += 1;
         } else {
           inferredActions.push(action);
@@ -1039,7 +1039,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
     const hasId = Object.prototype.hasOwnProperty.call(payload, 'id');
 
     if (method === 'session/update') {
-      handleUpdate(payload);
+      emitChain = emitChain.then(() => handleUpdate(payload)).catch(() => undefined);
       return;
     }
 
