@@ -19,6 +19,7 @@ type LogStage = 'incoming_raw' | 'incoming_payload' | 'parsed_append' | 'run_sta
 
 export type HappyRawLogRecord = {
   sessionId: string;
+  agent?: string;
   chatId?: string;
   threadId?: string;
   model?: string;
@@ -29,6 +30,7 @@ export type HappyRawLogRecord = {
 
 export type HappyParsedLogRecord = {
   sessionId: string;
+  agent?: string;
   chatId?: string;
   threadId?: string;
   model?: string;
@@ -101,6 +103,7 @@ export class HappyEventLogger {
 
   private getConversationKey(record: unknown): string {
     const parsedRecord = record as {
+      agent?: unknown;
       chatId?: unknown;
       threadId?: unknown;
       payload?: unknown;
@@ -109,6 +112,12 @@ export class HappyEventLogger {
     const sessionId = this.normalizeLogId(
       typeof parsedRecord.sessionId === 'string'
         ? parsedRecord.sessionId
+        : undefined,
+    );
+
+    const agent = this.normalizeLogId(
+      typeof parsedRecord.agent === 'string'
+        ? parsedRecord.agent
         : undefined,
     );
 
@@ -123,10 +132,11 @@ export class HappyEventLogger {
         : this.extractThreadIdFromPayload(parsedRecord.payload),
     );
 
+    const safeAgent = agent || 'unknown';
     const safeChatId = chatId || 'no-chat';
     const safeThreadId = threadId || sessionId || 'no-thread';
 
-    return `${safeChatId}-${safeThreadId}`;
+    return `chat-${safeAgent}-${safeChatId}-${safeThreadId}`;
   }
 
   private extractThreadIdFromPayload(payload: unknown): string | undefined {

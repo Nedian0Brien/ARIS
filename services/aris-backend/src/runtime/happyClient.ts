@@ -1827,6 +1827,7 @@ export class HappyRuntimeStore {
     const channel = input.agent === 'codex' && CODEX_RUNTIME_MODE !== 'exec' ? 'app_server' : 'exec_cli';
     this.happyEventLogger.logParsed({
       sessionId: input.sessionId,
+      agent: input.agent,
       ...(input.chatId ? { chatId: input.chatId } : {}),
       ...(input.model ? { model: input.model } : {}),
       turnStatus: 'run_stale_cleanup',
@@ -2644,6 +2645,7 @@ export class HappyRuntimeStore {
     });
     this.happyEventLogger.logParsed({
       sessionId: session.id,
+      agent: 'codex',
       ...(chatId ? { chatId } : {}),
       model: selectedModel,
       turnStatus: 'run_started',
@@ -2703,6 +2705,7 @@ export class HappyRuntimeStore {
     ) => {
       this.happyEventLogger.logParsed({
         sessionId: session.id,
+        agent: 'codex',
         ...(chatId ? { chatId } : {}),
         model: selectedModel,
         channel: 'app_server',
@@ -3103,6 +3106,7 @@ export class HappyRuntimeStore {
         const errorMessage = asString(asRecord(turn?.error)?.message, '').trim() || undefined;
         this.happyEventLogger.logParsed({
           sessionId: session.id,
+          agent: 'codex',
           ...(chatId ? { chatId } : {}),
           model: selectedModel,
           turnStatus: status,
@@ -3129,6 +3133,7 @@ export class HappyRuntimeStore {
       const rawLine = line.trim();
       this.happyEventLogger.logRaw({
         sessionId: session.id,
+        agent: 'codex',
         ...(chatId ? { chatId } : {}),
         model: selectedModel,
         channel: 'app_server',
@@ -3138,6 +3143,7 @@ export class HappyRuntimeStore {
       if (!payload) {
         this.happyEventLogger.logParsed({
           sessionId: session.id,
+          agent: 'codex',
           ...(chatId ? { chatId } : {}),
           model: selectedModel,
           channel: 'app_server',
@@ -3148,6 +3154,7 @@ export class HappyRuntimeStore {
       }
       this.happyEventLogger.logParsed({
         sessionId: session.id,
+        agent: 'codex',
         ...(chatId ? { chatId } : {}),
         model: selectedModel,
         channel: 'app_server',
@@ -3307,6 +3314,7 @@ export class HappyRuntimeStore {
       activeTurnId = asString(asRecord(turnStarted.turn)?.id, '').trim();
       this.happyEventLogger.logParsed({
         sessionId: session.id,
+        agent: 'codex',
         ...(chatId ? { chatId } : {}),
         model: selectedModel,
         turnStatus: 'turn_started',
@@ -3405,6 +3413,7 @@ export class HappyRuntimeStore {
         }
         this.happyEventLogger.logParsed({
           sessionId: session.id,
+          agent: 'codex',
           ...(chatId ? { chatId } : {}),
           model: selectedModel,
           turnStatus: 'turn_incomplete',
@@ -3420,6 +3429,7 @@ export class HappyRuntimeStore {
       }
       this.happyEventLogger.logParsed({
         sessionId: session.id,
+        agent: 'codex',
         ...(chatId ? { chatId } : {}),
         model: selectedModel,
         turnStatus: runStatus,
@@ -3477,6 +3487,7 @@ export class HappyRuntimeStore {
     });
     this.happyEventLogger.logParsed({
       sessionId: session.id,
+      agent: 'codex',
       ...(chatId ? { chatId } : {}),
       model: selectedModel,
       turnStatus: 'run_started',
@@ -3507,6 +3518,7 @@ export class HappyRuntimeStore {
     ) => {
       this.happyEventLogger.logParsed({
         sessionId: session.id,
+        agent: 'codex',
         ...(chatId ? { chatId } : {}),
         model: selectedModel,
         channel: 'exec_cli',
@@ -3569,6 +3581,7 @@ export class HappyRuntimeStore {
       const rawLine = line.trim();
       this.happyEventLogger.logRaw({
         sessionId: session.id,
+        agent: 'codex',
         ...(chatId ? { chatId } : {}),
         model: selectedModel,
         channel: 'exec_cli',
@@ -3578,6 +3591,7 @@ export class HappyRuntimeStore {
       if (!payload) {
         this.happyEventLogger.logParsed({
           sessionId: session.id,
+          agent: 'codex',
           ...(chatId ? { chatId } : {}),
           model: selectedModel,
           channel: 'exec_cli',
@@ -3588,6 +3602,7 @@ export class HappyRuntimeStore {
       }
       this.happyEventLogger.logParsed({
         sessionId: session.id,
+        agent: 'codex',
         ...(chatId ? { chatId } : {}),
         model: selectedModel,
         channel: 'exec_cli',
@@ -3744,6 +3759,7 @@ export class HappyRuntimeStore {
     if (signal?.aborted) {
       this.happyEventLogger.logParsed({
         sessionId: session.id,
+        agent: 'codex',
         ...(chatId ? { chatId } : {}),
         model: selectedModel,
         turnStatus: 'aborted',
@@ -3766,6 +3782,7 @@ export class HappyRuntimeStore {
       const detail = stripAnsi(stderr).slice(0, 800) || `exit code ${result.code}`;
       this.happyEventLogger.logParsed({
         sessionId: session.id,
+        agent: 'codex',
         ...(chatId ? { chatId } : {}),
         model: selectedModel,
         turnStatus: 'failed',
@@ -3782,6 +3799,7 @@ export class HappyRuntimeStore {
 
     this.happyEventLogger.logParsed({
       sessionId: session.id,
+      agent: 'codex',
       ...(chatId ? { chatId } : {}),
       model: selectedModel,
       turnStatus: 'completed',
@@ -3892,6 +3910,7 @@ export class HappyRuntimeStore {
     if (modelSelection.source !== 'requested') {
       this.happyEventLogger.logParsed({
         sessionId: session.id,
+        agent: flavor,
         ...(scopedChatId ? { chatId: scopedChatId } : {}),
         model: selectedModel,
         ...(selectedGeminiMode ? { geminiMode: selectedGeminiMode } : {}),
