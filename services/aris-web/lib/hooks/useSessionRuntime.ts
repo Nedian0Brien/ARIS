@@ -11,6 +11,7 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null, ena
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log(`[DBG:useSessionRuntime] effect cacheKey=${cacheKey} enabled=${enabled}`);
     let disposed = false;
     let inFlight = false;
     let stopped = false;
@@ -18,6 +19,7 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null, ena
     setRuntimeError(null);
 
     if (!enabled) {
+      console.log(`[DBG:useSessionRuntime] DISABLED — skipping poll`);
       return undefined;
     }
 
@@ -55,6 +57,7 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null, ena
         const body = (await response.json()) as { isRunning?: boolean };
         if (!disposed) {
           const nextIsRunning = Boolean(body.isRunning);
+          console.log(`[DBG:useSessionRuntime] poll result cacheKey=${cacheKey} isRunning=${nextIsRunning}`);
           runtimeStateCache.set(cacheKey, nextIsRunning);
           setIsRunning(nextIsRunning);
           setRuntimeError(null);

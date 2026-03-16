@@ -2216,15 +2216,23 @@ export function ChatInterface({
     activeChatId,
     isSessionSyncLeader,
   );
+  const _runtimeEnabled = isSessionSyncLeader && (
+    isAuxSyncReady
+    || activeChatRuntimeUi.isAwaitingReply
+    || activeChatRuntimeUi.isSubmitting
+    || activeChatRuntimeUi.isAborting
+  );
+  if (typeof window !== 'undefined') {
+    const _prev = (window as Record<string, unknown>).__dbgRuntimeEnabled;
+    if (_prev !== _runtimeEnabled) {
+      console.log(`[DBG:runtimeEnabled] ${String(_prev)} → ${_runtimeEnabled} | isSessionSyncLeader=${isSessionSyncLeader} isAuxSyncReady=${isAuxSyncReady} isAwaitingReply=${activeChatRuntimeUi.isAwaitingReply} isSubmitting=${activeChatRuntimeUi.isSubmitting} isAborting=${activeChatRuntimeUi.isAborting}`);
+      (window as Record<string, unknown>).__dbgRuntimeEnabled = _runtimeEnabled;
+    }
+  }
   const { isRunning: runtimeRunning, runtimeError } = useSessionRuntime(
     sessionId,
     activeChatIdResolved,
-    isSessionSyncLeader && (
-      isAuxSyncReady
-      || activeChatRuntimeUi.isAwaitingReply
-      || activeChatRuntimeUi.isSubmitting
-      || activeChatRuntimeUi.isAborting
-    ),
+    _runtimeEnabled,
   );
   const {
     displayPermissions,
@@ -2536,6 +2544,14 @@ export function ChatInterface({
     runStatus: latestRunStatus,
     hasPendingPermission: effectivePendingPermissions.length > 0,
   });
+  // DBG: runPhase 변화 추적
+  if (typeof window !== 'undefined') {
+    const _prev = (window as Record<string, unknown>).__dbgRunPhase;
+    if (_prev !== runPhase) {
+      console.log(`[DBG:runPhase] ${String(_prev)} → ${runPhase} | isSubmitting=${isSubmitting} isAwaitingReply=${isAwaitingReply} runtimeRunning=${runtimeRunning} latestRunStatus="${latestRunStatus}" hasCompletionSignal=${hasCompletionSignal} isAborting=${isAborting}`);
+      (window as Record<string, unknown>).__dbgRunPhase = runPhase;
+    }
+  }
   const runPhaseLabel = runPhase === 'idle' ? null : CHAT_RUN_PHASE_LABELS[runPhase];
   const isRunActive = runPhase === 'submitting' || runPhase === 'running' || runPhase === 'approval' || runPhase === 'aborting';
   const isAgentRunning = runPhase !== 'idle';
@@ -4009,6 +4025,7 @@ export function ChatInterface({
       return;
     }
 
+    console.log(`[DBG:completionSignal] hasCompletionSignal=true, isAwaitingReply=false (since=${awaitingReplySince})`);
     updateActiveChatRuntimeUi({
       hasCompletionSignal: true,
       isAwaitingReply: false,
@@ -4554,6 +4571,7 @@ export function ChatInterface({
     const submitModelReasoningEffort = codexReasoningEffort;
 
     const awaitingSince = new Date().toISOString();
+    console.log(`[DBG:submit] chatId=${scopedChatId} agent=${activeChat?.agent} → setting isSubmitting=true isAwaitingReply=true`);
     updateChatRuntimeUi(scopedChatId, {
       isSubmitting: true,
       isAwaitingReply: true,
@@ -4661,6 +4679,7 @@ export function ChatInterface({
       setPrompt('');
       setContextItems([]);
     } catch (error) {
+      console.log(`[DBG:submit] ERROR → isAwaitingReply=false`, error);
       updateChatRuntimeUi(scopedChatId, {
         isAwaitingReply: false,
         hasCompletionSignal: false,
@@ -4669,6 +4688,7 @@ export function ChatInterface({
       });
       runtimeStartedSinceAwaitingRef.current = false;
     } finally {
+      console.log(`[DBG:submit] finally → isSubmitting=false`);
       updateChatRuntimeUi(scopedChatId, { isSubmitting: false });
     }
   }
