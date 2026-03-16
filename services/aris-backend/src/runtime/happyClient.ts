@@ -4214,29 +4214,6 @@ export class HappyRuntimeStore {
             mode: selectedGeminiMode,
             signal: controller.signal,
             onAction: async (action, meta) => {
-              const callId = (action.callId ?? '').trim();
-              await this.appendAgentMessage(
-                session.id,
-                [
-                  action.command ? `$ ${action.command}` : '',
-                  action.path ? `path: ${action.path}` : '',
-                  action.output?.replace(/\n?0;\s*$/g, '').trim() ?? '',
-                ].filter(Boolean).join('\n').trim(),
-                {
-                  ...(scopedChatId ? { chatId: scopedChatId } : {}),
-                  requestedPath: session.metadata.path,
-                  actionType: action.actionType,
-                  normalizedActionKind: action.actionType,
-                  command: action.command,
-                  path: action.path,
-                  streamEvent: 'gemini_action_pending',
-                  agent: 'gemini',
-                  ...(selectedModel ? { model: selectedModel } : {}),
-                  ...(meta.threadId ? { threadId: meta.threadId } : {}),
-                  ...(callId ? { sessionCallId: callId } : {}),
-                },
-                { type: 'tool', title: action.title },
-              );
               await geminiMessageQueue?.enqueueToolAction({
                 action,
                 execCwd: nonCodexCwd,
