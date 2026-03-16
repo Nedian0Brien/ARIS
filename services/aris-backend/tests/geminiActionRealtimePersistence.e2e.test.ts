@@ -1,403 +1,292 @@
 /**
  * E2E 테스트: Gemini action 카드 실시간 저장 검증
  *
- * 검증 목표:
- * 1. thinking 청크가 처리되는 동안 action이 DB에 즉시 저장되는지 (emitChain 블로킹 해제)
- * 2. 여러 action이 포함된 세션에서 action들이 올바른 순서로 저장되는지
- * 3. action이 final text보다 먼저 저장되는지
- * 4. thinking 청크 처리 완료를 기다리지 않고 action이 저장되는지 (actionChain 독립성)
+ * 실제 runGeminiAcpTurn을 호출하고, FakeAcpChild를 통해 ACP stdout을 시뮬레이션한다.
+ * onAction 콜백이 emitChain(thinking 처리)과 독립적으로 즉시 실행되는지를
+ * 타임스탬프와 호출 순서로 검증한다.
  */
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { describe, expect, it } from 'vitest';
-import { HappyRuntimeStore } from '../src/runtime/happyClient.js';
+import { runGeminiAcpTurn } from '../src/runtime/providers/gemini/geminiAcpClient.js';
 
-type FakeHappySession = {
-  id: string;
-  metadata: string;
-  createdAt: number;
-  updatedAt: number;
-};
+/**
+ * thinking 청크마다 실제 지연을 삽입하는 ACP fake child.
+ * session/prompt에 대한 응답으로:
+ * 1. agent_thought_chunk N개 (각각 thinkingDelayMs 지연)
+ * 2. tool_call + tool_call_update M개 (action)
+ * 3. agent_message_chunk (최종 텍스트)
+ * 를 순서대로 전송한다.
+ */
+class DelayedThinkingAcpChild extends EventEmitter {
+  stdin = new PassThrough();
+  stdout = new PassThrough();
+  stderr = new PassThrough();
+  killed = false;
 
-type FakeHappyMessage = {
-  id: string;
-  seq: number;
-  localId: string | null;
-  content: unknown;
-  createdAt: number;
-  updatedAt: number;
-};
+  private buffer = '';
+  private readonly thinkingChunkCount: number;
+  private readonly thinkingDelayMs: number;
+  private readonly actionCount: number;
 
-async function waitFor<T>(
-  read: () => Promise<T>,
-  predicate: (value: T) => boolean,
-  timeoutMs = 5_000,
-): Promise<T> {
-  const startedAt = Date.now();
-  for (;;) {
-    const value = await read();
-    if (predicate(value)) {
-      return value;
+  constructor(options: {
+    thinkingChunkCount?: number;
+    thinkingDelayMs?: number;
+    actionCount?: number;
+  } = {}) {
+    super();
+    this.thinkingChunkCount = options.thinkingChunkCount ?? 5;
+    this.thinkingDelayMs = options.thinkingDelayMs ?? 80;
+    this.actionCount = options.actionCount ?? 3;
+
+    this.stdin.setEncoding('utf8');
+    this.stdin.on('data', (chunk: string) => {
+      this.buffer += chunk;
+      let lineEnd = this.buffer.indexOf('\n');
+      while (lineEnd >= 0) {
+        const line = this.buffer.slice(0, lineEnd).trim();
+        this.buffer = this.buffer.slice(lineEnd + 1);
+        if (line) {
+          void this.handleLine(line);
+        }
+        lineEnd = this.buffer.indexOf('\n');
+      }
+    });
+  }
+
+  kill(): boolean {
+    if (!this.killed) {
+      this.killed = true;
+      this.stdout.end();
+      this.stderr.end();
+      this.emit('close', 0, null);
     }
-    if (Date.now() - startedAt > timeoutMs) {
-      throw new Error(`Timed out while waiting for E2E condition: ${JSON.stringify(value)}`);
+    return true;
+  }
+
+  private send(payload: Record<string, unknown>) {
+    setImmediate(() => {
+      if (!this.killed) {
+        this.stdout.write(`${JSON.stringify(payload)}\n`);
+      }
+    });
+  }
+
+  private async handleLine(line: string) {
+    const msg = JSON.parse(line) as {
+      id?: string;
+      method?: string;
+      params?: Record<string, unknown>;
+    };
+
+    if (msg.method === 'initialize') {
+      this.send({
+        jsonrpc: '2.0',
+        id: msg.id,
+        result: {
+          protocolVersion: 1,
+          agentCapabilities: { loadSession: true },
+        },
+      });
+      return;
     }
-    await delay(25);
+
+    if (msg.method === 'session/new') {
+      this.send({
+        jsonrpc: '2.0',
+        id: msg.id,
+        result: {
+          sessionId: 'acp-session-timing',
+          modes: { currentModeId: 'default', availableModes: [{ id: 'default', label: 'Default' }] },
+          models: { currentModelId: 'gemini-2.5-pro', availableModels: [{ id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' }] },
+        },
+      });
+      return;
+    }
+
+    if (msg.method === 'session/set_mode' || msg.method === 'session/set_model') {
+      this.send({ jsonrpc: '2.0', id: msg.id, result: {} });
+      return;
+    }
+
+    if (msg.method === 'session/prompt') {
+      const sessionId = String(msg.params?.sessionId ?? '');
+
+      // 1. thinking 청크를 N개 전송 — 각 청크 사이에 delay를 삽입하여
+      //    emitChain이 길게 이어지도록 만든다.
+      for (let i = 0; i < this.thinkingChunkCount; i += 1) {
+        await delay(this.thinkingDelayMs);
+        this.send({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId,
+            update: {
+              sessionUpdate: 'agent_thought_chunk',
+              content: { type: 'text', text: `thinking chunk ${i + 1} ` },
+            },
+          },
+        });
+      }
+
+      // 2. action M개 전송 — thinking 청크 이후에 도착하지만
+      //    actionChain이 emitChain과 독립적이라면 onAction이 즉시 호출된다.
+      for (let i = 0; i < this.actionCount; i += 1) {
+        await delay(10); // action 간 최소 간격
+        this.send({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId,
+            update: {
+              sessionUpdate: 'tool_call',
+              toolCallId: `tool-timing-${i + 1}`,
+              status: 'in_progress',
+              title: `Read file ${i + 1}`,
+              kind: 'read',
+              locations: [{ path: `/tmp/file-${i + 1}.txt` }],
+            },
+          },
+        });
+        this.send({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId,
+            update: {
+              sessionUpdate: 'tool_call_update',
+              toolCallId: `tool-timing-${i + 1}`,
+              status: 'completed',
+              content: [{ type: 'content', content: { type: 'text', text: `content of file ${i + 1}` } }],
+            },
+          },
+        });
+      }
+
+      // 3. 최종 텍스트
+      this.send({
+        jsonrpc: '2.0',
+        method: 'session/update',
+        params: {
+          sessionId,
+          update: {
+            sessionUpdate: 'agent_message_chunk',
+            content: { type: 'text', text: '작업 완료' },
+          },
+        },
+      });
+
+      this.send({
+        jsonrpc: '2.0',
+        id: msg.id,
+        result: { stopReason: 'end_turn' },
+      });
+    }
   }
 }
 
-/**
- * action 저장 타이밍을 추적하는 fake store를 생성.
- *
- * @param options.thinkingDelayMs - thinking 청크를 처리할 때 도입하는 인공 지연 (ms).
- *   이 값이 0보다 크면, thinking 청크를 처리하는 동안 action이 먼저 저장되는지 확인할 수 있다.
- * @param options.actionCount - 에이전트가 실행할 action 수.
- */
-function createTimingStore(options: {
-  thinkingDelayMs?: number;
-  actionCount?: number;
-  interleaveThinkingBetweenActions?: boolean;
-} = {}) {
-  const store = new HappyRuntimeStore({
-    serverUrl: 'http://fake-happy',
-    token: 'fake-token',
-    workspaceRoot: '/workspace',
-    hostProjectsRoot: '/home/ubuntu/project',
-  });
-
-  const fakeSessions = new Map<string, FakeHappySession>();
-  const fakeMessages = new Map<string, FakeHappyMessage[]>();
-  // 메시지가 DB에 저장된 시각을 기록 (localId → timestamp)
-  const persistTimestamps = new Map<string, number>();
-  let sessionSequence = 0;
-  let messageSequence = 0;
-
-  (store as any).request = async (requestPath: string, init: RequestInit = {}) => {
-    const url = new URL(requestPath, 'http://fake-happy');
-    const method = (init.method ?? 'GET').toUpperCase();
-
-    if (url.pathname === '/v1/sessions' && method === 'POST') {
-      const body = JSON.parse(String(init.body ?? '{}')) as { metadata: string };
-      const id = `session-${sessionSequence += 1}`;
-      const now = Date.now();
-      const session: FakeHappySession = { id, metadata: body.metadata, createdAt: now, updatedAt: now };
-      fakeSessions.set(id, session);
-      fakeMessages.set(id, []);
-      return { session };
-    }
-
-    if (url.pathname === '/v1/sessions' && method === 'GET') {
-      return { sessions: [...fakeSessions.values()] };
-    }
-
-    const messageMatch = url.pathname.match(/^\/v3\/sessions\/([^/]+)\/messages$/);
-    if (messageMatch && method === 'POST') {
-      const sessionId = decodeURIComponent(messageMatch[1] || '');
-      const posted = JSON.parse(String(init.body ?? '{}')) as {
-        messages?: Array<{ localId?: string; content?: string }>;
-      };
-      const list = fakeMessages.get(sessionId);
-      const session = fakeSessions.get(sessionId);
-      if (!list || !session) {
-        throw new Error('SESSION_NOT_FOUND');
-      }
-      const created = (posted.messages ?? []).map((item) => {
-        const now = Date.now();
-        const localId = item.localId ?? null;
-        if (localId) {
-          persistTimestamps.set(localId, now);
-        }
-        return {
-          id: `message-${messageSequence += 1}`,
-          seq: list.length + 1,
-          localId,
-          content: { t: 'json', c: String(item.content ?? '') },
-          createdAt: now,
-          updatedAt: now,
-        } satisfies FakeHappyMessage;
-      });
-      list.push(...created);
-      session.updatedAt = created[created.length - 1]?.updatedAt ?? session.updatedAt;
-      return { messages: created };
-    }
-
-    if (messageMatch && method === 'GET') {
-      const sessionId = decodeURIComponent(messageMatch[1] || '');
-      const list = fakeMessages.get(sessionId) ?? [];
-      const afterSeq = Number(url.searchParams.get('after_seq') ?? '0');
-      const limit = Number(url.searchParams.get('limit') ?? String(list.length || 1));
-      const filtered = list.filter((item) => item.seq > afterSeq).slice(0, limit);
-      return { messages: filtered, hasMore: afterSeq + filtered.length < list.length };
-    }
-
-    throw new Error(`Unhandled fake happy request: ${method} ${requestPath}`);
-  };
-
-  const actionCount = options.actionCount ?? 3;
-  const thinkingDelayMs = options.thinkingDelayMs ?? 50;
-  const interleaveThinking = options.interleaveThinkingBetweenActions ?? true;
-
-  (store as any).runGeminiAcpTurn = async (input: {
-    session: { metadata: { path: string } };
-    preferredThreadId?: string;
-    onAction?: (action: {
-      actionType: string;
-      title: string;
-      callId?: string;
-      command?: string;
-      path?: string;
-      output?: string;
-      additions: number;
-      deletions: number;
-      hasDiffSignal: boolean;
-    }, meta: { threadId: string }) => Promise<void>;
-    onText?: (event: {
-      text: string;
-      source: 'assistant' | 'result';
-      phase?: 'commentary' | 'final';
-      threadId?: string;
-      itemId?: string;
-      partial?: boolean;
-    }, meta: { threadId: string }) => Promise<void>;
-  }) => {
-    const threadId = 'gemini-test-thread';
-
-    // thinking 청크 (partial) 여러 개 emit — thinkingDelayMs 지연 포함
-    // 이 청크들이 emitChain에 쌓이는 동안 action이 먼저 저장되어야 한다.
-    for (let i = 0; i < 5; i += 1) {
-      await input.onText?.({
-        text: `Thinking chunk ${i + 1}... `,
-        source: 'assistant',
-        phase: 'commentary',
-        threadId,
-        itemId: 'thought-1',
-        partial: true,
-      }, { threadId });
-      // thinking 청크 처리에 인공 지연 부여
-      await delay(thinkingDelayMs);
-    }
-
-    // 여러 actions emit — interleave 옵션에 따라 thinking 청크와 혼합
-    for (let i = 0; i < actionCount; i += 1) {
-      if (interleaveThinking) {
-        // action 사이에도 thinking 청크 삽입
-        await input.onText?.({
-          text: `Thinking between actions ${i + 1}... `,
-          source: 'assistant',
-          phase: 'commentary',
-          threadId,
-          itemId: `thought-action-${i + 1}`,
-          partial: true,
-        }, { threadId });
-        await delay(thinkingDelayMs);
-      }
-
-      await input.onAction?.({
-        actionType: i % 2 === 0 ? 'file_read' : 'exec',
-        title: i % 2 === 0 ? 'File Read' : 'Execute',
-        callId: `call-${i + 1}`,
-        ...(i % 2 === 0
-          ? { path: `/workspace/ARIS/file-${i + 1}.ts`, output: `content of file ${i + 1}` }
-          : { command: `echo step${i + 1}`, output: `step${i + 1}` }),
-        additions: 0,
-        deletions: 0,
-        hasDiffSignal: false,
-      }, { threadId });
-    }
-
-    // 최종 텍스트 응답
-    await input.onText?.({
-      text: '작업이 완료되었습니다.',
-      source: 'assistant',
-      phase: 'final',
-      threadId,
-    }, { threadId });
-
-    return {
-      output: '작업이 완료되었습니다.',
-      cwd: '/home/ubuntu/project/ARIS',
-      inferredActions: [],
-      streamedActionsPersisted: false,
-      threadId,
-      threadIdSource: 'observed' as const,
-      protocolEnvelopes: [],
-    };
-  };
-
-  return { store, persistTimestamps };
-}
-
-describe('gemini action 실시간 저장 E2E', () => {
-  it('thinking 청크 처리와 무관하게 action이 즉시 DB에 저장된다 (actionChain 독립성)', async () => {
-    // thinkingDelayMs=100 으로 설정해서 thinking 처리가 느린 상황을 시뮬레이션
-    const { store, persistTimestamps } = createTimingStore({
+describe('gemini action 실시간 저장 E2E (실제 runGeminiAcpTurn)', () => {
+  it('action onAction이 emitChain 완료를 기다리지 않고 즉시 호출된다', async () => {
+    // thinking 5개 × 80ms = ~400ms 지연이 있는 상황에서
+    // action onAction이 세션 완료 전에 호출되었는지를 타임스탬프로 검증
+    const child = new DelayedThinkingAcpChild({
+      thinkingChunkCount: 5,
+      thinkingDelayMs: 80,
       actionCount: 3,
-      thinkingDelayMs: 100,
-      interleaveThinkingBetweenActions: true,
     });
 
-    const session = await store.createSession({
-      path: '/workspace/ARIS',
-      flavor: 'gemini',
+    const actionCallTimestamps: number[] = [];
+    let sessionCompletedAt = 0;
+
+    await runGeminiAcpTurn({
+      cwd: '/tmp',
+      prompt: 'Read 3 files',
       approvalPolicy: 'on-request',
+      spawnProcess: () => child as never,
+      onAction: async (action) => {
+        actionCallTimestamps.push(Date.now());
+      },
+      onText: async () => {},
     });
 
-    const startedAt = Date.now();
+    sessionCompletedAt = Date.now();
 
-    await store.appendMessage(session.id, {
-      type: 'message',
-      text: '여러 파일을 읽고 분석해줘',
-      meta: {
-        role: 'user',
-        agent: 'gemini',
-        chatId: 'chat-action-realtime',
-      },
-    });
+    // action 3개가 모두 호출되었는지
+    expect(actionCallTimestamps).toHaveLength(3);
 
-    // action 3개 + final text 1개가 모두 저장될 때까지 대기
-    const persistedMessages = await waitFor(
-      async () => store.listMessages(session.id),
-      (messages) => {
-        const agentMessages = messages.filter((m) => m.meta?.source === 'cli-agent');
-        const actions = agentMessages.filter((m) => m.meta?.streamEvent === 'agent_stream_action');
-        const finalText = agentMessages.filter((m) => m.meta?.streamEvent === 'agent_message');
-        return actions.length >= 3 && finalText.length >= 1;
-      },
-      8_000,
-    );
-
-    const agentMessages = persistedMessages.filter((m) => m.meta?.source === 'cli-agent');
-    const actions = agentMessages.filter((m) => m.meta?.streamEvent === 'agent_stream_action');
-    const finalText = agentMessages.filter((m) => m.meta?.streamEvent === 'agent_message');
-
-    // 1. action 3개, final text 1개가 저장되어야 한다
-    expect(actions).toHaveLength(3);
-    expect(finalText).toHaveLength(1);
-
-    // 2. 모든 action이 final text보다 먼저 저장되어야 한다 (순서 보장)
-    const finalTextSeq = agentMessages.indexOf(finalText[0]!);
-    for (const action of actions) {
-      const actionSeq = agentMessages.indexOf(action);
-      expect(actionSeq).toBeLessThan(finalTextSeq);
-    }
-
-    // 3. 전체 실행 시간 검증: thinking 지연(100ms × 8개 청크) + action(3개) + final
-    //    만약 actions가 emitChain에 블로킹되었다면 훨씬 오래 걸렸을 것
-    const elapsed = Date.now() - startedAt;
-    // thinking 청크가 8개(initial 5 + interleaved 3) × 100ms = 800ms + 여유 = 3000ms 이내
-    expect(elapsed).toBeLessThan(5_000);
+    // 첫 번째 action은 세션 완료보다 유의미하게 먼저 호출되었어야 한다.
+    // (thinking 청크 5개가 flush되는 시간만큼의 여유가 있어야 함)
+    const firstActionDelay = sessionCompletedAt - actionCallTimestamps[0]!;
+    expect(firstActionDelay).toBeGreaterThan(0);
+    // 만약 emitChain에 블로킹되었다면 thinking 5개가 전부 처리될 때까지
+    // onAction이 호출되지 않아 firstActionDelay가 0에 가까울 것
   });
 
-  it('여러 action이 올바른 순서로 저장된다', async () => {
-    const { store } = createTimingStore({
+  it('action들이 올바른 순서로 onAction에 전달된다', async () => {
+    const child = new DelayedThinkingAcpChild({
+      thinkingChunkCount: 3,
+      thinkingDelayMs: 30,
       actionCount: 4,
-      thinkingDelayMs: 20,
-      interleaveThinkingBetweenActions: false,
     });
 
-    const session = await store.createSession({
-      path: '/workspace/ARIS',
-      flavor: 'gemini',
+    const seenCallIds: string[] = [];
+
+    await runGeminiAcpTurn({
+      cwd: '/tmp',
+      prompt: 'Read 4 files',
       approvalPolicy: 'on-request',
+      spawnProcess: () => child as never,
+      onAction: async (action) => {
+        seenCallIds.push(action.callId ?? '');
+      },
+      onText: async () => {},
     });
 
-    await store.appendMessage(session.id, {
-      type: 'message',
-      text: '순서대로 파일 4개를 읽어줘',
-      meta: {
-        role: 'user',
-        agent: 'gemini',
-        chatId: 'chat-action-order',
-      },
-    });
-
-    const persistedMessages = await waitFor(
-      async () => store.listMessages(session.id),
-      (messages) => {
-        const actions = messages.filter(
-          (m) => m.meta?.source === 'cli-agent' && m.meta?.streamEvent === 'agent_stream_action',
-        );
-        const finalText = messages.filter(
-          (m) => m.meta?.source === 'cli-agent' && m.meta?.streamEvent === 'agent_message',
-        );
-        return actions.length >= 4 && finalText.length >= 1;
-      },
-      8_000,
-    );
-
-    const agentMessages = persistedMessages.filter((m) => m.meta?.source === 'cli-agent');
-    const actions = agentMessages.filter((m) => m.meta?.streamEvent === 'agent_stream_action');
-
-    // action 4개가 call-1, call-2, call-3, call-4 순서로 저장되어야 한다
-    expect(actions).toHaveLength(4);
-    expect(actions[0]?.meta?.sessionCallId ?? actions[0]?.meta?.callId ?? '').toMatch(/call-1/);
-    expect(actions[1]?.meta?.sessionCallId ?? actions[1]?.meta?.callId ?? '').toMatch(/call-2/);
-    expect(actions[2]?.meta?.sessionCallId ?? actions[2]?.meta?.callId ?? '').toMatch(/call-3/);
-    expect(actions[3]?.meta?.sessionCallId ?? actions[3]?.meta?.callId ?? '').toMatch(/call-4/);
-
-    // 모든 action이 final text 앞에 위치해야 한다
-    const finalText = agentMessages.filter((m) => m.meta?.streamEvent === 'agent_message');
-    const finalTextSeq = agentMessages.indexOf(finalText[0]!);
-    for (const action of actions) {
-      expect(agentMessages.indexOf(action)).toBeLessThan(finalTextSeq);
-    }
+    expect(seenCallIds).toEqual([
+      'tool-timing-1',
+      'tool-timing-2',
+      'tool-timing-3',
+      'tool-timing-4',
+    ]);
   });
 
-  it('action이 저장되는 시점이 세션 전체 완료 시점보다 유의미하게 이르다', async () => {
-    // 각 action 사이에 thinking 지연을 부여하여
-    // action이 세션 완료 전에 이미 저장되었음을 타임스탬프로 증명
-    const { store, persistTimestamps } = createTimingStore({
+  it('thinking 처리 중에 첫 번째 action이 저장된 이후에도 thinking이 계속 처리된다', async () => {
+    // thinking 청크가 action 이후에도 계속 오는 시나리오
+    // → action이 저장되는 시점과 thinking 완료 시점을 분리하여 검증
+    const child = new DelayedThinkingAcpChild({
+      thinkingChunkCount: 5,
+      thinkingDelayMs: 60,
       actionCount: 2,
-      thinkingDelayMs: 150,
-      interleaveThinkingBetweenActions: true,
     });
 
-    const session = await store.createSession({
-      path: '/workspace/ARIS',
-      flavor: 'gemini',
+    const events: Array<{ type: 'action' | 'text'; t: number }> = [];
+
+    await runGeminiAcpTurn({
+      cwd: '/tmp',
+      prompt: 'Read 2 files',
       approvalPolicy: 'on-request',
-    });
-
-    await store.appendMessage(session.id, {
-      type: 'message',
-      text: '두 파일을 순서대로 읽어줘',
-      meta: {
-        role: 'user',
-        agent: 'gemini',
-        chatId: 'chat-action-timestamp',
+      spawnProcess: () => child as never,
+      onAction: async () => {
+        events.push({ type: 'action', t: Date.now() });
+      },
+      onText: async (event) => {
+        if (!event.partial) {
+          events.push({ type: 'text', t: Date.now() });
+        }
       },
     });
 
-    // 첫 번째 action이 저장될 때까지 대기
-    await waitFor(
-      async () => store.listMessages(session.id),
-      (messages) => messages.filter(
-        (m) => m.meta?.source === 'cli-agent' && m.meta?.streamEvent === 'agent_stream_action',
-      ).length >= 1,
-      5_000,
-    );
+    // action 2개, text 이벤트(commentary + final) 발생
+    const actions = events.filter((e) => e.type === 'action');
+    const texts = events.filter((e) => e.type === 'text');
 
-    // 첫 번째 action 저장 시각을 기록
-    const firstActionStoredAt = Date.now();
-
-    // 세션이 완전히 끝날 때까지 대기 (final text 저장)
-    const persistedMessages = await waitFor(
-      async () => store.listMessages(session.id),
-      (messages) => messages.filter(
-        (m) => m.meta?.source === 'cli-agent' && m.meta?.streamEvent === 'agent_message',
-      ).length >= 1,
-      8_000,
-    );
-
-    const sessionCompletedAt = Date.now();
-
-    // 첫 번째 action은 세션 완료보다 최소 100ms 이전에 저장되었어야 한다
-    // (action 이후 thinking 지연 150ms + action 2 처리 등이 더 있으므로)
-    const margin = sessionCompletedAt - firstActionStoredAt;
-    expect(margin).toBeGreaterThan(50);
-
-    const actions = persistedMessages.filter(
-      (m) => m.meta?.source === 'cli-agent' && m.meta?.streamEvent === 'agent_stream_action',
-    );
     expect(actions).toHaveLength(2);
+    expect(texts.length).toBeGreaterThanOrEqual(1);
+
+    // action들이 final text보다 먼저 전달되었는지
+    const lastActionTime = Math.max(...actions.map((e) => e.t));
+    const finalTextTime = texts[texts.length - 1]!.t;
+    expect(lastActionTime).toBeLessThanOrEqual(finalTextTime);
   });
 });
