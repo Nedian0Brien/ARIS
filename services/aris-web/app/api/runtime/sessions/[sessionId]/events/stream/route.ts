@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
-import { streamSessionEvents, HappyHttpError } from '@/lib/happy/client';
+import { streamSessionEvents, getSessionRealtimeEvents, HappyHttpError } from '@/lib/happy/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,6 +33,7 @@ export async function GET(
   let cursor = typeof after === 'string' && after.trim().length > 0 ? after.trim() : null;
   let initialLoadDone = cursor !== null;
   let latestSeqHint: number | undefined = undefined;
+  let realtimeCursor = 0;
 
   const encoder = new TextEncoder();
   let aborted = false;
@@ -63,6 +64,17 @@ export async function GET(
       void (async () => {
         while (!aborted) {
           try {
+            // realtime events 먼저 — DB polling보다 앞서 즉시 전달
+            try {
+              const rt = await getSessionRealtimeEvents({ sessionId, afterCursor: realtimeCursor, chatId });
+              realtimeCursor = rt.cursor;
+              for (const event of rt.events) {
+                writeEvent('event', { event });
+              }
+            } catch {
+              // realtime 실패 시 무시하고 DB polling 계속
+            }
+
             {
               const result = await streamSessionEvents(sessionId, {
                 after: initialLoadDone ? (cursor ?? undefined) : undefined,
