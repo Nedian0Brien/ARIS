@@ -542,12 +542,14 @@ async function waitForPostPromptSettle(input: {
   quietMs: number;
   timeoutMs: number;
   getEmitChain: () => Promise<void>;
+  getActionChain: () => Promise<void>;
 }): Promise<void> {
   const startedAt = Date.now();
 
   for (;;) {
     const beforeTick = input.getActivityTick();
     const beforeChain = input.getEmitChain();
+    const beforeActionChain = input.getActionChain();
     const remainingTimeoutMs = Math.max(input.quietMs, input.timeoutMs - (Date.now() - startedAt));
 
     await waitForQuiet({
@@ -557,10 +559,12 @@ async function waitForPostPromptSettle(input: {
       timeoutMs: remainingTimeoutMs,
     });
     await beforeChain;
+    await beforeActionChain;
 
     const afterTick = input.getActivityTick();
     const afterChain = input.getEmitChain();
-    if (afterTick === beforeTick && afterChain === beforeChain) {
+    const afterActionChain = input.getActionChain();
+    if (afterTick === beforeTick && afterChain === beforeChain && afterActionChain === beforeActionChain) {
       return;
     }
 
@@ -756,6 +760,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
   let thoughtSequence = 0;
   let ignoringHistoryReplay = false;
   let emitChain: Promise<void> = Promise.resolve();
+  let actionChain: Promise<void> = Promise.resolve();
   let streamedActionCount = 0;
   const inferredActions: ProviderActionEvent[] = [];
   const protocolEnvelopes: SessionProtocolEnvelope[] = [];
@@ -991,7 +996,11 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
           stopReason,
         }));
         if (input.onAction) {
-          await input.onAction(action, { threadId: sessionId });
+          const capturedAction = action;
+          const capturedThreadId = sessionId;
+          actionChain = actionChain.then(async () => {
+            await input.onAction!(capturedAction, { threadId: capturedThreadId });
+          }).catch(() => undefined);
           streamedActionCount += 1;
         } else {
           inferredActions.push(action);
@@ -1156,6 +1165,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
       quietMs: input.postPromptQuietMs ?? DEFAULT_POST_PROMPT_QUIET_MS,
       timeoutMs: DEFAULT_POST_PROMPT_TIMEOUT_MS,
       getEmitChain: () => emitChain,
+      getActionChain: () => actionChain,
     });
     emitChain = emitChain.then(() => flushThoughtBuffer());
     emitChain = emitChain.then(() => flushMessageBuffer().then((flushed) => {
@@ -1164,6 +1174,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
       }
     }));
     await emitChain;
+    await actionChain;
 
     const stopReason = mapStopReason(asString(promptResult.stopReason, 'unknown').trim());
     const finalEnvelopes = [

@@ -508,7 +508,7 @@ describe('gemini alignment E2E', () => {
     ));
 
     expect(agentMessages).toHaveLength(2);
-    expect(agentMessages[0]?.title).toBe('Commentary');
+    expect(agentMessages[0]?.title).toBe('Thinking');
     expect(agentMessages[0]?.meta?.streamEvent).toBe('agent_commentary');
     expect(agentMessages[0]?.text).toBe('먼저 구조를 확인하겠습니다.');
     expect(agentMessages[1]?.meta?.streamEvent).toBe('agent_message');
