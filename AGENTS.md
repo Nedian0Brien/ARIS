@@ -24,3 +24,51 @@
 - 런타임 로그는 `logs/{YYYY}/{MM}/{DD}/` 경로에 저장된다. 파일명 형식: `chat-{agent}-{chatId}-{threadId}-parsed.ndjson` / `chat-{agent}-{chatId}-{threadId}-raw.ndjson`. `{agent}` 는 `gemini` | `claude` | `codex` | `unknown`.
 - 특정 chatId/threadId 로그 조회: `find /home/ubuntu/project/ARIS/logs -name "*<chatId>*"` 또는 `ls logs/<YYYY>/<MM>/<DD>/ | grep <chatId>`.
 - 로그 내용 확인(pretty print): `cat <파일경로> | python3 -c "import json,sys; [print(f'{o.get(\"loggedAt\",\"\")[-15:]} [{o.get(\"stage\",o.get(\"turnStatus\",\"?\"))}] {json.dumps(o.get(\"payload\",{}),ensure_ascii=False)[:120]}') for o in map(json.loads,sys.stdin)]"`
+
+## 디버깅 가이드
+
+> 서버/DB 내부 값을 직접 조회하려 할 때 혼선이 생기므로, 반드시 아래 공식 스크립트와 절차만 사용한다.
+> 자세한 내용은 `deploy/ops/debug-runbook.md` 참조.
+
+### 환경 구성 핵심 정보
+
+| 항목 | 값 |
+|------|-----|
+| prod env 파일 | `/home/ubuntu/.config/aris/prod.env` |
+| aris-backend 포트 | `4080` (PM2 cluster) |
+| Happy Server 포트 | `3005` |
+| 웹 Blue/Green 포트 | `3301` / `3302` |
+| dev hot reload 포트 | `3305` (기본값) |
+| 인증 토큰 출처 | prod.env의 `RUNTIME_API_TOKEN` |
+
+### 공식 디버깅 스크립트
+
+```bash
+# 1) 런타임 연결 상태 확인 (토큰·헬스·인증 한 번에)
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/ops/check-runtime-connection.sh
+
+# 2) 백엔드 헬스 체크
+curl -sS http://127.0.0.1:4080/health
+
+# 3) 세션 목록 + isRunning 상태 조회
+./deploy/ops/debug-session-status.sh [sessionId] [chatId]
+
+# 4) 최근 채팅 로그 pretty-print
+./deploy/ops/debug-chat-log.sh <chatId>
+
+# 5) 백엔드 실시간 로그
+pm2 logs aris-backend --lines 120 --nostream
+
+# 6) 웹 컨테이너 로그
+docker compose --env-file /home/ubuntu/.config/aris/prod.env logs --tail=120 aris-web-blue aris-web-green
+
+# 7) dev 서버 띄우기 (디버그 로그 확인용)
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env SKIP_DB_PREPARE=1 WEB_DEV_PORT=3305 \
+  ./deploy/dev/run_web_dev_hot_reload.sh
+```
+
+### 절대 하지 말아야 할 것
+
+- 토큰/포트를 코드에서 직접 추측해서 `curl` 날리지 않는다 → `check-runtime-connection.sh` 사용
+- `runtimeStateCache`, `activeRuns` 등 인메모리 상태를 코드 읽기만으로 단정짓지 않는다 → 실제 로그/API로 검증
+- Happy Server JWT 토큰(`HAPPY_SERVER_TOKEN`)을 aris-backend API 인증에 쓰지 않는다 → `RUNTIME_API_TOKEN` 사용
