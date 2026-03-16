@@ -1983,8 +1983,10 @@ function ActionEventCard({
   const tone = isThoughtCard ? 'cyan' : kindMeta.tone;
 
   const fullPrimary = resolveActionPrimary(event).replace(/\s+/g, ' ').trim();
-  const compactPrimary = truncateSingleLine(fullPrimary, 88);
-  const resourceLabels = extractResourceLabelsFromEvent(event);
+  const rawCompactPrimary = truncateSingleLine(fullPrimary, 88);
+  const thoughtBoldMatch = isThoughtCard ? /\*\*(.+?)\*\*/.exec(event.body) : null;
+  const compactPrimary = thoughtBoldMatch ? thoughtBoldMatch[1] : rawCompactPrimary;
+  const resourceLabels = isThoughtCard ? [] : extractResourceLabelsFromEvent(event);
 
   const hasResource = resourceLabels.length > 0;
 
@@ -2001,7 +2003,7 @@ function ActionEventCard({
             {hasResource ? (
               <ResourceLabelStrip resources={resourceLabels} />
             ) : (
-              <span className={styles.actionCompactPrimaryInline}>{compactPrimary}</span>
+              <span className={`${styles.actionCompactPrimaryInline}${isThoughtCard && thoughtBoldMatch ? ` ${styles.actionCompactPrimaryBold}` : ''}`}>{compactPrimary}</span>
             )}
           </div>
           {hasResource && (
@@ -5385,7 +5387,7 @@ export function ChatInterface({
 
               if (actionEvent) {
                 const isThoughtCard = Boolean(event.meta?.isThoughtCard);
-                const expanded = expandedResultIds[event.id] ?? !isThoughtCard;
+                const expanded = expandedResultIds[event.id] ?? false;
                 return (
                   <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
                     <div className={`${styles.messageBubble} ${styles.messageBubbleAction}`}>
@@ -5406,7 +5408,7 @@ export function ChatInterface({
                         <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
                       </div>
                       <div className={`${styles.messageBubble} ${styles.messageBubbleAgent}`}>
-                        {renderEventPayload(event, false, expandedResultIds[event.id] ?? !event.meta?.isThoughtCard, () => toggleResult(event.id))}
+                        {renderEventPayload(event, false, expandedResultIds[event.id] ?? false, () => toggleResult(event.id))}
                       </div>
                     </div>
                   </div>
