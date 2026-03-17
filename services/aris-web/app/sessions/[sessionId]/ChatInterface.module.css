@@ -3801,7 +3801,19 @@
 }
 
 :global(html[data-theme='dark']) .backgroundLogoContainer {
-  opacity: 0.08;
+  opacity: 0.12;
+  filter: drop-shadow(0 0 40px color-mix(in srgb, var(--agent-color) 40%, transparent));
+}
+
+:global(html[data-theme='dark']) .quickStartChip {
+  background: rgba(30, 41, 59, 0.4);
+  border-color: rgba(71, 85, 105, 0.4);
+}
+
+:global(html[data-theme='dark']) .quickStartChip:hover {
+  background: rgba(30, 41, 59, 0.8);
+  border-color: var(--agent-color);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
 }
 
 .backgroundLogoIcon {
