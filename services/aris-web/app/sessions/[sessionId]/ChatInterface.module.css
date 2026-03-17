@@ -3705,6 +3705,23 @@
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: center;
   gap: 1.25rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.agentSelectorCard::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, var(--agent-color) 0%, transparent 60%);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.5);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  pointer-events: none;
+  z-index: 0;
 }
 
 .agentSelectorCard:hover {
@@ -3712,6 +3729,16 @@
   border-color: var(--agent-color);
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
   background: var(--agent-bg);
+}
+
+.agentSelectorCard:active {
+  transform: translateY(-2px) scale(0.98);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.06);
+}
+
+.agentSelectorCard:hover::after {
+  opacity: 0.08;
+  transform: translate(-50%, -50%) scale(1.5);
 }
 
 .agentSelectorIconWrap {
@@ -3723,39 +3750,54 @@
   justify-content: center;
   background: var(--agent-bg);
   color: var(--agent-color);
-  transition: transform 0.3s ease;
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 1;
 }
 
 .agentSelectorCard:hover .agentSelectorIconWrap {
-  transform: scale(1.1) rotate(5deg);
+  transform: scale(1.15) rotate(8deg);
 }
 
 .agentSelectorLabel {
   font-size: 1.125rem;
   font-weight: 700;
   color: var(--chat-text-primary);
+  z-index: 1;
+  position: relative;
 }
 
 .agentSelectorDesc {
   font-size: 0.875rem;
   color: var(--chat-text-muted);
   line-height: 1.4;
+  z-index: 1;
+  position: relative;
 }
 
 /* Background Logo Watermark */
+.emptyChatState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 400px;
+  position: relative;
+  animation: fadeIn 0.5s ease-out;
+}
+
 .backgroundLogoContainer {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
   z-index: 0;
   opacity: 0.06;
-  animation: logoFadeIn 1s ease-out;
+  animation: logoFadeIn 1s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 :global(html[data-theme='dark']) .backgroundLogoContainer {
@@ -3763,9 +3805,58 @@
 }
 
 .backgroundLogoIcon {
-  width: 240px;
-  height: 240px;
+  width: 280px;
+  height: 280px;
   color: var(--agent-color, var(--chat-text-primary));
+}
+
+.quickStartContainer {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 540px;
+  margin-top: 140px;
+}
+
+.quickStartChip {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-radius: 1rem;
+  border: 1px solid var(--chat-popover-border);
+  background: var(--chat-popover-bg);
+  color: var(--chat-text-primary);
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+}
+
+.quickStartChip:hover {
+  transform: translateY(-3px);
+  border-color: var(--agent-color);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.06);
+}
+
+.quickStartChip:active {
+  transform: translateY(0) scale(0.99);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+}
+
+.quickStartIcon {
+  color: var(--agent-color);
+  opacity: 0.7;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.quickStartChip:hover .quickStartIcon {
+  opacity: 1;
+  transform: translateX(2px);
 }
 
 @keyframes fadeIn {
@@ -3774,8 +3865,8 @@
 }
 
 @keyframes logoFadeIn {
-  from { opacity: 0; transform: scale(0.9); }
-  to { opacity: 0.06; transform: scale(1); }
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }
+  to { opacity: 0.06; transform: translate(-50%, -50%) scale(1); }
 }
 
 @media (max-width: 768px) {

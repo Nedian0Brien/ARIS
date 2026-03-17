@@ -142,6 +142,24 @@ const CHAT_RUN_PHASE_LABELS = {
 } as const;
 const CHAT_AGENT_CHOICES: AgentFlavor[] = ['codex', 'claude', 'gemini'];
 
+const AGENT_QUICK_STARTS: Partial<Record<AgentFlavor, string[]>> = {
+  claude: [
+    '현재 워크스페이스의 코드 구조를 설명해 줘',
+    '최근 변경된 파일들의 주요 로직을 리뷰해 줘',
+    '이 프로젝트의 아키텍처 다이어그램을 그려줘',
+  ],
+  codex: [
+    '이 프로젝트의 주요 진입점(Entry point) 코드를 분석해 줘',
+    'package.json (또는 의존성 파일)을 읽고 기술 스택을 요약해 줘',
+    '자주 사용되는 공통 컴포넌트나 유틸리티 함수를 찾아줘',
+  ],
+  gemini: [
+    '이 코드베이스의 전체적인 목적과 기능 명세를 추론해 줘',
+    '현재 프로젝트에서 개선할 만한 잠재적인 문제점(Code smell)을 찾아줘',
+    '프로젝트의 테스트 코드 작성 패턴을 분석해 줘',
+  ],
+};
+
 const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
 type ComposerModelOption = { id: string; shortLabel: string; badge: string };
 type GeminiModeOption = { id: string; shortLabel: string; badge: string };
@@ -5310,16 +5328,35 @@ export function ChatInterface({
                         </div>
                         ) : (
                         <>
-                        {timelineItems.length === 0 && activeChat && (() => {
-                        const AgentIcon = agentMeta.Icon;
-                        return (
-                        <div className={styles.backgroundLogoContainer} style={{ '--agent-color': `var(--agent-${activeAgentFlavor}-accent)` } as React.CSSProperties}>
-                        <AgentIcon className={styles.backgroundLogoIcon} />
-                        </div>
-                        );
-                        })()}
-                        {timelineItems.map((timelineItem) => {
-                        if (timelineItem.type === 'permission') {
+                          {timelineItems.length === 0 && activeChat && (() => {
+                            const AgentIcon = agentMeta.Icon;
+                            const quickStarts = AGENT_QUICK_STARTS[activeAgentFlavor] || AGENT_QUICK_STARTS.codex || [];
+                            return (
+                              <div className={styles.emptyChatState}>
+                                <div className={styles.backgroundLogoContainer} style={{ '--agent-color': `var(--agent-${activeAgentFlavor}-accent)` } as React.CSSProperties}>
+                                  <AgentIcon className={styles.backgroundLogoIcon} />
+                                </div>
+                                <div className={styles.quickStartContainer}>
+                                  {quickStarts.map((qs, i) => (
+                                    <button
+                                      key={i}
+                                      type="button"
+                                      className={styles.quickStartChip}
+                                      onClick={() => {
+                                        setPrompt(qs);
+                                        setTimeout(() => composerInputRef.current?.focus(), 0);
+                                      }}
+                                      style={{ '--agent-color': `var(--agent-${activeAgentFlavor}-accent)` } as React.CSSProperties}
+                                    >
+                                      <MessageSquarePlus size={16} className={styles.quickStartIcon} />
+                                      {qs}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                          {timelineItems.map((timelineItem) => {                        if (timelineItem.type === 'permission') {
                         const permission = timelineItem.permission;
                         return (
                         <PermissionRequestMessage
