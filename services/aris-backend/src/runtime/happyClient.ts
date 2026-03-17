@@ -2485,6 +2485,7 @@ export class HappyRuntimeStore {
     session: ProviderRuntimeSession<'gemini'>;
     prompt: string;
     preferredThreadId?: string;
+    chatId?: string;
     model?: string;
     mode?: string;
     signal?: AbortSignal;
@@ -2510,6 +2511,16 @@ export class HappyRuntimeStore {
       onText: input.onText
         ? ((event, meta) => input.onText!(event, meta))
         : undefined,
+      onRawLine: (line) => {
+        this.happyEventLogger.logRaw({
+          sessionId: input.session.id,
+          agent: 'gemini',
+          ...(input.chatId ? { chatId: input.chatId } : {}),
+          ...(normalizeModel(input.model) ? { model: normalizeModel(input.model)! } : {}),
+          channel: 'exec_cli',
+          line,
+        });
+      },
     });
   }
 

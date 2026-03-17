@@ -36,6 +36,7 @@ type GeminiAcpClientOptions = {
   onAction?: (action: ProviderActionEvent, meta: { threadId: string }) => Promise<void>;
   onText?: (event: ProviderTextEvent, meta: { threadId: string }) => Promise<void>;
   onPermission?: (request: ProviderPermissionRequest, meta: { threadId: string }) => Promise<PermissionDecision>;
+  onRawLine?: (line: string) => void;
   launchCommand?: GeminiAcpLaunchCommand;
   spawnProcess?: (command: string, args: string[], options: {
     cwd: string;
@@ -1040,6 +1041,7 @@ export async function runGeminiAcpTurn(input: GeminiAcpClientOptions): Promise<G
     }
     stdoutActivityTick += 1;
     lastStdoutActivityAt = Date.now();
+    input.onRawLine?.(line);
     const payload = parseJsonLine(line);
     if (!payload) {
       return;
