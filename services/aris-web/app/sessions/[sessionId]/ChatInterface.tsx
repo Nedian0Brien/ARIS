@@ -178,7 +178,7 @@ const MODEL_REASONING_EFFORT_OPTIONS: Array<{ value: ModelReasoningEffort; label
 type AgentMeta = {
   label: string;
   tone: 'clay' | 'mint' | 'blue';
-  Icon: React.ComponentType<{ size?: number }>;
+  Icon: React.ComponentType<{ size?: number; className?: string }>;
 };
 
 type Tone = 'sky' | 'amber' | 'cyan' | 'emerald' | 'violet' | 'red' | 'git' | 'docker';
@@ -496,6 +496,13 @@ function resolveAgentMeta(agentFlavor: string): AgentMeta {
     return { label: 'Gemini', tone: 'blue', Icon: GeminiIcon };
   }
   return { label: 'Runtime', tone: 'blue', Icon: Cpu };
+}
+
+function resolveAgentSubtitle(agentFlavor: string): string {
+  if (agentFlavor === 'claude') return '균형 잡힌 코딩 흐름';
+  if (agentFlavor === 'codex') return '빠른 구현 및 실행';
+  if (agentFlavor === 'gemini') return '넓은 맥락과 추론';
+  return '에이전틱 런타임';
 }
 
 function normalizeAgentFlavor(value: unknown, fallback: AgentFlavor = 'codex'): AgentFlavor {
@@ -2293,6 +2300,7 @@ export function ChatInterface({
     updateActiveChatRuntimeUi({ submitError: value });
   }, [updateActiveChatRuntimeUi]);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
+  const [isNewChatPlaceholder, setIsNewChatPlaceholder] = useState(false);
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
   const [expandedActionRunIds, setExpandedActionRunIds] = useState<Record<string, boolean>>({});
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
@@ -2349,7 +2357,6 @@ export function ChatInterface({
   const [approvalFeedbackByChat, setApprovalFeedbackByChat] = useState<Record<string, ChatApprovalFeedback>>({});
   const [sidebarApprovalLoadingChatId, setSidebarApprovalLoadingChatId] = useState<string | null>(null);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
-  const [isCreateChatMenuOpen, setIsCreateChatMenuOpen] = useState(false);
   const [contextItems, setContextItems] = useState<ContextItem[]>([]);
   const [plusMenuMode, setPlusMenuMode] = useState<'closed' | 'menu' | 'file' | 'text'>('closed');
   const [textContextInput, setTextContextInput] = useState('');
@@ -2409,11 +2416,10 @@ export function ChatInterface({
   const [sidebarFileRequest, setSidebarFileRequest] = useState<SidebarFileRequest | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
-  const createChatMenuRef = useRef<HTMLDivElement>(null);
+  const chatShellRef = useRef<HTMLDivElement>(null);
   const chatSidebarRef = useRef<HTMLDivElement>(null);
   const chatListRef = useRef<HTMLDivElement>(null);
   const chatListSentinelRef = useRef<HTMLDivElement>(null);
-  const chatShellRef = useRef<HTMLDivElement>(null);
   const centerPanelRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerDockRef = useRef<HTMLElement>(null);
@@ -3318,7 +3324,7 @@ export function ChatInterface({
   ]);
 
   useEffect(() => {
-    if (plusMenuMode === 'closed' && !isModelDropdownOpen && !isGeminiModeDropdownOpen && !isCreateChatMenuOpen) return;
+    if (plusMenuMode === 'closed' && !isModelDropdownOpen && !isGeminiModeDropdownOpen) return;
     function handleOutsideClick(e: MouseEvent) {
       if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
         setPlusMenuMode('closed');
@@ -3329,13 +3335,10 @@ export function ChatInterface({
       if (geminiModeDropdownRef.current && !geminiModeDropdownRef.current.contains(e.target as Node)) {
         setIsGeminiModeDropdownOpen(false);
       }
-      if (createChatMenuRef.current && !createChatMenuRef.current.contains(e.target as Node)) {
-        setIsCreateChatMenuOpen(false);
-      }
     }
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, [plusMenuMode, isModelDropdownOpen, isGeminiModeDropdownOpen, isCreateChatMenuOpen]);
+  }, [plusMenuMode, isModelDropdownOpen, isGeminiModeDropdownOpen]);
 
   const removeContextItem = useCallback((id: string) => {
     setContextItems((prev) => prev.filter((item) => item.id !== id));
@@ -4252,6 +4255,7 @@ export function ChatInterface({
   const buildChatUrlForChat = useCallback((chatId: string) => buildChatUrl(sessionId, chatId), [sessionId]);
 
   const goToChat = useCallback((chatId: string) => {
+    setIsNewChatPlaceholder(false);
     setChatActionMenuId(null);
     setRenamingChatId(null);
     setChatTitleDraft('');
@@ -4391,7 +4395,7 @@ export function ChatInterface({
     }
     setIsCreatingChat(true);
     setChatMutationError(null);
-    setIsCreateChatMenuOpen(false);
+    setIsNewChatPlaceholder(false);
     const defaultModelId = resolveDefaultModelId(agent, providerSelections, legacyCustomModels);
     const defaultGeminiModeId = agent === 'gemini'
       ? resolveDefaultGeminiModeId(approvalPolicy, providerSelections?.gemini?.defaultModeId)
@@ -4835,43 +4839,23 @@ export function ChatInterface({
             <div className={styles.chatSidebarTitle}>채팅 목록</div>
             <div className={styles.chatSidebarSubTitle}>{sessionTitle}</div>
           </div>
-          <div className={styles.createChatMenuWrap} ref={createChatMenuRef}>
+          <div className={styles.createChatMenuWrap}>
             <button
               type="button"
               className={styles.chatSidebarNewButton}
-              onClick={() => setIsCreateChatMenuOpen((prev) => !prev)}
+              onClick={() => {
+                setIsNewChatPlaceholder(true);
+                setSelectedChatId(null);
+                if (isMobileLayout) {
+                  setIsChatSidebarOpen(false);
+                }
+              }}
               disabled={isCreatingChat}
               title="새 채팅"
-              aria-haspopup="menu"
-              aria-expanded={isCreateChatMenuOpen}
             >
               <MessageSquarePlus size={15} />
               새 채팅
-              <ChevronDown size={14} />
             </button>
-            {isCreateChatMenuOpen && (
-              <div className={styles.createChatMenuPanel} role="menu">
-                {CHAT_AGENT_CHOICES.map((choice) => {
-                  const choiceMeta = resolveAgentMeta(choice);
-                  const ChoiceIcon = choiceMeta.Icon;
-                  return (
-                    <button
-                      key={choice}
-                      type="button"
-                      role="menuitem"
-                      className={styles.createChatMenuItem}
-                      onClick={() => void handleCreateChat(choice)}
-                      disabled={isCreatingChat}
-                    >
-                      <span className={`${styles.chatListAgentAvatar} ${getAgentAvatarToneClass(choiceMeta.tone)}`}>
-                        <ChoiceIcon size={11} />
-                      </span>
-                      <span>{choiceMeta.label} 채팅</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
           </div>
         </div>
 
@@ -5297,105 +5281,139 @@ export function ChatInterface({
           )}
 
           <div className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''}`} ref={scrollRef} onScroll={handleStreamScroll}>
-            {timelineItems.map((timelineItem) => {
-              if (timelineItem.type === 'permission') {
-                const permission = timelineItem.permission;
-                return (
-                  <PermissionRequestMessage
-                    key={permission.id}
-                    anchorId={`permission-${permission.id}`}
-                    permission={permission}
-                    disabled={!isOperator}
-                    loading={loadingPermissionId === permission.id}
-                    interactive={permission.availability === 'live'}
-                    pendingHint={permission.availability === 'live'
-                      ? null
-                      : '실시간 승인 세션을 찾을 수 없습니다. 같은 요청을 다시 실행해 주세요.'}
-                    onDecide={(permissionId, decision) => {
-                      void decidePermission(permissionId, decision);
-                    }}
-                  />
-                );
-              }
-
-              const item = timelineItem.item;
-              if (item.type === 'action_overflow') {
-                const overflowKindMeta = getEventKindMeta(item.kind);
-                const OverflowKindIcon = overflowKindMeta.Icon;
-                const title = item.expanded
-                  ? '반복 행동 접기'
-                  : `중간 행동 ${item.hiddenCount}개 펼치기`;
-                return (
-                  <article key={`overflow-${item.id}`} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
-                    <button
-                      type="button"
-                      className={`${styles.messageBubble} ${styles.messageBubbleAction} ${styles.actionOverflowBubble} ${styles.actionOverflowToggle}`}
-                      onClick={() => toggleActionRun(item.runId)}
-                      title={title}
-                      aria-label={title}
-                      aria-expanded={item.expanded}
-                    >
-                      <div className={styles.actionOverflowContent}>
-                        {item.expanded ? (
-                          <span className={styles.actionOverflowLabel}>
-                            접기
-                            <ChevronUp size={14} />
-                          </span>
+            {isNewChatPlaceholder ? (
+              <div className={styles.agentSelectorContainer}>
+                <h3 className={styles.agentSelectorTitle}>어떤 에이전트와 대화를 시작할까요?</h3>
+                <div className={styles.agentSelectorGrid}>
+                  {CHAT_AGENT_CHOICES.map((choice) => {
+                    const choiceMeta = resolveAgentMeta(choice);
+                    const ChoiceIcon = choiceMeta.Icon;
+                    return (
+                      <button
+                        key={choice}
+                        type="button"
+                        className={styles.agentSelectorCard}
+                        onClick={() => void handleCreateChat(choice)}
+                        style={{ '--agent-color': `var(--agent-${choice}-accent)`, '--agent-bg': `var(--agent-${choice}-bg)` } as React.CSSProperties}
+                        >
+                        <div className={styles.agentSelectorIconWrap}>
+                          <ChoiceIcon size={28} />
+                        </div>
+                        <div>
+                          <div className={styles.agentSelectorLabel}>{choiceMeta.label}</div>
+                          <div className={styles.agentSelectorDesc}>{resolveAgentSubtitle(choice)}</div>
+                        </div>
+                        </button>
+                        );
+                        })}
+                        </div>
+                        </div>
                         ) : (
-                          <>
-                            <div className={styles.actionOverflowLeft}>
-                              <span className={`${styles.kindChip} ${getToneClass(overflowKindMeta.tone)}`}>
-                                <OverflowKindIcon size={12} />
-                                {overflowKindMeta.label}
+                        <>
+                        {timelineItems.length === 0 && activeChat && (() => {
+                        const AgentIcon = agentMeta.Icon;
+                        return (
+                        <div className={styles.backgroundLogoContainer} style={{ '--agent-color': `var(--agent-${activeAgentFlavor}-accent)` } as React.CSSProperties}>
+                        <AgentIcon className={styles.backgroundLogoIcon} />
+                        </div>
+                        );
+                        })()}
+                        {timelineItems.map((timelineItem) => {
+                        if (timelineItem.type === 'permission') {
+                        const permission = timelineItem.permission;
+                        return (
+                        <PermissionRequestMessage
+                        key={permission.id}
+                        anchorId={`permission-${permission.id}`}
+                        permission={permission}
+                        disabled={!isOperator}
+                        loading={loadingPermissionId === permission.id}
+                        interactive={permission.availability === 'live'}
+                        pendingHint={permission.availability === 'live'
+                          ? null
+                          : '실시간 승인 세션을 찾을 수 없습니다. 같은 요청을 다시 실행해 주세요.'}
+                        onDecide={(permissionId, decision) => {
+                          void decidePermission(permissionId, decision);
+                        }}
+                        />
+                        );
+                        }
+
+                        const item = timelineItem.item;
+                        if (item.type === 'action_overflow') {
+                        const overflowKindMeta = getEventKindMeta(item.kind);
+                        const OverflowKindIcon = overflowKindMeta.Icon;
+                        const title = item.expanded
+                        ? '반복 행동 접기'
+                        : `중간 행동 ${item.hiddenCount}개 펼치기`;
+                        return (
+                        <article key={`overflow-${item.id}`} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                        <button
+                          type="button"
+                          className={`${styles.messageBubble} ${styles.messageBubbleAction} ${styles.actionOverflowBubble} ${styles.actionOverflowToggle}`}
+                          onClick={() => toggleActionRun(item.runId)}
+                          title={title}
+                          aria-label={title}
+                          aria-expanded={item.expanded}
+                        >
+                          <div className={styles.actionOverflowContent}>
+                            {item.expanded ? (
+                              <span className={styles.actionOverflowLabel}>
+                                접기
+                                <ChevronUp size={14} />
                               </span>
-                            </div>
-                            <span className={styles.actionOverflowLabel}>
-                              {item.hiddenCount}개의 행동 더 보기
-                              <ChevronDown size={14} />
-                            </span>
-                            <div className={styles.actionOverflowRight}>
-                              <span className={styles.actionOverflowCount}>+{item.hiddenCount}</span>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </button>
-                  </article>
-                );
-              }
+                            ) : (
+                              <>
+                                <div className={styles.actionOverflowLeft}>
+                                  <span className={`${styles.kindChip} ${getToneClass(overflowKindMeta.tone)}`}>
+                                    <OverflowKindIcon size={12} />
+                                    {overflowKindMeta.label}
+                                  </span>
+                                </div>
+                                <span className={styles.actionOverflowLabel}>
+                                  {item.hiddenCount}개의 행동 더 보기
+                                  <ChevronDown size={14} />
+                                </span>
+                                <div className={styles.actionOverflowRight}>
+                                  <span className={styles.actionOverflowCount}>+{item.hiddenCount}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </button>
+                        </article>
+                        );
+                        }
 
-              const event = item.event;
-              const userEvent = isUserEvent(event);
-              const actionEvent = !userEvent && isActionKind(event.kind);
-              const kindMeta = getEventKindMeta(event.kind);
-              const KindIcon = kindMeta.Icon;
-              const commentaryEvent = isCommentaryEvent(event);
+                        const event = item.event;
+                        const userEvent = isUserEvent(event);
+                        const actionEvent = !userEvent && isActionKind(event.kind);
 
-              if (userEvent) {
-                return (
-                  <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowUser}`}>
-                    <div className={`${styles.msgHeader} ${styles.msgHeaderUser}`}>
-                      <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
-                      <span className={`${styles.msgSender} ${styles.msgSenderUser}`}>YOU</span>
-                    </div>
-                    <div className={`${styles.messageBubble} ${styles.messageBubbleUser} ${highlightedEventId === event.id ? styles.messageBubbleHighlight : ''}`}>
-                      {renderEventPayload(event, true, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id))}
-                    </div>
-                  </article>
-                );
-              }
+                        if (userEvent) {
+                        return (
+                        <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowUser}`}>
+                        <div className={`${styles.msgHeader} ${styles.msgHeaderUser}`}>
+                          <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
+                          <span className={`${styles.msgSender} ${styles.msgSenderUser}`}>YOU</span>
+                        </div>
+                        <div className={`${styles.messageBubble} ${styles.messageBubbleUser} ${highlightedEventId === event.id ? styles.messageBubbleHighlight : ''}`}>
+                          {renderEventPayload(event, true, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id))}
+                        </div>
+                        </article>
+                        );
+                        }
 
-              if (actionEvent) {
-                const isThoughtCard = Boolean(event.meta?.isThoughtCard);
-                const expanded = expandedResultIds[event.id] ?? false;
-                return (
-                  <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
-                    <div className={`${styles.messageBubble} ${styles.messageBubbleAction}`}>
-                      {renderEventPayload(event, false, expanded, () => toggleResult(event.id))}
-                    </div>
-                  </article>
-                );
-              }
+                        if (actionEvent) {
+                        const expanded = expandedResultIds[event.id] ?? false;
+                        return (
+                        <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                        <div className={`${styles.messageBubble} ${styles.messageBubbleAction}`}>
+                          {renderEventPayload(event, false, expanded, () => toggleResult(event.id))}
+                        </div>
+                        </article>
+                        );
+                        }
+
               return (
                 <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
                   <div className={styles.messageWithAvatar}>
@@ -5415,6 +5433,8 @@ export function ChatInterface({
                 </article>
               );
             })}
+              </>
+            )}
           </div>
 
           {showScrollToBottom && (
