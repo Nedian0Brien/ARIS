@@ -1,60 +1,79 @@
-# GEMINI.md
-
-**프로젝트 운영 규칙 및 협업 가이드라인은 `AGENTS.md`를 최우선으로 참조하며, 모든 작업 시 이를 준수해야 합니다.**
-
 # AGENTS (project)
+
+## 절대 준수사항
+- 작업 시작 시 AGENTS.md를 참조합니다.
+- 작업 과정에서 기존 코드가 실수로 유실되지 않게 주의합니다.
+
 
 ## Operational Rules
 
-- 사용자의 지침을 받으면 사용자의 의도에 대해서 이해한 내용을 반드시 먼저 작성하고, 사용자의 승인을 구한다.
-- 사용자의 승인을 받으면 작업을 진행한다.
-- 작업 완료 이후 반드시 커밋, 푸쉬를 거친다. 배포는 코드 변경사항이 있을 때만 자동으로 수행한다.
+- 사용자의 지침을 받으면 사용자의 의도에 대해서 이해한 내용을 반드시 먼저 작성한다.
+- 작업 완료 이후 반드시 커밋, 푸쉬를 거친다.
 - 작업 과정에서 식별한 이슈 중 대응이 필요한 이슈는 GitHub 리포지토리에 이슈를 작성하여 추가한다.
 - GitHub 이슈를 생성할 때는 제목과 본문을 반드시 한글로 작성한다.
-- 작업 마무리 시 `main` 브랜치 머지 여부를 사용자에게 반드시 확인한다.
+- main 브랜치에 머지하면 GitHub Actions에 의해 자동으로 배포가 수행된다. 머지하고 나면 배포가 성공하는지까지 확인하여 사용자에게 최종 보고한다.
+- 직접 배포를 수행할 때는 반드시 deploy/README.md 문서를 참고한다.
+- 머지 과정에서 충돌이 발생한 경우 어떤 내용이 서로 충돌하는지 파악한 후 사용자에게 설명하고, 처리 방안 3가지를 제안한다.
 - 작업이 마무리되고 나면 후속 작업 5가지를 제안한다.
 - 사용자의 지침 중 확실하지 않은 부분이 있으면 작업을 진행하기 전에 사용자에게 분명히 물어본다. 이때 사용자의 의도일 가능성이 있는 최대 3가지 경우를 제시하며 사용자에게 의도를 명확히 해 달라고 요청한다.
-- 모든 작업은 작업의 규모나 성격과 관계없이 반드시 에이전트별 전용 `git worktree`에서 독립적으로 수행한다. 현재 워킹 디렉터리에서의 직접적인 수정 작업은 엄격히 금지된다.
+- 코드 변경 작업은 반드시 에이전트별 전용 `git worktree`에서 독립적으로 수행한다. 현재 워킹 디렉터리에서의 직접적인 수정 작업은 엄격히 금지된다.
 - 멀티 에이전트/병렬 작업뿐만 아니라 단독 작업 시에도 전용 `git worktree` 환경을 보장해야 한다.
 - 동일한 워킹 디렉터리를 여러 에이전트가 공유해서 동시에 수정하는 것을 금지한다.
-- 모든 작업은 시작 전 `git worktree add <path> <branch>`로 전용 작업 디렉터리를 생성하고, 해당 경로에서만 커밋/푸쉬/배포를 수행한다.
+- 모든 작업은 시작 전 아래 표준 절차로 전용 작업 디렉터리를 생성하고, 해당 경로에서만 커밋/푸쉬를 수행한다.
+- 1) 메인 체크아웃에서 `services/aris-backend/node_modules` 와 `services/aris-web/node_modules` 가 준비되어 있는지 먼저 확인한다. 없거나 필요한 dev 바이너리(`vitest`, `tsc`)가 없으면 메인 체크아웃에서 각 서비스의 의존성을 먼저 설치한다.
+- 2) 새 작업 디렉터리는 `scripts/create_worktree_with_shared_node_modules.sh <worktree_path> <branch> [base_ref]` 로 생성한다. 이 스크립트를 표준 경로로 사용하며, 내부에서 `git worktree add` 이후 공유 `node_modules` 심볼릭 링크까지 연결한다.
+- 3) 이미 `git worktree add` 로 만든 작업 디렉터리라면 즉시 `scripts/link_shared_node_modules.sh <worktree_path>` 를 실행해 공유 `node_modules` 를 연결한다.
+- 4) 링크 이후 필요한 바이너리가 보이지 않으면 메인 체크아웃에서 의존성을 다시 설치한 뒤 `scripts/link_shared_node_modules.sh <worktree_path>` 를 다시 실행한다.
+- 5) 수정, 테스트, 커밋, 푸쉬, 머지는 모두 해당 전용 `git worktree` 내부에서만 수행한다.
 - 작업 완료 후 `main` 브랜치에 머지가 완료되면, 사용했던 전용 `git worktree`를 `git worktree remove <path>`로 제거하고, 작업에 사용된 로컬 및 원격 브랜치도 함께 삭제하여 환경을 청결하게 유지한다.
+- 런타임 로그는 `logs/{YYYY}/{MM}/{DD}/` 경로에 저장된다. 파일명 형식: `chat-{agent}-{chatId}-{threadId}-parsed.ndjson` / `chat-{agent}-{chatId}-{threadId}-raw.ndjson`. `{agent}` 는 `gemini` | `claude` | `codex` | `unknown`.
+- 특정 chatId/threadId 로그 조회: `find /home/ubuntu/project/ARIS/logs -name "*<chatId>*"` 또는 `ls logs/<YYYY>/<MM>/<DD>/ | grep <chatId>`.
+- 로그 내용 확인(pretty print): `cat <파일경로> | python3 -c "import json,sys; [print(f'{o.get(\"loggedAt\",\"\")[-15:]} [{o.get(\"stage\",o.get(\"turnStatus\",\"?\"))}] {json.dumps(o.get(\"payload\",{}),ensure_ascii=False)[:120]}') for o in map(json.loads,sys.stdin)]"`
 
+## 디버깅 가이드
 
-당신은 항상 **한국어**로 응답해야 합니다.  
-코드 주석을 한국어로 작성하십시오. 코드 동작 방식에 대해 이해하기 쉽게 주석을 작성하십시오.
-계획 보고서 및 실행 결과는 반드시 한국어로 작성합니다.
+> 서버/DB 내부 값을 직접 조회하려 할 때 혼선이 생기므로, 반드시 아래 공식 스크립트와 절차만 사용한다.
+> 자세한 내용은 `deploy/ops/debug-runbook.md` 참조.
 
-작업을 마치고 나면 작업한 내용을 정리해서 전달하십시오. 사용자가 주의해야 할 부분이 있다면 반드시 언급하십시오.
+### 환경 구성 핵심 정보
 
-## 주석 작성 가이드라인
-- 주석은 한국어로 작성할 것
-- 함수에 type hinting을 사용할 것
-- Docstring을 작성할 때는 Description과 Args를 포함하여 작성할 것
+| 항목 | 값 |
+|------|-----|
+| prod env 파일 | `/home/ubuntu/.config/aris/prod.env` |
+| aris-backend 포트 | `4080` (PM2 cluster) |
+| Happy Server 포트 | `3005` |
+| 웹 Blue/Green 포트 | `3301` / `3302` |
+| dev hot reload 포트 | `3305` (기본값) |
+| 인증 토큰 출처 | prod.env의 `RUNTIME_API_TOKEN` |
 
-## 주의사항(반드시 준수합니다)
-- DB 데이터를 다룰 때에는 파괴적인 작업(Truncate, Delete 등)을 수행하기 전에 반드시 사용자에게 확인을 구할 것
-- **파일 시스템 및 Git 작업 시 파괴적인 조치(git reset --hard, rm 등)를 수행하기 전에는 반드시 `git status`와 `git diff`를 통해 변경 사항의 정체를 확인하고 사용자에게 보고한 뒤 명확한 승인을 얻을 것**
-- '당연히 필요 없는 파일'이라는 자의적 판단으로 사용자의 작업 내역을 유실시 키는 행위를 엄격히 금지함
+### 공식 디버깅 스크립트
 
-실패가 발생하면 실패 단계와 원인을 즉시 공유하고, 가능한 범위에서 자동 복구 를 시도합니다.
+```bash
+# 1) 런타임 연결 상태 확인 (토큰·헬스·인증 한 번에)
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/ops/check-runtime-connection.sh
 
+# 2) 백엔드 헬스 체크
+curl -sS http://127.0.0.1:4080/health
 
-# 파일 무결성 보존 프로토콜 (File Integrity & CSS Maintenance Protocol)
-이 지침은 긴 파일(특히 CSS/스타일 시트)을 편집할 때 기존 코드가 유실되는 것을 방지하기 위해 반드시 준수해야 합니다.
+# 3) 세션 목록 + isRunning 상태 조회
+./deploy/ops/debug-session-status.sh [sessionId] [chatId]
 
-1. **`replace` 도구 우선 사용:**
-    - 기존 파일의 내용을 수정할 때는 `write_file` 대신 반드시 **`replace`** 도구를 사용합니다.
-    - `replace`는 특정 문자열(`old_string`)을 정밀하게 타겟팅하므로, 파일의 나머지 부분(Unchanged code)이 삭제되는 것을 구조적으로 방지할 수 있습니다.
+# 4) 최근 채팅 로그 pretty-print
+./deploy/ops/debug-chat-log.sh <chatId>
 
-2. **`write_file` 사용 시 전수 확인:**
-    - 부득이하게 `write_file`을 사용해야 하는 경우, 반드시 파일의 **전체 내용**을 먼저 읽고(`read_file`), 제가 수정하려는 부분과 기존 내용이 **완벽하게 병합된 전체 텍스트**를 작성합니다.
-    - `// ... rest of code`와 같은 생략 기법은 절대 사용하지 않으며, 전체 내용을 그대로 유지한 상태에서 필요한 부분만 교체합니다.
+# 5) 백엔드 실시간 로그
+pm2 logs aris-backend --lines 120 --nostream
 
-3. **수정 후 무결성 검증 (Post-Write Validation):**
-    - 쓰기 작업 직후, 파일의 크기가 비정상적으로 줄어들지 않았는지(예: 수천 라인이 수십 라인으로 감소) 확인합니다.
-    - `grep_search` 등을 사용하여 기존에 존재해야 할 다른 스타일 정의나 코드가 여전히 남아 있는지 즉시 재검토합니다.
+# 6) 웹 컨테이너 로그
+docker compose --env-file /home/ubuntu/.config/aris/prod.env logs --tail=120 aris-web-blue aris-web-green
 
-4. **CSS/스타일 시트 특화 관리:**
-    - CSS 파일은 누락 시 UI에 치명적이므로, 수정 전후의 상태를 비교하는 단계를 명시적으로 거칩니다.
-    - 긴 파일의 경우, 수정할 범위뿐만 아니라 그 앞뒤 컨텍스트를 충분히 읽어(`read_file`의 `start_line`, `end_line` 활용) 위치를 정확히 파악한 후 `replace`를 적용합니다.
+# 7) dev 서버 띄우기 (디버그 로그 확인용)
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env SKIP_DB_PREPARE=1 WEB_DEV_PORT=3305 \
+  ./deploy/dev/run_web_dev_hot_reload.sh
+```
+
+### 절대 하지 말아야 할 것
+
+- 토큰/포트를 코드에서 직접 추측해서 `curl` 날리지 않는다 → `check-runtime-connection.sh` 사용
+- `runtimeStateCache`, `activeRuns` 등 인메모리 상태를 코드 읽기만으로 단정짓지 않는다 → 실제 로그/API로 검증
+- Happy Server JWT 토큰(`HAPPY_SERVER_TOKEN`)을 aris-backend API 인증에 쓰지 않는다 → `RUNTIME_API_TOKEN` 사용
