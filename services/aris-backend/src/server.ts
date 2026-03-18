@@ -11,7 +11,8 @@ type RequestBucket = {
 
 type ServerConfig = {
   RUNTIME_API_TOKEN: string;
-  RUNTIME_BACKEND?: 'mock' | 'happy';
+  RUNTIME_BACKEND?: 'mock' | 'happy' | 'prisma';
+  DATABASE_URL?: string;
   HAPPY_SERVER_URL?: string;
   HAPPY_SERVER_TOKEN?: string;
   DEFAULT_PROJECT_PATH: string;
@@ -102,6 +103,7 @@ export function buildServer(config: ServerConfig) {
     config.HAPPY_SERVER_URL,
     config.HAPPY_SERVER_TOKEN,
     config.HOST_PROJECTS_ROOT,
+    config.DATABASE_URL,
   );
   const rateLimitBuckets = new Map<string, RequestBucket>();
 
