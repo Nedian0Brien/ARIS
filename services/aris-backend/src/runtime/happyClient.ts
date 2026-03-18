@@ -1490,6 +1490,10 @@ export class HappyRuntimeStore {
   private readonly hostProjectsRoot: string;
   private readonly happyEventLogger: HappyEventLogger;
 
+  // listSessions() 응답을 1초간 캐시하여 getSession() 호출 시 happy-server 왕복을 줄임
+  private sessionListCache: { sessions: RuntimeSession[]; expiresAt: number } | null = null;
+  private readonly SESSION_LIST_CACHE_TTL_MS = 1_000;
+
   constructor(opts: { serverUrl: string; token: string; workspaceRoot?: string; hostProjectsRoot?: string }) {
     this.serverUrl = opts.serverUrl.replace(/\/+$/, '');
     this.serverToken = opts.token;
@@ -4639,13 +4643,23 @@ export class HappyRuntimeStore {
   }
 
   async listSessions(): Promise<RuntimeSession[]> {
+    const now = Date.now();
+    if (this.sessionListCache && this.sessionListCache.expiresAt > now) {
+      return this.sessionListCache.sessions;
+    }
     const raw = await this.request<HappyListSessionsResponse>('/v1/sessions');
     const list = Array.isArray(raw.sessions) ? raw.sessions : [];
-    return list
+    const sessions = list
       .map((item) => (asRecord(item) ? (item as unknown as HappyBackendSession) : null))
       .filter((item): item is HappyBackendSession => item !== null && typeof item.id === 'string')
       .map(toRuntimeSession)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    this.sessionListCache = { sessions, expiresAt: now + this.SESSION_LIST_CACHE_TTL_MS };
+    return sessions;
+  }
+
+  private invalidateSessionListCache(): void {
+    this.sessionListCache = null;
   }
 
   async getSession(sessionId: string): Promise<RuntimeSession | null> {
@@ -4687,6 +4701,7 @@ export class HappyRuntimeStore {
     if (!mapped) {
       throw new Error('Failed to create happy session');
     }
+    this.invalidateSessionListCache();
     return toRuntimeSession(mapped);
   }
 
@@ -4943,6 +4958,7 @@ export class HappyRuntimeStore {
         }
         throw error;
       }
+      this.invalidateSessionListCache();
     }
 
     return {
