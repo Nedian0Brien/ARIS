@@ -88,6 +88,28 @@ function toRuntimeMessage(row: {
   };
 }
 
+function normalizeMetaChatId(meta: unknown): string | null {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) {
+    return null;
+  }
+  const value = (meta as { chatId?: unknown }).chatId;
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+export function filterRealtimeRowsByChat<
+  TRow extends {
+    meta: unknown;
+  },
+>(rows: TRow[], chatId?: string): TRow[] {
+  const normalizedChatId = typeof chatId === 'string' && chatId.trim().length > 0
+    ? chatId.trim()
+    : null;
+  if (!normalizedChatId) {
+    return rows;
+  }
+  return rows.filter((row) => normalizeMetaChatId(row.meta) === normalizedChatId);
+}
+
 function toPermissionRequest(row: {
   id: string;
   sessionId: string;
@@ -217,7 +239,8 @@ export class PrismaRuntimeStore {
       orderBy: { seq: 'asc' },
       ...(options.limit ? { take: options.limit } : {}),
     });
-    const events = rows.map(toRuntimeMessage);
+    const filteredRows = filterRealtimeRowsByChat(rows, options.chatId);
+    const events = filteredRows.map(toRuntimeMessage);
     const cursor = rows.length > 0 ? rows[rows.length - 1].seq : afterSeq;
     return { events, cursor };
   }
