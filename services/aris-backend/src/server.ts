@@ -141,6 +141,12 @@ function parseHappyBridgeMessages(body: unknown): HappyBridgeAppendMessage[] | n
     }
 
     const payloadMeta = asRecord(payload.meta) ?? undefined;
+    const payloadRole = typeof payload.role === 'string' && payload.role.trim().length > 0
+      ? payload.role.trim()
+      : undefined;
+    const mergedMeta = payloadRole
+      ? { role: payloadRole, ...payloadMeta }
+      : payloadMeta;
     const type = typeof payload.type === 'string' && payload.type.trim().length > 0
       ? payload.type.trim()
       : 'message';
@@ -161,7 +167,7 @@ function parseHappyBridgeMessages(body: unknown): HappyBridgeAppendMessage[] | n
         type,
         ...(title ? { title } : {}),
         text,
-        ...(payloadMeta ? { meta: payloadMeta } : {}),
+        ...(mergedMeta ? { meta: mergedMeta } : {}),
       },
     } satisfies HappyBridgeAppendMessage;
   });
