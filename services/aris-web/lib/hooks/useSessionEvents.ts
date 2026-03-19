@@ -113,6 +113,14 @@ export function collapseRealtimeGeminiPartialEvents(events: UiEvent[]): UiEvent[
   });
 }
 
+export function getScopedSessionEvents(
+  events: UiEvent[],
+  eventsForChatId: string | null,
+  activeChatId: string | null,
+): UiEvent[] {
+  return eventsForChatId === activeChatId ? events : [];
+}
+
 function areEventsEqual(prev: UiEvent[], next: UiEvent[]): boolean {
   if (prev.length !== next.length) {
     return false;
@@ -212,6 +220,13 @@ export function useSessionEvents(
   useEffect(() => {
     hasMoreBeforeRef.current = hasMoreBefore;
   }, [hasMoreBefore]);
+
+  const scopedEvents = useMemo(
+    () => getScopedSessionEvents(events, eventsForChatId, chatId),
+    [chatId, events, eventsForChatId],
+  );
+  const scopedHasMoreBefore = eventsForChatId === chatId ? hasMoreBefore : false;
+  const scopedIsLoadingOlder = eventsForChatId === chatId ? isLoadingOlder : false;
 
   const refreshEvents = useCallback(async (force = false) => {
     if (!enabled && !force) {
@@ -652,8 +667,17 @@ export function useSessionEvents(
   }, [enabled, sessionId, chatId, includeUnassigned, refreshEvents]);
 
   const addEvent = (event: UiEvent) => {
+    setEventsForChatId(chatId);
     setEvents((prev) => mergeEvents([...prev, event]));
   };
 
-  return { events, eventsForChatId, addEvent, syncError, loadOlder, hasMoreBefore, isLoadingOlder };
+  return {
+    events: scopedEvents,
+    eventsForChatId,
+    addEvent,
+    syncError,
+    loadOlder,
+    hasMoreBefore: scopedHasMoreBefore,
+    isLoadingOlder: scopedIsLoadingOlder,
+  };
 }
