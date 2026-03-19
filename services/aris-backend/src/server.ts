@@ -66,6 +66,19 @@ const appendMessageSchema = z.object({
   meta: z.record(z.string(), z.unknown()).optional(),
 });
 
+type AppendMessageInput = z.infer<typeof appendMessageSchema>;
+
+type HappyBridgeAppendMessage = {
+  localId: string | null;
+  content: string;
+  input: {
+    type: string;
+    title?: string;
+    text: string;
+    meta?: Record<string, unknown>;
+  };
+};
+
 const sessionActionSchema = z.object({
   action: z.enum(['abort', 'retry', 'kill', 'resume']),
   chatId: z.string().trim().min(1).optional(),
@@ -95,6 +108,100 @@ function toErrorMessage(error: unknown, fallback = 'Internal Server Error'): str
     }
   }
   return fallback;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function parseHappyBridgeMessages(body: unknown): HappyBridgeAppendMessage[] | null {
+  const record = asRecord(body);
+  if (!record || !Array.isArray(record.messages)) {
+    return null;
+  }
+
+  const parsed = record.messages.map((item) => {
+    const messageRecord = asRecord(item);
+    const content = typeof messageRecord?.content === 'string'
+      ? messageRecord.content
+      : '';
+    if (!content.trim()) {
+      return null;
+    }
+
+    let payload: Record<string, unknown>;
+    try {
+      const parsedContent = JSON.parse(content) as unknown;
+      payload = asRecord(parsedContent) ?? {};
+    } catch {
+      return null;
+    }
+
+    const payloadMeta = asRecord(payload.meta) ?? undefined;
+    const type = typeof payload.type === 'string' && payload.type.trim().length > 0
+      ? payload.type.trim()
+      : 'message';
+    const title = typeof payload.title === 'string' && payload.title.trim().length > 0
+      ? payload.title.trim()
+      : undefined;
+    const text = typeof payload.text === 'string'
+      ? payload.text
+      : '';
+    const localId = typeof messageRecord?.localId === 'string' && messageRecord.localId.trim().length > 0
+      ? messageRecord.localId.trim()
+      : null;
+
+    return {
+      localId,
+      content,
+      input: {
+        type,
+        ...(title ? { title } : {}),
+        text,
+        ...(payloadMeta ? { meta: payloadMeta } : {}),
+      },
+    } satisfies HappyBridgeAppendMessage;
+  });
+
+  if (parsed.some((item) => item === null)) {
+    return null;
+  }
+
+  return parsed as HappyBridgeAppendMessage[];
+}
+
+function toHappyBridgeMessage(
+  message: {
+    id: string;
+    type: string;
+    title: string;
+    text: string;
+    createdAt: string;
+    meta?: Record<string, unknown>;
+  },
+  localId: string | null,
+  content: string,
+) {
+  const seqRaw = message.meta?.seq;
+  const seq = typeof seqRaw === 'number'
+    ? seqRaw
+    : Number.parseInt(String(seqRaw ?? ''), 10);
+  const createdAt = Date.parse(message.createdAt);
+  const createdAtMs = Number.isFinite(createdAt) ? createdAt : Date.now();
+
+  return {
+    id: message.id,
+    seq: Number.isFinite(seq) ? seq : 0,
+    localId,
+    content,
+    createdAt: createdAtMs,
+    updatedAt: createdAtMs,
+    type: message.type,
+    title: message.title,
+  };
 }
 
 export function buildServer(config: ServerConfig) {
@@ -395,12 +502,32 @@ export function buildServer(config: ServerConfig) {
   });
 
   app.post('/v3/sessions/:sessionId/messages', async (request, reply) => {
+    const { sessionId } = request.params as { sessionId: string };
+    const bridgeMessages = parseHappyBridgeMessages(request.body);
+    if (bridgeMessages) {
+      try {
+        const createdMessages = [];
+        for (const bridgeMessage of bridgeMessages) {
+          const createdMessage = await store.appendMessage(sessionId, bridgeMessage.input);
+          createdMessages.push(
+            toHappyBridgeMessage(createdMessage, bridgeMessage.localId, bridgeMessage.content),
+          );
+        }
+
+        return reply.code(201).send({ messages: createdMessages });
+      } catch (error) {
+        if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
+          return reply.code(404).send({ error: 'Session not found' });
+        }
+        const message = toErrorMessage(error, 'Failed to append session message');
+        return reply.code(502).send({ error: message });
+      }
+    }
+
     const parsed = appendMessageSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: 'Invalid request body' });
     }
-
-    const { sessionId } = request.params as { sessionId: string };
 
     try {
       const message = await store.appendMessage(sessionId, parsed.data);
