@@ -4052,6 +4052,8 @@ export class HappyRuntimeStore {
       const streamedClaudeTextReplies = new Set<string>();
       const streamedGeminiTextReplies = new Set<string>();
       let streamedGeminiCompletedTextPersisted = false;
+      // onText 콜백에서 claude 텍스트를 실제로 저장했는지 추적하는 플래그
+      let claudeTextStreamed = false;
       let claudeMessageQueue: ClaudeMessageQueue | null = null;
       let geminiMessageQueue: GeminiMessageQueue | null = null;
       const persistClaudeProjection = async (projection: {
@@ -4170,21 +4172,17 @@ export class HappyRuntimeStore {
               streamedActionIndex += 1;
             },
             onText: async (event, meta) => {
+              // Claude CLI는 동일한 텍스트를 'assistant' 이벤트와 'result' 이벤트로 두 번 방출
+              // 'result' 이벤트는 스트리밍 완료 후 최종 출력을 다시 전달하는 것이므로,
+              // 'assistant' 이벤트에서만 저장하고 'result'는 무시
+              if (event.source === 'result') {
+                return;
+              }
               const normalizedText = sanitizeAgentMessageText(event.text);
               if (!normalizedText) {
                 return;
               }
-              // buildStreamedTextReplyKey()와 동일한 형식으로 키 생성
-              // → agentMessagePersisted 중복 감지가 정확히 동작하기 위해 반드시 일치해야 함
-              const textKey = buildStreamedTextReplyKey({
-                source: event.source === 'result' ? 'result' : 'assistant',
-                threadId: meta.threadId,
-                text: normalizedText,
-              });
-              if (streamedClaudeTextReplies.has(textKey)) {
-                return;
-              }
-              streamedClaudeTextReplies.add(textKey);
+              claudeTextStreamed = true;
               await claudeMessageQueue?.enqueueText({
                 output: normalizedText,
                 execCwd: nonCodexCwd,
@@ -4218,7 +4216,9 @@ export class HappyRuntimeStore {
             output: claudeResponse.output,
             cwd: claudeResponse.cwd,
             streamedPersisted: false,
-            agentMessagePersisted: false,
+            // onText 콜백에서 실제로 텍스트를 저장한 경우 true로 설정
+            // → persistFinalAgentOutput이 중복 실행되지 않도록 차단
+            agentMessagePersisted: claudeTextStreamed,
             streamedActionsPersisted: claudeResponse.streamedActionsPersisted,
             inferredActions: claudeResponse.inferredActions,
             threadId: claudeResponse.threadId ?? claudeResponse.actionThreadId,
@@ -4489,23 +4489,9 @@ export class HappyRuntimeStore {
 
       const finalAgentOutput = sanitizeAgentMessageText(response.output);
       const streamedPersisted = Boolean(response.streamedPersisted);
+      // claudeTextStreamed가 true이면 이미 onText에서 저장 완료이므로 중복 저장 방지
+      // (이전의 Set 기반 중복 감지 로직은 claudeTextStreamed 플래그로 대체)
       const agentMessagePersisted = Boolean(response.agentMessagePersisted)
-        || (
-          flavor === 'claude'
-          && finalAgentOutput.length > 0
-          && (
-            streamedClaudeTextReplies.has(buildStreamedTextReplyKey({
-              source: 'assistant',
-              threadId: response.threadId,
-              text: finalAgentOutput,
-            }))
-            || streamedClaudeTextReplies.has(buildStreamedTextReplyKey({
-              source: 'result',
-              threadId: response.threadId,
-              text: finalAgentOutput,
-            }))
-          )
-        )
         || (
           flavor === 'gemini'
           && (
