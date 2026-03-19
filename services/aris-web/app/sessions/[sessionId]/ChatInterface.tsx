@@ -74,6 +74,7 @@ import { CustomizationSidebar } from './CustomizationSidebar';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import styles from './ChatInterface.module.css';
 import dynamic from 'next/dynamic';
+import { resolveActiveChat, resolveNextSelectedChatId } from './chatSelection';
 
 // SSR을 비활성화해 react-syntax-highlighter의 window 참조 오류 방지
 const SyntaxHighlighter = dynamic(
@@ -2159,33 +2160,33 @@ export function ChatInterface({
 
   const [chats, setChats] = useState<SessionChat[]>(() => sortSessionChats(initialChats));
   const [selectedChatId, setSelectedChatId] = useState<string | null>(activeChatId);
+  const [isNewChatPlaceholder, setIsNewChatPlaceholder] = useState(false);
   const activeChat = useMemo(
-    () => (selectedChatId ? chats.find((chat) => chat.id === selectedChatId) : null) ?? chats[0] ?? null,
-    [chats, selectedChatId],
+    () => resolveActiveChat(chats, selectedChatId, isNewChatPlaceholder),
+    [chats, isNewChatPlaceholder, selectedChatId],
   );
   const activeChatIdResolved = activeChat?.id ?? null;
   useEffect(() => {
-    if (selectedChatId && chats.some((chat) => chat.id === selectedChatId)) {
+    const nextSelectedChatId = resolveNextSelectedChatId({
+      chats,
+      selectedChatId,
+      requestedChatId: readChatIdFromLocation(),
+      isNewChatPlaceholder,
+    });
+    if (nextSelectedChatId === selectedChatId) {
       return;
     }
-    const requestedChatId = readChatIdFromLocation();
-    if (requestedChatId && chats.some((chat) => chat.id === requestedChatId)) {
-      setSelectedChatId(requestedChatId);
-      return;
-    }
-    const fallbackChatId = chats[0]?.id ?? null;
-    if (fallbackChatId !== selectedChatId) {
-      setSelectedChatId(fallbackChatId);
-    }
-  }, [chats, selectedChatId]);
+    setSelectedChatId(nextSelectedChatId);
+  }, [chats, isNewChatPlaceholder, selectedChatId]);
   useEffect(() => {
     const syncFromHistory = () => {
-      const requestedChatId = readChatIdFromLocation();
-      if (requestedChatId && chats.some((chat) => chat.id === requestedChatId)) {
-        setSelectedChatId(requestedChatId);
-        return;
-      }
-      setSelectedChatId(chats[0]?.id ?? null);
+      setIsNewChatPlaceholder(false);
+      setSelectedChatId(resolveNextSelectedChatId({
+        chats,
+        selectedChatId: null,
+        requestedChatId: readChatIdFromLocation(),
+        isNewChatPlaceholder: false,
+      }));
     };
     window.addEventListener('popstate', syncFromHistory);
     return () => {
@@ -2193,11 +2194,11 @@ export function ChatInterface({
     };
   }, [chats]);
   useEffect(() => {
-    if (!activeChatIdResolved) {
+    if (isNewChatPlaceholder || !activeChatIdResolved) {
       return;
     }
     writeChatIdToHistory(buildChatUrl(sessionId, activeChatIdResolved), 'replace');
-  }, [activeChatIdResolved, sessionId]);
+  }, [activeChatIdResolved, isNewChatPlaceholder, sessionId]);
   const includeUnassignedEvents = Boolean(activeChat?.isDefault);
   const { isLeader: isSessionSyncLeader } = useSessionSyncLeader(sessionId);
   const [chatRuntimeUiByChat, setChatRuntimeUiByChat] = useState<Record<string, ChatRuntimeUiState>>({});
@@ -2318,7 +2319,6 @@ export function ChatInterface({
     updateActiveChatRuntimeUi({ submitError: value });
   }, [updateActiveChatRuntimeUi]);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
-  const [isNewChatPlaceholder, setIsNewChatPlaceholder] = useState(false);
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
   const [expandedActionRunIds, setExpandedActionRunIds] = useState<Record<string, boolean>>({});
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
