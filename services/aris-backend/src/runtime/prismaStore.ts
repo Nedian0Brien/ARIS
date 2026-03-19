@@ -110,6 +110,43 @@ export function filterRealtimeRowsByChat<
   return rows.filter((row) => normalizeMetaChatId(row.meta) === normalizedChatId);
 }
 
+function deriveRunningStateFromMeta(meta: unknown): boolean | null {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) {
+    return null;
+  }
+  const record = meta as Record<string, unknown>;
+  const action = typeof record.action === 'string' ? record.action.trim() : '';
+  if (action === 'abort' || action === 'kill') {
+    return false;
+  }
+  if (action === 'retry' || action === 'resume') {
+    return true;
+  }
+  const role = typeof record.role === 'string' ? record.role.trim() : '';
+  if (role === 'user') {
+    return true;
+  }
+  if (role === 'agent') {
+    return false;
+  }
+  return null;
+}
+
+export function resolveChatRunningState<
+  TRow extends {
+    meta: unknown;
+  },
+>(rows: TRow[], chatId: string): boolean {
+  const filteredRows = filterRealtimeRowsByChat(rows, chatId);
+  for (let index = filteredRows.length - 1; index >= 0; index -= 1) {
+    const derived = deriveRunningStateFromMeta(filteredRows[index]?.meta);
+    if (derived !== null) {
+      return derived;
+    }
+  }
+  return false;
+}
+
 function toPermissionRequest(row: {
   id: string;
   sessionId: string;
@@ -285,7 +322,7 @@ export class PrismaRuntimeStore {
   async applySessionAction(
     sessionId: string,
     action: SessionAction,
-    _chatId?: string,
+    chatId?: string,
   ): Promise<{ accepted: boolean; message: string; at: string }> {
     const session = await this.db.session.findUnique({ where: { id: sessionId } });
     if (!session) throw new Error('SESSION_NOT_FOUND');
@@ -303,7 +340,12 @@ export class PrismaRuntimeStore {
       resume: 'running',
     };
 
-    const updates: { status: string; riskScore?: number } = { status: statusByAction[action] };
+    const normalizedChatId = typeof chatId === 'string' && chatId.trim().length > 0
+      ? chatId.trim()
+      : null;
+    const updates: { status?: string; riskScore?: number } = normalizedChatId && action === 'abort'
+      ? {}
+      : { status: statusByAction[action] };
     if (action === 'retry' || action === 'resume') {
       updates.riskScore = Math.max(10, session.riskScore - 15);
     }
@@ -320,7 +362,11 @@ export class PrismaRuntimeStore {
           type: 'tool',
           title: 'Command Execution',
           text: `$ session ${action}\nexit code: 0`,
-          meta: { system: true, action },
+          meta: {
+            system: true,
+            action,
+            ...(normalizedChatId ? { chatId: normalizedChatId } : {}),
+          },
           seq: await this.db.sessionMessage
             .aggregate({ where: { sessionId }, _max: { seq: true } })
             .then((a) => (a._max.seq ?? 0) + 1),
@@ -332,6 +378,18 @@ export class PrismaRuntimeStore {
   }
 
   async isSessionRunning(sessionId: string, _chatId?: string): Promise<boolean> {
+    const normalizedChatId = typeof _chatId === 'string' && _chatId.trim().length > 0
+      ? _chatId.trim()
+      : null;
+    if (normalizedChatId) {
+      const rows = await this.db.sessionMessage.findMany({
+        where: { sessionId },
+        orderBy: { seq: 'asc' },
+        take: 200,
+      });
+      return resolveChatRunningState(rows, normalizedChatId);
+    }
+
     const row = await this.db.session.findUnique({
       where: { id: sessionId },
       select: { status: true },
