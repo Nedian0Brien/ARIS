@@ -4935,6 +4935,41 @@ export class HappyRuntimeStore {
     return created;
   }
 
+  async triggerPersistedUserMessage(sessionId: string, input: HappyRuntimeAppendInput): Promise<void> {
+    if (input.meta?.role === 'agent') {
+      return;
+    }
+
+    const session = await this.getSession(sessionId);
+    if (!session) {
+      throw new Error('SESSION_NOT_FOUND');
+    }
+
+    const chatId = typeof input.meta?.chatId === 'string' && input.meta.chatId.trim().length > 0
+      ? input.meta.chatId.trim()
+      : undefined;
+    const threadId = typeof input.meta?.threadId === 'string' && input.meta.threadId.trim().length > 0
+      ? input.meta.threadId.trim()
+      : undefined;
+    const requestedAgent = normalizeAgent(input.meta?.agent);
+    const requestedModel = normalizeModel(input.meta?.model);
+    const requestedGeminiMode = normalizeGeminiMode(input.meta?.geminiMode);
+    const customModel = normalizeModel(input.meta?.customModel);
+    const modelReasoningEffort = normalizeModelReasoningEffort(
+      input.meta?.modelReasoningEffort ?? input.meta?.model_reasoning_effort,
+    );
+
+    void this.generateAndPersistAgentReply(session, input.text, {
+      chatId,
+      threadId,
+      ...(requestedAgent !== 'unknown' ? { agent: requestedAgent } : {}),
+      ...(requestedModel ? { model: requestedModel } : {}),
+      ...(requestedGeminiMode ? { geminiMode: requestedGeminiMode } : {}),
+      ...(customModel ? { customModel } : {}),
+      ...(modelReasoningEffort ? { modelReasoningEffort } : {}),
+    });
+  }
+
   async applySessionAction(sessionId: string, action: SessionAction, chatId?: string): Promise<{ accepted: boolean; message: string; at: string }> {
     const session = await this.getSession(sessionId);
     if (!session) {

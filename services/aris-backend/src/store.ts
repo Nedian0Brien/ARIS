@@ -66,6 +66,18 @@ interface RuntimeStoreBackend {
   decidePermission(permissionId: string, decision: PermissionDecision): Promise<PermissionRequest>;
 }
 
+type RuntimeExecutor = Pick<
+  HappyRuntimeStore,
+  | 'triggerPersistedUserMessage'
+  | 'listRealtimeEvents'
+  | 'applySessionAction'
+  | 'isSessionRunning'
+  | 'listPermissions'
+  | 'createPermission'
+  | 'decidePermission'
+  | 'getGeminiSessionCapabilities'
+>;
+
 class MockRuntimeStore implements RuntimeStoreBackend {
   private readonly sessions = new Map<string, RuntimeSession>();
   private readonly messages = new Map<string, RuntimeMessage[]>();
@@ -331,6 +343,7 @@ class MockRuntimeStore implements RuntimeStoreBackend {
 
 export class RuntimeStore {
   private readonly delegate: RuntimeStoreBackend;
+  private readonly runtimeExecutor: RuntimeExecutor | null;
 
   constructor(
     defaultProjectPath: string,
@@ -339,12 +352,23 @@ export class RuntimeStore {
     happyServerToken?: string,
     hostProjectsRoot?: string,
     databaseUrl?: string,
+    runtimeApiUrl?: string,
+    runtimeApiToken?: string,
   ) {
     if (runtimeBackend === 'prisma') {
       if (!databaseUrl) {
         throw new Error('DATABASE_URL is required when RUNTIME_BACKEND=prisma');
       }
       this.delegate = new PrismaRuntimeStore(databaseUrl);
+      const internalRuntimeUrl = typeof runtimeApiUrl === 'string' && runtimeApiUrl.trim().length > 0
+        ? runtimeApiUrl.trim()
+        : 'http://127.0.0.1:4080';
+      this.runtimeExecutor = new HappyRuntimeStore({
+        serverUrl: internalRuntimeUrl,
+        token: runtimeApiToken ?? '',
+        workspaceRoot: defaultProjectPath,
+        hostProjectsRoot: hostProjectsRoot ?? '',
+      });
       return;
     }
 
@@ -358,10 +382,12 @@ export class RuntimeStore {
         workspaceRoot: defaultProjectPath,
         hostProjectsRoot: hostProjectsRoot ?? '',
       });
+      this.runtimeExecutor = null;
       return;
     }
 
     this.delegate = new MockRuntimeStore(defaultProjectPath);
+    this.runtimeExecutor = null;
   }
 
   async listSessions() {
@@ -373,6 +399,9 @@ export class RuntimeStore {
   }
 
   async getGeminiSessionCapabilities(sessionId: string) {
+    if (this.runtimeExecutor) {
+      return this.runtimeExecutor.getGeminiSessionCapabilities(sessionId);
+    }
     if ('getGeminiSessionCapabilities' in this.delegate && typeof this.delegate.getGeminiSessionCapabilities === 'function') {
       return this.delegate.getGeminiSessionCapabilities(sessionId);
     }
@@ -388,10 +417,17 @@ export class RuntimeStore {
   }
 
   async appendMessage(sessionId: string, input: AppendMessageInput) {
-    return this.delegate.appendMessage(sessionId, input);
+    const created = await this.delegate.appendMessage(sessionId, input);
+    if (this.runtimeExecutor && input.meta?.role !== 'agent') {
+      await this.runtimeExecutor.triggerPersistedUserMessage(sessionId, input);
+    }
+    return created;
   }
 
   async listRealtimeEvents(sessionId: string, options?: { afterCursor?: number; limit?: number; chatId?: string }) {
+    if (this.runtimeExecutor) {
+      return this.runtimeExecutor.listRealtimeEvents(sessionId, options);
+    }
     if ('listRealtimeEvents' in this.delegate && typeof this.delegate.listRealtimeEvents === 'function') {
       return this.delegate.listRealtimeEvents(sessionId, options);
     }
@@ -399,22 +435,42 @@ export class RuntimeStore {
   }
 
   async applySessionAction(sessionId: string, action: SessionAction, chatId?: string) {
+    if (this.runtimeExecutor) {
+      if (action === 'kill') {
+        await this.runtimeExecutor.applySessionAction(sessionId, 'abort');
+        return this.delegate.applySessionAction(sessionId, action, chatId);
+      }
+      await this.runtimeExecutor.applySessionAction(sessionId, action, chatId);
+      return this.delegate.applySessionAction(sessionId, action, chatId);
+    }
     return this.delegate.applySessionAction(sessionId, action, chatId);
   }
 
   async isSessionRunning(sessionId: string, chatId?: string) {
+    if (this.runtimeExecutor) {
+      return this.runtimeExecutor.isSessionRunning(sessionId, chatId);
+    }
     return this.delegate.isSessionRunning(sessionId, chatId);
   }
 
   async listPermissions(state?: PermissionRequest['state']) {
+    if (this.runtimeExecutor) {
+      return this.runtimeExecutor.listPermissions(state);
+    }
     return this.delegate.listPermissions(state);
   }
 
   async createPermission(input: CreatePermissionInput) {
+    if (this.runtimeExecutor) {
+      return this.runtimeExecutor.createPermission(input);
+    }
     return this.delegate.createPermission(input);
   }
 
   async decidePermission(permissionId: string, decision: PermissionDecision) {
+    if (this.runtimeExecutor) {
+      return this.runtimeExecutor.decidePermission(permissionId, decision);
+    }
     return this.delegate.decidePermission(permissionId, decision);
   }
 
