@@ -72,6 +72,77 @@ describe('aris-backend API', () => {
     await app.close();
   });
 
+  it('accepts happy bridge payloads on the messages endpoint', async () => {
+    const app = buildServer({
+      RUNTIME_API_TOKEN: TOKEN,
+      DEFAULT_PROJECT_PATH: '/tmp/project',
+      LOG_LEVEL: 'silent',
+    });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: {
+        ...authHeader(),
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        path: '/tmp/project',
+        flavor: 'claude',
+      }),
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const sessionId = (createResponse.json() as { session: { id: string } }).session.id;
+
+    const appendResponse = await app.inject({
+      method: 'POST',
+      url: `/v3/sessions/${sessionId}/messages`,
+      headers: {
+        ...authHeader(),
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        messages: [
+          {
+            localId: 'local-agent-1',
+            content: JSON.stringify({
+              role: 'agent',
+              type: 'message',
+              title: 'Text Reply',
+              text: 'OK',
+              meta: {
+                role: 'agent',
+                chatId: 'chat-bridge-1',
+              },
+            }),
+          },
+        ],
+      }),
+    });
+
+    expect(appendResponse.statusCode).toBe(201);
+    const appendPayload = appendResponse.json() as {
+      messages: Array<{ localId?: string | null }>;
+    };
+    expect(appendPayload.messages[0]?.localId).toBe('local-agent-1');
+
+    const messagesResponse = await app.inject({
+      method: 'GET',
+      url: `/v3/sessions/${sessionId}/messages`,
+      headers: authHeader(),
+    });
+
+    expect(messagesResponse.statusCode).toBe(200);
+    const messagesPayload = messagesResponse.json() as {
+      messages: Array<{ text?: string; meta?: { role?: string; chatId?: string } }>;
+    };
+    expect(messagesPayload.messages.some((message) => message.text === 'OK')).toBe(true);
+    expect(messagesPayload.messages.some((message) => message.meta?.role === 'agent' && message.meta?.chatId === 'chat-bridge-1')).toBe(true);
+
+    await app.close();
+  });
+
   it('returns Gemini capabilities even when the session flavor is not gemini', async () => {
     const app = buildServer({
       RUNTIME_API_TOKEN: TOKEN,
