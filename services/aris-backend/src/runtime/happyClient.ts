@@ -1971,7 +1971,9 @@ export class HappyRuntimeStore {
           maxBuffer: 8 * 1024 * 1024,
           env: { ...spawnEnv, PATH: mergedPath },
           signal,
-        })
+          stdio: ['ignore', 'pipe', 'pipe'],
+          encoding: 'utf8',
+        } as any) as unknown as Promise<{ stdout: string; stderr: string }>
     );
     const runCommandStreaming = async (
       args: string[],
