@@ -10,6 +10,8 @@ type RequestBucket = {
 };
 
 type ServerConfig = {
+  HOST: string;
+  PORT: number;
   RUNTIME_API_TOKEN: string;
   RUNTIME_BACKEND?: 'mock' | 'happy' | 'prisma';
   DATABASE_URL?: string;
@@ -104,6 +106,8 @@ export function buildServer(config: ServerConfig) {
     config.HAPPY_SERVER_TOKEN,
     config.HOST_PROJECTS_ROOT,
     config.DATABASE_URL,
+    `http://127.0.0.1:${config.PORT}`,
+    config.RUNTIME_API_TOKEN,
   );
   const rateLimitBuckets = new Map<string, RequestBucket>();
 
