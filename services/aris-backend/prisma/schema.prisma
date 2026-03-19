@@ -1,0 +1,59 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Session {
+  id             String   @id @default(uuid())
+  flavor         String
+  path           String
+  status         String   @default("idle")
+  approvalPolicy String   @default("on-request")
+  model          String?
+  riskScore      Int      @default(20)
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  messages    SessionMessage[]
+  permissions Permission[]
+}
+
+model SessionMessage {
+  id        String   @id @default(uuid())
+  sessionId String
+  type      String
+  title     String?
+  text      String
+  meta      Json?
+  seq       Int
+
+  createdAt DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, seq])
+  @@index([sessionId, seq])
+  @@index([sessionId, createdAt])
+}
+
+model Permission {
+  id          String    @id @default(uuid())
+  sessionId   String
+  chatId      String?
+  agent       String
+  command     String
+  reason      String
+  risk        String
+  state       String    @default("pending")
+  requestedAt DateTime  @default(now())
+  decidedAt   DateTime?
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([state])
+}

@@ -11,8 +11,9 @@ import type {
   SessionStatus,
 } from './types.js';
 import { HappyRuntimeStore } from './runtime/happyClient.js';
+import { PrismaRuntimeStore } from './runtime/prismaStore.js';
 
-type RuntimeBackend = 'mock' | 'happy';
+type RuntimeBackend = 'mock' | 'happy' | 'prisma';
 
 type CreateSessionInput = {
   path: string;
@@ -337,7 +338,16 @@ export class RuntimeStore {
     happyServerUrl?: string,
     happyServerToken?: string,
     hostProjectsRoot?: string,
+    databaseUrl?: string,
   ) {
+    if (runtimeBackend === 'prisma') {
+      if (!databaseUrl) {
+        throw new Error('DATABASE_URL is required when RUNTIME_BACKEND=prisma');
+      }
+      this.delegate = new PrismaRuntimeStore(databaseUrl);
+      return;
+    }
+
     if (runtimeBackend === 'happy') {
       if (!happyServerUrl) {
         throw new Error('HAPPY_SERVER_URL is required when RUNTIME_BACKEND=happy');
