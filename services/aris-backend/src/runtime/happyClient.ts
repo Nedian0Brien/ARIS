@@ -4174,11 +4174,13 @@ export class HappyRuntimeStore {
               if (!normalizedText) {
                 return;
               }
-              const textKey = [
-                event.source,
-                meta.threadId,
-                normalizedText,
-              ].join('|');
+              // buildStreamedTextReplyKey()와 동일한 형식으로 키 생성
+              // → agentMessagePersisted 중복 감지가 정확히 동작하기 위해 반드시 일치해야 함
+              const textKey = buildStreamedTextReplyKey({
+                source: event.source === 'result' ? 'result' : 'assistant',
+                threadId: meta.threadId,
+                text: normalizedText,
+              });
               if (streamedClaudeTextReplies.has(textKey)) {
                 return;
               }
