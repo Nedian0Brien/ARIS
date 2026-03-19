@@ -100,6 +100,7 @@ module.exports = {
         PORT: 4080,
         RUNTIME_API_TOKEN: resolveRuntimeToken(),
         RUNTIME_BACKEND: resolveEnvValue('RUNTIME_BACKEND', 'mock'),
+        DATABASE_URL: resolveEnvValue('DATABASE_URL', ''),
         HAPPY_SERVER_URL: resolveEnvValue('HAPPY_SERVER_URL', 'http://127.0.0.1:4080'),
         HAPPY_SERVER_TOKEN: resolveEnvValue('HAPPY_SERVER_TOKEN', ''),
         HAPPY_ACCOUNT_SECRET: resolveEnvValue('HAPPY_ACCOUNT_SECRET', ''),
