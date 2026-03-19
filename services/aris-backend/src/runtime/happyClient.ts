@@ -4173,9 +4173,9 @@ export class HappyRuntimeStore {
             },
             onText: async (event, meta) => {
               // Claude CLI는 동일한 텍스트를 'assistant' 이벤트와 'result' 이벤트로 두 번 방출
-              // 'result' 이벤트는 스트리밍 완료 후 최종 출력을 다시 전달하는 것이므로,
-              // 'assistant' 이벤트에서만 저장하고 'result'는 무시
-              if (event.source === 'result') {
+              // 'result' 이벤트는 스트리밍 완료 후 최종 출력을 다시 전달하는 것이므로 우선 무시.
+              // 단, 'assistant' 스트리밍이 누락된 예외적인 경우를 대비해 fallback으로 활용
+              if (event.source === 'result' && claudeTextStreamed) {
                 return;
               }
               const normalizedText = sanitizeAgentMessageText(event.text);
