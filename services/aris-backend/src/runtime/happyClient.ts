@@ -2649,6 +2649,7 @@ export class HappyRuntimeStore {
     }).model;
     const selectedReasoningEffort = normalizeModelReasoningEffort(modelReasoningEffort);
     const autoApproveAll = sessionApprovalPolicy === 'yolo';
+    const effectiveSandboxMode = autoApproveAll ? 'danger-full-access' : CODEX_SANDBOX_MODE;
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
     const args = [
       ...(selectedModel ? ['-c', `model=${JSON.stringify(selectedModel)}`] : []),
@@ -3293,7 +3294,7 @@ export class HappyRuntimeStore {
           threadId: resolvedThreadId,
           cwd: safeCwd,
           approvalPolicy: codexApprovalPolicy,
-          sandbox: CODEX_SANDBOX_MODE,
+          sandbox: effectiveSandboxMode,
           persistExtendedHistory: true,
         });
         const resumedThreadId = asString(asRecord(resumed.thread)?.id, '').trim();
@@ -3305,7 +3306,7 @@ export class HappyRuntimeStore {
         const started = await sendRequest('thread/start', {
           cwd: safeCwd,
           approvalPolicy: codexApprovalPolicy,
-          sandbox: CODEX_SANDBOX_MODE,
+          sandbox: effectiveSandboxMode,
           experimentalRawEvents: false,
           persistExtendedHistory: true,
         });
@@ -3486,6 +3487,7 @@ export class HappyRuntimeStore {
     }).model;
     const selectedReasoningEffort = normalizeModelReasoningEffort(modelReasoningEffort);
     const autoApproveAll = sessionApprovalPolicy === 'yolo';
+    const effectiveSandboxMode = autoApproveAll ? 'danger-full-access' : CODEX_SANDBOX_MODE;
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
     const execArgs = threadId
       ? ['exec', 'resume', threadId, '--json', prompt]
@@ -3494,7 +3496,7 @@ export class HappyRuntimeStore {
       '-a',
       codexApprovalPolicy,
       '-s',
-      CODEX_SANDBOX_MODE,
+      effectiveSandboxMode,
       ...(selectedModel ? ['-m', selectedModel] : []),
       ...(selectedReasoningEffort ? ['-c', `model_reasoning_effort=${JSON.stringify(selectedReasoningEffort)}`] : []),
       ...execArgs,
