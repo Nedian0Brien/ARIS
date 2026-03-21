@@ -1312,6 +1312,38 @@
   cursor: not-allowed;
 }
 
+.contextMenuPolicyRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.35rem;
+  border-bottom: 1px solid var(--chat-panel-border);
+}
+
+.contextMenuPolicyLabel {
+  font-size: 0.67rem;
+  font-weight: 700;
+  color: var(--chat-text-muted);
+  white-space: nowrap;
+}
+
+.contextMenuPolicySelect {
+  flex: 1;
+  border: 1px solid var(--chat-control-border);
+  border-radius: 6px;
+  background: var(--chat-surface-subtle);
+  color: var(--chat-text-primary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.2rem 0.35rem;
+  cursor: pointer;
+}
+
+.contextMenuPolicySelect:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
 .noticeWrap {
   padding: 0.7rem 0.85rem 0;
 }

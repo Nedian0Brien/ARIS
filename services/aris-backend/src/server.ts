@@ -59,6 +59,10 @@ const createSessionSchema = z.object({
   riskScore: z.number().int().min(0).max(100).optional(),
 });
 
+const updateSessionSchema = z.object({
+  approvalPolicy: z.enum(['on-request', 'on-failure', 'never', 'yolo']),
+});
+
 const appendMessageSchema = z.object({
   type: z.string().min(1),
   title: z.string().min(1).optional(),
@@ -345,6 +349,28 @@ export function buildServer(config: ServerConfig) {
       return reply.code(201).send({ session });
     } catch (error) {
       const message = toErrorMessage(error, 'Failed to create session');
+      return reply.code(502).send({ error: message });
+    }
+  });
+
+  app.patch('/v1/sessions/:sessionId', async (request, reply) => {
+    const parsed = updateSessionSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid request body' });
+    }
+
+    const { sessionId } = request.params as { sessionId: string };
+    try {
+      const session = await store.updateApprovalPolicy(sessionId, parsed.data.approvalPolicy);
+      return { session };
+    } catch (error) {
+      if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
+        return reply.code(404).send({ error: 'Session not found' });
+      }
+      if (error instanceof Error && error.message === 'UPDATE_APPROVAL_POLICY_NOT_SUPPORTED') {
+        return reply.code(501).send({ error: 'Not supported in current backend' });
+      }
+      const message = toErrorMessage(error, 'Failed to update session');
       return reply.code(502).send({ error: message });
     }
   });

@@ -657,6 +657,24 @@ export async function createSession(input: {
   return normalizeSessions([session])[0];
 }
 
+export async function updateSessionApprovalPolicy(
+  sessionId: string,
+  approvalPolicy: ApprovalPolicy,
+): Promise<SessionSummary> {
+  const raw = await fetchHappy(`/v1/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ approvalPolicy }),
+  });
+
+  const obj = asObject(raw);
+  const session = obj?.session;
+  if (!session) {
+    throw new Error('백엔드 응답이 올바르지 않습니다.');
+  }
+
+  return normalizeSessions([session])[0];
+}
+
 export async function getSessionEvents(
   sessionId: string,
   options: string | GetSessionEventsOptions = {},

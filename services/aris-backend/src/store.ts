@@ -56,6 +56,7 @@ interface RuntimeStoreBackend {
   getSession(sessionId: string): Promise<RuntimeSession | null>;
   getGeminiSessionCapabilities?(sessionId: string): Promise<GeminiSessionCapabilities>;
   createSession(input: CreateSessionInput): Promise<RuntimeSession>;
+  updateApprovalPolicy?(sessionId: string, approvalPolicy: ApprovalPolicy): Promise<RuntimeSession>;
   listMessages(sessionId: string, options?: { afterSeq?: number; afterId?: string; limit?: number }): Promise<RuntimeMessage[]>;
   listRealtimeEvents?(sessionId: string, options?: { afterCursor?: number; limit?: number; chatId?: string }): Promise<{ events: RuntimeMessage[]; cursor: number }>;
   appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage>;
@@ -142,6 +143,16 @@ class MockRuntimeStore implements RuntimeStoreBackend {
 
     this.sessions.set(session.id, session);
     this.messages.set(session.id, []);
+    return session;
+  }
+
+  async updateApprovalPolicy(sessionId: string, approvalPolicy: ApprovalPolicy): Promise<RuntimeSession> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error('SESSION_NOT_FOUND');
+    }
+    session.metadata.approvalPolicy = approvalPolicy;
+    session.updatedAt = new Date().toISOString();
     return session;
   }
 
@@ -410,6 +421,13 @@ export class RuntimeStore {
 
   async createSession(input: CreateSessionInput) {
     return this.delegate.createSession(input);
+  }
+
+  async updateApprovalPolicy(sessionId: string, approvalPolicy: ApprovalPolicy) {
+    if (typeof this.delegate.updateApprovalPolicy === 'function') {
+      return this.delegate.updateApprovalPolicy(sessionId, approvalPolicy);
+    }
+    throw new Error('UPDATE_APPROVAL_POLICY_NOT_SUPPORTED');
   }
 
   async listMessages(sessionId: string, options?: { afterSeq?: number; afterId?: string; limit?: number }) {
