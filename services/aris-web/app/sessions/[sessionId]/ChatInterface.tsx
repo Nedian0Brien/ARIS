@@ -2129,7 +2129,7 @@ export function ChatInterface({
   alias,
   agentFlavor,
   sessionModel,
-  approvalPolicy,
+  approvalPolicy: initialApprovalPolicy,
 }: {
   sessionId: string;
   initialEvents: UiEvent[];
@@ -2145,6 +2145,8 @@ export function ChatInterface({
   sessionModel?: string | null;
   approvalPolicy?: ApprovalPolicy;
 }) {
+  const [approvalPolicy, setApprovalPolicy] = useState<ApprovalPolicy | undefined>(initialApprovalPolicy);
+  const [isPolicyChanging, setIsPolicyChanging] = useState(false);
   const [modelSettings, setModelSettings] = useState<ModelSettingsResponse | null>(null);
   
   useEffect(() => {
@@ -5196,9 +5198,46 @@ export function ChatInterface({
                 {isContextMenuOpen && (
                   <div className={styles.contextMenuPanel} role="menu">
                     <div className={styles.contextMenuMeta}>
-                      <span>Policy: {approvalPolicyLabel(approvalPolicy)}</span>
                       <span>Pending: {effectivePendingPermissions.length}</span>
                     </div>
+                    {isOperator && (
+                      <div className={styles.contextMenuPolicyRow}>
+                        <label htmlFor="approval-policy-select" className={styles.contextMenuPolicyLabel}>
+                          Policy
+                        </label>
+                        <select
+                          id="approval-policy-select"
+                          className={styles.contextMenuPolicySelect}
+                          value={approvalPolicy ?? 'on-request'}
+                          disabled={isPolicyChanging}
+                          onChange={(e) => {
+                            const next = e.target.value as ApprovalPolicy;
+                            setIsPolicyChanging(true);
+                            fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ approvalPolicy: next }),
+                            })
+                              .then((res) => {
+                                if (!res.ok) throw new Error('Failed to update policy');
+                                setApprovalPolicy(next);
+                              })
+                              .catch(() => {})
+                              .finally(() => setIsPolicyChanging(false));
+                          }}
+                        >
+                          <option value="on-request">ON REQUEST</option>
+                          <option value="on-failure">ON FAILURE</option>
+                          <option value="never">NEVER</option>
+                          <option value="yolo">YOLO</option>
+                        </select>
+                      </div>
+                    )}
+                    {!isOperator && (
+                      <div className={styles.contextMenuMeta}>
+                        <span>Policy: {approvalPolicyLabel(approvalPolicy)}</span>
+                      </div>
+                    )}
                     <button
                       type="button"
                       className={styles.contextMenuItem}

@@ -238,6 +238,16 @@ export class PrismaRuntimeStore {
     return toRuntimeSession(row);
   }
 
+  async updateApprovalPolicy(sessionId: string, approvalPolicy: ApprovalPolicy): Promise<RuntimeSession> {
+    const existing = await this.db.session.findUnique({ where: { id: sessionId } });
+    if (!existing) throw new Error('SESSION_NOT_FOUND');
+    const row = await this.db.session.update({
+      where: { id: sessionId },
+      data: { approvalPolicy, updatedAt: new Date() },
+    });
+    return toRuntimeSession(row);
+  }
+
   async listMessages(
     sessionId: string,
     options: { afterSeq?: number; afterId?: string; limit?: number } = {},
