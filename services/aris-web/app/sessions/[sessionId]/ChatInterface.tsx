@@ -4415,7 +4415,6 @@ export function ChatInterface({
     }
     setIsCreatingChat(true);
     setChatMutationError(null);
-    setIsNewChatPlaceholder(false);
     const defaultModelId = resolveDefaultModelId(agent, providerSelections, legacyCustomModels);
     const defaultGeminiModeId = agent === 'gemini'
       ? resolveDefaultGeminiModeId(approvalPolicy, providerSelections?.gemini?.defaultModeId)
