@@ -57,6 +57,7 @@ const createSessionSchema = z.object({
   model: z.string().trim().min(1).max(120).optional(),
   status: z.enum(['running', 'idle', 'stopped', 'error', 'unknown']).optional(),
   riskScore: z.number().int().min(0).max(100).optional(),
+  branch: z.string().trim().min(1).max(255).optional(),
 });
 
 const updateSessionSchema = z.object({
@@ -321,7 +322,7 @@ export function buildServer(config: ServerConfig) {
       // Resolve host-side path for terminal access
       let hostPath = session.metadata.path;
       try {
-        hostPath = store.resolveExecutionCwd(session.metadata.path);
+        hostPath = store.resolveExecutionCwd(session.metadata.path, session.metadata.branch);
       } catch {
         // Keep original path as fallback
       }

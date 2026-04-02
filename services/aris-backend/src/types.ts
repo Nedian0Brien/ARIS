@@ -14,6 +14,7 @@ export type RuntimeSession = {
     path: string;
     approvalPolicy: ApprovalPolicy;
     model?: string;
+    branch?: string;
   };
   state: {
     status: SessionStatus;

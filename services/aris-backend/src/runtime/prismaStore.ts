@@ -20,6 +20,7 @@ type CreateSessionInput = {
   model?: string;
   status?: SessionStatus;
   riskScore?: number;
+  branch?: string;
 };
 
 type AppendMessageInput = {
@@ -42,6 +43,7 @@ function toRuntimeSession(row: {
   id: string;
   flavor: string;
   path: string;
+  branch: string | null;
   status: string;
   approvalPolicy: string;
   model: string | null;
@@ -55,6 +57,7 @@ function toRuntimeSession(row: {
       path: row.path,
       approvalPolicy: row.approvalPolicy as ApprovalPolicy,
       ...(row.model ? { model: row.model } : {}),
+      ...(row.branch ? { branch: row.branch } : {}),
     },
     state: {
       status: row.status as SessionStatus,
@@ -229,6 +232,7 @@ export class PrismaRuntimeStore {
         id: randomUUID(),
         flavor: input.flavor,
         path: input.path,
+        branch: input.branch ?? null,
         approvalPolicy: input.approvalPolicy ?? 'on-request',
         model: input.model ?? null,
         status: input.status ?? 'idle',

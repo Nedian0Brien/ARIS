@@ -54,10 +54,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { path, agent, approvalPolicy } = body as {
+    const { path, agent, approvalPolicy, branch } = body as {
       path?: string;
       agent?: string;
       approvalPolicy?: string;
+      branch?: string;
     };
     const normalizedPolicy = approvalPolicy === 'on-request'
       || approvalPolicy === 'on-failure'
@@ -80,7 +81,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ session: existing, reused: true });
     }
 
-    const session = await createSession({ path: normalizedPath, agent: normalizedAgent, approvalPolicy: normalizedPolicy });
+    const normalizedBranch = typeof branch === 'string' && branch.trim() ? branch.trim() : undefined;
+    const session = await createSession({ path: normalizedPath, agent: normalizedAgent, approvalPolicy: normalizedPolicy, branch: normalizedBranch });
     await syncWorkspacesForUser(auth.user.id, [session]);
     return NextResponse.json({ session, reused: false });
   } catch (error) {

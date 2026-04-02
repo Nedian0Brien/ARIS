@@ -275,6 +275,7 @@ export function SessionDashboard({
   const [newPath, setNewPath] = useState('');
   const [newAgent, setNewAgent] = useState<AgentFlavor>('claude');
   const [newApprovalPolicy, setNewApprovalPolicy] = useState<SessionApprovalPolicy>('on-request');
+  const [newBranch, setNewBranch] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -599,6 +600,7 @@ export function SessionDashboard({
     pathInput: string,
     agentInput: AgentFlavor,
     approvalPolicyInput: SessionApprovalPolicy,
+    branchInput: string,
   ) {
     if (!isOperator) return;
     const path = sanitizePath(pathInput);
@@ -606,11 +608,12 @@ export function SessionDashboard({
 
     setError(null);
     setIsCreating(true);
+    const branch = branchInput.trim() || undefined;
     try {
       const response = await fetch('/api/runtime/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path, agent: agentInput, approvalPolicy: approvalPolicyInput }),
+        body: JSON.stringify({ path, agent: agentInput, approvalPolicy: approvalPolicyInput, ...(branch ? { branch } : {}) }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error ?? '워크스페이스 생성에 실패했습니다.');
@@ -628,12 +631,13 @@ export function SessionDashboard({
 
   async function handleCreateSession(e: React.FormEvent) {
     e.preventDefault();
-    await createSession(newPath, newAgent, newApprovalPolicy);
+    await createSession(newPath, newAgent, newApprovalPolicy, newBranch);
   }
 
   function openCreateSessionModal() {
     setError(null);
     setNewPath('');
+    setNewBranch('');
     setIsBrowsing(true);
     setBrowserPath('/');
     setDirectories([]);
@@ -663,7 +667,7 @@ export function SessionDashboard({
       router.push(`/sessions/${entry.sessionId}`);
       return;
     }
-    await createSession(entry.path, entry.agent, entry.approvalPolicy);
+    await createSession(entry.path, entry.agent, entry.approvalPolicy, '');
   }
 
   function applyHistory(entry: PathHistoryEntry) {
@@ -1168,6 +1172,25 @@ export function SessionDashboard({
                     모든 권한 요청을 자동 허용합니다. 신뢰 가능한 프로젝트에서만 사용하세요.
                   </div>
                 )}
+              </div>
+
+              <div className="form-section">
+                <div className="section-header">
+                  <label className="section-label" htmlFor="new-branch-input">
+                    브랜치
+                    <span style={{ fontWeight: 400, color: 'var(--text-subtle)', textTransform: 'none', letterSpacing: 0, fontSize: '0.75rem' }}> (선택)</span>
+                  </label>
+                </div>
+                <input
+                  id="new-branch-input"
+                  type="text"
+                  className="input"
+                  placeholder="예: feat/my-feature (없으면 기본 경로 사용)"
+                  value={newBranch}
+                  onChange={(e) => setNewBranch(e.target.value)}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
               </div>
 
               {error && (

@@ -10,6 +10,7 @@ model Session {
   id             String   @id @default(uuid())
   flavor         String
   path           String
+  branch         String?
   status         String   @default("idle")
   approvalPolicy String   @default("on-request")
   model          String?
