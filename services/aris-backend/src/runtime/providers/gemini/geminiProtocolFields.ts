@@ -16,10 +16,14 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-export function parseGeminiJsonLine(line: string): Record<string, unknown> | null {
+export function parseGeminiJsonLine(
+  line: string,
+  onParseWarning?: (rawLine: string) => void,
+): Record<string, unknown> | null {
   try {
     return asRecord(JSON.parse(line));
   } catch {
+    onParseWarning?.(line);
     return null;
   }
 }
