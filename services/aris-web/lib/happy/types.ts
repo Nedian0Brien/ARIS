@@ -15,6 +15,9 @@ export type SessionSummary = {
   approvalPolicy?: ApprovalPolicy;
   alias?: string | null;
   isPinned?: boolean;
+  // 채팅 집계 (API route에서 주입, happy 서버에서 오지 않음)
+  chatAgentCounts?: { claude: number; codex: number; gemini: number; unknown: number };
+  totalChats?: number;
 };
 
 export type SessionChat = {
@@ -154,4 +157,20 @@ export type SessionActionResult = {
   accepted: boolean;
   message: string;
   at: string;
+};
+
+export type ChatSample = {
+  id: string;
+  title: string;
+  sessionId: string;
+  sessionName: string;
+  agent: AgentFlavor;
+};
+
+export type GlobalChatStats = {
+  running: number;
+  completed: number;
+  agentDistribution: { claude: number; codex: number; gemini: number; unknown: number };
+  runningSample: ChatSample[];
+  completedSample: ChatSample[];
 };

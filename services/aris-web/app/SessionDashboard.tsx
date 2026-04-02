@@ -8,31 +8,24 @@ import {
   Play, Terminal, FolderOpen, Search, PlusCircle, X, Plus,
   Clock3, ArrowUpRight, Folder, ArrowUp, Check,
   MoreVertical, Activity, Pin, Edit2, RotateCw, Square, Trash2, HardDrive,
-  ShieldCheck, ShieldAlert, ShieldOff, Zap, CheckCircle2
 } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
-import type { ApprovalPolicy, SessionSummary } from '@/lib/happy/types';
+import type { GlobalChatStats, SessionSummary } from '@/lib/happy/types';
+import { extractLastDirectoryName } from '@/lib/happy/utils';
 import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
 import { readLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import styles from './SessionDashboard.module.css';
 
-type AgentFlavor = 'claude' | 'codex' | 'gemini';
-
 type PathHistoryEntry = {
   path: string;
-  agent: AgentFlavor;
-  approvalPolicy: ApprovalPolicy;
   lastUsedAt: string;
   sessionId?: string;
 };
 
-type SessionApprovalPolicy = ApprovalPolicy;
-
 type AgentOption = {
-  id: AgentFlavor;
+  id: 'claude' | 'codex' | 'gemini';
   label: string;
-  subtitle: string;
   Icon: React.ComponentType<{ size?: number }>;
   accentColor: string;
   accentBg: string;
@@ -78,7 +71,6 @@ const AGENT_OPTIONS: AgentOption[] = [
   {
     id: 'claude',
     label: 'Claude',
-    subtitle: 'Balanced coding flow',
     Icon: ClaudeIcon,
     accentColor: 'var(--agent-claude-accent)',
     accentBg: 'var(--agent-claude-bg)',
@@ -86,7 +78,6 @@ const AGENT_OPTIONS: AgentOption[] = [
   {
     id: 'codex',
     label: 'Codex',
-    subtitle: 'Fast implementation',
     Icon: CodexIcon,
     accentColor: 'var(--agent-codex-accent)',
     accentBg: 'var(--agent-codex-bg)',
@@ -94,81 +85,14 @@ const AGENT_OPTIONS: AgentOption[] = [
   {
     id: 'gemini',
     label: 'Gemini',
-    subtitle: 'Broad reasoning',
     Icon: GeminiIcon,
     accentColor: 'var(--agent-gemini-accent)',
     accentBg: 'var(--agent-gemini-bg)',
   },
 ];
 
-const APPROVAL_POLICY_OPTIONS: Array<{
-  id: SessionApprovalPolicy;
-  label: string;
-  description: string;
-  Icon: React.ComponentType<{ size?: number }>;
-  color: string;
-}> = [
-  {
-    id: 'on-request',
-    label: '요청 시 승인',
-    description: '권한이 필요할 때마다 확인',
-    Icon: ShieldCheck,
-    color: 'var(--approval-on-request-color)',
-  },
-  {
-    id: 'on-failure',
-    label: '실패 시 승인',
-    description: '실패한 작업만 승인 요청',
-    Icon: ShieldAlert,
-    color: 'var(--approval-on-failure-color)',
-  },
-  {
-    id: 'never',
-    label: '자동 허용',
-    description: '승인 없이 허용된 작업만 수행',
-    Icon: ShieldOff,
-    color: 'var(--approval-never-color)',
-  },
-  {
-    id: 'yolo',
-    label: 'YOLO',
-    description: '모든 권한 요청 자동 허용',
-    Icon: Zap,
-    color: 'var(--approval-yolo-color)',
-  },
-];
-
-function isAgentFlavor(value: unknown): value is AgentFlavor {
-  return value === 'claude' || value === 'codex' || value === 'gemini';
-}
-
-function resolveAgent(value: unknown): AgentFlavor {
-  return isAgentFlavor(value) ? value : 'claude';
-}
-
-function isSessionApprovalPolicy(value: unknown): value is SessionApprovalPolicy {
-  return value === 'on-request' || value === 'on-failure' || value === 'never' || value === 'yolo';
-}
-
-function resolveSessionApprovalPolicy(value: unknown): SessionApprovalPolicy {
-  return isSessionApprovalPolicy(value) ? value : 'on-request';
-}
-
-function getAgentOption(value: unknown): AgentOption {
-  const agent = resolveAgent(value);
-  return AGENT_OPTIONS.find((item) => item.id === agent) ?? AGENT_OPTIONS[0];
-}
-
 function sanitizePath(path: string): string {
   return path.trim();
-}
-
-function extractLastDirectoryName(path: string): string {
-  const normalized = path.replace(/\\/g, '/').trim().replace(/\/+$/, '');
-  if (!normalized) return 'workspace';
-  if (normalized === '/') return '/';
-  const segments = normalized.split('/').filter(Boolean);
-  return segments[segments.length - 1] ?? normalized;
 }
 
 function normalizeDate(value: unknown): string {
@@ -273,8 +197,6 @@ export function SessionDashboard({
   const router = useRouter();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newPath, setNewPath] = useState('');
-  const [newAgent, setNewAgent] = useState<AgentFlavor>('claude');
-  const [newApprovalPolicy, setNewApprovalPolicy] = useState<SessionApprovalPolicy>('on-request');
   const [newBranch, setNewBranch] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -310,6 +232,8 @@ export function SessionDashboard({
   // Local mutation state
   const [sessionsList, setSessionsList] = useState<SessionSummary[]>(initialSessions);
   const [pendingPermissionSessionIds, setPendingPermissionSessionIds] = useState<Set<string>>(new Set());
+  const [chatStats, setChatStats] = useState<GlobalChatStats | null>(null);
+  const [pendingChatIds, setPendingChatIds] = useState<Set<string>>(new Set());
   const [serverMetrics, setServerMetrics] = useState<ServerMetrics | null>(null);
   const [isLoadingServerMetrics, setIsLoadingServerMetrics] = useState(true);
   const [serverMetricsError, setServerMetricsError] = useState<string | null>(null);
@@ -340,9 +264,10 @@ export function SessionDashboard({
       try {
         const res = await fetch('/api/runtime/sessions', { cache: 'no-store' });
         if (disposed || !res.ok) return;
-        const data = (await res.json()) as { sessions?: SessionSummary[] };
+        const data = (await res.json()) as { sessions?: SessionSummary[]; chatStats?: GlobalChatStats };
         if (disposed || !data.sessions) return;
         setSessionsList(data.sessions);
+        if (data.chatStats) setChatStats(data.chatStats);
       } catch {
         // 네트워크 오류는 무시 — 다음 주기에 재시도
       } finally {
@@ -376,10 +301,11 @@ export function SessionDashboard({
 
     es.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data as string) as { sessions?: SessionSummary[] };
+        const data = JSON.parse(event.data as string) as { sessions?: SessionSummary[]; chatStats?: GlobalChatStats };
         if (!Array.isArray(data.sessions)) return;
 
         setSessionsList(data.sessions);
+        if (data.chatStats) setChatStats(data.chatStats);
 
         const pins = new Set<string>();
         const aliases: Record<string, string> = {};
@@ -417,20 +343,25 @@ export function SessionDashboard({
       try {
         const response = await fetch('/api/runtime/permissions', { cache: 'no-store' });
         const body = (await response.json().catch(() => ({}))) as {
-          permissions?: Array<{ sessionId?: string }>;
+          permissions?: Array<{ sessionId?: string; chatId?: string | null }>;
         };
         if (!response.ok || !Array.isArray(body.permissions)) {
           throw new Error('Failed to refresh pending permissions');
         }
 
         if (!isCancelled) {
-          const next = new Set<string>();
-          body.permissions.forEach((permission) => {
+          const nextSessionIds = new Set<string>();
+          const nextChatIds = new Set<string>();
+          body.permissions?.forEach((permission) => {
             if (typeof permission?.sessionId === 'string' && permission.sessionId.trim()) {
-              next.add(permission.sessionId);
+              nextSessionIds.add(permission.sessionId);
+            }
+            if (typeof permission?.chatId === 'string' && permission.chatId.trim()) {
+              nextChatIds.add(permission.chatId);
             }
           });
-          setPendingPermissionSessionIds(next);
+          setPendingPermissionSessionIds(nextSessionIds);
+          setPendingChatIds(nextChatIds);
         }
       } catch {
         // Keep last known pending set when sync fails.
@@ -460,10 +391,9 @@ export function SessionDashboard({
         if (Array.isArray(parsed)) {
           setPathHistory(parsed.map(item => ({
             path: String(item.path || ''),
-            agent: resolveAgent(item.agent),
-            approvalPolicy: resolveSessionApprovalPolicy(item.approvalPolicy),
             lastUsedAt: normalizeDate(item.lastUsedAt),
             sessionId: item.sessionId ? String(item.sessionId) : undefined,
+            // agent, approvalPolicy fields ignored (backwards compat)
           })));
         }
       } catch (e) {
@@ -579,29 +509,19 @@ export function SessionDashboard({
     }
   }
 
-  function recordHistory(
-    pathInput: string,
-    agent: AgentFlavor,
-    approvalPolicy: SessionApprovalPolicy,
-    sessionId?: string,
-  ) {
+  function recordHistory(pathInput: string, sessionId?: string) {
     const path = sanitizePath(pathInput);
     if (!path) return;
     setPathHistory((prev) => {
       const next = [
-        { path, agent, approvalPolicy, lastUsedAt: new Date().toISOString(), sessionId },
+        { path, lastUsedAt: new Date().toISOString(), sessionId },
         ...prev.filter((item) => item.path !== path),
       ];
       return next.slice(0, MAX_PATH_HISTORY_ITEMS);
     });
   }
 
-  async function createSession(
-    pathInput: string,
-    agentInput: AgentFlavor,
-    approvalPolicyInput: SessionApprovalPolicy,
-    branchInput: string,
-  ) {
+  async function createSession(pathInput: string, branchInput: string) {
     if (!isOperator) return;
     const path = sanitizePath(pathInput);
     if (!path) { setError('프로젝트 경로를 입력해 주세요.'); return; }
@@ -613,14 +533,14 @@ export function SessionDashboard({
       const response = await fetch('/api/runtime/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path, agent: agentInput, approvalPolicy: approvalPolicyInput, ...(branch ? { branch } : {}) }),
+        body: JSON.stringify({ path, ...(branch ? { branch } : {}) }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error ?? '워크스페이스 생성에 실패했습니다.');
       const sessionId = body.session?.id;
       if (!sessionId) throw new Error('워크스페이스 생성 응답이 올바르지 않습니다.');
 
-      recordHistory(path, agentInput, approvalPolicyInput, sessionId);
+      recordHistory(path, sessionId);
       router.push(`/sessions/${sessionId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.');
@@ -631,7 +551,7 @@ export function SessionDashboard({
 
   async function handleCreateSession(e: React.FormEvent) {
     e.preventDefault();
-    await createSession(newPath, newAgent, newApprovalPolicy, newBranch);
+    await createSession(newPath, newBranch);
   }
 
   function openCreateSessionModal() {
@@ -644,7 +564,6 @@ export function SessionDashboard({
     setParentPath(null);
     setIsBrowserPathEditing(false);
     setBrowserPathDraft(WORKSPACE_PATH_ROOT);
-    setNewApprovalPolicy('on-request');
     setIsCreateModalOpen(true);
   }
 
@@ -663,17 +582,15 @@ export function SessionDashboard({
   async function handleQuickResume(entry: PathHistoryEntry) {
     if (!isOperator || isCreating) return;
     if (entry.sessionId && sessionsList.some((s) => s.id === entry.sessionId)) {
-      recordHistory(entry.path, entry.agent, entry.approvalPolicy, entry.sessionId);
+      recordHistory(entry.path, entry.sessionId);
       router.push(`/sessions/${entry.sessionId}`);
       return;
     }
-    await createSession(entry.path, entry.agent, entry.approvalPolicy, '');
+    await createSession(entry.path, '');
   }
 
   function applyHistory(entry: PathHistoryEntry) {
     setNewPath(entry.path);
-    setNewAgent(entry.agent);
-    setNewApprovalPolicy(entry.approvalPolicy);
     setError(null);
   }
 
@@ -889,14 +806,6 @@ export function SessionDashboard({
     return { total: sessionsList.length, idle, running, pending, completed };
   }, [sessionsList, sessionUiStatusById]);
 
-  const agentStats = useMemo(() => {
-    const stats = { claude: 0, codex: 0, gemini: 0 };
-    sessionsList.forEach(s => {
-      const a = resolveAgent(s.agent);
-      if (a in stats) stats[a]++;
-    });
-    return stats;
-  }, [sessionsList]);
 
   const filteredSessions = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -945,7 +854,7 @@ export function SessionDashboard({
                 </div>
                 <div>
                   <h3 className="modal-title">새 워크스페이스 만들기</h3>
-                  <p className="modal-subtitle">프로젝트 경로와 에이전트를 선택하여 시작하세요.</p>
+                  <p className="modal-subtitle">프로젝트 경로를 선택하여 시작하세요.</p>
                 </div>
               </div>
               <Button variant="ghost" onClick={() => setIsCreateModalOpen(false)} className="close-btn">
@@ -1010,26 +919,15 @@ export function SessionDashboard({
                         {isBrowserPathEditing ? <Check size={14} /> : <Edit2 size={14} />}
                       </Button>
                     </div>
-                    <Button 
-                      type="button"
-                      variant="primary" 
-                      className="select-current-btn"
-                      onClick={() => {
-                        setNewPath(buildWorkspacePath(browserPath));
-                        setIsBrowserPathEditing(false);
-                      }}
-                    >
-                      <Check size={14} /> 이 경로 선택
-                    </Button>
                   </div>
-                  
+
                   <div className="browser-list no-scrollbar">
                     {isLoadingDirs ? (
                       <div className="browser-loading">탐색 중...</div>
                     ) : (
                       <>
                         {parentPath !== null && (
-                          <button 
+                          <button
                             type="button"
                             onClick={() => fetchDirectory(parentPath)}
                             className="browser-item up-dir"
@@ -1042,7 +940,7 @@ export function SessionDashboard({
                           <div className="browser-empty">표시할 디렉토리가 없습니다.</div>
                         )}
                         {directories.map((dir) => (
-                          <button 
+                          <button
                             key={dir.path}
                             type="button"
                             onClick={() => fetchDirectory(dir.path)}
@@ -1055,6 +953,17 @@ export function SessionDashboard({
                       </>
                     )}
                   </div>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    className="select-current-btn"
+                    onClick={() => {
+                      setNewPath(buildWorkspacePath(browserPath));
+                      setIsBrowserPathEditing(false);
+                    }}
+                  >
+                    <Check size={14} /> 이 경로 선택
+                  </Button>
                 </div>
               </div>
 
@@ -1066,8 +975,6 @@ export function SessionDashboard({
                   </div>
                   <div className="history-stack">
                     {pathHistory.map((entry) => {
-                      const agent = getAgentOption(entry.agent);
-                      const AgentIcon = agent.Icon;
                       const isLive = Boolean(entry.sessionId && sessionsList.some(s => s.id === entry.sessionId));
 
                       return (
@@ -1079,9 +986,6 @@ export function SessionDashboard({
                           >
                             <span className="path-text">{entry.path}</span>
                             <div className="meta-row">
-                              <span className="meta-item" style={{ color: agent.accentColor }}>
-                                <AgentIcon size={12} /> {agent.label}
-                              </span>
                               <span className="meta-item">
                                 <Clock3 size={12} /> {formatHistoryDate(entry.lastUsedAt)}
                               </span>
@@ -1102,77 +1006,6 @@ export function SessionDashboard({
                   </div>
                 </div>
               )}
-
-              <div className="form-section">
-                <label className="section-label">에이전트</label>
-                <div className="agent-selection-grid">
-                  {AGENT_OPTIONS.map((agent) => {
-                    const AgentIcon = agent.Icon;
-                    const isSelected = newAgent === agent.id;
-
-                    return (
-                      <button
-                        key={agent.id}
-                        type="button"
-                        className={`agent-select-card ${isSelected ? 'active' : ''}`}
-                        style={{ '--agent-color': agent.accentColor, '--agent-bg': agent.accentBg, '--agent-shadow': agent.accentColor + '26' } as React.CSSProperties}
-                        onClick={() => {
-                          setNewAgent(agent.id);
-                          if (agent.id === 'gemini') {
-                            setNewApprovalPolicy('on-request');
-                          }
-                        }}
-                      >
-                        <div className="agent-visual" style={{ backgroundColor: agent.accentBg, color: agent.accentColor }}>
-                          <AgentIcon size={20} />
-                        </div>
-                        <div className="agent-details">
-                          <div className="agent-label">{agent.label}</div>
-                          <div className="agent-desc">{agent.subtitle}</div>
-                        </div>
-                        <CheckCircle2 size={16} className="agent-check" />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="form-section">
-                <div className="section-header">
-                  <label className="section-label">승인 정책</label>
-                  {newAgent === 'gemini' && <span className="text-muted text-sm">Gemini는 추후 지원</span>}
-                </div>
-                <div className="policy-grid">
-                  {APPROVAL_POLICY_OPTIONS.map((policy) => {
-                    const PolicyIcon = policy.Icon;
-                    const selected = newApprovalPolicy === policy.id;
-                    const disabled = newAgent === 'gemini';
-                    return (
-                      <button
-                        key={policy.id}
-                        type="button"
-                        className={`policy-card ${selected ? 'active' : ''}`}
-                        onClick={() => setNewApprovalPolicy(policy.id)}
-                        disabled={disabled}
-                        style={{ '--policy-color': policy.color } as React.CSSProperties}
-                      >
-                        <div className="policy-icon">
-                          <PolicyIcon size={16} />
-                        </div>
-                        <span className="policy-label">{policy.label}</span>
-                        <span className="policy-desc">{policy.description}</span>
-                        <CheckCircle2 size={14} className="policy-check" />
-                      </button>
-                    );
-                  })}
-                </div>
-                {newApprovalPolicy === 'yolo' && newAgent !== 'gemini' && (
-                  <div className="form-error">
-                    <Zap size={14} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
-                    모든 권한 요청을 자동 허용합니다. 신뢰 가능한 프로젝트에서만 사용하세요.
-                  </div>
-                )}
-              </div>
 
               <div className="form-section">
                 <div className="section-header">
@@ -1233,27 +1066,25 @@ export function SessionDashboard({
     ? `${formatBytes(serverMetrics.storage.usedBytes)} / ${formatBytes(serverMetrics.storage.totalBytes)}`
     : 'collecting';
 
-  const activeAgentDistribution = AGENT_OPTIONS.map((agent) => ({
-    name: agent.label,
-    value: agentStats[agent.id],
-    color: agent.accentColor,
-  })).filter((entry) => entry.value > 0);
-  const agentDistributionData = activeAgentDistribution.length > 0
-    ? activeAgentDistribution
+  const chatAgentDistData = chatStats
+    ? AGENT_OPTIONS.map(agent => ({
+        name: agent.label,
+        value: chatStats.agentDistribution[agent.id as 'claude' | 'codex' | 'gemini'] ?? 0,
+        color: agent.accentColor,
+      })).filter(e => e.value > 0)
+    : [];
+  const agentDistributionData = chatAgentDistData.length > 0
+    ? chatAgentDistData
     : [{ name: '없음', value: 1, color: 'var(--chart-track)' }];
 
-  // 진행 중인 워크스페이스 및 미확인 완료 워크스페이스 필터링
-  const runningSessions = useMemo(
-    () => sessionsList.filter((session) => sessionUiStatusById.get(session.id) === 'running'),
-    [sessionsList, sessionUiStatusById],
-  );
-  const completedSessions = useMemo(
-    () =>
-      sessionsList
-        .filter((session) => sessionUiStatusById.get(session.id) === 'completed')
-        .sort((a, b) => Date.parse(b.lastActivityAt || FALLBACK_DATE_ISO) - Date.parse(a.lastActivityAt || FALLBACK_DATE_ISO)),
-    [sessionsList, sessionUiStatusById],
-  );
+  const totalChatCount = chatStats
+    ? Object.values(chatStats.agentDistribution).reduce((a, b) => a + b, 0)
+    : 0;
+
+  const chatRunning = chatStats?.running ?? 0;
+  const chatPending = pendingChatIds.size;
+  const chatCompleted = chatStats?.completed ?? 0;
+  const chatTotal = chatRunning + chatPending + chatCompleted;
 
   return (
     <div style={{ position: 'relative' }}>
@@ -1396,63 +1227,43 @@ export function SessionDashboard({
                   <h3 className={styles.sessionSidebarTitle}>
                     <Terminal size={16} color="var(--accent-violet)" /> 워크스페이스 현황
                   </h3>
-                  <div className={styles.sessionSummaryBarChart} role="img" aria-label="워크스페이스 상태 요약">
-                    {sessionStats.total > 0 ? (
+                  {/* 바 차트 — idle 세그먼트 없음 */}
+                  <div className={styles.sessionSummaryBarChart} role="img" aria-label="채팅 상태 요약">
+                    {chatTotal > 0 ? (
                       <>
-                        <div 
-                          className={`${styles.sessionBarSegment} ${styles.sessionBarRunning}`} 
-                          style={{ width: `${(sessionStats.running / sessionStats.total) * 100}%`, backgroundColor: SESSION_UI_STATUS_META.running.color }}
-                        />
-                        <div 
-                          className={`${styles.sessionBarSegment} ${styles.sessionBarPending}`} 
-                          style={{ width: `${(sessionStats.pending / sessionStats.total) * 100}%`, backgroundColor: SESSION_UI_STATUS_META.pending.color }}
-                        />
-                        <div 
-                          className={`${styles.sessionBarSegment} ${styles.sessionBarCompleted}`} 
-                          style={{ width: `${(sessionStats.completed / sessionStats.total) * 100}%`, backgroundColor: SESSION_UI_STATUS_META.completed.color }}
-                        />
-                        <div 
-                          className={`${styles.sessionBarSegment} ${styles.sessionBarIdle}`} 
-                          style={{ width: `${(sessionStats.idle / sessionStats.total) * 100}%`, backgroundColor: SESSION_UI_STATUS_META.idle.color }}
-                        />
+                        <div style={{ width: `${(chatRunning / chatTotal) * 100}%`, backgroundColor: SESSION_UI_STATUS_META.running.color }} className={styles.sessionBarSegment} />
+                        <div style={{ width: `${(chatPending / chatTotal) * 100}%`, backgroundColor: SESSION_UI_STATUS_META.pending.color }} className={styles.sessionBarSegment} />
+                        <div style={{ width: `${(chatCompleted / chatTotal) * 100}%`, backgroundColor: SESSION_UI_STATUS_META.completed.color }} className={styles.sessionBarSegment} />
                       </>
-                    ) : (
-                      <div className={styles.sessionBarSegment} style={{ width: '0%', backgroundColor: 'transparent' }} />
-                    )}
-                  </div>
-                  <div className={styles.sessionSummaryLegend}>
-                    <div className={styles.sessionSummaryLegendItem}>
-                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: SESSION_UI_STATUS_META.running.color }}></span>
-                      <span>{SESSION_UI_STATUS_META.running.label}</span>
-                      <strong>{sessionStats.running}</strong>
-                    </div>
-                    <div className={styles.sessionSummaryLegendItem}>
-                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: SESSION_UI_STATUS_META.pending.color }}></span>
-                      <span>{SESSION_UI_STATUS_META.pending.label}</span>
-                      <strong>{sessionStats.pending}</strong>
-                    </div>
-                    <div className={styles.sessionSummaryLegendItem}>
-                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: SESSION_UI_STATUS_META.completed.color }}></span>
-                      <span>{SESSION_UI_STATUS_META.completed.label}</span>
-                      <strong>{sessionStats.completed}</strong>
-                    </div>
-                    <div className={styles.sessionSummaryLegendItem}>
-                      <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: SESSION_UI_STATUS_META.idle.color }}></span>
-                      <span>{SESSION_UI_STATUS_META.idle.label}</span>
-                      <strong>{sessionStats.idle}</strong>
-                    </div>
+                    ) : null}
                   </div>
 
-                  {/* 워크스페이스 리스트 섹션 */}
+                  {/* 레전드 — idle 없음 */}
+                  <div className={styles.sessionSummaryLegend}>
+                    {[
+                      { status: 'running' as const, count: chatRunning },
+                      { status: 'pending' as const, count: chatPending },
+                      { status: 'completed' as const, count: chatCompleted },
+                    ].map(({ status, count }) => (
+                      <div key={status} className={styles.sessionSummaryLegendItem}>
+                        <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: SESSION_UI_STATUS_META[status].color }} />
+                        <span>{SESSION_UI_STATUS_META[status].label}</span>
+                        <strong>{count}</strong>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 채팅 리스트 섹션 */}
                   <div className={styles.sessionStatusLists}>
                     <div className={styles.sessionStatusSubSection}>
-                      <h4 className={styles.sessionStatusSubTitle}>진행 중인 워크스페이스</h4>
-                      {runningSessions.length > 0 ? (
+                      <h4 className={styles.sessionStatusSubTitle}>진행 중인 채팅</h4>
+                      {chatStats && chatStats.runningSample.length > 0 ? (
                         <div className={styles.sessionMiniList}>
-                          {runningSessions.slice(0, 3).map(s => (
-                            <div key={s.id} className={styles.sessionMiniItem}>
-                              <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: 'var(--chart-status-running)' }}></span>
-                              <span className={styles.sessionMiniName}>{sessionAliases[s.id] || extractLastDirectoryName(s.projectName)}</span>
+                          {chatStats.runningSample.map(chat => (
+                            <div key={chat.id} className={styles.sessionMiniItem}>
+                              <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: 'var(--chart-status-running)' }} />
+                              <span className={styles.sessionMiniName}>{chat.title}</span>
+                              <span className={styles.sessionMiniSubName}>{chat.sessionName}</span>
                             </div>
                           ))}
                         </div>
@@ -1460,12 +1271,13 @@ export function SessionDashboard({
                     </div>
                     <div className={styles.sessionStatusSubSection}>
                       <h4 className={styles.sessionStatusSubTitle}>최근 완료</h4>
-                      {completedSessions.length > 0 ? (
+                      {chatStats && chatStats.completedSample.length > 0 ? (
                         <div className={styles.sessionMiniList}>
-                          {completedSessions.slice(0, 3).map(s => (
-                            <div key={s.id} className={styles.sessionMiniItem}>
-                              <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: 'var(--chart-status-completed)' }}></span>
-                              <span className={styles.sessionMiniName}>{sessionAliases[s.id] || extractLastDirectoryName(s.projectName)}</span>
+                          {chatStats.completedSample.map(chat => (
+                            <div key={chat.id} className={styles.sessionMiniItem}>
+                              <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: 'var(--chart-status-completed)' }} />
+                              <span className={styles.sessionMiniName}>{chat.title}</span>
+                              <span className={styles.sessionMiniSubName}>{chat.sessionName}</span>
                             </div>
                           ))}
                         </div>
@@ -1476,7 +1288,7 @@ export function SessionDashboard({
 
                 {/* Agent Distribution */}
                 <Card className={styles.sessionSidebarCard}>
-                  <h4 className={styles.sessionSidebarTitle}>에이전트 분포</h4>
+                  <h4 className={styles.sessionSidebarTitle}>채팅 에이전트 분포</h4>
                   <div className={styles.agentStatsContent}>
                     <div className={styles.agentDonutWrap}>
                       <div className={styles.agentDonutChart}>
@@ -1504,8 +1316,8 @@ export function SessionDashboard({
                           </PieChart>
                         </ResponsiveContainer>
                         <div className={styles.agentDonutCenter}>
-                          <div className={styles.agentDonutValue}>{sessionStats.total}</div>
-                          <div className={styles.agentDonutLabel}>workspaces</div>
+                          <div className={styles.agentDonutValue}>{totalChatCount}</div>
+                          <div className={styles.agentDonutLabel}>chats</div>
                         </div>
                       </div>
                     </div>
@@ -1513,10 +1325,10 @@ export function SessionDashboard({
                       {AGENT_OPTIONS.map((agent) => (
                         <div key={`agent-legend-${agent.id}`} className={styles.agentSummaryLegendItem}>
                           <div className={styles.agentSummaryLegendInfo}>
-                            <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: agent.accentColor }}></span>
+                            <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: agent.accentColor }} />
                             <span>{agent.label}</span>
                           </div>
-                          <strong>{agentStats[agent.id]}</strong>
+                          <strong>{chatStats?.agentDistribution[agent.id as 'claude' | 'codex' | 'gemini'] ?? 0}</strong>
                         </div>
                       ))}
                     </div>
@@ -1606,8 +1418,6 @@ export function SessionDashboard({
               ) : (
                 <div className={styles.sessionGrid}>
                   {filteredSessions.map((session) => {
-                    const agentInfo = getAgentOption(session.agent);
-                    const AgentIcon = agentInfo.Icon;
                     const sessionUiStatus = sessionUiStatusById.get(session.id) ?? 'idle';
                     const sessionUiStatusMeta = SESSION_UI_STATUS_META[sessionUiStatus];
                     const isPinned = pinnedSessions.has(session.id);
@@ -1703,12 +1513,54 @@ export function SessionDashboard({
                         </div>
 
                         <div className={styles.sessionCardBody}>
-                          <div className={styles.sessionCardAgent} style={{ color: agentInfo.accentColor }}>
-                            <div className={styles.sessionCardAgentIcon} style={{ backgroundColor: agentInfo.accentBg }}>
-                              <AgentIcon size={18} />
+                          {session.totalChats && session.totalChats > 0 && session.chatAgentCounts ? (
+                            <div className={styles.chatAgentDistribution}>
+                              {/* 수평 바 차트 */}
+                              <div className={styles.chatAgentBar}>
+                                {AGENT_OPTIONS
+                                  .filter(a => (session.chatAgentCounts?.[a.id] ?? 0) > 0)
+                                  .map(a => (
+                                    <div
+                                      key={a.id}
+                                      className={styles.chatAgentBarSegment}
+                                      style={{
+                                        width: `${((session.chatAgentCounts?.[a.id] ?? 0) / session.totalChats!) * 100}%`,
+                                        backgroundColor: a.accentColor,
+                                      }}
+                                    />
+                                  ))
+                                }
+                              </div>
+                              {/* 겹침 아이콘 그룹 */}
+                              <div className={styles.agentAvatarStack}>
+                                {AGENT_OPTIONS
+                                  .filter(a => (session.chatAgentCounts?.[a.id] ?? 0) > 0)
+                                  .sort((a, b) => (session.chatAgentCounts?.[b.id] ?? 0) - (session.chatAgentCounts?.[a.id] ?? 0))
+                                  .map((a, idx) => {
+                                    const AIcon = a.Icon;
+                                    return (
+                                      <div
+                                        key={a.id}
+                                        className={styles.agentAvatarItem}
+                                        style={{
+                                          backgroundColor: a.accentBg,
+                                          color: a.accentColor,
+                                          zIndex: AGENT_OPTIONS.length - idx,
+                                          marginLeft: idx === 0 ? 0 : -8,
+                                        }}
+                                        title={a.label}
+                                      >
+                                        <AIcon size={14} />
+                                      </div>
+                                    );
+                                  })
+                                }
+                              </div>
                             </div>
-                            {agentInfo.label}
-                          </div>
+                          ) : (
+                            <span className={styles.chatAgentEmpty}>채팅 없음</span>
+                          )}
+                          {/* 상태 배지 */}
                           <div>
                             <Badge variant={sessionUiStatusMeta.variant}>
                               {sessionUiStatusMeta.label}
