@@ -322,7 +322,7 @@ export function buildServer(config: ServerConfig) {
       // Resolve host-side path for terminal access
       let hostPath = session.metadata.path;
       try {
-        hostPath = store.resolveExecutionCwd(session.metadata.path);
+        hostPath = store.resolveExecutionCwd(session.metadata.path, session.metadata.branch);
       } catch {
         // Keep original path as fallback
       }

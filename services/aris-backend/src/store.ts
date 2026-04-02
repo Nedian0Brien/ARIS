@@ -12,6 +12,7 @@ import type {
 } from './types.js';
 import { HappyRuntimeStore } from './runtime/happyClient.js';
 import { PrismaRuntimeStore } from './runtime/prismaStore.js';
+import { computeWorktreePath, ensureWorktree } from './runtime/worktreeManager.js';
 
 type RuntimeBackend = 'mock' | 'happy' | 'prisma';
 
@@ -422,7 +423,17 @@ export class RuntimeStore {
   }
 
   async createSession(input: CreateSessionInput) {
-    return this.delegate.createSession(input);
+    const session = await this.delegate.createSession(input);
+
+    if (input.branch) {
+      ensureWorktree(session.metadata.path, input.branch).catch((error) => {
+        process.stderr.write(
+          `[worktree] failed to ensure worktree for branch "${input.branch}": ${error instanceof Error ? error.message : String(error)}\n`,
+        );
+      });
+    }
+
+    return session;
   }
 
   async updateApprovalPolicy(sessionId: string, approvalPolicy: ApprovalPolicy) {
@@ -494,7 +505,10 @@ export class RuntimeStore {
     return this.delegate.decidePermission(permissionId, decision);
   }
 
-  resolveExecutionCwd(cwdHint?: string): string {
+  resolveExecutionCwd(cwdHint?: string, branch?: string): string {
+    if (branch && cwdHint) {
+      return computeWorktreePath(cwdHint, branch);
+    }
     if ('resolveExecutionCwd' in this.delegate && typeof this.delegate.resolveExecutionCwd === 'function') {
       return (this.delegate as any).resolveExecutionCwd(cwdHint);
     }
