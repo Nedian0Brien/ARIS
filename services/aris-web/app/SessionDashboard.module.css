@@ -339,6 +339,15 @@
   white-space: nowrap;
 }
 
+.sessionMiniSubName {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .sessionEmptyHint {
   font-size: 0.65rem;
   color: var(--text-muted);
@@ -808,4 +817,48 @@
     height: clamp(132px, 42vw, 160px);
     min-height: 132px;
   }
+}
+
+/* 워크스페이스 카드 에이전트 분포 */
+.chatAgentDistribution {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.chatAgentBar {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background-color: var(--dashboard-surface-track);
+}
+
+.chatAgentBarSegment {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.agentAvatarStack {
+  display: flex;
+  align-items: center;
+}
+
+.agentAvatarItem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--surface-base, #fff);
+  flex-shrink: 0;
+}
+
+.chatAgentEmpty {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  flex: 1;
 }
