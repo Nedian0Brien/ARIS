@@ -638,6 +638,7 @@ export async function createSession(input: {
   path: string;
   agent: SessionSummary['agent'];
   approvalPolicy?: ApprovalPolicy;
+  branch?: string;
 }): Promise<SessionSummary> {
   const raw = await fetchHappy('/v1/sessions', {
     method: 'POST',
@@ -645,6 +646,7 @@ export async function createSession(input: {
       path: input.path,
       flavor: input.agent,
       approvalPolicy: input.approvalPolicy ?? 'on-request',
+      ...(input.branch ? { branch: input.branch } : {}),
     }),
   });
 
