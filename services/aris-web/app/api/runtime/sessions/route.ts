@@ -68,10 +68,13 @@ export async function POST(request: NextRequest) {
       : 'on-request';
     const normalizedPath = typeof path === 'string' ? normalizeProjectPath(path) : '';
 
-    const normalizedAgent = agent === 'claude' || agent === 'codex' || agent === 'gemini' ? agent : null;
+    // agent 미전달 시 'claude' 기본값 (에러 반환하지 않음)
+    const normalizedAgent = agent === 'claude' || agent === 'codex' || agent === 'gemini'
+      ? agent
+      : 'claude';
 
-    if (!normalizedPath || !normalizedAgent) {
-      return NextResponse.json({ error: 'Path and agent are required' }, { status: 400 });
+    if (!normalizedPath) {
+      return NextResponse.json({ error: 'Path is required' }, { status: 400 });
     }
 
     const existingSessions = await listSessions();
