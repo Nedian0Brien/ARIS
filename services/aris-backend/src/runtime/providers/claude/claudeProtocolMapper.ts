@@ -150,8 +150,12 @@ function buildToolName(action: ClaudeActionEvent, payloadSubtype: string): strin
   return action.actionType;
 }
 
-export function parseClaudeStreamLine(line: string): ClaudeMappedLine {
-  const payload = parseClaudeJsonLine(line);
+type ParseClaudeStreamLineOptions = {
+  onParseWarning?: (rawLine: string) => void;
+};
+
+export function parseClaudeStreamLine(line: string, options?: ParseClaudeStreamLineOptions): ClaudeMappedLine {
+  const payload = parseClaudeJsonLine(line, options?.onParseWarning);
   if (!payload) {
     return { envelopes: [] };
   }
