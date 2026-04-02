@@ -22,6 +22,7 @@ type CreateSessionInput = {
   model?: string;
   status?: SessionStatus;
   riskScore?: number;
+  branch?: string;
 };
 
 function normalizeModel(value: unknown): string | undefined {
@@ -133,6 +134,7 @@ class MockRuntimeStore implements RuntimeStoreBackend {
         path: input.path,
         approvalPolicy: input.approvalPolicy ?? 'on-request',
         ...(model ? { model } : {}),
+        ...(input.branch ? { branch: input.branch } : {}),
       },
       state: {
         status: input.status ?? 'idle',
