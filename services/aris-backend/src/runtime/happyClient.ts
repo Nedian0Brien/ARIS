@@ -17,6 +17,7 @@ import {
 import { ClaudeMessageQueue } from './providers/claude/claudeMessageQueue.js';
 import { extractClaudePermissionRequest } from './providers/claude/claudePermissionBridge.js';
 import { looksLikeClaudeActionTranscript, parseClaudeStreamLine, parseClaudeStreamOutput } from './providers/claude/claudeProtocolMapper.js';
+import { TurnProgressTracker } from './providers/claude/turnProgressTracker.js';
 import { ClaudeSessionRegistry } from './providers/claude/claudeSessionRegistry.js';
 import { ClaudeSessionLogTracker, extractClaudeSessionHintIds } from './providers/claude/claudeSessionScanner.js';
 import { buildClaudeSessionId } from './providers/claude/claudeSessionSource.js';
@@ -1986,7 +1987,10 @@ export class HappyRuntimeStore {
       actions: ParsedAgentActionEvent[];
       streamedActionsPersisted: boolean;
       threadId?: string;
-    }> => new Promise((resolve, reject) => {
+    }> => {
+      const tracker = new TurnProgressTracker();
+      tracker.setModel(agent);
+      return new Promise((resolve, reject) => {
       let child: ReturnType<typeof spawn>;
       try {
         child = command.requiresPty
@@ -2022,7 +2026,11 @@ export class HappyRuntimeStore {
       let providerErrorDetail = '';
       let emitChain: Promise<void> = Promise.resolve();
       const geminiStreamAdapter = agent === 'gemini' && GEMINI_STREAM_BACKEND_V2
-        ? new GeminiStreamAdapter()
+        ? new GeminiStreamAdapter({
+          onParseWarning: (rawLine) => {
+            process.stderr.write(`[gemini] JSONL parse failed: ${rawLine.slice(0, 200)}\n`);
+          },
+        })
         : null;
       let settled = false;
       let timedOut = false;
@@ -2094,7 +2102,11 @@ export class HappyRuntimeStore {
           }
         }
         if (agent === 'claude') {
-          const parsedLine = parseClaudeStreamLine(normalized);
+          const parsedLine = parseClaudeStreamLine(normalized, {
+            onParseWarning: (rawLine) => {
+              process.stderr.write(`[claude] JSONL parse failed: ${rawLine.slice(0, 200)}\n`);
+            },
+          });
           if (parsedLine.sessionId) {
             resolvedSessionId = parsedLine.sessionId;
           }
@@ -2104,8 +2116,14 @@ export class HappyRuntimeStore {
           if (parsedLine.action && parsedLine.actionKey && !actionByKey.has(parsedLine.actionKey)) {
             actionByKey.set(parsedLine.actionKey, parsedLine.action);
             if (onAction) {
+              tracker.nextStep();
+              const progressMeta = tracker.toMeta();
+              const actionWithMeta: ParsedAgentActionEvent = {
+                ...parsedLine.action,
+                meta: { ...parsedLine.action.meta, ...progressMeta },
+              };
               emitChain = emitChain.then(async () => {
-                await onAction(parsedLine.action!);
+                await onAction(actionWithMeta);
                 streamedActionsPersisted = true;
               });
             }
@@ -2149,8 +2167,14 @@ export class HappyRuntimeStore {
               if (!actionByKey.has(actionKey)) {
                 actionByKey.set(actionKey, event.action);
                 if (onAction) {
+                  tracker.nextStep();
+                  const progressMeta = tracker.toMeta();
+                  const actionWithMeta: ParsedAgentActionEvent = {
+                    ...event.action,
+                    meta: { ...event.action.meta, ...progressMeta },
+                  };
                   emitChain = emitChain.then(async () => {
-                    await onAction(event.action);
+                    await onAction(actionWithMeta);
                     streamedActionsPersisted = true;
                   });
                 }
@@ -2291,7 +2315,8 @@ export class HappyRuntimeStore {
             settleReject(error);
           });
       });
-    });
+      });
+    };
 
     let result: { stdout: string; stderr: string; threadId?: string } | null = null;
     let lastError: unknown = null;

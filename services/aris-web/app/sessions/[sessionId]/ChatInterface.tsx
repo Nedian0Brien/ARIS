@@ -964,6 +964,32 @@ function getLatestVisibleEvent(events: UiEvent[]): UiEvent | null {
   return null;
 }
 
+function extractProgressMeta(events: UiEvent[]): { step?: number; elapsedMs?: number; modelLabel?: string } | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (!event?.meta) continue;
+    const step = typeof event.meta.step === 'number' ? event.meta.step : undefined;
+    const elapsedMs = typeof event.meta.elapsedMs === 'number' ? event.meta.elapsedMs : undefined;
+    const modelLabel = typeof event.meta.modelLabel === 'string' ? event.meta.modelLabel : undefined;
+    if (step !== undefined || modelLabel !== undefined) {
+      return { step, elapsedMs, modelLabel };
+    }
+  }
+  return null;
+}
+
+function buildProgressLabel(
+  base: string,
+  progress: { step?: number; elapsedMs?: number; modelLabel?: string } | null,
+): string {
+  if (!progress) return base;
+  const parts: string[] = ['working'];
+  if (progress.modelLabel) parts.push(progress.modelLabel);
+  if (progress.elapsedMs !== undefined) parts.push(`${Math.floor(progress.elapsedMs / 1000)}s`);
+  if (progress.step !== undefined && progress.step > 0) parts.push(`step ${progress.step}`);
+  return parts.length > 1 ? parts.join(' · ') : base;
+}
+
 function hasChatErrorSignal(event: UiEvent | null | undefined): boolean {
   if (!event) {
     return false;
@@ -2570,8 +2596,9 @@ export function ChatInterface({
     : runtimeNotice
       ? 'degraded'
       : 'connected';
+  const progressMeta = isRunActive ? extractProgressMeta(events) : null;
   const connectionLabel = connectionState === 'running'
-    ? (runPhaseLabel ?? '실행 중')
+    ? buildProgressLabel(runPhaseLabel ?? '실행 중', progressMeta)
     : connectionState === 'connected'
       ? '정상 연결'
       : '응답 지연 또는 연결 확인 필요';

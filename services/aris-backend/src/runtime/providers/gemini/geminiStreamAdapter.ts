@@ -278,6 +278,10 @@ type GeminiStreamSummary = {
   errorText?: string;
 };
 
+type GeminiStreamAdapterOptions = {
+  onParseWarning?: (rawLine: string) => void;
+};
+
 export class GeminiStreamAdapter {
   private readonly assembler = new GeminiIdentityAssembler();
   private readonly emittedKeys = new Set<string>();
@@ -286,14 +290,19 @@ export class GeminiStreamAdapter {
   private readonly pendingToolCalls = new Map<string, GeminiPendingToolCall>();
   private readonly completedTexts: GeminiCanonicalTextCompletedEvent[] = [];
   private readonly events: GeminiCanonicalEvent[] = [];
+  private readonly onParseWarning?: (rawLine: string) => void;
   private latestThreadId?: string;
   private sequence = 0;
   private errorText?: string;
   private pendingTextBlock: GeminiPendingTextBlock | null = null;
   private syntheticItemSequence = 0;
 
+  constructor(options?: GeminiStreamAdapterOptions) {
+    this.onParseWarning = options?.onParseWarning;
+  }
+
   processLine(line: string): GeminiCanonicalEvent[] {
-    const payload = parseGeminiJsonLine(line);
+    const payload = parseGeminiJsonLine(line, this.onParseWarning);
     if (!payload) {
       return [];
     }
@@ -914,8 +923,8 @@ export class GeminiStreamAdapter {
   }
 }
 
-export function parseGeminiStreamToCanonicalEvents(stdout: string): GeminiCanonicalEvent[] {
-  const adapter = new GeminiStreamAdapter();
+export function parseGeminiStreamToCanonicalEvents(stdout: string, options?: GeminiStreamAdapterOptions): GeminiCanonicalEvent[] {
+  const adapter = new GeminiStreamAdapter(options);
   for (const line of stdout.replace(/\r\n/g, '\n').split('\n').map((entry) => entry.trim()).filter(Boolean)) {
     adapter.processLine(line);
   }

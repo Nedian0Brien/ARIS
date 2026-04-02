@@ -35,6 +35,7 @@ export type ProviderActionEvent = {
   additions: number;
   deletions: number;
   hasDiffSignal: boolean;
+  meta?: Record<string, unknown>;
 };
 
 export type ProviderTextEvent = {
