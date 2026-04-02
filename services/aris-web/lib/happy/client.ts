@@ -636,7 +636,7 @@ export async function listSessions(userId?: string): Promise<SessionSummary[]> {
 
 export async function createSession(input: {
   path: string;
-  agent: SessionSummary['agent'];
+  agent?: SessionSummary['agent'];  // optional — 미전달 시 'claude' 기본값
   approvalPolicy?: ApprovalPolicy;
   branch?: string;
 }): Promise<SessionSummary> {
@@ -644,7 +644,7 @@ export async function createSession(input: {
     method: 'POST',
     body: JSON.stringify({
       path: input.path,
-      flavor: input.agent,
+      flavor: input.agent ?? 'claude',  // 기본값 'claude'
       approvalPolicy: input.approvalPolicy ?? 'on-request',
       ...(input.branch ? { branch: input.branch } : {}),
     }),
