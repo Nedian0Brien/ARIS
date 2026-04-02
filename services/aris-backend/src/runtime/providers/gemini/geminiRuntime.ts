@@ -1,4 +1,5 @@
 import type { ProviderRuntime } from '../../contracts/providerRuntime.js';
+import { ScopeQueue } from '../../scopeQueue.js';
 import { GeminiSessionRegistry, buildGeminiScopeKey } from './geminiSessionRegistry.js';
 import { recoverGeminiThreadIdFromMessages } from './geminiSessionSource.js';
 import type { GeminiMessageHistoryLoader, GeminiRuntimeSession, GeminiTurnExecutor, GeminiTurnResult } from './types.js';
@@ -19,7 +20,7 @@ export function createGeminiRuntime(input: {
   executeTurn?: GeminiTurnExecutor;
 } = {}): ProviderRuntime<GeminiRuntimeSession, GeminiTurnResult> {
   const registry = input.registry ?? new GeminiSessionRegistry();
-  const runningScopes = new Set<string>();
+  const scopeQueue = new ScopeQueue();
 
   return {
     provider: 'gemini',
@@ -35,10 +36,9 @@ export function createGeminiRuntime(input: {
       const runKey = buildGeminiScopeKey(scope.sessionId, scope.chatId);
       const sessionOwner = registry.getOrCreate(scope);
       const preferredThreadId = sessionOwner.resolvePreferredThreadId(request.requestedThreadId, request.storedThreadId);
-      runningScopes.add(runKey);
 
-      try {
-        const result = await input.executeTurn({
+      return scopeQueue.run(runKey, async () => {
+        const result = await input.executeTurn!({
           ...request,
           preferredThreadId,
         }).catch((error) => {
@@ -56,12 +56,10 @@ export function createGeminiRuntime(input: {
         }
 
         return result;
-      } finally {
-        runningScopes.delete(runKey);
-      }
+      });
     },
-    abortTurn(scope) {
-      runningScopes.delete(buildGeminiScopeKey(scope.sessionId, scope.chatId));
+    abortTurn(_scope) {
+      // ScopeQueue는 abort를 지원하지 않음 — abort 신호는 executeTurn 내부의 AbortSignal로 처리됨
     },
     async recoverSession(request) {
       const storedThreadId = typeof request.storedThreadId === 'string' && request.storedThreadId.trim().length > 0
@@ -100,7 +98,7 @@ export function createGeminiRuntime(input: {
       };
     },
     isRunning(scope) {
-      return runningScopes.has(buildGeminiScopeKey(scope.sessionId, scope.chatId));
+      return scopeQueue.isQueued(buildGeminiScopeKey(scope.sessionId, scope.chatId));
     },
   };
 }

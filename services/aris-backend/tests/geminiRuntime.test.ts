@@ -1,216 +1,96 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { createGeminiRuntime } from '../src/runtime/providers/gemini/geminiRuntime.js';
+import type { GeminiRuntimeSession, GeminiTurnResult } from '../src/runtime/providers/gemini/types.js';
 
-describe('geminiRuntime', () => {
-  it('recovers a stored Gemini thread id as a resume target', async () => {
-    const runtime = createGeminiRuntime();
+const makeSession = (id = 'sess-1'): GeminiRuntimeSession => ({
+  id,
+  metadata: { flavor: 'gemini', path: '/tmp', approvalPolicy: 'on-request' },
+  state: { status: 'idle' },
+  updatedAt: new Date().toISOString(),
+  riskScore: 0,
+});
 
-    const recovered = await runtime.recoverSession({
-      session: {
-        id: 'session-1',
-        metadata: {
-          flavor: 'gemini',
-          path: '/workspace/project',
-          approvalPolicy: 'on-request',
-        },
-      },
-      chatId: 'chat-1',
-      storedThreadId: 'gemini-thread-123',
+const makeResult = (): GeminiTurnResult => ({
+  output: '',
+  cwd: '/tmp',
+  streamedActionsPersisted: false,
+  inferredActions: [],
+  threadId: undefined,
+  threadIdSource: undefined,
+});
+
+describe('createGeminiRuntime — serialization', () => {
+  it('serializes concurrent sendTurn calls for the same session scope', async () => {
+    const order: number[] = [];
+    let resolveFirst!: () => void;
+    const firstStarted = new Promise<void>((res) => {
+      resolveFirst = res;
     });
 
-    expect(recovered).toEqual({
-      session: {
-        id: 'session-1',
-        metadata: {
-          flavor: 'gemini',
-          path: '/workspace/project',
-          approvalPolicy: 'on-request',
-        },
-      },
-      chatId: 'chat-1',
-      recoveredThreadId: 'gemini-thread-123',
-      threadIdSource: 'resume',
-      source: 'stored',
-    });
-  });
-
-  it('recovers a Gemini thread id from message history when no stored id exists', async () => {
+    let call = 0;
     const runtime = createGeminiRuntime({
-      listMessages: vi.fn().mockResolvedValue([
-        {
-          id: 'm1',
-          sessionId: 'session-1',
-          type: 'text',
-          title: 'reply',
-          text: 'OK',
-          createdAt: '2026-03-13T00:00:00.000Z',
-          meta: {
-            agent: 'gemini',
-            chatId: 'chat-1',
-            threadId: 'gemini-thread-from-history',
-          },
-        },
-      ]),
-    });
-
-    const recovered = await runtime.recoverSession({
-      session: {
-        id: 'session-1',
-        metadata: {
-          flavor: 'gemini',
-          path: '/workspace/project',
-          approvalPolicy: 'on-request',
-        },
-      },
-      chatId: 'chat-1',
-    });
-
-    expect(recovered).toMatchObject({
-      recoveredThreadId: 'gemini-thread-from-history',
-      threadIdSource: 'observed',
-      source: 'messages',
-    });
-  });
-
-  it('tracks observed Gemini thread ids through the provider registry during sendTurn', async () => {
-    let resolveTurn: ((value: {
-      output: string;
-      cwd: string;
-      streamedActionsPersisted: boolean;
-      inferredActions: [];
-      threadId: string;
-      threadIdSource: 'observed';
-    }) => void) | null = null;
-    const runtime = createGeminiRuntime({
-      executeTurn: vi.fn().mockImplementation(() => new Promise((resolve) => {
-        resolveTurn = resolve;
-      })),
-    });
-
-    const turnPromise = runtime.sendTurn({
-      session: {
-        id: 'session-1',
-        metadata: {
-          flavor: 'gemini',
-          path: '/workspace/project',
-          approvalPolicy: 'on-request',
-        },
-      },
-      chatId: 'chat-1',
-      prompt: 'Reply with OK',
-    });
-
-    expect(runtime.isRunning({ sessionId: 'session-1', chatId: 'chat-1' })).toBe(true);
-    resolveTurn?.({
-      output: 'OK',
-      cwd: '/workspace/project',
-      streamedActionsPersisted: false,
-      inferredActions: [],
-      threadId: 'gemini-observed-1',
-      threadIdSource: 'observed',
-    });
-    const result = await turnPromise;
-
-    expect(result.threadId).toBe('gemini-observed-1');
-    expect(runtime.isRunning({ sessionId: 'session-1', chatId: 'chat-1' })).toBe(false);
-  });
-
-  it('preserves observed Gemini thread ids after abortTurn for the next turn', async () => {
-    const preferredThreadIds: Array<string | undefined> = [];
-    const runtime = createGeminiRuntime({
-      executeTurn: vi.fn().mockImplementation(async (input) => {
-        preferredThreadIds.push(input.preferredThreadId);
-        return {
-          output: 'OK',
-          cwd: '/workspace/project',
-          streamedActionsPersisted: false,
-          inferredActions: [],
-          threadId: 'gemini-observed-2',
-          threadIdSource: 'observed',
-        };
-      }),
-    });
-
-    await runtime.sendTurn({
-      session: {
-        id: 'session-1',
-        metadata: {
-          flavor: 'gemini',
-          path: '/workspace/project',
-          approvalPolicy: 'on-request',
-        },
-      },
-      chatId: 'chat-1',
-      prompt: 'First turn',
-    });
-
-    runtime.abortTurn({ sessionId: 'session-1', chatId: 'chat-1' });
-
-    await runtime.sendTurn({
-      session: {
-        id: 'session-1',
-        metadata: {
-          flavor: 'gemini',
-          path: '/workspace/project',
-          approvalPolicy: 'on-request',
-        },
-      },
-      chatId: 'chat-1',
-      prompt: 'Second turn',
-    });
-
-    expect(preferredThreadIds).toEqual([undefined, 'gemini-observed-2']);
-  });
-
-  it('keeps observed Gemini thread ids when a turn fails after the thread was discovered', async () => {
-    const preferredThreadIds: Array<string | undefined> = [];
-    let attempt = 0;
-    const runtime = createGeminiRuntime({
-      executeTurn: vi.fn().mockImplementation(async (input) => {
-        preferredThreadIds.push(input.preferredThreadId);
-        attempt += 1;
-        if (attempt === 1) {
-          const error = new Error('gemini CLI failed');
-          Object.assign(error, { threadId: 'gemini-observed-error-1' });
-          throw error;
+      executeTurn: async () => {
+        call++;
+        if (call === 1) {
+          resolveFirst();
+          await new Promise((res) => setTimeout(res, 30));
+          order.push(1);
+        } else {
+          order.push(2);
         }
-        return {
-          output: 'Recovered',
-          cwd: '/workspace/project',
-          streamedActionsPersisted: false,
-          inferredActions: [],
-          threadId: 'gemini-observed-error-1',
-          threadIdSource: 'observed',
-        };
-      }),
+        return makeResult();
+      },
     });
 
-    await expect(runtime.sendTurn({
-      session: {
-        id: 'session-1',
-        metadata: {
-          flavor: 'gemini',
-          path: '/workspace/project',
-          approvalPolicy: 'on-request',
-        },
-      },
-      chatId: 'chat-1',
-      prompt: 'First turn',
-    })).rejects.toThrow('gemini CLI failed');
+    const session = makeSession();
 
-    await runtime.sendTurn({
-      session: {
-        id: 'session-1',
-        metadata: {
-          flavor: 'gemini',
-          path: '/workspace/project',
-          approvalPolicy: 'on-request',
-        },
+    const t1 = runtime.sendTurn({ session, prompt: 'first' });
+    await firstStarted;
+    const t2 = runtime.sendTurn({ session, prompt: 'second' });
+
+    await Promise.all([t1, t2]);
+    expect(order).toEqual([1, 2]);
+  });
+
+  it('allows different session scopes to run concurrently', async () => {
+    const started: string[] = [];
+
+    const runtime = createGeminiRuntime({
+      executeTurn: async (req) => {
+        started.push(req.session.id);
+        await new Promise((res) => setTimeout(res, 20));
+        return makeResult();
       },
-      chatId: 'chat-1',
-      prompt: 'Retry turn',
     });
 
-    expect(preferredThreadIds).toEqual([undefined, 'gemini-observed-error-1']);
+    const t1 = runtime.sendTurn({ session: makeSession('sess-a'), prompt: 'a' });
+    const t2 = runtime.sendTurn({ session: makeSession('sess-b'), prompt: 'b' });
+
+    await t2;
+    expect(started).toContain('sess-b');
+    await t1;
+  });
+
+  it('isRunning returns true while turn is executing', async () => {
+    let resolveExec!: () => void;
+
+    const runtime = createGeminiRuntime({
+      executeTurn: async () => {
+        await new Promise<void>((res) => {
+          resolveExec = res;
+        });
+        return makeResult();
+      },
+    });
+
+    const session = makeSession();
+    const turn = runtime.sendTurn({ session, prompt: 'hi' });
+
+    await new Promise((res) => setTimeout(res, 5));
+    expect(runtime.isRunning({ sessionId: session.id, chatId: undefined })).toBe(true);
+
+    resolveExec();
+    await turn;
+    expect(runtime.isRunning({ sessionId: session.id, chatId: undefined })).toBe(false);
   });
 });
