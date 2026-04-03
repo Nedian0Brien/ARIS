@@ -1141,6 +1141,53 @@
   overflow: visible;
 }
 
+.chatTransitionOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.22) 0%, rgba(241, 245, 249, 0.16) 100%);
+  backdrop-filter: blur(2px);
+}
+
+:global(html[data-theme='dark']) .chatTransitionOverlay {
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0.32) 0%, rgba(15, 23, 42, 0.22) 100%);
+}
+
+.chatTransitionCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: min(280px, 84vw);
+  padding: 1.1rem 1.35rem 1.25rem;
+  border-radius: 1.5rem;
+  border: 1px solid var(--chat-popover-border);
+  background: var(--chat-popover-bg);
+  box-shadow: var(--chat-popover-shadow);
+}
+
+.chatTransitionLogo {
+  width: 72px;
+  height: 72px;
+  border-radius: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.chatTransitionMessage {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--chat-text-primary);
+  text-align: center;
+}
+
 .centerHeader {
   display: flex;
   align-items: center;
