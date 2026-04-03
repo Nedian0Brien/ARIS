@@ -74,6 +74,7 @@ import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '
 import { CustomizationSidebar } from './CustomizationSidebar';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import { buildPermissionTimelineItems } from './chatTimeline';
+import { resolveNextChatReadMarker } from './chatSidebar';
 import styles from './ChatInterface.module.css';
 import dynamic from 'next/dynamic';
 import { resolveActiveChat, resolveNextSelectedChatId } from './chatSelection';
@@ -3178,15 +3179,21 @@ export function ChatInterface({
       return;
     }
     const latestEvent = getLatestVisibleEvent(visibleEvents);
-    if (!latestEvent || showScrollToBottom) {
+    const nextReadMarker = resolveNextChatReadMarker({
+      activeChatId: activeChatIdResolved,
+      eventsForChatId,
+      latestEventId: latestEvent?.id ?? null,
+      hasScrollToBottomButton: showScrollToBottom,
+    });
+    if (!nextReadMarker) {
       return;
     }
     setChatReadMarkers((prev) => (
-      prev[activeChatIdResolved] === latestEvent.id
+      prev[activeChatIdResolved] === nextReadMarker
         ? prev
       : {
           ...prev,
-          [activeChatIdResolved]: latestEvent.id,
+          [activeChatIdResolved]: nextReadMarker,
         }
     ));
   }, [activeChatIdResolved, eventsForChatId, showScrollToBottom, visibleEvents]);
