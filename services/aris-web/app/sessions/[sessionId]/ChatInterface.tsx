@@ -5904,13 +5904,20 @@ export function ChatInterface({
           </footer>
 
             {showChatTransitionLoading && (
-              <div className={styles.chatTransitionOverlay} role="status" aria-live="polite" aria-busy="true">
-                <div className={styles.chatTransitionCard}>
-                  <div className={`${styles.chatTransitionLogo} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
+              <div
+                className={styles.chatTransitionOverlay}
+                role="status"
+                aria-live="polite"
+                aria-busy="true"
+                style={{ '--chat-transition-accent': `var(--agent-${activeAgentFlavor}-accent)` } as React.CSSProperties}
+              >
+                <div className={styles.chatTransitionOrb}>
+                  <span className={styles.chatTransitionSpinner} aria-hidden="true" />
+                  <div className={styles.chatTransitionLogo}>
                     <agentMeta.Icon size={34} />
                   </div>
-                  <div className={styles.chatTransitionMessage}>에이전트 채팅 로딩중…</div>
                 </div>
+                <div className={styles.chatTransitionMessage}>에이전트 채팅 로딩중…</div>
               </div>
             )}
           </>
