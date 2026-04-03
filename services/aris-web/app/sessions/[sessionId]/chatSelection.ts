@@ -35,3 +35,18 @@ export function resolveNextSelectedChatId({
   }
   return chats[0]?.id ?? null;
 }
+
+export function shouldShowChatTransitionLoading(input: {
+  activeChatIdResolved: string | null;
+  eventsForChatId: string | null;
+  hasLoadedCurrentChat: boolean;
+  isNewChatPlaceholder: boolean;
+}): boolean {
+  if (input.isNewChatPlaceholder || !input.activeChatIdResolved) {
+    return false;
+  }
+  if (input.eventsForChatId !== input.activeChatIdResolved) {
+    return true;
+  }
+  return !input.hasLoadedCurrentChat;
+}

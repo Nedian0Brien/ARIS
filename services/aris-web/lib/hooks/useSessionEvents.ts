@@ -187,6 +187,7 @@ export function useSessionEvents(
   const [hasMoreBefore, setHasMoreBefore] = useState<boolean>(hydratedInitialHasMoreBefore);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [hasLoadedCurrentChat, setHasLoadedCurrentChat] = useState(initialEventsMatchChat);
   const eventsRef = useRef<UiEvent[]>(hydratedInitialEvents);
   const hasMoreBeforeRef = useRef<boolean>(hydratedInitialHasMoreBefore);
   const loadingOlderRef = useRef<boolean>(false);
@@ -204,6 +205,7 @@ export function useSessionEvents(
     terminalStatusRef.current = null;
     setIsLoadingOlder(false);
     setSyncError(null);
+    setHasLoadedCurrentChat(initialEventsMatchChat);
   }, [
     sessionId,
     chatId,
@@ -236,51 +238,55 @@ export function useSessionEvents(
       return;
     }
 
-    const params = new URLSearchParams();
-    params.set('limit', String(EVENTS_PAGE_LIMIT));
-    appendChatFilters(params, chatId, includeUnassigned);
-    const latestId = findLatestPersistedCursorEventId(eventsRef.current);
-    if (latestId) {
-      params.set('after', latestId);
-    }
-
-    const query = params.toString();
-    const response = await fetch(
-      `/api/runtime/sessions/${encodeURIComponent(sessionId)}/events${query ? `?${query}` : ''}`,
-      { cache: 'no-store' },
-    );
-    if (response.status === 401) {
-      redirectToLoginWithNext();
-      throw new SessionEventsHttpError(401, '로그인이 만료되었습니다.');
-    }
-    if (response.status === 404) {
-      terminalStatusRef.current = 404;
-      throw new SessionEventsHttpError(404, '워크스페이스가 종료되었거나 삭제되었습니다.');
-    }
-    if (!response.ok) {
-      const retryAfterMs = response.status === 429
-        ? parseRetryAfterHeader(response.headers.get('Retry-After'))
-        : null;
-      throw new SessionEventsHttpError(
-        response.status,
-        `백엔드 이벤트 API 응답 오류 (${response.status})`,
-        retryAfterMs,
-      );
-    }
-
-    const body = (await response.json()) as EventsApiResponse;
-    if (Array.isArray(body.events)) {
-      const nextEvents = body.events;
-      setEvents((prev) => {
-        const merged = mergeEvents([...prev, ...nextEvents]);
-        return areEventsEqual(prev, merged) ? prev : merged;
-      });
-      if (!latestId && typeof body.page?.hasMoreBefore === 'boolean') {
-        setHasMoreBefore(body.page.hasMoreBefore);
+    try {
+      const params = new URLSearchParams();
+      params.set('limit', String(EVENTS_PAGE_LIMIT));
+      appendChatFilters(params, chatId, includeUnassigned);
+      const latestId = findLatestPersistedCursorEventId(eventsRef.current);
+      if (latestId) {
+        params.set('after', latestId);
       }
-      pollBackoffMsRef.current = FALLBACK_POLL_INTERVAL_MS;
-      rateLimitUntilMsRef.current = null;
-      setSyncError(null);
+
+      const query = params.toString();
+      const response = await fetch(
+        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/events${query ? `?${query}` : ''}`,
+        { cache: 'no-store' },
+      );
+      if (response.status === 401) {
+        redirectToLoginWithNext();
+        throw new SessionEventsHttpError(401, '로그인이 만료되었습니다.');
+      }
+      if (response.status === 404) {
+        terminalStatusRef.current = 404;
+        throw new SessionEventsHttpError(404, '워크스페이스가 종료되었거나 삭제되었습니다.');
+      }
+      if (!response.ok) {
+        const retryAfterMs = response.status === 429
+          ? parseRetryAfterHeader(response.headers.get('Retry-After'))
+          : null;
+        throw new SessionEventsHttpError(
+          response.status,
+          `백엔드 이벤트 API 응답 오류 (${response.status})`,
+          retryAfterMs,
+        );
+      }
+
+      const body = (await response.json()) as EventsApiResponse;
+      if (Array.isArray(body.events)) {
+        const nextEvents = body.events;
+        setEvents((prev) => {
+          const merged = mergeEvents([...prev, ...nextEvents]);
+          return areEventsEqual(prev, merged) ? prev : merged;
+        });
+        if (!latestId && typeof body.page?.hasMoreBefore === 'boolean') {
+          setHasMoreBefore(body.page.hasMoreBefore);
+        }
+        pollBackoffMsRef.current = FALLBACK_POLL_INTERVAL_MS;
+        rateLimitUntilMsRef.current = null;
+        setSyncError(null);
+      }
+    } finally {
+      setHasLoadedCurrentChat(true);
     }
   }, [enabled, sessionId, chatId, includeUnassigned]);
 
@@ -679,5 +685,6 @@ export function useSessionEvents(
     loadOlder,
     hasMoreBefore: scopedHasMoreBefore,
     isLoadingOlder: scopedIsLoadingOlder,
+    hasLoadedCurrentChat,
   };
 }

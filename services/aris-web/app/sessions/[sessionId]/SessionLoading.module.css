@@ -97,6 +97,75 @@
   margin-top: auto;
 }
 
+.panelShell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem 1.25rem 1.5rem;
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.panelEyebrow {
+  width: 120px;
+  height: 12px;
+  margin-bottom: 0.5rem;
+}
+
+.panelCopy {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.panelBadge {
+  width: 96px;
+  height: 28px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.panelBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.75rem 0;
+}
+
+.panelMessage {
+  height: 82px;
+  border-radius: 1rem;
+}
+
+.panelMessageAgent {
+  width: 72%;
+  align-self: flex-start;
+}
+
+.panelMessageUser {
+  width: 56%;
+  align-self: flex-end;
+}
+
+.panelComposer {
+  height: 104px;
+  width: 100%;
+  border-radius: 1rem;
+}
+
 @media (max-width: 1024px) {
   .skeletonRight {
     display: none;
@@ -112,5 +181,19 @@
   }
   .skeletonWrapper {
     grid-template-columns: 1fr;
+  }
+
+  .panelHeader {
+    flex-direction: column;
+  }
+
+  .panelBadge {
+    width: 84px;
+    height: 24px;
+  }
+
+  .panelMessageAgent,
+  .panelMessageUser {
+    width: 100%;
   }
 }
