@@ -52,6 +52,7 @@ import {
   Folder,
   FolderTree,
   Brain,
+  Bug,
   MessageSquarePlus,
   MessageSquareText,
   MoreVertical,
@@ -75,6 +76,7 @@ import { CustomizationSidebar } from './CustomizationSidebar';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import { buildPermissionTimelineItems } from './chatTimeline';
 import { resolveChatReadMarkerId } from './chatSidebar';
+import { looksLikeShellTranscript, shouldShowDebugToggleInHeader } from './chatDebugMode';
 import styles from './ChatInterface.module.css';
 import dynamic from 'next/dynamic';
 import {
@@ -1808,6 +1810,74 @@ function TextReply({ body, isUser }: { body: string; isUser: boolean }) {
   );
 }
 
+function DebugRawBody({ body }: { body: string }) {
+  const normalized = body.replace(/\r\n/g, '\n');
+  if (!normalized.trim()) {
+    return null;
+  }
+
+  const transcriptLike = looksLikeShellTranscript(normalized);
+  const lines = normalized.split('\n');
+
+  return (
+    <pre className={`${styles.debugRawBody} ${transcriptLike ? styles.debugRawBodyTranscript : ''}`}>
+      {lines.map((line, index) => {
+        const lineKey = `debug-line-${index}`;
+
+        if (!line.trim()) {
+          return <span key={lineKey} className={styles.debugRawBlankLine}> </span>;
+        }
+
+        const commandMatch = transcriptLike ? line.match(/^(\s*)([$>])\s+(.*)$/) : null;
+        if (commandMatch) {
+          const [, prefix, prompt, command] = commandMatch;
+          return (
+            <span key={lineKey} className={styles.debugRawLine}>
+              <span className={styles.debugRawPrompt}>{prefix}{prompt}</span>
+              <span className={styles.debugRawCommand}> {command}</span>
+            </span>
+          );
+        }
+
+        if (/^(diff --git |\+\+\+ |--- |\*\*\* |@@ )/.test(line)) {
+          return (
+            <span key={lineKey} className={`${styles.debugRawLine} ${styles.diffLineMeta}`}>
+              {line}
+            </span>
+          );
+        }
+
+        if (/^[+-](?!\+\+\+|---)/.test(line)) {
+          return (
+            <span key={lineKey} className={`${styles.debugRawLine} ${line.startsWith('+') ? styles.diffLineAdd : styles.diffLineDel}`}>
+              {line}
+            </span>
+          );
+        }
+
+        return (
+          <span key={lineKey} className={styles.debugRawLine}>
+            {line}
+          </span>
+        );
+      })}
+    </pre>
+  );
+}
+
+function DebugReply({ body }: { body: string }) {
+  const normalized = body.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return (
+    <div className={styles.debugReply}>
+      <DebugRawBody body={normalized} />
+    </div>
+  );
+}
+
 function ActionResultDetail({ event }: { event: UiEvent }) {
   const result = event.result ?? fallbackResult(event);
   if (!result?.preview) {
@@ -2130,9 +2200,14 @@ function renderEventPayload(
   userEvent: boolean,
   expanded: boolean,
   onToggleExpand: () => void,
+  debugMode: boolean,
 ) {
   if (userEvent) {
     return <TextReply body={event.body || event.title} isUser />;
+  }
+
+  if (debugMode) {
+    return <DebugReply body={event.body || event.title} />;
   }
 
   if (isActionKind(event.kind)) {
@@ -2368,6 +2443,9 @@ export function ChatInterface({
   const [idBundleCopyState, setIdBundleCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [showPermissionQueue, setShowPermissionQueue] = useState(true);
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
+  const toggleDebugMode = useCallback(() => {
+    setIsDebugMode((prev) => !prev);
+  }, []);
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(true);
   const [viewportWidth, setViewportWidth] = useState(0);
   const [isCustomizationOverlayLayout, setIsCustomizationOverlayLayout] = useState(false);
@@ -2476,12 +2554,15 @@ export function ChatInterface({
   const [recentAttachments, setRecentAttachments] = useState<string[]>([]);
   const [sidebarFileRequest, setSidebarFileRequest] = useState<SidebarFileRequest | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [isDebugMode, setIsDebugMode] = useState(false);
+  const [centerHeaderWidth, setCenterHeaderWidth] = useState(0);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const chatShellRef = useRef<HTMLDivElement>(null);
   const chatSidebarRef = useRef<HTMLDivElement>(null);
   const chatListRef = useRef<HTMLDivElement>(null);
   const chatListSentinelRef = useRef<HTMLDivElement>(null);
   const centerPanelRef = useRef<HTMLElement>(null);
+  const centerHeaderRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerDockRef = useRef<HTMLElement>(null);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
@@ -2524,6 +2605,7 @@ export function ChatInterface({
   const activeGeminiMode = activeGeminiModeOptions.find((mode) => mode.id === activeGeminiModeId)
     ?? { id: activeGeminiModeId, shortLabel: deriveGeminiModeLabel(activeGeminiModeId), badge: '현재' };
   const agentMeta = resolveAgentMeta(activeAgentFlavor);
+  const showDebugToggleInHeader = shouldShowDebugToggleInHeader(centerHeaderWidth, isMobileLayout);
   const runtimeNotice = submitError ?? permissionError ?? syncError ?? runtimeError ?? null;
   const latestRunStatus = useMemo(
     () => getLatestRunStatusSince(events, awaitingReplySince),
@@ -2957,6 +3039,27 @@ export function ChatInterface({
   }, [decidePermission, isOperator, pendingPermissions, scheduleApprovalFeedbackReset]);
 
   useEffect(() => { setIsMounted(true); }, []);
+
+  useEffect(() => {
+    const header = centerHeaderRef.current;
+    if (!header || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const updateWidth = () => {
+      setCenterHeaderWidth(header.getBoundingClientRect().width);
+    };
+
+    updateWidth();
+    const observer = new ResizeObserver(() => {
+      updateWidth();
+    });
+    observer.observe(header);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     setFileBrowserPath(normalizedWorkspaceRootPath);
@@ -5274,7 +5377,7 @@ export function ChatInterface({
 
       <main className={`${styles.centerPanel} ${isMobileLayout ? styles.centerPanelMobileScroll : ''}`} ref={centerPanelRef}>
         <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
-          <header className={styles.centerHeader}>
+          <header className={styles.centerHeader} ref={centerHeaderRef}>
             <button
               type="button"
               className={styles.sidebarToggleButton}
@@ -5319,6 +5422,19 @@ export function ChatInterface({
                   title={isCustomizationSidebarOpen ? '우측 사이드바 닫기' : '우측 사이드바 열기'}
                 >
                   {isCustomizationSidebarOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
+                </button>
+              )}
+              {showDebugToggleInHeader && (
+                <button
+                  type="button"
+                  className={`${styles.debugToggleButton} ${isDebugMode ? styles.debugToggleButtonActive : ''}`}
+                  onClick={toggleDebugMode}
+                  aria-pressed={isDebugMode}
+                  aria-label={isDebugMode ? '디버그 모드 끄기' : '디버그 모드 켜기'}
+                  title={isDebugMode ? '디버그 모드 끄기' : '디버그 모드 켜기'}
+                >
+                  <Bug size={14} />
+                  <span>디버그</span>
                 </button>
               )}
               <span
@@ -5441,6 +5557,18 @@ export function ChatInterface({
                     >
                       대기 승인 바로 이동
                     </button>
+                    {!showDebugToggleInHeader && (
+                      <button
+                        type="button"
+                        className={`${styles.contextMenuItem} ${isDebugMode ? styles.contextMenuItemActive : ''}`}
+                        onClick={() => {
+                          setIsContextMenuOpen(false);
+                          toggleDebugMode();
+                        }}
+                      >
+                        {isDebugMode ? '디버그 모드 끄기' : '디버그 모드 켜기'}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className={styles.contextMenuItem}
@@ -5627,7 +5755,7 @@ export function ChatInterface({
                           <span className={`${styles.msgSender} ${styles.msgSenderUser}`}>YOU</span>
                         </div>
                         <div className={`${styles.messageBubble} ${styles.messageBubbleUser} ${highlightedEventId === event.id ? styles.messageBubbleHighlight : ''}`}>
-                          {renderEventPayload(event, true, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id))}
+                          {renderEventPayload(event, true, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id), isDebugMode)}
                         </div>
                         </article>
                         );
@@ -5638,7 +5766,7 @@ export function ChatInterface({
                         return (
                         <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
                         <div className={`${styles.messageBubble} ${styles.messageBubbleAction}`}>
-                          {renderEventPayload(event, false, expanded, () => toggleResult(event.id))}
+                          {renderEventPayload(event, false, expanded, () => toggleResult(event.id), isDebugMode)}
                         </div>
                         </article>
                         );
@@ -5656,7 +5784,7 @@ export function ChatInterface({
                         <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
                       </div>
                       <div className={`${styles.messageBubble} ${styles.messageBubbleAgent}`}>
-                        {renderEventPayload(event, false, expandedResultIds[event.id] ?? false, () => toggleResult(event.id))}
+                        {renderEventPayload(event, false, expandedResultIds[event.id] ?? false, () => toggleResult(event.id), isDebugMode)}
                       </div>
                     </div>
                   </div>

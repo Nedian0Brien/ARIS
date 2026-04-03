@@ -924,6 +924,45 @@
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.sidebarToggleButton:hover {
+  border-color: var(--chat-item-hover-border);
+  background: var(--chat-surface-hover);
+}
+
+.debugToggleButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  border: 1px solid var(--chat-control-border);
+  background: var(--chat-control-bg);
+  color: var(--chat-control-text);
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 0.28rem 0.6rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.debugToggleButton:hover {
+  border-color: var(--chat-item-hover-border);
+  background: var(--chat-surface-hover);
+}
+
+.debugToggleButtonActive {
+  border-color: rgba(234, 179, 8, 0.42);
+  background: rgba(254, 249, 195, 0.92);
+  color: #92400e;
+}
+
+:global(html[data-theme='dark']) .debugToggleButtonActive {
+  border-color: rgba(250, 204, 21, 0.4);
+  background: rgba(120, 53, 15, 0.45);
+  color: #fde68a;
 }
 
 .sidePanel {
@@ -1361,6 +1400,18 @@
   padding: 0.36rem 0.5rem;
   text-align: left;
   cursor: pointer;
+}
+
+.contextMenuItemActive {
+  border-color: rgba(234, 179, 8, 0.35);
+  background: rgba(254, 249, 195, 0.76);
+  color: #92400e;
+}
+
+:global(html[data-theme='dark']) .contextMenuItemActive {
+  border-color: rgba(250, 204, 21, 0.28);
+  background: rgba(120, 53, 15, 0.4);
+  color: #fde68a;
 }
 
 .contextMenuItem:hover:not(:disabled) {
@@ -1812,6 +1863,46 @@
   min-width: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.debugReply {
+  min-width: 0;
+}
+
+.debugRawBody {
+  margin: 0;
+  display: grid;
+  gap: 0.1rem;
+  font-family: var(--font-mono);
+  font-size: 0.81rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.debugRawBodyTranscript {
+  padding: 0.1rem 0;
+}
+
+.debugRawLine {
+  display: block;
+  min-width: 0;
+}
+
+.debugRawBlankLine {
+  display: block;
+  min-height: 1em;
+}
+
+.debugRawPrompt {
+  color: var(--chat-accent);
+  font-weight: 800;
+}
+
+.debugRawCommand {
+  color: var(--chat-text-primary);
+  font-weight: 700;
 }
 
 .markdownRoot {
