@@ -75,7 +75,6 @@ import { CustomizationSidebar } from './CustomizationSidebar';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import { buildPermissionTimelineItems } from './chatTimeline';
 import { resolveChatReadMarkerId } from './chatSidebar';
-import { SessionLoading } from './SessionLoading';
 import styles from './ChatInterface.module.css';
 import dynamic from 'next/dynamic';
 import {
@@ -5457,13 +5456,13 @@ export function ChatInterface({
             </div>
           </header>
 
-          {!showChatTransitionLoading && runtimeNotice && (
+          {runtimeNotice && (
             <div className={styles.noticeWrap}>
               <BackendNotice message={`백엔드 연결 상태: ${runtimeNotice}`} />
             </div>
           )}
 
-          {!showChatTransitionLoading && showDisconnectRetry && (
+          {showDisconnectRetry && (
             <div className={styles.disconnectNoticeBar} role="status" aria-live="polite">
               <span>에이전트 연결이 중단되었습니다.</span>
               <button
@@ -5479,7 +5478,7 @@ export function ChatInterface({
             </div>
           )}
 
-          {!showChatTransitionLoading && effectivePendingPermissions.length > 0 && (
+          {effectivePendingPermissions.length > 0 && (
             <div className={styles.permissionNoticeBar} role="status" aria-live="polite">
               <span>
                 승인 요청 {effectivePendingPermissions.length}건이 대기 중입니다.
@@ -5491,10 +5490,7 @@ export function ChatInterface({
             </div>
           )}
 
-          {showChatTransitionLoading ? (
-            <SessionLoading variant="panel" />
-          ) : (
-            <>
+          <>
           <div className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''}`} ref={scrollRef} onScroll={handleStreamScroll}>
             {isNewChatPlaceholder ? (
               <div className={styles.agentSelectorContainer}>
@@ -5906,8 +5902,18 @@ export function ChatInterface({
               </div>
             </form>
           </footer>
-            </>
-          )}
+
+            {showChatTransitionLoading && (
+              <div className={styles.chatTransitionOverlay} role="status" aria-live="polite" aria-busy="true">
+                <div className={styles.chatTransitionCard}>
+                  <div className={`${styles.chatTransitionLogo} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
+                    <agentMeta.Icon size={34} />
+                  </div>
+                  <div className={styles.chatTransitionMessage}>에이전트 채팅 로딩중…</div>
+                </div>
+              </div>
+            )}
+          </>
         </section>
       </main>
 
