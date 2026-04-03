@@ -1,15 +1,14 @@
-type ResolveNextChatReadMarkerInput = {
-  activeChatId: string | null;
-  eventsForChatId: string | null;
-  latestEventId: string | null | undefined;
-  hasScrollToBottomButton?: boolean;
+type ResolveChatReadMarkerIdInput = {
+  latestEventId?: string | null;
+  fallbackLatestEventId?: string | null;
 };
 
-export function resolveNextChatReadMarker(input: ResolveNextChatReadMarkerInput): string | null {
-  if (!input.activeChatId || input.eventsForChatId !== input.activeChatId) {
-    return null;
+export function resolveChatReadMarkerId(input: ResolveChatReadMarkerIdInput): string | null {
+  const primary = typeof input.latestEventId === 'string' ? input.latestEventId.trim() : '';
+  if (primary) {
+    return primary;
   }
 
-  const latestEventId = typeof input.latestEventId === 'string' ? input.latestEventId.trim() : '';
-  return latestEventId || null;
+  const fallback = typeof input.fallbackLatestEventId === 'string' ? input.fallbackLatestEventId.trim() : '';
+  return fallback || null;
 }
