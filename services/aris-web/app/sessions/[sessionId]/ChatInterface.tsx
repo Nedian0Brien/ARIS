@@ -74,7 +74,7 @@ import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '
 import { CustomizationSidebar } from './CustomizationSidebar';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import { buildPermissionTimelineItems } from './chatTimeline';
-import { resolveNextChatReadMarker } from './chatSidebar';
+import { resolveChatReadMarkerId } from './chatSidebar';
 import styles from './ChatInterface.module.css';
 import dynamic from 'next/dynamic';
 import { resolveActiveChat, resolveNextSelectedChatId } from './chatSelection';
@@ -2714,6 +2714,25 @@ export function ChatInterface({
     });
   }, []);
 
+  const handleMarkChatAsRead = useCallback((chat: SessionChat) => {
+    const nextReadMarker = resolveChatReadMarkerId({
+      latestEventId: chatSidebarSnapshots[chat.id]?.latestEventId,
+      fallbackLatestEventId: chat.latestEventId,
+    });
+    if (!nextReadMarker) {
+      return;
+    }
+
+    setChatReadMarkers((prev) => (
+      prev[chat.id] === nextReadMarker
+        ? prev
+      : {
+          ...prev,
+          [chat.id]: nextReadMarker,
+        }
+    ));
+  }, [chatSidebarSnapshots]);
+
   const scheduleApprovalFeedbackReset = useCallback((chatId: string) => {
     const currentTimer = approvalFeedbackTimersRef.current[chatId];
     if (currentTimer) {
@@ -3179,11 +3198,9 @@ export function ChatInterface({
       return;
     }
     const latestEvent = getLatestVisibleEvent(visibleEvents);
-    const nextReadMarker = resolveNextChatReadMarker({
-      activeChatId: activeChatIdResolved,
-      eventsForChatId,
-      latestEventId: latestEvent?.id ?? null,
-      hasScrollToBottomButton: showScrollToBottom,
+    const nextReadMarker = resolveChatReadMarkerId({
+      latestEventId: latestEvent?.id,
+      fallbackLatestEventId: chatSidebarSnapshots[activeChatIdResolved]?.latestEventId,
     });
     if (!nextReadMarker) {
       return;
@@ -3196,7 +3213,7 @@ export function ChatInterface({
           [activeChatIdResolved]: nextReadMarker,
         }
     ));
-  }, [activeChatIdResolved, eventsForChatId, showScrollToBottom, visibleEvents]);
+  }, [activeChatIdResolved, chatSidebarSnapshots, eventsForChatId, visibleEvents]);
 
   useEffect(() => {
     if (!activeChatIdResolved) {
@@ -5132,6 +5149,22 @@ export function ChatInterface({
                                         zIndex: 9999,
                                       }}
                                     >
+                                      <button
+                                        type="button"
+                                        className={styles.chatListMenuItem}
+                                        onClick={() => {
+                                          handleMarkChatAsRead(chat);
+                                          setChatActionMenuId(null);
+                                          setChatActionMenuRect(null);
+                                        }}
+                                        disabled={!resolveChatReadMarkerId({
+                                          latestEventId: chatSidebarSnapshots[chat.id]?.latestEventId,
+                                          fallbackLatestEventId: chat.latestEventId,
+                                        })}
+                                      >
+                                        <CheckCircle2 size={14} />
+                                        읽음 처리
+                                      </button>
                                       <button
                                         type="button"
                                         className={styles.chatListMenuItem}

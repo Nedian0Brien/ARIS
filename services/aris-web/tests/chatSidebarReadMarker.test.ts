@@ -1,15 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { resolveNextChatReadMarker } from '@/app/sessions/[sessionId]/chatSidebar';
+import { resolveChatReadMarkerId } from '@/app/sessions/[sessionId]/chatSidebar';
 
-describe('resolveNextChatReadMarker', () => {
-  it('marks the active chat as read even when the scroll-to-bottom button is visible', () => {
+describe('resolveChatReadMarkerId', () => {
+  it('uses the latest event id when available', () => {
     expect(
-      resolveNextChatReadMarker({
-        activeChatId: 'chat-1',
-        eventsForChatId: 'chat-1',
+      resolveChatReadMarkerId({
         latestEventId: 'evt-2',
-        hasScrollToBottomButton: true,
+        fallbackLatestEventId: 'evt-1',
       }),
     ).toBe('evt-2');
+  });
+
+  it('falls back to the cached latest event id when needed', () => {
+    expect(
+      resolveChatReadMarkerId({
+        latestEventId: null,
+        fallbackLatestEventId: 'evt-1',
+      }),
+    ).toBe('evt-1');
   });
 });
