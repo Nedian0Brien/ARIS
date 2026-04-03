@@ -72,6 +72,7 @@ import type { AgentFlavor, ApprovalPolicy, PermissionRequest, SessionChat, UiEve
 import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '@/components/ui/AgentIcons';
 import { CustomizationSidebar } from './CustomizationSidebar';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
+import { buildPermissionTimelineItems } from './chatTimeline';
 import styles from './ChatInterface.module.css';
 import dynamic from 'next/dynamic';
 import { resolveActiveChat, resolveNextSelectedChatId } from './chatSelection';
@@ -2536,7 +2537,12 @@ export function ChatInterface({
     () => mergedDisplayPermissions.filter((permission) => permission.state === 'pending'),
     [mergedDisplayPermissions],
   );
-  const deferredDisplayPermissions = useDeferredValue(mergedDisplayPermissions);
+  // Permission decisions must surface immediately; deferring this list can
+  // briefly re-render stale pending state and show the wrong hint.
+  const permissionTimelineItems = useMemo(
+    () => buildPermissionTimelineItems(mergedDisplayPermissions),
+    [mergedDisplayPermissions],
+  );
   const streamItems = useMemo(
     () => buildStreamRenderItems(deferredVisibleEvents, expandedActionRunIds),
     [deferredVisibleEvents, expandedActionRunIds],
@@ -2544,7 +2550,6 @@ export function ChatInterface({
   const timelineItems = useMemo<TimelineRenderItem[]>(() => {
     const merged: TimelineRenderItem[] = [];
     let order = 0;
-    const fallbackBase = Number.MAX_SAFE_INTEGER / 8;
 
     for (const item of streamItems) {
       const timestamp = item.type === 'event' ? item.event.timestamp : item.timestamp;
@@ -2552,19 +2557,16 @@ export function ChatInterface({
       merged.push({
         type: 'stream',
         item,
-        sortKey: Number.isFinite(parsed) ? parsed : fallbackBase + order,
+        sortKey: Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER / 8 + order,
         order,
       });
       order += 1;
     }
 
     if (showPermissionQueue) {
-      for (const permission of deferredDisplayPermissions) {
-        const parsed = Date.parse(permission.requestedAt);
+      for (const permission of permissionTimelineItems) {
         merged.push({
-          type: 'permission',
-          permission,
-          sortKey: Number.isFinite(parsed) ? parsed : fallbackBase + order,
+          ...permission,
           order,
         });
         order += 1;
@@ -2577,7 +2579,7 @@ export function ChatInterface({
       }
       return a.order - b.order;
     });
-  }, [deferredDisplayPermissions, showPermissionQueue, streamItems]);
+  }, [permissionTimelineItems, showPermissionQueue, streamItems]);
   const firstPendingPermissionId = effectivePendingPermissions[0]?.id ?? null;
   const runPhase: ChatRunPhase = resolveRunPhaseState({
     isAborting,
