@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionChat } from '@/lib/happy/types';
-import { resolveActiveChat, resolveNextSelectedChatId } from '@/app/sessions/[sessionId]/chatSelection';
+import {
+  resolveActiveChat,
+  resolveNextSelectedChatId,
+  shouldShowChatTransitionLoading,
+} from '@/app/sessions/[sessionId]/chatSelection';
 
 function makeChat(id: string, overrides: Partial<SessionChat> = {}): SessionChat {
   return {
@@ -62,5 +66,35 @@ describe('chatSelection', () => {
       requestedChatId: 'missing',
       isNewChatPlaceholder: false,
     })).toBe('chat-1');
+  });
+
+  it('shows transition loading while the chat events are still out of sync', () => {
+    expect(shouldShowChatTransitionLoading({
+      activeChatIdResolved: 'chat-2',
+      eventsForChatId: 'chat-1',
+      hasLoadedCurrentChat: true,
+      isNewChatPlaceholder: false,
+    })).toBe(true);
+
+    expect(shouldShowChatTransitionLoading({
+      activeChatIdResolved: 'chat-2',
+      eventsForChatId: 'chat-2',
+      hasLoadedCurrentChat: false,
+      isNewChatPlaceholder: false,
+    })).toBe(true);
+
+    expect(shouldShowChatTransitionLoading({
+      activeChatIdResolved: 'chat-2',
+      eventsForChatId: 'chat-2',
+      hasLoadedCurrentChat: true,
+      isNewChatPlaceholder: false,
+    })).toBe(false);
+
+    expect(shouldShowChatTransitionLoading({
+      activeChatIdResolved: 'chat-2',
+      eventsForChatId: 'chat-1',
+      hasLoadedCurrentChat: false,
+      isNewChatPlaceholder: true,
+    })).toBe(false);
   });
 });

@@ -75,9 +75,14 @@ import { CustomizationSidebar } from './CustomizationSidebar';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import { buildPermissionTimelineItems } from './chatTimeline';
 import { resolveChatReadMarkerId } from './chatSidebar';
+import { SessionLoading } from './SessionLoading';
 import styles from './ChatInterface.module.css';
 import dynamic from 'next/dynamic';
-import { resolveActiveChat, resolveNextSelectedChatId } from './chatSelection';
+import {
+  resolveActiveChat,
+  resolveNextSelectedChatId,
+  shouldShowChatTransitionLoading,
+} from './chatSelection';
 
 // SSR을 비활성화해 react-syntax-highlighter의 window 참조 오류 방지
 const SyntaxHighlighter = dynamic(
@@ -2264,6 +2269,7 @@ export function ChatInterface({
     loadOlder,
     hasMoreBefore,
     isLoadingOlder,
+    hasLoadedCurrentChat,
   } = useSessionEvents(
     sessionId,
     activeChatIdResolved,
@@ -2306,6 +2312,12 @@ export function ChatInterface({
   const showDisconnectRetry = activeChatRuntimeUi.showDisconnectRetry;
   const lastSubmittedPayload = activeChatRuntimeUi.lastSubmittedPayload;
   const submitError = activeChatRuntimeUi.submitError;
+  const showChatTransitionLoading = shouldShowChatTransitionLoading({
+    activeChatIdResolved,
+    eventsForChatId,
+    hasLoadedCurrentChat,
+    isNewChatPlaceholder,
+  });
   const updateChatRuntimeUi = useCallback((chatId: string | null, patch: Partial<ChatRuntimeUiState>) => {
     if (!chatId) {
       return;
@@ -5445,13 +5457,13 @@ export function ChatInterface({
             </div>
           </header>
 
-          {runtimeNotice && (
+          {!showChatTransitionLoading && runtimeNotice && (
             <div className={styles.noticeWrap}>
               <BackendNotice message={`백엔드 연결 상태: ${runtimeNotice}`} />
             </div>
           )}
 
-          {showDisconnectRetry && (
+          {!showChatTransitionLoading && showDisconnectRetry && (
             <div className={styles.disconnectNoticeBar} role="status" aria-live="polite">
               <span>에이전트 연결이 중단되었습니다.</span>
               <button
@@ -5467,7 +5479,7 @@ export function ChatInterface({
             </div>
           )}
 
-          {effectivePendingPermissions.length > 0 && (
+          {!showChatTransitionLoading && effectivePendingPermissions.length > 0 && (
             <div className={styles.permissionNoticeBar} role="status" aria-live="polite">
               <span>
                 승인 요청 {effectivePendingPermissions.length}건이 대기 중입니다.
@@ -5479,6 +5491,10 @@ export function ChatInterface({
             </div>
           )}
 
+          {showChatTransitionLoading ? (
+            <SessionLoading variant="panel" />
+          ) : (
+            <>
           <div className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''}`} ref={scrollRef} onScroll={handleStreamScroll}>
             {isNewChatPlaceholder ? (
               <div className={styles.agentSelectorContainer}>
@@ -5890,6 +5906,8 @@ export function ChatInterface({
               </div>
             </form>
           </footer>
+            </>
+          )}
         </section>
       </main>
 
