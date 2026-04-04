@@ -194,6 +194,11 @@ export function useSessionEvents(
   const terminalStatusRef = useRef<number | null>(null);
   const pollBackoffMsRef = useRef<number>(FALLBACK_POLL_INTERVAL_MS);
   const rateLimitUntilMsRef = useRef<number | null>(null);
+  // 비동기 콜백(refreshEvents, SSE handler)에서 현재 활성 chatId를 동기적으로 확인하기 위한 ref.
+  // 채팅 전환 후 이전 chatId의 in-flight fetch가 완료되어도 상태가 오염되지 않도록 guard 역할.
+  const activeChatIdRef = useRef<string | null>(chatId);
+
+  activeChatIdRef.current = chatId;
 
   useEffect(() => {
     setEvents(hydratedInitialEvents);
@@ -238,6 +243,9 @@ export function useSessionEvents(
       return;
     }
 
+    // fetch를 시작할 때의 chatId를 캡처하여, 응답 수신 후 chatId가 변경되었는지 검증.
+    const snapshotChatId = chatId;
+
     try {
       const params = new URLSearchParams();
       params.set('limit', String(EVENTS_PAGE_LIMIT));
@@ -271,8 +279,17 @@ export function useSessionEvents(
         );
       }
 
+      // 채팅이 전환되었으면 이 응답은 현재 활성 채팅의 것이 아니므로 무시.
+      if (activeChatIdRef.current !== snapshotChatId) {
+        return;
+      }
+
       const body = (await response.json()) as EventsApiResponse;
       if (Array.isArray(body.events)) {
+        // 응답 파싱 후에도 한 번 더 검증 (파싱 사이에 전환될 수 있으므로).
+        if (activeChatIdRef.current !== snapshotChatId) {
+          return;
+        }
         const nextEvents = body.events;
         setEvents((prev) => {
           const merged = mergeEvents([...prev, ...nextEvents]);
@@ -286,7 +303,9 @@ export function useSessionEvents(
         setSyncError(null);
       }
     } finally {
-      setHasLoadedCurrentChat(true);
+      if (activeChatIdRef.current === snapshotChatId) {
+        setHasLoadedCurrentChat(true);
+      }
     }
   }, [enabled, sessionId, chatId, includeUnassigned]);
 
@@ -301,6 +320,7 @@ export function useSessionEvents(
       return { loadedCount: 0, hasMoreBefore: false };
     }
 
+    const snapshotChatId = chatId;
     loadingOlderRef.current = true;
     setIsLoadingOlder(true);
 
@@ -329,11 +349,19 @@ export function useSessionEvents(
         throw new SessionEventsHttpError(response.status, `이전 이벤트 API 응답 오류 (${response.status})`, retryAfterMs);
       }
 
+      if (activeChatIdRef.current !== snapshotChatId) {
+        return { loadedCount: 0, hasMoreBefore: hasMoreBeforeRef.current };
+      }
+
       const body = (await response.json()) as EventsApiResponse;
       const olderEvents = Array.isArray(body.events) ? body.events : [];
       const nextHasMoreBefore = typeof body.page?.hasMoreBefore === 'boolean'
         ? body.page.hasMoreBefore
         : olderEvents.length >= EVENTS_PAGE_LIMIT;
+
+      if (activeChatIdRef.current !== snapshotChatId) {
+        return { loadedCount: 0, hasMoreBefore: hasMoreBeforeRef.current };
+      }
 
       setEvents((prev) => {
         const merged = mergeEvents([...olderEvents, ...prev]);
@@ -508,6 +536,7 @@ export function useSessionEvents(
 
       closeStream();
       const latestId = findLatestPersistedCursorEventId(eventsRef.current);
+      const streamChatId = chatId;
       const params = new URLSearchParams();
       appendChatFilters(params, chatId, includeUnassigned);
       if (latestId) {
@@ -527,6 +556,10 @@ export function useSessionEvents(
       });
 
       stream.addEventListener('event', (raw) => {
+        // 채팅 전환 후 이전 SSE 연결에서 도착하는 이벤트를 무시.
+        if (activeChatIdRef.current !== streamChatId) {
+          return;
+        }
         try {
           const payload = JSON.parse((raw as MessageEvent).data) as { event?: UiEvent };
           if (!payload.event) {
