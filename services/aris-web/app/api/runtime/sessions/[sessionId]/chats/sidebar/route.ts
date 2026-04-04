@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
 import { listSessionChats } from '@/lib/happy/chats';
-import { getSessionRuntimeState } from '@/lib/happy/client';
+import { getChatSnapshots } from '@/lib/happy/client';
+import type { SessionChat } from '@/lib/happy/types';
 
 function parseRequestedChatIds(request: NextRequest): string[] {
   const all = request.nextUrl.searchParams.getAll('chatId')
@@ -18,6 +19,24 @@ function parseActiveChatId(request: NextRequest): string | null {
   }
   const trimmed = raw.trim();
   return trimmed || null;
+}
+
+function buildFallbackSnapshot(chatId: string, cached: SessionChat | undefined) {
+  return {
+    chatId,
+    preview: typeof cached?.latestPreview === 'string' ? cached.latestPreview : '',
+    hasEvents: Boolean(
+      (typeof cached?.latestEventId === 'string' && cached.latestEventId.trim().length > 0)
+      || (typeof cached?.latestPreview === 'string' && cached.latestPreview.trim().length > 0)
+    ),
+    hasErrorSignal: Boolean(cached?.latestHasErrorSignal),
+    latestEventId: typeof cached?.latestEventId === 'string' && cached.latestEventId.trim().length > 0
+      ? cached.latestEventId.trim()
+      : null,
+    latestEventAt: cached?.latestEventAt ?? null,
+    latestEventIsUser: Boolean(cached?.latestEventIsUser),
+    isRunning: false,
+  };
 }
 
 export async function GET(
@@ -45,37 +64,26 @@ export async function GET(
       return NextResponse.json({ snapshots: [] });
     }
 
-    const chatMap = new Map(chats.map((chat) => [chat.id, chat]));
-    const runtimeTargetChatIds = targetChatIds.filter((chatId) => chatId === activeChatId);
-    const runningByChat = Object.fromEntries(
-      await Promise.all(runtimeTargetChatIds.map(async (chatId) => {
-        try {
-          const runtime = await getSessionRuntimeState(sessionId, { chatId });
-          return [chatId, runtime.isRunning] as const;
-        } catch {
-          return [chatId, false] as const;
+    // Primary: derive snapshots from backend event stream
+    const backendSnapshots = await getChatSnapshots(sessionId, targetChatIds);
+    if (backendSnapshots && backendSnapshots.length > 0) {
+      const snapshotMap = new Map(backendSnapshots.map((s) => [s.chatId, s]));
+      const chatMap = new Map(chats.map((chat) => [chat.id, chat]));
+      const snapshots = targetChatIds.map((chatId) => {
+        const fromBackend = snapshotMap.get(chatId);
+        if (fromBackend) {
+          return fromBackend;
         }
-      }))
-    );
+        return buildFallbackSnapshot(chatId, chatMap.get(chatId));
+      });
+      return NextResponse.json({ snapshots });
+    }
 
-    const snapshots = targetChatIds.map((chatId) => {
-      const cached = chatMap.get(chatId);
-      return {
-        chatId,
-        preview: typeof cached?.latestPreview === 'string' ? cached.latestPreview : '',
-        hasEvents: Boolean(
-          (typeof cached?.latestEventId === 'string' && cached.latestEventId.trim().length > 0)
-          || (typeof cached?.latestPreview === 'string' && cached.latestPreview.trim().length > 0)
-        ),
-        hasErrorSignal: Boolean(cached?.latestHasErrorSignal),
-        latestEventId: typeof cached?.latestEventId === 'string' && cached.latestEventId.trim().length > 0
-          ? cached.latestEventId.trim()
-          : null,
-        latestEventAt: cached?.latestEventAt ?? null,
-        latestEventIsUser: Boolean(cached?.latestEventIsUser),
-        isRunning: Boolean(runningByChat[chatId]),
-      };
-    });
+    // Fallback: derive from cached SessionChat fields (rolling deploy safety)
+    const chatMap = new Map(chats.map((chat) => [chat.id, chat]));
+    const snapshots = targetChatIds.map((chatId) =>
+      buildFallbackSnapshot(chatId, chatMap.get(chatId)),
+    );
 
     return NextResponse.json({ snapshots });
   } catch (error) {
