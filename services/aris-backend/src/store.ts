@@ -11,7 +11,7 @@ import type {
   SessionStatus,
 } from './types.js';
 import { HappyRuntimeStore } from './runtime/happyClient.js';
-import { PrismaRuntimeStore } from './runtime/prismaStore.js';
+import { PrismaRuntimeStore, type ChatSnapshot } from './runtime/prismaStore.js';
 import { computeWorktreePath, ensureWorktree } from './runtime/worktreeManager.js';
 
 type RuntimeBackend = 'mock' | 'happy' | 'prisma';
@@ -64,6 +64,7 @@ interface RuntimeStoreBackend {
   appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage>;
   applySessionAction(sessionId: string, action: SessionAction, chatId?: string): Promise<{ accepted: boolean; message: string; at: string }>;
   isSessionRunning(sessionId: string, chatId?: string): Promise<boolean>;
+  getChatSnapshots?(sessionId: string, chatIds: string[]): Promise<ChatSnapshot[]>;
   listPermissions(state?: PermissionRequest['state']): Promise<PermissionRequest[]>;
   createPermission(input: CreatePermissionInput): Promise<PermissionRequest>;
   decidePermission(permissionId: string, decision: PermissionDecision): Promise<PermissionRequest>;
@@ -482,6 +483,13 @@ export class RuntimeStore {
       return this.runtimeExecutor.isSessionRunning(sessionId, chatId);
     }
     return this.delegate.isSessionRunning(sessionId, chatId);
+  }
+
+  async getChatSnapshots(sessionId: string, chatIds: string[]): Promise<ChatSnapshot[]> {
+    if (this.delegate.getChatSnapshots) {
+      return this.delegate.getChatSnapshots(sessionId, chatIds);
+    }
+    return [];
   }
 
   async listPermissions(state?: PermissionRequest['state']) {
