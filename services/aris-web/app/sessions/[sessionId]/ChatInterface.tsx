@@ -3072,7 +3072,19 @@ export function ChatInterface({
         return;
       }
 
-      const normalizedTarget = normalizeWorkspaceClientPath(detail.path);
+      // If the path is a host absolute path (e.g. /home/ubuntu/project/ARIS/services/...),
+      // strip the project prefix and resolve relative to the workspace root.
+      const normalizedProjectName = projectName.replace(/\/+$/, '');
+      let resolvedPath = detail.path;
+      if (
+        normalizedProjectName
+        && (resolvedPath === normalizedProjectName || resolvedPath.startsWith(`${normalizedProjectName}/`))
+      ) {
+        const relPart = resolvedPath.slice(normalizedProjectName.length).replace(/^\/+/, '');
+        resolvedPath = joinWorkspacePath(normalizedWorkspaceRootPath, relPart);
+      }
+
+      const normalizedTarget = normalizeWorkspaceClientPath(resolvedPath);
       const finalPath = isWorkspacePathWithinRoot(normalizedTarget, normalizedWorkspaceRootPath)
         ? normalizedTarget
         : joinWorkspacePath(normalizedWorkspaceRootPath, normalizedTarget);
@@ -3096,7 +3108,7 @@ export function ChatInterface({
     return () => {
       window.removeEventListener(WORKSPACE_FILE_OPEN_EVENT, handleWorkspaceFileOpen as EventListener);
     };
-  }, [isCustomizationOverlayLayout, isLeftSidebarOverlayLayout, normalizedWorkspaceRootPath]);
+  }, [isCustomizationOverlayLayout, isLeftSidebarOverlayLayout, normalizedWorkspaceRootPath, projectName]);
 
   useEffect(() => {
     const sortedInitialChats = sortSessionChats(initialChats);
