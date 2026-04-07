@@ -22,6 +22,13 @@ const themeBootScript = `
 export const metadata: Metadata = {
   title: 'ARIS | Agentic Workspace',
   description: 'Streamlined workspace for agentic coding.',
+  icons: {
+    icon: [
+      { url: '/icon', type: 'image/png', sizes: '32x32' },
+      { url: '/icon', type: 'image/png', sizes: '16x16' },
+    ],
+    apple: [{ url: '/apple-icon', type: 'image/png', sizes: '180x180' }],
+  },
 };
 
 export const viewport: Viewport = {
