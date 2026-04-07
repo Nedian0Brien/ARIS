@@ -1045,7 +1045,7 @@ function parseCodeChangeSummary(event: UiEvent): {
   files: string[];
   additions: number;
   deletions: number;
-  hunks: Array<{ file: string; line: number; additions: number; deletions: number }>;
+  hunks: Array<{ file: string; fullPath: string; line: number; additions: number; deletions: number }>;
   previewLines: string[];
   fullText: string;
   hasDiffSignal: boolean;
@@ -1060,7 +1060,7 @@ function parseCodeChangeSummary(event: UiEvent): {
   let computedDeletions = 0;
   let hasStructuralDiffSignal = false;
   let currentDiffFile: string | null = null;
-  const parsedHunks: Array<{ file: string; line: number; additions: number; deletions: number }> = [];
+  const parsedHunks: Array<{ file: string; fullPath: string; line: number; additions: number; deletions: number }> = [];
   let activeHunkIndex = -1;
 
   for (const line of lines) {
@@ -1105,6 +1105,7 @@ function parseCodeChangeSummary(event: UiEvent): {
       if (Number.isFinite(parsed)) {
         parsedHunks.push({
           file: currentDiffFile ?? event.action?.path ?? '',
+          fullPath: currentDiffFile ?? event.action?.path ?? '',
           line: parsed,
           additions: 0,
           deletions: 0,
@@ -1154,6 +1155,7 @@ function parseCodeChangeSummary(event: UiEvent): {
   const hunks = parsedHunks.map((hunk) => ({
     ...hunk,
     file: fileNameOnly(hunk.file || fallbackFile),
+    fullPath: hunk.fullPath || fallbackFile,
   }));
 
   const previewCandidates = lines.filter((line) => (
@@ -1914,23 +1916,24 @@ function diffLineToneClass(line: string): string {
 
 function renderDiffLineContent(
   line: string,
-  hunk?: { file: string; line: number; additions: number; deletions: number },
+  hunk?: { file: string; fullPath?: string; line: number; additions: number; deletions: number },
 ): ReactNode {
   if (!line.startsWith('@@ ')) {
     return line.length > 0 ? line : ' ';
   }
   if (hunk) {
+    const clickPath = hunk.fullPath || hunk.file;
     return (
       <>
         <button
           type="button"
           className={`${styles.fileBadgeBase} ${styles.diffHunkFileBadge} ${styles.fileBadgeButton}`}
           onClick={() => {
-            if (hunk.file) {
-              dispatchWorkspaceFileOpen({ path: hunk.file });
+            if (clickPath) {
+              dispatchWorkspaceFileOpen({ path: clickPath, name: hunk.file });
             }
           }}
-          disabled={!hunk.file}
+          disabled={!clickPath}
         >
           {hunk.file || '(unknown)'}
         </button>
