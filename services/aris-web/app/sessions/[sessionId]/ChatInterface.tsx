@@ -43,6 +43,7 @@ import {
   ChevronRight,
   CircleAlert,
   Clock,
+  Copy,
   Cpu,
   File,
   FileCode,
@@ -121,6 +122,35 @@ function saveRecentFile(filePath: string): void {
     const prev = getRecentFiles().filter((p) => p !== filePath);
     writeLocalStorage(RECENT_FILES_STORAGE_KEY, JSON.stringify([filePath, ...prev].slice(0, RECENT_FILES_MAX)));
   } catch { /* localStorage 사용 불가 시 무시 */ }
+}
+
+async function copyTextToClipboard(text: string): Promise<void> {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  if (typeof document === 'undefined') {
+    throw new Error('clipboard-unavailable');
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', 'true');
+  textarea.style.position = 'fixed';
+  textarea.style.top = '0';
+  textarea.style.left = '0';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  const copied = document.execCommand('copy');
+  document.body.removeChild(textarea);
+
+  if (!copied) {
+    throw new Error('clipboard-unavailable');
+  }
 }
 
 function getFileIcon(name: string, isDirectory: boolean): React.ReactNode {
@@ -1045,7 +1075,7 @@ function parseCodeChangeSummary(event: UiEvent): {
   files: string[];
   additions: number;
   deletions: number;
-  hunks: Array<{ file: string; line: number; additions: number; deletions: number }>;
+  hunks: Array<{ file: string; fullPath: string; line: number; additions: number; deletions: number }>;
   previewLines: string[];
   fullText: string;
   hasDiffSignal: boolean;
@@ -1060,7 +1090,7 @@ function parseCodeChangeSummary(event: UiEvent): {
   let computedDeletions = 0;
   let hasStructuralDiffSignal = false;
   let currentDiffFile: string | null = null;
-  const parsedHunks: Array<{ file: string; line: number; additions: number; deletions: number }> = [];
+  const parsedHunks: Array<{ file: string; fullPath: string; line: number; additions: number; deletions: number }> = [];
   let activeHunkIndex = -1;
 
   for (const line of lines) {
@@ -1105,6 +1135,7 @@ function parseCodeChangeSummary(event: UiEvent): {
       if (Number.isFinite(parsed)) {
         parsedHunks.push({
           file: currentDiffFile ?? event.action?.path ?? '',
+          fullPath: currentDiffFile ?? event.action?.path ?? '',
           line: parsed,
           additions: 0,
           deletions: 0,
@@ -1154,6 +1185,7 @@ function parseCodeChangeSummary(event: UiEvent): {
   const hunks = parsedHunks.map((hunk) => ({
     ...hunk,
     file: fileNameOnly(hunk.file || fallbackFile),
+    fullPath: hunk.fullPath || fallbackFile,
   }));
 
   const previewCandidates = lines.filter((line) => (
@@ -1666,7 +1698,7 @@ function MarkdownContent({ body }: { body: string }) {
   const blocks = useMemo(() => parseMarkdownBlocks(body), [body]);
   const [copiedCodeKey, setCopiedCodeKey] = useState<string | null>(null);
   const copyCodeToClipboard = useCallback((code: string, key: string) => {
-    void navigator.clipboard.writeText(code).then(() => {
+    void copyTextToClipboard(code).then(() => {
       setCopiedCodeKey(key);
       setTimeout(() => setCopiedCodeKey((prev) => (prev === key ? null : prev)), 2000);
     });
@@ -1914,23 +1946,24 @@ function diffLineToneClass(line: string): string {
 
 function renderDiffLineContent(
   line: string,
-  hunk?: { file: string; line: number; additions: number; deletions: number },
+  hunk?: { file: string; fullPath?: string; line: number; additions: number; deletions: number },
 ): ReactNode {
   if (!line.startsWith('@@ ')) {
     return line.length > 0 ? line : ' ';
   }
   if (hunk) {
+    const clickPath = hunk.fullPath || hunk.file;
     return (
       <>
         <button
           type="button"
           className={`${styles.fileBadgeBase} ${styles.diffHunkFileBadge} ${styles.fileBadgeButton}`}
           onClick={() => {
-            if (hunk.file) {
-              dispatchWorkspaceFileOpen({ path: hunk.file });
+            if (clickPath) {
+              dispatchWorkspaceFileOpen({ path: clickPath, name: hunk.file });
             }
           }}
-          disabled={!hunk.file}
+          disabled={!clickPath}
         >
           {hunk.file || '(unknown)'}
         </button>
@@ -2441,6 +2474,7 @@ export function ChatInterface({
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
   const [chatIdCopyState, setChatIdCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [idBundleCopyState, setIdBundleCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [copiedUserEventId, setCopiedUserEventId] = useState<string | null>(null);
   const [showPermissionQueue, setShowPermissionQueue] = useState(true);
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
   const toggleDebugMode = useCallback(() => {
@@ -2459,6 +2493,19 @@ export function ChatInterface({
   const [chatTitleDraft, setChatTitleDraft] = useState('');
   const [chatMutationLoadingId, setChatMutationLoadingId] = useState<string | null>(null);
   const [chatMutationError, setChatMutationError] = useState<string | null>(null);
+  const handleCopyUserMessage = useCallback(async (event: UiEvent) => {
+    const text = (event.body || event.title || '').replace(/\r\n/g, '\n').trim();
+    if (!text) {
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(text);
+      setCopiedUserEventId(event.id);
+    } catch {
+      setCopiedUserEventId(null);
+    }
+  }, []);
   const [chatSidebarSnapshots, setChatSidebarSnapshots] = useState<Record<string, ChatSidebarSnapshot>>(() => {
     const sortedInitialChats = sortSessionChats(initialChats);
     const seeded: Record<string, ChatSidebarSnapshot> = {};
@@ -2539,6 +2586,17 @@ export function ChatInterface({
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isGeminiModeDropdownOpen, setIsGeminiModeDropdownOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  useEffect(() => {
+    if (!copiedUserEventId) {
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setCopiedUserEventId((current) => (current === copiedUserEventId ? null : current));
+    }, 2000);
+
+    return () => window.clearTimeout(timeout);
+  }, [copiedUserEventId]);
   const normalizedWorkspaceRootPath = useMemo(
     () => normalizeWorkspaceClientPath(workspaceRootPath),
     [workspaceRootPath],
@@ -3072,7 +3130,19 @@ export function ChatInterface({
         return;
       }
 
-      const normalizedTarget = normalizeWorkspaceClientPath(detail.path);
+      // If the path is a host absolute path (e.g. /home/ubuntu/project/ARIS/services/...),
+      // strip the project prefix and resolve relative to the workspace root.
+      const normalizedProjectName = projectName.replace(/\/+$/, '');
+      let resolvedPath = detail.path;
+      if (
+        normalizedProjectName
+        && (resolvedPath === normalizedProjectName || resolvedPath.startsWith(`${normalizedProjectName}/`))
+      ) {
+        const relPart = resolvedPath.slice(normalizedProjectName.length).replace(/^\/+/, '');
+        resolvedPath = joinWorkspacePath(normalizedWorkspaceRootPath, relPart);
+      }
+
+      const normalizedTarget = normalizeWorkspaceClientPath(resolvedPath);
       const finalPath = isWorkspacePathWithinRoot(normalizedTarget, normalizedWorkspaceRootPath)
         ? normalizedTarget
         : joinWorkspacePath(normalizedWorkspaceRootPath, normalizedTarget);
@@ -3096,7 +3166,7 @@ export function ChatInterface({
     return () => {
       window.removeEventListener(WORKSPACE_FILE_OPEN_EVENT, handleWorkspaceFileOpen as EventListener);
     };
-  }, [isCustomizationOverlayLayout, isLeftSidebarOverlayLayout, normalizedWorkspaceRootPath]);
+  }, [isCustomizationOverlayLayout, isLeftSidebarOverlayLayout, normalizedWorkspaceRootPath, projectName]);
 
   useEffect(() => {
     const sortedInitialChats = sortSessionChats(initialChats);
@@ -5754,8 +5824,29 @@ export function ChatInterface({
                           <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
                           <span className={`${styles.msgSender} ${styles.msgSenderUser}`}>YOU</span>
                         </div>
-                        <div className={`${styles.messageBubble} ${styles.messageBubbleUser} ${highlightedEventId === event.id ? styles.messageBubbleHighlight : ''}`}>
-                          {renderEventPayload(event, true, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id), isDebugMode)}
+                        <div className={styles.messageBubbleUserStack}>
+                          <div className={`${styles.messageBubble} ${styles.messageBubbleUser} ${highlightedEventId === event.id ? styles.messageBubbleHighlight : ''}`}>
+                            {renderEventPayload(event, true, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id), isDebugMode)}
+                          </div>
+                          <button
+                            type="button"
+                            className={styles.messageCopyButton}
+                            onClick={() => void handleCopyUserMessage(event)}
+                            aria-label="사용자 메시지 복사"
+                            title="사용자 메시지 복사"
+                          >
+                            {copiedUserEventId === event.id ? (
+                              <>
+                                <CheckCircle2 size={12} />
+                                <span>복사됨</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy size={12} />
+                                <span>복사하기</span>
+                              </>
+                            )}
+                          </button>
                         </div>
                         </article>
                         );
