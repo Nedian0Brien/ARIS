@@ -1663,26 +1663,22 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.3rem;
   min-height: 44px;
-  padding: 0.42rem 0.78rem;
+  width: 44px;
+  padding: 0;
+  border: 0;
   border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.26);
-  background: rgba(15, 23, 42, 0.04);
+  background: transparent;
   color: var(--chat-text-muted);
-  font-size: 0.72rem;
-  font-weight: 700;
   line-height: 1;
   cursor: pointer;
   transition:
     background 0.15s ease,
-    border-color 0.15s ease,
     color 0.15s ease,
     transform 0.12s ease;
 }
 
 .messageCopyButton:hover {
-  border-color: rgba(59, 130, 246, 0.35);
   background: rgba(59, 130, 246, 0.12);
   color: var(--chat-text-primary);
 }
@@ -1697,8 +1693,7 @@
 }
 
 :global(html[data-theme='dark']) .messageCopyButton {
-  border-color: rgba(148, 163, 184, 0.18);
-  background: rgba(148, 163, 184, 0.08);
+  background: transparent;
   color: var(--chat-text-secondary);
 }
 
