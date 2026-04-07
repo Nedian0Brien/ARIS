@@ -5836,15 +5836,9 @@ export function ChatInterface({
                             title="사용자 메시지 복사"
                           >
                             {copiedUserEventId === event.id ? (
-                              <>
-                                <CheckCircle2 size={12} />
-                                <span>복사됨</span>
-                              </>
+                              <CheckCircle2 size={14} />
                             ) : (
-                              <>
-                                <Copy size={12} />
-                                <span>복사하기</span>
-                              </>
+                              <Copy size={14} />
                             )}
                           </button>
                         </div>
