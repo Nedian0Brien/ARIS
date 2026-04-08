@@ -29,6 +29,7 @@ x-aris-web-common: &aris_web_common
     RUNTIME_API_URL: http://host.docker.internal:4080
     RUNTIME_API_TOKEN: ${RUNTIME_API_TOKEN:?set in DEPLOY_ENV_FILE}
     HOST_PROJECTS_ROOT: ${HOST_PROJECTS_ROOT:-/home/ubuntu/project}
+    HOST_HOME_DIR: ${HOST_HOME_DIR:-/home/ubuntu}
     SSH_BASE_COMMAND: ${SSH_BASE_COMMAND:-ssh ubuntu@your-server}
     SSH_LINK_TTL_SECONDS: ${SSH_LINK_TTL_SECONDS:-300}
     SSH_KEY_ENCRYPTION_SECRET: ${SSH_KEY_ENCRYPTION_SECRET:?set in DEPLOY_ENV_FILE}
@@ -39,6 +40,7 @@ x-aris-web-common: &aris_web_common
     - "host.docker.internal:host-gateway"
   volumes:
     - ${HOST_PROJECTS_ROOT:-/tmp/aris-workspace}:/workspace
+    - ${HOST_HOME_DIR:-/home/ubuntu}:${HOST_HOME_DIR:-/home/ubuntu}
     - ${HOST_HOME_DIR:-/home/ubuntu}/.agents/skills:/agent-home/.agents/skills:ro
     - ${HOST_HOME_DIR:-/home/ubuntu}/.codex/skills:/agent-home/.codex-skills:ro
     - ${HOST_HOME_DIR:-/home/ubuntu}/.claude/debug:/agent-home/.claude/debug:ro

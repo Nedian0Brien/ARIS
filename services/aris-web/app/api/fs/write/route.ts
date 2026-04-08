@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { requireApiUser } from '@/lib/auth/guard';
-import { env } from '@/lib/config';
-
-const WORKSPACE_ROOT = '/workspace';
+import { resolveFsPath } from '@/lib/fs/pathResolver';
 
 export async function POST(request: NextRequest) {
   const auth = await requireApiUser(request);
@@ -15,21 +13,11 @@ export async function POST(request: NextRequest) {
     const { path: filePath, content } = await request.json();
     if (!filePath) return NextResponse.json({ error: 'Path required' }, { status: 400 });
 
-    const normalizedPath = path.normalize(filePath).replace(/^(\.\.[\/\\])+/, '');
-    let fullPath = path.join(WORKSPACE_ROOT, normalizedPath);
-
-    // Development fallback check
-    if (env.NODE_ENV !== 'production') {
-      try {
-        await fs.access(WORKSPACE_ROOT);
-      } catch {
-        fullPath = path.join(process.cwd(), normalizedPath);
-      }
-    }
+    const { runtimePath } = resolveFsPath(filePath);
 
     // Ensure parent directory exists
-    await fs.mkdir(path.dirname(fullPath), { recursive: true });
-    await fs.writeFile(fullPath, content || '', 'utf8');
+    await fs.mkdir(path.dirname(runtimePath), { recursive: true });
+    await fs.writeFile(runtimePath, content || '', 'utf8');
 
     return NextResponse.json({ success: true });
   } catch {

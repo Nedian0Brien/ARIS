@@ -60,7 +60,7 @@ export default async function SessionPage({
             initialHasMoreBefore={detail.page.hasMoreBefore}
             initialPermissions={permissions}
             isOperator={user.role === 'operator'}
-            projectName={detail.session.projectName}
+            projectName={workspaceRootPath}
             workspaceRootPath={workspaceRootPath}
             alias={detail.session.alias}
             agentFlavor={detail.session.agent}

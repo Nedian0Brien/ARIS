@@ -3,6 +3,7 @@ import 'server-only';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { env } from '@/lib/config';
+import { mapWorkspacePathToHost, normalizeVisiblePath } from '@/lib/fs/pathResolver';
 
 const WORKSPACE_MOUNT_ROOT = '/workspace';
 const KNOWN_INSTRUCTION_DOCS = ['AGENTS.md', 'CLAUDE.md', 'GEMINI.md', 'CODEX.md'] as const;
@@ -72,40 +73,41 @@ export async function resolveWorkspacePath(projectPath: string): Promise<Resolve
   }
 
   const absoluteProjectPath = normalizeAbsolutePath(trimmed);
-  if (await pathExists(absoluteProjectPath)) {
-    return {
-      displayPath: absoluteProjectPath,
-      runtimePath: absoluteProjectPath,
-    };
-  }
+  const displayPath = normalizeVisiblePath(trimmed);
+  const runtimeCandidates = [...new Set<string>([
+    displayPath,
+    absoluteProjectPath,
+    mapWorkspacePathToHost(absoluteProjectPath),
+  ])];
 
-  const hostProjectsRoot = env.HOST_PROJECTS_ROOT.trim();
-  if (hostProjectsRoot) {
-    const normalizedHostRoot = normalizeAbsolutePath(hostProjectsRoot);
-    const relativePath = path.relative(normalizedHostRoot, absoluteProjectPath);
-    if (!relativePath.startsWith('..') && !path.isAbsolute(relativePath)) {
-      const mountedPath = path.join(WORKSPACE_MOUNT_ROOT, relativePath);
-      if (await pathExists(mountedPath)) {
-        return {
-          displayPath: absoluteProjectPath,
-          runtimePath: mountedPath,
-        };
-      }
+  for (const runtimePath of runtimeCandidates) {
+    if (!await pathExists(runtimePath)) {
+      continue;
     }
-  }
-
-  if (absoluteProjectPath.startsWith(`${WORKSPACE_MOUNT_ROOT}/`) && await pathExists(absoluteProjectPath)) {
     return {
-      displayPath: absoluteProjectPath,
-      runtimePath: absoluteProjectPath,
+      displayPath,
+      runtimePath,
     };
   }
 
-  throw new Error(`워크스페이스 경로를 해석할 수 없습니다: ${absoluteProjectPath}`);
+  throw new Error(`워크스페이스 경로를 해석할 수 없습니다: ${displayPath}`);
 }
 
 function toClientWorkspacePath(runtimePath: string): string {
   const normalizedRuntimePath = normalizeAbsolutePath(runtimePath);
+
+  const hostMappedPath = mapWorkspacePathToHost(normalizedRuntimePath);
+  if (hostMappedPath !== normalizedRuntimePath) {
+    return hostMappedPath;
+  }
+
+  const hostHomeDir = normalizeAbsolutePath(env.HOST_HOME_DIR.trim() || '/home/ubuntu');
+  if (
+    normalizedRuntimePath === hostHomeDir ||
+    normalizedRuntimePath.startsWith(`${hostHomeDir}/`)
+  ) {
+    return normalizedRuntimePath;
+  }
 
   if (normalizedRuntimePath === WORKSPACE_MOUNT_ROOT) {
     return '/';
@@ -441,5 +443,5 @@ export async function buildCustomizationOverview(projectPath: string): Promise<C
 
 export async function resolveWorkspaceClientPath(projectPath: string): Promise<string> {
   const resolved = await resolveWorkspacePath(projectPath);
-  return toClientWorkspacePath(resolved.runtimePath);
+  return toClientWorkspacePath(resolved.displayPath);
 }

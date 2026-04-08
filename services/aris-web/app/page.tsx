@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { requirePageUser } from '@/lib/auth/guard';
 import { getRuntimeHealth, listSessions } from '@/lib/happy/client';
+import { env } from '@/lib/config';
 import HomePageWrapper from './HomePageClient';
 
 export default async function HomePage() {
@@ -29,7 +30,12 @@ export default async function HomePage() {
 
   return (
     <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>로딩 중...</div>}>
-      <HomePageWrapper user={user} initialSessions={sessions} runtimeError={runtimeError} />
+      <HomePageWrapper
+        user={user}
+        initialSessions={sessions}
+        runtimeError={runtimeError}
+        browserRootPath={env.HOST_HOME_DIR}
+      />
     </Suspense>
   );
 }

@@ -2,10 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { requireApiUser } from '@/lib/auth/guard';
-import { env } from '@/lib/config';
-
-// Host projects root mapped inside the container as /workspace
-const WORKSPACE_ROOT = '/workspace';
+import { getDefaultBrowseRoot, resolveFsPath } from '@/lib/fs/pathResolver';
 
 export async function GET(request: NextRequest) {
   const auth = await requireApiUser(request);
@@ -18,35 +15,26 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const dirPath = searchParams.get('path') || '/';
+  const dirPath = searchParams.get('path');
+  const { visiblePath, runtimePath } = resolveFsPath(dirPath);
 
-  // Prevent directory traversal attacks
-  const normalizedPath = path.normalize(dirPath).replace(/^(\.\.[\/\\])+/, '');
-  let fullPath = path.join(WORKSPACE_ROOT, normalizedPath);
-
-  // In local dev, /workspace might not exist, fallback to process.cwd() or /tmp
   try {
-    const stat = await fs.stat(fullPath);
+    const stat = await fs.stat(runtimePath);
     if (!stat.isDirectory()) {
       return NextResponse.json({ error: 'Not a directory' }, { status: 400 });
     }
   } catch {
-    // Fallback for dev environments where /workspace isn't mounted
-    if (env.NODE_ENV !== 'production') {
-      fullPath = path.join(process.cwd(), normalizedPath);
-    } else {
-      return NextResponse.json({ error: 'Directory not found' }, { status: 404 });
-    }
+    return NextResponse.json({ error: 'Directory not found' }, { status: 404 });
   }
 
   try {
-    const entries = await fs.readdir(fullPath, { withFileTypes: true });
+    const entries = await fs.readdir(runtimePath, { withFileTypes: true });
     
     const items = entries
       .filter((entry) => !entry.name.startsWith('.'))
       .map((entry) => ({
         name: entry.name,
-        path: path.join(normalizedPath, entry.name),
+        path: path.join(visiblePath, entry.name),
         isDirectory: entry.isDirectory(),
         isFile: entry.isFile()
       }))
@@ -57,8 +45,8 @@ export async function GET(request: NextRequest) {
       });
 
     return NextResponse.json({ 
-      currentPath: normalizedPath, 
-      parentPath: normalizedPath === '/' ? null : path.dirname(normalizedPath),
+      currentPath: visiblePath, 
+      parentPath: visiblePath === getDefaultBrowseRoot() ? null : path.dirname(visiblePath),
       directories: items // 유지 호환성 또는 items로 클라이언트에서 처리. 일단 items를 보내지만 하위호환을 위해 items로 대체.
     });
   } catch {

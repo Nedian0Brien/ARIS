@@ -15,11 +15,13 @@ import type { SessionSummary } from '@/lib/happy/types';
 export default function HomePageWrapper({ 
   user, 
   initialSessions,
-  runtimeError
+  runtimeError,
+  browserRootPath,
 }: { 
   user: AuthenticatedUser; 
   initialSessions: SessionSummary[];
   runtimeError: string | null;
+  browserRootPath: string;
 }) {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('sessions');
@@ -34,7 +36,13 @@ export default function HomePageWrapper({
   const renderContent = () => {
     switch (activeTab) {
       case 'sessions':
-        return <SessionDashboard initialSessions={initialSessions} isOperator={user.role === 'operator'} />;
+        return (
+          <SessionDashboard
+            initialSessions={initialSessions}
+            isOperator={user.role === 'operator'}
+            browserRootPath={browserRootPath}
+          />
+        );
       case 'console':
         return <ConsoleTab user={user} initialSessions={initialSessions} />;
       case 'files':

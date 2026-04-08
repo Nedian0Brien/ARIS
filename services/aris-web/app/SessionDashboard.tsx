@@ -35,7 +35,6 @@ interface DirectoryInfo {
   name: string;
   path: string;
 }
-
 const PATH_HISTORY_STORAGE_KEY = 'aris:new-session-path-history';
 const MAX_PATH_HISTORY_ITEMS = 8;
 const FALLBACK_DATE_ISO = '1970-01-01T00:00:00.000Z';
@@ -165,35 +164,30 @@ function formatBytes(bytes: number): string {
   return `${Math.round(bytes / mb)} MB`;
 }
 
-const WORKSPACE_PATH_ROOT = '/workspace';
-
-function trimWorkspacePath(path: string): string {
-  const normalized = path.replace(/\\/g, '/').trim().replace(/\/+$/, '');
-  if (!normalized || normalized === WORKSPACE_PATH_ROOT) return '/';
-
-  if (normalized.startsWith(`${WORKSPACE_PATH_ROOT}/`)) {
-    return normalized.slice(WORKSPACE_PATH_ROOT.length) || '/';
+function normalizeAbsoluteBrowserPath(input: string, rootPath: string): string {
+  const normalized = input.replace(/\\/g, '/').trim().replace(/\/+$/, '');
+  if (!normalized || normalized === '/') {
+    return rootPath;
   }
-
   if (normalized.startsWith('/')) {
-    return normalized || '/';
+    return normalized;
   }
-
-  return `/${normalized}`;
-}
-
-function buildWorkspacePath(relativePath: string): string {
-  const trimmed = trimWorkspacePath(relativePath);
-  return trimmed === '/' ? WORKSPACE_PATH_ROOT : `${WORKSPACE_PATH_ROOT}${trimmed}`;
+  return `${rootPath}/${normalized}`.replace(/\/+/g, '/');
 }
 
 export function SessionDashboard({ 
   initialSessions, 
-  isOperator 
+  isOperator,
+  browserRootPath,
 }: { 
   initialSessions: SessionSummary[];
   isOperator: boolean;
+  browserRootPath: string;
 }) {
+  const normalizedBrowserRootPath = useMemo(
+    () => normalizeAbsoluteBrowserPath(browserRootPath, '/home/ubuntu'),
+    [browserRootPath],
+  );
   const router = useRouter();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newPath, setNewPath] = useState('');
@@ -204,12 +198,12 @@ export function SessionDashboard({
 
   // Directory Browser States
   const [isBrowsing, setIsBrowsing] = useState(false);
-  const [browserPath, setBrowserPath] = useState('/');
+  const [browserPath, setBrowserPath] = useState(normalizedBrowserRootPath);
   const [directories, setDirectories] = useState<DirectoryInfo[]>([]);
   const [parentPath, setParentPath] = useState<string | null>(null);
   const [isLoadingDirs, setIsLoadingDirs] = useState(false);
   const [isBrowserPathEditing, setIsBrowserPathEditing] = useState(false);
-  const [browserPathDraft, setBrowserPathDraft] = useState(WORKSPACE_PATH_ROOT);
+  const [browserPathDraft, setBrowserPathDraft] = useState(normalizedBrowserRootPath);
 
   // Recent History State
   const [pathHistory, setPathHistory] = useState<PathHistoryEntry[]>([]);
@@ -559,21 +553,21 @@ export function SessionDashboard({
     setNewPath('');
     setNewBranch('');
     setIsBrowsing(true);
-    setBrowserPath('/');
+    setBrowserPath(normalizedBrowserRootPath);
     setDirectories([]);
     setParentPath(null);
     setIsBrowserPathEditing(false);
-    setBrowserPathDraft(WORKSPACE_PATH_ROOT);
+    setBrowserPathDraft(normalizedBrowserRootPath);
     setIsCreateModalOpen(true);
   }
 
   function openBrowserPathEditor() {
-    setBrowserPathDraft(buildWorkspacePath(browserPath));
+    setBrowserPathDraft(browserPath);
     setIsBrowserPathEditing(true);
   }
 
   function applyBrowserPath() {
-    const nextBrowserPath = trimWorkspacePath(browserPathDraft);
+    const nextBrowserPath = normalizeAbsoluteBrowserPath(browserPathDraft, normalizedBrowserRootPath);
     setIsBrowserPathEditing(false);
     setBrowserPath(nextBrowserPath);
     void fetchDirectory(nextBrowserPath);
@@ -898,8 +892,7 @@ export function SessionDashboard({
                         />
                       ) : (
                         <span className="current-path-display">
-                          <span className="path-prefix">{WORKSPACE_PATH_ROOT}</span>
-                          {browserPath !== '/' ? browserPath : ''}
+                          {browserPath}
                         </span>
                       )}
                       <Button
@@ -958,7 +951,7 @@ export function SessionDashboard({
                     variant="primary"
                     className="select-current-btn"
                     onClick={() => {
-                      setNewPath(buildWorkspacePath(browserPath));
+                      setNewPath(browserPath);
                       setIsBrowserPathEditing(false);
                     }}
                   >

@@ -10,6 +10,7 @@ const envSchema = z.object({
   HAPPY_SERVER_URL: z.string().url().optional(),
   HAPPY_SERVER_TOKEN: z.string().optional(),
   HOST_PROJECTS_ROOT: z.string().default(''),
+  HOST_HOME_DIR: z.string().default('/home/ubuntu'),
   SSH_BASE_COMMAND: z.string().default('ssh ubuntu@your-server'),
   SSH_LINK_TTL_SECONDS: z.coerce.number().int().positive().default(300),
   SSH_KEY_ENCRYPTION_SECRET: z.string().min(16).default('dev-only-ssh-enc-secret-change-me'),

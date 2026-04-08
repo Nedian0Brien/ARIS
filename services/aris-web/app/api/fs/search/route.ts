@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { requireApiUser } from '@/lib/auth/guard';
-import { env } from '@/lib/config';
-
-const WORKSPACE_ROOT = '/workspace';
+import { resolveFsPath } from '@/lib/fs/pathResolver';
 const MAX_RESULTS = 100;
 const MAX_DEPTH = 8;
 const IGNORE_DIRS = new Set([
@@ -19,6 +17,8 @@ interface FileResult {
 }
 
 async function searchFiles(
+  visibleRootPath: string,
+  runtimeRootPath: string,
   dirPath: string,
   query: string,
   results: FileResult[],
@@ -38,8 +38,8 @@ async function searchFiles(
     if (entry.name.startsWith('.')) continue;
     if (entry.isDirectory() && IGNORE_DIRS.has(entry.name)) continue;
 
-    const relativePath = path.join(path.relative(WORKSPACE_ROOT, dirPath), entry.name);
-    const normalizedRelative = relativePath.startsWith('/') ? relativePath : '/' + relativePath;
+    const relativePath = path.relative(runtimeRootPath, dirPath);
+    const normalizedRelative = path.join(visibleRootPath, relativePath, entry.name);
 
     if (entry.name.toLowerCase().includes(query)) {
       results.push({
@@ -50,7 +50,7 @@ async function searchFiles(
     }
 
     if (entry.isDirectory()) {
-      await searchFiles(path.join(dirPath, entry.name), query, results, depth + 1);
+      await searchFiles(visibleRootPath, runtimeRootPath, path.join(dirPath, entry.name), query, results, depth + 1);
     }
   }
 }
@@ -71,23 +71,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ results: [] });
   }
 
-  const normalizedRootPath = path.normalize(requestedRootPath).replace(/^(\.\.[\/\\])+/, '');
-  let rootPath = path.join(WORKSPACE_ROOT, normalizedRootPath);
+  const { visiblePath, runtimePath } = resolveFsPath(requestedRootPath);
   try {
-    const stat = await fs.stat(rootPath);
+    const stat = await fs.stat(runtimePath);
     if (!stat.isDirectory()) {
       return NextResponse.json({ error: 'Directory not found' }, { status: 404 });
     }
   } catch {
-    if (env.NODE_ENV !== 'production') {
-      rootPath = path.join(process.cwd(), normalizedRootPath);
-    } else {
-      return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
-    }
+    return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
   }
 
   const results: FileResult[] = [];
-  await searchFiles(rootPath, query, results, 0);
+  await searchFiles(visiblePath, runtimePath, runtimePath, query, results, 0);
 
   results.sort((a, b) => {
     // 정확히 일치하는 이름 우선

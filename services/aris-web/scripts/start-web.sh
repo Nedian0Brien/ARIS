@@ -3,13 +3,18 @@ set -eu
 
 tries=0
 max_tries=30
+HOST_HOME_DIR="${HOST_HOME_DIR:-/home/ubuntu}"
 
-if command -v git >/dev/null 2>&1 && [ -d /workspace ]; then
-  find /workspace -mindepth 1 -maxdepth 2 \( -type d -name .git -o -type f -name .git \) 2>/dev/null \
-    | while IFS= read -r git_meta_path; do
-      repo_dir=$(dirname "$git_meta_path")
-      git config --global --add safe.directory "$repo_dir" >/dev/null 2>&1 || true
-    done
+if command -v git >/dev/null 2>&1; then
+  for safe_root in /workspace "$HOST_HOME_DIR"; do
+    if [ -d "$safe_root" ]; then
+      find "$safe_root" -mindepth 1 -maxdepth 2 \( -type d -name .git -o -type f -name .git \) 2>/dev/null \
+        | while IFS= read -r git_meta_path; do
+          repo_dir=$(dirname "$git_meta_path")
+          git config --global --add safe.directory "$repo_dir" >/dev/null 2>&1 || true
+        done
+    fi
+  done
 fi
 
 until npm run prisma:deploy; do

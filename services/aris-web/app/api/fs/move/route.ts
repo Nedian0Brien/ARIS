@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { requireApiUser } from '@/lib/auth/guard';
-import { env } from '@/lib/config';
-
-const WORKSPACE_ROOT = '/workspace';
+import { resolveFsPath } from '@/lib/fs/pathResolver';
 
 export async function POST(request: NextRequest) {
   const auth = await requireApiUser(request);
@@ -15,21 +13,8 @@ export async function POST(request: NextRequest) {
     const { oldPath, newPath } = await request.json();
     if (!oldPath || !newPath) return NextResponse.json({ error: 'Both oldPath and newPath are required' }, { status: 400 });
 
-    const normalizedOld = path.normalize(oldPath).replace(/^(\.\.[\/\\])+/, '');
-    const normalizedNew = path.normalize(newPath).replace(/^(\.\.[\/\\])+/, '');
-    
-    let fullOldPath = path.join(WORKSPACE_ROOT, normalizedOld);
-    let fullNewPath = path.join(WORKSPACE_ROOT, normalizedNew);
-
-    // Development fallback check
-    if (env.NODE_ENV !== 'production') {
-      try {
-        await fs.access(WORKSPACE_ROOT);
-      } catch {
-        fullOldPath = path.join(process.cwd(), normalizedOld);
-        fullNewPath = path.join(process.cwd(), normalizedNew);
-      }
-    }
+    const { runtimePath: fullOldPath } = resolveFsPath(oldPath);
+    const { runtimePath: fullNewPath } = resolveFsPath(newPath);
 
     // Ensure parent directory of new path exists
     await fs.mkdir(path.dirname(fullNewPath), { recursive: true });

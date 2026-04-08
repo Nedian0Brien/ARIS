@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import { requireApiUser } from '@/lib/auth/guard';
-import { env } from '@/lib/config';
-
-const WORKSPACE_ROOT = '/workspace';
+import { resolveFsPath } from '@/lib/fs/pathResolver';
 
 export async function DELETE(request: NextRequest) {
   const auth = await requireApiUser(request);
@@ -17,20 +14,10 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Valid path required' }, { status: 400 });
   }
 
-  const normalizedPath = path.normalize(targetPath).replace(/^(\.\.[\/\\])+/, '');
-  let fullPath = path.join(WORKSPACE_ROOT, normalizedPath);
-
-  // Development fallback check
-  if (env.NODE_ENV !== 'production') {
-    try {
-      await fs.access(WORKSPACE_ROOT);
-    } catch {
-      fullPath = path.join(process.cwd(), normalizedPath);
-    }
-  }
+  const { runtimePath } = resolveFsPath(targetPath);
 
   try {
-    await fs.rm(fullPath, { recursive: true, force: true });
+    await fs.rm(runtimePath, { recursive: true, force: true });
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: 'Failed to delete path' }, { status: 500 });
