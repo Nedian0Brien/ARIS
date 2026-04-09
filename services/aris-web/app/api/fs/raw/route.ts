@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import { requireApiUser } from '@/lib/auth/guard';
 import { resolveFsPath } from '@/lib/fs/pathResolver';
 
-const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;
+const MIME_TYPES: Record<string, string> = {
+  pdf: 'application/pdf',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  svg: 'image/svg+xml',
+  webp: 'image/webp',
+};
 
 export async function GET(request: NextRequest) {
   const auth = await requireApiUser(request);
@@ -19,34 +28,16 @@ export async function GET(request: NextRequest) {
   try {
     const stat = await fs.stat(runtimePath);
     if (!stat.isFile()) return NextResponse.json({ error: 'Not a file' }, { status: 400 });
-  } catch {
-    return NextResponse.json({ error: 'File not found' }, { status: 404 });
-  }
 
-  try {
-    const stat = await fs.stat(runtimePath);
-    if (!stat.isFile()) {
-      return NextResponse.json({ error: 'Not a file' }, { status: 400 });
-    }
+    const ext = path.extname(runtimePath).slice(1).toLowerCase();
+    const contentType = MIME_TYPES[ext] ?? 'application/octet-stream';
+    const content = await fs.readFile(runtimePath);
 
-    if (stat.size > MAX_PREVIEW_BYTES) {
-      return NextResponse.json({
-        blockedReason: 'large',
-        sizeBytes: stat.size,
-      });
-    }
-
-    const contentBuffer = await fs.readFile(runtimePath);
-    if (contentBuffer.includes(0)) {
-      return NextResponse.json({
-        blockedReason: 'binary',
-        sizeBytes: stat.size,
-      });
-    }
-
-    return NextResponse.json({
-      content: contentBuffer.toString('utf8'),
-      sizeBytes: stat.size,
+    return new NextResponse(content, {
+      headers: {
+        'Content-Type': contentType,
+        'Content-Disposition': 'inline',
+      },
     });
   } catch {
     return NextResponse.json({ error: 'Failed to read file' }, { status: 500 });

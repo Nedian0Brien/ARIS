@@ -3154,9 +3154,6 @@ export function ChatInterface({
         nonce: sidebarFileRequestNonceRef.current,
       });
 
-      if (isCustomizationOverlayLayout) {
-        setIsCustomizationSidebarOpen(true);
-      }
       if (isLeftSidebarOverlayLayout) {
         setIsChatSidebarOpen(false);
       }

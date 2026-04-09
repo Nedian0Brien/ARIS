@@ -19,6 +19,7 @@ import 'prismjs/themes/prism.css';
 type WorkspaceFileEditorProps = {
   fileName: string;
   content: string;
+  rawUrl?: string;
   isSaving?: boolean;
   saveDisabled?: boolean;
   onChange: (nextContent: string) => void;
@@ -177,6 +178,8 @@ function getLanguage(fileName: string): string {
       return 'python';
     case 'sh':
       return 'bash';
+    case 'pdf':
+      return 'pdf';
     default:
       return 'text';
   }
@@ -191,6 +194,7 @@ function displayLanguageName(fileName: string): string {
     json: 'JSON',
     markdown: 'Markdown',
     markup: 'HTML',
+    pdf: 'PDF',
     python: 'Python',
     text: 'Text',
     typescript: 'TypeScript',
@@ -201,6 +205,7 @@ function displayLanguageName(fileName: string): string {
 export function WorkspaceFileEditor({
   fileName,
   content,
+  rawUrl,
   isSaving = false,
   saveDisabled = false,
   onChange,
@@ -375,7 +380,13 @@ export function WorkspaceFileEditor({
       </div>
 
       <div className={styles.editorViewport}>
-        {!isPreview ? (
+        {language === 'pdf' && rawUrl ? (
+          <iframe
+            src={rawUrl}
+            className={styles.pdfViewer}
+            title={fileName}
+          />
+        ) : !isPreview ? (
           <>
             <div ref={lineNumbersRef} className={styles.lineNumbers}>
               {lineNumbers}
