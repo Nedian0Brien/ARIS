@@ -281,6 +281,18 @@
   }
 }
 
+.markdownBody :global(.md-wikilink) {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.05rem 0.45rem;
+  border-radius: 4px;
+  background: var(--accent-violet-bg);
+  color: var(--accent-violet);
+  font-size: 0.88em;
+  font-weight: 500;
+  cursor: default;
+}
+
 .markdownBody :global(.md-code-block) {
   margin: 0.75rem 0;
   border-radius: 8px;
