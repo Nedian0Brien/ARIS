@@ -1069,6 +1069,70 @@
   font-family: var(--font-mono);
 }
 
+.gitErrorBanner {
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 235, 0.98) 0%, rgba(255, 247, 237, 0.96) 100%);
+  padding: 0.84rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.72rem;
+}
+
+:global(html[data-theme='dark']) .gitErrorBanner {
+  border-color: rgba(245, 158, 11, 0.26);
+  background:
+    linear-gradient(180deg, rgba(69, 26, 3, 0.94) 0%, rgba(41, 20, 6, 0.94) 100%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(html:not([data-theme='light']):not([data-theme='dark'])) .gitErrorBanner {
+    border-color: rgba(245, 158, 11, 0.26);
+    background:
+      linear-gradient(180deg, rgba(69, 26, 3, 0.94) 0%, rgba(41, 20, 6, 0.94) 100%);
+  }
+}
+
+.gitErrorBannerHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.gitErrorBannerCopy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+}
+
+.gitErrorBannerTitle {
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.35;
+  color: var(--chat-text-primary);
+}
+
+.gitErrorBannerDetail,
+.gitErrorBannerHint {
+  font-size: 0.68rem;
+  line-height: 1.55;
+  color: var(--chat-text-secondary);
+}
+
+.gitErrorBannerFooter {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.gitErrorBannerHint {
+  max-width: 34rem;
+}
+
 .gitSectionHeader {
   padding: 0.58rem 0.74rem;
   border-bottom: 1px solid var(--git-panel-border);
