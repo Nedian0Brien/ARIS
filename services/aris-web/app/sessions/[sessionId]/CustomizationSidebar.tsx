@@ -34,6 +34,7 @@ import {
   X,
 } from 'lucide-react';
 import { WorkspaceFileEditor } from '@/components/files/WorkspaceFileEditor';
+import { describeGitSidebarError } from '@/lib/git/sidebarErrors';
 import { buildGitFileTree, parseGitUnifiedDiff, type GitTreeNode } from '@/lib/git/sidebarUi';
 import styles from './CustomizationSidebar.module.css';
 
@@ -1028,6 +1029,7 @@ export function CustomizationSidebar({
   const filesCountLabel = filesSearchResults ? `검색 ${visibleFiles.length}개` : `${visibleFiles.length}개`;
   const stagedGitFiles = gitOverview?.files.filter((file) => file.staged) ?? [];
   const workingGitFiles = gitOverview?.files.filter((file) => file.unstaged || file.untracked) ?? [];
+  const gitErrorDetails = gitError ? describeGitSidebarError(gitError) : null;
   const workingGitTree = useMemo(() => buildGitFileTree(workingGitFiles), [workingGitFiles]);
   const stagedGitTree = useMemo(() => buildGitFileTree(stagedGitFiles), [stagedGitFiles]);
   const activeGitFiles = gitListTab === 'working' ? workingGitFiles : stagedGitFiles;
@@ -1644,10 +1646,26 @@ export function CustomizationSidebar({
                 <Loader2 size={18} className={styles.rotate} />
                 <p>Git 정보를 불러오는 중입니다.</p>
               </div>
-            ) : gitError ? (
-              <div className={styles.errorState}>
-                <GitBranch size={18} />
-                <p>{gitError}</p>
+            ) : gitErrorDetails ? (
+              <div className={styles.gitErrorBanner}>
+                <div className={styles.gitErrorBannerHeader}>
+                  <AlertTriangle size={18} />
+                  <div className={styles.gitErrorBannerCopy}>
+                    <p className={styles.gitErrorBannerTitle}>{gitErrorDetails.title}</p>
+                    <p className={styles.gitErrorBannerDetail}>{gitErrorDetails.detail}</p>
+                  </div>
+                </div>
+                <div className={styles.gitErrorBannerFooter}>
+                  {gitErrorDetails.hint ? <p className={styles.gitErrorBannerHint}>{gitErrorDetails.hint}</p> : null}
+                  <button
+                    type="button"
+                    className={styles.gitToolbarButton}
+                    onClick={() => { void loadGitOverview(); }}
+                    disabled={gitLoading || gitActionBusy !== null}
+                  >
+                    다시 시도
+                  </button>
+                </div>
               </div>
             ) : gitOverview ? (
               <div className={styles.gitWorkbench}>

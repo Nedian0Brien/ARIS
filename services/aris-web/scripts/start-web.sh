@@ -8,7 +8,9 @@ HOST_HOME_DIR="${HOST_HOME_DIR:-/home/ubuntu}"
 if command -v git >/dev/null 2>&1; then
   for safe_root in /workspace "$HOST_HOME_DIR"; do
     if [ -d "$safe_root" ]; then
-      find "$safe_root" -mindepth 1 -maxdepth 2 \( -type d -name .git -o -type f -name .git \) 2>/dev/null \
+      # Repo roots under /home/ubuntu are often nested one level deeper than the
+      # previous scan covered, so include the .git entry itself in the search.
+      find "$safe_root" -mindepth 1 -maxdepth 3 \( -type d -name .git -o -type f -name .git \) 2>/dev/null \
         | while IFS= read -r git_meta_path; do
           repo_dir=$(dirname "$git_meta_path")
           git config --global --add safe.directory "$repo_dir" >/dev/null 2>&1 || true
