@@ -7,6 +7,7 @@ import { resolveWorkspacePath } from '@/lib/customization/catalog';
 const execFileAsync = promisify(execFile);
 const GIT_TIMEOUT_MS = 15_000;
 const GIT_MAX_BUFFER_BYTES = 4 * 1024 * 1024;
+const GIT_DUBIOUS_OWNERSHIP_PATTERN = /detected dubious ownership in repository|unsafe repository/i;
 
 export type GitDiffScope = 'working' | 'staged';
 export type GitActionName = 'stage' | 'unstage' | 'commit' | 'fetch' | 'pull' | 'push';
@@ -169,6 +170,27 @@ async function runGitCommand(cwd: string, args: string[]): Promise<RunGitResult>
         stderr: failure.stderr,
         cause: error,
       });
+    }
+
+    if (GIT_DUBIOUS_OWNERSHIP_PATTERN.test(stderr)) {
+      await execFileAsync('git', ['config', '--global', '--add', 'safe.directory', cwd], {
+        cwd,
+        encoding: 'utf8',
+        timeout: GIT_TIMEOUT_MS,
+        maxBuffer: GIT_MAX_BUFFER_BYTES,
+      }).catch(() => undefined);
+
+      const retry = await execFileAsync('git', args, {
+        cwd,
+        encoding: 'utf8',
+        timeout: GIT_TIMEOUT_MS,
+        maxBuffer: GIT_MAX_BUFFER_BYTES,
+      });
+
+      return {
+        stdout: retry.stdout ?? '',
+        stderr: retry.stderr ?? '',
+      };
     }
 
     const details = [stderr, failure.stdout?.trim() ?? ''].filter(Boolean).join('\n');
