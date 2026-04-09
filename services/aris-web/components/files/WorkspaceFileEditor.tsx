@@ -208,13 +208,13 @@ export function WorkspaceFileEditor({
   onClose,
   className,
 }: WorkspaceFileEditorProps) {
-  const [isPreview, setIsPreview] = useState(false);
+  const [isPreview, setIsPreview] = useState(() => getLanguage(fileName) === 'markdown');
   const lineNumbersRef = useRef<HTMLDivElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    setIsPreview(false);
+    setIsPreview(getLanguage(fileName) === 'markdown');
   }, [fileName]);
 
   const lineNumbers = useMemo(() => {
