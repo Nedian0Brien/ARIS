@@ -6,6 +6,28 @@ import Prism from 'prismjs';
 import { marked } from 'marked';
 import styles from './WorkspaceFileEditor.module.css';
 
+marked.use({
+  extensions: [{
+    name: 'wikilink',
+    level: 'inline' as const,
+    start(src: string) { return src.indexOf('[['); },
+    tokenizer(src: string) {
+      const match = /^\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/.exec(src);
+      if (match) {
+        const path = match[1].trim();
+        const text = match[2] ? match[2].trim() : (path.split('/').pop() ?? path);
+        return { type: 'wikilink', raw: match[0], path, text };
+      }
+      return undefined;
+    },
+    renderer(token) {
+      const safeText = String(token['text']).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const safePath = String(token['path']).replace(/"/g, '&quot;');
+      return `<span class="md-wikilink" data-path="${safePath}">${safeText}</span>`;
+    },
+  }],
+});
+
 import 'prismjs/components/prism-typescript';
 import 'prismjs/components/prism-javascript';
 import 'prismjs/components/prism-json';
