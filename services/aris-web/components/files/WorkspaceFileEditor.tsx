@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Code, Edit3, Eye, Loader2, Save, X } from 'lucide-react';
+import { Code, Edit3, Eye, FileText, Loader2, Save, X } from 'lucide-react';
 import Prism from 'prismjs';
 import { marked } from 'marked';
 import styles from './WorkspaceFileEditor.module.css';
@@ -26,6 +26,135 @@ type WorkspaceFileEditorProps = {
   onClose?: () => void;
   className?: string;
 };
+
+interface Frontmatter {
+  title?: string;
+  type?: string;
+  tags?: string[];
+  created?: string;
+  updated?: string;
+  sources?: string[];
+  [key: string]: string | string[] | undefined;
+}
+
+function parseFrontmatter(content: string): { frontmatter: Frontmatter | null; body: string } {
+  if (!content.startsWith('---')) {
+    return { frontmatter: null, body: content };
+  }
+
+  const rest = content.slice(3);
+  const endMatch = rest.match(/\n---(\r?\n|$)/);
+  if (!endMatch || endMatch.index === undefined) {
+    return { frontmatter: null, body: content };
+  }
+
+  const yamlStr = rest.slice(0, endMatch.index);
+  const body = rest.slice(endMatch.index + endMatch[0].length);
+  const frontmatter: Frontmatter = {};
+
+  for (const line of yamlStr.split('\n')) {
+    const colonIdx = line.indexOf(':');
+    if (colonIdx === -1) continue;
+
+    const key = line.slice(0, colonIdx).trim();
+    const rawValue = line.slice(colonIdx + 1).trim();
+    if (!key || !rawValue) continue;
+
+    if (rawValue.startsWith('[[')) {
+      const matches = [...rawValue.matchAll(/\[\[([^\]]+)\]\]/g)];
+      frontmatter[key] = matches.map((m) => m[1]);
+    } else if (rawValue.startsWith('[')) {
+      const inner = rawValue.slice(1, rawValue.lastIndexOf(']'));
+      frontmatter[key] = inner
+        .split(',')
+        .map((s) => s.trim().replace(/^["']|["']$/g, ''))
+        .filter(Boolean);
+    } else {
+      frontmatter[key] = rawValue.replace(/^["']|["']$/g, '');
+    }
+  }
+
+  return { frontmatter: Object.keys(frontmatter).length > 0 ? frontmatter : null, body };
+}
+
+const TYPE_COLORS: Record<string, { color: string; bg: string }> = {
+  summary: { color: 'var(--accent-emerald)', bg: 'var(--accent-emerald-bg)' },
+  note: { color: 'var(--accent-sky)', bg: 'var(--accent-sky-bg)' },
+  paper: { color: 'var(--accent-violet)', bg: 'var(--accent-violet-bg)' },
+  task: { color: 'var(--accent-amber)', bg: 'var(--accent-amber-bg)' },
+  default: { color: 'var(--accent-slate)', bg: 'var(--accent-slate-bg)' },
+};
+
+function FrontmatterBlock({ fm }: { fm: Frontmatter }) {
+  const typeStyle = fm.type ? (TYPE_COLORS[fm.type.toLowerCase()] ?? TYPE_COLORS.default) : TYPE_COLORS.default;
+  const knownKeys = new Set(['title', 'type', 'tags', 'created', 'updated', 'sources']);
+  const extraKeys = Object.keys(fm).filter((k) => !knownKeys.has(k));
+
+  return (
+    <div className={styles.fmBlock}>
+      {fm.title && <h1 className={styles.fmTitle}>{fm.title}</h1>}
+      <div className={styles.fmProps}>
+        {fm.type && (
+          <div className={styles.fmProp}>
+            <span className={styles.fmPropKey}>타입</span>
+            <span
+              className={styles.fmTypeBadge}
+              style={{ color: typeStyle.color, background: typeStyle.bg }}
+            >
+              {fm.type}
+            </span>
+          </div>
+        )}
+        {fm.tags && fm.tags.length > 0 && (
+          <div className={styles.fmProp}>
+            <span className={styles.fmPropKey}>태그</span>
+            <div className={styles.fmTagList}>
+              {fm.tags.map((tag) => (
+                <span key={tag} className={styles.fmTag}>#{tag}</span>
+              ))}
+            </div>
+          </div>
+        )}
+        {fm.created && (
+          <div className={styles.fmProp}>
+            <span className={styles.fmPropKey}>생성일</span>
+            <span className={styles.fmDate}>{fm.created}</span>
+          </div>
+        )}
+        {fm.updated && (
+          <div className={styles.fmProp}>
+            <span className={styles.fmPropKey}>수정일</span>
+            <span className={styles.fmDate}>{fm.updated}</span>
+          </div>
+        )}
+        {fm.sources && fm.sources.length > 0 && (
+          <div className={styles.fmProp}>
+            <span className={styles.fmPropKey}>출처</span>
+            <div className={styles.fmTagList}>
+              {fm.sources.map((src) => (
+                <span key={src} className={styles.fmSource}>
+                  <FileText size={11} />
+                  {src}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {extraKeys.map((key) => {
+          const val = fm[key];
+          return (
+            <div key={key} className={styles.fmProp}>
+              <span className={styles.fmPropKey}>{key}</span>
+              <span className={styles.fmDate}>
+                {Array.isArray(val) ? val.join(', ') : (val ?? '')}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function getLanguage(fileName: string): string {
   const ext = fileName.split('.').pop()?.toLowerCase();
@@ -102,6 +231,11 @@ export function WorkspaceFileEditor({
     return Prism.highlight(content, Prism.languages[language], language);
   }, [content, language]);
 
+  const parsed = useMemo(() => {
+    if (language !== 'markdown') return { frontmatter: null, body: content };
+    return parseFrontmatter(content);
+  }, [content, language]);
+
   const markdownHtml = useMemo(() => {
     if (!isPreview || language !== 'markdown') {
       return '';
@@ -117,8 +251,8 @@ export function WorkspaceFileEditor({
       return `<div class="md-code-block"><div class="md-code-header">${langBadge}</div><pre class="md-code-pre"><code>${highlighted}</code></pre></div>`;
     };
 
-    return marked.parse(content, { breaks: true, gfm: true, renderer }) as string;
-  }, [content, isPreview, language]);
+    return marked.parse(parsed.body, { breaks: true, gfm: true, renderer }) as string;
+  }, [parsed, isPreview, language]);
 
   const handleEditorKeyDown = useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const textarea = event.currentTarget;
@@ -264,7 +398,10 @@ export function WorkspaceFileEditor({
             </div>
           </>
         ) : (
-          <div className={styles.markdownBody} dangerouslySetInnerHTML={{ __html: markdownHtml }} />
+          <div className={styles.markdownBody}>
+            {parsed.frontmatter && <FrontmatterBlock fm={parsed.frontmatter} />}
+            <div className={styles.markdownContent} dangerouslySetInnerHTML={{ __html: markdownHtml }} />
+          </div>
         )}
       </div>
 

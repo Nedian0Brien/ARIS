@@ -148,11 +148,100 @@
 
 .markdownBody {
   flex: 1;
-  padding: 2rem;
   overflow: auto;
   background-color: var(--bg);
   color: var(--text);
   line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+}
+
+.markdownContent {
+  padding: 2rem;
+  flex: 1;
+}
+
+/* Notion-style frontmatter */
+.fmBlock {
+  padding: 2rem 2rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+  background-color: var(--surface-subtle);
+  flex-shrink: 0;
+}
+
+.fmTitle {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.35;
+  margin-bottom: 1.1rem;
+  letter-spacing: -0.01em;
+}
+
+.fmProps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.fmProp {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  font-size: 0.82rem;
+  min-height: 1.6rem;
+}
+
+.fmPropKey {
+  color: var(--text-muted);
+  min-width: 4.5rem;
+  font-weight: 500;
+  padding-top: 0.1rem;
+  flex-shrink: 0;
+}
+
+.fmTypeBadge {
+  display: inline-block;
+  padding: 0.12rem 0.55rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.fmTagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.fmTag {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+  background: var(--accent-sky-bg);
+  color: var(--accent-sky);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.fmDate {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  padding-top: 0.1rem;
+}
+
+.fmSource {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  background: var(--surface);
 }
 
 .markdownBody ol {
@@ -307,7 +396,15 @@
     font-size: 16px;
   }
 
-  .markdownBody {
+  .markdownContent {
     padding: 1rem;
+  }
+
+  .fmBlock {
+    padding: 1rem 1rem 0.75rem;
+  }
+
+  .fmTitle {
+    font-size: 1.2rem;
   }
 }
