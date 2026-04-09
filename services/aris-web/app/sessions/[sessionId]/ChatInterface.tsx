@@ -432,7 +432,9 @@ function fileExtension(filename: string): string {
   if (dotIndex <= 0 || dotIndex === base.length - 1) {
     return '';
   }
-  return base.slice(dotIndex + 1).toLowerCase();
+  const ext = base.slice(dotIndex + 1).toLowerCase();
+  if (!/^[a-z0-9]+$/.test(ext)) return '';
+  return ext;
 }
 
 function normalizeWorkspaceClientPath(input: string): string {
