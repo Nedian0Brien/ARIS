@@ -290,7 +290,12 @@
   color: var(--accent-violet);
   font-size: 0.88em;
   font-weight: 500;
-  cursor: default;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.markdownBody :global(.md-wikilink:hover) {
+  opacity: 0.75;
 }
 
 .markdownBody :global(.md-code-block) {

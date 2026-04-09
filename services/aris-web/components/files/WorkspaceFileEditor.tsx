@@ -351,6 +351,19 @@ export function WorkspaceFileEditor({
     }
   }, [onChange]);
 
+  const handleWikilinkClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const target = (e.target as HTMLElement).closest('.md-wikilink');
+    if (!target) return;
+    let wikilinkPath = target.getAttribute('data-path') ?? '';
+    if (!wikilinkPath) return;
+    if (!wikilinkPath.includes('.')) {
+      wikilinkPath = `${wikilinkPath}.md`;
+    }
+    window.dispatchEvent(new CustomEvent('aris-open-workspace-file', {
+      detail: { path: wikilinkPath, name: wikilinkPath.split('/').pop() ?? wikilinkPath },
+    }));
+  }, []);
+
   const handleEditorScroll = useCallback((event: React.UIEvent<HTMLTextAreaElement>) => {
     if (lineNumbersRef.current) {
       lineNumbersRef.current.scrollTop = event.currentTarget.scrollTop;
@@ -431,7 +444,7 @@ export function WorkspaceFileEditor({
             </div>
           </>
         ) : (
-          <div className={styles.markdownBody}>
+          <div className={styles.markdownBody} onClick={handleWikilinkClick}>
             {parsed.frontmatter && <FrontmatterBlock fm={parsed.frontmatter} />}
             <div className={styles.markdownContent} dangerouslySetInnerHTML={{ __html: markdownHtml }} />
           </div>
