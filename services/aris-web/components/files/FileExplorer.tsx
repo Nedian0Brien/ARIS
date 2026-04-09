@@ -40,7 +40,7 @@ export function FileExplorer() {
   }, []);
 
   // UI States
-  const [editingFile, setEditingFile] = useState<{ path: string; name: string; content: string } | null>(null);
+  const [editingFile, setEditingFile] = useState<{ path: string; name: string; content: string; rawUrl?: string } | null>(null);
   const [isEditorSaving, setIsEditorSaving] = useState(false);
   const [newPathInput, setNewPathInput] = useState<{ type: 'file' | 'folder'; active: boolean }>({ type: 'file', active: false });
   const [newName, setNewName] = useState('');
@@ -158,6 +158,17 @@ export function FileExplorer() {
     if (item.isDirectory) return;
     setActiveMenu(null);
 
+    const ext = item.name.split('.').pop()?.toLowerCase();
+    if (ext === 'pdf') {
+      setEditingFile({
+        path: item.path,
+        name: item.name,
+        content: '',
+        rawUrl: `/api/fs/raw?path=${encodeURIComponent(item.path)}`,
+      });
+      return;
+    }
+
     try {
       const res = await fetch(`/api/fs/read?path=${encodeURIComponent(item.path)}`);
       if (!res.ok) throw new Error('파일을 읽는 데 실패했습니다.');
@@ -204,6 +215,7 @@ export function FileExplorer() {
       <WorkspaceFileEditor
         fileName={editingFile.name}
         content={editingFile.content}
+        rawUrl={editingFile.rawUrl}
         isSaving={isEditorSaving}
         onChange={(nextContent) => {
           setEditingFile((current) => (current ? { ...current, content: nextContent } : null));
