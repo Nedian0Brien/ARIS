@@ -167,7 +167,6 @@ function getFileIcon(name: string, isDirectory: boolean): React.ReactNode {
 const COMPOSER_MAX_HEIGHT_PX = 180;
 const ACTION_COLLAPSE_THRESHOLD = 4;
 const READ_CURSOR_SYNC_DEBOUNCE_MS = 2000;
-const SNAPSHOT_SYNC_DEBOUNCE_MS = 1500;
 const SIDEBAR_CHAT_PAGE_SIZE = 7;
 const SIDEBAR_APPROVAL_FEEDBACK_MS = 3000;
 const SIDEBAR_STATUS_REFRESH_MS = 10000;
@@ -837,17 +836,6 @@ function buildReadMarkerMap(chats: SessionChat[]): Record<string, string> {
     }
   }
   return markers;
-}
-
-function buildSnapshotSyncMap(chats: SessionChat[]): Record<string, string> {
-  const synced: Record<string, string> = {};
-  for (const chat of chats) {
-    const latestEventId = typeof chat.latestEventId === 'string' ? chat.latestEventId.trim() : '';
-    if (latestEventId) {
-      synced[chat.id] = latestEventId;
-    }
-  }
-  return synced;
 }
 
 function buildSnapshotFromChat(chat: SessionChat): ChatSidebarSnapshot | null {
@@ -2634,12 +2622,10 @@ export function ChatInterface({
   const chatSidebarFetchInFlightRef = useRef<Record<string, boolean>>({});
   const readMarkerSyncInFlightRef = useRef<Record<string, boolean>>({});
   const readMarkerSyncedRef = useRef<Record<string, string>>(buildReadMarkerMap(initialChats));
-  const snapshotSyncInFlightRef = useRef<Record<string, boolean>>({});
   const sidebarFileRequestNonceRef = useRef(0);
   const isRightSidebarPinnedLayout = !isMobileLayout && (viewportWidth > CUSTOMIZATION_OVERLAY_MAX_WIDTH_PX || isCustomizationPinned);
   const isLeftSidebarOverlayLayout = isMobileLayout
     || (isRightSidebarPinnedLayout && viewportWidth < RIGHT_PIN_PREFERS_LEFT_OVERLAY_MIN_WIDTH_PX);
-  const snapshotSyncedEventRef = useRef<Record<string, string>>(buildSnapshotSyncMap(initialChats));
 
   const defaultAgentFlavor = normalizeAgentFlavor(agentFlavor, 'codex');
   const providerSelections = modelSettings?.providers;
@@ -3309,22 +3295,6 @@ export function ChatInterface({
       }
     }
     readMarkerSyncedRef.current = nextReadSynced;
-
-    const nextSnapshotSyncInFlight: Record<string, boolean> = {};
-    for (const [chatId, inFlight] of Object.entries(snapshotSyncInFlightRef.current)) {
-      if (chatIds.has(chatId)) {
-        nextSnapshotSyncInFlight[chatId] = inFlight;
-      }
-    }
-    snapshotSyncInFlightRef.current = nextSnapshotSyncInFlight;
-
-    const nextSnapshotSyncedEvent: Record<string, string> = {};
-    for (const [chatId, eventId] of Object.entries(snapshotSyncedEventRef.current)) {
-      if (chatIds.has(chatId)) {
-        nextSnapshotSyncedEvent[chatId] = eventId;
-      }
-    }
-    snapshotSyncedEventRef.current = nextSnapshotSyncedEvent;
   }, [chats]);
 
   useEffect(() => {
@@ -3398,64 +3368,6 @@ export function ChatInterface({
         }
     ));
   }, [activeChatIdResolved, chatSidebarSnapshots, eventsForChatId, visibleEvents]);
-
-  useEffect(() => {
-    if (!activeChatIdResolved) {
-      return;
-    }
-    const snapshot = chatSidebarSnapshots[activeChatIdResolved];
-    const latestEventId = snapshot?.latestEventId?.trim() ?? '';
-    if (!latestEventId) {
-      return;
-    }
-    if (snapshotSyncedEventRef.current[activeChatIdResolved] === latestEventId) {
-      return;
-    }
-    if (snapshotSyncInFlightRef.current[activeChatIdResolved]) {
-      return;
-    }
-
-    const latestEventAt = snapshot.latestEventAt;
-    const timer = window.setTimeout(() => {
-      snapshotSyncInFlightRef.current[activeChatIdResolved] = true;
-      void fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            latestPreview: snapshot.preview,
-            latestEventId,
-            latestEventAt,
-            latestEventIsUser: snapshot.latestEventIsUser,
-            latestHasErrorSignal: snapshot.hasErrorSignal,
-          }),
-        },
-      )
-        .then(async (response) => {
-          if (!response.ok) {
-            return;
-          }
-          snapshotSyncedEventRef.current[activeChatIdResolved] = latestEventId;
-          const payload = (await response.json().catch(() => ({}))) as { chat?: SessionChat };
-          if (!payload.chat) {
-            return;
-          }
-          setChats((prev) => sortSessionChats(prev.map((chat) => (
-            chat.id === payload.chat?.id ? payload.chat : chat
-          ))));
-        })
-        .catch(() => {
-        })
-        .finally(() => {
-          delete snapshotSyncInFlightRef.current[activeChatIdResolved];
-        });
-    }, SNAPSHOT_SYNC_DEBOUNCE_MS);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [activeChatIdResolved, chatSidebarSnapshots, isSessionSyncLeader, sessionId]);
 
   useEffect(() => {
     if (!isSessionSyncLeader) {

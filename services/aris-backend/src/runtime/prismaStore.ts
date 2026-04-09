@@ -150,6 +150,98 @@ export function resolveChatRunningState<
   return false;
 }
 
+// ── Chat snapshot derivation from event stream ──
+
+type MessageRow = {
+  id: string;
+  text: string;
+  meta: unknown;
+  createdAt: Date;
+};
+
+const TERMINAL_RUN_STATUSES = new Set([
+  'completed', 'failed', 'aborted', 'timed_out', 'turn_incomplete', 'run_stale_cleanup',
+]);
+
+function readMetaString(meta: unknown, key: string): string {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return '';
+  const value = (meta as Record<string, unknown>)[key];
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function isRunLifecycleMessage(meta: unknown): boolean {
+  return readMetaString(meta, 'streamEvent') === 'run_status';
+}
+
+function deriveErrorSignalFromMeta(meta: unknown): boolean {
+  const streamEvent = readMetaString(meta, 'streamEvent');
+  if (streamEvent === 'runtime_disconnected' || streamEvent === 'stream_error' || streamEvent === 'runtime_error') {
+    return true;
+  }
+  if (streamEvent === 'run_status') {
+    const runStatus = readMetaString(meta, 'runStatus')
+      || readMetaString(meta, 'sessionTurnStatus');
+    return TERMINAL_RUN_STATUSES.has(runStatus) && runStatus !== 'completed';
+  }
+  return false;
+}
+
+export type ChatSnapshot = {
+  chatId: string;
+  preview: string;
+  hasEvents: boolean;
+  hasErrorSignal: boolean;
+  latestEventId: string | null;
+  latestEventAt: string | null;
+  latestEventIsUser: boolean;
+  isRunning: boolean;
+};
+
+function deriveSnapshotFromRows(rows: MessageRow[], chatId: string): ChatSnapshot {
+  const chatRows = filterRealtimeRowsByChat(rows, chatId);
+  const isRunning = resolveChatRunningState(rows, chatId);
+
+  // Find latest non-lifecycle event for preview/snapshot fields
+  let latestVisible: MessageRow | null = null;
+  for (let i = chatRows.length - 1; i >= 0; i -= 1) {
+    if (!isRunLifecycleMessage(chatRows[i].meta)) {
+      latestVisible = chatRows[i];
+      break;
+    }
+  }
+
+  // Error signal from the absolute latest event (including lifecycle)
+  const latestEvent = chatRows.length > 0 ? chatRows[chatRows.length - 1] : null;
+  const hasErrorSignal = latestEvent ? deriveErrorSignalFromMeta(latestEvent.meta) : false;
+
+  if (!latestVisible) {
+    return {
+      chatId,
+      preview: '',
+      hasEvents: false,
+      hasErrorSignal,
+      latestEventId: null,
+      latestEventAt: null,
+      latestEventIsUser: false,
+      isRunning,
+    };
+  }
+
+  const role = readMetaString(latestVisible.meta, 'role');
+  const preview = (latestVisible.text || '').slice(0, 240).split('\n')[0] || '';
+
+  return {
+    chatId,
+    preview,
+    hasEvents: true,
+    hasErrorSignal,
+    latestEventId: latestVisible.id,
+    latestEventAt: latestVisible.createdAt.toISOString(),
+    latestEventIsUser: role === 'user',
+    isRunning,
+  };
+}
+
 function toPermissionRequest(row: {
   id: string;
   sessionId: string;
@@ -451,6 +543,26 @@ export class PrismaRuntimeStore {
       },
     });
     return toPermissionRequest(row);
+  }
+
+  async getChatSnapshots(sessionId: string, chatIds: string[]): Promise<ChatSnapshot[]> {
+    const normalizedChatIds = chatIds
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0);
+    if (normalizedChatIds.length === 0) {
+      return [];
+    }
+
+    const rows = await this.db.sessionMessage.findMany({
+      where: { sessionId },
+      orderBy: { seq: 'asc' },
+      take: 200,
+      select: { id: true, text: true, meta: true, createdAt: true },
+    });
+
+    return normalizedChatIds.map((chatId) =>
+      deriveSnapshotFromRows(rows as MessageRow[], chatId),
+    );
   }
 
   resolveExecutionCwd(cwdHint?: string): string {

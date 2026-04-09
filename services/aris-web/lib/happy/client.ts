@@ -1003,6 +1003,56 @@ export async function getSessionRuntimeState(
   };
 }
 
+export type BackendChatSnapshot = {
+  chatId: string;
+  preview: string;
+  hasEvents: boolean;
+  hasErrorSignal: boolean;
+  latestEventId: string | null;
+  latestEventAt: string | null;
+  latestEventIsUser: boolean;
+  isRunning: boolean;
+};
+
+let chatSnapshotsEndpointSupported: boolean | null = null;
+
+export async function getChatSnapshots(
+  sessionId: string,
+  chatIds: string[],
+): Promise<BackendChatSnapshot[] | null> {
+  if (chatSnapshotsEndpointSupported === false || chatIds.length === 0) {
+    return null;
+  }
+  try {
+    const query = chatIds.map((id) => `chatId=${encodeURIComponent(id)}`).join('&');
+    const raw = await fetchHappy(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/chats/snapshots?${query}`,
+    );
+    chatSnapshotsEndpointSupported = true;
+    const obj = asObject(raw);
+    const arr = Array.isArray(obj?.snapshots) ? obj.snapshots as unknown[] : [];
+    return arr.map((item) => {
+      const o = asObject(item);
+      return {
+        chatId: String(o?.chatId ?? ''),
+        preview: String(o?.preview ?? ''),
+        hasEvents: Boolean(o?.hasEvents),
+        hasErrorSignal: Boolean(o?.hasErrorSignal),
+        latestEventId: typeof o?.latestEventId === 'string' ? o.latestEventId : null,
+        latestEventAt: typeof o?.latestEventAt === 'string' ? o.latestEventAt : null,
+        latestEventIsUser: Boolean(o?.latestEventIsUser),
+        isRunning: Boolean(o?.isRunning),
+      };
+    });
+  } catch (error) {
+    if (error instanceof HappyHttpError && error.status === 404) {
+      chatSnapshotsEndpointSupported = false;
+      return null;
+    }
+    throw error;
+  }
+}
+
 export async function runSessionAction(
   sessionId: string,
   action: SessionAction,

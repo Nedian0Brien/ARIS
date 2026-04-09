@@ -442,6 +442,27 @@ export function buildServer(config: ServerConfig) {
     }
   });
 
+  app.get('/v1/sessions/:sessionId/chats/snapshots', async (request, reply) => {
+    const { sessionId } = request.params as { sessionId: string };
+    const { chatId } = request.query as { chatId?: string | string[] };
+    const chatIds = (Array.isArray(chatId) ? chatId : (chatId ?? '').split(','))
+      .map((id) => id.trim())
+      .filter(Boolean);
+    if (chatIds.length === 0) {
+      return { snapshots: [] };
+    }
+    try {
+      const snapshots = await store.getChatSnapshots(sessionId, chatIds);
+      return { snapshots };
+    } catch (error) {
+      if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
+        return reply.code(404).send({ error: 'Session not found' });
+      }
+      const message = toErrorMessage(error, 'Failed to load chat snapshots');
+      return reply.code(502).send({ error: message });
+    }
+  });
+
   app.get('/v1/sessions/:sessionId/providers/gemini/capabilities', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
     try {
