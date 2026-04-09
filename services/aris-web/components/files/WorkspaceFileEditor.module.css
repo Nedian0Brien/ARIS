@@ -63,6 +63,16 @@
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.navButtons {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.buttonIconOnly {
+  padding: 0.4rem !important;
 }
 
 .buttonSmall {

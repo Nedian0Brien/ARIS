@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Code, Edit3, Eye, FileText, Loader2, Save, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Code, Edit3, Eye, FileText, Loader2, Save, X } from 'lucide-react';
 import Prism from 'prismjs';
 import { marked } from 'marked';
 import styles from './WorkspaceFileEditor.module.css';
@@ -42,11 +42,17 @@ type WorkspaceFileEditorProps = {
   fileName: string;
   content: string;
   rawUrl?: string;
+  filePath?: string;
   isSaving?: boolean;
   saveDisabled?: boolean;
+  canGoBack?: boolean;
+  canGoForward?: boolean;
   onChange: (nextContent: string) => void;
   onSave: () => void | Promise<void>;
   onClose?: () => void;
+  onWikilinkClick?: (wikilinkPath: string) => void;
+  onBack?: () => void;
+  onForward?: () => void;
   className?: string;
 };
 
@@ -228,11 +234,17 @@ export function WorkspaceFileEditor({
   fileName,
   content,
   rawUrl,
+  filePath,
   isSaving = false,
   saveDisabled = false,
+  canGoBack = false,
+  canGoForward = false,
   onChange,
   onSave,
   onClose,
+  onWikilinkClick,
+  onBack,
+  onForward,
   className,
 }: WorkspaceFileEditorProps) {
   const [isPreview, setIsPreview] = useState(() => getLanguage(fileName) === 'markdown');
@@ -354,15 +366,31 @@ export function WorkspaceFileEditor({
   const handleWikilinkClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const target = (e.target as HTMLElement).closest('.md-wikilink');
     if (!target) return;
-    let wikilinkPath = target.getAttribute('data-path') ?? '';
+    const wikilinkPath = target.getAttribute('data-path') ?? '';
     if (!wikilinkPath) return;
-    if (!wikilinkPath.includes('.')) {
-      wikilinkPath = `${wikilinkPath}.md`;
+
+    if (onWikilinkClick) {
+      onWikilinkClick(wikilinkPath);
+      return;
     }
-    window.dispatchEvent(new CustomEvent('aris-open-workspace-file', {
-      detail: { path: wikilinkPath, name: wikilinkPath.split('/').pop() ?? wikilinkPath },
-    }));
-  }, []);
+
+    // fallback: resolve via API then dispatch event
+    void (async () => {
+      let resolvedPath = wikilinkPath.includes('.') ? wikilinkPath : `${wikilinkPath}.md`;
+      if (filePath) {
+        try {
+          const resp = await fetch(
+            `/api/fs/resolve-wikilink?path=${encodeURIComponent(wikilinkPath)}&from=${encodeURIComponent(filePath)}`
+          );
+          const data = await resp.json() as { resolvedPath: string | null };
+          if (data.resolvedPath) resolvedPath = data.resolvedPath;
+        } catch { /* fallback to default */ }
+      }
+      window.dispatchEvent(new CustomEvent('aris-open-workspace-file', {
+        detail: { path: resolvedPath, name: resolvedPath.split('/').pop() ?? resolvedPath },
+      }));
+    })();
+  }, [filePath, onWikilinkClick]);
 
   const handleEditorScroll = useCallback((event: React.UIEvent<HTMLTextAreaElement>) => {
     if (lineNumbersRef.current) {
@@ -386,6 +414,28 @@ export function WorkspaceFileEditor({
           </div>
         </div>
         <div className={styles.editorActions}>
+          {(onBack || onForward) ? (
+            <div className={styles.navButtons}>
+              <button
+                type="button"
+                onClick={onBack}
+                disabled={!canGoBack}
+                className={`btn-secondary ${styles.buttonSmall} ${styles.buttonIconOnly}`}
+                title="뒤로"
+              >
+                <ArrowLeft size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={onForward}
+                disabled={!canGoForward}
+                className={`btn-secondary ${styles.buttonSmall} ${styles.buttonIconOnly}`}
+                title="앞으로"
+              >
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          ) : null}
           {language === 'markdown' ? (
             <button
               type="button"

@@ -42,6 +42,9 @@ export function FileExplorer() {
   // UI States
   const [editingFile, setEditingFile] = useState<{ path: string; name: string; content: string; rawUrl?: string } | null>(null);
   const [isEditorSaving, setIsEditorSaving] = useState(false);
+  const fileNavHistoryRef = useRef<string[]>([]);
+  const fileNavIndexRef = useRef(-1);
+  const [fileNavState, setFileNavState] = useState({ canGoBack: false, canGoForward: false });
   const [newPathInput, setNewPathInput] = useState<{ type: 'file' | 'folder'; active: boolean }>({ type: 'file', active: false });
   const [newName, setNewName] = useState('');
 
@@ -187,7 +190,12 @@ export function FileExplorer() {
       setEditingFile({ path: item.path, name: item.name, content: content ?? '' });
     } catch (err) {
       alert(err instanceof Error ? err.message : '오류 발생');
+      return;
     }
+    // 파일 목록 직접 클릭: 히스토리 초기화
+    fileNavHistoryRef.current = [item.path];
+    fileNavIndexRef.current = 0;
+    setFileNavState({ canGoBack: false, canGoForward: false });
   };
 
   const saveEditedFile = async () => {
@@ -214,14 +222,81 @@ export function FileExplorer() {
     return (
       <WorkspaceFileEditor
         fileName={editingFile.name}
+        filePath={editingFile.path}
         content={editingFile.content}
         rawUrl={editingFile.rawUrl}
         isSaving={isEditorSaving}
+        canGoBack={fileNavState.canGoBack}
+        canGoForward={fileNavState.canGoForward}
         onChange={(nextContent) => {
           setEditingFile((current) => (current ? { ...current, content: nextContent } : null));
         }}
         onSave={() => void saveEditedFile()}
         onClose={() => setEditingFile(null)}
+        onWikilinkClick={(wikilinkPath) => {
+          void (async () => {
+            const currentPath = editingFile.path;
+            let resolvedPath: string | null = null;
+            try {
+              const resp = await fetch(
+                `/api/fs/resolve-wikilink?path=${encodeURIComponent(wikilinkPath)}&from=${encodeURIComponent(currentPath)}`
+              );
+              const data = await resp.json() as { resolvedPath: string | null };
+              resolvedPath = data.resolvedPath;
+            } catch { /* fallback */ }
+            const finalPath = resolvedPath ?? (wikilinkPath.includes('.') ? wikilinkPath : `${wikilinkPath}.md`);
+            const name = finalPath.split('/').pop() ?? finalPath;
+            try {
+              const res = await fetch(`/api/fs/read?path=${encodeURIComponent(finalPath)}`);
+              if (!res.ok) throw new Error('파일을 읽는 데 실패했습니다.');
+              const data = await res.json() as { content?: string; blockedReason?: string };
+              if (data.blockedReason === 'binary') {
+                alert('바이너리 파일은 미리보기를 지원하지 않습니다.');
+                return;
+              }
+              setEditingFile({ path: finalPath, name, content: data.content ?? '' });
+              const history = fileNavHistoryRef.current.slice(0, fileNavIndexRef.current + 1);
+              history.push(finalPath);
+              fileNavHistoryRef.current = history;
+              fileNavIndexRef.current = history.length - 1;
+              setFileNavState({ canGoBack: fileNavIndexRef.current > 0, canGoForward: false });
+            } catch (err) {
+              alert(err instanceof Error ? err.message : '파일을 열 수 없습니다.');
+            }
+          })();
+        }}
+        onBack={() => {
+          const idx = fileNavIndexRef.current - 1;
+          if (idx < 0) return;
+          const path = fileNavHistoryRef.current[idx];
+          if (!path) return;
+          fileNavIndexRef.current = idx;
+          setFileNavState({
+            canGoBack: idx > 0,
+            canGoForward: idx < fileNavHistoryRef.current.length - 1,
+          });
+          void fetch(`/api/fs/read?path=${encodeURIComponent(path)}`).then(async (res) => {
+            const data = await res.json() as { content?: string };
+            const name = path.split('/').pop() ?? path;
+            setEditingFile({ path, name, content: data.content ?? '' });
+          });
+        }}
+        onForward={() => {
+          const idx = fileNavIndexRef.current + 1;
+          if (idx >= fileNavHistoryRef.current.length) return;
+          const path = fileNavHistoryRef.current[idx];
+          if (!path) return;
+          fileNavIndexRef.current = idx;
+          setFileNavState({
+            canGoBack: idx > 0,
+            canGoForward: idx < fileNavHistoryRef.current.length - 1,
+          });
+          void fetch(`/api/fs/read?path=${encodeURIComponent(path)}`).then(async (res) => {
+            const data = await res.json() as { content?: string };
+            const name = path.split('/').pop() ?? path;
+            setEditingFile({ path, name, content: data.content ?? '' });
+          });
+        }}
       />
     );
   };

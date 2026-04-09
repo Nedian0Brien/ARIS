@@ -370,6 +370,11 @@ export function CustomizationSidebar({
   const [isMounted, setIsMounted] = useState(false);
   const handledRequestedFileNonceRef = useRef<number | null>(null);
 
+  // 파일 탐색 히스토리 (wikilink 네비게이션용)
+  const fileNavHistoryRef = useRef<string[]>([]);
+  const fileNavIndexRef = useRef(-1);
+  const [fileNavState, setFileNavState] = useState({ canGoBack: false, canGoForward: false });
+
   const selectedInstruction = useMemo(
     () => overview?.instructionDocs.find((doc) => doc.id === selectedInstructionId) ?? null,
     [overview, selectedInstructionId],
@@ -892,9 +897,21 @@ export function CustomizationSidebar({
     }
   }, [expandedDirectories, filesEntriesByPath, filesLoadingByPath, loadFilesDirectory]);
 
-  const openFileModal = useCallback((filePath: string, fileName?: string) => {
+  const openFileModal = useCallback((filePath: string, fileName?: string, opts?: { pushHistory?: boolean }) => {
     void loadFile(filePath, fileName);
     setActiveModal({ kind: 'file', id: filePath });
+    if (opts?.pushHistory) {
+      const history = fileNavHistoryRef.current;
+      const index = fileNavIndexRef.current;
+      const trimmed = history.slice(0, index + 1);
+      trimmed.push(filePath);
+      fileNavHistoryRef.current = trimmed;
+      fileNavIndexRef.current = trimmed.length - 1;
+      setFileNavState({
+        canGoBack: fileNavIndexRef.current > 0,
+        canGoForward: false,
+      });
+    }
   }, [loadFile]);
 
   const handleConfirmFileAction = useCallback(async () => {
@@ -1085,6 +1102,10 @@ export function CustomizationSidebar({
                 if (item.isDirectory) {
                   handleToggleDirectory(item.path);
                 } else {
+                  // 파일 목록 직접 클릭: 히스토리 초기화
+                  fileNavHistoryRef.current = [item.path];
+                  fileNavIndexRef.current = 0;
+                  setFileNavState({ canGoBack: false, canGoForward: false });
                   openFileModal(item.path, item.name);
                 }
               }}
@@ -1908,9 +1929,12 @@ export function CustomizationSidebar({
                       {fileStatus ? <div className={styles.fileModalStatus}>{fileStatus}</div> : null}
                       <WorkspaceFileEditor
                         fileName={activeFileModal.name}
+                        filePath={activeFileModal.path}
                         content={fileContent}
                         isSaving={fileSaving}
                         saveDisabled={fileSaving || fileLoading || !fileDirty}
+                        canGoBack={fileNavState.canGoBack}
+                        canGoForward={fileNavState.canGoForward}
                         className={styles.fileModalEditor}
                         onChange={(nextContent) => {
                           setFileContent(nextContent);
@@ -1919,6 +1943,46 @@ export function CustomizationSidebar({
                         }}
                         onSave={() => void handleSaveFile()}
                         onClose={closeModal}
+                        onWikilinkClick={(wikilinkPath) => {
+                          void (async () => {
+                            const pathWithExt = wikilinkPath.includes('.') ? wikilinkPath : `${wikilinkPath}.md`;
+                            let resolvedPath: string | null = null;
+                            try {
+                              const resp = await fetch(
+                                `/api/fs/resolve-wikilink?path=${encodeURIComponent(wikilinkPath)}&from=${encodeURIComponent(activeFileModal.path)}`
+                              );
+                              const data = await resp.json() as { resolvedPath: string | null };
+                              resolvedPath = data.resolvedPath;
+                            } catch { /* fallback */ }
+                            const finalPath = resolvedPath ?? pathWithExt;
+                            const name = finalPath.split('/').pop() ?? finalPath;
+                            openFileModal(finalPath, name, { pushHistory: true });
+                          })();
+                        }}
+                        onBack={() => {
+                          const idx = fileNavIndexRef.current - 1;
+                          if (idx < 0) return;
+                          const path = fileNavHistoryRef.current[idx];
+                          if (!path) return;
+                          fileNavIndexRef.current = idx;
+                          setFileNavState({
+                            canGoBack: idx > 0,
+                            canGoForward: idx < fileNavHistoryRef.current.length - 1,
+                          });
+                          openFileModal(path, path.split('/').pop() ?? path);
+                        }}
+                        onForward={() => {
+                          const idx = fileNavIndexRef.current + 1;
+                          if (idx >= fileNavHistoryRef.current.length) return;
+                          const path = fileNavHistoryRef.current[idx];
+                          if (!path) return;
+                          fileNavIndexRef.current = idx;
+                          setFileNavState({
+                            canGoBack: idx > 0,
+                            canGoForward: idx < fileNavHistoryRef.current.length - 1,
+                          });
+                          openFileModal(path, path.split('/').pop() ?? path);
+                        }}
                       />
                     </>
                   )
