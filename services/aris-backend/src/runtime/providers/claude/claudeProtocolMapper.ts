@@ -1,6 +1,7 @@
 import { inferActionTypeFromCommand, titleForActionType } from '../../actionType.js';
 import { sanitizeAgentMessageText } from '../../agentMessageSanitizer.js';
 import { summarizeDiffText } from '../../diffStats.js';
+import type { DiffStats } from '../../diffStats.js';
 import type { SessionProtocolEnvelope, SessionProtocolStopReason } from '../../contracts/sessionProtocol.js';
 import { collectClaudeNestedRecords, extractClaudeObservedSessionId, extractFirstClaudeStringByKeys, parseClaudeJsonLine } from './claudeProtocolFields.js';
 import type { ClaudeActionEvent } from './types.js';
@@ -84,6 +85,127 @@ export function looksLikeClaudeActionTranscript(value: string): boolean {
     || text.includes('*** delete file:')
     || text.includes('@@ ')
   );
+}
+
+type ClaudeToolUseDetails =
+  | { kind: 'edit'; filePath: string; oldString: string; newString: string }
+  | { kind: 'write'; filePath: string; content: string }
+  | { kind: 'multiedit'; filePath: string; edits: Array<{ oldString: string; newString: string }> };
+
+function findClaudeToolUseDetails(records: Record<string, unknown>[]): ClaudeToolUseDetails | null {
+  for (const record of records) {
+    if (record.type !== 'tool_use' || typeof record.name !== 'string') {
+      continue;
+    }
+    const input = record.input;
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      continue;
+    }
+    const inp = input as Record<string, unknown>;
+    const toolName = record.name.trim().toLowerCase();
+    const filePath = typeof inp.file_path === 'string' ? inp.file_path.trim() : '';
+
+    if (toolName === 'edit') {
+      const oldString = typeof inp.old_string === 'string' ? inp.old_string : '';
+      const newString = typeof inp.new_string === 'string' ? inp.new_string : '';
+      if (filePath) {
+        return { kind: 'edit', filePath, oldString, newString };
+      }
+    }
+
+    if (toolName === 'write') {
+      const content = typeof inp.content === 'string' ? inp.content : '';
+      if (filePath) {
+        return { kind: 'write', filePath, content };
+      }
+    }
+
+    if (toolName === 'multiedit') {
+      const editsRaw = Array.isArray(inp.edits) ? inp.edits : [];
+      const edits = editsRaw
+        .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object' && !Array.isArray(e))
+        .map((e) => ({
+          oldString: typeof e.old_string === 'string' ? e.old_string : '',
+          newString: typeof e.new_string === 'string' ? e.new_string : '',
+        }));
+      if (filePath) {
+        return { kind: 'multiedit', filePath, edits };
+      }
+    }
+  }
+  return null;
+}
+
+function synthesizeDiffFromToolDetails(details: ClaudeToolUseDetails): { output: string; diffStats: DiffStats } {
+  const { filePath } = details;
+  const escapedPath = filePath.replace(/^\//, '');
+
+  if (details.kind === 'edit') {
+    const oldLines = details.oldString.split('\n');
+    const newLines = details.newString.split('\n');
+    const hunk = `@@ -1,${oldLines.length} +1,${newLines.length} @@`;
+    const output = [
+      `diff --git a/${escapedPath} b/${escapedPath}`,
+      `--- a/${escapedPath}`,
+      `+++ b/${escapedPath}`,
+      hunk,
+      ...oldLines.map((l) => `-${l}`),
+      ...newLines.map((l) => `+${l}`),
+    ].join('\n');
+    return {
+      output,
+      diffStats: { additions: newLines.length, deletions: oldLines.length, hasDiffSignal: true },
+    };
+  }
+
+  if (details.kind === 'write') {
+    const contentLines = details.content.split('\n');
+    const output = [
+      `diff --git a/${escapedPath} b/${escapedPath}`,
+      '--- /dev/null',
+      `+++ b/${escapedPath}`,
+      `@@ -0,0 +1,${contentLines.length} @@`,
+      ...contentLines.map((l) => `+${l}`),
+    ].join('\n');
+    return {
+      output,
+      diffStats: { additions: contentLines.length, deletions: 0, hasDiffSignal: true },
+    };
+  }
+
+  if (details.kind === 'multiedit') {
+    let totalAdditions = 0;
+    let totalDeletions = 0;
+    const diffLines = [
+      `diff --git a/${escapedPath} b/${escapedPath}`,
+      `--- a/${escapedPath}`,
+      `+++ b/${escapedPath}`,
+    ];
+    for (const edit of details.edits) {
+      const oldLines = edit.oldString.split('\n');
+      const newLines = edit.newString.split('\n');
+      diffLines.push(`@@ -1,${oldLines.length} +1,${newLines.length} @@`);
+      diffLines.push(...oldLines.map((l) => `-${l}`));
+      diffLines.push(...newLines.map((l) => `+${l}`));
+      totalAdditions += newLines.length;
+      totalDeletions += oldLines.length;
+    }
+    return {
+      output: diffLines.join('\n'),
+      diffStats: { additions: totalAdditions, deletions: totalDeletions, hasDiffSignal: true },
+    };
+  }
+
+  return { output: '', diffStats: { additions: 0, deletions: 0, hasDiffSignal: false } };
+}
+
+function extractToolUseId(records: Record<string, unknown>[]): string {
+  for (const record of records) {
+    if (record.type === 'tool_use' && typeof record.id === 'string' && record.id.trim()) {
+      return record.id.trim();
+    }
+  }
+  return '';
 }
 
 function buildActionEventKey(action: ClaudeActionEvent): string {
@@ -212,7 +334,7 @@ export function parseClaudeStreamLine(line: string, options?: ParseClaudeStreamL
     'toolCallId',
     'tool_call_id',
     'call',
-  ]);
+  ]) || extractToolUseId(records);
   const sessionId = extractClaudeObservedSessionId(records);
   const turnId = sessionId || extractFirstClaudeStringByKeys(records, ['turnId', 'turn_id']) || undefined;
   const errorText = extractClaudeErrorText(payloadType, payloadSubtype, payload, records);
@@ -231,16 +353,33 @@ export function parseClaudeStreamLine(line: string, options?: ParseClaudeStreamL
 
   if (actionType) {
     const resolvedPath = normalizedPath || extractPathFromCommand(command);
+
+    let finalOutput = outputCandidate;
+    let finalDiffStats = diffStats;
+
+    // When Claude uses native tools (Edit/Write/MultiEdit), there is no shell diff output.
+    // Synthesize a unified diff from the tool input fields so the CHANGES card can appear.
+    if (!diffStats.hasDiffSignal) {
+      const toolDetails = findClaudeToolUseDetails(records);
+      if (toolDetails) {
+        const synthetic = synthesizeDiffFromToolDetails(toolDetails);
+        if (synthetic.diffStats.hasDiffSignal) {
+          finalOutput = synthetic.output;
+          finalDiffStats = synthetic.diffStats;
+        }
+      }
+    }
+
     action = {
       actionType,
       title: titleForActionType(actionType),
       callId: callId || undefined,
       command: command || undefined,
       path: resolvedPath || undefined,
-      output: outputCandidate || undefined,
-      additions: diffStats.additions,
-      deletions: diffStats.deletions,
-      hasDiffSignal: diffStats.hasDiffSignal,
+      output: finalOutput || undefined,
+      additions: finalDiffStats.additions,
+      deletions: finalDiffStats.deletions,
+      hasDiffSignal: finalDiffStats.hasDiffSignal,
     };
   }
 

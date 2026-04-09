@@ -247,6 +247,126 @@ session source를 observed 우선 정책으로 조정`);
     ]);
   });
 
+  describe('Claude native tool calls (Edit/Write/MultiEdit) produce CHANGES card signals', () => {
+    it('detects Edit tool call and synthesizes a diff with hasDiffSignal=true', () => {
+      const line = JSON.stringify({
+        type: 'assistant',
+        session_id: 'claude-session-edit',
+        message: {
+          id: 'msg_edit',
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_edit_001',
+              name: 'Edit',
+              input: {
+                file_path: '/project/src/app.ts',
+                old_string: 'const x = 1;',
+                new_string: 'const x = 2;\nconst y = 3;',
+              },
+            },
+          ],
+          stop_reason: 'tool_use',
+        },
+      });
+
+      const parsed = parseClaudeStreamLine(line);
+      expect(parsed.action?.actionType).toBe('file_write');
+      expect(parsed.action?.path).toBe('/project/src/app.ts');
+      expect(parsed.action?.hasDiffSignal).toBe(true);
+      expect(parsed.action?.deletions).toBe(1);
+      expect(parsed.action?.additions).toBe(2);
+      expect(parsed.action?.output).toContain('diff --git');
+      expect(parsed.action?.output).toContain('-const x = 1;');
+      expect(parsed.action?.output).toContain('+const x = 2;');
+      expect(parsed.action?.callId).toBe('toolu_edit_001');
+    });
+
+    it('detects Write tool call and synthesizes additions-only diff', () => {
+      const line = JSON.stringify({
+        type: 'assistant',
+        session_id: 'claude-session-write',
+        message: {
+          id: 'msg_write',
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_write_002',
+              name: 'Write',
+              input: {
+                file_path: '/project/src/new-file.ts',
+                content: 'export const hello = "world";\nexport const foo = 42;',
+              },
+            },
+          ],
+          stop_reason: 'tool_use',
+        },
+      });
+
+      const parsed = parseClaudeStreamLine(line);
+      expect(parsed.action?.actionType).toBe('file_write');
+      expect(parsed.action?.path).toBe('/project/src/new-file.ts');
+      expect(parsed.action?.hasDiffSignal).toBe(true);
+      expect(parsed.action?.deletions).toBe(0);
+      expect(parsed.action?.additions).toBe(2);
+      expect(parsed.action?.output).toContain('diff --git');
+      expect(parsed.action?.output).toContain('--- /dev/null');
+      expect(parsed.action?.output).toContain('+export const hello = "world";');
+    });
+
+    it('detects MultiEdit tool call and aggregates diff from all edits', () => {
+      const line = JSON.stringify({
+        type: 'assistant',
+        session_id: 'claude-session-multiedit',
+        message: {
+          id: 'msg_multiedit',
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_multiedit_003',
+              name: 'MultiEdit',
+              input: {
+                file_path: '/project/src/utils.ts',
+                edits: [
+                  { old_string: 'const a = 1;', new_string: 'const a = 10;' },
+                  { old_string: 'const b = 2;', new_string: 'const b = 20;\nconst c = 30;' },
+                ],
+              },
+            },
+          ],
+          stop_reason: 'tool_use',
+        },
+      });
+
+      const parsed = parseClaudeStreamLine(line);
+      expect(parsed.action?.actionType).toBe('file_write');
+      expect(parsed.action?.hasDiffSignal).toBe(true);
+      expect(parsed.action?.deletions).toBe(2);
+      expect(parsed.action?.additions).toBe(3);
+      expect(parsed.action?.output).toContain('diff --git');
+    });
+
+    it('does not overwrite hasDiffSignal when real diff output already exists', () => {
+      const line = JSON.stringify({
+        type: 'tool',
+        subtype: 'command_execution',
+        callId: 'call-apply',
+        command: 'apply_patch',
+        output: '*** update file: /project/src/app.ts\n-old line\n+new line',
+      });
+
+      const parsed = parseClaudeStreamLine(line);
+      expect(parsed.action?.hasDiffSignal).toBe(true);
+      expect(parsed.action?.output).toContain('*** update file:');
+    });
+  });
+
   it('maps Claude stream output into protocol envelopes directly', () => {
     const streamOutput = [
       JSON.stringify({
