@@ -3143,9 +3143,28 @@ export function ChatInterface({
       }
 
       const normalizedTarget = normalizeWorkspaceClientPath(resolvedPath);
-      const finalPath = isWorkspacePathWithinRoot(normalizedTarget, normalizedWorkspaceRootPath)
-        ? normalizedTarget
-        : joinWorkspacePath(normalizedWorkspaceRootPath, normalizedTarget);
+      let finalPath: string;
+      if (isWorkspacePathWithinRoot(normalizedTarget, normalizedWorkspaceRootPath)) {
+        // 이미 workspace root 내의 경로 → 그대로 사용
+        finalPath = normalizedTarget;
+      } else {
+        // 절대 경로(worktree 등 sibling 디렉터리)인 경우:
+        // /home/ubuntu/project/ARIS-wt-xxx/services/file.ts
+        // → /home/ubuntu/project/ARIS/services/file.ts 로 재매핑
+        const workspaceParentDir = normalizedWorkspaceRootPath.includes('/')
+          ? normalizedWorkspaceRootPath.slice(0, normalizedWorkspaceRootPath.lastIndexOf('/'))
+          : '';
+        if (workspaceParentDir && normalizedTarget.startsWith(`${workspaceParentDir}/`)) {
+          const afterParent = normalizedTarget.slice(workspaceParentDir.length + 1);
+          const slashIdx = afterParent.indexOf('/');
+          const relPart = slashIdx !== -1 ? afterParent.slice(slashIdx + 1) : '';
+          finalPath = relPart
+            ? joinWorkspacePath(normalizedWorkspaceRootPath, relPart)
+            : normalizedWorkspaceRootPath;
+        } else {
+          finalPath = joinWorkspacePath(normalizedWorkspaceRootPath, normalizedTarget);
+        }
+      }
 
       sidebarFileRequestNonceRef.current += 1;
       setSidebarFileRequest({
