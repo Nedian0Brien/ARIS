@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Code, Edit3, Eye, FileText, Loader2, Save, X } from 'lucide-react';
 import Prism from 'prismjs';
 import { marked } from 'marked';
+import { classifyMarkdownLink } from '@/lib/markdown/resourceLinks';
 import styles from './WorkspaceFileEditor.module.css';
 
 marked.use({
@@ -281,6 +282,20 @@ export function WorkspaceFileEditor({
     }
 
     const renderer = new marked.Renderer();
+    renderer.link = ({ href, title, text }) => {
+      const resource = typeof href === 'string' ? classifyMarkdownLink(text, href) : null;
+      if (resource) {
+        const safeText = String(text).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const safePath = String(resource.sourcePath ?? href ?? '').replace(/"/g, '&quot;');
+        const safeTitle = title ? ` title="${String(title).replace(/"/g, '&quot;')}"` : '';
+        return `<span class="md-wikilink" data-path="${safePath}"${safeTitle}>${safeText}</span>`;
+      }
+
+      const safeHref = String(href ?? '').replace(/"/g, '&quot;');
+      const safeTitle = title ? ` title="${String(title).replace(/"/g, '&quot;')}"` : '';
+      const safeText = String(text).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return `<a href="${safeHref}"${safeTitle} target="_blank" rel="noreferrer noopener">${safeText}</a>`;
+    };
     renderer.code = ({ text, lang }) => {
       const validLang = lang && Prism.languages[lang] ? lang : null;
       const highlighted = validLang

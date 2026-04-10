@@ -75,6 +75,7 @@ import type { AgentFlavor, ApprovalPolicy, PermissionRequest, SessionChat, UiEve
 import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '@/components/ui/AgentIcons';
 import { CustomizationSidebar } from './CustomizationSidebar';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
+import { classifyMarkdownLink, type ResourceLabel } from '@/lib/markdown/resourceLinks';
 import { buildPermissionTimelineItems } from './chatTimeline';
 import { resolveChatReadMarkerId } from './chatSidebar';
 import { looksLikeShellTranscript, shouldShowDebugToggleInHeader } from './chatDebugMode';
@@ -200,7 +201,6 @@ const AGENT_QUICK_STARTS: Partial<Record<AgentFlavor, string[]>> = {
   ],
 };
 
-const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
 type ComposerModelOption = { id: string; shortLabel: string; badge: string };
 type GeminiModeOption = { id: string; shortLabel: string; badge: string };
 type ModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
@@ -247,10 +247,6 @@ type StreamRenderItem =
 type TimelineRenderItem =
   | { type: 'stream'; item: StreamRenderItem; sortKey: number; order: number }
   | { type: 'permission'; permission: RenderablePermissionRequest; sortKey: number; order: number };
-type ResourceLabel =
-  | { kind: 'folder'; name: FolderLabel; sourcePath?: string }
-  | { kind: 'file'; name: string; extension: string; sourcePath?: string };
-type FolderLabel = (typeof FOLDER_LABELS)[number];
 type ComposerModelId = string;
 
 type ContextItem =
@@ -418,25 +414,6 @@ function genId(): string {
   return Math.random().toString(36).slice(2, 9);
 }
 
-function isFolderLabel(label: string): label is FolderLabel {
-  return (FOLDER_LABELS as readonly string[]).includes(label);
-}
-
-function isLinkForLabelPath(url: string): boolean {
-  return /^https?:\/\//i.test(url) || /^file:\/\//i.test(url) || /^\/?[\w./-]+$/.test(url);
-}
-
-function fileExtension(filename: string): string {
-  const base = filename.trim().split('/').pop() ?? '';
-  const dotIndex = base.lastIndexOf('.');
-  if (dotIndex <= 0 || dotIndex === base.length - 1) {
-    return '';
-  }
-  const ext = base.slice(dotIndex + 1).toLowerCase();
-  if (!/^[a-z0-9]+$/.test(ext)) return '';
-  return ext;
-}
-
 function normalizeWorkspaceClientPath(input: string): string {
   const trimmed = input.trim();
   if (!trimmed) {
@@ -504,45 +481,6 @@ function dispatchWorkspaceFileOpen(detail: WorkspaceFileOpenDetail) {
       path: normalizeWorkspaceClientPath(detail.path),
     },
   }));
-}
-
-function classifyLabelLink(label: string, rawPath: string): ResourceLabel | null {
-  const normalizedLabel = label.trim();
-  if (!normalizedLabel || !isLinkForLabelPath(rawPath)) {
-    return null;
-  }
-
-  const folderCandidate = normalizedLabel.toLowerCase();
-  if (isFolderLabel(folderCandidate)) {
-    return { kind: 'folder', name: folderCandidate as FolderLabel, sourcePath: rawPath };
-  }
-
-  const extension = fileExtension(normalizedLabel);
-  if (extension) {
-    return { kind: 'file', name: normalizedLabel, extension, sourcePath: rawPath };
-  }
-
-  return null;
-}
-
-function classifyPath(pathValue: string): ResourceLabel | null {
-  const normalizedPath = pathValue.trim();
-  if (!normalizedPath) {
-    return null;
-  }
-
-  const basename = normalizedPath.split('/').filter(Boolean).pop() ?? normalizedPath;
-  const extension = fileExtension(basename);
-  if (extension) {
-    return { kind: 'file', name: basename, extension, sourcePath: normalizedPath };
-  }
-
-  const folderCandidate = basename.toLowerCase();
-  if (isFolderLabel(folderCandidate)) {
-    return { kind: 'folder', name: folderCandidate as FolderLabel, sourcePath: normalizedPath };
-  }
-
-  return null;
 }
 
 function resolveAgentMeta(agentFlavor: string): AgentMeta {
@@ -903,7 +841,7 @@ function extractResourceLabels(source: string): ResourceLabel[] {
   for (const match of normalized.matchAll(/\[([^\]]+)\]\(([^)\s]+)\)/g)) {
     const label = match[1];
     const rawPath = match[2];
-    const resource = classifyLabelLink(label, rawPath);
+    const resource = classifyMarkdownLink(label, rawPath);
     if (!resource) {
       continue;
     }
@@ -920,7 +858,7 @@ function extractResourceLabels(source: string): ResourceLabel[] {
 
 function extractResourceLabelsFromEvent(event: UiEvent): ResourceLabel[] {
   const resources = extractResourceLabels([event.body, event.title].filter(Boolean).join('\n'));
-  const pathResource = typeof event.action?.path === 'string' ? classifyPath(event.action.path) : null;
+  const pathResource = typeof event.action?.path === 'string' ? classifyMarkdownLink(event.action.path, event.action.path) : null;
   if (!pathResource) {
     return resources;
   }
@@ -1559,7 +1497,7 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
     }
 
     if (match[2] && match[3]) {
-      const resource = classifyLabelLink(match[2], match[3]);
+      const resource = classifyMarkdownLink(match[2], match[3]);
       if (resource) {
         result.push(<InlineResourceChip key={`${keyPrefix}-resource-${token}`} resource={resource} />);
       } else {
