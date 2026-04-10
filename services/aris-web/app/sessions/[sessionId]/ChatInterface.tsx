@@ -90,6 +90,11 @@ import {
   resolveNextSelectedChatId,
   shouldShowChatTransitionLoading,
 } from './chatSelection';
+import {
+  resolveMobileWindowScrollTop,
+  resolveScrollToBottomTarget,
+  shouldResetScrollForChatChange,
+} from './chatScroll';
 
 // SSR을 비활성화해 react-syntax-highlighter의 window 참조 오류 방지
 const SyntaxHighlighter = dynamic(
@@ -2639,6 +2644,7 @@ export function ChatInterface({
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const geminiModeDropdownRef = useRef<HTMLDivElement>(null);
+  const previousActiveChatIdRef = useRef<string | null>(activeChatIdResolved);
   const shouldStickToBottomRef = useRef(true);
   const disconnectNoticeAwaitingRef = useRef<string | null>(null);
   const runtimeStartedSinceAwaitingRef = useRef(false);
@@ -3967,13 +3973,15 @@ export function ChatInterface({
   }, [syncComposerDockMetrics]);
 
   const scrollConversationToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
-    if (isMobileLayout) {
-      const keyboardOpen = document.documentElement.dataset.keyboardOpen === 'true';
-      if (keyboardOpen) {
-        return;
-      }
-
-      const top = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+    const target = resolveScrollToBottomTarget({
+      isMobileLayout,
+      keyboardOpen: document.documentElement.dataset.keyboardOpen === 'true',
+    });
+    if (target === 'window') {
+      const top = resolveMobileWindowScrollTop({
+        scrollHeight: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
+        viewportHeight: window.visualViewport?.height ?? window.innerHeight,
+      });
       window.scrollTo({ top, behavior });
       return;
     }
@@ -4270,6 +4278,39 @@ export function ChatInterface({
       window.clearTimeout(timeoutId);
     };
   }, [events, isAwaitingReply, effectivePendingPermissions.length, pendingUserEvents.length, scrollConversationToBottom]);
+
+  useEffect(() => {
+    const previousChatId = previousActiveChatIdRef.current;
+    previousActiveChatIdRef.current = activeChatIdResolved;
+
+    if (!shouldResetScrollForChatChange({
+      previousChatId,
+      nextChatId: activeChatIdResolved,
+      isNewChatPlaceholder,
+    })) {
+      return;
+    }
+
+    shouldStickToBottomRef.current = true;
+    setShowScrollToBottom(false);
+    scrollConversationToBottom('auto');
+
+    const rafId = window.requestAnimationFrame(() => {
+      if (shouldStickToBottomRef.current) {
+        scrollConversationToBottom('auto');
+      }
+    });
+    const timeoutId = window.setTimeout(() => {
+      if (shouldStickToBottomRef.current) {
+        scrollConversationToBottom('auto');
+      }
+    }, 140);
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [activeChatIdResolved, isNewChatPlaceholder, scrollConversationToBottom]);
 
   const hasAgentEventSince = useCallback((since: string | null): boolean => {
     if (!since) {

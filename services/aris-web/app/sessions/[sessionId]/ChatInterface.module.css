@@ -2530,7 +2530,7 @@
 .scrollBottomButton {
   position: fixed;
   right: max(0.9rem, env(safe-area-inset-right));
-  bottom: calc(var(--composer-dock-height) + 0.92rem + var(--safe-area-bottom-effective));
+  bottom: calc(var(--composer-dock-height) + 0.92rem + var(--safe-area-bottom-effective) + var(--keyboard-inset-height, 0px));
   width: 36px;
   height: 36px;
   border-radius: 999px;
@@ -2864,7 +2864,7 @@
   position: fixed;
   left: var(--composer-dock-left);
   width: var(--composer-dock-width);
-  bottom: calc(0.5rem + var(--safe-area-bottom-effective));
+  bottom: calc(0.5rem + var(--safe-area-bottom-effective) + var(--keyboard-inset-height, 0px));
   z-index: 220;
   border-top: none;
   background: transparent;
@@ -3795,7 +3795,7 @@
 
   .scrollBottomButton {
     right: max(0.8rem, env(safe-area-inset-right));
-    bottom: calc(var(--composer-dock-height) + 0.7rem + var(--safe-area-bottom-effective));
+    bottom: calc(var(--composer-dock-height) + 0.7rem + var(--safe-area-bottom-effective) + var(--keyboard-inset-height, 0px));
   }
 }
 
