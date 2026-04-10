@@ -36,7 +36,7 @@ import {
   resolvePreferredModelId,
   writeLastSelectedModelId,
 } from './chatModelPreferences';
-import { formatCodexQuotaUsage } from './chatQuotaUsage';
+import { resolveAvailableChatCommands, type ChatCommandId, type UsageCommandProvider } from './chatCommands';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import {
   Activity,
@@ -81,6 +81,7 @@ import type { AgentFlavor, ApprovalPolicy, PermissionRequest, SessionChat, UiEve
 import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '@/components/ui/AgentIcons';
 import { CustomizationSidebar } from './CustomizationSidebar';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
+import { UsageProbeModal } from './UsageProbeModal';
 import { buildPermissionTimelineItems } from './chatTimeline';
 import { resolveChatReadMarkerId } from './chatSidebar';
 import { looksLikeShellTranscript, shouldShowDebugToggleInHeader } from './chatDebugMode';
@@ -2403,7 +2404,7 @@ export function ChatInterface({
     activeChatId,
     isSessionSyncLeader,
   );
-  const { isRunning: runtimeRunning, codexQuotaUsage, runtimeError } = useSessionRuntime(
+  const { isRunning: runtimeRunning, runtimeError } = useSessionRuntime(
     sessionId,
     activeChatIdResolved,
     isSessionSyncLeader && (
@@ -2602,6 +2603,8 @@ export function ChatInterface({
   });
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isGeminiModeDropdownOpen, setIsGeminiModeDropdownOpen] = useState(false);
+  const [isCommandMenuOpen, setIsCommandMenuOpen] = useState(false);
+  const [usageProbeProvider, setUsageProbeProvider] = useState<UsageCommandProvider | null>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   useEffect(() => {
     if (!copiedUserEventId) {
@@ -2645,6 +2648,7 @@ export function ChatInterface({
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const geminiModeDropdownRef = useRef<HTMLDivElement>(null);
+  const commandMenuRef = useRef<HTMLDivElement>(null);
   const previousActiveChatIdRef = useRef<string | null>(activeChatIdResolved);
   const shouldStickToBottomRef = useRef(true);
   const disconnectNoticeAwaitingRef = useRef<string | null>(null);
@@ -2679,9 +2683,10 @@ export function ChatInterface({
   const codexReasoningEffort = activeAgentFlavor === 'codex'
     ? selectedModelReasoningEffort
     : undefined;
-  const codexQuotaUsageLabel = activeAgentFlavor === 'codex'
-    ? formatCodexQuotaUsage(codexQuotaUsage)
-    : null;
+  const availableChatCommands = useMemo(
+    () => resolveAvailableChatCommands(activeAgentFlavor),
+    [activeAgentFlavor],
+  );
   const activeGeminiMode = activeGeminiModeOptions.find((mode) => mode.id === activeGeminiModeId)
     ?? { id: activeGeminiModeId, shortLabel: deriveGeminiModeLabel(activeGeminiModeId), badge: '현재' };
   const agentMeta = resolveAgentMeta(activeAgentFlavor);
@@ -3645,7 +3650,7 @@ export function ChatInterface({
   ]);
 
   useEffect(() => {
-    if (plusMenuMode === 'closed' && !isModelDropdownOpen && !isGeminiModeDropdownOpen) return;
+    if (plusMenuMode === 'closed' && !isModelDropdownOpen && !isGeminiModeDropdownOpen && !isCommandMenuOpen) return;
     function handleOutsideClick(e: MouseEvent) {
       if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
         setPlusMenuMode('closed');
@@ -3656,10 +3661,13 @@ export function ChatInterface({
       if (geminiModeDropdownRef.current && !geminiModeDropdownRef.current.contains(e.target as Node)) {
         setIsGeminiModeDropdownOpen(false);
       }
+      if (commandMenuRef.current && !commandMenuRef.current.contains(e.target as Node)) {
+        setIsCommandMenuOpen(false);
+      }
     }
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, [plusMenuMode, isModelDropdownOpen, isGeminiModeDropdownOpen]);
+  }, [plusMenuMode, isModelDropdownOpen, isGeminiModeDropdownOpen, isCommandMenuOpen]);
 
   const removeContextItem = useCallback((id: string) => {
     setContextItems((prev) => prev.filter((item) => item.id !== id));
@@ -4879,6 +4887,13 @@ export function ChatInterface({
     }
   }, [activeChatIdResolved, chatMutationLoadingId, goToChat, sessionId]);
 
+  function handleRunChatCommand(commandId: ChatCommandId) {
+    setIsCommandMenuOpen(false);
+    if (commandId === 'usage' && (activeAgentFlavor === 'codex' || activeAgentFlavor === 'claude')) {
+      setUsageProbeProvider(activeAgentFlavor);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const promptText = prompt.trim();
@@ -5616,11 +5631,6 @@ export function ChatInterface({
                     <div className={styles.contextMenuMeta}>
                       <span>Pending: {effectivePendingPermissions.length}</span>
                     </div>
-                    {codexQuotaUsageLabel && (
-                      <div className={styles.contextMenuMeta}>
-                        <span>Usage: {codexQuotaUsageLabel}</span>
-                      </div>
-                    )}
                     {isOperator && (
                       <div className={styles.contextMenuPolicyRow}>
                         <label htmlFor="approval-policy-select" className={styles.contextMenuPolicyLabel}>
@@ -5978,6 +5988,38 @@ export function ChatInterface({
             <form onSubmit={handleSubmit} className={styles.composerForm}>
               <div className={styles.composerCard}>
                 <div className={styles.composerToolbar}>
+                  {availableChatCommands.length > 0 && (
+                    <div className={styles.modelSelectorWrap} ref={commandMenuRef}>
+                      <button
+                        type="button"
+                        className={styles.modelSelectorBtn}
+                        onClick={() => setIsCommandMenuOpen((value) => !value)}
+                        aria-haspopup="listbox"
+                        aria-expanded={isCommandMenuOpen}
+                      >
+                        <TerminalSquare size={13} />
+                        <span>Command</span>
+                        <ChevronDown size={11} />
+                      </button>
+                      {isCommandMenuOpen && (
+                        <div className={styles.modelDropdown} role="listbox">
+                          {availableChatCommands.map((command) => (
+                            <button
+                              key={command.id}
+                              type="button"
+                              role="option"
+                              className={styles.commandOption}
+                              onClick={() => handleRunChatCommand(command.id)}
+                            >
+                              <span className={styles.commandOptionLabel}>{command.label}</span>
+                              <span className={styles.commandOptionMeta}>{command.slashCommand}</span>
+                              <span className={styles.commandOptionDescription}>{command.description}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className={styles.modelSelectorWrap} ref={modelDropdownRef}>
                     <button
                       type="button"
@@ -6397,6 +6439,14 @@ export function ChatInterface({
         </div>
       </div>,
       document.body
+    )}
+    {isMounted && usageProbeProvider && createPortal(
+      <UsageProbeModal
+        provider={usageProbeProvider}
+        workspacePath={normalizedWorkspaceRootPath}
+        onClose={() => setUsageProbeProvider(null)}
+      />,
+      document.body,
     )}
     </>
   );

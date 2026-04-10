@@ -3171,6 +3171,42 @@
   padding: 0.1rem 0.32rem;
 }
 
+.commandOption {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.18rem 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  background: none;
+  border: none;
+  color: var(--chat-control-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.commandOption:hover {
+  background: var(--chat-surface-hover);
+}
+
+.commandOptionLabel {
+  font-size: 0.79rem;
+  font-weight: 700;
+}
+
+.commandOptionMeta {
+  font-size: 0.64rem;
+  font-weight: 700;
+  color: var(--chat-accent);
+}
+
+.commandOptionDescription {
+  grid-column: 1 / -1;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: var(--chat-text-muted);
+}
+
 .modelDropdownNote {
   font-size: 0.67rem;
   color: #94a3b8;

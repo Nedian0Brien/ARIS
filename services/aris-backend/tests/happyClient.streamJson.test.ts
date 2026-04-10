@@ -238,47 +238,6 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     expect(toolMeta.sessionCallId).toBe('call-9');
   });
 
-  it('extracts Codex quota usage from nested runtime usage payloads', () => {
-    expect(happyClientTestHooks.extractCodexQuotaUsage({
-      method: 'turn/completed',
-      params: {
-        turn: {
-          id: 'turn-1',
-          usage: {
-            input_tokens: 1234,
-            cached_input_tokens: 222,
-            output_tokens: 56,
-            total_tokens: 1290,
-          },
-        },
-      },
-    })).toEqual({
-      inputTokens: 1234,
-      cachedInputTokens: 222,
-      outputTokens: 56,
-      totalTokens: 1290,
-    });
-  });
-
-  it('extracts Codex quota usage from camelCase payloads when total is omitted', () => {
-    expect(happyClientTestHooks.extractCodexQuotaUsage({
-      type: 'item.completed',
-      item: {
-        type: 'turn_result',
-        tokenUsage: {
-          inputTokens: 800,
-          outputTokens: 24,
-          cachedInputTokens: 120,
-        },
-      },
-    })).toEqual({
-      inputTokens: 800,
-      cachedInputTokens: 120,
-      outputTokens: 24,
-      totalTokens: 824,
-    });
-  });
-
   it('extracts message text from wrapped happy payload content', () => {
     const wrappedPayload = {
       t: 'json',

@@ -41,14 +41,12 @@ import type { ClaudeSessionLaunchMode } from './providers/claude/claudeSessionCo
 import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeTextEvent } from './providers/claude/types.js';
 import type {
   ApprovalPolicy,
-  CodexQuotaUsage,
   GeminiSessionCapabilities,
   PermissionDecision,
   PermissionRequest,
   PermissionRisk,
   RuntimeMessage,
   RuntimeSession,
-  SessionRuntimeState,
   SessionAction,
 } from '../types.js';
 
@@ -1063,116 +1061,6 @@ function parseJsonLine(line: string): Record<string, unknown> | null {
   }
 }
 
-type CodexQuotaUsageSnapshot = Omit<CodexQuotaUsage, 'updatedAt'>;
-
-function normalizeTokenCount(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
-    return Math.floor(value);
-  }
-  if (typeof value === 'string' && value.trim().length > 0) {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed) && parsed >= 0) {
-      return Math.floor(parsed);
-    }
-  }
-  return undefined;
-}
-
-function buildCodexQuotaUsageCandidate(value: unknown): CodexQuotaUsageSnapshot | null {
-  const record = asRecord(value);
-  if (!record) {
-    return null;
-  }
-
-  const inputTokens = normalizeTokenCount(
-    record.input_tokens ?? record.inputTokens ?? record.prompt_tokens ?? record.promptTokens,
-  );
-  const cachedInputTokens = normalizeTokenCount(
-    record.cached_input_tokens ?? record.cachedInputTokens ?? record.cached_tokens ?? record.cachedTokens,
-  );
-  const outputTokens = normalizeTokenCount(
-    record.output_tokens ?? record.outputTokens ?? record.completion_tokens ?? record.completionTokens,
-  );
-  const totalTokens = normalizeTokenCount(record.total_tokens ?? record.totalTokens)
-    ?? (
-      inputTokens !== undefined || outputTokens !== undefined
-        ? (inputTokens ?? 0) + (outputTokens ?? 0)
-        : undefined
-    );
-
-  if (
-    inputTokens === undefined
-    && cachedInputTokens === undefined
-    && outputTokens === undefined
-    && totalTokens === undefined
-  ) {
-    return null;
-  }
-
-  return {
-    ...(inputTokens !== undefined ? { inputTokens } : {}),
-    ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
-    ...(outputTokens !== undefined ? { outputTokens } : {}),
-    ...(totalTokens !== undefined ? { totalTokens } : {}),
-  };
-}
-
-function codexQuotaUsageScore(value: CodexQuotaUsageSnapshot | null): number {
-  if (!value) {
-    return -1;
-  }
-  let score = 0;
-  if (value.inputTokens !== undefined) score += 1;
-  if (value.cachedInputTokens !== undefined) score += 1;
-  if (value.outputTokens !== undefined) score += 1;
-  if (value.totalTokens !== undefined) score += 2;
-  return score;
-}
-
-function extractCodexQuotaUsageFromPayload(payload: Record<string, unknown>): CodexQuotaUsageSnapshot | null {
-  const seen = new Set<Record<string, unknown>>();
-  const stack: unknown[] = [payload];
-  let best: CodexQuotaUsageSnapshot | null = null;
-
-  while (stack.length > 0) {
-    const current = stack.pop();
-    const record = asRecord(current);
-    if (!record || seen.has(record)) {
-      continue;
-    }
-    seen.add(record);
-
-    const candidates = [
-      buildCodexQuotaUsageCandidate(record),
-      buildCodexQuotaUsageCandidate(record.usage),
-      buildCodexQuotaUsageCandidate(record.token_usage),
-      buildCodexQuotaUsageCandidate(record.tokenUsage),
-      buildCodexQuotaUsageCandidate(record.stats),
-      buildCodexQuotaUsageCandidate(record.quota),
-      buildCodexQuotaUsageCandidate(record.quota_usage),
-      buildCodexQuotaUsageCandidate(record.quotaUsage),
-    ];
-
-    for (const candidate of candidates) {
-      if (codexQuotaUsageScore(candidate) > codexQuotaUsageScore(best)) {
-        best = candidate;
-      }
-    }
-
-    for (const nested of Object.values(record)) {
-      if (Array.isArray(nested)) {
-        stack.push(...nested);
-        continue;
-      }
-      if (nested && typeof nested === 'object') {
-        stack.push(nested);
-      }
-    }
-  }
-
-  return best;
-}
-
 function toJsonRpcIdKey(value: unknown): string {
   if (typeof value === 'string' || typeof value === 'number') {
     return String(value);
@@ -1563,7 +1451,6 @@ function buildAgentCommand(
 export const happyClientTestHooks = {
   parseAgentStreamLine,
   parseAgentStreamOutput,
-  extractCodexQuotaUsage: extractCodexQuotaUsageFromPayload,
   looksLikeActionTranscript,
   buildStreamedTextReplyKey,
   extractGeminiStreamTextEvent,
@@ -1586,7 +1473,6 @@ export class HappyRuntimeStore {
   private readonly geminiSessionRegistry = new GeminiSessionRegistry();
   private readonly claudeSessionScanners = new Map<string, ClaudeSessionLogTracker>();
   private readonly codexThreads = new Map<string, string>();
-  private readonly codexQuotaUsageByRun = new Map<string, CodexQuotaUsage>();
   private readonly codexPermissionIndex = new Map<string, string>();
   private readonly codexPermissionResponders = new Map<string, (decision: PermissionDecision) => Promise<void>>();
   private readonly providerPermissionIndex = new Map<string, string>();
@@ -1627,61 +1513,6 @@ export class HappyRuntimeStore {
         this.codexThreads.delete(key);
       }
     }
-  }
-
-  private clearCodexQuotaUsageForSession(sessionId: string): void {
-    for (const key of this.codexQuotaUsageByRun.keys()) {
-      if (key === `${sessionId}:__default__` || key.startsWith(`${sessionId}:`)) {
-        this.codexQuotaUsageByRun.delete(key);
-      }
-    }
-  }
-
-  private mergeCodexQuotaUsage(existing: CodexQuotaUsage | null, next: CodexQuotaUsageSnapshot): CodexQuotaUsage {
-    const inputTokens = next.inputTokens ?? existing?.inputTokens;
-    const cachedInputTokens = next.cachedInputTokens ?? existing?.cachedInputTokens;
-    const outputTokens = next.outputTokens ?? existing?.outputTokens;
-    const totalTokens = next.totalTokens
-      ?? existing?.totalTokens
-      ?? (
-        inputTokens !== undefined || outputTokens !== undefined
-          ? (inputTokens ?? 0) + (outputTokens ?? 0)
-          : undefined
-      );
-
-    return {
-      ...(inputTokens !== undefined ? { inputTokens } : {}),
-      ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
-      ...(outputTokens !== undefined ? { outputTokens } : {}),
-      ...(totalTokens !== undefined ? { totalTokens } : {}),
-      updatedAt: new Date().toISOString(),
-    };
-  }
-
-  private updateCodexQuotaUsage(sessionId: string, chatId: string | undefined, usage: CodexQuotaUsageSnapshot): void {
-    const runKey = this.buildRunKey(sessionId, chatId);
-    const existing = this.codexQuotaUsageByRun.get(runKey) ?? null;
-    this.codexQuotaUsageByRun.set(runKey, this.mergeCodexQuotaUsage(existing, usage));
-  }
-
-  private getCodexQuotaUsage(sessionId: string, chatId?: string): CodexQuotaUsage | null {
-    if (chatId && chatId.trim().length > 0) {
-      return this.codexQuotaUsageByRun.get(this.buildRunKey(sessionId, chatId)) ?? null;
-    }
-
-    let latest: CodexQuotaUsage | null = this.codexQuotaUsageByRun.get(this.buildRunKey(sessionId)) ?? null;
-    let latestAt = latest ? Date.parse(latest.updatedAt) : Number.NEGATIVE_INFINITY;
-    for (const [runKey, usage] of this.codexQuotaUsageByRun.entries()) {
-      if (!this.isSessionRunKey(runKey, sessionId)) {
-        continue;
-      }
-      const usageAt = Date.parse(usage.updatedAt);
-      if (usageAt > latestAt) {
-        latest = usage;
-        latestAt = usageAt;
-      }
-    }
-    return latest;
   }
 
   private appendSessionRealtimeEvent(sessionId: string, event: RuntimeMessage): RuntimeMessage {
@@ -3377,11 +3208,6 @@ export class HappyRuntimeStore {
         payload,
       });
 
-      const quotaUsage = extractCodexQuotaUsageFromPayload(payload);
-      if (quotaUsage) {
-        this.updateCodexQuotaUsage(session.id, chatId, quotaUsage);
-      }
-
       const messageMethod = typeof payload.method === 'string' ? payload.method : '';
       const hasId = Object.prototype.hasOwnProperty.call(payload, 'id');
 
@@ -3830,11 +3656,6 @@ export class HappyRuntimeStore {
         stage: 'incoming_payload',
         payload,
       });
-
-      const quotaUsage = extractCodexQuotaUsageFromPayload(payload);
-      if (quotaUsage) {
-        this.updateCodexQuotaUsage(session.id, chatId, quotaUsage);
-      }
 
       if (payload.type === 'thread.started') {
         const startedThreadId = asString(payload.thread_id, '').trim();
@@ -5178,7 +4999,6 @@ export class HappyRuntimeStore {
 
     if (action === 'kill') {
       this.clearCodexThreadsForSession(sessionId);
-      this.clearCodexQuotaUsageForSession(sessionId);
       try {
         await this.request(`/v1/sessions/${encodeURIComponent(sessionId)}`, {
           method: 'DELETE',
@@ -5200,7 +5020,7 @@ export class HappyRuntimeStore {
     };
   }
 
-  private async computeSessionRunning(sessionId: string, chatId?: string): Promise<boolean> {
+  async isSessionRunning(sessionId: string, chatId?: string): Promise<boolean> {
     const session = await this.getSession(sessionId);
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
@@ -5218,19 +5038,6 @@ export class HappyRuntimeStore {
       }
     }
     return false;
-  }
-
-  async getSessionRuntimeState(sessionId: string, chatId?: string): Promise<SessionRuntimeState> {
-    const isRunning = await this.computeSessionRunning(sessionId, chatId);
-    return {
-      sessionId,
-      isRunning,
-      codexQuotaUsage: this.getCodexQuotaUsage(sessionId, chatId),
-    };
-  }
-
-  async isSessionRunning(sessionId: string, chatId?: string): Promise<boolean> {
-    return this.computeSessionRunning(sessionId, chatId);
   }
 
   async listPermissions(state?: PermissionState): Promise<PermissionRequest[]> {
