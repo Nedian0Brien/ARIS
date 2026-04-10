@@ -17,6 +17,7 @@
   --chat-item-hover-border: rgba(59, 130, 246, 0.34);
   --chat-item-active-bg: rgba(239, 246, 255, 0.9);
   --chat-item-active-border: rgba(37, 99, 235, 0.46);
+  --chat-item-active-ring: color-mix(in srgb, var(--primary) 18%, transparent);
   --chat-control-bg: rgba(255, 255, 255, 0.9);
   --chat-control-border: rgba(148, 163, 184, 0.3);
   --chat-control-text: #475569;
@@ -39,6 +40,51 @@
   --chat-msg-action-bg: rgba(248, 250, 252, 0.95);
   --chat-msg-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
   --chat-msg-shadow-strong: 0 4px 16px rgba(15, 23, 42, 0.07);
+  --chat-sidebar-preview-icon: color-mix(in srgb, var(--text-muted) 86%, var(--surface-soft) 14%);
+  --chat-sidebar-preview-text: color-mix(in srgb, var(--text-muted) 90%, var(--surface-soft) 10%);
+  --chat-sidebar-mini-item-bg: color-mix(in srgb, var(--surface) 88%, transparent);
+  --chat-sidebar-mini-item-border: color-mix(in srgb, var(--line) 76%, transparent);
+  --chat-sidebar-mini-item-hover-bg: color-mix(in srgb, var(--accent-sky-bg) 72%, var(--surface) 28%);
+  --chat-sidebar-mini-item-hover-border: color-mix(in srgb, var(--accent-sky) 32%, transparent);
+  --chat-sidebar-mini-item-active-bg: linear-gradient(155deg, color-mix(in srgb, var(--accent-sky-bg) 90%, var(--surface) 10%) 0%, color-mix(in srgb, var(--accent-sky-bg) 74%, var(--surface) 26%) 100%);
+  --chat-sidebar-mini-item-active-border: color-mix(in srgb, var(--primary) 44%, transparent);
+  --chat-sidebar-mini-item-active-ring: color-mix(in srgb, var(--primary) 16%, transparent);
+  --chat-status-running-bg: linear-gradient(145deg, color-mix(in srgb, var(--accent-sky-bg) 88%, var(--surface) 12%) 0%, color-mix(in srgb, var(--accent-sky-bg) 68%, var(--surface) 32%) 100%);
+  --chat-status-running-border: color-mix(in srgb, var(--accent-sky) 42%, transparent);
+  --chat-status-running-ring: color-mix(in srgb, var(--accent-sky) 28%, transparent);
+  --chat-status-running-text: color-mix(in srgb, var(--accent-sky) 88%, var(--text) 12%);
+  --chat-status-completed-bg: linear-gradient(145deg, color-mix(in srgb, var(--accent-emerald-bg) 86%, var(--surface) 14%) 0%, color-mix(in srgb, var(--accent-emerald-bg) 68%, var(--surface) 32%) 100%);
+  --chat-status-completed-border: color-mix(in srgb, var(--accent-emerald) 34%, transparent);
+  --chat-status-completed-text: color-mix(in srgb, var(--accent-emerald) 90%, var(--text) 10%);
+  --chat-status-approval-bg: linear-gradient(145deg, color-mix(in srgb, var(--accent-amber-bg) 88%, var(--surface) 12%) 0%, color-mix(in srgb, var(--accent-amber-bg) 72%, var(--surface) 28%) 100%);
+  --chat-status-approval-border: color-mix(in srgb, var(--accent-amber) 38%, transparent);
+  --chat-status-approval-text: color-mix(in srgb, var(--accent-amber) 88%, var(--text) 12%);
+  --chat-status-error-bg: linear-gradient(145deg, color-mix(in srgb, var(--accent-red-bg) 88%, var(--surface) 12%) 0%, color-mix(in srgb, var(--accent-red-bg) 72%, var(--surface) 28%) 100%);
+  --chat-status-error-border: color-mix(in srgb, var(--accent-red) 34%, transparent);
+  --chat-status-error-text: color-mix(in srgb, var(--accent-red) 88%, var(--text) 12%);
+  --chat-status-submitting-badge-bg: color-mix(in srgb, var(--accent-sky-bg) 72%, transparent);
+  --chat-status-submitting-text: color-mix(in srgb, var(--primary) 80%, var(--text) 20%);
+  --chat-status-waiting-badge-bg: color-mix(in srgb, var(--accent-amber-bg) 72%, transparent);
+  --chat-status-waiting-text: color-mix(in srgb, var(--accent-amber) 86%, var(--text) 14%);
+  --chat-status-approval-badge-bg: color-mix(in srgb, var(--accent-amber-bg) 78%, transparent);
+  --chat-status-running-badge-bg: color-mix(in srgb, var(--accent-sky-bg) 82%, transparent);
+  --chat-status-aborting-badge-bg: color-mix(in srgb, var(--accent-red-bg) 74%, transparent);
+  --chat-status-aborting-text: color-mix(in srgb, var(--accent-red) 84%, var(--text) 16%);
+  --chat-status-danger-subtle-bg: color-mix(in srgb, var(--accent-red-bg) 82%, var(--surface) 18%);
+  --chat-status-danger-subtle-border: color-mix(in srgb, var(--accent-red) 30%, transparent);
+  --chat-status-success-subtle-bg: color-mix(in srgb, var(--accent-emerald-bg) 80%, var(--surface) 20%);
+  --chat-status-success-subtle-border: color-mix(in srgb, var(--accent-emerald) 32%, transparent);
+  --chat-status-success-text: color-mix(in srgb, var(--accent-emerald) 82%, var(--text) 18%);
+  --chat-approval-divider: color-mix(in srgb, var(--line-strong) 52%, transparent);
+  --chat-approval-button-bg: color-mix(in srgb, var(--surface) 92%, transparent);
+  --chat-approval-button-border: color-mix(in srgb, var(--line-strong) 62%, transparent);
+  --chat-approval-button-text: color-mix(in srgb, var(--text) 78%, var(--text-muted) 22%);
+  --chat-agent-claude-bg: var(--agent-claude-bg);
+  --chat-agent-claude-accent: var(--agent-claude-accent);
+  --chat-agent-codex-bg: var(--agent-codex-bg);
+  --chat-agent-codex-accent: var(--agent-codex-accent);
+  --chat-agent-gemini-bg: var(--agent-gemini-bg);
+  --chat-agent-gemini-accent: var(--agent-gemini-accent);
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr) 320px;
   grid-template-rows: minmax(0, 1fr);
@@ -62,6 +108,7 @@
   --chat-item-hover-border: rgba(96, 165, 250, 0.6);
   --chat-item-active-bg: rgba(30, 64, 175, 0.26);
   --chat-item-active-border: rgba(96, 165, 250, 0.78);
+  --chat-item-active-ring: color-mix(in srgb, var(--primary) 28%, transparent);
   --chat-control-bg: rgba(30, 41, 59, 0.92);
   --chat-control-border: rgba(71, 85, 105, 0.6);
   --chat-control-text: #cbd5e1;
@@ -84,6 +131,45 @@
   --chat-msg-action-bg: rgba(30, 41, 59, 0.92);
   --chat-msg-shadow: 0 2px 10px rgba(2, 6, 23, 0.45);
   --chat-msg-shadow-strong: 0 6px 18px rgba(2, 6, 23, 0.55);
+  --chat-sidebar-preview-icon: color-mix(in srgb, var(--text-muted) 84%, var(--accent-slate) 16%);
+  --chat-sidebar-preview-text: color-mix(in srgb, var(--text-muted) 88%, var(--accent-slate) 12%);
+  --chat-sidebar-mini-item-bg: color-mix(in srgb, var(--surface) 94%, transparent);
+  --chat-sidebar-mini-item-border: color-mix(in srgb, var(--line-strong) 70%, transparent);
+  --chat-sidebar-mini-item-hover-bg: color-mix(in srgb, var(--accent-sky-bg) 70%, var(--surface) 30%);
+  --chat-sidebar-mini-item-hover-border: color-mix(in srgb, var(--accent-sky) 44%, transparent);
+  --chat-sidebar-mini-item-active-bg: linear-gradient(155deg, color-mix(in srgb, var(--accent-sky-bg) 74%, var(--surface) 26%) 0%, color-mix(in srgb, var(--accent-sky-bg) 54%, var(--surface) 46%) 100%);
+  --chat-sidebar-mini-item-active-border: color-mix(in srgb, var(--primary) 58%, transparent);
+  --chat-sidebar-mini-item-active-ring: color-mix(in srgb, var(--primary) 22%, transparent);
+  --chat-status-running-bg: linear-gradient(145deg, color-mix(in srgb, var(--accent-sky-bg) 78%, var(--surface) 22%) 0%, color-mix(in srgb, var(--accent-sky-bg) 56%, var(--surface) 44%) 100%);
+  --chat-status-running-border: color-mix(in srgb, var(--accent-sky) 52%, transparent);
+  --chat-status-running-ring: color-mix(in srgb, var(--accent-sky) 36%, transparent);
+  --chat-status-running-text: color-mix(in srgb, var(--accent-sky) 70%, white 30%);
+  --chat-status-completed-bg: linear-gradient(145deg, color-mix(in srgb, var(--accent-emerald-bg) 78%, var(--surface) 22%) 0%, color-mix(in srgb, var(--accent-emerald-bg) 58%, var(--surface) 42%) 100%);
+  --chat-status-completed-border: color-mix(in srgb, var(--accent-emerald) 46%, transparent);
+  --chat-status-completed-text: color-mix(in srgb, var(--accent-emerald) 76%, white 24%);
+  --chat-status-approval-bg: linear-gradient(145deg, color-mix(in srgb, var(--accent-amber-bg) 80%, var(--surface) 20%) 0%, color-mix(in srgb, var(--accent-amber-bg) 58%, var(--surface) 42%) 100%);
+  --chat-status-approval-border: color-mix(in srgb, var(--accent-amber) 48%, transparent);
+  --chat-status-approval-text: color-mix(in srgb, var(--accent-amber) 72%, white 28%);
+  --chat-status-error-bg: linear-gradient(145deg, color-mix(in srgb, var(--accent-red-bg) 82%, var(--surface) 18%) 0%, color-mix(in srgb, var(--accent-red-bg) 58%, var(--surface) 42%) 100%);
+  --chat-status-error-border: color-mix(in srgb, var(--accent-red) 44%, transparent);
+  --chat-status-error-text: color-mix(in srgb, var(--accent-red) 74%, white 26%);
+  --chat-status-submitting-badge-bg: color-mix(in srgb, var(--accent-sky-bg) 88%, transparent);
+  --chat-status-submitting-text: color-mix(in srgb, var(--accent-sky) 72%, white 28%);
+  --chat-status-waiting-badge-bg: color-mix(in srgb, var(--accent-amber-bg) 82%, transparent);
+  --chat-status-waiting-text: color-mix(in srgb, var(--accent-amber) 72%, white 28%);
+  --chat-status-approval-badge-bg: color-mix(in srgb, var(--accent-amber-bg) 88%, transparent);
+  --chat-status-running-badge-bg: color-mix(in srgb, var(--accent-sky-bg) 92%, transparent);
+  --chat-status-aborting-badge-bg: color-mix(in srgb, var(--accent-red-bg) 86%, transparent);
+  --chat-status-aborting-text: color-mix(in srgb, var(--accent-red) 72%, white 28%);
+  --chat-status-danger-subtle-bg: color-mix(in srgb, var(--accent-red-bg) 76%, var(--surface) 24%);
+  --chat-status-danger-subtle-border: color-mix(in srgb, var(--accent-red) 42%, transparent);
+  --chat-status-success-subtle-bg: color-mix(in srgb, var(--accent-emerald-bg) 74%, var(--surface) 26%);
+  --chat-status-success-subtle-border: color-mix(in srgb, var(--accent-emerald) 40%, transparent);
+  --chat-status-success-text: color-mix(in srgb, var(--accent-emerald) 74%, white 26%);
+  --chat-approval-divider: color-mix(in srgb, var(--line-strong) 68%, transparent);
+  --chat-approval-button-bg: color-mix(in srgb, var(--surface) 92%, transparent);
+  --chat-approval-button-border: color-mix(in srgb, var(--line-strong) 76%, transparent);
+  --chat-approval-button-text: color-mix(in srgb, var(--text) 86%, var(--text-muted) 14%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -100,6 +186,7 @@
     --chat-item-hover-border: rgba(96, 165, 250, 0.6);
     --chat-item-active-bg: rgba(30, 64, 175, 0.26);
     --chat-item-active-border: rgba(96, 165, 250, 0.78);
+    --chat-item-active-ring: color-mix(in srgb, var(--primary) 28%, transparent);
     --chat-control-bg: rgba(30, 41, 59, 0.92);
     --chat-control-border: rgba(71, 85, 105, 0.6);
     --chat-control-text: #cbd5e1;
@@ -122,6 +209,45 @@
     --chat-msg-action-bg: rgba(30, 41, 59, 0.92);
     --chat-msg-shadow: 0 2px 10px rgba(2, 6, 23, 0.45);
     --chat-msg-shadow-strong: 0 6px 18px rgba(2, 6, 23, 0.55);
+    --chat-sidebar-preview-icon: color-mix(in srgb, var(--text-muted) 84%, var(--accent-slate) 16%);
+    --chat-sidebar-preview-text: color-mix(in srgb, var(--text-muted) 88%, var(--accent-slate) 12%);
+    --chat-sidebar-mini-item-bg: color-mix(in srgb, var(--surface) 94%, transparent);
+    --chat-sidebar-mini-item-border: color-mix(in srgb, var(--line-strong) 70%, transparent);
+    --chat-sidebar-mini-item-hover-bg: color-mix(in srgb, var(--accent-sky-bg) 70%, var(--surface) 30%);
+    --chat-sidebar-mini-item-hover-border: color-mix(in srgb, var(--accent-sky) 44%, transparent);
+    --chat-sidebar-mini-item-active-bg: linear-gradient(155deg, color-mix(in srgb, var(--accent-sky-bg) 74%, var(--surface) 26%) 0%, color-mix(in srgb, var(--accent-sky-bg) 54%, var(--surface) 46%) 100%);
+    --chat-sidebar-mini-item-active-border: color-mix(in srgb, var(--primary) 58%, transparent);
+    --chat-sidebar-mini-item-active-ring: color-mix(in srgb, var(--primary) 22%, transparent);
+    --chat-status-running-bg: linear-gradient(145deg, color-mix(in srgb, var(--accent-sky-bg) 78%, var(--surface) 22%) 0%, color-mix(in srgb, var(--accent-sky-bg) 56%, var(--surface) 44%) 100%);
+    --chat-status-running-border: color-mix(in srgb, var(--accent-sky) 52%, transparent);
+    --chat-status-running-ring: color-mix(in srgb, var(--accent-sky) 36%, transparent);
+    --chat-status-running-text: color-mix(in srgb, var(--accent-sky) 70%, white 30%);
+    --chat-status-completed-bg: linear-gradient(145deg, color-mix(in srgb, var(--accent-emerald-bg) 78%, var(--surface) 22%) 0%, color-mix(in srgb, var(--accent-emerald-bg) 58%, var(--surface) 42%) 100%);
+    --chat-status-completed-border: color-mix(in srgb, var(--accent-emerald) 46%, transparent);
+    --chat-status-completed-text: color-mix(in srgb, var(--accent-emerald) 76%, white 24%);
+    --chat-status-approval-bg: linear-gradient(145deg, color-mix(in srgb, var(--accent-amber-bg) 80%, var(--surface) 20%) 0%, color-mix(in srgb, var(--accent-amber-bg) 58%, var(--surface) 42%) 100%);
+    --chat-status-approval-border: color-mix(in srgb, var(--accent-amber) 48%, transparent);
+    --chat-status-approval-text: color-mix(in srgb, var(--accent-amber) 72%, white 28%);
+    --chat-status-error-bg: linear-gradient(145deg, color-mix(in srgb, var(--accent-red-bg) 82%, var(--surface) 18%) 0%, color-mix(in srgb, var(--accent-red-bg) 58%, var(--surface) 42%) 100%);
+    --chat-status-error-border: color-mix(in srgb, var(--accent-red) 44%, transparent);
+    --chat-status-error-text: color-mix(in srgb, var(--accent-red) 74%, white 26%);
+    --chat-status-submitting-badge-bg: color-mix(in srgb, var(--accent-sky-bg) 88%, transparent);
+    --chat-status-submitting-text: color-mix(in srgb, var(--accent-sky) 72%, white 28%);
+    --chat-status-waiting-badge-bg: color-mix(in srgb, var(--accent-amber-bg) 82%, transparent);
+    --chat-status-waiting-text: color-mix(in srgb, var(--accent-amber) 72%, white 28%);
+    --chat-status-approval-badge-bg: color-mix(in srgb, var(--accent-amber-bg) 88%, transparent);
+    --chat-status-running-badge-bg: color-mix(in srgb, var(--accent-sky-bg) 92%, transparent);
+    --chat-status-aborting-badge-bg: color-mix(in srgb, var(--accent-red-bg) 86%, transparent);
+    --chat-status-aborting-text: color-mix(in srgb, var(--accent-red) 72%, white 28%);
+    --chat-status-danger-subtle-bg: color-mix(in srgb, var(--accent-red-bg) 76%, var(--surface) 24%);
+    --chat-status-danger-subtle-border: color-mix(in srgb, var(--accent-red) 42%, transparent);
+    --chat-status-success-subtle-bg: color-mix(in srgb, var(--accent-emerald-bg) 74%, var(--surface) 26%);
+    --chat-status-success-subtle-border: color-mix(in srgb, var(--accent-emerald) 40%, transparent);
+    --chat-status-success-text: color-mix(in srgb, var(--accent-emerald) 74%, white 26%);
+    --chat-approval-divider: color-mix(in srgb, var(--line-strong) 68%, transparent);
+    --chat-approval-button-bg: color-mix(in srgb, var(--surface) 92%, transparent);
+    --chat-approval-button-border: color-mix(in srgb, var(--line-strong) 76%, transparent);
+    --chat-approval-button-text: color-mix(in srgb, var(--text) 86%, var(--text-muted) 14%);
   }
 }
 
@@ -447,12 +573,12 @@
 }
 
 .chatListItemActive {
-  box-shadow: 0 0 0 1px rgba(30, 64, 175, 0.2) inset;
+  box-shadow: 0 0 0 1px var(--chat-item-active-ring) inset;
 }
 
 .chatListItemStateRunning {
-  border-color: rgba(59, 130, 246, 0.78);
-  background: linear-gradient(145deg, rgba(239, 246, 255, 0.96) 0%, rgba(219, 234, 254, 0.9) 100%);
+  border-color: var(--chat-status-running-border);
+  background: var(--chat-status-running-bg);
 }
 
 .chatListItemStateRunning::after {
@@ -460,30 +586,30 @@
   position: absolute;
   inset: -1px;
   border-radius: inherit;
-  border: 1px solid rgba(59, 130, 246, 0.55);
+  border: 1px solid var(--chat-status-running-border);
   pointer-events: none;
   animation: chatListPulseRing 1.8s ease-out infinite;
 }
 
 .chatListItemStateCompleted {
-  border-color: rgba(22, 163, 74, 0.5);
-  background: linear-gradient(145deg, rgba(236, 253, 245, 0.96) 0%, rgba(220, 252, 231, 0.88) 100%);
+  border-color: var(--chat-status-completed-border);
+  background: var(--chat-status-completed-bg);
 }
 
 .chatListItemStateApproval {
-  border-color: rgba(217, 119, 6, 0.56);
-  background: linear-gradient(145deg, rgba(255, 251, 235, 0.98) 0%, rgba(254, 243, 199, 0.9) 100%);
+  border-color: var(--chat-status-approval-border);
+  background: var(--chat-status-approval-bg);
 }
 
 .chatListItemStateError {
-  border-color: rgba(220, 38, 38, 0.52);
-  background: linear-gradient(145deg, rgba(254, 242, 242, 0.98) 0%, rgba(254, 226, 226, 0.9) 100%);
+  border-color: var(--chat-status-error-border);
+  background: var(--chat-status-error-bg);
 }
 
 @keyframes chatListPulseRing {
   0% {
     opacity: 0.95;
-    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.34);
+    box-shadow: 0 0 0 0 var(--chat-status-running-ring);
   }
   65% {
     opacity: 0.25;
@@ -575,14 +701,14 @@
 }
 
 .chatListPreviewIcon {
-  color: #94a3b8;
+  color: var(--chat-sidebar-preview-icon);
   flex: 0 0 auto;
 }
 
 .chatListPreviewText {
   min-width: 0;
   font-size: 0.68rem;
-  color: #94a3b8;
+  color: var(--chat-sidebar-preview-text);
   line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -603,28 +729,28 @@
 }
 
 .chatListRunPhaseBadgeSubmitting {
-  background: rgba(59, 130, 246, 0.12);
-  color: #1d4ed8;
+  background: var(--chat-status-submitting-badge-bg);
+  color: var(--chat-status-submitting-text);
 }
 
 .chatListRunPhaseBadgeWaiting {
-  background: rgba(245, 158, 11, 0.14);
-  color: #b45309;
+  background: var(--chat-status-waiting-badge-bg);
+  color: var(--chat-status-waiting-text);
 }
 
 .chatListRunPhaseBadgeApproval {
-  background: rgba(217, 119, 6, 0.16);
-  color: #92400e;
+  background: var(--chat-status-approval-badge-bg);
+  color: var(--chat-status-approval-text);
 }
 
 .chatListRunPhaseBadgeRunning {
-  background: rgba(14, 165, 233, 0.14);
-  color: #0369a1;
+  background: var(--chat-status-running-badge-bg);
+  color: var(--chat-status-running-text);
 }
 
 .chatListRunPhaseBadgeAborting {
-  background: rgba(239, 68, 68, 0.14);
-  color: #b91c1c;
+  background: var(--chat-status-aborting-badge-bg);
+  color: var(--chat-status-aborting-text);
 }
 
 .chatListRunPhaseElapsed {
@@ -708,9 +834,9 @@
 }
 
 .chatListMenuDelete {
-  color: #b91c1c;
-  border-color: rgba(248, 113, 113, 0.32);
-  background: rgba(254, 242, 242, 0.92);
+  color: var(--chat-status-error-text);
+  border-color: var(--chat-status-danger-subtle-border);
+  background: var(--chat-status-danger-subtle-bg);
 }
 
 .chatListApprovalWrap {
@@ -728,7 +854,7 @@
 }
 
 .chatListApprovalInner {
-  border-top: 1px dashed rgba(148, 163, 184, 0.36);
+  border-top: 1px dashed var(--chat-approval-divider);
   padding-top: 0.44rem;
 }
 
@@ -739,10 +865,10 @@
 }
 
 .chatListApprovalButton {
-  border: 1px solid rgba(148, 163, 184, 0.42);
+  border: 1px solid var(--chat-approval-button-border);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #334155;
+  background: var(--chat-approval-button-bg);
+  color: var(--chat-approval-button-text);
   font-size: 0.66rem;
   font-weight: 700;
   line-height: 1.2;
@@ -756,9 +882,9 @@
 }
 
 .chatListApprovalButtonDeny {
-  color: #b91c1c;
-  border-color: rgba(248, 113, 113, 0.4);
-  background: rgba(254, 242, 242, 0.9);
+  color: var(--chat-status-error-text);
+  border-color: var(--chat-status-danger-subtle-border);
+  background: var(--chat-status-danger-subtle-bg);
 }
 
 .chatListApprovalResult {
@@ -772,15 +898,15 @@
 }
 
 .chatListApprovalResultApproved {
-  color: #166534;
-  border-color: rgba(34, 197, 94, 0.45);
-  background: rgba(220, 252, 231, 0.84);
+  color: var(--chat-status-success-text);
+  border-color: var(--chat-status-success-subtle-border);
+  background: var(--chat-status-success-subtle-bg);
 }
 
 .chatListApprovalResultDenied {
-  color: #991b1b;
-  border-color: rgba(248, 113, 113, 0.5);
-  background: rgba(254, 226, 226, 0.84);
+  color: var(--chat-status-error-text);
+  border-color: var(--chat-status-danger-subtle-border);
+  background: var(--chat-status-danger-subtle-bg);
 }
 
 @keyframes chatListApprovalFeedback {
@@ -812,9 +938,9 @@
 
 .sidebarMiniItemButton {
   width: 100%;
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  border: 1px solid var(--chat-sidebar-mini-item-border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.86);
+  background: var(--chat-sidebar-mini-item-bg);
   color: var(--chat-text-primary);
   padding: 0.4rem 0.46rem;
   text-align: left;
@@ -824,14 +950,14 @@
 }
 
 .sidebarMiniItemButton:hover {
-  border-color: rgba(59, 130, 246, 0.35);
-  background: rgba(239, 246, 255, 0.9);
+  border-color: var(--chat-sidebar-mini-item-hover-border);
+  background: var(--chat-sidebar-mini-item-hover-bg);
 }
 
 .sidebarMiniItemButtonActive {
-  border-color: rgba(37, 99, 235, 0.5);
-  background: linear-gradient(155deg, rgba(239, 246, 255, 0.98) 0%, rgba(219, 234, 254, 0.92) 100%);
-  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.18);
+  border-color: var(--chat-sidebar-mini-item-active-border);
+  background: var(--chat-sidebar-mini-item-active-bg);
+  box-shadow: 0 0 0 1px var(--chat-sidebar-mini-item-active-ring);
 }
 
 .sidebarMiniTitleRow {
@@ -1034,18 +1160,18 @@
 }
 
 .agentAvatarClay {
-  background: rgba(217, 119, 87, 0.15);
-  color: #d97757;
+  background: var(--chat-agent-claude-bg);
+  color: var(--chat-agent-claude-accent);
 }
 
 .agentAvatarMint {
-  background: rgba(16, 163, 127, 0.15);
-  color: #10a37f;
+  background: var(--chat-agent-codex-bg);
+  color: var(--chat-agent-codex-accent);
 }
 
 .agentAvatarBlue {
-  background: rgba(66, 133, 244, 0.15);
-  color: #4285f4;
+  background: var(--chat-agent-gemini-bg);
+  color: var(--chat-agent-gemini-accent);
 }
 
 .agentProfileText {
