@@ -31,9 +31,9 @@ describe('providerModels', () => {
 
   it('normalizes partial provider selections without forcing absent providers', () => {
     expect(normalizePartialProviderModelSelections({
-      codex: { selectedModelIds: ['gpt-5.4'] },
+      codex: { selectedModelIds: ['gpt-5.4', 'gpt-5.3-codex'], defaultModelId: 'gpt-5.3-codex' },
     })).toEqual({
-      codex: { selectedModelIds: ['gpt-5.4'], defaultModelId: 'gpt-5.4', defaultModeId: null },
+      codex: { selectedModelIds: ['gpt-5.4', 'gpt-5.3-codex'], defaultModelId: 'gpt-5.3-codex', defaultModeId: null },
     });
   });
 

@@ -60,6 +60,7 @@ export function SettingsTab() {
   // Codex 상태
   const [codexCatalogItems, setCodexCatalogItems] = useState<OpenAiCatalogItem[]>([]);
   const [selectedCodexModelIds, setSelectedCodexModelIds] = useState<string[]>([...DEFAULT_CODEX_MODEL_SELECTIONS]);
+  const [selectedCodexDefaultModelId, setSelectedCodexDefaultModelId] = useState<string>(DEFAULT_CODEX_MODEL_SELECTIONS[0]);
   const [codexModelSaving, setCodexModelSaving] = useState(false);
   const [codexModelFeedback, setCodexModelFeedback] = useState<Feedback>(null);
   const [codexCatalogLoading, setCodexCatalogLoading] = useState(false);
@@ -94,7 +95,9 @@ export function SettingsTab() {
 
   const syncCodexSelection = useCallback((settings: ModelSettingsResponse) => {
     const persisted = settings.providers.codex.selectedModelIds;
-    setSelectedCodexModelIds(persisted.length > 0 ? persisted : [...DEFAULT_CODEX_MODEL_SELECTIONS]);
+    const nextSelected = persisted.length > 0 ? persisted : [...DEFAULT_CODEX_MODEL_SELECTIONS];
+    setSelectedCodexModelIds(nextSelected);
+    setSelectedCodexDefaultModelId(settings.providers.codex.defaultModelId ?? nextSelected[0] ?? DEFAULT_CODEX_MODEL_SELECTIONS[0]);
   }, []);
 
   const syncClaudeSelection = useCallback((settings: ModelSettingsResponse) => {
@@ -425,11 +428,14 @@ export function SettingsTab() {
   const handleToggleCodexModel = useCallback((modelId: string) => {
     setSelectedCodexModelIds((prev) => {
       if (prev.includes(modelId)) {
-        return prev.filter((item) => item !== modelId);
+        const next = prev.filter((item) => item !== modelId);
+        setSelectedCodexDefaultModelId((current) => (current === modelId ? (next[0] ?? DEFAULT_CODEX_MODEL_SELECTIONS[0]) : current));
+        return next;
       }
       const next = [...prev, modelId];
       const order = new Map(codexCatalogItems.map((item, index) => [item.id, index]));
       next.sort((left, right) => (order.get(left) ?? Number.MAX_SAFE_INTEGER) - (order.get(right) ?? Number.MAX_SAFE_INTEGER));
+      setSelectedCodexDefaultModelId((current) => current || next[0] || DEFAULT_CODEX_MODEL_SELECTIONS[0]);
       return next;
     });
   }, [codexCatalogItems]);
@@ -437,11 +443,14 @@ export function SettingsTab() {
   const handleApplyRecommendedCodexModels = useCallback(() => {
     if (codexCatalogItems.length === 0) {
       setSelectedCodexModelIds([...DEFAULT_CODEX_MODEL_SELECTIONS]);
+      setSelectedCodexDefaultModelId(DEFAULT_CODEX_MODEL_SELECTIONS[0]);
       return;
     }
     const available = new Set(codexCatalogItems.map((item) => item.id));
     const recommended = DEFAULT_CODEX_MODEL_SELECTIONS.filter((modelId) => available.has(modelId));
-    setSelectedCodexModelIds(recommended.length > 0 ? [...recommended] : [...DEFAULT_CODEX_MODEL_SELECTIONS]);
+    const nextSelected = recommended.length > 0 ? [...recommended] : [...DEFAULT_CODEX_MODEL_SELECTIONS];
+    setSelectedCodexModelIds(nextSelected);
+    setSelectedCodexDefaultModelId(nextSelected[0] ?? DEFAULT_CODEX_MODEL_SELECTIONS[0]);
   }, [codexCatalogItems]);
 
   const handleCodexModelSave = useCallback(async () => {
@@ -455,7 +464,14 @@ export function SettingsTab() {
       const response = await fetch('/api/settings/models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providers: { codex: { selectedModelIds: selectedCodexModelIds } } }),
+        body: JSON.stringify({
+          providers: {
+            codex: {
+              selectedModelIds: selectedCodexModelIds,
+              defaultModelId: selectedCodexDefaultModelId,
+            },
+          },
+        }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok || !data) {
@@ -469,7 +485,7 @@ export function SettingsTab() {
     } finally {
       setCodexModelSaving(false);
     }
-  }, [selectedCodexModelIds, syncCodexSelection]);
+  }, [selectedCodexDefaultModelId, selectedCodexModelIds, syncCodexSelection]);
 
   // Claude 모델 토글 / 권장 / 저장
   const handleToggleClaudeModel = useCallback((modelId: string) => {
@@ -705,6 +721,33 @@ export function SettingsTab() {
             </div>
             <p className={styles.keyHint}>
               새 Gemini 채팅은 여기서 저장한 기본 모델과 모드로 시작합니다. 채팅 화면에서는 ACP capability를 다시 조회하지 않습니다.
+            </p>
+          </div>
+        )}
+
+        {activeProvider === 'codex' && (
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>
+              <Cpu size={16} />
+              Codex 기본 실행값
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>기본 모델</label>
+              <select
+                className={styles.input}
+                value={selectedCodexDefaultModelId}
+                onChange={(event) => setSelectedCodexDefaultModelId(event.target.value)}
+                disabled={selectedCodexModelIds.length === 0}
+              >
+                {selectedCodexModelIds.map((modelId) => (
+                  <option key={modelId} value={modelId}>
+                    {modelId}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className={styles.keyHint}>
+              새 Codex 채팅은 현재 브라우저의 마지막 모델 선택을 우선 사용하고, 캐시가 없거나 더 이상 선택 목록에 없으면 여기서 저장한 기본 모델로 시작합니다.
             </p>
           </div>
         )}
