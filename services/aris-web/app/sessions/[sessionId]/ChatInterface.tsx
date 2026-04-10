@@ -31,6 +31,11 @@ import {
   type RenderablePermissionRequest,
 } from '@/lib/happy/permissions';
 import { buildOptimisticUserEvent } from './chatComposer';
+import {
+  readLastSelectedModelId,
+  resolvePreferredModelId,
+  writeLastSelectedModelId,
+} from './chatModelPreferences';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import {
   Activity,
@@ -687,14 +692,18 @@ function resolveDefaultModelId(
   agent: AgentFlavor,
   providerSelections?: ProviderModelSelections,
   legacyCustomModels?: LegacyCustomModels,
+  cachedModelId?: string | null,
 ): string {
+  const availableModels = resolveComposerModels(agent, providerSelections, legacyCustomModels);
   if (isSupportedAgentFlavor(agent)) {
-    const configuredDefault = normalizeModelId(providerSelections?.[agent]?.defaultModelId);
-    if (configuredDefault) {
-      return configuredDefault;
-    }
+    return resolvePreferredModelId({
+      availableModelIds: availableModels.map((model) => model.id),
+      cachedModelId: agent === 'codex' ? cachedModelId : null,
+      configuredDefaultModelId: normalizeModelId(providerSelections?.[agent]?.defaultModelId),
+      fallbackModelId: 'gpt-5.4',
+    }) ?? 'gpt-5.4';
   }
-  return resolveComposerModels(agent, providerSelections, legacyCustomModels)[0]?.id ?? 'gpt-5.4';
+  return availableModels[0]?.id ?? 'gpt-5.4';
 }
 
 function resolveAvailableComposerModelId(input: {
@@ -2612,6 +2621,7 @@ export function ChatInterface({
   const [fileBrowserSearchResults, setFileBrowserSearchResults] = useState<Array<{ name: string; path: string; isDirectory: boolean }> | null>(null);
   const [fileBrowserSearchLoading, setFileBrowserSearchLoading] = useState(false);
   const [recentAttachments, setRecentAttachments] = useState<string[]>([]);
+  const [lastSelectedCodexModelId, setLastSelectedCodexModelId] = useState<string | null>(() => readLastSelectedModelId('codex'));
   const [sidebarFileRequest, setSidebarFileRequest] = useState<SidebarFileRequest | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [isDebugMode, setIsDebugMode] = useState(false);
@@ -2656,7 +2666,7 @@ export function ChatInterface({
     [activeAgentFlavor, legacyCustomModels, providerSelections],
   );
   const activeModelId = normalizeModelId(selectedModelId)
-    ?? resolveDefaultModelId(activeAgentFlavor, providerSelections, legacyCustomModels);
+    ?? resolveDefaultModelId(activeAgentFlavor, providerSelections, legacyCustomModels, lastSelectedCodexModelId);
   const activeGeminiModeId = normalizeGeminiModeId(selectedGeminiModeId)
     ?? resolveDefaultGeminiModeId(approvalPolicy, providerSelections?.gemini?.defaultModeId);
   const codexReasoningEffort = activeAgentFlavor === 'codex'
@@ -4577,6 +4587,10 @@ export function ChatInterface({
       return;
     }
     setSelectedModelId(normalizedModelId);
+    if (activeAgentFlavor === 'codex') {
+      setLastSelectedCodexModelId(normalizedModelId);
+      writeLastSelectedModelId('codex', normalizedModelId);
+    }
     setIsModelDropdownOpen(false);
     setChatMutationError(null);
     setChats((prev) => sortSessionChats(prev.map((chat) => (
@@ -4603,7 +4617,7 @@ export function ChatInterface({
     } catch (error) {
       setChatMutationError(error instanceof Error ? error.message : '모델 설정 저장에 실패했습니다.');
     }
-  }, [activeChatIdResolved, sessionId]);
+  }, [activeAgentFlavor, activeChatIdResolved, sessionId]);
 
   const handleSelectGeminiMode = useCallback(async (modeId: string) => {
     const normalizedModeId = normalizeGeminiModeId(modeId);
@@ -4696,7 +4710,7 @@ export function ChatInterface({
     }
     setIsCreatingChat(true);
     setChatMutationError(null);
-    const defaultModelId = resolveDefaultModelId(agent, providerSelections, legacyCustomModels);
+    const defaultModelId = resolveDefaultModelId(agent, providerSelections, legacyCustomModels, lastSelectedCodexModelId);
     const defaultGeminiModeId = agent === 'gemini'
       ? resolveDefaultGeminiModeId(approvalPolicy, providerSelections?.gemini?.defaultModeId)
       : undefined;
@@ -4722,7 +4736,7 @@ export function ChatInterface({
     } finally {
       setIsCreatingChat(false);
     }
-  }, [approvalPolicy, goToChat, isCreatingChat, legacyCustomModels, providerSelections, selectedModelReasoningEffort, sessionId]);
+  }, [approvalPolicy, goToChat, isCreatingChat, lastSelectedCodexModelId, legacyCustomModels, providerSelections, selectedModelReasoningEffort, sessionId]);
 
   const handleToggleChatPin = useCallback(async (chat: SessionChat) => {
     setChatMutationLoadingId(chat.id);
@@ -4848,7 +4862,7 @@ export function ChatInterface({
       : '';
     const finalText = contextPrefix + promptText;
     const submitModelId = normalizeModelId(selectedModelId)
-      ?? resolveDefaultModelId(activeAgentFlavor, providerSelections, legacyCustomModels);
+      ?? resolveDefaultModelId(activeAgentFlavor, providerSelections, legacyCustomModels, lastSelectedCodexModelId);
     const submitGeminiModeId = activeAgentFlavor === 'gemini'
       ? resolveAvailableGeminiModeId({
           requestedMode: selectedGeminiModeId,

@@ -7,7 +7,8 @@ const mocks = vi.hoisted(() => ({
   resolveWorkspacePath: vi.fn(),
 }));
 
-mocks.execFile[Symbol.for('nodejs.util.promisify.custom')] = (
+Object.assign(mocks.execFile, {
+  [Symbol.for('nodejs.util.promisify.custom')]: (
   command: string,
   args: string[],
   options: object,
@@ -24,6 +25,7 @@ mocks.execFile[Symbol.for('nodejs.util.promisify.custom')] = (
 
     resolve({ stdout, stderr });
   });
+}),
 });
 
 vi.mock('node:child_process', () => ({
