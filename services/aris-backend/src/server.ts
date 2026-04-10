@@ -431,8 +431,7 @@ export function buildServer(config: ServerConfig) {
       ? chatId.trim()
       : undefined;
     try {
-      const isRunning = await store.isSessionRunning(sessionId, normalizedChatId);
-      return { sessionId, isRunning };
+      return await store.getSessionRuntimeState(sessionId, normalizedChatId);
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
         return reply.code(404).send({ error: 'Session not found' });

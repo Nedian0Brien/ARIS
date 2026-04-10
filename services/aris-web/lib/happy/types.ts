@@ -134,6 +134,20 @@ export type GeminiSessionCapabilities = {
   };
 };
 
+export type CodexQuotaUsage = {
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  updatedAt: string;
+};
+
+export type SessionRuntimeState = {
+  sessionId: string;
+  isRunning: boolean;
+  codexQuotaUsage?: CodexQuotaUsage | null;
+};
+
 export type PermissionRisk = 'low' | 'medium' | 'high';
 export type PermissionState = 'pending' | 'approved' | 'denied';
 export type PermissionDecision = 'allow_once' | 'allow_session' | 'deny';

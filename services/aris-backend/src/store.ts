@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type {
   ApprovalPolicy,
+  SessionRuntimeState,
   GeminiSessionCapabilities,
   PermissionDecision,
   PermissionRequest,
@@ -56,6 +57,7 @@ type CreatePermissionInput = {
 interface RuntimeStoreBackend {
   listSessions(): Promise<RuntimeSession[]>;
   getSession(sessionId: string): Promise<RuntimeSession | null>;
+  getSessionRuntimeState?(sessionId: string, chatId?: string): Promise<SessionRuntimeState>;
   getGeminiSessionCapabilities?(sessionId: string): Promise<GeminiSessionCapabilities>;
   createSession(input: CreateSessionInput): Promise<RuntimeSession>;
   updateApprovalPolicy?(sessionId: string, approvalPolicy: ApprovalPolicy): Promise<RuntimeSession>;
@@ -75,6 +77,7 @@ type RuntimeExecutor = Pick<
   | 'listRealtimeEvents'
   | 'applySessionAction'
   | 'isSessionRunning'
+  | 'getSessionRuntimeState'
   | 'listPermissions'
   | 'createPermission'
   | 'decidePermission'
@@ -122,6 +125,19 @@ class MockRuntimeStore implements RuntimeStoreBackend {
           ? [{ id: session.metadata.model, label: session.metadata.model }]
           : [],
       },
+    };
+  }
+
+  async getSessionRuntimeState(sessionId: string, chatId?: string): Promise<SessionRuntimeState> {
+    const session = await this.getSession(sessionId);
+    if (!session) {
+      throw new Error('SESSION_NOT_FOUND');
+    }
+
+    return {
+      sessionId,
+      isRunning: await this.isSessionRunning(sessionId, chatId),
+      codexQuotaUsage: null,
     };
   }
 
@@ -410,6 +426,20 @@ export class RuntimeStore {
 
   async getSession(sessionId: string) {
     return this.delegate.getSession(sessionId);
+  }
+
+  async getSessionRuntimeState(sessionId: string, chatId?: string) {
+    if (this.runtimeExecutor) {
+      return this.runtimeExecutor.getSessionRuntimeState(sessionId, chatId);
+    }
+    if ('getSessionRuntimeState' in this.delegate && typeof this.delegate.getSessionRuntimeState === 'function') {
+      return this.delegate.getSessionRuntimeState(sessionId, chatId);
+    }
+    return {
+      sessionId,
+      isRunning: await this.delegate.isSessionRunning(sessionId, chatId),
+      codexQuotaUsage: null,
+    };
   }
 
   async getGeminiSessionCapabilities(sessionId: string) {

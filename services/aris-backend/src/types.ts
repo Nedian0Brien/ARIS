@@ -41,6 +41,20 @@ export type GeminiSessionCapabilities = {
   };
 };
 
+export type CodexQuotaUsage = {
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  updatedAt: string;
+};
+
+export type SessionRuntimeState = {
+  sessionId: string;
+  isRunning: boolean;
+  codexQuotaUsage?: CodexQuotaUsage | null;
+};
+
 export type RuntimeMessage = {
   id: string;
   sessionId: string;

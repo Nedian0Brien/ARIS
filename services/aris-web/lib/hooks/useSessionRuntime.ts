@@ -1,20 +1,31 @@
 import { useEffect, useState } from 'react';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
+import type { CodexQuotaUsage } from '@/lib/happy/types';
 
 const RUNTIME_POLL_INTERVAL_MS = 3000;
-const runtimeStateCache = new Map<string, boolean>();
+type RuntimeStateSnapshot = {
+  isRunning: boolean;
+  codexQuotaUsage: CodexQuotaUsage | null;
+};
+
+const EMPTY_RUNTIME_STATE: RuntimeStateSnapshot = {
+  isRunning: false,
+  codexQuotaUsage: null,
+};
+
+const runtimeStateCache = new Map<string, RuntimeStateSnapshot>();
 const isDocumentVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
 
 export function useSessionRuntime(sessionId: string, chatId?: string | null, enabled = true) {
   const cacheKey = `${sessionId}:${chatId?.trim() || '__default__'}`;
-  const [isRunning, setIsRunning] = useState(() => runtimeStateCache.get(cacheKey) ?? false);
+  const [runtimeState, setRuntimeState] = useState<RuntimeStateSnapshot>(() => runtimeStateCache.get(cacheKey) ?? EMPTY_RUNTIME_STATE);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
 
   useEffect(() => {
     let disposed = false;
     let inFlight = false;
     let stopped = false;
-    setIsRunning(runtimeStateCache.get(cacheKey) ?? false);
+    setRuntimeState(runtimeStateCache.get(cacheKey) ?? EMPTY_RUNTIME_STATE);
     setRuntimeError(null);
 
     if (!enabled) {
@@ -42,8 +53,8 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null, ena
         }
         if (response.status === 404) {
           if (!disposed) {
-            runtimeStateCache.set(cacheKey, false);
-            setIsRunning(false);
+            runtimeStateCache.set(cacheKey, EMPTY_RUNTIME_STATE);
+            setRuntimeState(EMPTY_RUNTIME_STATE);
             setRuntimeError('워크스페이스가 종료되었거나 삭제되었습니다.');
           }
           stopped = true;
@@ -52,18 +63,24 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null, ena
         if (!response.ok) {
           throw new Error(`Runtime status sync failed (${response.status})`);
         }
-        const body = (await response.json()) as { isRunning?: boolean };
+        const body = (await response.json()) as {
+          isRunning?: boolean;
+          codexQuotaUsage?: CodexQuotaUsage | null;
+        };
         if (!disposed) {
-          const nextIsRunning = Boolean(body.isRunning);
-          runtimeStateCache.set(cacheKey, nextIsRunning);
-          setIsRunning(nextIsRunning);
+          const nextState: RuntimeStateSnapshot = {
+            isRunning: Boolean(body.isRunning),
+            codexQuotaUsage: body.codexQuotaUsage ?? null,
+          };
+          runtimeStateCache.set(cacheKey, nextState);
+          setRuntimeState(nextState);
           setRuntimeError(null);
         }
       } catch (error) {
         if (!disposed) {
           const message = error instanceof Error ? error.message : 'Failed to sync runtime status';
-          runtimeStateCache.set(cacheKey, false);
-          setIsRunning(false);
+          runtimeStateCache.set(cacheKey, EMPTY_RUNTIME_STATE);
+          setRuntimeState(EMPTY_RUNTIME_STATE);
           setRuntimeError(message);
         }
       } finally {
@@ -93,5 +110,9 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null, ena
     };
   }, [cacheKey, sessionId, chatId, enabled]);
 
-  return { isRunning, runtimeError };
+  return {
+    isRunning: runtimeState.isRunning,
+    codexQuotaUsage: runtimeState.codexQuotaUsage,
+    runtimeError,
+  };
 }

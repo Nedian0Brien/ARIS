@@ -36,6 +36,7 @@ import {
   resolvePreferredModelId,
   writeLastSelectedModelId,
 } from './chatModelPreferences';
+import { formatCodexQuotaUsage } from './chatQuotaUsage';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import {
   Activity,
@@ -2402,7 +2403,7 @@ export function ChatInterface({
     activeChatId,
     isSessionSyncLeader,
   );
-  const { isRunning: runtimeRunning, runtimeError } = useSessionRuntime(
+  const { isRunning: runtimeRunning, codexQuotaUsage, runtimeError } = useSessionRuntime(
     sessionId,
     activeChatIdResolved,
     isSessionSyncLeader && (
@@ -2678,6 +2679,9 @@ export function ChatInterface({
   const codexReasoningEffort = activeAgentFlavor === 'codex'
     ? selectedModelReasoningEffort
     : undefined;
+  const codexQuotaUsageLabel = activeAgentFlavor === 'codex'
+    ? formatCodexQuotaUsage(codexQuotaUsage)
+    : null;
   const activeGeminiMode = activeGeminiModeOptions.find((mode) => mode.id === activeGeminiModeId)
     ?? { id: activeGeminiModeId, shortLabel: deriveGeminiModeLabel(activeGeminiModeId), badge: '현재' };
   const agentMeta = resolveAgentMeta(activeAgentFlavor);
@@ -5612,6 +5616,11 @@ export function ChatInterface({
                     <div className={styles.contextMenuMeta}>
                       <span>Pending: {effectivePendingPermissions.length}</span>
                     </div>
+                    {codexQuotaUsageLabel && (
+                      <div className={styles.contextMenuMeta}>
+                        <span>Usage: {codexQuotaUsageLabel}</span>
+                      </div>
+                    )}
                     {isOperator && (
                       <div className={styles.contextMenuPolicyRow}>
                         <label htmlFor="approval-policy-select" className={styles.contextMenuPolicyLabel}>

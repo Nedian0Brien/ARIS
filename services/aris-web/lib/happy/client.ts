@@ -3,6 +3,7 @@ import { normalizeEvents, normalizeSessionDetail, normalizeSessions } from '@/li
 import { getWorkspaceById, syncWorkspacesForUser } from '@/lib/happy/workspaces';
 import type {
   ApprovalPolicy,
+  CodexQuotaUsage,
   GeminiSessionCapabilities,
   PermissionDecision,
   PermissionRequest,
@@ -10,6 +11,7 @@ import type {
   SessionActionResult,
   SessionDetail,
   SessionEventsPage,
+  SessionRuntimeState,
   SessionSummary,
   UiEvent,
 } from '@/lib/happy/types';
@@ -75,6 +77,54 @@ function asObject(value: unknown): JsonObject | null {
     return null;
   }
   return value as JsonObject;
+}
+
+function normalizeTokenCount(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    return Math.floor(value);
+  }
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return Math.floor(parsed);
+    }
+  }
+  return undefined;
+}
+
+function normalizeCodexQuotaUsage(value: unknown): CodexQuotaUsage | null {
+  const obj = asObject(value);
+  if (!obj) {
+    return null;
+  }
+
+  const inputTokens = normalizeTokenCount(obj.inputTokens);
+  const cachedInputTokens = normalizeTokenCount(obj.cachedInputTokens);
+  const outputTokens = normalizeTokenCount(obj.outputTokens);
+  const totalTokens = normalizeTokenCount(obj.totalTokens);
+  const updatedAt = typeof obj.updatedAt === 'string' && obj.updatedAt.trim().length > 0
+    ? obj.updatedAt.trim()
+    : '';
+
+  if (!updatedAt) {
+    return null;
+  }
+  if (
+    inputTokens === undefined
+    && cachedInputTokens === undefined
+    && outputTokens === undefined
+    && totalTokens === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    ...(inputTokens !== undefined ? { inputTokens } : {}),
+    ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
+    ...(outputTokens !== undefined ? { outputTokens } : {}),
+    ...(totalTokens !== undefined ? { totalTokens } : {}),
+    updatedAt,
+  };
 }
 
 function extractArrayPayload(raw: unknown, key: string): unknown[] {
@@ -957,11 +1007,11 @@ export async function decidePermissionRequest(input: {
 export async function getSessionRuntimeState(
   sessionId: string,
   options: { chatId?: string } = {},
-): Promise<{ sessionId: string; isRunning: boolean }> {
+): Promise<SessionRuntimeState> {
   const chatId = typeof options.chatId === 'string' && options.chatId.trim().length > 0
     ? options.chatId.trim()
     : undefined;
-  const deriveFromSessions = async () => {
+  const deriveFromSessions = async (): Promise<SessionRuntimeState> => {
     const raw = await fetchHappy('/v1/sessions');
     const sessions = extractArrayPayload(raw, 'sessions');
     const found = findSessionById(sessions, sessionId) ?? { id: sessionId };
@@ -969,6 +1019,7 @@ export async function getSessionRuntimeState(
     return {
       sessionId,
       isRunning: detail.status === 'running',
+      codexQuotaUsage: null,
     };
   };
 
@@ -981,6 +1032,7 @@ export async function getSessionRuntimeState(
       return {
         sessionId: String(obj?.sessionId ?? sessionId),
         isRunning: Boolean(obj?.isRunning),
+        codexQuotaUsage: normalizeCodexQuotaUsage(obj?.codexQuotaUsage),
       };
     } catch (error) {
       if (error instanceof HappyHttpError && error.status === 404) {
@@ -988,7 +1040,7 @@ export async function getSessionRuntimeState(
         if (chatId) {
           // Legacy fallback (`/v1/sessions`) is session-scoped and cannot
           // represent chat-scoped runtime state safely.
-          return { sessionId, isRunning: false };
+          return { sessionId, isRunning: false, codexQuotaUsage: null };
         }
         return deriveFromSessions();
       }
@@ -1000,6 +1052,7 @@ export async function getSessionRuntimeState(
   return {
     sessionId: obj.sessionId,
     isRunning: obj.isRunning,
+    codexQuotaUsage: obj.codexQuotaUsage ?? null,
   };
 }
 
