@@ -1772,6 +1772,18 @@
   background: var(--chat-msg-agent-bg);
   backdrop-filter: blur(12px);
   box-shadow: var(--chat-msg-shadow-strong);
+  width: fit-content;
+  max-width: 100%;
+}
+
+.agentMessageStack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  width: fit-content;
+  max-width: min(100%, 48rem);
+  min-width: 0;
 }
 
 .messageBubbleAction {
@@ -4311,7 +4323,8 @@
 
 .linkPreviewWrap {
   position: relative;
-  margin-top: 0.45rem;
+  margin-top: 0;
+  align-self: stretch;
   width: 100%;
   max-width: 100%;
   min-width: 0;

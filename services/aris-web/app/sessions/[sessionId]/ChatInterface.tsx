@@ -6252,12 +6252,14 @@ export function ChatInterface({
                         <span className={styles.msgSender}>{agentMeta.label}</span>
                         <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
                       </div>
-                      <div className={`${styles.messageBubble} ${styles.messageBubbleAgent}`}>
-                        {renderEventPayload(event, false, expandedResultIds[event.id] ?? false, () => toggleResult(event.id), isDebugMode)}
+                      <div className={styles.agentMessageStack}>
+                        <div className={`${styles.messageBubble} ${styles.messageBubbleAgent}`}>
+                          {renderEventPayload(event, false, expandedResultIds[event.id] ?? false, () => toggleResult(event.id), isDebugMode)}
+                        </div>
+                        {!isDebugMode && !isActionKind(event.kind) && (event.body || event.title) && (
+                          <LinkPreviewCarousel body={event.body || event.title} />
+                        )}
                       </div>
-                      {!isDebugMode && !isActionKind(event.kind) && (event.body || event.title) && (
-                        <LinkPreviewCarousel body={event.body || event.title} />
-                      )}
                     </div>
                   </div>
                 </article>

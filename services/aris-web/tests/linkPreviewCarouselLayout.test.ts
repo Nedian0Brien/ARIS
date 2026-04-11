@@ -10,10 +10,14 @@ const css = readFileSync(cssPath, 'utf8');
 const tsx = readFileSync(tsxPath, 'utf8');
 
 describe('link preview carousel mobile layout', () => {
-  it('keeps the carousel wrapper constrained to the message body width', () => {
+  it('keeps the carousel wrapper constrained to the agent bubble stack width', () => {
+    expect(tsx).toMatch(/className=\{styles\.agentMessageStack\}/);
+    expect(css).toMatch(/\.agentMessageStack\s*\{[^}]*width:\s*fit-content;/s);
+    expect(css).toMatch(/\.agentMessageStack\s*\{[^}]*max-width:\s*min\(100%,\s*48rem\);/s);
     expect(css).toMatch(/\.linkPreviewWrap\s*\{[^}]*width:\s*100%;/s);
     expect(css).toMatch(/\.linkPreviewWrap\s*\{[^}]*max-width:\s*100%;/s);
     expect(css).toMatch(/\.linkPreviewWrap\s*\{[^}]*min-width:\s*0;/s);
+    expect(css).toMatch(/\.linkPreviewWrap\s*\{[^}]*align-self:\s*stretch;/s);
     expect(css).toMatch(/\.linkPreviewTrack\s*\{[^}]*max-width:\s*100%;/s);
   });
 
@@ -25,5 +29,10 @@ describe('link preview carousel mobile layout', () => {
   it('scrolls by the rendered card width instead of a hard-coded desktop value', () => {
     expect(tsx).not.toContain('const cardWidth = 296;');
     expect(tsx).toMatch(/firstElementChild as HTMLElement \| null/);
+  });
+
+  it('lets the agent bubble define the stack width instead of the full message body', () => {
+    expect(css).toMatch(/\.messageBubbleAgent\s*\{[^}]*width:\s*fit-content;/s);
+    expect(css).toMatch(/\.messageBubbleAgent\s*\{[^}]*max-width:\s*100%;/s);
   });
 });
