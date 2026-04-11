@@ -71,6 +71,12 @@
   gap: 0.25rem;
 }
 
+.pathCopyActions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
 .buttonIconOnly {
   padding: 0.4rem !important;
 }
