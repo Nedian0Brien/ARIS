@@ -30,8 +30,8 @@ import {
   mergeRenderablePermissions,
   type RenderablePermissionRequest,
 } from '@/lib/happy/permissions';
-import { buildImageAttachmentPromptPrefix } from '@/lib/chatImageAttachments';
 import { buildOptimisticUserEvent } from './chatComposer';
+import { buildComposerSubmitText, buildUserMessageMeta } from './chatSubmitPayload';
 import {
   readLastSelectedModelId,
   resolvePreferredModelId,
@@ -5256,18 +5256,25 @@ export function ChatInterface({
       ? buildChatTitleFromFirstPrompt(promptText)
       : null;
     const imageAttachments = extractImageAttachments(contextItems);
-    const imagePrefix = buildImageAttachmentPromptPrefix(imageAttachments);
-
-    const contextPrefix = contextItems.length > 0
-      ? contextItems.map((item) => (
-        item.type === 'file'
-          ? `<file path="${item.path}">\n${item.content}\n</file>`
-          : item.type === 'text'
-            ? `<context>\n${item.text}\n</context>`
-            : ''
-      )).join('\n') + '\n\n'
-      : '';
-    const finalText = imagePrefix + contextPrefix + promptText;
+    const contextBlocks: Array<
+      { type: 'file'; path: string; content: string }
+      | { type: 'text'; text: string }
+    > = contextItems.reduce<Array<
+      { type: 'file'; path: string; content: string }
+      | { type: 'text'; text: string }
+    >>((acc, item) => {
+      if (item.type === 'file') {
+        acc.push({ type: 'file', path: item.path, content: item.content });
+      } else if (item.type === 'text') {
+        acc.push({ type: 'text', text: item.text });
+      }
+      return acc;
+    }, []);
+    const finalText = buildComposerSubmitText({
+      promptText,
+      imageAttachments,
+      contextBlocks,
+    });
     const submitModelId = normalizeModelId(selectedModelId)
       ?? resolveDefaultModelId(activeAgentFlavor, providerSelections, legacyCustomModels, lastSelectedCodexModelId);
     const submitGeminiModeId = activeAgentFlavor === 'gemini'
@@ -5337,21 +5344,15 @@ export function ChatInterface({
           type: 'message',
           title: 'User Instruction',
           text: finalText,
-          meta: {
-            role: 'user',
+          meta: buildUserMessageMeta({
             chatId: scopedChatId,
             agent: activeChat?.agent ?? 'codex',
             model: submitModelId,
             ...(submitGeminiModeId ? { geminiMode: submitGeminiModeId } : {}),
-            ...(submitModelReasoningEffort
-              ? {
-                  modelReasoningEffort: submitModelReasoningEffort,
-                  model_reasoning_effort: submitModelReasoningEffort,
-                }
-              : {}),
+            ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
             ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
             ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
-          },
+          }),
         }),
       });
 
@@ -5474,21 +5475,17 @@ export function ChatInterface({
           type: 'message',
           title: 'User Instruction',
           text: lastSubmittedPayload.text,
-          meta: {
-            role: 'user',
+          meta: buildUserMessageMeta({
             chatId: lastSubmittedPayload.chatId,
             agent: lastSubmittedPayload.agent,
             model: lastSubmittedPayload.model,
             ...(lastSubmittedPayload.geminiMode ? { geminiMode: lastSubmittedPayload.geminiMode } : {}),
             ...(lastSubmittedPayload.modelReasoningEffort
-              ? {
-                  modelReasoningEffort: lastSubmittedPayload.modelReasoningEffort,
-                  model_reasoning_effort: lastSubmittedPayload.modelReasoningEffort,
-                }
+              ? { modelReasoningEffort: lastSubmittedPayload.modelReasoningEffort }
               : {}),
             ...(lastSubmittedPayload.threadId ? { threadId: lastSubmittedPayload.threadId } : {}),
             ...(lastSubmittedPayload.attachments?.length ? { attachments: lastSubmittedPayload.attachments } : {}),
-          },
+          }),
         }),
       });
 
