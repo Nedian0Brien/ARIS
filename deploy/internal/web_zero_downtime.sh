@@ -6,6 +6,7 @@ source "${ROOT_DIR}/deploy/lib/env.sh"
 
 ENV_FILE="$(require_deploy_env_file "deploy:web-zd")"
 STATE_DIR="${DEPLOY_STATE_DIR:-${ROOT_DIR}/deploy/.state}"
+LOG_DIR="${DEPLOY_LOG_DIR:-${ROOT_DIR}/deploy/.logs}"
 ACTIVE_SLOT_FILE="${STATE_DIR}/aris-web.active-slot"
 FINGERPRINT_FILE="${STATE_DIR}/aris-web.build-fingerprint"
 
@@ -15,6 +16,10 @@ WEB_HEALTH_TIMEOUT_SECONDS="${WEB_HEALTH_TIMEOUT_SECONDS:-120}"
 SKIP_BUILD_IF_UNCHANGED="${SKIP_BUILD_IF_UNCHANGED:-1}"
 PULL_BASE="${PULL_BASE:-0}"
 STOP_LEGACY_WEB="${STOP_LEGACY_WEB:-1}"
+WEB_PRUNE_MODE="${WEB_PRUNE_MODE:-light}"              # off | light | aggressive
+WEB_PRUNE_ASYNC="${WEB_PRUNE_ASYNC:-1}"               # 1 to run pruning in background
+WEB_PRUNE_CACHE_UNTIL="${WEB_PRUNE_CACHE_UNTIL:-168h}" # e.g. 24h, 168h
+WEB_PRUNE_CACHE_KEEP_STORAGE="${WEB_PRUNE_CACHE_KEEP_STORAGE:-8gb}"
 
 ARIS_WEB_IMAGE="${ARIS_WEB_IMAGE:-aris-stack-aris-web:latest}"
 NGINX_SITE="${ARIS_NGINX_SITE:-/etc/nginx/sites-available/aris.lawdigest.cloud}"
@@ -34,8 +39,12 @@ if [[ "$WEB_SLOT_DEFAULT" != "blue" && "$WEB_SLOT_DEFAULT" != "green" ]]; then
   echo "[deploy:web-zd] invalid WEB_SLOT_DEFAULT: $WEB_SLOT_DEFAULT (blue|green)" >&2
   exit 1
 fi
+if [[ "$WEB_PRUNE_MODE" != "off" && "$WEB_PRUNE_MODE" != "light" && "$WEB_PRUNE_MODE" != "aggressive" ]]; then
+  echo "[deploy:web-zd] invalid WEB_PRUNE_MODE: $WEB_PRUNE_MODE (off|light|aggressive)" >&2
+  exit 1
+fi
 
-mkdir -p "$STATE_DIR"
+mkdir -p "$STATE_DIR" "$LOG_DIR"
 
 export DOCKER_BUILDKIT=1
 export COMPOSE_DOCKER_CLI_BUILD=1
@@ -207,6 +216,37 @@ write_nginx_upstream_snippet() {
   rm -f "$tmp"
 }
 
+prune_builder_cache() {
+  local aggressive="$1"
+  local args=(-f --filter "until=${WEB_PRUNE_CACHE_UNTIL}")
+
+  if docker buildx version >/dev/null 2>&1; then
+    if docker buildx prune --help | grep -q -- '--keep-storage' && [[ "$aggressive" != "1" ]]; then
+      docker buildx prune -f --keep-storage "${WEB_PRUNE_CACHE_KEEP_STORAGE}" >/dev/null || true
+    else
+      docker buildx prune "${args[@]}" >/dev/null || true
+    fi
+  else
+    docker builder prune "${args[@]}" >/dev/null || true
+  fi
+}
+
+run_cleanup() {
+  case "$WEB_PRUNE_MODE" in
+    off)
+      ;;
+    light)
+      docker image prune -f >/dev/null || true
+      prune_builder_cache 0
+      ;;
+    aggressive)
+      docker image prune -af >/dev/null || true
+      docker container prune -f >/dev/null || true
+      prune_builder_cache 1
+      ;;
+  esac
+}
+
 reload_nginx() {
   sudo nginx -t >/dev/null
   sudo systemctl reload nginx
@@ -221,10 +261,14 @@ if [[ "$SKIP_BUILD_IF_UNCHANGED" == "1" && "$PULL_BASE" != "1" ]]; then
     previous_fingerprint="$(cat "$FINGERPRINT_FILE" 2>/dev/null || true)"
     if [[ -n "$previous_fingerprint" && "$previous_fingerprint" == "$current_fingerprint" ]]; then
       build_required=0
-      echo "[deploy:web-zd] build skipped: unchanged context fingerprint"
+echo "[deploy:web-zd] build skipped: unchanged context fingerprint"
     fi
   fi
 fi
+echo "[deploy:web-zd] prune mode: $WEB_PRUNE_MODE"
+echo "[deploy:web-zd] prune async: $WEB_PRUNE_ASYNC"
+echo "[deploy:web-zd] prune cache until: $WEB_PRUNE_CACHE_UNTIL"
+echo "[deploy:web-zd] prune cache keep storage: $WEB_PRUNE_CACHE_KEEP_STORAGE"
 
 active_slot="$(resolve_active_slot)"
 target_slot="$(other_slot "$active_slot")"
@@ -273,6 +317,25 @@ if [[ "$STOP_LEGACY_WEB" == "1" ]]; then
   if compose ps -q aris-web | grep -q '.'; then
     echo "[deploy:web-zd] stopping legacy aris-web service"
     compose stop aris-web >/dev/null || true
+  fi
+fi
+
+if [[ "$WEB_PRUNE_MODE" != "off" ]]; then
+  cleanup_log="${LOG_DIR}/web-prune.log"
+  if [[ "$WEB_PRUNE_ASYNC" == "1" ]]; then
+    echo "[deploy:web-zd] pruning started in background: ${cleanup_log}"
+    (
+      echo "[$(date -Iseconds)] prune started (mode=${WEB_PRUNE_MODE})"
+      run_cleanup
+      echo "[$(date -Iseconds)] prune finished"
+    ) >> "$cleanup_log" 2>&1 &
+  else
+    echo "[deploy:web-zd] prune started (foreground)"
+    (
+      echo "[$(date -Iseconds)] prune started (mode=${WEB_PRUNE_MODE})"
+      run_cleanup
+      echo "[$(date -Iseconds)] prune finished"
+    ) >> "$cleanup_log" 2>&1
   fi
 fi
 
