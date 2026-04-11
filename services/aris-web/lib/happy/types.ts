@@ -3,6 +3,18 @@ export type SessionAction = 'abort' | 'retry' | 'kill' | 'resume';
 export type ApprovalPolicy = 'on-request' | 'on-failure' | 'never' | 'yolo';
 export type AgentFlavor = 'claude' | 'codex' | 'gemini' | 'unknown';
 
+export type ChatImageAttachment = {
+  assetId: string;
+  kind: 'image';
+  name: string;
+  mimeType: string;
+  size: number;
+  width?: number;
+  height?: number;
+  serverPath: string;
+  previewUrl: string;
+};
+
 export type SessionSummary = {
   id: string;
   agent: AgentFlavor;
