@@ -57,6 +57,7 @@ deploy/
 5. If `services/aris-backend/.env` is still maintained for local checks, keep its `RUNTIME_API_TOKEN` aligned with `prod.env`.
 6. After pushing `main`, confirm that the `Deploy on Main Push` workflow run is actually created before deleting the source branch or assuming deploy completed.
 7. When validating direct-to-main operational flows, prefer fast-forwarding a local `main` checkout and pushing `origin main` so the final deploy push is recorded from the `main` ref itself.
+8. If the current shell has `GITHUB_ACTIONS=true` or other GitHub Actions runner environment variables, leave that shell and push from a normal user shell before expecting a new Actions run to appear.
 
 ## Standard deployment flows
 
