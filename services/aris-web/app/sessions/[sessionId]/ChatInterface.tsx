@@ -2107,8 +2107,13 @@ function LinkPreviewCarousel({ body }: { body: string }) {
   const scroll = useCallback((direction: 'left' | 'right') => {
     const el = scrollRef.current;
     if (!el) return;
-    const cardWidth = 296;
-    el.scrollBy({ left: direction === 'left' ? -cardWidth : cardWidth, behavior: 'smooth' });
+    const firstCard = el.firstElementChild as HTMLElement | null;
+    const trackStyles = window.getComputedStyle(el);
+    const gapValue = trackStyles.columnGap || trackStyles.gap || '0';
+    const gap = Number.parseFloat(gapValue) || 0;
+    const cardWidth = firstCard?.getBoundingClientRect().width ?? Math.min(el.clientWidth, 296);
+    const scrollAmount = cardWidth + gap;
+    el.scrollBy({ left: direction === 'left' ? -scrollAmount : scrollAmount, behavior: 'smooth' });
   }, []);
 
   const meaningful = previews.filter(p =>
