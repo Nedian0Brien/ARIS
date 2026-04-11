@@ -10,13 +10,18 @@ import type { ChatImageAttachment } from '@/lib/happy/types';
 const CHAT_IMAGE_ASSET_ROOT = path.join(getHostHomeDir(), '.aris', 'chat-assets');
 const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
 const MAX_MULTIPART_REQUEST_BYTES = MAX_IMAGE_UPLOAD_BYTES + 256 * 1024;
+const ALLOWED_IMAGE_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+]);
 const MIME_TYPES: Record<string, string> = {
   png: 'image/png',
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
   gif: 'image/gif',
   webp: 'image/webp',
-  svg: 'image/svg+xml',
 };
 
 function sanitizeFilename(name: string): string {
@@ -99,7 +104,7 @@ export async function POST(
     return NextResponse.json({ error: '이미지 파일이 필요합니다.' }, { status: 400 });
   }
 
-  if (!file.type.startsWith('image/')) {
+  if (!ALLOWED_IMAGE_MIME_TYPES.has(file.type)) {
     return NextResponse.json({ error: '이미지 파일만 업로드할 수 있습니다.' }, { status: 400 });
   }
 

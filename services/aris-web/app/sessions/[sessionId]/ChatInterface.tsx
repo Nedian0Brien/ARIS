@@ -5500,7 +5500,7 @@ export function ChatInterface({
       return;
     }
     const scopedChatId = lastSubmittedPayload.chatId;
-    const hasPersistedMatchingUserEvent = eventsForChatId === scopedChatId
+    const localPersistedMatch = eventsForChatId === scopedChatId
       ? events.some((event) => matchesSubmittedUserPayload(event, {
           text: lastSubmittedPayload.text,
           attachments: lastSubmittedPayload.attachments,
@@ -5519,6 +5519,30 @@ export function ChatInterface({
     disconnectNoticeAwaitingRef.current = null;
 
     try {
+      let hasPersistedMatchingUserEvent = localPersistedMatch;
+      if (!hasPersistedMatchingUserEvent) {
+        try {
+          const query = new URLSearchParams({
+            chatId: scopedChatId,
+            limit: '20',
+          });
+          const persistedResponse = await fetch(`/api/runtime/sessions/${sessionId}/events?${query.toString()}`, {
+            cache: 'no-store',
+          });
+          const persistedPayload = (await persistedResponse.json().catch(() => ({}))) as {
+            events?: UiEvent[];
+          };
+          hasPersistedMatchingUserEvent = persistedResponse.ok
+            && Array.isArray(persistedPayload.events)
+            && persistedPayload.events.some((event) => matchesSubmittedUserPayload(event, {
+              text: lastSubmittedPayload.text,
+              attachments: lastSubmittedPayload.attachments,
+            }));
+        } catch {
+          hasPersistedMatchingUserEvent = localPersistedMatch;
+        }
+      }
+
       const response = hasPersistedMatchingUserEvent
         ? await fetch(`/api/runtime/sessions/${sessionId}/actions`, {
             method: 'POST',

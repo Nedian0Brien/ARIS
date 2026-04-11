@@ -132,6 +132,22 @@ describe('chat image upload route', () => {
     expect(await response.json()).toMatchObject({ error: '이미지 파일만 업로드할 수 있습니다.' });
   });
 
+  it('rejects svg uploads to avoid serving active content from the app origin', async () => {
+    const form = new FormData();
+    form.set('file', new File(['<svg></svg>'], 'vector.svg', { type: 'image/svg+xml' }));
+
+    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const response = await POST(
+      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+        method: 'POST',
+        body: form,
+      }),
+      { params: Promise.resolve({ sessionId: 'session-1' }) },
+    );
+
+    expect(response.status).toBe(400);
+  });
+
   it('rejects non-operator uploads', async () => {
     mocks.requireApiUser.mockResolvedValue({ user: { role: 'viewer', id: 'user-1' } });
     const form = new FormData();
