@@ -3311,10 +3311,42 @@
   max-width: 220px;
 }
 
+.contextChipImage {
+  align-items: stretch;
+  gap: 0.42rem;
+  max-width: 280px;
+  padding: 0.22rem 0.34rem 0.22rem 0.22rem;
+}
+
+.contextChipThumb {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  border-radius: 5px;
+  flex-shrink: 0;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.contextChipBody {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.08rem;
+}
+
 .contextChipLabel {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.contextChipMeta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.64rem;
+  font-weight: 500;
+  color: var(--chat-text-muted);
 }
 
 .contextChipRemove {
@@ -3347,6 +3379,14 @@
 .plusMenuWrap {
   position: relative;
   flex-shrink: 0;
+}
+
+.hiddenFileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .composerPlusBtn {
@@ -3415,11 +3455,67 @@
   background: var(--chat-surface-subtle);
 }
 
+.plusMenuItem:disabled {
+  opacity: 0.52;
+  cursor: progress;
+}
+
 .plusMenuInputArea {
   display: flex;
   flex-direction: column;
   gap: 0.32rem;
   padding: 0.4rem;
+}
+
+.messageImageAttachmentList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.messageImageAttachmentCard {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  max-width: 280px;
+  padding: 0.36rem;
+  border-radius: 10px;
+  border: 1px solid var(--chat-item-border);
+  background: color-mix(in srgb, var(--chat-msg-agent-bg) 84%, transparent);
+  color: inherit;
+  text-decoration: none;
+}
+
+.messageImageAttachmentThumb {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.messageImageAttachmentBody {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.14rem;
+}
+
+.messageImageAttachmentName {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--chat-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.messageImageAttachmentMeta {
+  font-size: 0.68rem;
+  color: var(--chat-text-muted);
 }
 
 .plusMenuInputLabel {

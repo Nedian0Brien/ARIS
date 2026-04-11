@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ChangeEvent, ReactNode } from 'react';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
@@ -30,7 +30,7 @@ import {
   mergeRenderablePermissions,
   type RenderablePermissionRequest,
 } from '@/lib/happy/permissions';
-import { buildOptimisticUserEvent } from './chatComposer';
+import { buildOptimisticUserEvent, type ComposerImageAttachment } from './chatComposer';
 import {
   readLastSelectedModelId,
   resolvePreferredModelId,
@@ -79,6 +79,7 @@ import {
   GitPullRequest,
   CircleDot,
   Globe,
+  Image as ImageIcon,
   Play,
   Star,
   TerminalSquare,
@@ -284,7 +285,8 @@ type ComposerModelId = string;
 
 type ContextItem =
   | { id: string; type: 'file'; path: string; content: string; name: string }
-  | { id: string; type: 'text'; text: string };
+  | { id: string; type: 'text'; text: string }
+  | { id: string; type: 'image'; attachment: ComposerImageAttachment };
 type ChatRunPhase = ResolvedChatRunPhase;
 type ChatSidebarState = 'default' | 'running' | 'completed' | 'approval' | 'error';
 type ChatSidebarSectionKey = 'pinned' | 'running' | 'completed' | 'history';
@@ -312,6 +314,7 @@ type ChatSubmittedPayload = {
   geminiMode?: string;
   modelReasoningEffort?: ModelReasoningEffort;
   threadId?: string;
+  attachments?: ComposerImageAttachment[];
 };
 type ChatRuntimeUiState = {
   isSubmitting: boolean;
@@ -445,6 +448,41 @@ function ElapsedTimer({ since, className }: { since: string; className?: string 
 
 function genId(): string {
   return Math.random().toString(36).slice(2, 9);
+}
+
+function isComposerImageAttachment(value: unknown): value is ComposerImageAttachment {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return candidate.kind === 'image'
+    && typeof candidate.assetId === 'string'
+    && typeof candidate.name === 'string'
+    && typeof candidate.mimeType === 'string'
+    && typeof candidate.size === 'number'
+    && typeof candidate.serverPath === 'string'
+    && typeof candidate.previewUrl === 'string';
+}
+
+function extractImageAttachments(contextItems: ContextItem[]): ComposerImageAttachment[] {
+  return contextItems.flatMap((item) => (item.type === 'image' ? [item.attachment] : []));
+}
+
+function readUserEventImageAttachments(event: UiEvent): ComposerImageAttachment[] {
+  const attachments = event.meta?.attachments;
+  if (!Array.isArray(attachments)) {
+    return [];
+  }
+  return attachments.filter(isComposerImageAttachment);
+}
+
+function formatAttachmentCaption(attachment: ComposerImageAttachment): string {
+  const dimensions = attachment.width && attachment.height
+    ? `${attachment.width}×${attachment.height}`
+    : null;
+  const sizeKb = attachment.size > 0 ? `${Math.max(1, Math.round(attachment.size / 1024))} KB` : null;
+  return [dimensions, sizeKb].filter(Boolean).join(' · ');
 }
 
 function isFolderLabel(label: string): label is FolderLabel {
@@ -1898,15 +1936,48 @@ function MarkdownContent({ body }: { body: string }) {
   );
 }
 
-function TextReply({ body, isUser }: { body: string; isUser: boolean }) {
+function TextReply({
+  body,
+  isUser,
+  attachments = [],
+}: {
+  body: string;
+  isUser: boolean;
+  attachments?: ComposerImageAttachment[];
+}) {
   const normalized = body.trim();
-  if (!normalized) {
+  if (!normalized && attachments.length === 0) {
     return null;
   }
 
   return (
     <div className={isUser ? styles.userText : styles.agentText}>
-      <MarkdownContent body={normalized} />
+      {attachments.length > 0 && (
+        <div className={styles.messageImageAttachmentList}>
+          {attachments.map((attachment) => (
+            <a
+              key={attachment.assetId}
+              href={attachment.previewUrl}
+              target="_blank"
+              rel="noreferrer"
+              className={styles.messageImageAttachmentCard}
+            >
+              <img
+                src={attachment.previewUrl}
+                alt={attachment.name}
+                className={styles.messageImageAttachmentThumb}
+              />
+              <span className={styles.messageImageAttachmentBody}>
+                <span className={styles.messageImageAttachmentName}>{attachment.name}</span>
+                {formatAttachmentCaption(attachment) ? (
+                  <span className={styles.messageImageAttachmentMeta}>{formatAttachmentCaption(attachment)}</span>
+                ) : null}
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
+      {normalized ? <MarkdownContent body={normalized} /> : null}
     </div>
   );
 }
@@ -2589,7 +2660,13 @@ function renderEventPayload(
   debugMode: boolean,
 ) {
   if (userEvent) {
-    return <TextReply body={event.body || event.title} isUser />;
+    return (
+      <TextReply
+        body={event.body || event.title}
+        isUser
+        attachments={readUserEventImageAttachments(event)}
+      />
+    );
   }
 
   if (debugMode) {
@@ -2909,6 +2986,9 @@ export function ChatInterface({
   const [pendingUserEventsByChat, setPendingUserEventsByChat] = useState<Record<string, UiEvent[]>>({});
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [contextItems, setContextItems] = useState<ContextItem[]>([]);
+  const imageUploadInputRef = useRef<HTMLInputElement>(null);
+  const [isImageUploading, setIsImageUploading] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [plusMenuMode, setPlusMenuMode] = useState<'closed' | 'menu' | 'file' | 'text'>('closed');
   const [textContextInput, setTextContextInput] = useState('');
   const [selectedModelId, setSelectedModelId] = useState<ComposerModelId>(() => {
@@ -4027,6 +4107,50 @@ export function ChatInterface({
     setTextContextInput('');
     setPlusMenuMode('closed');
   }, [textContextInput]);
+
+  const handleOpenImagePicker = useCallback(() => {
+    setImageUploadError(null);
+    setPlusMenuMode('closed');
+    imageUploadInputRef.current?.click();
+  }, []);
+
+  const handleImageFileChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !activeChatIdResolved || !isOperator) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setImageUploadError('이미지 파일만 첨부할 수 있습니다.');
+      return;
+    }
+
+    setImageUploadError(null);
+    setIsImageUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/assets/images`, {
+        method: 'POST',
+        body: formData,
+      });
+      const payload = (await response.json().catch(() => ({ error: '이미지 업로드 응답을 읽을 수 없습니다.' }))) as
+        | ComposerImageAttachment
+        | { error?: string };
+
+      if (!response.ok || !isComposerImageAttachment(payload)) {
+        throw new Error(('error' in payload && payload.error) ? payload.error : '이미지 업로드에 실패했습니다.');
+      }
+
+      setContextItems((prev) => [...prev, { id: genId(), type: 'image', attachment: payload }]);
+    } catch (error) {
+      setImageUploadError(error instanceof Error ? error.message : '이미지 업로드에 실패했습니다.');
+    } finally {
+      setIsImageUploading(false);
+    }
+  }, [activeChatIdResolved, isOperator, sessionId]);
 
   const fetchFileBrowserDir = useCallback(async (dirPath: string) => {
     setFileBrowserLoading(true);
@@ -5260,12 +5384,17 @@ export function ChatInterface({
       ? buildChatTitleFromFirstPrompt(promptText)
       : null;
 
+    const imageAttachments = extractImageAttachments(contextItems);
     const contextPrefix = contextItems.length > 0
-      ? contextItems.map((item) => (
-        item.type === 'file'
-          ? `<file path="${item.path}">\n${item.content}\n</file>`
-          : `<context>\n${item.text}\n</context>`
-      )).join('\n') + '\n\n'
+      ? contextItems.flatMap((item) => {
+        if (item.type === 'file') {
+          return [`<file path="${item.path}">\n${item.content}\n</file>`];
+        }
+        if (item.type === 'text') {
+          return [`<context>\n${item.text}\n</context>`];
+        }
+        return [];
+      }).join('\n') + '\n\n'
       : '';
     const finalText = contextPrefix + promptText;
     const submitModelId = normalizeModelId(selectedModelId)
@@ -5290,6 +5419,7 @@ export function ChatInterface({
       ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
       text: finalText,
       submittedAt: awaitingSince,
+      attachments: imageAttachments,
     });
     const wasStickyAtSubmit = shouldStickToBottomRef.current;
     updateChatRuntimeUi(scopedChatId, {
@@ -5309,6 +5439,7 @@ export function ChatInterface({
         ...(submitGeminiModeId ? { geminiMode: submitGeminiModeId } : {}),
         ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
         ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
+        ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
       },
     });
     runtimeStartedSinceAwaitingRef.current = false;
@@ -5348,6 +5479,7 @@ export function ChatInterface({
                 }
               : {}),
             ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
+            ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
           },
         }),
       });
@@ -5484,6 +5616,9 @@ export function ChatInterface({
                 }
               : {}),
             ...(lastSubmittedPayload.threadId ? { threadId: lastSubmittedPayload.threadId } : {}),
+            ...(lastSubmittedPayload.attachments && lastSubmittedPayload.attachments.length > 0
+              ? { attachments: lastSubmittedPayload.attachments }
+              : {}),
           },
         }),
       });
@@ -6509,11 +6644,32 @@ export function ChatInterface({
                 {contextItems.length > 0 && (
                   <div className={styles.composerChips}>
                     {contextItems.map((item) => (
-                      <span key={item.id} className={styles.contextChip}>
-                        {item.type === 'file' ? <Paperclip size={11} /> : <AlignLeft size={11} />}
-                        <span className={styles.contextChipLabel}>
-                          {item.type === 'file' ? item.name : '텍스트'}
-                        </span>
+                      <span
+                        key={item.id}
+                        className={`${styles.contextChip} ${item.type === 'image' ? styles.contextChipImage : ''}`}
+                      >
+                        {item.type === 'image' ? (
+                          <>
+                            <img
+                              src={item.attachment.previewUrl}
+                              alt={item.attachment.name}
+                              className={styles.contextChipThumb}
+                            />
+                            <span className={styles.contextChipBody}>
+                              <span className={styles.contextChipLabel}>{item.attachment.name}</span>
+                              {formatAttachmentCaption(item.attachment) ? (
+                                <span className={styles.contextChipMeta}>{formatAttachmentCaption(item.attachment)}</span>
+                              ) : null}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            {item.type === 'file' ? <Paperclip size={11} /> : <AlignLeft size={11} />}
+                            <span className={styles.contextChipLabel}>
+                              {item.type === 'file' ? item.name : '텍스트'}
+                            </span>
+                          </>
+                        )}
                         <button
                           type="button"
                           className={styles.contextChipRemove}
@@ -6539,10 +6695,26 @@ export function ChatInterface({
                     >
                       <Plus size={16} />
                     </button>
+                    <input
+                      ref={imageUploadInputRef}
+                      type="file"
+                      accept="image/*"
+                      className={styles.hiddenFileInput}
+                      onChange={handleImageFileChange}
+                      tabIndex={-1}
+                    />
                     {plusMenuMode !== 'closed' && (
                       <div className={styles.plusMenu}>
                         {plusMenuMode === 'menu' && (
                           <>
+                            <button
+                              type="button"
+                              className={styles.plusMenuItem}
+                              onClick={handleOpenImagePicker}
+                              disabled={isImageUploading || !activeChatIdResolved}
+                            >
+                              <ImageIcon size={14} /> {isImageUploading ? '이미지 업로드 중…' : '이미지 첨부'}
+                            </button>
                             <button type="button" className={styles.plusMenuItem} onClick={() => { handleFileBrowserOpen(); }}>
                               <Paperclip size={14} /> 파일 첨부
                             </button>
@@ -6621,7 +6793,7 @@ export function ChatInterface({
                 </div>
 
                 <div className={styles.composerHint}>
-                  Ctrl + Enter로 전송
+                  {imageUploadError ? imageUploadError : isImageUploading ? '이미지 업로드 중…' : 'Ctrl + Enter로 전송'}
                 </div>
               </div>
             </form>
