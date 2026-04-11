@@ -57,6 +57,10 @@ describe('mobile home/workspace layout overflow guards', () => {
     expect(dashboardTsx).toMatch(/className=\{styles\.sessionMiniName\}>\{chat\.title\}<\/span>/);
     expect(dashboardCss).toMatch(/\.sessionMiniName\s*\{[^}]*text-overflow:\s*ellipsis;/s);
     expect(dashboardCss).toMatch(/\.sessionSidebarCard\s*\{[^}]*max-width:\s*100%;/s);
+    expect(dashboardCss).toMatch(/\.sessionDashboardSidebar\s*\{[^}]*max-width:\s*100%;/s);
+    expect(dashboardCss).toMatch(/\.sessionDashboardSidebar\s*\{[^}]*min-width:\s*0;/s);
+    expect(dashboardCss).toMatch(/\.sessionStatusSubSection\s*\{[^}]*max-width:\s*100%;/s);
+    expect(dashboardCss).toMatch(/\.sessionStatusSubSection\s*\{[^}]*min-width:\s*0;/s);
     expect(dashboardCss).toMatch(/\.sessionMiniList\s*\{[^}]*width:\s*100%;/s);
     expect(dashboardCss).toMatch(/\.sessionMiniList\s*\{[^}]*max-width:\s*100%;/s);
     expect(dashboardCss).toMatch(/\.sessionMiniItem\s*\{[^}]*width:\s*100%;/s);
