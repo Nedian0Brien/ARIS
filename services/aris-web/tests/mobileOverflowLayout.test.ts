@@ -18,7 +18,8 @@ describe('mobile home/workspace layout overflow guards', () => {
   });
 
   it('uses a single-column server resource grid on narrow phones', () => {
-    expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.serverResourceGridHorizontal\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
+    expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.serverResourceGridHorizontal\s*\{[^}]*display:\s*flex;/s);
+    expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.serverResourceGridHorizontal\s*\{[^}]*flex-direction:\s*column;/s);
   });
 
   it('collapses workspace summary cards to one column on small screens', () => {
@@ -28,5 +29,13 @@ describe('mobile home/workspace layout overflow guards', () => {
   it('lets the workspace path text shrink within the hero row on mobile', () => {
     expect(workspaceHomeCss).toMatch(/\.heroMetaPath\s*\{[^}]*min-width:\s*0;/s);
     expect(workspaceHomeCss).toMatch(/@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?\.heroMetaPath\s*\{[^}]*max-width:\s*100%;/s);
+  });
+
+  it('forces long chat titles and previews to shrink within mobile cards', () => {
+    expect(workspaceHomeCss).toMatch(/\.chatItemTop\s*\{[^}]*min-width:\s*0;/s);
+    expect(workspaceHomeCss).toMatch(/\.chatItemTitle\s*\{[^}]*min-width:\s*0;/s);
+    expect(workspaceHomeCss).toMatch(/\.chatItemTitle\s*\{[^}]*max-width:\s*100%;/s);
+    expect(workspaceHomeCss).toMatch(/\.chatItemPreview\s*\{[^}]*max-width:\s*100%;/s);
+    expect(workspaceHomeCss).toMatch(/@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?\.chatItemMeta\s*\{[^}]*max-width:\s*100%;/s);
   });
 });

@@ -105,6 +105,7 @@ async function collectOverflow(page, path: string) {
       appShell: queryMetrics('.app-shell'),
       workspaceHomeRoot: queryMetrics('[class*="WorkspaceHome_homeRoot"]'),
       chatShell: queryMetrics('[class*="ChatInterface_chatShell"]'),
+      workspaceHomeOffenders: offenders.filter((offender) => String(offender?.className ?? '').includes('WorkspaceHome_')),
       offenders,
     };
   });
@@ -135,6 +136,7 @@ test('home and workspace pages stay within the mobile viewport width', async ({ 
     } else {
       expect(report.workspaceHomeRoot?.clientWidth, `${path} workspace home width: ${JSON.stringify(report)}`).toBeLessThanOrEqual(report.viewportWidth + 1);
       expect(report.chatShell?.clientWidth, `${path} chat shell width: ${JSON.stringify(report)}`).toBeLessThanOrEqual(report.viewportWidth + 1);
+      expect(report.workspaceHomeOffenders, `${path} workspace home offender overflow: ${JSON.stringify(report)}`).toEqual([]);
     }
   }
 });
