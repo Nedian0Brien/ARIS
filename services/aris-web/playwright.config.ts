@@ -1,4 +1,4 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -16,6 +16,13 @@ export default defineConfig({
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },
         screen: { width: 390, height: 844 },
+        locale: 'ko-KR',
+      },
+    },
+    {
+      name: 'mobile-webkit',
+      use: {
+        ...devices['iPhone 13'],
         locale: 'ko-KR',
       },
     },
