@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   resolveMobileWindowScrollTop,
   resolveScrollToBottomTarget,
+  shouldAutoScrollToBottom,
   shouldResetScrollForChatChange,
 } from '@/app/sessions/[sessionId]/chatScroll';
 
@@ -41,5 +42,17 @@ describe('chatScroll', () => {
       nextChatId: 'chat-2',
       isNewChatPlaceholder: true,
     })).toBe(false);
+  });
+
+  it('does not auto-scroll to the bottom on workspace home', () => {
+    expect(shouldAutoScrollToBottom({
+      isWorkspaceHome: true,
+      shouldStickToBottom: true,
+    })).toBe(false);
+
+    expect(shouldAutoScrollToBottom({
+      isWorkspaceHome: false,
+      shouldStickToBottom: true,
+    })).toBe(true);
   });
 });

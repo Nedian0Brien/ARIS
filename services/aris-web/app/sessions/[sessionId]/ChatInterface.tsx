@@ -95,6 +95,7 @@ import { buildPermissionTimelineItems } from './chatTimeline';
 import { resolveChatReadMarkerId } from './chatSidebar';
 import { looksLikeShellTranscript, shouldShowDebugToggleInHeader } from './chatDebugMode';
 import { WorkspaceHome } from './WorkspaceHome';
+import { deriveWorkspaceTitle } from './workspaceHome';
 import styles from './ChatInterface.module.css';
 import dynamic from 'next/dynamic';
 import {
@@ -105,6 +106,7 @@ import {
 import {
   resolveMobileWindowScrollTop,
   resolveScrollToBottomTarget,
+  shouldAutoScrollToBottom,
   shouldResetScrollForChatChange,
 } from './chatScroll';
 import {
@@ -2638,7 +2640,6 @@ export function ChatInterface({
   isOperator,
   projectName,
   workspaceRootPath,
-  alias,
   agentFlavor,
   sessionModel,
   approvalPolicy: initialApprovalPolicy,
@@ -2653,7 +2654,6 @@ export function ChatInterface({
   isOperator: boolean;
   projectName: string;
   workspaceRootPath: string;
-  alias?: string | null;
   agentFlavor: string;
   sessionModel?: string | null;
   approvalPolicy?: ApprovalPolicy;
@@ -2748,9 +2748,9 @@ export function ChatInterface({
       clearTimeout(timer);
     };
   }, [sessionId, activeChatIdResolved]);
-  const sessionTitle = alias || projectName;
+  const sessionTitle = deriveWorkspaceTitle(projectName);
   const currentChatTitle = activeChat?.title || '새 채팅';
-  const displayName = activeChat?.title || alias || projectName;
+  const displayName = activeChat?.title || sessionTitle;
   const {
     events,
     eventsForChatId,
@@ -4635,7 +4635,10 @@ export function ChatInterface({
   }, [events.length, effectivePendingPermissions.length, pendingUserEvents.length, showPermissionQueue, syncScrollToBottomButton]);
 
   useEffect(() => {
-    if (!shouldStickToBottomRef.current) {
+    if (!shouldAutoScrollToBottom({
+      isWorkspaceHome,
+      shouldStickToBottom: shouldStickToBottomRef.current,
+    })) {
       return;
     }
     scrollConversationToBottom('auto');
@@ -4655,7 +4658,7 @@ export function ChatInterface({
       window.cancelAnimationFrame(rafId);
       window.clearTimeout(timeoutId);
     };
-  }, [events, isAwaitingReply, effectivePendingPermissions.length, pendingUserEvents.length, scrollConversationToBottom]);
+  }, [events, isAwaitingReply, effectivePendingPermissions.length, isWorkspaceHome, pendingUserEvents.length, scrollConversationToBottom]);
 
   useEffect(() => {
     const previousChatId = previousActiveChatIdRef.current;
