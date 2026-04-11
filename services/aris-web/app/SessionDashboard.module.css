@@ -101,6 +101,9 @@
   background: var(--dashboard-card-bg);
   backdrop-filter: blur(20px);
   box-shadow: var(--dashboard-shadow-soft);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .sessionSidebarTitle {
@@ -119,6 +122,8 @@
   grid-template-columns: repeat(2, 1fr);
   gap: 0.75rem;
   margin-bottom: 0.75rem;
+  width: 100%;
+  min-width: 0;
 }
 
 .serverDonutCard {
@@ -127,6 +132,8 @@
   border: none;
   padding: 0.65rem 0.55rem 0.55rem;
   box-shadow: var(--dashboard-shine);
+  width: 100%;
+  min-width: 0;
 }
 
 .serverDonutChart {
