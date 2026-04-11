@@ -1883,7 +1883,7 @@ interface LinkPreviewMeta {
   extra: Record<string, string>;
 }
 
-const LINK_URL_RE = /https?:\/\/[^\s)<>]+/g;
+const LINK_URL_RE = /https?:\/\/[^\s)<>"'`\]]+/g;
 
 function extractExternalUrls(text: string): string[] {
   const matches = text.match(LINK_URL_RE);
@@ -2111,7 +2111,11 @@ function LinkPreviewCarousel({ body }: { body: string }) {
     el.scrollBy({ left: direction === 'left' ? -cardWidth : cardWidth, behavior: 'smooth' });
   }, []);
 
-  const meaningful = previews.filter(p => p.title || p.description || p.image);
+  const meaningful = previews.filter(p =>
+    p.title || p.description || p.image ||
+    p.siteType === 'github_issue' || p.siteType === 'github_pr' || p.siteType === 'github_repo' ||
+    p.siteType === 'youtube'
+  );
   if (meaningful.length === 0) return null;
 
   return (

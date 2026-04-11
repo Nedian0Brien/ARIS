@@ -246,7 +246,13 @@ async function fetchOgMeta(url: string): Promise<OgMeta> {
     clearTimeout(timer);
 
     if (!res.ok) {
-      return { url, title: '', description: '', image: '', siteName: '', favicon: '', siteType, extra: {} };
+      let fallback: OgMeta = { url, title: '', description: '', image: '', siteName: tryHostname(url), favicon: '', siteType, extra: {} };
+      if (siteType === 'youtube') {
+        fallback = enrichYouTube(fallback);
+      } else if (siteType.startsWith('github')) {
+        fallback = enrichGitHub(fallback, siteType);
+      }
+      return fallback;
     }
 
     const reader = res.body?.getReader();
@@ -300,7 +306,13 @@ async function fetchOgMeta(url: string): Promise<OgMeta> {
     return meta;
   } catch {
     clearTimeout(timer);
-    return { url, title: '', description: '', image: '', siteName: tryHostname(url), favicon: '', siteType, extra: {} };
+    let fallback: OgMeta = { url, title: '', description: '', image: '', siteName: tryHostname(url), favicon: '', siteType, extra: {} };
+    if (siteType === 'youtube') {
+      fallback = enrichYouTube(fallback);
+    } else if (siteType.startsWith('github')) {
+      fallback = enrichGitHub(fallback, siteType);
+    }
+    return fallback;
   }
 }
 
