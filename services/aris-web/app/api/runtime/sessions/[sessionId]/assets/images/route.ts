@@ -50,6 +50,12 @@ function isAllowedAssetPath(filePath: string): boolean {
   return resolvedPath === resolvedRoot || resolvedPath.startsWith(`${resolvedRoot}${path.sep}`);
 }
 
+function isAllowedAssetPathForSession(filePath: string, sessionSegment: string): boolean {
+  const sessionRoot = path.resolve(path.join(CHAT_IMAGE_ASSET_ROOT, sessionSegment));
+  const resolvedPath = path.resolve(filePath);
+  return resolvedPath === sessionRoot || resolvedPath.startsWith(`${sessionRoot}${path.sep}`);
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> },
@@ -102,7 +108,10 @@ export async function POST(
   return NextResponse.json({ attachment });
 }
 
-export async function DELETE(request: NextRequest) {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ sessionId: string }> },
+) {
   const auth = await requireApiUser(request);
   if ('response' in auth) {
     return auth.response;
@@ -112,9 +121,15 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Operator role required' }, { status: 403 });
   }
 
+  const { sessionId } = await params;
+  const sessionSegment = normalizeSessionSegment(sessionId);
+  if (!sessionSegment) {
+    return NextResponse.json({ error: '유효하지 않은 세션 식별자입니다.' }, { status: 400 });
+  }
+
   const body = (await request.json().catch(() => ({}))) as { serverPath?: string };
   const serverPath = typeof body.serverPath === 'string' ? body.serverPath.trim() : '';
-  if (!serverPath || !isAllowedAssetPath(serverPath)) {
+  if (!serverPath || !isAllowedAssetPath(serverPath) || !isAllowedAssetPathForSession(serverPath, sessionSegment)) {
     return NextResponse.json({ error: '유효하지 않은 이미지 경로입니다.' }, { status: 400 });
   }
 

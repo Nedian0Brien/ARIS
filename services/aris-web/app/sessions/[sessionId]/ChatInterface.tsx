@@ -2865,7 +2865,7 @@ export function ChatInterface({
   const [contextItems, setContextItems] = useState<ContextItem[]>([]);
   const [plusMenuMode, setPlusMenuMode] = useState<'closed' | 'menu' | 'file' | 'text'>('closed');
   const [textContextInput, setTextContextInput] = useState('');
-  const [isImageUploading, setIsImageUploading] = useState(false);
+  const [imageUploadsInFlight, setImageUploadsInFlight] = useState(0);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<ComposerModelId>(() => {
     const sortedInitialChats = sortSessionChats(initialChats);
@@ -2949,7 +2949,6 @@ export function ChatInterface({
   const composerDockRef = useRef<HTMLElement>(null);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const composerImageInputRef = useRef<HTMLInputElement>(null);
-  const contextItemsRef = useRef<ContextItem[]>([]);
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const geminiModeDropdownRef = useRef<HTMLDivElement>(null);
@@ -3954,10 +3953,6 @@ export function ChatInterface({
     upsertChatSidebarSnapshot,
   ]);
 
-  useEffect(() => {
-    contextItemsRef.current = contextItems;
-  }, [contextItems]);
-
   const deleteUploadedImageAsset = useCallback((attachment: ChatImageAttachment, keepalive = false) => {
     void fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/assets/images`, {
       method: 'DELETE',
@@ -3966,16 +3961,6 @@ export function ChatInterface({
       ...(keepalive ? { keepalive: true } : {}),
     }).catch(() => {});
   }, [sessionId]);
-
-  useEffect(() => {
-    return () => {
-      for (const item of contextItemsRef.current) {
-        if (item.type === 'image') {
-          deleteUploadedImageAsset(item.attachment, true);
-        }
-      }
-    };
-  }, [deleteUploadedImageAsset]);
 
   useEffect(() => {
     if (plusMenuMode === 'closed' && !isModelDropdownOpen && !isGeminiModeDropdownOpen && !isCommandMenuOpen) return;
@@ -4086,10 +4071,13 @@ export function ChatInterface({
   }, []);
 
   const handleImageUploadOpen = useCallback(() => {
+    if (imageUploadsInFlight > 0) {
+      return;
+    }
     setPlusMenuMode('closed');
     setImageUploadError(null);
     composerImageInputRef.current?.click();
-  }, []);
+  }, [imageUploadsInFlight]);
 
   const handleComposerImageSelection = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -4098,7 +4086,7 @@ export function ChatInterface({
       return;
     }
 
-    setIsImageUploading(true);
+    setImageUploadsInFlight((prev) => prev + 1);
     setImageUploadError(null);
     try {
       const formData = new FormData();
@@ -4121,7 +4109,7 @@ export function ChatInterface({
     } catch (error) {
       setImageUploadError(error instanceof Error ? error.message : '이미지 업로드에 실패했습니다.');
     } finally {
-      setIsImageUploading(false);
+      setImageUploadsInFlight((prev) => Math.max(0, prev - 1));
     }
   }, [sessionId]);
 
@@ -5268,7 +5256,7 @@ export function ChatInterface({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const promptText = prompt.trim();
-    if (!promptText || !isOperator || isAgentRunning || !activeChatIdResolved || isImageUploading) return;
+    if (!promptText || !isOperator || isAgentRunning || !activeChatIdResolved || imageUploadsInFlight > 0) return;
     const scopedChatId = activeChatIdResolved;
 
     const hasUserMessageInChat = eventsForChatId === scopedChatId
@@ -6555,7 +6543,7 @@ export function ChatInterface({
                     ))}
                   </div>
                 )}
-                {isImageUploading && (
+                {imageUploadsInFlight > 0 && (
                   <div className={styles.composerAttachmentStatus}>이미지 업로드 중...</div>
                 )}
                 {imageUploadError && (
@@ -6655,7 +6643,7 @@ export function ChatInterface({
                   ) : (
                     <button
                       type="submit"
-                      disabled={!activeChatIdResolved || !prompt.trim() || !isOperator || isImageUploading}
+                      disabled={!activeChatIdResolved || !prompt.trim() || !isOperator || imageUploadsInFlight > 0}
                       className={styles.composerSendBtn}
                       aria-label="메시지 전송"
                       title="메시지 전송 (Ctrl/Cmd + Enter)"

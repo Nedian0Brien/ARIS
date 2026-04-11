@@ -222,9 +222,29 @@ describe('chat image upload route', () => {
           'content-type': 'application/json',
         },
       }),
+      { params: Promise.resolve({ sessionId: 'session-1' }) },
     );
 
     expect(response.status).toBe(200);
     expect(mocks.unlink).toHaveBeenCalledWith('/home/ubuntu/.aris/chat-assets/session-1/asset-123-screen.png');
+  });
+
+  it('rejects deleting another session path through the current session endpoint', async () => {
+    const { DELETE } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const response = await DELETE(
+      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+        method: 'DELETE',
+        body: JSON.stringify({
+          serverPath: '/home/ubuntu/.aris/chat-assets/session-2/asset-999-screen.png',
+        }),
+        headers: {
+          'content-type': 'application/json',
+        },
+      }),
+      { params: Promise.resolve({ sessionId: 'session-1' }) },
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.unlink).not.toHaveBeenCalledWith('/home/ubuntu/.aris/chat-assets/session-2/asset-999-screen.png');
   });
 });
