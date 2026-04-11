@@ -57,6 +57,16 @@ export async function POST(
   }
 
   const { sessionId } = await params;
+  const sessionSegment = normalizeSessionSegment(sessionId);
+  if (!sessionSegment) {
+    return NextResponse.json({ error: '유효하지 않은 세션 식별자입니다.' }, { status: 400 });
+  }
+
+  const contentLength = Number.parseInt(request.headers.get('content-length') ?? '', 10);
+  if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_UPLOAD_BYTES) {
+    return NextResponse.json({ error: '이미지 파일은 10MB 이하만 업로드할 수 있습니다.' }, { status: 400 });
+  }
+
   const formData = await request.formData().catch(() => null);
   const file = formData?.get('file');
   if (!(file instanceof File) || file.size <= 0) {
@@ -69,11 +79,6 @@ export async function POST(
 
   if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
     return NextResponse.json({ error: '이미지 파일은 10MB 이하만 업로드할 수 있습니다.' }, { status: 400 });
-  }
-
-  const sessionSegment = normalizeSessionSegment(sessionId);
-  if (!sessionSegment) {
-    return NextResponse.json({ error: '유효하지 않은 세션 식별자입니다.' }, { status: 400 });
   }
 
   const assetId = randomUUID();
