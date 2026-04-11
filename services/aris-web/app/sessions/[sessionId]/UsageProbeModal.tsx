@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, X } from 'lucide-react';
 import type { UsageCommandProvider } from './chatCommands';
 import { buildUsageProbeDescriptor } from './chatCommands';
-import { normalizeUsageProbeMessageData } from './usageProbeTerminal';
+import { formatUsageProbeCloseMessage, normalizeUsageProbeMessageData } from './usageProbeTerminal';
 import styles from './UsageProbeModal.module.css';
 import '@xterm/xterm/css/xterm.css';
 
@@ -21,8 +21,11 @@ export function UsageProbeModal({ provider, workspacePath, onClose }: Props) {
   const wsRef = useRef<WebSocket | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const automationTimersRef = useRef<number[]>([]);
+  const receivedChunkRef = useRef(false);
   const [probeNonce, setProbeNonce] = useState(0);
   const [connected, setConnected] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('연결 중...');
+  const [probeEvents, setProbeEvents] = useState<string[]>([]);
 
   const descriptor = useMemo(
     () => buildUsageProbeDescriptor(provider, workspacePath),
@@ -36,20 +39,30 @@ export function UsageProbeModal({ provider, workspacePath, onClose }: Props) {
     automationTimersRef.current = [];
   }, []);
 
+  const appendProbeEvent = useCallback((message: string) => {
+    console.info(`[usage-probe:${provider}] ${message}`);
+    setProbeEvents((prev) => [...prev.slice(-7), message]);
+  }, [provider]);
+
   const runAutomation = useCallback((ws: WebSocket) => {
     clearAutomationTimers();
     for (const step of descriptor.steps) {
       const timerId = window.setTimeout(() => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(step.input);
+          appendProbeEvent(`입력 전송: ${step.input.trim() || '(empty)'}`);
         }
       }, step.delayMs);
       automationTimersRef.current.push(timerId);
     }
-  }, [clearAutomationTimers, descriptor.steps]);
+  }, [appendProbeEvent, clearAutomationTimers, descriptor.steps]);
 
   useEffect(() => {
     let disposed = false;
+    receivedChunkRef.current = false;
+    setConnected(false);
+    setStatusMessage('연결 중...');
+    setProbeEvents(['usage probe 초기화']);
 
     async function boot() {
       if (!containerRef.current) {
@@ -99,6 +112,8 @@ export function UsageProbeModal({ provider, workspacePath, onClose }: Props) {
           return;
         }
         setConnected(true);
+        setStatusMessage('usage probe 실행 중...');
+        appendProbeEvent('WebSocket 연결 성공');
         ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
         runAutomation(ws);
       };
@@ -107,12 +122,25 @@ export function UsageProbeModal({ provider, workspacePath, onClose }: Props) {
         if (disposed) {
           return;
         }
+        if (!receivedChunkRef.current) {
+          receivedChunkRef.current = true;
+          setStatusMessage('터미널 출력 수신 중');
+          appendProbeEvent('첫 터미널 출력 수신');
+        }
         term.write(normalizeUsageProbeMessageData(event.data as string | ArrayBuffer));
       };
 
-      ws.onclose = () => {
+      ws.onerror = () => {
+        if (!disposed) {
+          appendProbeEvent('WebSocket 오류 발생');
+        }
+      };
+
+      ws.onclose = (event) => {
         if (!disposed) {
           setConnected(false);
+          setStatusMessage(formatUsageProbeCloseMessage(event.code, event.reason));
+          appendProbeEvent(formatUsageProbeCloseMessage(event.code, event.reason));
         }
       };
 
@@ -184,7 +212,13 @@ export function UsageProbeModal({ provider, workspacePath, onClose }: Props) {
 
         <div className={styles.footer}>
           <span className={`${styles.statusDot} ${connected ? styles.statusDotConnected : styles.statusDotDisconnected}`} />
-          <span>{connected ? '라이브 usage probe 연결됨' : '연결 종료됨'}</span>
+          <span>{statusMessage}</span>
+        </div>
+
+        <div className={styles.diagnostics}>
+          {probeEvents.map((entry, index) => (
+            <div key={`${probeNonce}-${index}`} className={styles.diagnosticItem}>{entry}</div>
+          ))}
         </div>
       </div>
     </div>

@@ -105,6 +105,23 @@
   color: #94a3b8;
 }
 
+.diagnostics {
+  display: grid;
+  gap: 0.26rem;
+  padding: 0 1.1rem 1rem;
+  font-size: 0.68rem;
+  color: #94a3b8;
+}
+
+.diagnosticItem {
+  padding: 0.32rem 0.45rem;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(15, 23, 42, 0.52);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  word-break: break-word;
+}
+
 .statusDot {
   width: 8px;
   height: 8px;
