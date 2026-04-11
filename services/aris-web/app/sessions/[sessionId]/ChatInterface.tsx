@@ -70,6 +70,7 @@ import {
   PanelRightOpen,
   Paperclip,
   Pencil,
+  Layers,
   Pin,
   Plus,
   Square,
@@ -93,6 +94,7 @@ import { UsageProbeModal } from './UsageProbeModal';
 import { buildPermissionTimelineItems } from './chatTimeline';
 import { resolveChatReadMarkerId } from './chatSidebar';
 import { looksLikeShellTranscript, shouldShowDebugToggleInHeader } from './chatDebugMode';
+import { WorkspaceHome } from './WorkspaceHome';
 import styles from './ChatInterface.module.css';
 import dynamic from 'next/dynamic';
 import {
@@ -2622,6 +2624,7 @@ export function ChatInterface({
   agentFlavor,
   sessionModel,
   approvalPolicy: initialApprovalPolicy,
+  initialShowWorkspaceHome = false,
 }: {
   sessionId: string;
   initialEvents: UiEvent[];
@@ -2636,11 +2639,13 @@ export function ChatInterface({
   agentFlavor: string;
   sessionModel?: string | null;
   approvalPolicy?: ApprovalPolicy;
+  initialShowWorkspaceHome?: boolean;
 }) {
   const [approvalPolicy, setApprovalPolicy] = useState<ApprovalPolicy | undefined>(initialApprovalPolicy);
   const [isPolicyChanging, setIsPolicyChanging] = useState(false);
   const [modelSettings, setModelSettings] = useState<ModelSettingsResponse | null>(null);
-  
+  const [isWorkspaceHome, setIsWorkspaceHome] = useState(initialShowWorkspaceHome);
+
   useEffect(() => {
     fetch('/api/settings/models')
       .then((r) => r.json())
@@ -2656,8 +2661,8 @@ export function ChatInterface({
   const [selectedChatId, setSelectedChatId] = useState<string | null>(activeChatId);
   const [isNewChatPlaceholder, setIsNewChatPlaceholder] = useState(false);
   const activeChat = useMemo(
-    () => resolveActiveChat(chats, selectedChatId, isNewChatPlaceholder),
-    [chats, isNewChatPlaceholder, selectedChatId],
+    () => resolveActiveChat(chats, selectedChatId, isNewChatPlaceholder, isWorkspaceHome),
+    [chats, isNewChatPlaceholder, selectedChatId, isWorkspaceHome],
   );
   const activeChatIdResolved = activeChat?.id ?? null;
   useEffect(() => {
@@ -2666,21 +2671,30 @@ export function ChatInterface({
       selectedChatId,
       requestedChatId: readChatIdFromLocation(),
       isNewChatPlaceholder,
+      isWorkspaceHome,
     });
     if (nextSelectedChatId === selectedChatId) {
       return;
     }
     setSelectedChatId(nextSelectedChatId);
-  }, [chats, isNewChatPlaceholder, selectedChatId]);
+  }, [chats, isNewChatPlaceholder, isWorkspaceHome, selectedChatId]);
   useEffect(() => {
     const syncFromHistory = () => {
-      setIsNewChatPlaceholder(false);
-      setSelectedChatId(resolveNextSelectedChatId({
-        chats,
-        selectedChatId: null,
-        requestedChatId: readChatIdFromLocation(),
-        isNewChatPlaceholder: false,
-      }));
+      const requestedChatId = readChatIdFromLocation();
+      if (requestedChatId) {
+        setIsWorkspaceHome(false);
+        setIsNewChatPlaceholder(false);
+        setSelectedChatId(resolveNextSelectedChatId({
+          chats,
+          selectedChatId: null,
+          requestedChatId,
+          isNewChatPlaceholder: false,
+        }));
+      } else {
+        setIsWorkspaceHome(true);
+        setIsNewChatPlaceholder(false);
+        setSelectedChatId(null);
+      }
     };
     window.addEventListener('popstate', syncFromHistory);
     return () => {
@@ -2688,11 +2702,11 @@ export function ChatInterface({
     };
   }, [chats]);
   useEffect(() => {
-    if (isNewChatPlaceholder || !activeChatIdResolved) {
+    if (isWorkspaceHome || isNewChatPlaceholder || !activeChatIdResolved) {
       return;
     }
     writeChatIdToHistory(buildChatUrl(sessionId, activeChatIdResolved), 'replace');
-  }, [activeChatIdResolved, isNewChatPlaceholder, sessionId]);
+  }, [activeChatIdResolved, isNewChatPlaceholder, isWorkspaceHome, sessionId]);
   const includeUnassignedEvents = Boolean(activeChat?.isDefault);
   const { isLeader: isSessionSyncLeader } = useSessionSyncLeader(sessionId);
   const [chatRuntimeUiByChat, setChatRuntimeUiByChat] = useState<Record<string, ChatRuntimeUiState>>({});
@@ -5590,15 +5604,28 @@ export function ChatInterface({
         }`}
       >
         <div className={styles.chatSidebarHeader}>
-          <div>
-            <div className={styles.chatSidebarTitle}>채팅 목록</div>
-            <div className={styles.chatSidebarSubTitle}>{sessionTitle}</div>
-          </div>
+          <button
+            type="button"
+            className={`${styles.chatSidebarHomeButton} ${isWorkspaceHome ? styles.chatSidebarHomeButtonActive : ''}`}
+            onClick={() => {
+              setIsWorkspaceHome(true);
+              setIsNewChatPlaceholder(false);
+              setSelectedChatId(null);
+              if (isMobileLayout) {
+                setIsChatSidebarOpen(false);
+              }
+            }}
+            title="워크스페이스 홈"
+          >
+            <Layers size={14} />
+            <span className={styles.chatSidebarHomeLabel}>{sessionTitle}</span>
+          </button>
           <div className={styles.createChatMenuWrap}>
             <button
               type="button"
               className={styles.chatSidebarNewButton}
               onClick={() => {
+                setIsWorkspaceHome(false);
                 setIsNewChatPlaceholder(true);
                 setSelectedChatId(null);
                 if (isMobileLayout) {
@@ -6115,7 +6142,29 @@ export function ChatInterface({
 
           <>
           <div className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''}`} ref={scrollRef} onScroll={handleStreamScroll}>
-            {isNewChatPlaceholder ? (
+            {isWorkspaceHome ? (
+              <WorkspaceHome
+                sessionId={sessionId}
+                sessionTitle={sessionTitle}
+                projectPath={projectName}
+                agentFlavor={agentFlavor}
+                chats={chats}
+                onSelectChat={(chatId) => {
+                  setIsWorkspaceHome(false);
+                  setIsNewChatPlaceholder(false);
+                  setSelectedChatId(chatId);
+                  writeChatIdToHistory(buildChatUrl(sessionId, chatId), 'push');
+                }}
+                onNewChat={() => {
+                  setIsWorkspaceHome(false);
+                  setIsNewChatPlaceholder(true);
+                  setSelectedChatId(null);
+                  if (isMobileLayout) {
+                    setIsChatSidebarOpen(false);
+                  }
+                }}
+              />
+            ) : isNewChatPlaceholder ? (
               <div className={styles.agentSelectorContainer}>
                 <h3 className={styles.agentSelectorTitle}>어떤 에이전트와 대화를 시작할까요?</h3>
                 <div className={styles.agentSelectorGrid}>
@@ -6322,7 +6371,7 @@ export function ChatInterface({
             </button>
           )}
 
-          <footer className={styles.composerDock} ref={composerDockRef}>
+          {!isWorkspaceHome && <footer className={styles.composerDock} ref={composerDockRef}>
             <form onSubmit={handleSubmit} className={styles.composerForm}>
               <div className={styles.composerCard}>
                 <div className={styles.composerToolbar}>
@@ -6576,7 +6625,7 @@ export function ChatInterface({
                 </div>
               </div>
             </form>
-          </footer>
+          </footer>}
 
             {showChatTransitionLoading && (
               <div
