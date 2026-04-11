@@ -10,14 +10,16 @@ async function login(page) {
     throw new Error('MOBILE_OVERFLOW_EMAIL and MOBILE_OVERFLOW_PASSWORD are required');
   }
 
-  await page.goto('/login', { waitUntil: 'networkidle' });
-  await page.locator('input[type="email"]').fill(email);
-  await page.locator('input[type="password"]').fill(password);
-  await Promise.all([
-    page.waitForURL((url) => !url.pathname.startsWith('/login'), { waitUntil: 'commit' }),
-    page.getByRole('button', { name: /sign in/i }).click(),
-  ]);
-  await page.waitForLoadState('domcontentloaded');
+  const response = await page.request.post('/api/auth/login', {
+    data: { email, password, rememberMe: false },
+  });
+  const body = await response.json();
+
+  if (!response.ok || body?.status !== 'success') {
+    throw new Error(`login failed: ${response.status()} ${JSON.stringify(body)}`);
+  }
+
+  await page.goto('/', { waitUntil: 'networkidle' });
 }
 
 async function resolveFirstSessionPath(page) {
