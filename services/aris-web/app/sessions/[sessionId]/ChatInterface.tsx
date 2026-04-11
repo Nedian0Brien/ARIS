@@ -45,6 +45,7 @@ import {
   CheckCircle2,
   CornerDownRight,
   ChevronDown,
+  ChevronLeft,
   ChevronUp,
   ChevronRight,
   CircleAlert,
@@ -72,6 +73,8 @@ import {
   Pin,
   Plus,
   Square,
+  ExternalLink,
+  Globe,
   TerminalSquare,
   Trash2,
   X,
@@ -1856,6 +1859,195 @@ function TextReply({ body, isUser }: { body: string; isUser: boolean }) {
   return (
     <div className={isUser ? styles.userText : styles.agentText}>
       <MarkdownContent body={normalized} />
+    </div>
+  );
+}
+
+/* ─── Link Preview ─── */
+
+interface LinkPreviewMeta {
+  url: string;
+  title: string;
+  description: string;
+  image: string;
+  siteName: string;
+  favicon: string;
+}
+
+const LINK_URL_RE = /https?:\/\/[^\s)<>]+/g;
+
+function extractExternalUrls(text: string): string[] {
+  const matches = text.match(LINK_URL_RE);
+  if (!matches) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of matches) {
+    // Strip trailing punctuation that's unlikely part of the URL
+    const url = raw.replace(/[.,;:!?)]+$/, '');
+    if (!seen.has(url)) {
+      seen.add(url);
+      result.push(url);
+    }
+  }
+  return result;
+}
+
+const linkPreviewClientCache = new Map<string, LinkPreviewMeta>();
+
+function useLinkPreviews(urls: string[]): LinkPreviewMeta[] {
+  const [previews, setPreviews] = useState<LinkPreviewMeta[]>([]);
+
+  useEffect(() => {
+    if (urls.length === 0) {
+      setPreviews([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function load() {
+      const results: LinkPreviewMeta[] = [];
+      for (const url of urls) {
+        const cached = linkPreviewClientCache.get(url);
+        if (cached) {
+          results.push(cached);
+          continue;
+        }
+        try {
+          const res = await fetch(`/api/link-preview?url=${encodeURIComponent(url)}`);
+          if (!res.ok) {
+            results.push({ url, title: '', description: '', image: '', siteName: '', favicon: '' });
+            continue;
+          }
+          const meta: LinkPreviewMeta = await res.json();
+          linkPreviewClientCache.set(url, meta);
+          results.push(meta);
+        } catch {
+          results.push({ url, title: '', description: '', image: '', siteName: '', favicon: '' });
+        }
+      }
+      if (!cancelled) setPreviews(results);
+    }
+
+    void load();
+    return () => { cancelled = true; };
+  }, [urls.join('\n')]);
+
+  return previews;
+}
+
+function LinkPreviewCarousel({ body }: { body: string }) {
+  const urls = useMemo(() => extractExternalUrls(body), [body]);
+  const previews = useLinkPreviews(urls);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 2);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    updateScrollState();
+    el.addEventListener('scroll', updateScrollState, { passive: true });
+    const ro = new ResizeObserver(updateScrollState);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener('scroll', updateScrollState);
+      ro.disconnect();
+    };
+  }, [previews.length, updateScrollState]);
+
+  const scroll = useCallback((direction: 'left' | 'right') => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const cardWidth = 296;
+    el.scrollBy({ left: direction === 'left' ? -cardWidth : cardWidth, behavior: 'smooth' });
+  }, []);
+
+  const meaningful = previews.filter(p => p.title || p.description || p.image);
+  if (meaningful.length === 0) return null;
+
+  return (
+    <div className={styles.linkPreviewWrap}>
+      {canScrollLeft && (
+        <button
+          type="button"
+          className={`${styles.linkPreviewNavBtn} ${styles.linkPreviewNavBtnLeft}`}
+          onClick={() => scroll('left')}
+          aria-label="이전 링크"
+        >
+          <ChevronLeft size={16} />
+        </button>
+      )}
+      <div className={styles.linkPreviewTrack} ref={scrollRef}>
+        {meaningful.map((meta) => (
+          <a
+            key={meta.url}
+            href={meta.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className={styles.linkPreviewCard}
+          >
+            {meta.image && (
+              <div className={styles.linkPreviewImageWrap}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={meta.image}
+                  alt=""
+                  className={styles.linkPreviewImage}
+                  loading="lazy"
+                  onError={(e) => {
+                    (e.currentTarget.parentElement as HTMLElement).style.display = 'none';
+                  }}
+                />
+              </div>
+            )}
+            <div className={styles.linkPreviewBody}>
+              <div className={styles.linkPreviewSite}>
+                {meta.favicon ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={meta.favicon}
+                    alt=""
+                    className={styles.linkPreviewFavicon}
+                    width={14}
+                    height={14}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      (e.currentTarget.nextElementSibling as HTMLElement | null)?.style.removeProperty('display');
+                    }}
+                  />
+                ) : null}
+                <Globe size={14} className={styles.linkPreviewGlobe} style={meta.favicon ? { display: 'none' } : undefined} />
+                <span className={styles.linkPreviewSiteName}>{meta.siteName || new URL(meta.url).hostname}</span>
+                <ExternalLink size={11} className={styles.linkPreviewExtIcon} />
+              </div>
+              {meta.title && (
+                <div className={styles.linkPreviewTitle}>{meta.title}</div>
+              )}
+              {meta.description && (
+                <div className={styles.linkPreviewDesc}>{meta.description}</div>
+              )}
+            </div>
+          </a>
+        ))}
+      </div>
+      {canScrollRight && (
+        <button
+          type="button"
+          className={`${styles.linkPreviewNavBtn} ${styles.linkPreviewNavBtnRight}`}
+          onClick={() => scroll('right')}
+          aria-label="다음 링크"
+        >
+          <ChevronRight size={16} />
+        </button>
+      )}
     </div>
   );
 }
@@ -5963,6 +6155,9 @@ export function ChatInterface({
                       <div className={`${styles.messageBubble} ${styles.messageBubbleAgent}`}>
                         {renderEventPayload(event, false, expandedResultIds[event.id] ?? false, () => toggleResult(event.id), isDebugMode)}
                       </div>
+                      {!isDebugMode && !isActionKind(event.kind) && (event.body || event.title) && (
+                        <LinkPreviewCarousel body={event.body || event.title} />
+                      )}
                     </div>
                   </div>
                 </article>
