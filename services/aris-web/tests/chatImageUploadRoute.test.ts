@@ -99,4 +99,57 @@ describe('chat image upload route', () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: '이미지 파일만 업로드할 수 있습니다.' });
   });
+
+  it('rejects non-operator uploads', async () => {
+    mocks.requireApiUser.mockResolvedValue({ user: { role: 'viewer', id: 'user-1' } });
+    const form = new FormData();
+    form.set('file', new File([Uint8Array.from([137, 80, 78, 71])], 'screen.png', { type: 'image/png' }));
+
+    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const response = await POST(
+      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+        method: 'POST',
+        body: form,
+      }),
+      { params: Promise.resolve({ sessionId: 'session-1' }) },
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it('rejects unsafe session ids that escape the asset root', async () => {
+    const form = new FormData();
+    form.set('file', new File([Uint8Array.from([137, 80, 78, 71])], 'screen.png', { type: 'image/png' }));
+
+    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const response = await POST(
+      new NextRequest('http://localhost/api/runtime/sessions/../../.ssh/assets/images', {
+        method: 'POST',
+        body: form,
+      }),
+      { params: Promise.resolve({ sessionId: '../../.ssh' }) },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: '유효하지 않은 세션 식별자입니다.' });
+  });
+
+  it('rejects oversized image uploads before buffering them to disk', async () => {
+    const largeBytes = new Uint8Array(10 * 1024 * 1024 + 1);
+    const form = new FormData();
+    form.set('file', new File([largeBytes], 'huge.png', { type: 'image/png' }));
+
+    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const response = await POST(
+      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+        method: 'POST',
+        body: form,
+      }),
+      { params: Promise.resolve({ sessionId: 'session-1' }) },
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.writeFile).not.toHaveBeenCalled();
+    expect(await response.json()).toMatchObject({ error: '이미지 파일은 10MB 이하만 업로드할 수 있습니다.' });
+  });
 });

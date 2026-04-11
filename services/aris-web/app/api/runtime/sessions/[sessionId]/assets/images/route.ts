@@ -7,19 +7,28 @@ import { getHostHomeDir } from '@/lib/fs/pathResolver';
 import type { ChatImageAttachment } from '@/lib/happy/types';
 
 const CHAT_IMAGE_ASSET_ROOT = path.join(getHostHomeDir(), '.aris', 'chat-assets');
+const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 function sanitizeFilename(name: string): string {
   const base = path.basename(name).trim() || 'image';
   return base.replace(/[^\w.-]+/g, '-');
 }
 
+function normalizeSessionSegment(sessionId: string): string | null {
+  const trimmed = sessionId.trim();
+  if (!trimmed || !/^[A-Za-z0-9._-]+$/.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
 function buildAttachment(input: {
-  sessionId: string;
+  sessionSegment: string;
   assetId: string;
   file: File;
 }): ChatImageAttachment {
   const safeName = sanitizeFilename(input.file.name);
-  const serverPath = path.join(CHAT_IMAGE_ASSET_ROOT, input.sessionId, `${input.assetId}-${safeName}`);
+  const serverPath = path.join(CHAT_IMAGE_ASSET_ROOT, input.sessionSegment, `${input.assetId}-${safeName}`);
   return {
     assetId: input.assetId,
     kind: 'image',
@@ -55,8 +64,17 @@ export async function POST(
     return NextResponse.json({ error: '이미지 파일만 업로드할 수 있습니다.' }, { status: 400 });
   }
 
+  if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+    return NextResponse.json({ error: '이미지 파일은 10MB 이하만 업로드할 수 있습니다.' }, { status: 400 });
+  }
+
+  const sessionSegment = normalizeSessionSegment(sessionId);
+  if (!sessionSegment) {
+    return NextResponse.json({ error: '유효하지 않은 세션 식별자입니다.' }, { status: 400 });
+  }
+
   const assetId = randomUUID();
-  const attachment = buildAttachment({ sessionId, assetId, file });
+  const attachment = buildAttachment({ sessionSegment, assetId, file });
 
   try {
     await fs.mkdir(path.dirname(attachment.serverPath), { recursive: true });
