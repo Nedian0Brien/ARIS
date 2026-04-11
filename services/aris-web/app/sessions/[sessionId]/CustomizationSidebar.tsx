@@ -136,6 +136,7 @@ type FileActionDialog =
 type RequestedFilePayload = {
   path: string;
   name?: string;
+  line?: number | null;
   nonce: number;
 };
 
@@ -351,6 +352,8 @@ export function CustomizationSidebar({
   const [filesSearchLoading, setFilesSearchLoading] = useState(false);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [selectedFileLine, setSelectedFileLine] = useState<number | null>(null);
+  const [selectedFileNavigationKey, setSelectedFileNavigationKey] = useState(0);
   const [fileContent, setFileContent] = useState('');
   const [fileLoading, setFileLoading] = useState(false);
   const [fileSaving, setFileSaving] = useState(false);
@@ -942,9 +945,15 @@ export function CustomizationSidebar({
     }
   }, [normalizedWorkspaceRootPath, setTransientFilePathCopyState]);
 
-  const openFileModal = useCallback((filePath: string, fileName?: string, opts?: { pushHistory?: boolean }) => {
+  const openFileModal = useCallback((
+    filePath: string,
+    fileName?: string,
+    opts?: { pushHistory?: boolean; line?: number | null },
+  ) => {
     void loadFile(filePath, fileName);
     setActiveModal({ kind: 'file', id: filePath });
+    setSelectedFileLine(opts?.line ?? null);
+    setSelectedFileNavigationKey((current) => current + 1);
     if (opts?.pushHistory) {
       const history = fileNavHistoryRef.current;
       const index = fileNavIndexRef.current;
@@ -1064,7 +1073,7 @@ export function CustomizationSidebar({
     setFilesSearchResults(null);
     setExpandedDirectories({});
     void loadFilesDirectory(nextParentPath);
-    openFileModal(requestedFile.path, requestedFile.name);
+    openFileModal(requestedFile.path, requestedFile.name, { line: requestedFile.line ?? null });
   }, [loadFilesDirectory, normalizedWorkspaceRootPath, openFileModal, requestedFile]);
   const closeModal = useCallback(() => {
     setActiveModal(null);
@@ -2022,6 +2031,8 @@ export function CustomizationSidebar({
                         filePath={activeFileModal.path}
                         workspaceRootPath={normalizedWorkspaceRootPath}
                         content={fileContent}
+                        requestedLine={selectedFileLine}
+                        navigationRequestKey={selectedFileNavigationKey}
                         isSaving={fileSaving}
                         saveDisabled={fileSaving || fileLoading || !fileDirty}
                         canGoBack={fileNavState.canGoBack}

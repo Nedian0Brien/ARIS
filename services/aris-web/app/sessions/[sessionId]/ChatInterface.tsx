@@ -274,8 +274,8 @@ type TimelineRenderItem =
   | { type: 'stream'; item: StreamRenderItem; sortKey: number; order: number }
   | { type: 'permission'; permission: RenderablePermissionRequest; sortKey: number; order: number };
 type ResourceLabel =
-  | { kind: 'folder'; name: FolderLabel; sourcePath?: string }
-  | { kind: 'file'; name: string; extension: string; sourcePath?: string };
+  | { kind: 'folder'; name: FolderLabel; sourcePath?: string; sourceLine?: number | null }
+  | { kind: 'file'; name: string; extension: string; sourcePath?: string; sourceLine?: number | null };
 type FolderLabel = (typeof FOLDER_LABELS)[number];
 type ComposerModelId = string;
 
@@ -323,6 +323,7 @@ type ChatRuntimeUiState = {
 type WorkspaceFileOpenDetail = {
   path: string;
   name?: string;
+  line?: number | null;
 };
 type SidebarFileRequest = WorkspaceFileOpenDetail & {
   nonce: number;
@@ -524,6 +525,7 @@ function dispatchWorkspaceFileOpen(detail: WorkspaceFileOpenDetail) {
     detail: {
       ...detail,
       path: normalizeWorkspaceClientPath(detail.path),
+      line: typeof detail.line === 'number' ? detail.line : null,
     },
   }));
 }
@@ -541,13 +543,24 @@ function classifyLabelLink(label: string, rawPath: string): ResourceLabel | null
 
   const folderCandidate = normalizedLabel.toLowerCase();
   if (isFolderLabel(folderCandidate)) {
-    return { kind: 'folder', name: folderCandidate as FolderLabel, sourcePath: normalizedPath.path };
+    return {
+      kind: 'folder',
+      name: folderCandidate as FolderLabel,
+      sourcePath: normalizedPath.path,
+      sourceLine: normalizedPath.line,
+    };
   }
 
   const parsedFile = parseLocalFileReferenceTarget(rawPath);
   if (parsedFile) {
     const displayName = fileExtension(normalizedLabel) ? normalizedLabel : parsedFile.name;
-    return { kind: 'file', name: displayName, extension: parsedFile.extension, sourcePath: parsedFile.path };
+    return {
+      kind: 'file',
+      name: displayName,
+      extension: parsedFile.extension,
+      sourcePath: parsedFile.path,
+      sourceLine: parsedFile.line,
+    };
   }
 
   return null;
@@ -1598,6 +1611,7 @@ function renderTextWithFileReferences(text: string, keyPrefix: string): ReactNod
           name: part.name,
           extension: part.extension,
           sourcePath: part.path,
+          sourceLine: part.line,
         }}
       />,
     );
@@ -1711,7 +1725,11 @@ function ResourceChip({ resource }: { resource: ResourceLabel }) {
       title={resource.sourcePath}
       onClick={() => {
         if (resource.sourcePath) {
-          dispatchWorkspaceFileOpen({ path: resource.sourcePath, name: resource.name });
+          dispatchWorkspaceFileOpen({
+            path: resource.sourcePath,
+            name: resource.name,
+            line: resource.sourceLine ?? null,
+          });
         }
       }}
       disabled={!resource.sourcePath}
@@ -3529,6 +3547,7 @@ export function ChatInterface({
       setSidebarFileRequest({
         path: finalPath,
         name: detail.name,
+        line: detail.line ?? null,
         nonce: sidebarFileRequestNonceRef.current,
       });
 

@@ -116,10 +116,34 @@
   flex-shrink: 0;
 }
 
+.lineNumber {
+  display: block;
+  border-radius: 5px;
+  padding-right: 0.15rem;
+}
+
+.lineNumberActive {
+  background: color-mix(in srgb, var(--accent-sky-bg) 72%, transparent);
+  color: var(--accent-sky);
+  font-weight: 700;
+}
+
 .editorContainer {
   position: relative;
   flex: 1;
   overflow: hidden;
+}
+
+.codeLineHighlight {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: color-mix(in srgb, var(--accent-sky-bg) 52%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--accent-sky) 24%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent-sky) 20%, transparent);
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity 160ms ease;
 }
 
 .editorPre {
@@ -183,6 +207,17 @@
 .markdownContent {
   padding: 2rem;
   flex: 1;
+}
+
+.markdownContent :global(.md-source-block) {
+  border-radius: 10px;
+  transition: background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.markdownContent :global(.md-source-block-highlight),
+.markdownBody :global(.md-source-block-highlight) {
+  background: color-mix(in srgb, var(--accent-sky-bg) 58%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-sky) 24%, transparent);
 }
 
 /* Notion-style frontmatter */
