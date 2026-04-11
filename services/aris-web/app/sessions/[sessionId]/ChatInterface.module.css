@@ -2223,12 +2223,12 @@
 .markdownTable th {
   font-weight: 800;
   color: var(--chat-text-primary);
-  background: rgba(241, 245, 249, 0.78);
+  background: var(--chat-surface-subtle);
 }
 
 .markdownTable td {
-  color: #1f2937;
-  background: rgba(255, 255, 255, 0.9);
+  color: var(--chat-text-primary);
+  background: var(--chat-control-bg);
 }
 
 .markdownTable tbody tr:last-child td {
