@@ -1,6 +1,7 @@
+import type { Metadata } from 'next';
 import { requirePageUser } from '@/lib/auth/guard';
 import { listSessionChats } from '@/lib/happy/chats';
-import { getSessionEvents, listPermissionRequests } from '@/lib/happy/client';
+import { getSessionEvents, listPermissionRequests, listSessions } from '@/lib/happy/client';
 import { Header } from '@/components/layout/Header';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import { Card } from '@/components/ui';
@@ -9,6 +10,28 @@ import { ChatInterface } from './ChatInterface';
 import { resolveWorkspaceClientPath } from '@/lib/customization/catalog';
 
 const INITIAL_EVENTS_PAGE_LIMIT = 40;
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ sessionId: string }>;
+}): Promise<Metadata> {
+  try {
+    const user = await requirePageUser();
+    const { sessionId } = await params;
+    const sessions = await listSessions(user.id);
+    const session = sessions.find((s) => s.id === sessionId);
+    if (!session) {
+      return { title: 'ARIS | Agentic Workspace' };
+    }
+    const workspaceName = session.alias?.trim()
+      || session.projectName.split('/').filter(Boolean).at(-1)
+      || 'Agentic Workspace';
+    return { title: `ARIS | ${workspaceName}` };
+  } catch {
+    return { title: 'ARIS | Agentic Workspace' };
+  }
+}
 
 export default async function SessionPage({
   params,
