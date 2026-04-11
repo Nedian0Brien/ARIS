@@ -33,6 +33,11 @@ describe('mobile home/workspace layout overflow guards', () => {
     expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.serverResourceGridHorizontal\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
   });
 
+  it('uses minmax(0, 1fr) for mobile dashboard grid tracks', () => {
+    expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*999px\)\s*\{[\s\S]*?\.sessionDashboardLayout\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
+    expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*999px\)\s*\{[\s\S]*?\.sessionDashboardSidebar\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
+  });
+
   it('collapses workspace summary cards to one column on small screens', () => {
     expect(workspaceHomeCss).toMatch(/@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?\.statsRow\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
   });
