@@ -1,9 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Code, Edit3, Eye, FileText, Loader2, Save, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Code, Copy, Edit3, Eye, FileText, Loader2, Save, X } from 'lucide-react';
 import Prism from 'prismjs';
 import { marked } from 'marked';
+import { copyTextToClipboard } from '@/lib/copyTextToClipboard';
+import { getWorkspaceAbsolutePathForCopy, getWorkspaceRelativePathForCopy } from '@/lib/workspacePathCopy';
 import styles from './WorkspaceFileEditor.module.css';
 
 marked.use({
@@ -43,6 +45,7 @@ type WorkspaceFileEditorProps = {
   content: string;
   rawUrl?: string;
   filePath?: string;
+  workspaceRootPath?: string;
   isSaving?: boolean;
   saveDisabled?: boolean;
   canGoBack?: boolean;
@@ -235,6 +238,7 @@ export function WorkspaceFileEditor({
   content,
   rawUrl,
   filePath,
+  workspaceRootPath,
   isSaving = false,
   saveDisabled = false,
   canGoBack = false,
@@ -251,10 +255,18 @@ export function WorkspaceFileEditor({
   const lineNumbersRef = useRef<HTMLDivElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pathCopyResetTimerRef = useRef<number | null>(null);
+  const [pathCopyState, setPathCopyState] = useState<{ target: 'absolute' | 'relative'; status: 'copied' | 'failed' } | null>(null);
 
   useEffect(() => {
     setIsPreview(getLanguage(fileName) === 'markdown');
   }, [fileName]);
+
+  useEffect(() => () => {
+    if (pathCopyResetTimerRef.current !== null && typeof window !== 'undefined') {
+      window.clearTimeout(pathCopyResetTimerRef.current);
+    }
+  }, []);
 
   const lineNumbers = useMemo(() => {
     const lines = content.split('\n').length;
@@ -403,6 +415,45 @@ export function WorkspaceFileEditor({
     }
   }, []);
 
+  const setTransientPathCopyState = useCallback((target: 'absolute' | 'relative', status: 'copied' | 'failed') => {
+    setPathCopyState({ target, status });
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (pathCopyResetTimerRef.current !== null) {
+      window.clearTimeout(pathCopyResetTimerRef.current);
+    }
+    pathCopyResetTimerRef.current = window.setTimeout(() => {
+      setPathCopyState((current) => (current?.target === target ? null : current));
+      pathCopyResetTimerRef.current = null;
+    }, 1800);
+  }, []);
+
+  const handleCopyPath = useCallback(async (target: 'absolute' | 'relative') => {
+    if (!filePath) {
+      return;
+    }
+
+    const copyValue = target === 'absolute'
+      ? getWorkspaceAbsolutePathForCopy(filePath)
+      : getWorkspaceRelativePathForCopy(filePath, workspaceRootPath ?? '/');
+
+    try {
+      await copyTextToClipboard(copyValue);
+      setTransientPathCopyState(target, 'copied');
+    } catch {
+      setTransientPathCopyState(target, 'failed');
+    }
+  }, [filePath, setTransientPathCopyState, workspaceRootPath]);
+
+  const absoluteCopyLabel = pathCopyState?.target === 'absolute'
+    ? (pathCopyState.status === 'copied' ? '절대경로 복사됨' : '절대경로 실패')
+    : '절대경로';
+  const relativeCopyLabel = pathCopyState?.target === 'relative'
+    ? (pathCopyState.status === 'copied' ? '상대경로 복사됨' : '상대경로 실패')
+    : '상대경로';
+  const canCopyRelativePath = Boolean(filePath && workspaceRootPath);
+
   return (
     <div className={`${styles.editorRoot}${className ? ` ${className}` : ''}`}>
       <div className={styles.editorHeader}>
@@ -445,6 +496,29 @@ export function WorkspaceFileEditor({
               {isPreview ? <Edit3 size={16} /> : <Eye size={16} />}
               <span>{isPreview ? '편집' : '미리보기'}</span>
             </button>
+          ) : null}
+          {filePath ? (
+            <div className={styles.pathCopyActions}>
+              <button
+                type="button"
+                onClick={() => { void handleCopyPath('absolute'); }}
+                className={`btn-secondary ${styles.buttonSmall}`}
+                title={filePath}
+              >
+                <Copy size={16} />
+                <span>{absoluteCopyLabel}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { void handleCopyPath('relative'); }}
+                disabled={!canCopyRelativePath}
+                className={`btn-secondary ${styles.buttonSmall}`}
+                title={canCopyRelativePath ? '워크스페이스 루트 기준 상대경로 복사' : '워크스페이스 루트가 필요합니다.'}
+              >
+                <Copy size={16} />
+                <span>{relativeCopyLabel}</span>
+              </button>
+            </div>
           ) : null}
           <button
             type="button"

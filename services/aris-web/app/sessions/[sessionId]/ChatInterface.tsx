@@ -6729,6 +6729,7 @@ export function ChatInterface({
     {isMounted && usageProbeProvider && createPortal(
       <UsageProbeModal
         provider={usageProbeProvider}
+        commandId="usage"
         workspacePath={normalizedWorkspaceRootPath}
         onClose={() => setUsageProbeProvider(null)}
       />,

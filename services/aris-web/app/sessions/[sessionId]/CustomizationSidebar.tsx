@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Copy,
   FilePlus,
   FileText,
   Folder,
@@ -34,8 +35,10 @@ import {
   X,
 } from 'lucide-react';
 import { WorkspaceFileEditor } from '@/components/files/WorkspaceFileEditor';
+import { copyTextToClipboard } from '@/lib/copyTextToClipboard';
 import { describeGitSidebarError } from '@/lib/git/sidebarErrors';
 import { buildGitFileTree, parseGitUnifiedDiff, type GitTreeNode } from '@/lib/git/sidebarUi';
+import { getWorkspaceAbsolutePathForCopy, getWorkspaceRelativePathForCopy } from '@/lib/workspacePathCopy';
 import styles from './CustomizationSidebar.module.css';
 
 type SidebarSurface = 'customization' | 'files' | 'git' | 'terminal';
@@ -135,6 +138,8 @@ type RequestedFilePayload = {
   name?: string;
   nonce: number;
 };
+
+type FilePathCopyKind = 'absolute' | 'relative';
 
 type CustomizationModal =
   | { kind: 'instruction'; id: string }
@@ -354,6 +359,7 @@ export function CustomizationSidebar({
   const [filePreviewBlock, setFilePreviewBlock] = useState<FilePreviewBlock | null>(null);
   const [fileActionDialog, setFileActionDialog] = useState<FileActionDialog | null>(null);
   const [fileActionMenuPath, setFileActionMenuPath] = useState<string | null>(null);
+  const [filePathCopyState, setFilePathCopyState] = useState<{ key: string; status: 'copied' | 'failed' } | null>(null);
   const [gitOverview, setGitOverview] = useState<GitOverview | null>(null);
   const [gitLoading, setGitLoading] = useState(false);
   const [gitError, setGitError] = useState<string | null>(null);
@@ -370,6 +376,7 @@ export function CustomizationSidebar({
   const [activeModal, setActiveModal] = useState<CustomizationModal>(null);
   const [isMounted, setIsMounted] = useState(false);
   const handledRequestedFileNonceRef = useRef<number | null>(null);
+  const filePathCopyResetTimerRef = useRef<number | null>(null);
 
   // 파일 탐색 히스토리 (wikilink 네비게이션용)
   const fileNavHistoryRef = useRef<string[]>([]);
@@ -820,6 +827,12 @@ export function CustomizationSidebar({
     };
   }, [fileActionMenuPath]);
 
+  useEffect(() => () => {
+    if (filePathCopyResetTimerRef.current !== null && typeof window !== 'undefined') {
+      window.clearTimeout(filePathCopyResetTimerRef.current);
+    }
+  }, []);
+
   const handleSaveInstruction = useCallback(async () => {
     if (!selectedInstructionId) return;
     setInstructionSaving(true);
@@ -897,6 +910,37 @@ export function CustomizationSidebar({
       void loadFilesDirectory(normalizedDirPath, { focus: false });
     }
   }, [expandedDirectories, filesEntriesByPath, filesLoadingByPath, loadFilesDirectory]);
+
+  const setTransientFilePathCopyState = useCallback((key: string, status: 'copied' | 'failed') => {
+    setFilePathCopyState({ key, status });
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (filePathCopyResetTimerRef.current !== null) {
+      window.clearTimeout(filePathCopyResetTimerRef.current);
+    }
+    filePathCopyResetTimerRef.current = window.setTimeout(() => {
+      setFilePathCopyState((current) => (current?.key === key ? null : current));
+      filePathCopyResetTimerRef.current = null;
+    }, 1800);
+  }, []);
+
+  const handleCopyFilePath = useCallback(async (targetPath: string, kind: FilePathCopyKind) => {
+    const normalizedTargetPath = normalizeWorkspaceClientPath(targetPath);
+    const copyKey = `${normalizedTargetPath}:${kind}`;
+    const copyValue = kind === 'absolute'
+      ? getWorkspaceAbsolutePathForCopy(normalizedTargetPath)
+      : getWorkspaceRelativePathForCopy(normalizedTargetPath, normalizedWorkspaceRootPath);
+
+    try {
+      await copyTextToClipboard(copyValue);
+      setTransientFilePathCopyState(copyKey, 'copied');
+      setFilesError(null);
+    } catch {
+      setTransientFilePathCopyState(copyKey, 'failed');
+      setFilesError(kind === 'absolute' ? '절대경로를 복사하지 못했습니다.' : '상대경로를 복사하지 못했습니다.');
+    }
+  }, [normalizedWorkspaceRootPath, setTransientFilePathCopyState]);
 
   const openFileModal = useCallback((filePath: string, fileName?: string, opts?: { pushHistory?: boolean }) => {
     void loadFile(filePath, fileName);
@@ -1080,6 +1124,14 @@ export function CustomizationSidebar({
       const childEntries = filesEntriesByPath[item.path] ?? [];
       const childLoading = Boolean(filesLoadingByPath[item.path]);
       const childError = filesErrorByPath[item.path];
+      const absoluteCopyKey = `${item.path}:absolute`;
+      const relativeCopyKey = `${item.path}:relative`;
+      const absoluteCopyLabel = filePathCopyState?.key === absoluteCopyKey
+        ? (filePathCopyState.status === 'copied' ? '절대경로 복사됨' : '절대경로 복사 실패')
+        : '절대경로 복사';
+      const relativeCopyLabel = filePathCopyState?.key === relativeCopyKey
+        ? (filePathCopyState.status === 'copied' ? '상대경로 복사됨' : '상대경로 복사 실패')
+        : '상대경로 복사';
 
       return (
         <div key={item.path} className={styles.fileTreeBranch}>
@@ -1152,6 +1204,26 @@ export function CustomizationSidebar({
                   </button>
                   <button
                     type="button"
+                    className={styles.fileTreeMenuItem}
+                    onClick={() => {
+                      void handleCopyFilePath(item.path, 'absolute');
+                    }}
+                  >
+                    <Copy size={13} />
+                    {absoluteCopyLabel}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.fileTreeMenuItem}
+                    onClick={() => {
+                      void handleCopyFilePath(item.path, 'relative');
+                    }}
+                  >
+                    <Copy size={13} />
+                    {relativeCopyLabel}
+                  </button>
+                  <button
+                    type="button"
                     className={`${styles.fileTreeMenuItem} ${styles.fileTreeMenuItemDanger}`}
                     onClick={() => {
                       setFileActionMenuPath(null);
@@ -1194,7 +1266,7 @@ export function CustomizationSidebar({
         </div>
       );
     })
-  ), [expandedDirectories, fileActionMenuPath, filesEntriesByPath, filesErrorByPath, filesLoadingByPath, handleToggleDirectory, openFileModal]);
+  ), [expandedDirectories, fileActionMenuPath, filePathCopyState, filesEntriesByPath, filesErrorByPath, filesLoadingByPath, handleCopyFilePath, handleToggleDirectory, openFileModal]);
   const renderGitTree = useCallback((
     nodes: Array<GitTreeNode<GitFileEntry>>,
     scope: GitDiffScope,
@@ -1948,6 +2020,7 @@ export function CustomizationSidebar({
                       <WorkspaceFileEditor
                         fileName={activeFileModal.name}
                         filePath={activeFileModal.path}
+                        workspaceRootPath={normalizedWorkspaceRootPath}
                         content={fileContent}
                         isSaving={fileSaving}
                         saveDisabled={fileSaving || fileLoading || !fileDirty}
