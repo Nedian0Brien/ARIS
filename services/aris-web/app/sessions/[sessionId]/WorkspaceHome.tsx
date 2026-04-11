@@ -15,6 +15,7 @@ import {
 import type { AgentFlavor, SessionChat } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
 import styles from './WorkspaceHome.module.css';
+import { limitWorkspaceHomeChats } from './workspaceHome';
 
 // --- 타입 ---
 
@@ -144,6 +145,7 @@ export function WorkspaceHome({
     () => [...chats].sort((a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime()),
     [chats],
   );
+  const visibleChats = useMemo(() => limitWorkspaceHomeChats(sortedChats), [sortedChats]);
 
   const stats = useMemo(() => {
     const total = chats.length;
@@ -210,7 +212,7 @@ export function WorkspaceHome({
       <div className={styles.section}>
         <div className={styles.sectionHeader}>
           <span className={styles.sectionTitle}>채팅 목록</span>
-          <span className={styles.sectionCount}>{chats.length}개</span>
+          <span className={styles.sectionCount}>{Math.min(chats.length, visibleChats.length)} / {chats.length}개</span>
         </div>
 
         {sortedChats.length === 0 ? (
@@ -225,7 +227,7 @@ export function WorkspaceHome({
           </div>
         ) : (
           <ul className={styles.chatList}>
-            {sortedChats.map((chat) => {
+            {visibleChats.map((chat) => {
               const status = resolveChatStatus(chat);
               const ChatAgentMeta = resolveAgentMeta(chat.agent);
               const ChatIcon = ChatAgentMeta.Icon;
