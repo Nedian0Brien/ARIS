@@ -1,8 +1,10 @@
 /* Base UI Elements */
 .container {
+  width: 100%;
   max-width: var(--max-width);
   margin: 0 auto;
   padding: 0 0.75rem;
+  box-sizing: border-box;
 }
 
 @media (min-width: 768px) {
@@ -108,4 +110,3 @@
   font-weight: 700;
   gap: 0.25rem;
 }
-

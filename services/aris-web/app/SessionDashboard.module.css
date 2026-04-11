@@ -636,13 +636,16 @@
 }
 
 .sessionCardTitle {
+  display: block;
+  width: 100%;
+  min-width: 0;
   font-size: 1.1rem;
   font-weight: 800;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: none;
+  max-width: 100%;
 }
 
 .sessionCardId {
