@@ -9,12 +9,12 @@ function asObject(value: unknown): Record<string, unknown> | null {
 
 function asNonNegativeNumber(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
-    return Math.floor(value);
+    return Number.isInteger(value) ? value : undefined;
   }
-  if (typeof value === 'string' && value.trim()) {
+  if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
     const parsed = Number.parseInt(value, 10);
     if (Number.isFinite(parsed) && parsed >= 0) {
-      return parsed;
+      return Number.isInteger(parsed) ? parsed : undefined;
     }
   }
   return undefined;
@@ -33,7 +33,9 @@ function escapeXmlAttribute(value: string): string {
     .replaceAll('&', '&amp;')
     .replaceAll('"', '&quot;')
     .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
+    .replaceAll('>', '&gt;')
+    .replaceAll('\r', '&#13;')
+    .replaceAll('\n', '&#10;');
 }
 
 export function buildImageAttachmentPromptPrefix(attachments: ChatImageAttachment[]): string {

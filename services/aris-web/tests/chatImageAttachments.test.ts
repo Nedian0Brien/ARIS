@@ -71,6 +71,38 @@ describe('chatImageAttachments helpers', () => {
     ]);
   });
 
+  it('escapes line breaks in prompt attributes so the tag stays on one line', () => {
+    expect(buildImageAttachmentPromptPrefix([
+      {
+        assetId: 'asset-1',
+        kind: 'image',
+        name: 'screen.png',
+        mimeType: 'image/png',
+        size: 1200,
+        serverPath: '/tmp/aris/session-1/chat-1/asset-1-screen\nline.png',
+        previewUrl: '/api/runtime/sessions/session-1/assets/images/asset-1',
+      },
+    ])).toContain('serverPath="/tmp/aris/session-1/chat-1/asset-1-screen&#10;line.png"');
+  });
+
+  it('rejects malformed numeric values instead of partially coercing them', () => {
+    expect(readChatImageAttachments({
+      attachments: [
+        {
+          assetId: 'asset-1',
+          kind: 'image',
+          name: 'screen.png',
+          mimeType: 'image/png',
+          size: '12px',
+          width: '1e2',
+          height: 1.9,
+          serverPath: '/tmp/a.png',
+          previewUrl: '/api/x',
+        },
+      ],
+    })).toEqual([]);
+  });
+
   it('returns an empty array for missing or invalid meta payloads', () => {
     expect(readChatImageAttachments(undefined)).toEqual([]);
     expect(readChatImageAttachments({ attachments: 'invalid' })).toEqual([]);
