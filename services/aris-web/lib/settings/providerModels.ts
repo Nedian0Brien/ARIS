@@ -48,6 +48,7 @@ export type ModelSettingsResponse = {
 export const DEFAULT_CODEX_MODEL_SELECTIONS = [
   'gpt-5.4',
   'gpt-5.3-codex',
+  'gpt-5.3-codex-spark',
   'gpt-5',
   'gpt-5-mini',
 ] as const;
@@ -310,6 +311,9 @@ export function deriveOpenAiModelTags(modelId: string): string[] {
   }
   if (/\d{4}-\d{2}-\d{2}/.test(normalized)) {
     tags.push('Snapshot');
+  }
+  if (normalized.includes('spark')) {
+    tags.push('Spark');
   }
   if (normalized.includes('mini')) {
     tags.push('Mini');
