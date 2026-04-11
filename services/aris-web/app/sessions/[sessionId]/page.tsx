@@ -8,6 +8,7 @@ import { Card } from '@/components/ui';
 import Link from 'next/link';
 import { ChatInterface } from './ChatInterface';
 import { resolveWorkspaceClientPath } from '@/lib/customization/catalog';
+import { deriveWorkspaceTitle } from './workspaceHome';
 
 const INITIAL_EVENTS_PAGE_LIMIT = 40;
 const CHAT_TITLE_MAX_LEN = 30;
@@ -41,9 +42,7 @@ export async function generateMetadata({
       return { title: 'ARIS | Agentic Workspace' };
     }
 
-    const workspaceName = session.alias?.trim()
-      || session.projectName.split('/').filter(Boolean).at(-1)
-      || 'Agentic Workspace';
+    const workspaceName = deriveWorkspaceTitle(session.projectName);
 
     const activeChat = (requestedChatId ? chats.find((c) => c.id === requestedChatId) : null) ?? chats[0];
     const chatTitle = activeChat?.title?.trim();
@@ -106,7 +105,6 @@ export default async function SessionPage({
               isOperator={user.role === 'operator'}
               projectName={workspaceRootPath}
               workspaceRootPath={workspaceRootPath}
-              alias={detail.session.alias}
               agentFlavor={detail.session.agent}
               sessionModel={detail.session.model}
               approvalPolicy={detail.session.approvalPolicy}
@@ -149,7 +147,6 @@ export default async function SessionPage({
             isOperator={user.role === 'operator'}
             projectName={workspaceRootPath}
             workspaceRootPath={workspaceRootPath}
-            alias={detail.session.alias}
             agentFlavor={detail.session.agent}
             sessionModel={detail.session.model}
             approvalPolicy={detail.session.approvalPolicy}

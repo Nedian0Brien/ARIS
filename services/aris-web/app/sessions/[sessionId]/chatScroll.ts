@@ -14,6 +14,11 @@ type ResetScrollForChatChangeInput = {
   isNewChatPlaceholder: boolean;
 };
 
+type AutoScrollToBottomInput = {
+  isWorkspaceHome: boolean;
+  shouldStickToBottom: boolean;
+};
+
 export function resolveScrollToBottomTarget(input: ScrollToBottomTargetInput): 'window' | 'stream' {
   if (input.isMobileLayout) {
     return 'window';
@@ -30,4 +35,11 @@ export function shouldResetScrollForChatChange(input: ResetScrollForChatChangeIn
     return false;
   }
   return input.previousChatId !== input.nextChatId;
+}
+
+export function shouldAutoScrollToBottom(input: AutoScrollToBottomInput): boolean {
+  if (input.isWorkspaceHome) {
+    return false;
+  }
+  return input.shouldStickToBottom;
 }
