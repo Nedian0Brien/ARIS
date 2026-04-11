@@ -114,4 +114,35 @@ describe('session events stream route', () => {
     expect(dbPos).toBeGreaterThanOrEqual(0);
     expect(rtPos).toBeLessThan(dbPos);
   });
+
+  it('does not enqueue late events after the request aborts', async () => {
+    let resolveRealtime!: (value: { events: UiEvent[]; cursor: number }) => void;
+    const realtimePromise = new Promise<{ events: UiEvent[]; cursor: number }>((resolve) => {
+      resolveRealtime = resolve;
+    });
+
+    mocks.getSessionRealtimeEvents
+      .mockReturnValueOnce(realtimePromise)
+      .mockResolvedValue({ events: [], cursor: 1 });
+    mocks.streamSessionEvents.mockResolvedValue({ events: [], latestSeq: 0 });
+
+    const abortController = new AbortController();
+    const response = await GET(
+      new NextRequest('http://localhost/api/runtime/sessions/session-1/events/stream', {
+        signal: abortController.signal,
+      }),
+      { params: Promise.resolve({ sessionId: 'session-1' }) },
+    );
+
+    abortController.abort();
+    resolveRealtime({
+      events: [buildEvent({ id: 'late-rt-1' })],
+      cursor: 1,
+    });
+
+    const payload = await response.text();
+
+    expect(payload).toContain('event: ready');
+    expect(payload).not.toContain('late-rt-1');
+  });
 });

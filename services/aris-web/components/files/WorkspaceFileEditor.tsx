@@ -6,29 +6,12 @@ import Prism from 'prismjs';
 import { marked } from 'marked';
 import { copyTextToClipboard } from '@/lib/copyTextToClipboard';
 import { getWorkspaceAbsolutePathForCopy, getWorkspaceRelativePathForCopy } from '@/lib/workspacePathCopy';
+import {
+  findNearestMarkdownSourceLine,
+  renderMarkdownWithSourceLines,
+  resolveCodeLineSelection,
+} from './workspaceFileLineNavigation';
 import styles from './WorkspaceFileEditor.module.css';
-
-marked.use({
-  extensions: [{
-    name: 'wikilink',
-    level: 'inline' as const,
-    start(src: string) { return src.indexOf('[['); },
-    tokenizer(src: string) {
-      const match = /^\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/.exec(src);
-      if (match) {
-        const path = match[1].trim();
-        const text = match[2] ? match[2].trim() : (path.split('/').pop() ?? path);
-        return { type: 'wikilink', raw: match[0], path, text };
-      }
-      return undefined;
-    },
-    renderer(token) {
-      const safeText = String(token['text']).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      const safePath = String(token['path']).replace(/"/g, '&quot;');
-      return `<span class="md-wikilink" data-path="${safePath}">${safeText}</span>`;
-    },
-  }],
-});
 
 import 'prismjs/components/prism-typescript';
 import 'prismjs/components/prism-javascript';
@@ -46,6 +29,8 @@ type WorkspaceFileEditorProps = {
   rawUrl?: string;
   filePath?: string;
   workspaceRootPath?: string;
+  requestedLine?: number | null;
+  navigationRequestKey?: number;
   isSaving?: boolean;
   saveDisabled?: boolean;
   canGoBack?: boolean;
@@ -69,15 +54,15 @@ interface Frontmatter {
   [key: string]: string | string[] | undefined;
 }
 
-function parseFrontmatter(content: string): { frontmatter: Frontmatter | null; body: string } {
+function parseFrontmatter(content: string): { frontmatter: Frontmatter | null; body: string; bodyStartLine: number } {
   if (!content.startsWith('---')) {
-    return { frontmatter: null, body: content };
+    return { frontmatter: null, body: content, bodyStartLine: 1 };
   }
 
   const rest = content.slice(3);
   const endMatch = rest.match(/\n---(\r?\n|$)/);
   if (!endMatch || endMatch.index === undefined) {
-    return { frontmatter: null, body: content };
+    return { frontmatter: null, body: content, bodyStartLine: 1 };
   }
 
   const yamlStr = rest.slice(0, endMatch.index);
@@ -106,7 +91,8 @@ function parseFrontmatter(content: string): { frontmatter: Frontmatter | null; b
     }
   }
 
-  return { frontmatter: Object.keys(frontmatter).length > 0 ? frontmatter : null, body };
+  const bodyStartLine = content.slice(0, content.length - body.length).split('\n').length;
+  return { frontmatter: Object.keys(frontmatter).length > 0 ? frontmatter : null, body, bodyStartLine };
 }
 
 const TYPE_COLORS: Record<string, { color: string; bg: string }> = {
@@ -239,6 +225,8 @@ export function WorkspaceFileEditor({
   rawUrl,
   filePath,
   workspaceRootPath,
+  requestedLine = null,
+  navigationRequestKey = 0,
   isSaving = false,
   saveDisabled = false,
   canGoBack = false,
@@ -255,8 +243,14 @@ export function WorkspaceFileEditor({
   const lineNumbersRef = useRef<HTMLDivElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const markdownBodyRef = useRef<HTMLDivElement>(null);
   const pathCopyResetTimerRef = useRef<number | null>(null);
+  const codeHighlightResetTimerRef = useRef<number | null>(null);
+  const markdownHighlightResetTimerRef = useRef<number | null>(null);
   const [pathCopyState, setPathCopyState] = useState<{ target: 'absolute' | 'relative'; status: 'copied' | 'failed' } | null>(null);
+  const [highlightedCodeLine, setHighlightedCodeLine] = useState<number | null>(null);
+  const [editorScrollTop, setEditorScrollTop] = useState(0);
+  const [editorMetrics, setEditorMetrics] = useState({ lineHeight: 20.4, paddingTop: 24 });
 
   useEffect(() => {
     setIsPreview(getLanguage(fileName) === 'markdown');
@@ -266,11 +260,17 @@ export function WorkspaceFileEditor({
     if (pathCopyResetTimerRef.current !== null && typeof window !== 'undefined') {
       window.clearTimeout(pathCopyResetTimerRef.current);
     }
+    if (codeHighlightResetTimerRef.current !== null && typeof window !== 'undefined') {
+      window.clearTimeout(codeHighlightResetTimerRef.current);
+    }
+    if (markdownHighlightResetTimerRef.current !== null && typeof window !== 'undefined') {
+      window.clearTimeout(markdownHighlightResetTimerRef.current);
+    }
   }, []);
 
-  const lineNumbers = useMemo(() => {
+  const lineNumberItems = useMemo(() => {
     const lines = content.split('\n').length;
-    return Array.from({ length: lines }, (_, index) => index + 1).join('\n');
+    return Array.from({ length: lines }, (_, index) => index + 1);
   }, [content]);
 
   const language = useMemo(() => getLanguage(fileName), [fileName]);
@@ -283,13 +283,13 @@ export function WorkspaceFileEditor({
   }, [content, language]);
 
   const parsed = useMemo(() => {
-    if (language !== 'markdown') return { frontmatter: null, body: content };
+    if (language !== 'markdown') return { frontmatter: null, body: content, bodyStartLine: 1 };
     return parseFrontmatter(content);
   }, [content, language]);
 
-  const markdownHtml = useMemo(() => {
+  const markdownPreview = useMemo(() => {
     if (!isPreview || language !== 'markdown') {
-      return '';
+      return { html: '', sourceLines: [] as number[] };
     }
 
     const renderer = new marked.Renderer();
@@ -302,8 +302,25 @@ export function WorkspaceFileEditor({
       return `<div class="md-code-block"><div class="md-code-header">${langBadge}</div><pre class="md-code-pre"><code>${highlighted}</code></pre></div>`;
     };
 
-    return marked.parse(parsed.body, { breaks: true, gfm: true, renderer }) as string;
+    return renderMarkdownWithSourceLines(parsed.body, {
+      startLine: parsed.bodyStartLine,
+      renderer,
+    });
   }, [parsed, isPreview, language]);
+
+  useEffect(() => {
+    if (!textareaRef.current) {
+      return;
+    }
+
+    const computed = window.getComputedStyle(textareaRef.current);
+    const nextLineHeight = Number.parseFloat(computed.lineHeight);
+    const nextPaddingTop = Number.parseFloat(computed.paddingTop);
+    setEditorMetrics({
+      lineHeight: Number.isFinite(nextLineHeight) ? nextLineHeight : 20.4,
+      paddingTop: Number.isFinite(nextPaddingTop) ? nextPaddingTop : 24,
+    });
+  }, [fileName, isPreview, language]);
 
   const handleEditorKeyDown = useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const textarea = event.currentTarget;
@@ -405,6 +422,7 @@ export function WorkspaceFileEditor({
   }, [filePath, onWikilinkClick]);
 
   const handleEditorScroll = useCallback((event: React.UIEvent<HTMLTextAreaElement>) => {
+    setEditorScrollTop(event.currentTarget.scrollTop);
     if (lineNumbersRef.current) {
       lineNumbersRef.current.scrollTop = event.currentTarget.scrollTop;
     }
@@ -414,6 +432,80 @@ export function WorkspaceFileEditor({
       preRef.current.scrollLeft = event.currentTarget.scrollLeft;
     }
   }, []);
+
+  useEffect(() => {
+    if (requestedLine == null || !textareaRef.current || (language === 'markdown' && isPreview)) {
+      return;
+    }
+
+    const selection = resolveCodeLineSelection(content, requestedLine);
+    if (!selection) {
+      return;
+    }
+
+    const textarea = textareaRef.current;
+    const scrollTop = Math.max(
+      0,
+      editorMetrics.paddingTop + ((selection.line - 1) * editorMetrics.lineHeight) - (textarea.clientHeight * 0.35),
+    );
+    textarea.scrollTop = scrollTop;
+    textarea.setSelectionRange(selection.start, selection.end);
+    if (lineNumbersRef.current) {
+      lineNumbersRef.current.scrollTop = scrollTop;
+    }
+    if (preRef.current) {
+      preRef.current.scrollTop = scrollTop;
+    }
+    setEditorScrollTop(scrollTop);
+    setHighlightedCodeLine(selection.line);
+    if (typeof window !== 'undefined') {
+      if (codeHighlightResetTimerRef.current !== null) {
+        window.clearTimeout(codeHighlightResetTimerRef.current);
+      }
+      codeHighlightResetTimerRef.current = window.setTimeout(() => {
+        setHighlightedCodeLine((current) => (current === selection.line ? null : current));
+        codeHighlightResetTimerRef.current = null;
+      }, 1800);
+    }
+  }, [content, editorMetrics.lineHeight, editorMetrics.paddingTop, isPreview, language, navigationRequestKey, requestedLine]);
+
+  useEffect(() => {
+    if (requestedLine == null || language !== 'markdown' || !isPreview || !markdownBodyRef.current) {
+      return;
+    }
+
+    const sourceLines = parsed.frontmatter ? [1, ...markdownPreview.sourceLines] : markdownPreview.sourceLines;
+    const targetSourceLine = findNearestMarkdownSourceLine(sourceLines, requestedLine);
+    if (targetSourceLine == null) {
+      return;
+    }
+
+    const body = markdownBodyRef.current;
+    const previous = body.querySelector('.md-source-block-highlight');
+    if (previous instanceof HTMLElement) {
+      previous.classList.remove('md-source-block-highlight');
+    }
+
+    const target = body.querySelector(`[data-source-line="${targetSourceLine}"]`);
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    body.scrollTo({
+      top: Math.max(0, target.offsetTop - 24),
+      behavior: 'auto',
+    });
+    target.classList.add('md-source-block-highlight');
+    if (typeof window !== 'undefined') {
+      if (markdownHighlightResetTimerRef.current !== null) {
+        window.clearTimeout(markdownHighlightResetTimerRef.current);
+      }
+      markdownHighlightResetTimerRef.current = window.setTimeout(() => {
+        target.classList.remove('md-source-block-highlight');
+        markdownHighlightResetTimerRef.current = null;
+      }, 1800);
+    }
+  }, [isPreview, language, markdownPreview.html, markdownPreview.sourceLines, navigationRequestKey, parsed.frontmatter, requestedLine]);
 
   const setTransientPathCopyState = useCallback((target: 'absolute' | 'relative', status: 'copied' | 'failed') => {
     setPathCopyState({ target, status });
@@ -453,6 +545,10 @@ export function WorkspaceFileEditor({
     ? (pathCopyState.status === 'copied' ? '상대경로 복사됨' : '상대경로 실패')
     : '상대경로';
   const canCopyRelativePath = Boolean(filePath && workspaceRootPath);
+  const codeLineHighlightStyle = highlightedCodeLine == null ? undefined : {
+    top: `${editorMetrics.paddingTop + ((highlightedCodeLine - 1) * editorMetrics.lineHeight) - editorScrollTop}px`,
+    height: `${editorMetrics.lineHeight}px`,
+  };
 
   return (
     <div className={`${styles.editorRoot}${className ? ` ${className}` : ''}`}>
@@ -548,9 +644,17 @@ export function WorkspaceFileEditor({
         ) : !isPreview ? (
           <>
             <div ref={lineNumbersRef} className={styles.lineNumbers}>
-              {lineNumbers}
+              {lineNumberItems.map((lineNumber) => (
+                <span
+                  key={lineNumber}
+                  className={`${styles.lineNumber}${highlightedCodeLine === lineNumber ? ` ${styles.lineNumberActive}` : ''}`}
+                >
+                  {lineNumber}
+                </span>
+              ))}
             </div>
             <div className={styles.editorContainer}>
+              {codeLineHighlightStyle ? <div className={styles.codeLineHighlight} style={codeLineHighlightStyle} /> : null}
               <pre
                 ref={preRef}
                 className={styles.editorPre}
@@ -568,15 +672,19 @@ export function WorkspaceFileEditor({
             </div>
           </>
         ) : (
-          <div className={styles.markdownBody} onClick={handleWikilinkClick}>
-            {parsed.frontmatter && <FrontmatterBlock fm={parsed.frontmatter} />}
-            <div className={styles.markdownContent} dangerouslySetInnerHTML={{ __html: markdownHtml }} />
+          <div ref={markdownBodyRef} className={styles.markdownBody} onClick={handleWikilinkClick}>
+            {parsed.frontmatter && (
+              <div className="md-source-block" data-source-line={1}>
+                <FrontmatterBlock fm={parsed.frontmatter} />
+              </div>
+            )}
+            <div className={styles.markdownContent} dangerouslySetInnerHTML={{ __html: markdownPreview.html }} />
           </div>
         )}
       </div>
 
       <div className={styles.editorFooter}>
-        <span>라인: {content.split('\n').length}</span>
+        <span>라인: {lineNumberItems.length}</span>
         <span>탭: 2 spaces</span>
       </div>
     </div>

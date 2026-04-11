@@ -37,20 +37,32 @@ export async function GET(
 
   const encoder = new TextEncoder();
   let aborted = false;
+  let streamClosed = false;
   let lastHeartbeatAt = 0;
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const writeEvent = (event: string, payload: unknown) => {
-        controller.enqueue(encoder.encode(`event: ${event}\n`));
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+        if (aborted || streamClosed) {
+          return false;
+        }
+        try {
+          controller.enqueue(encoder.encode(`event: ${event}\n`));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+          return true;
+        } catch {
+          aborted = true;
+          streamClosed = true;
+          return false;
+        }
       };
 
       const closeSafely = () => {
-        if (aborted) {
+        if (aborted || streamClosed) {
           return;
         }
         aborted = true;
+        streamClosed = true;
         try {
           controller.close();
         } catch {
@@ -58,7 +70,7 @@ export async function GET(
         }
       };
 
-      request.signal.addEventListener('abort', closeSafely);
+      request.signal.addEventListener('abort', closeSafely, { once: true });
       writeEvent('ready', { sessionId, now: new Date().toISOString() });
 
       void (async () => {
@@ -67,9 +79,14 @@ export async function GET(
             // realtime events 먼저 — DB polling보다 앞서 즉시 전달
             try {
               const rt = await getSessionRealtimeEvents({ sessionId, afterCursor: realtimeCursor, chatId });
+              if (aborted) {
+                break;
+              }
               realtimeCursor = rt.cursor;
               for (const event of rt.events) {
-                writeEvent('event', { event });
+                if (!writeEvent('event', { event })) {
+                  break;
+                }
               }
             } catch {
               // realtime 실패 시 무시하고 DB polling 계속
@@ -83,9 +100,14 @@ export async function GET(
                 includeUnassigned,
                 latestSeqHint,
               });
+              if (aborted) {
+                break;
+              }
               latestSeqHint = result.latestSeq;
               for (const event of result.events) {
-                writeEvent('event', { event });
+                if (!writeEvent('event', { event })) {
+                  break;
+                }
                 cursor = event.id;
               }
               initialLoadDone = true;
@@ -115,6 +137,7 @@ export async function GET(
     },
     cancel() {
       aborted = true;
+      streamClosed = true;
     },
   });
 
