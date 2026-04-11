@@ -329,6 +329,14 @@
   min-width: 0;
 }
 
+.sessionMiniTextGroup {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+}
+
 .sessionMiniItemClickable {
   cursor: pointer;
   transition: background 0.15s ease;
@@ -354,12 +362,15 @@
 }
 
 .sessionMiniSubName {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
   font-size: 0.65rem;
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex-shrink: 0;
+  flex-shrink: 1;
 }
 
 .sessionEmptyHint {
