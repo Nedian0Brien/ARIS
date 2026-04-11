@@ -314,18 +314,21 @@
   justify-content: space-between;
   gap: 0.5rem;
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .chatItemTitle {
   display: block;
+  flex: 1 1 auto;
   min-width: 0;
-  max-width: 100%;
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--text, #0f172a);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .chatItemMeta {
@@ -334,6 +337,7 @@
   gap: 0.375rem;
   flex-shrink: 0;
   min-width: 0;
+  max-width: 100%;
 }
 
 .chatItemTime {
@@ -347,6 +351,7 @@
 
 .chatItemPreview {
   display: block;
+  min-width: 0;
   max-width: 100%;
   font-size: 0.78rem;
   color: var(--text-muted, #64748b);
@@ -585,6 +590,7 @@
 
   .chatItemMeta {
     width: 100%;
+    max-width: 100%;
     justify-content: space-between;
     flex-wrap: wrap;
   }

@@ -39,4 +39,19 @@ describe('mobile home/workspace layout overflow guards', () => {
     expect(dashboardCss).toMatch(/\.sessionMiniSubName\s*\{[^}]*max-width:\s*100%;/s);
     expect(dashboardCss).toMatch(/\.sessionMiniSubName\s*\{[^}]*flex-shrink:\s*1;/s);
   });
+
+  it('forces long chat titles and previews to shrink within mobile cards', () => {
+    expect(workspaceHomeCss).toMatch(/\.chatItemTop\s*\{[^}]*min-width:\s*0;/s);
+    expect(workspaceHomeCss).toMatch(/\.chatItemTop\s*\{[^}]*width:\s*100%;/s);
+    expect(workspaceHomeCss).toMatch(/\.chatItemTop\s*\{[^}]*max-width:\s*100%;/s);
+    expect(workspaceHomeCss).toMatch(/\.chatItemTitle\s*\{[^}]*min-width:\s*0;/s);
+    expect(workspaceHomeCss).toMatch(/\.chatItemTitle\s*\{[^}]*display:\s*block;/s);
+    expect(workspaceHomeCss).toMatch(/\.chatItemTitle\s*\{[^}]*max-width:\s*100%;/s);
+    expect(workspaceHomeCss).toMatch(/\.chatItemPreview\s*\{[^}]*min-width:\s*0;/s);
+    expect(workspaceHomeCss).toMatch(/\.chatItemPreview\s*\{[^}]*max-width:\s*100%;/s);
+    expect(workspaceHomeCss).toMatch(/@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?\.chatItemMeta\s*\{[^}]*max-width:\s*100%;/s);
+    expect(workspaceHomeCss).toMatch(/@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?\.chatItemMeta\s*\{[^}]*flex-wrap:\s*wrap;/s);
+    expect(workspaceHomeCss).toMatch(/@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?\.chatItemPreview\s*\{[^}]*white-space:\s*normal;/s);
+    expect(workspaceHomeCss).toMatch(/@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?\.chatItemPreview\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+  });
 });

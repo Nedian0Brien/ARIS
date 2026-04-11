@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+test.setTimeout(90_000);
+
 async function login(page) {
   const email = process.env.MOBILE_OVERFLOW_EMAIL;
   const password = process.env.MOBILE_OVERFLOW_PASSWORD;
@@ -11,9 +13,11 @@ async function login(page) {
   await page.goto('/login', { waitUntil: 'networkidle' });
   await page.locator('input[type="email"]').fill(email);
   await page.locator('input[type="password"]').fill(password);
-  await page.getByRole('button', { name: /sign in/i }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'));
-  await page.waitForLoadState('networkidle');
+  await Promise.all([
+    page.waitForURL((url) => !url.pathname.startsWith('/login'), { waitUntil: 'commit' }),
+    page.getByRole('button', { name: /sign in/i }).click(),
+  ]);
+  await page.waitForLoadState('domcontentloaded');
 }
 
 async function resolveFirstSessionPath(page) {
@@ -105,6 +109,7 @@ async function collectOverflow(page, path: string) {
       appShell: queryMetrics('.app-shell'),
       workspaceHomeRoot: queryMetrics('[class*="WorkspaceHome_homeRoot"]'),
       chatShell: queryMetrics('[class*="ChatInterface_chatShell"]'),
+      workspaceHomeOffenders: offenders.filter((offender) => String(offender?.className ?? '').includes('WorkspaceHome_')),
       offenders,
     };
   });
@@ -113,7 +118,7 @@ async function collectOverflow(page, path: string) {
 test('home and workspace pages stay within the mobile viewport width', async ({ page }) => {
   await login(page);
 
-  const paths = ['/'];
+  const paths = ['/', '/?tab=console', '/?tab=files', '/?tab=settings'];
   const sessionPath = await resolveFirstSessionPath(page);
   if (sessionPath) {
     paths.push(sessionPath);
@@ -132,9 +137,12 @@ test('home and workspace pages stay within the mobile viewport width', async ({ 
     if (path === '/') {
       expect(report.dashboardTitleRow?.clientWidth, `${path} title row width: ${JSON.stringify(report)}`).toBeLessThanOrEqual(report.viewportWidth + 1);
       expect(report.dashboardLayout?.clientWidth, `${path} dashboard width: ${JSON.stringify(report)}`).toBeLessThanOrEqual(report.viewportWidth + 1);
-    } else {
+    } else if (path.startsWith('/sessions/')) {
       expect(report.workspaceHomeRoot?.clientWidth, `${path} workspace home width: ${JSON.stringify(report)}`).toBeLessThanOrEqual(report.viewportWidth + 1);
       expect(report.chatShell?.clientWidth, `${path} chat shell width: ${JSON.stringify(report)}`).toBeLessThanOrEqual(report.viewportWidth + 1);
+      expect(report.workspaceHomeOffenders, `${path} workspace home offender overflow: ${JSON.stringify(report)}`).toEqual([]);
+    } else {
+      expect(report.appShell?.clientWidth, `${path} app shell width: ${JSON.stringify(report)}`).toBeLessThanOrEqual(report.viewportWidth + 1);
     }
   }
 });
