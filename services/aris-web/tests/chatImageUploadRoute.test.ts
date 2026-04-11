@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   rmdir: vi.fn(),
   readFile: vi.fn(),
   requireApiUser: vi.fn(),
+  getWorkspaceById: vi.fn(),
   randomUUID: vi.fn(),
 }));
 
@@ -29,6 +30,10 @@ vi.mock('@/lib/auth/guard', () => ({
   requireApiUser: mocks.requireApiUser,
 }));
 
+vi.mock('@/lib/happy/workspaces', () => ({
+  getWorkspaceById: mocks.getWorkspaceById,
+}));
+
 vi.mock('@/lib/config', () => ({
   env: {
     NODE_ENV: 'production',
@@ -41,6 +46,7 @@ describe('chat image upload route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.requireApiUser.mockResolvedValue({ user: { role: 'operator', id: 'user-1' } });
+    mocks.getWorkspaceById.mockResolvedValue({ id: 'session-1', path: '/home/ubuntu/project/ARIS' });
     mocks.randomUUID.mockReturnValue('asset-123');
     mocks.mkdir.mockResolvedValue(undefined);
     mocks.writeFile.mockResolvedValue(undefined);
@@ -76,6 +82,23 @@ describe('chat image upload route', () => {
         previewUrl: '/api/runtime/sessions/session-1/assets/images?path=%2Fhome%2Fubuntu%2F.aris%2Fchat-assets%2Fsession-1%2Fasset-123-screen.png',
       },
     });
+  });
+
+  it('rejects requests for sessions the current user does not own', async () => {
+    mocks.getWorkspaceById.mockResolvedValue(null);
+    const form = new FormData();
+    form.set('file', new File([Uint8Array.from([137, 80, 78, 71])], 'screen.png', { type: 'image/png' }));
+
+    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const response = await POST(
+      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+        method: 'POST',
+        body: form,
+      }),
+      { params: Promise.resolve({ sessionId: 'session-1' }) },
+    );
+
+    expect(response.status).toBe(404);
   });
 
   it('rejects requests without a file', async () => {

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { requireApiUser } from '@/lib/auth/guard';
 import { getHostHomeDir } from '@/lib/fs/pathResolver';
+import { getWorkspaceById } from '@/lib/happy/workspaces';
 import type { ChatImageAttachment } from '@/lib/happy/types';
 
 const CHAT_IMAGE_ASSET_ROOT = path.join(getHostHomeDir(), '.aris', 'chat-assets');
@@ -82,6 +83,10 @@ export async function POST(
   if (!sessionSegment) {
     return NextResponse.json({ error: '유효하지 않은 세션 식별자입니다.' }, { status: 400 });
   }
+  const workspace = await getWorkspaceById(auth.user.id, sessionId);
+  if (!workspace) {
+    return NextResponse.json({ error: '세션을 찾을 수 없습니다.' }, { status: 404 });
+  }
 
   const contentLength = Number.parseInt(request.headers.get('content-length') ?? '', 10);
   if (Number.isFinite(contentLength) && contentLength > MAX_MULTIPART_REQUEST_BYTES) {
@@ -130,6 +135,10 @@ export async function GET(
   if (!sessionSegment) {
     return NextResponse.json({ error: '유효하지 않은 세션 식별자입니다.' }, { status: 400 });
   }
+  const workspace = await getWorkspaceById(auth.user.id, sessionId);
+  if (!workspace) {
+    return NextResponse.json({ error: '세션을 찾을 수 없습니다.' }, { status: 404 });
+  }
 
   const serverPath = request.nextUrl.searchParams.get('path')?.trim() ?? '';
   if (!serverPath || !isAllowedAssetPath(serverPath) || !isAllowedAssetPathForSession(serverPath, sessionSegment)) {
@@ -168,6 +177,10 @@ export async function DELETE(
   const sessionSegment = normalizeSessionSegment(sessionId);
   if (!sessionSegment) {
     return NextResponse.json({ error: '유효하지 않은 세션 식별자입니다.' }, { status: 400 });
+  }
+  const workspace = await getWorkspaceById(auth.user.id, sessionId);
+  if (!workspace) {
+    return NextResponse.json({ error: '세션을 찾을 수 없습니다.' }, { status: 404 });
   }
 
   const body = (await request.json().catch(() => ({}))) as { serverPath?: string };

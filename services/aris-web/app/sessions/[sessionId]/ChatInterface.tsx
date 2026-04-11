@@ -3985,6 +3985,7 @@ export function ChatInterface({
     window.addEventListener('beforeunload', handleDraftCleanup);
     window.addEventListener('pagehide', handleDraftCleanup);
     return () => {
+      handleDraftCleanup();
       window.removeEventListener('beforeunload', handleDraftCleanup);
       window.removeEventListener('pagehide', handleDraftCleanup);
     };
