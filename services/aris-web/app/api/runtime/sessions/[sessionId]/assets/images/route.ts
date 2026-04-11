@@ -44,6 +44,12 @@ function buildAttachment(input: {
   };
 }
 
+function isAllowedAssetPath(filePath: string): boolean {
+  const resolvedRoot = path.resolve(CHAT_IMAGE_ASSET_ROOT);
+  const resolvedPath = path.resolve(filePath);
+  return resolvedPath === resolvedRoot || resolvedPath.startsWith(`${resolvedRoot}${path.sep}`);
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> },
@@ -94,4 +100,35 @@ export async function POST(
   }
 
   return NextResponse.json({ attachment });
+}
+
+export async function DELETE(request: NextRequest) {
+  const auth = await requireApiUser(request);
+  if ('response' in auth) {
+    return auth.response;
+  }
+
+  if (auth.user.role !== 'operator') {
+    return NextResponse.json({ error: 'Operator role required' }, { status: 403 });
+  }
+
+  const body = (await request.json().catch(() => ({}))) as { serverPath?: string };
+  const serverPath = typeof body.serverPath === 'string' ? body.serverPath.trim() : '';
+  if (!serverPath || !isAllowedAssetPath(serverPath)) {
+    return NextResponse.json({ error: '유효하지 않은 이미지 경로입니다.' }, { status: 400 });
+  }
+
+  try {
+    await fs.unlink(serverPath).catch((error: NodeJS.ErrnoException) => {
+      if (error?.code !== 'ENOENT') {
+        throw error;
+      }
+    });
+    await fs.rmdir(path.dirname(serverPath)).catch(() => {});
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '이미지 삭제에 실패했습니다.';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
 }

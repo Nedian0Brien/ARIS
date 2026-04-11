@@ -4,6 +4,8 @@ import { NextRequest } from 'next/server';
 const mocks = vi.hoisted(() => ({
   mkdir: vi.fn(),
   writeFile: vi.fn(),
+  unlink: vi.fn(),
+  rmdir: vi.fn(),
   requireApiUser: vi.fn(),
   randomUUID: vi.fn(),
 }));
@@ -12,6 +14,8 @@ vi.mock('node:fs/promises', () => ({
   default: {
     mkdir: mocks.mkdir,
     writeFile: mocks.writeFile,
+    unlink: mocks.unlink,
+    rmdir: mocks.rmdir,
   },
 }));
 
@@ -38,6 +42,8 @@ describe('chat image upload route', () => {
     mocks.randomUUID.mockReturnValue('asset-123');
     mocks.mkdir.mockResolvedValue(undefined);
     mocks.writeFile.mockResolvedValue(undefined);
+    mocks.unlink.mockResolvedValue(undefined);
+    mocks.rmdir.mockResolvedValue(undefined);
   });
 
   it('stores an uploaded image and returns attachment metadata', async () => {
@@ -202,5 +208,23 @@ describe('chat image upload route', () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: '이미지 파일이 필요합니다.' });
+  });
+
+  it('deletes a stored image asset when the composer removes it', async () => {
+    const { DELETE } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const response = await DELETE(
+      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+        method: 'DELETE',
+        body: JSON.stringify({
+          serverPath: '/home/ubuntu/.aris/chat-assets/session-1/asset-123-screen.png',
+        }),
+        headers: {
+          'content-type': 'application/json',
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.unlink).toHaveBeenCalledWith('/home/ubuntu/.aris/chat-assets/session-1/asset-123-screen.png');
   });
 });

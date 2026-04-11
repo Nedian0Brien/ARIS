@@ -2949,6 +2949,7 @@ export function ChatInterface({
   const composerDockRef = useRef<HTMLElement>(null);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const composerImageInputRef = useRef<HTMLInputElement>(null);
+  const contextItemsRef = useRef<ContextItem[]>([]);
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const geminiModeDropdownRef = useRef<HTMLDivElement>(null);
@@ -3954,6 +3955,29 @@ export function ChatInterface({
   ]);
 
   useEffect(() => {
+    contextItemsRef.current = contextItems;
+  }, [contextItems]);
+
+  const deleteUploadedImageAsset = useCallback((attachment: ChatImageAttachment, keepalive = false) => {
+    void fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/assets/images`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ serverPath: attachment.serverPath }),
+      ...(keepalive ? { keepalive: true } : {}),
+    }).catch(() => {});
+  }, [sessionId]);
+
+  useEffect(() => {
+    return () => {
+      for (const item of contextItemsRef.current) {
+        if (item.type === 'image') {
+          deleteUploadedImageAsset(item.attachment, true);
+        }
+      }
+    };
+  }, [deleteUploadedImageAsset]);
+
+  useEffect(() => {
     if (plusMenuMode === 'closed' && !isModelDropdownOpen && !isGeminiModeDropdownOpen && !isCommandMenuOpen) return;
     function handleOutsideClick(e: MouseEvent) {
       if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
@@ -3973,9 +3997,12 @@ export function ChatInterface({
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [plusMenuMode, isModelDropdownOpen, isGeminiModeDropdownOpen, isCommandMenuOpen]);
 
-  const removeContextItem = useCallback((id: string) => {
-    setContextItems((prev) => prev.filter((item) => item.id !== id));
-  }, []);
+  const removeContextItem = useCallback((itemToRemove: ContextItem) => {
+    if (itemToRemove.type === 'image') {
+      deleteUploadedImageAsset(itemToRemove.attachment);
+    }
+    setContextItems((prev) => prev.filter((item) => item.id !== itemToRemove.id));
+  }, [deleteUploadedImageAsset]);
 
   const handleAddTextContext = useCallback(() => {
     const text = textContextInput.trim();
@@ -5241,7 +5268,7 @@ export function ChatInterface({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const promptText = prompt.trim();
-    if (!promptText || !isOperator || isAgentRunning || !activeChatIdResolved) return;
+    if (!promptText || !isOperator || isAgentRunning || !activeChatIdResolved || isImageUploading) return;
     const scopedChatId = activeChatIdResolved;
 
     const hasUserMessageInChat = eventsForChatId === scopedChatId
@@ -6519,7 +6546,7 @@ export function ChatInterface({
                         <button
                           type="button"
                           className={styles.contextChipRemove}
-                          onClick={() => removeContextItem(item.id)}
+                          onClick={() => removeContextItem(item)}
                           aria-label="컨텍스트 제거"
                         >
                           <X size={10} />
@@ -6610,7 +6637,7 @@ export function ChatInterface({
                           ? '메시지를 입력하세요...'
                           : 'Viewer 권한입니다.'
                     }
-                    disabled={!activeChatIdResolved || !isOperator}
+                      disabled={!activeChatIdResolved || !isOperator}
                     className={styles.composerInput}
                   />
 
@@ -6628,7 +6655,7 @@ export function ChatInterface({
                   ) : (
                     <button
                       type="submit"
-                      disabled={!activeChatIdResolved || !prompt.trim() || !isOperator}
+                      disabled={!activeChatIdResolved || !prompt.trim() || !isOperator || isImageUploading}
                       className={styles.composerSendBtn}
                       aria-label="메시지 전송"
                       title="메시지 전송 (Ctrl/Cmd + Enter)"
