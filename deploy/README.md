@@ -55,6 +55,7 @@ deploy/
 3. Ensure required keys are set: `APP_BASE_URL`, `AUTH_JWT_SECRET`, `ARIS_ADMIN_EMAIL`, `ARIS_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `RUNTIME_API_TOKEN`, `RUNTIME_BACKEND`, `SSH_KEY_ENCRYPTION_SECRET`.
 4. If `RUNTIME_BACKEND=happy`, also ensure `HAPPY_SERVER_URL`, `HAPPY_SERVER_TOKEN` are set.
 5. If `services/aris-backend/.env` is still maintained for local checks, keep its `RUNTIME_API_TOKEN` aligned with `prod.env`.
+6. After pushing `main`, confirm that the `Deploy on Main Push` workflow run is actually created before deleting the source branch or assuming deploy completed.
 
 ## Standard deployment flows
 
