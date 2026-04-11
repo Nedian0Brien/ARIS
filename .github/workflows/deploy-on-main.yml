@@ -10,8 +10,6 @@ on:
       - "deploy/**"
       - "docker-compose.yml"
       - ".github/workflows/deploy-on-main.yml"
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -40,12 +38,6 @@ jobs:
           set -euo pipefail
 
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "run_web=true" >> "$GITHUB_OUTPUT"
-            echo "run_backend=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [[ "${{ github.event_name }}" == "schedule" ]]; then
             echo "run_web=true" >> "$GITHUB_OUTPUT"
             echo "run_backend=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -127,63 +119,7 @@ jobs:
           echo "Resolved deploy repo: $deploy_repo_dir"
           echo "deploy_repo_dir=$deploy_repo_dir" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve deployment execution plan
-        id: plan
-        shell: bash
-        run: |
-          set -euo pipefail
-          DEPLOY_REPO_DIR="${{ steps.resolve-deploy-repo.outputs.deploy_repo_dir }}"
-
-          if [[ "${{ github.event_name }}" != "schedule" ]]; then
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-            echo "run_web=${{ needs.detect-changes.outputs.run_web }}" >> "$GITHUB_OUTPUT"
-            echo "run_backend=${{ needs.detect-changes.outputs.run_backend }}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          git -C "$DEPLOY_REPO_DIR" fetch origin main
-          current_sha="$(git -C "$DEPLOY_REPO_DIR" rev-parse main)"
-          remote_sha="$(git -C "$DEPLOY_REPO_DIR" rev-parse origin/main)"
-
-          if [[ "$current_sha" == "$remote_sha" ]]; then
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-            echo "run_web=false" >> "$GITHUB_OUTPUT"
-            echo "run_backend=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          changed_files="$(git -C "$DEPLOY_REPO_DIR" diff --name-only "$current_sha" "$remote_sha")"
-          run_web=false
-          run_backend=false
-          shared_changed=false
-
-          while IFS= read -r file; do
-            [[ -z "$file" ]] && continue
-
-            case "$file" in
-              services/aris-web/*)
-                run_web=true
-                ;;
-              services/aris-backend/*)
-                run_backend=true
-                ;;
-              deploy/*|docker-compose.yml|.github/workflows/deploy-on-main.yml)
-                shared_changed=true
-                ;;
-            esac
-          done <<< "$changed_files"
-
-          if [[ "$shared_changed" == "true" ]]; then
-            run_web=true
-            run_backend=true
-          fi
-
-          echo "has_changes=true" >> "$GITHUB_OUTPUT"
-          echo "run_web=$run_web" >> "$GITHUB_OUTPUT"
-          echo "run_backend=$run_backend" >> "$GITHUB_OUTPUT"
-
       - name: Sync deployment repository
-        if: steps.plan.outputs.has_changes == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -205,7 +141,7 @@ jobs:
           git -C "$DEPLOY_REPO_DIR" pull --ff-only origin main
 
       - name: Install backend dependencies
-        if: steps.plan.outputs.run_backend == 'true'
+        if: needs.detect-changes.outputs.run_backend == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -214,7 +150,7 @@ jobs:
           npm --prefix "$DEPLOY_REPO_DIR/services/aris-backend" ci
 
       - name: Deploy backend (PM2 zero-downtime)
-        if: steps.plan.outputs.run_backend == 'true'
+        if: needs.detect-changes.outputs.run_backend == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -225,7 +161,7 @@ jobs:
           "$DEPLOY_REPO_DIR/deploy/deploy_backend_zero_downtime.sh"
 
       - name: Deploy web (blue/green zero-downtime)
-        if: steps.plan.outputs.run_web == 'true'
+        if: needs.detect-changes.outputs.run_web == 'true'
         shell: bash
         run: |
           set -euo pipefail
