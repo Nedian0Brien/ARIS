@@ -25,7 +25,7 @@ export function UsageProbeModal({ provider, workspacePath, onClose }: Props) {
   const [probeNonce, setProbeNonce] = useState(0);
   const [connected, setConnected] = useState(false);
   const [statusMessage, setStatusMessage] = useState('연결 중...');
-  const [probeEvents, setProbeEvents] = useState<string[]>([]);
+  const [latestProbeEvent, setLatestProbeEvent] = useState('');
 
   const descriptor = useMemo(
     () => buildUsageProbeDescriptor(provider, workspacePath),
@@ -41,7 +41,7 @@ export function UsageProbeModal({ provider, workspacePath, onClose }: Props) {
 
   const appendProbeEvent = useCallback((message: string) => {
     console.info(`[usage-probe:${provider}] ${message}`);
-    setProbeEvents((prev) => [...prev.slice(-7), message]);
+    setLatestProbeEvent(message);
   }, [provider]);
 
   const runAutomation = useCallback((ws: WebSocket) => {
@@ -62,7 +62,7 @@ export function UsageProbeModal({ provider, workspacePath, onClose }: Props) {
     receivedChunkRef.current = false;
     setConnected(false);
     setStatusMessage('연결 중...');
-    setProbeEvents(['usage probe 초기화']);
+    setLatestProbeEvent('usage probe 초기화');
 
     async function boot() {
       if (!containerRef.current) {
@@ -215,11 +215,11 @@ export function UsageProbeModal({ provider, workspacePath, onClose }: Props) {
           <span>{statusMessage}</span>
         </div>
 
-        <div className={styles.diagnostics}>
-          {probeEvents.map((entry, index) => (
-            <div key={`${probeNonce}-${index}`} className={styles.diagnosticItem}>{entry}</div>
-          ))}
-        </div>
+        {latestProbeEvent && (
+          <div className={styles.diagnostics}>
+            <div className={styles.diagnosticItem}>{latestProbeEvent}</div>
+          </div>
+        )}
       </div>
     </div>
   );
