@@ -60,32 +60,34 @@ export async function GET(request: NextRequest) {
           if (!cachedChatStats || now - chatStatsCachedAt > CHAT_STATS_TTL_MS) {
             const runningSessionIds = sessions.filter(s => s.status === 'running').map(s => s.id);
             const runningCount = await prisma.sessionChat.count({
-              where: { sessionId: { in: runningSessionIds }, latestEventIsUser: false, userId },
+              where: { sessionId: { in: runningSessionIds }, latestEventIsUser: false, latestEventId: { not: null }, userId },
             });
             const runningSampleRows = await prisma.sessionChat.findMany({
-              where: { sessionId: { in: runningSessionIds }, latestEventIsUser: false, userId },
+              where: { sessionId: { in: runningSessionIds }, latestEventIsUser: false, latestEventId: { not: null }, userId },
               orderBy: { lastActivityAt: 'desc' }, take: 3,
               select: { id: true, title: true, sessionId: true, agent: true },
             });
             const completedNullCount = await prisma.sessionChat.count({
-              where: { latestEventIsUser: false, userId, sessionId: { notIn: runningSessionIds }, lastReadAt: null },
+              where: { latestEventIsUser: false, latestEventId: { not: null }, userId, sessionId: { notIn: runningSessionIds }, lastReadAt: null },
             });
             const completedNonNullResult = await prisma.$queryRaw<[{ count: bigint }]>`
               SELECT COUNT(*)::bigint as count FROM "SessionChat"
               WHERE "userId" = ${userId}
                 AND "latestEventIsUser" = false
+                AND "latestEventId" IS NOT NULL
                 AND "sessionId" != ALL(${runningSessionIds}::text[])
                 AND "lastReadAt" IS NOT NULL AND "lastActivityAt" > "lastReadAt"
             `;
             const completedCount = completedNullCount + Number(completedNonNullResult[0]?.count ?? 0);
             const completedNullSample = await prisma.sessionChat.findMany({
-              where: { latestEventIsUser: false, userId, sessionId: { notIn: runningSessionIds }, lastReadAt: null },
+              where: { latestEventIsUser: false, latestEventId: { not: null }, userId, sessionId: { notIn: runningSessionIds }, lastReadAt: null },
               orderBy: { lastActivityAt: 'desc' }, take: 5,
               select: { id: true, title: true, sessionId: true, agent: true, lastActivityAt: true },
             });
             const completedNonNullSample = await prisma.$queryRaw<Array<{ id: string; title: string; sessionId: string; agent: string; lastActivityAt: Date }>>`
               SELECT id, title, "sessionId", agent, "lastActivityAt" FROM "SessionChat"
               WHERE "userId" = ${userId} AND "latestEventIsUser" = false
+                AND "latestEventId" IS NOT NULL
                 AND "sessionId" != ALL(${runningSessionIds}::text[])
                 AND "lastReadAt" IS NOT NULL AND "lastActivityAt" > "lastReadAt"
               ORDER BY "lastActivityAt" DESC LIMIT 5

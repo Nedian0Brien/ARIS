@@ -33,10 +33,10 @@ export async function GET(request: NextRequest) {
 
     // running 채팅 집계
     const runningCount = await prisma.sessionChat.count({
-      where: { sessionId: { in: runningSessionIds }, latestEventIsUser: false, userId },
+      where: { sessionId: { in: runningSessionIds }, latestEventIsUser: false, latestEventId: { not: null }, userId },
     });
     const runningSampleRows = await prisma.sessionChat.findMany({
-      where: { sessionId: { in: runningSessionIds }, latestEventIsUser: false, userId },
+      where: { sessionId: { in: runningSessionIds }, latestEventIsUser: false, latestEventId: { not: null }, userId },
       orderBy: { lastActivityAt: 'desc' },
       take: 3,
       select: { id: true, title: true, sessionId: true, agent: true },
@@ -44,13 +44,14 @@ export async function GET(request: NextRequest) {
 
     // completed 채팅 집계
     const completedNullCount = await prisma.sessionChat.count({
-      where: { latestEventIsUser: false, userId, sessionId: { notIn: runningSessionIds }, lastReadAt: null },
+      where: { latestEventIsUser: false, latestEventId: { not: null }, userId, sessionId: { notIn: runningSessionIds }, lastReadAt: null },
     });
     const completedNonNullResult = await prisma.$queryRaw<[{ count: bigint }]>`
       SELECT COUNT(*)::bigint as count
       FROM "SessionChat"
       WHERE "userId" = ${userId}
         AND "latestEventIsUser" = false
+        AND "latestEventId" IS NOT NULL
         AND "sessionId" != ALL(${runningSessionIds}::text[])
         AND "lastReadAt" IS NOT NULL
         AND "lastActivityAt" > "lastReadAt"
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
     const completedCount = completedNullCount + Number(completedNonNullResult[0]?.count ?? 0);
 
     const completedNullSample = await prisma.sessionChat.findMany({
-      where: { latestEventIsUser: false, userId, sessionId: { notIn: runningSessionIds }, lastReadAt: null },
+      where: { latestEventIsUser: false, latestEventId: { not: null }, userId, sessionId: { notIn: runningSessionIds }, lastReadAt: null },
       orderBy: { lastActivityAt: 'desc' }, take: 5,
       select: { id: true, title: true, sessionId: true, agent: true, lastActivityAt: true },
     });
@@ -67,6 +68,7 @@ export async function GET(request: NextRequest) {
       FROM "SessionChat"
       WHERE "userId" = ${userId}
         AND "latestEventIsUser" = false
+        AND "latestEventId" IS NOT NULL
         AND "sessionId" != ALL(${runningSessionIds}::text[])
         AND "lastReadAt" IS NOT NULL
         AND "lastActivityAt" > "lastReadAt"
