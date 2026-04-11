@@ -96,7 +96,7 @@
   padding: 1.5rem;
   border: none;
   border-radius: 1.5rem;
-  overflow: visible;
+  overflow: hidden;
   background: var(--dashboard-card-bg);
   backdrop-filter: blur(20px);
   box-shadow: var(--dashboard-shadow-soft);
@@ -227,7 +227,7 @@
 /* 워크스페이스 & 에이전트 수평 그리드 */
 .sessionStatsGrid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
 }
 
