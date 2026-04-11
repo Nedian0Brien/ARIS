@@ -35,4 +35,14 @@ describe('link preview carousel mobile layout', () => {
     expect(css).toMatch(/\.messageBubbleAgent\s*\{[^}]*width:\s*fit-content;/s);
     expect(css).toMatch(/\.messageBubbleAgent\s*\{[^}]*max-width:\s*100%;/s);
   });
+
+  it('forces long url text inside chat bubbles to wrap without triggering mobile text autosizing', () => {
+    expect(css).toMatch(/\.userText,\s*\.agentText\s*\{[^}]*max-width:\s*100%;/s);
+    expect(css).toMatch(/\.userText,\s*\.agentText\s*\{[^}]*-webkit-text-size-adjust:\s*100%;/s);
+    expect(css).toMatch(/\.userText,\s*\.agentText\s*\{[^}]*text-size-adjust:\s*100%;/s);
+    expect(css).toMatch(/\.markdownParagraph\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+    expect(css).toMatch(/\.markdownParagraph\s*\{[^}]*word-break:\s*break-word;/s);
+    expect(css).toMatch(/\.markdownLink\s*\{[^}]*max-width:\s*100%;/s);
+    expect(css).toMatch(/\.markdownLink\s*\{[^}]*word-break:\s*break-all;/s);
+  });
 });

@@ -1760,6 +1760,7 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 0.35rem;
+  width: fit-content;
   max-width: min(92%, 860px);
   min-width: 0;
 }
@@ -2054,6 +2055,9 @@
   line-height: 1.5;
   color: var(--chat-text-primary);
   min-width: 0;
+  max-width: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -2114,6 +2118,8 @@
 
 .markdownParagraph {
   margin: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .markdownHeading {
@@ -2262,12 +2268,14 @@
 }
 
 .markdownLink {
+  display: inline;
+  max-width: 100%;
   color: var(--chat-accent);
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 2px;
   overflow-wrap: anywhere;
-  word-break: break-word;
+  word-break: break-all;
 }
 
 .markdownStrong {
