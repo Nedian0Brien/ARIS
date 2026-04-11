@@ -2,19 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, X } from 'lucide-react';
-import type { UsageCommandProvider } from './chatCommands';
+import type { ChatCommandId, UsageCommandProvider } from './chatCommands';
 import { buildUsageProbeDescriptor } from './chatCommands';
 import { formatUsageProbeCloseMessage, normalizeUsageProbeMessageData } from './usageProbeTerminal';
+import { parseUsageProbeOutput, type ParsedUsageProbe } from './usageProbeParser';
 import styles from './UsageProbeModal.module.css';
 import '@xterm/xterm/css/xterm.css';
 
 type Props = {
   provider: UsageCommandProvider;
+  commandId: ChatCommandId;
   workspacePath: string;
   onClose: () => void;
 };
 
-export function UsageProbeModal({ provider, workspacePath, onClose }: Props) {
+export function UsageProbeModal({ provider, commandId, workspacePath, onClose }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<import('@xterm/xterm').Terminal | null>(null);
   const fitAddonRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
@@ -22,14 +24,19 @@ export function UsageProbeModal({ provider, workspacePath, onClose }: Props) {
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const automationTimersRef = useRef<number[]>([]);
   const receivedChunkRef = useRef(false);
+  const transcriptRef = useRef('');
   const [probeNonce, setProbeNonce] = useState(0);
   const [connected, setConnected] = useState(false);
   const [statusMessage, setStatusMessage] = useState('연결 중...');
   const [latestProbeEvent, setLatestProbeEvent] = useState('');
+  const [parsedUsage, setParsedUsage] = useState<ParsedUsageProbe>({
+    fiveHour: null,
+    weekly: null,
+  });
 
   const descriptor = useMemo(
-    () => buildUsageProbeDescriptor(provider, workspacePath),
-    [provider, workspacePath],
+    () => buildUsageProbeDescriptor(provider, commandId, workspacePath),
+    [provider, commandId, workspacePath],
   );
 
   const clearAutomationTimers = useCallback(() => {
@@ -60,9 +67,11 @@ export function UsageProbeModal({ provider, workspacePath, onClose }: Props) {
   useEffect(() => {
     let disposed = false;
     receivedChunkRef.current = false;
+    transcriptRef.current = '';
     setConnected(false);
     setStatusMessage('연결 중...');
     setLatestProbeEvent('usage probe 초기화');
+    setParsedUsage({ fiveHour: null, weekly: null });
 
     async function boot() {
       if (!containerRef.current) {
@@ -127,7 +136,14 @@ export function UsageProbeModal({ provider, workspacePath, onClose }: Props) {
           setStatusMessage('터미널 출력 수신 중');
           appendProbeEvent('첫 터미널 출력 수신');
         }
-        term.write(normalizeUsageProbeMessageData(event.data as string | ArrayBuffer));
+        const normalized = normalizeUsageProbeMessageData(event.data as string | ArrayBuffer);
+        term.write(normalized);
+        transcriptRef.current += typeof normalized === 'string'
+          ? normalized
+          : new TextDecoder().decode(normalized);
+        if (descriptor.renderMode === 'parsed') {
+          setParsedUsage(parseUsageProbeOutput(provider, transcriptRef.current));
+        }
       };
 
       ws.onerror = () => {
@@ -207,6 +223,32 @@ export function UsageProbeModal({ provider, workspacePath, onClose }: Props) {
         </div>
 
         <div className={styles.terminalShell}>
+          {descriptor.renderMode === 'parsed' && (
+            <div className={styles.usageSummaryGrid}>
+              <div className={styles.usageSummaryCard}>
+                <div className={styles.usageSummaryLabel}>5-hour</div>
+                <div className={styles.usageSummaryValue}>
+                  {parsedUsage.fiveHour?.remainingPercent !== undefined
+                    ? `${parsedUsage.fiveHour.remainingPercent}%`
+                    : '추출 중'}
+                </div>
+                <div className={styles.usageSummaryMeta}>
+                  {parsedUsage.fiveHour?.resetText ?? 'reset 정보 대기중'}
+                </div>
+              </div>
+              <div className={styles.usageSummaryCard}>
+                <div className={styles.usageSummaryLabel}>Weekly</div>
+                <div className={styles.usageSummaryValue}>
+                  {parsedUsage.weekly?.remainingPercent !== undefined
+                    ? `${parsedUsage.weekly.remainingPercent}%`
+                    : '추출 중'}
+                </div>
+                <div className={styles.usageSummaryMeta}>
+                  {parsedUsage.weekly?.resetText ?? 'reset 정보 대기중'}
+                </div>
+              </div>
+            </div>
+          )}
           <div ref={containerRef} className={styles.terminalViewport} />
         </div>
 
