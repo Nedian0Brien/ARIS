@@ -4312,17 +4312,25 @@
 .linkPreviewWrap {
   position: relative;
   margin-top: 0.45rem;
-  max-width: min(92%, 860px);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .linkPreviewTrack {
   display: flex;
   gap: 0.55rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
   -ms-overflow-style: none;
   padding: 0.15rem 0;
+  box-sizing: border-box;
+  overscroll-behavior-x: contain;
 }
 
 .linkPreviewTrack::-webkit-scrollbar {
@@ -4331,6 +4339,9 @@
 
 .linkPreviewCard {
   flex: 0 0 280px;
+  width: 280px;
+  max-width: 100%;
+  min-width: 0;
   scroll-snap-align: start;
   display: flex;
   flex-direction: column;
@@ -4343,6 +4354,7 @@
   box-shadow: var(--chat-msg-shadow);
   transition: border-color 0.18s, box-shadow 0.18s, transform 0.15s;
   cursor: pointer;
+  box-sizing: border-box;
 }
 
 .linkPreviewCard:hover {
@@ -4549,7 +4561,9 @@
 
 @media (max-width: 768px) {
   .linkPreviewCard {
-    flex: 0 0 240px;
+    flex: 0 0 clamp(12.5rem, calc(100vw - 7rem), 15rem);
+    width: clamp(12.5rem, calc(100vw - 7rem), 15rem);
+    max-width: 100%;
   }
 
   .linkPreviewImageWrap {
