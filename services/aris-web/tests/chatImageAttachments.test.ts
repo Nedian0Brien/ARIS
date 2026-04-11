@@ -103,6 +103,22 @@ describe('chatImageAttachments helpers', () => {
     })).toEqual([]);
   });
 
+  it('rejects numeric strings outside the safe integer range', () => {
+    expect(readChatImageAttachments({
+      attachments: [
+        {
+          assetId: 'asset-1',
+          kind: 'image',
+          name: 'screen.png',
+          mimeType: 'image/png',
+          size: '9007199254740993',
+          serverPath: '/tmp/a.png',
+          previewUrl: '/api/x',
+        },
+      ],
+    })).toEqual([]);
+  });
+
   it('returns an empty array for missing or invalid meta payloads', () => {
     expect(readChatImageAttachments(undefined)).toEqual([]);
     expect(readChatImageAttachments({ attachments: 'invalid' })).toEqual([]);

@@ -9,12 +9,12 @@ function asObject(value: unknown): Record<string, unknown> | null {
 
 function asNonNegativeNumber(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
-    return Number.isInteger(value) ? value : undefined;
+    return Number.isSafeInteger(value) ? value : undefined;
   }
   if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
     const parsed = Number.parseInt(value, 10);
     if (Number.isFinite(parsed) && parsed >= 0) {
-      return Number.isInteger(parsed) ? parsed : undefined;
+      return Number.isSafeInteger(parsed) ? parsed : undefined;
     }
   }
   return undefined;
