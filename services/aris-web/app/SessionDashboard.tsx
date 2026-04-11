@@ -1214,7 +1214,7 @@ export function SessionDashboard({
               </Card>
 
               {/* Session & Agent Stats Row */}
-              <div className={styles.sessionStatsGrid}>
+/*               <div className={styles.sessionStatsGrid}>
                 {/* Session Status */}
                 <Card className={styles.sessionSidebarCard}>
                   <h3 className={styles.sessionSidebarTitle}>
@@ -1334,7 +1334,7 @@ export function SessionDashboard({
                 </Card>
               </div>
             </aside>
-
+ */
             <section className={styles.sessionDashboardMain}>
               <div className={styles.sessionMainToolbar}>
                 <div className={styles.sessionSearchWrap}>
