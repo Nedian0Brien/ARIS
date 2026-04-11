@@ -40,6 +40,15 @@ function escapeXmlAttribute(value: string): string {
 
 const IMAGE_ATTACHMENT_PREFIX_PATTERN = /^(?:<image_attachment\b[\s\S]*?<\/image_attachment>\n\n)+/;
 
+function toModelVisibleServerPath(serverPath: string): string {
+  const marker = '/chat-assets/';
+  const markerIndex = serverPath.lastIndexOf(marker);
+  if (markerIndex >= 0) {
+    return `chat-assets/${serverPath.slice(markerIndex + marker.length)}`;
+  }
+  return serverPath;
+}
+
 export function buildImageAttachmentPromptPrefix(attachments: ChatImageAttachment[]): string {
   if (attachments.length === 0) {
     return '';
@@ -47,7 +56,7 @@ export function buildImageAttachmentPromptPrefix(attachments: ChatImageAttachmen
 
   return `${attachments.map((attachment) => (
     [
-      `<image_attachment assetId="${escapeXmlAttribute(attachment.assetId)}" serverPath="${escapeXmlAttribute(attachment.serverPath)}" mimeType="${escapeXmlAttribute(attachment.mimeType)}">`,
+      `<image_attachment assetId="${escapeXmlAttribute(attachment.assetId)}" serverPath="${escapeXmlAttribute(toModelVisibleServerPath(attachment.serverPath))}" mimeType="${escapeXmlAttribute(attachment.mimeType)}">`,
       '첨부 이미지를 참고해서 답변하라.',
       '</image_attachment>',
     ].join('\n')

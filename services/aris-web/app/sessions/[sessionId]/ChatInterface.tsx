@@ -32,7 +32,7 @@ import {
 } from '@/lib/happy/permissions';
 import { readChatImageAttachments, stripImageAttachmentPromptPrefix } from '@/lib/chatImageAttachments';
 import { buildOptimisticUserEvent } from './chatComposer';
-import { buildComposerSubmitText, buildUserMessageMeta, matchesSubmittedUserPayload } from './chatSubmitPayload';
+import { buildComposerSubmitText, buildUserMessageMeta } from './chatSubmitPayload';
 import {
   readLastSelectedModelId,
   resolvePreferredModelId,
@@ -5500,13 +5500,6 @@ export function ChatInterface({
       return;
     }
     const scopedChatId = lastSubmittedPayload.chatId;
-    const localPersistedMatch = eventsForChatId === scopedChatId
-      ? events.some((event) => matchesSubmittedUserPayload(event, {
-          text: lastSubmittedPayload.text,
-          attachments: lastSubmittedPayload.attachments,
-        }))
-      : false;
-
     updateChatRuntimeUi(scopedChatId, {
       isSubmitting: true,
       isAwaitingReply: true,
@@ -5519,59 +5512,14 @@ export function ChatInterface({
     disconnectNoticeAwaitingRef.current = null;
 
     try {
-      let hasPersistedMatchingUserEvent = localPersistedMatch;
-      if (!hasPersistedMatchingUserEvent) {
-        try {
-          const query = new URLSearchParams({
-            chatId: scopedChatId,
-            limit: '20',
-          });
-          const persistedResponse = await fetch(`/api/runtime/sessions/${sessionId}/events?${query.toString()}`, {
-            cache: 'no-store',
-          });
-          const persistedPayload = (await persistedResponse.json().catch(() => ({}))) as {
-            events?: UiEvent[];
-          };
-          hasPersistedMatchingUserEvent = persistedResponse.ok
-            && Array.isArray(persistedPayload.events)
-            && persistedPayload.events.some((event) => matchesSubmittedUserPayload(event, {
-              text: lastSubmittedPayload.text,
-              attachments: lastSubmittedPayload.attachments,
-            }));
-        } catch {
-          hasPersistedMatchingUserEvent = localPersistedMatch;
-        }
-      }
-
-      const response = hasPersistedMatchingUserEvent
-        ? await fetch(`/api/runtime/sessions/${sessionId}/actions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'retry',
-              chatId: scopedChatId,
-            }),
-          })
-        : await fetch(`/api/runtime/sessions/${sessionId}/events`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type: 'message',
-              title: 'User Instruction',
-              text: lastSubmittedPayload.text,
-              meta: buildUserMessageMeta({
-                chatId: lastSubmittedPayload.chatId,
-                agent: lastSubmittedPayload.agent,
-                model: lastSubmittedPayload.model,
-                ...(lastSubmittedPayload.geminiMode ? { geminiMode: lastSubmittedPayload.geminiMode } : {}),
-                ...(lastSubmittedPayload.modelReasoningEffort
-                  ? { modelReasoningEffort: lastSubmittedPayload.modelReasoningEffort }
-                  : {}),
-                ...(lastSubmittedPayload.threadId ? { threadId: lastSubmittedPayload.threadId } : {}),
-                ...(lastSubmittedPayload.attachments?.length ? { attachments: lastSubmittedPayload.attachments } : {}),
-              }),
-            }),
-          });
+      const response = await fetch(`/api/runtime/sessions/${sessionId}/actions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'retry',
+          chatId: scopedChatId,
+        }),
+      });
 
       const body = (await response.json().catch(() => ({ error: '백엔드 응답을 읽을 수 없습니다.' }))) as {
         event?: UiEvent;
