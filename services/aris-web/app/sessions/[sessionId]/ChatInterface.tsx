@@ -2949,6 +2949,8 @@ export function ChatInterface({
   const composerDockRef = useRef<HTMLElement>(null);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const composerImageInputRef = useRef<HTMLInputElement>(null);
+  const contextItemsRef = useRef<ContextItem[]>([]);
+  const isSubmittingRef = useRef(false);
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const geminiModeDropdownRef = useRef<HTMLDivElement>(null);
@@ -2967,6 +2969,12 @@ export function ChatInterface({
   const isLeftSidebarOverlayLayout = isMobileLayout
     || (isRightSidebarPinnedLayout && viewportWidth < RIGHT_PIN_PREFERS_LEFT_OVERLAY_MIN_WIDTH_PX);
   const snapshotSyncedEventRef = useRef<Record<string, string>>(buildSnapshotSyncMap(initialChats));
+  useEffect(() => {
+    contextItemsRef.current = contextItems;
+  }, [contextItems]);
+  useEffect(() => {
+    isSubmittingRef.current = isSubmitting;
+  }, [isSubmitting]);
 
   const defaultAgentFlavor = normalizeAgentFlavor(agentFlavor, 'codex');
   const providerSelections = modelSettings?.providers;
@@ -3961,6 +3969,26 @@ export function ChatInterface({
       ...(keepalive ? { keepalive: true } : {}),
     }).catch(() => {});
   }, [sessionId]);
+
+  useEffect(() => {
+    const handleDraftCleanup = () => {
+      if (isSubmittingRef.current) {
+        return;
+      }
+      for (const item of contextItemsRef.current) {
+        if (item.type === 'image') {
+          deleteUploadedImageAsset(item.attachment, true);
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleDraftCleanup);
+    window.addEventListener('pagehide', handleDraftCleanup);
+    return () => {
+      window.removeEventListener('beforeunload', handleDraftCleanup);
+      window.removeEventListener('pagehide', handleDraftCleanup);
+    };
+  }, [deleteUploadedImageAsset]);
 
   useEffect(() => {
     if (plusMenuMode === 'closed' && !isModelDropdownOpen && !isGeminiModeDropdownOpen && !isCommandMenuOpen) return;

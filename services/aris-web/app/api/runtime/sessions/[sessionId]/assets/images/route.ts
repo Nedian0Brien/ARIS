@@ -9,6 +9,14 @@ import type { ChatImageAttachment } from '@/lib/happy/types';
 const CHAT_IMAGE_ASSET_ROOT = path.join(getHostHomeDir(), '.aris', 'chat-assets');
 const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
 const MAX_MULTIPART_REQUEST_BYTES = MAX_IMAGE_UPLOAD_BYTES + 256 * 1024;
+const MIME_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+};
 
 function sanitizeFilename(name: string): string {
   const base = path.basename(name).trim() || 'image';
@@ -40,7 +48,7 @@ function buildAttachment(input: {
     mimeType: input.file.type,
     size: input.file.size,
     serverPath,
-    previewUrl: `/api/fs/raw?path=${encodeURIComponent(serverPath)}`,
+    previewUrl: `/api/runtime/sessions/${encodeURIComponent(input.sessionSegment)}/assets/images?path=${encodeURIComponent(serverPath)}`,
   };
 }
 
@@ -106,6 +114,41 @@ export async function POST(
   }
 
   return NextResponse.json({ attachment });
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ sessionId: string }> },
+) {
+  const auth = await requireApiUser(request);
+  if ('response' in auth) {
+    return auth.response;
+  }
+
+  const { sessionId } = await params;
+  const sessionSegment = normalizeSessionSegment(sessionId);
+  if (!sessionSegment) {
+    return NextResponse.json({ error: '유효하지 않은 세션 식별자입니다.' }, { status: 400 });
+  }
+
+  const serverPath = request.nextUrl.searchParams.get('path')?.trim() ?? '';
+  if (!serverPath || !isAllowedAssetPath(serverPath) || !isAllowedAssetPathForSession(serverPath, sessionSegment)) {
+    return NextResponse.json({ error: '유효하지 않은 이미지 경로입니다.' }, { status: 400 });
+  }
+
+  try {
+    const content = await fs.readFile(serverPath);
+    const ext = path.extname(serverPath).slice(1).toLowerCase();
+    return new NextResponse(content, {
+      headers: {
+        'Content-Type': MIME_TYPES[ext] ?? 'application/octet-stream',
+        'Content-Disposition': 'inline',
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '이미지를 읽을 수 없습니다.';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 
 export async function DELETE(

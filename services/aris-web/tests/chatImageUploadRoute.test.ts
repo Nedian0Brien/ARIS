@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   writeFile: vi.fn(),
   unlink: vi.fn(),
   rmdir: vi.fn(),
+  readFile: vi.fn(),
   requireApiUser: vi.fn(),
   randomUUID: vi.fn(),
 }));
@@ -16,6 +17,7 @@ vi.mock('node:fs/promises', () => ({
     writeFile: mocks.writeFile,
     unlink: mocks.unlink,
     rmdir: mocks.rmdir,
+    readFile: mocks.readFile,
   },
 }));
 
@@ -44,6 +46,7 @@ describe('chat image upload route', () => {
     mocks.writeFile.mockResolvedValue(undefined);
     mocks.unlink.mockResolvedValue(undefined);
     mocks.rmdir.mockResolvedValue(undefined);
+    mocks.readFile.mockResolvedValue(Buffer.from([137, 80, 78, 71]));
   });
 
   it('stores an uploaded image and returns attachment metadata', async () => {
@@ -70,7 +73,7 @@ describe('chat image upload route', () => {
         mimeType: 'image/png',
         size: 4,
         serverPath: '/home/ubuntu/.aris/chat-assets/session-1/asset-123-screen.png',
-        previewUrl: '/api/fs/raw?path=%2Fhome%2Fubuntu%2F.aris%2Fchat-assets%2Fsession-1%2Fasset-123-screen.png',
+        previewUrl: '/api/runtime/sessions/session-1/assets/images?path=%2Fhome%2Fubuntu%2F.aris%2Fchat-assets%2Fsession-1%2Fasset-123-screen.png',
       },
     });
   });
@@ -227,6 +230,19 @@ describe('chat image upload route', () => {
 
     expect(response.status).toBe(200);
     expect(mocks.unlink).toHaveBeenCalledWith('/home/ubuntu/.aris/chat-assets/session-1/asset-123-screen.png');
+  });
+
+  it('serves a stored image preview to authenticated viewers', async () => {
+    mocks.requireApiUser.mockResolvedValue({ user: { role: 'viewer', id: 'user-2' } });
+    const { GET } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const response = await GET(
+      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images?path=%2Fhome%2Fubuntu%2F.aris%2Fchat-assets%2Fsession-1%2Fasset-123-screen.png'),
+      { params: Promise.resolve({ sessionId: 'session-1' }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toBe('image/png');
+    expect(mocks.readFile).toHaveBeenCalledWith('/home/ubuntu/.aris/chat-assets/session-1/asset-123-screen.png');
   });
 
   it('rejects deleting another session path through the current session endpoint', async () => {
