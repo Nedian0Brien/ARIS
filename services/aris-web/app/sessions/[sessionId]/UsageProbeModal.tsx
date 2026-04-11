@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, X } from 'lucide-react';
 import type { UsageCommandProvider } from './chatCommands';
 import { buildUsageProbeDescriptor } from './chatCommands';
+import { normalizeUsageProbeMessageData } from './usageProbeTerminal';
 import styles from './UsageProbeModal.module.css';
 import '@xterm/xterm/css/xterm.css';
 
@@ -23,7 +24,10 @@ export function UsageProbeModal({ provider, workspacePath, onClose }: Props) {
   const [probeNonce, setProbeNonce] = useState(0);
   const [connected, setConnected] = useState(false);
 
-  const descriptor = buildUsageProbeDescriptor(provider, workspacePath);
+  const descriptor = useMemo(
+    () => buildUsageProbeDescriptor(provider, workspacePath),
+    [provider, workspacePath],
+  );
 
   const clearAutomationTimers = useCallback(() => {
     for (const timerId of automationTimersRef.current) {
@@ -103,7 +107,7 @@ export function UsageProbeModal({ provider, workspacePath, onClose }: Props) {
         if (disposed) {
           return;
         }
-        term.write(new Uint8Array(event.data as ArrayBuffer));
+        term.write(normalizeUsageProbeMessageData(event.data as string | ArrayBuffer));
       };
 
       ws.onclose = () => {
