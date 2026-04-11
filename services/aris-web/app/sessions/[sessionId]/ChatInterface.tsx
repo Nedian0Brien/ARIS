@@ -30,6 +30,7 @@ import {
   mergeRenderablePermissions,
   type RenderablePermissionRequest,
 } from '@/lib/happy/permissions';
+import { readChatImageAttachments } from '@/lib/chatImageAttachments';
 import { buildOptimisticUserEvent } from './chatComposer';
 import { buildComposerSubmitText, buildUserMessageMeta } from './chatSubmitPayload';
 import {
@@ -6258,6 +6259,7 @@ export function ChatInterface({
                         const actionEvent = !userEvent && isActionKind(event.kind);
 
                         if (userEvent) {
+                        const userAttachments = readChatImageAttachments(event.meta);
                         return (
                         <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowUser}`}>
                         <div className={`${styles.msgHeader} ${styles.msgHeaderUser}`}>
@@ -6266,6 +6268,29 @@ export function ChatInterface({
                         </div>
                         <div className={styles.messageBubbleUserStack}>
                           <div className={`${styles.messageBubble} ${styles.messageBubbleUser} ${highlightedEventId === event.id ? styles.messageBubbleHighlight : ''}`}>
+                            {userAttachments.length > 0 && (
+                              <div className={styles.messageAttachmentStrip}>
+                                {userAttachments.map((attachment) => (
+                                  <div key={attachment.assetId} className={styles.messageAttachmentCard}>
+                                    <img
+                                      src={attachment.previewUrl}
+                                      alt={attachment.name}
+                                      className={styles.messageAttachmentImage}
+                                      loading="lazy"
+                                    />
+                                    <div className={styles.messageAttachmentMeta}>
+                                      <span className={styles.messageAttachmentName}>{attachment.name}</span>
+                                      <span className={styles.messageAttachmentSubtle}>
+                                        {attachment.width && attachment.height
+                                          ? `${attachment.width}×${attachment.height} · `
+                                          : ''}
+                                        {Math.max(1, Math.round(attachment.size / 1024))}KB
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                             {renderEventPayload(event, true, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id), isDebugMode)}
                           </div>
                           <button
