@@ -6,10 +6,14 @@ import { describe, expect, it } from 'vitest';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dashboardCssPath = resolve(__dirname, '../app/SessionDashboard.module.css');
 const dashboardTsxPath = resolve(__dirname, '../app/SessionDashboard.tsx');
+const uiCssPath = resolve(__dirname, '../app/styles/ui.css');
+const fabCssPath = resolve(__dirname, '../app/styles/fab.css');
 const workspaceHomeCssPath = resolve(__dirname, '../app/sessions/[sessionId]/WorkspaceHome.module.css');
 
 const dashboardCss = readFileSync(dashboardCssPath, 'utf8');
 const dashboardTsx = readFileSync(dashboardTsxPath, 'utf8');
+const uiCss = readFileSync(uiCssPath, 'utf8');
+const fabCss = readFileSync(fabCssPath, 'utf8');
 const workspaceHomeCss = readFileSync(workspaceHomeCssPath, 'utf8');
 
 describe('mobile home/workspace layout overflow guards', () => {
@@ -17,6 +21,12 @@ describe('mobile home/workspace layout overflow guards', () => {
     expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.dashboardTitleRow\s*\{[^}]*flex-direction:\s*column;/s);
     expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.dashboardTitleRow\s*\{[^}]*align-items:\s*stretch;/s);
     expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.dashboardCreateButton\s*\{[^}]*width:\s*100%;/s);
+  });
+
+  it('preserves horizontal page gutters on the mobile sessions landing page', () => {
+    expect(uiCss).toMatch(/\.container\s*\{[^}]*padding:\s*0 0\.75rem;/s);
+    expect(fabCss).toMatch(/\.main\s*\{[^}]*padding-block:\s*1\.5rem;/s);
+    expect(fabCss).toMatch(/@media\s*\(min-width:\s*768px\)\s*\{[\s\S]*?\.main\s*\{[^}]*padding-block:\s*2rem;/s);
   });
 
   it('uses a single-column server resource grid on narrow phones', () => {

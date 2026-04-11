@@ -51,9 +51,12 @@ async function collectOverflow(page, path: string) {
     const queryMetrics = (selector: string) => {
       const element = document.querySelector(selector) as HTMLElement | null;
       if (!element) return null;
+      const rect = element.getBoundingClientRect();
       return {
         clientWidth: element.clientWidth,
         scrollWidth: element.scrollWidth,
+        left: Number(rect.left.toFixed(2)),
+        right: Number(rect.right.toFixed(2)),
       };
     };
 
@@ -102,15 +105,19 @@ async function collectOverflow(page, path: string) {
       dashboardLayout: (() => {
         const element = document.querySelector('[class*="sessionDashboardLayout"]') as HTMLElement | null;
         if (!element) return null;
+        const rect = element.getBoundingClientRect();
         return {
           clientWidth: element.clientWidth,
           scrollWidth: element.scrollWidth,
           gridTemplateColumns: window.getComputedStyle(element).gridTemplateColumns,
+          left: Number(rect.left.toFixed(2)),
+          right: Number(rect.right.toFixed(2)),
         };
       })(),
       appShell: queryMetrics('.app-shell'),
       workspaceHomeRoot: queryMetrics('[class*="WorkspaceHome_homeRoot"]'),
       chatShell: queryMetrics('[class*="ChatInterface_chatShell"]'),
+      dashboardSidebarCard: queryMetrics('[class*="SessionDashboard_sessionSidebarCard"]'),
       workspaceHomeOffenders: offenders.filter((offender) => String(offender?.className ?? '').includes('WorkspaceHome_')),
       offenders,
     };
@@ -139,6 +146,10 @@ test('home and workspace pages stay within the mobile viewport width', async ({ 
     if (path === '/') {
       expect(report.dashboardTitleRow?.clientWidth, `${path} title row width: ${JSON.stringify(report)}`).toBeLessThanOrEqual(report.viewportWidth + 1);
       expect(report.dashboardLayout?.clientWidth, `${path} dashboard width: ${JSON.stringify(report)}`).toBeLessThanOrEqual(report.viewportWidth + 1);
+      expect(report.dashboardLayout?.left, `${path} dashboard left gutter: ${JSON.stringify(report)}`).toBeGreaterThanOrEqual(12);
+      expect(report.viewportWidth - (report.dashboardLayout?.right ?? report.viewportWidth), `${path} dashboard right gutter: ${JSON.stringify(report)}`).toBeGreaterThanOrEqual(12);
+      expect(report.dashboardSidebarCard?.left, `${path} dashboard card left gutter: ${JSON.stringify(report)}`).toBeGreaterThanOrEqual(12);
+      expect(report.viewportWidth - (report.dashboardSidebarCard?.right ?? report.viewportWidth), `${path} dashboard card right gutter: ${JSON.stringify(report)}`).toBeGreaterThanOrEqual(12);
     } else if (path.startsWith('/sessions/')) {
       expect(report.workspaceHomeRoot?.clientWidth, `${path} workspace home width: ${JSON.stringify(report)}`).toBeLessThanOrEqual(report.viewportWidth + 1);
       expect(report.chatShell?.clientWidth, `${path} chat shell width: ${JSON.stringify(report)}`).toBeLessThanOrEqual(report.viewportWidth + 1);
