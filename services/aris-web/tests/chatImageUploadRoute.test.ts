@@ -134,6 +134,23 @@ describe('chat image upload route', () => {
     expect(await response.json()).toMatchObject({ error: '유효하지 않은 세션 식별자입니다.' });
   });
 
+  it('rejects bare dot-segment session ids', async () => {
+    const form = new FormData();
+    form.set('file', new File([Uint8Array.from([137, 80, 78, 71])], 'screen.png', { type: 'image/png' }));
+
+    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const response = await POST(
+      new NextRequest('http://localhost/api/runtime/sessions/../assets/images', {
+        method: 'POST',
+        body: form,
+      }),
+      { params: Promise.resolve({ sessionId: '..' }) },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: '유효하지 않은 세션 식별자입니다.' });
+  });
+
   it('rejects oversized image uploads before buffering them to disk', async () => {
     const largeBytes = new Uint8Array(10 * 1024 * 1024 + 1);
     const form = new FormData();

@@ -19,6 +19,9 @@ function normalizeSessionSegment(sessionId: string): string | null {
   if (!trimmed || !/^[A-Za-z0-9._-]+$/.test(trimmed)) {
     return null;
   }
+  if (trimmed === '.' || trimmed === '..') {
+    return null;
+  }
   return trimmed;
 }
 
