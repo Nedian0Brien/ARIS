@@ -105,6 +105,12 @@ import {
   resolveScrollToBottomTarget,
   shouldResetScrollForChatChange,
 } from './chatScroll';
+import {
+  normalizeLocalPathTarget,
+  parseLocalFileReferenceTarget,
+  scanMarkdownLinks,
+  tokenizePlainTextFileReferences,
+} from './chatFileReferences';
 
 // SSR을 비활성화해 react-syntax-highlighter의 window 참조 오류 방지
 const SyntaxHighlighter = dynamic(
@@ -442,10 +448,6 @@ function isFolderLabel(label: string): label is FolderLabel {
   return (FOLDER_LABELS as readonly string[]).includes(label);
 }
 
-function isLinkForLabelPath(url: string): boolean {
-  return /^https?:\/\//i.test(url) || /^file:\/\//i.test(url) || /^\/?[\w./-]+$/.test(url);
-}
-
 function fileExtension(filename: string): string {
   const base = filename.trim().split('/').pop() ?? '';
   const dotIndex = base.lastIndexOf('.');
@@ -528,18 +530,24 @@ function dispatchWorkspaceFileOpen(detail: WorkspaceFileOpenDetail) {
 
 function classifyLabelLink(label: string, rawPath: string): ResourceLabel | null {
   const normalizedLabel = label.trim();
-  if (!normalizedLabel || !isLinkForLabelPath(rawPath)) {
+  if (!normalizedLabel) {
+    return null;
+  }
+
+  const normalizedPath = normalizeLocalPathTarget(rawPath);
+  if (!normalizedPath) {
     return null;
   }
 
   const folderCandidate = normalizedLabel.toLowerCase();
   if (isFolderLabel(folderCandidate)) {
-    return { kind: 'folder', name: folderCandidate as FolderLabel, sourcePath: rawPath };
+    return { kind: 'folder', name: folderCandidate as FolderLabel, sourcePath: normalizedPath.path };
   }
 
-  const extension = fileExtension(normalizedLabel);
-  if (extension) {
-    return { kind: 'file', name: normalizedLabel, extension, sourcePath: rawPath };
+  const parsedFile = parseLocalFileReferenceTarget(rawPath);
+  if (parsedFile) {
+    const displayName = fileExtension(normalizedLabel) ? normalizedLabel : parsedFile.name;
+    return { kind: 'file', name: displayName, extension: parsedFile.extension, sourcePath: parsedFile.path };
   }
 
   return null;
@@ -924,9 +932,9 @@ function extractResourceLabels(source: string): ResourceLabel[] {
   const resources: ResourceLabel[] = [];
   const seen = new Set<string>();
 
-  for (const match of normalized.matchAll(/\[([^\]]+)\]\(([^)\s]+)\)/g)) {
-    const label = match[1];
-    const rawPath = match[2];
+  for (const match of scanMarkdownLinks(normalized)) {
+    const label = match.label;
+    const rawPath = match.target;
     const resource = classifyLabelLink(label, rawPath);
     if (!resource) {
       continue;
@@ -1570,8 +1578,37 @@ function parseMarkdownBlocks(source: string): MarkdownBlock[] {
   return blocks;
 }
 
+function renderTextWithFileReferences(text: string, keyPrefix: string): ReactNode[] {
+  const result: ReactNode[] = [];
+  let token = 0;
+
+  for (const part of tokenizePlainTextFileReferences(text)) {
+    if (part.type === 'text') {
+      if (part.value) {
+        result.push(part.value);
+      }
+      continue;
+    }
+
+    result.push(
+      <InlineResourceChip
+        key={`${keyPrefix}-file-${token}`}
+        resource={{
+          kind: 'file',
+          name: part.name,
+          extension: part.extension,
+          sourcePath: part.path,
+        }}
+      />,
+    );
+    token += 1;
+  }
+
+  return result;
+}
+
 function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
-  const pattern = /(\[([^\]]+)\]\(([^)\s]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*|_([^_]+)_)/g;
+  const pattern = /(\[([^\]]+)\]\((<[^>]+>|[^)\n]+?)\)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*|_([^_]+)_)/g;
   const result: ReactNode[] = [];
   let cursor = 0;
   let token = 0;
@@ -1579,7 +1616,7 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
   for (const match of text.matchAll(pattern)) {
     const index = match.index ?? 0;
     if (index > cursor) {
-      result.push(text.slice(cursor, index));
+      result.push(...renderTextWithFileReferences(text.slice(cursor, index), `${keyPrefix}-text-${token}`));
     }
 
     if (match[2] && match[3]) {
@@ -1587,11 +1624,14 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
       if (resource) {
         result.push(<InlineResourceChip key={`${keyPrefix}-resource-${token}`} resource={resource} />);
       } else {
+        const href = match[3].trim().startsWith('<') && match[3].trim().endsWith('>')
+          ? match[3].trim().slice(1, -1).trim()
+          : match[3];
         result.push(
           <a
             key={`${keyPrefix}-link-${token}`}
             className={styles.markdownLink}
-            href={match[3]}
+            href={href}
             target="_blank"
             rel="noreferrer noopener"
           >
@@ -1624,11 +1664,11 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
   }
 
   if (cursor < text.length) {
-    result.push(text.slice(cursor));
+    result.push(...renderTextWithFileReferences(text.slice(cursor), `${keyPrefix}-tail`));
   }
 
   if (result.length === 0) {
-    result.push(text);
+    result.push(...renderTextWithFileReferences(text, `${keyPrefix}-plain`));
   }
 
   return result;
