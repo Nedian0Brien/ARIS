@@ -10,24 +10,49 @@ import { ChatInterface } from './ChatInterface';
 import { resolveWorkspaceClientPath } from '@/lib/customization/catalog';
 
 const INITIAL_EVENTS_PAGE_LIMIT = 40;
+const CHAT_TITLE_MAX_LEN = 30;
+
+function truncate(text: string, max: number): string {
+  return text.length > max ? text.slice(0, max).trimEnd() + '…' : text;
+}
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ sessionId: string }>;
+  searchParams: Promise<{ chat?: string }>;
 }): Promise<Metadata> {
   try {
     const user = await requirePageUser();
     const { sessionId } = await params;
-    const sessions = await listSessions(user.id);
+    const resolvedSearchParams = await searchParams;
+    const requestedChatId = typeof resolvedSearchParams?.chat === 'string' && resolvedSearchParams.chat.trim()
+      ? resolvedSearchParams.chat.trim()
+      : null;
+
+    const [sessions, chats] = await Promise.all([
+      listSessions(user.id),
+      listSessionChats({ sessionId, userId: user.id, ensureDefault: false }),
+    ]);
+
     const session = sessions.find((s) => s.id === sessionId);
     if (!session) {
       return { title: 'ARIS | Agentic Workspace' };
     }
+
     const workspaceName = session.alias?.trim()
       || session.projectName.split('/').filter(Boolean).at(-1)
       || 'Agentic Workspace';
-    return { title: `ARIS | ${workspaceName}` };
+
+    const activeChat = (requestedChatId ? chats.find((c) => c.id === requestedChatId) : null) ?? chats[0];
+    const chatTitle = activeChat?.title?.trim();
+
+    if (!chatTitle) {
+      return { title: `ARIS - ${workspaceName}` };
+    }
+
+    return { title: `ARIS - ${workspaceName} | ${truncate(chatTitle, CHAT_TITLE_MAX_LEN)}` };
   } catch {
     return { title: 'ARIS | Agentic Workspace' };
   }
