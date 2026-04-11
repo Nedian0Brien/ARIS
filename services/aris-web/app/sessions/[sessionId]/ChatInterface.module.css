@@ -2192,15 +2192,15 @@
 .markdownQuote {
   margin: 0;
   padding: 0.42rem 0.6rem;
-  border-left: 3px solid rgba(59, 130, 246, 0.45);
-  background: rgba(239, 246, 255, 0.85);
+  border-left: 3px solid color-mix(in srgb, var(--chat-accent) 45%, transparent);
+  background: var(--chat-surface-hover);
   border-radius: 8px;
 }
 
 .markdownTableWrap {
   width: 100%;
   overflow-x: auto;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  border: 1px solid var(--chat-msg-border);
   border-radius: 10px;
   background: var(--chat-control-bg);
 }
@@ -2216,7 +2216,7 @@
 .markdownTable th,
 .markdownTable td {
   padding: 0.4rem 0.56rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.24);
+  border-bottom: 1px solid var(--chat-msg-border);
   vertical-align: top;
 }
 
@@ -2238,7 +2238,7 @@
 .markdownCodeBlock {
   margin: 0;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  border: 1px solid var(--chat-msg-border);
   background: rgba(15, 23, 42, 0.95);
   color: #e2e8f0;
   font-size: 0.76rem;

@@ -318,6 +318,51 @@
   margin-top: 0.24rem;
 }
 
+.markdownBody :global(blockquote) {
+  margin: 0.75rem 0;
+  padding: 0.42rem 0.6rem;
+  border-left: 3px solid color-mix(in srgb, var(--primary) 45%, transparent);
+  background: color-mix(in srgb, var(--accent-sky-bg) 55%, transparent);
+  border-radius: 8px;
+  color: var(--text);
+}
+
+.markdownBody :global(blockquote p) {
+  margin: 0;
+}
+
+.markdownBody :global(table) {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin: 0.75rem 0;
+  border: 1px solid var(--line-strong);
+}
+
+.markdownBody :global(th),
+.markdownBody :global(td) {
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  text-align: left;
+}
+
+.markdownBody :global(th) {
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface-subtle);
+}
+
+.markdownBody :global(td) {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.markdownBody :global(tbody tr:last-child td) {
+  border-bottom: none;
+}
+
 .animateSpin {
   animation: editorSpin 1s linear infinite;
 }
