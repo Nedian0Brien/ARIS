@@ -46,6 +46,7 @@ x-aris-web-common: &aris_web_common
     - ${HOST_HOME_DIR:-/home/ubuntu}/.claude/debug:/agent-home/.claude/debug:ro
     - ${HOST_HOME_DIR:-/home/ubuntu}/.claude/mcp-needs-auth-cache.json:/agent-home/.claude/mcp-needs-auth-cache.json:ro
     - ${HOST_HOME_DIR:-/home/ubuntu}/.claude/.claude.json:/agent-home/.claude/.claude.json:ro
+    - link_preview_cache:/app/.cache
   expose:
     - "3000"
   healthcheck:
@@ -116,6 +117,7 @@ services:
 
 volumes:
   postgres_data:
+  link_preview_cache:
   caddy_data:
   caddy_config:
 

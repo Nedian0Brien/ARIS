@@ -16,6 +16,7 @@ services/aris-web/.env.bak-*
 services/aris-backend/.env
 services/aris-backend/.env.bak-*
 **/tsconfig.tsbuildinfo
+**/.cache/
 
 **/logs/
 services/aris-backend/logs/
