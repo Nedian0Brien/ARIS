@@ -19,6 +19,10 @@ export DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env
 ./deploy/deploy_zero_downtime.sh
 ```
 
+Production deployment policy:
+- The official deployment baseline is the script entrypoints above.
+- GitHub Actions deployment workflow is manual-only and should not be treated as the default production trigger.
+
 - `deploy_backend_zero_downtime.sh`: backend build + PM2 zero-downtime reload
 - `deploy_web.sh`: web blue/green deploy and nginx upstream switch
 - `deploy_zero_downtime.sh`: backend then web
@@ -55,9 +59,8 @@ deploy/
 3. Ensure required keys are set: `APP_BASE_URL`, `AUTH_JWT_SECRET`, `ARIS_ADMIN_EMAIL`, `ARIS_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `RUNTIME_API_TOKEN`, `RUNTIME_BACKEND`, `SSH_KEY_ENCRYPTION_SECRET`.
 4. If `RUNTIME_BACKEND=happy`, also ensure `HAPPY_SERVER_URL`, `HAPPY_SERVER_TOKEN` are set.
 5. If `services/aris-backend/.env` is still maintained for local checks, keep its `RUNTIME_API_TOKEN` aligned with `prod.env`.
-6. After pushing `main`, confirm that the `Deploy on Main Push` workflow run is actually created before deleting the source branch or assuming deploy completed.
-7. When validating direct-to-main operational flows, prefer fast-forwarding a local `main` checkout and pushing `origin main` so the final deploy push is recorded from the `main` ref itself.
-8. If the current shell has `GITHUB_ACTIONS=true` or other GitHub Actions runner environment variables, leave that shell and push from a normal user shell before expecting a new Actions run to appear.
+6. If deployment is needed, run the appropriate script entrypoint directly and do not assume that `main` push alone performed production deployment.
+7. After running a deployment script, complete the health checks in this document before reporting completion.
 
 ## Standard deployment flows
 
