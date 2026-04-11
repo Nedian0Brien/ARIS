@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import path from 'node:path';
 import { requireApiUser } from '@/lib/auth/guard';
 import { getSessionEvents, appendSessionMessage, HappyHttpError } from '@/lib/happy/client';
 import { prisma } from '@/lib/db/prisma';
@@ -7,6 +8,10 @@ import {
   resolveRuntimeMessageModel,
 } from '@/lib/happy/modelPolicy';
 import { getUserModelSettings } from '@/lib/settings/providerPreferences';
+import { readChatImageAttachments } from '@/lib/chatImageAttachments';
+import { getHostHomeDir } from '@/lib/fs/pathResolver';
+
+const CHAT_IMAGE_ASSET_ROOT = path.join(getHostHomeDir(), '.aris', 'chat-assets');
 
 function toMetaRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -20,6 +25,33 @@ function normalizeModelReasoningEffort(value: unknown): 'low' | 'medium' | 'high
     return value;
   }
   return undefined;
+}
+
+function normalizeSessionSegment(sessionId: string): string | null {
+  const trimmed = sessionId.trim();
+  if (!trimmed || !/^[A-Za-z0-9._-]+$/.test(trimmed) || trimmed === '.' || trimmed === '..') {
+    return null;
+  }
+  return trimmed;
+}
+
+function normalizeImageAttachments(sessionId: string, meta: Record<string, unknown>) {
+  const sessionSegment = normalizeSessionSegment(sessionId);
+  if (!sessionSegment) {
+    return [];
+  }
+  const sessionRoot = path.resolve(path.join(CHAT_IMAGE_ASSET_ROOT, sessionSegment));
+  return readChatImageAttachments(meta).flatMap((attachment) => {
+    const resolvedPath = path.resolve(attachment.serverPath);
+    if (!(resolvedPath === sessionRoot || resolvedPath.startsWith(`${sessionRoot}${path.sep}`))) {
+      return [];
+    }
+    return [{
+      ...attachment,
+      serverPath: resolvedPath,
+      previewUrl: `/api/runtime/sessions/${encodeURIComponent(sessionSegment)}/assets/images?path=${encodeURIComponent(resolvedPath)}`,
+    }];
+  });
 }
 
 export async function GET(
@@ -132,6 +164,12 @@ export async function POST(
       }
       if (resolved.customModel) {
         meta.customModel = resolved.customModel;
+      }
+      const attachments = normalizeImageAttachments(sessionId, meta);
+      if (attachments.length > 0) {
+        meta.attachments = attachments;
+      } else {
+        delete meta.attachments;
       }
       meta.modelValidation = {
         source: resolved.source,

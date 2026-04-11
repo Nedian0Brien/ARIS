@@ -1,5 +1,5 @@
-import { buildImageAttachmentPromptPrefix } from '@/lib/chatImageAttachments';
-import type { AgentFlavor, ChatImageAttachment } from '@/lib/happy/types';
+import { buildImageAttachmentPromptPrefix, readChatImageAttachments } from '@/lib/chatImageAttachments';
+import type { AgentFlavor, ChatImageAttachment, UiEvent } from '@/lib/happy/types';
 
 type ModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -47,4 +47,24 @@ export function buildUserMessageMeta(input: {
     ...(input.threadId ? { threadId: input.threadId } : {}),
     ...(input.attachments?.length ? { attachments: input.attachments } : {}),
   };
+}
+
+export function matchesSubmittedUserPayload(
+  event: UiEvent,
+  payload: { text: string; attachments?: ChatImageAttachment[] },
+): boolean {
+  if ((event.meta?.role ?? null) !== 'user') {
+    return false;
+  }
+  if ((event.body || event.title || '') !== payload.text) {
+    return false;
+  }
+
+  const eventAttachments = readChatImageAttachments(event.meta);
+  const payloadAttachments = payload.attachments ?? [];
+  if (eventAttachments.length !== payloadAttachments.length) {
+    return false;
+  }
+
+  return eventAttachments.every((attachment, index) => attachment.assetId === payloadAttachments[index]?.assetId);
 }

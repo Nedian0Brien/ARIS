@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildComposerSubmitText, buildUserMessageMeta } from '@/app/sessions/[sessionId]/chatSubmitPayload';
+import { buildComposerSubmitText, buildUserMessageMeta, matchesSubmittedUserPayload } from '@/app/sessions/[sessionId]/chatSubmitPayload';
 
 const attachments = [
   {
@@ -37,5 +37,22 @@ describe('chatSubmitPayload helpers', () => {
       agent: 'codex',
       attachments,
     });
+  });
+
+  it('matches persisted user events against the last submitted payload', () => {
+    expect(matchesSubmittedUserPayload({
+      id: 'evt-1',
+      timestamp: '2026-04-11T09:00:00.000Z',
+      kind: 'text_reply',
+      title: 'User Instruction',
+      body: 'hello',
+      meta: {
+        role: 'user',
+        attachments,
+      },
+    }, {
+      text: 'hello',
+      attachments,
+    })).toBe(true);
   });
 });

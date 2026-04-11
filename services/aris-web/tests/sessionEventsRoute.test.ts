@@ -103,7 +103,7 @@ describe('session events route', () => {
                 mimeType: 'image/png',
                 size: 1200,
                 serverPath: '/home/ubuntu/.aris/chat-assets/session-1/asset-1-screen.png',
-                previewUrl: '/api/fs/raw?path=%2Fhome%2Fubuntu%2F.aris%2Fchat-assets%2Fsession-1%2Fasset-1-screen.png',
+                previewUrl: '/api/runtime/sessions/session-1/assets/images?path=%2Fhome%2Fubuntu%2F.aris%2Fchat-assets%2Fsession-1%2Fasset-1-screen.png',
               },
             ],
           },
