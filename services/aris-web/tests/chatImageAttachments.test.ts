@@ -33,11 +33,27 @@ describe('chatImageAttachments helpers', () => {
       '<image_attachment assetId="asset-2" serverPath="/tmp/aris/session-1/chat-1/asset-2-details.jpg" mimeType="image/jpeg">',
       '첨부 이미지를 참고해서 답변하라.',
       '</image_attachment>',
+      '',
+      '',
     ].join('\n'));
   });
 
   it('returns an empty string when there are no attachments', () => {
     expect(buildImageAttachmentPromptPrefix([])).toBe('');
+  });
+
+  it('ends with a blank-line separator so callers can concatenate message text safely', () => {
+    expect(buildImageAttachmentPromptPrefix([
+      {
+        assetId: 'asset-1',
+        kind: 'image',
+        name: 'screen.png',
+        mimeType: 'image/png',
+        size: 1200,
+        serverPath: '/tmp/aris/session-1/chat-1/asset-1-screen.png',
+        previewUrl: '/api/runtime/sessions/session-1/assets/images/asset-1',
+      },
+    ]).endsWith('\n\n')).toBe(true);
   });
 
   it('returns only valid image attachments from arbitrary meta payloads', () => {

@@ -43,13 +43,13 @@ export function buildImageAttachmentPromptPrefix(attachments: ChatImageAttachmen
     return '';
   }
 
-  return attachments.map((attachment) => (
+  return `${attachments.map((attachment) => (
     [
       `<image_attachment assetId="${escapeXmlAttribute(attachment.assetId)}" serverPath="${escapeXmlAttribute(attachment.serverPath)}" mimeType="${escapeXmlAttribute(attachment.mimeType)}">`,
       '첨부 이미지를 참고해서 답변하라.',
       '</image_attachment>',
     ].join('\n')
-  )).join('\n\n');
+  )).join('\n\n')}\n\n`;
 }
 
 export function readChatImageAttachments(meta: Record<string, unknown> | null | undefined): ChatImageAttachment[] {
