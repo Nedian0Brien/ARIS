@@ -2576,12 +2576,17 @@ export class HappyRuntimeStore {
       },
     });
 
-    await this.request<HappyMessageResponse>(`/v3/sessions/${encodeURIComponent(sessionId)}/messages`, {
-      method: 'POST',
-      body: JSON.stringify({
-        messages: [{ localId, content }],
-      }),
-    });
+    try {
+      await this.request<HappyMessageResponse>(`/v3/sessions/${encodeURIComponent(sessionId)}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({
+          messages: [{ localId, content }],
+        }),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`failed to persist agent message (best-effort, continuing): ${message}`);
+    }
   }
 
   private async appendRunLifecycleEvent(
