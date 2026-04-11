@@ -40,6 +40,13 @@ describe('mobile home/workspace layout overflow guards', () => {
     expect(dashboardCss).toMatch(/\.sessionMiniSubName\s*\{[^}]*flex-shrink:\s*1;/s);
   });
 
+  it('hard-truncates recent completed chat titles before rendering', () => {
+    expect(dashboardTsx).toMatch(/const WORKSPACE_STATUS_COMPLETED_TITLE_MAX_LEN = \d+;/);
+    expect(dashboardTsx).toMatch(/function truncateWorkspaceStatusCompletedTitle\(title: string\)/);
+    expect(dashboardTsx).toMatch(/chatStats\.completedSample\.map\(chat =>/);
+    expect(dashboardTsx).toMatch(/className=\{styles\.sessionMiniName\}>\{truncateWorkspaceStatusCompletedTitle\(chat\.title\)\}<\/span>/);
+  });
+
   it('forces long chat titles and previews to shrink within mobile cards', () => {
     expect(workspaceHomeCss).toMatch(/\.chatItemTop\s*\{[^}]*min-width:\s*0;/s);
     expect(workspaceHomeCss).toMatch(/\.chatItemTop\s*\{[^}]*width:\s*100%;/s);
