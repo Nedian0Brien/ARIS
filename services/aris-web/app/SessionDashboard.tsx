@@ -40,7 +40,6 @@ const MAX_PATH_HISTORY_ITEMS = 8;
 const FALLBACK_DATE_ISO = '1970-01-01T00:00:00.000Z';
 const SERVER_METRICS_POLL_INTERVAL_MS = 10_000;
 const PERMISSION_POLL_INTERVAL_MS = 5_000;
-const WORKSPACE_STATUS_COMPLETED_TITLE_MAX_LEN = 28;
 
 type SessionUiStatus = 'running' | 'pending' | 'completed' | 'idle';
 
@@ -125,15 +124,6 @@ function formatHistoryDate(dateStr: string): string {
   } catch {
     return 'unknown';
   }
-}
-
-function truncateWorkspaceStatusCompletedTitle(title: string): string {
-  const normalized = title.trim();
-  if (normalized.length <= WORKSPACE_STATUS_COMPLETED_TITLE_MAX_LEN) {
-    return normalized;
-  }
-
-  return `${normalized.slice(0, WORKSPACE_STATUS_COMPLETED_TITLE_MAX_LEN - 1).trimEnd()}…`;
 }
 
 function parseIsoEpoch(value: string | null | undefined): number | null {
@@ -1287,7 +1277,7 @@ export function SessionDashboard({
                             >
                               <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: 'var(--chart-status-completed)' }} />
                               <span className={styles.sessionMiniTextGroup}>
-                                <span className={styles.sessionMiniName}>{truncateWorkspaceStatusCompletedTitle(chat.title)}</span>
+                                <span className={styles.sessionMiniName}>{chat.title}</span>
                                 <span className={styles.sessionMiniSubName}>{chat.sessionName}</span>
                               </span>
                             </div>

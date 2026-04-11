@@ -12,6 +12,8 @@
 - 직접 배포를 수행할 때는 반드시 deploy/README.md 문서를 참고한다.
 - 모바일 UI 또는 긴 텍스트가 포함된 UI를 수정할 때는 완료 전에 반드시 `services/aris-web/tests/mobileOverflowLayout.test.ts` 와 `services/aris-web/tests/e2e/mobile-overflow.spec.ts` 를 실행해 overflow 회귀를 확인한다.
 - Flex/Grid 자식 요소 안에 긴 텍스트를 배치할 때는 기본적으로 `min-width: 0`, `max-width: 100%`, 필요 시 `overflow-wrap`/`word-break`/`white-space` 조합을 명시해서 텍스트 길이로 인한 모바일 가로 깨짐을 방지한다.
+- `.container`를 사용하는 랜딩/목록 화면에서는 상위 레이아웃 클래스가 shorthand `padding`으로 가로 패딩을 덮어쓰지 않도록 한다. 세로 여백만 필요하면 `padding-block`을 사용한다.
+- `text-overflow: ellipsis`만으로는 긴 제목 overflow를 막을 수 없으므로, 목록형 UI에서는 텍스트 노드뿐 아니라 부모 체인(`card/list/item/textGroup`) 전체에 `width: 100%`, `max-width: 100%`, `min-width: 0`를 검토한다. 관련 사례는 `docs/issue/07-session-dashboard-mobile-width-guard.md` 참고.
 - 머지 과정에서 충돌이 발생한 경우 어떤 내용이 서로 충돌하는지 파악한 후 사용자에게 설명하고, 처리 방안 3가지를 제안한다.
 - 작업이 마무리되고 나면 후속 작업 5가지를 제안한다.
 - 사용자의 지침 중 확실하지 않은 부분이 있으면 작업을 진행하기 전에 사용자에게 분명히 물어본다. 이때 사용자의 의도일 가능성이 있는 최대 3가지 경우를 제시하며 사용자에게 의도를 명확히 해 달라고 요청한다.
