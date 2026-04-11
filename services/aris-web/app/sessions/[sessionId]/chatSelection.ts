@@ -5,14 +5,16 @@ type ChatSelectionInput = {
   selectedChatId: string | null;
   requestedChatId: string | null;
   isNewChatPlaceholder: boolean;
+  isWorkspaceHome?: boolean;
 };
 
 export function resolveActiveChat(
   chats: SessionChat[],
   selectedChatId: string | null,
   isNewChatPlaceholder: boolean,
+  isWorkspaceHome?: boolean,
 ): SessionChat | null {
-  if (isNewChatPlaceholder) {
+  if (isNewChatPlaceholder || isWorkspaceHome) {
     return null;
   }
   return (selectedChatId ? chats.find((chat) => chat.id === selectedChatId) : null) ?? chats[0] ?? null;
@@ -23,8 +25,9 @@ export function resolveNextSelectedChatId({
   selectedChatId,
   requestedChatId,
   isNewChatPlaceholder,
+  isWorkspaceHome,
 }: ChatSelectionInput): string | null {
-  if (isNewChatPlaceholder) {
+  if (isNewChatPlaceholder || isWorkspaceHome) {
     return null;
   }
   if (selectedChatId && chats.some((chat) => chat.id === selectedChatId)) {

@@ -73,14 +73,53 @@ export default async function SessionPage({
     : null;
 
   try {
+    // ?chat= 파라미터가 없으면 워크스페이스 홈 화면을 보여주기 위해
+    // 기본 채팅을 자동 생성하지 않고 채팅 목록만 가져온다.
+    const isHomeView = requestedChatId === null;
+
     const chats = await listSessionChats({
       sessionId,
       userId: user.id,
-      ensureDefault: true,
+      ensureDefault: !isHomeView,
     });
-    const activeChat = (requestedChatId
-      ? chats.find((chat) => chat.id === requestedChatId)
-      : null) ?? chats[0];
+
+    // 홈 화면: 이벤트 없이 워크스페이스 메타 정보만 가져온다.
+    if (isHomeView) {
+      const detail = await getSessionEvents(sessionId, {
+        userId: user.id,
+        limit: 0,
+        chatId: undefined,
+        includeUnassigned: false,
+      });
+
+      const workspaceRootPath = await resolveWorkspaceClientPath(detail.session.projectName).catch(() => '/');
+
+      return (
+        <div className="app-shell app-shell-immersive">
+          <Header userEmail={user.email} role={user.role} autoHideOnScroll />
+          <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, paddingTop: '64px' }}>
+            <ChatInterface
+              sessionId={sessionId}
+              initialEvents={[]}
+              initialHasMoreBefore={false}
+              initialPermissions={[]}
+              isOperator={user.role === 'operator'}
+              projectName={workspaceRootPath}
+              workspaceRootPath={workspaceRootPath}
+              alias={detail.session.alias}
+              agentFlavor={detail.session.agent}
+              sessionModel={detail.session.model}
+              approvalPolicy={detail.session.approvalPolicy}
+              initialChats={chats}
+              activeChatId={null}
+              initialShowWorkspaceHome
+            />
+          </main>
+        </div>
+      );
+    }
+
+    const activeChat = chats.find((chat) => chat.id === requestedChatId) ?? chats[0];
 
     const [detail, permissions] = await Promise.all([
       getSessionEvents(sessionId, {
