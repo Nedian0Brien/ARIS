@@ -39,7 +39,8 @@ type CreatePermissionInput = {
   risk: PermissionRisk;
 };
 
-const SESSION_MESSAGE_WRITE_MAX_RETRIES = 5;
+const SESSION_MESSAGE_WRITE_MAX_RETRIES = 8;
+const SESSION_MESSAGE_WRITE_BASE_DELAY_MS = 50;
 
 function toRuntimeSession(row: {
   id: string;
@@ -202,7 +203,15 @@ function isRetryableSessionMessageWriteError(error: unknown): boolean {
     message.includes('TransactionWriteConflict')
     || message.includes('could not serialize access')
     || message.includes('serialization failure')
+    || message.includes('deadlock detected')
   );
+}
+
+function retryDelay(attempt: number): Promise<void> {
+  // Exponential backoff with jitter: base * 2^(attempt-1) + random jitter
+  const base = SESSION_MESSAGE_WRITE_BASE_DELAY_MS * (2 ** (attempt - 1));
+  const jitter = Math.random() * base * 0.5;
+  return new Promise((resolve) => setTimeout(resolve, base + jitter));
 }
 
 export class PrismaRuntimeStore {
@@ -236,6 +245,7 @@ export class PrismaRuntimeStore {
         if (!isRetryableSessionMessageWriteError(error) || attempt === SESSION_MESSAGE_WRITE_MAX_RETRIES) {
           throw error;
         }
+        await retryDelay(attempt);
       }
     }
 
