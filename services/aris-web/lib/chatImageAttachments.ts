@@ -38,6 +38,8 @@ function escapeXmlAttribute(value: string): string {
     .replaceAll('\n', '&#10;');
 }
 
+const IMAGE_ATTACHMENT_PREFIX_PATTERN = /^(?:<image_attachment\b[\s\S]*?<\/image_attachment>\n\n)+/;
+
 export function buildImageAttachmentPromptPrefix(attachments: ChatImageAttachment[]): string {
   if (attachments.length === 0) {
     return '';
@@ -50,6 +52,10 @@ export function buildImageAttachmentPromptPrefix(attachments: ChatImageAttachmen
       '</image_attachment>',
     ].join('\n')
   )).join('\n\n')}\n\n`;
+}
+
+export function stripImageAttachmentPromptPrefix(text: string): string {
+  return text.replace(IMAGE_ATTACHMENT_PREFIX_PATTERN, '');
 }
 
 export function readChatImageAttachments(meta: Record<string, unknown> | null | undefined): ChatImageAttachment[] {

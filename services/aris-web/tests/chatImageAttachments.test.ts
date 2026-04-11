@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildImageAttachmentPromptPrefix,
   readChatImageAttachments,
+  stripImageAttachmentPromptPrefix,
 } from '@/lib/chatImageAttachments';
 
 describe('chatImageAttachments helpers', () => {
@@ -133,6 +134,22 @@ describe('chatImageAttachments helpers', () => {
         },
       ],
     })).toEqual([]);
+  });
+
+  it('strips internal image attachment prompt blocks from visible user text', () => {
+    const prefixed = `${buildImageAttachmentPromptPrefix([
+      {
+        assetId: 'asset-1',
+        kind: 'image',
+        name: 'screen.png',
+        mimeType: 'image/png',
+        size: 1200,
+        serverPath: '/home/ubuntu/.aris/chat-assets/session-1/asset-1-screen.png',
+        previewUrl: '/api/fs/raw?path=%2Fhome%2Fubuntu%2F.aris%2Fchat-assets%2Fsession-1%2Fasset-1-screen.png',
+      },
+    ])}실제 사용자 텍스트`;
+
+    expect(stripImageAttachmentPromptPrefix(prefixed)).toBe('실제 사용자 텍스트');
   });
 
   it('returns an empty array for missing or invalid meta payloads', () => {

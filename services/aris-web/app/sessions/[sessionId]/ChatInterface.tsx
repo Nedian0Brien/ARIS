@@ -30,7 +30,7 @@ import {
   mergeRenderablePermissions,
   type RenderablePermissionRequest,
 } from '@/lib/happy/permissions';
-import { readChatImageAttachments } from '@/lib/chatImageAttachments';
+import { readChatImageAttachments, stripImageAttachmentPromptPrefix } from '@/lib/chatImageAttachments';
 import { buildOptimisticUserEvent } from './chatComposer';
 import { buildComposerSubmitText, buildUserMessageMeta } from './chatSubmitPayload';
 import {
@@ -2555,7 +2555,7 @@ function renderEventPayload(
   debugMode: boolean,
 ) {
   if (userEvent) {
-    return <TextReply body={event.body || event.title} isUser />;
+    return <TextReply body={stripImageAttachmentPromptPrefix(event.body || event.title)} isUser />;
   }
 
   if (debugMode) {
@@ -2813,7 +2813,7 @@ export function ChatInterface({
   const [chatMutationLoadingId, setChatMutationLoadingId] = useState<string | null>(null);
   const [chatMutationError, setChatMutationError] = useState<string | null>(null);
   const handleCopyUserMessage = useCallback(async (event: UiEvent) => {
-    const text = (event.body || event.title || '').replace(/\r\n/g, '\n').trim();
+    const text = stripImageAttachmentPromptPrefix((event.body || event.title || '').replace(/\r\n/g, '\n')).trim();
     if (!text) {
       return;
     }
