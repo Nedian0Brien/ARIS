@@ -4352,6 +4352,7 @@
 }
 
 .linkPreviewImageWrap {
+  position: relative;
   width: 100%;
   height: 140px;
   overflow: hidden;
@@ -4461,6 +4462,89 @@
 
 .linkPreviewNavBtnRight {
   right: -14px;
+}
+
+/* ─── YouTube card ─── */
+
+.linkPreviewCardYoutube {
+  border-color: rgba(255, 0, 0, 0.15);
+}
+
+.linkPreviewCardYoutube:hover {
+  border-color: rgba(255, 0, 0, 0.45);
+}
+
+.youtubePlayOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.25);
+  transition: background 0.18s;
+  pointer-events: none;
+}
+
+.linkPreviewCardYoutube:hover .youtubePlayOverlay {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.youtubeIcon {
+  color: #ff0000;
+  flex-shrink: 0;
+}
+
+/* ─── GitHub card ─── */
+
+.linkPreviewCardGithub {
+  border-color: rgba(31, 111, 200, 0.15);
+}
+
+.linkPreviewCardGithub:hover {
+  border-color: rgba(31, 111, 200, 0.45);
+}
+
+.ghBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.08rem 0.4rem;
+  border-radius: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ghBadgeRepo {
+  background: rgba(31, 111, 200, 0.12);
+  color: #1f6fc8;
+}
+
+.ghBadgeIssue {
+  background: rgba(26, 127, 55, 0.12);
+  color: #1a7f37;
+}
+
+.ghBadgePr {
+  background: rgba(130, 80, 223, 0.12);
+  color: #8250df;
+}
+
+:global(html[data-theme='dark']) .ghBadgeRepo {
+  background: rgba(88, 166, 255, 0.16);
+  color: #58a6ff;
+}
+
+:global(html[data-theme='dark']) .ghBadgeIssue {
+  background: rgba(63, 185, 80, 0.16);
+  color: #3fb950;
+}
+
+:global(html[data-theme='dark']) .ghBadgePr {
+  background: rgba(188, 140, 255, 0.16);
+  color: #bc8cff;
 }
 
 @media (max-width: 768px) {
