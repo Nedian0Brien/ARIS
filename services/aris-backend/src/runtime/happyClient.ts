@@ -2561,7 +2561,7 @@ export class HappyRuntimeStore {
     meta: Record<string, unknown> = {},
     options: { type?: string; title?: string } = {},
   ): Promise<void> {
-    const cleanedText = text.replace(/\n?0;\s*$/g, '').trim();
+    const cleanedText = trimOutput(text.replace(/\n?0;\s*$/g, '').trim());
     const localId = `aris-agent-${randomUUID()}`;
     const type = options.type ?? 'message';
     const title = options.title ?? (type === 'message' ? 'Text Reply' : 'Command Execution');
