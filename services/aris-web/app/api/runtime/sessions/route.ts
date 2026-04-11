@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
 
     const completedNullSample = await prisma.sessionChat.findMany({
       where: { latestEventIsUser: false, userId, sessionId: { notIn: runningSessionIds }, lastReadAt: null },
-      orderBy: { lastActivityAt: 'desc' }, take: 3,
+      orderBy: { lastActivityAt: 'desc' }, take: 5,
       select: { id: true, title: true, sessionId: true, agent: true, lastActivityAt: true },
     });
     const completedNonNullSample = await prisma.$queryRaw<Array<{ id: string; title: string; sessionId: string; agent: string; lastActivityAt: Date }>>`
@@ -71,11 +71,11 @@ export async function GET(request: NextRequest) {
         AND "lastReadAt" IS NOT NULL
         AND "lastActivityAt" > "lastReadAt"
       ORDER BY "lastActivityAt" DESC
-      LIMIT 3
+      LIMIT 5
     `;
     const completedSample = [...completedNullSample, ...completedNonNullSample]
       .sort((a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime())
-      .slice(0, 3);
+      .slice(0, 5);
 
     // 에이전트 분포
     const agentGroupBy = await prisma.sessionChat.groupBy({

@@ -1267,7 +1267,12 @@ export function SessionDashboard({
                       {chatStats && chatStats.completedSample.length > 0 ? (
                         <div className={styles.sessionMiniList}>
                           {chatStats.completedSample.map(chat => (
-                            <div key={chat.id} className={styles.sessionMiniItem}>
+                            <div
+                              key={chat.id}
+                              className={`${styles.sessionMiniItem} ${styles.sessionMiniItemClickable}`}
+                              onClick={() => router.push(`/sessions/${chat.sessionId}?chat=${chat.id}`)}
+                              title={`${chat.title} — ${chat.sessionName}`}
+                            >
                               <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: 'var(--chart-status-completed)' }} />
                               <span className={styles.sessionMiniName}>{chat.title}</span>
                               <span className={styles.sessionMiniSubName}>{chat.sessionName}</span>

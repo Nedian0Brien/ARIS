@@ -325,15 +325,28 @@
   font-size: 0.7rem;
   font-weight: 600;
   color: var(--text);
+  min-width: 0;
+}
+
+.sessionMiniItemClickable {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.sessionMiniItemClickable:hover {
+  background: var(--dashboard-list-item-bg-hover, var(--hover));
 }
 
 .sessionMiniStatusDot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .sessionMiniName {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

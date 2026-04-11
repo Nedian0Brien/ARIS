@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
             const completedCount = completedNullCount + Number(completedNonNullResult[0]?.count ?? 0);
             const completedNullSample = await prisma.sessionChat.findMany({
               where: { latestEventIsUser: false, userId, sessionId: { notIn: runningSessionIds }, lastReadAt: null },
-              orderBy: { lastActivityAt: 'desc' }, take: 3,
+              orderBy: { lastActivityAt: 'desc' }, take: 5,
               select: { id: true, title: true, sessionId: true, agent: true, lastActivityAt: true },
             });
             const completedNonNullSample = await prisma.$queryRaw<Array<{ id: string; title: string; sessionId: string; agent: string; lastActivityAt: Date }>>`
@@ -88,11 +88,11 @@ export async function GET(request: NextRequest) {
               WHERE "userId" = ${userId} AND "latestEventIsUser" = false
                 AND "sessionId" != ALL(${runningSessionIds}::text[])
                 AND "lastReadAt" IS NOT NULL AND "lastActivityAt" > "lastReadAt"
-              ORDER BY "lastActivityAt" DESC LIMIT 3
+              ORDER BY "lastActivityAt" DESC LIMIT 5
             `;
             const completedSample = [...completedNullSample, ...completedNonNullSample]
               .sort((a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime())
-              .slice(0, 3);
+              .slice(0, 5);
             const agentGroupBy = await prisma.sessionChat.groupBy({ by: ['agent'], where: { userId }, _count: { id: true } });
             const perSessionGroupBy = await prisma.sessionChat.groupBy({ by: ['sessionId', 'agent'], where: { userId }, _count: { id: true } });
             const sessionChatMeta = buildSessionChatMeta(perSessionGroupBy);
