@@ -1304,6 +1304,7 @@
   height: auto;
   min-height: calc(var(--app-vh, 100dvh) - 64px);
   overflow: visible;
+  min-width: 0;
 }
 
 .chatTransitionOverlay {
