@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import type {
   ApprovalPolicy,
@@ -38,6 +38,8 @@ type CreatePermissionInput = {
   reason: string;
   risk: PermissionRisk;
 };
+
+const SESSION_MESSAGE_WRITE_MAX_RETRIES = 5;
 
 function toRuntimeSession(row: {
   id: string;
@@ -174,6 +176,19 @@ function toPermissionRequest(row: {
   };
 }
 
+function getPrismaErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== 'object') {
+    return null;
+  }
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? code : null;
+}
+
+function isRetryableSessionMessageWriteError(error: unknown): boolean {
+  const code = getPrismaErrorCode(error);
+  return code === 'P2002' || code === 'P2034';
+}
+
 export class PrismaRuntimeStore {
   private readonly db: PrismaClient;
 
@@ -190,6 +205,25 @@ export class PrismaRuntimeStore {
 
   async disconnect(): Promise<void> {
     await this.db.$disconnect();
+  }
+
+  private async runSessionMessageMutationWithRetry<T>(
+    operation: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 1; attempt <= SESSION_MESSAGE_WRITE_MAX_RETRIES; attempt += 1) {
+      try {
+        return await this.db.$transaction(
+          async (tx) => operation(tx),
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        if (!isRetryableSessionMessageWriteError(error) || attempt === SESSION_MESSAGE_WRITE_MAX_RETRIES) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error('SESSION_MESSAGE_WRITE_RETRY_EXHAUSTED');
   }
 
   async listSessions(): Promise<RuntimeSession[]> {
@@ -303,32 +337,34 @@ export class PrismaRuntimeStore {
     const isAgentMessage = input.meta?.role === 'agent';
     const isUserPrompt = input.type === 'message' && !isAgentMessage;
 
-    // next seq number
-    const agg = await this.db.sessionMessage.aggregate({
-      where: { sessionId },
-      _max: { seq: true },
-    });
-    const nextSeq = (agg._max.seq ?? 0) + 1;
-
     const newStatus: SessionStatus = isUserPrompt ? 'running' : isAgentMessage ? 'idle' : (session.status as SessionStatus);
 
-    const [row] = await this.db.$transaction([
-      this.db.sessionMessage.create({
+    const row = await this.runSessionMessageMutationWithRetry(async (tx) => {
+      const agg = await tx.sessionMessage.aggregate({
+        where: { sessionId },
+        _max: { seq: true },
+      });
+      const nextSeq = (agg._max.seq ?? 0) + 1;
+
+      const created = await tx.sessionMessage.create({
         data: {
           id: randomUUID(),
           sessionId,
           type: input.type,
           title: input.title ?? input.type,
           text: input.text,
-          meta: (input.meta ?? {}) as Parameters<typeof this.db.sessionMessage.create>[0]['data']['meta'],
+          meta: (input.meta ?? {}) as Parameters<typeof tx.sessionMessage.create>[0]['data']['meta'],
           seq: nextSeq,
         },
-      }),
-      this.db.session.update({
+      });
+
+      await tx.session.update({
         where: { id: sessionId },
         data: { status: newStatus, updatedAt: new Date() },
-      }),
-    ]);
+      });
+
+      return created;
+    });
 
     return toRuntimeMessage(row);
   }
@@ -364,12 +400,17 @@ export class PrismaRuntimeStore {
       updates.riskScore = Math.max(10, session.riskScore - 15);
     }
 
-    await this.db.$transaction([
-      this.db.session.update({
+    await this.runSessionMessageMutationWithRetry(async (tx) => {
+      const nextSeq = await tx.sessionMessage
+        .aggregate({ where: { sessionId }, _max: { seq: true } })
+        .then((a) => (a._max.seq ?? 0) + 1);
+
+      await tx.session.update({
         where: { id: sessionId },
         data: { ...updates, updatedAt: new Date(at) },
-      }),
-      this.db.sessionMessage.create({
+      });
+
+      await tx.sessionMessage.create({
         data: {
           id: randomUUID(),
           sessionId,
@@ -381,12 +422,10 @@ export class PrismaRuntimeStore {
             action,
             ...(normalizedChatId ? { chatId: normalizedChatId } : {}),
           },
-          seq: await this.db.sessionMessage
-            .aggregate({ where: { sessionId }, _max: { seq: true } })
-            .then((a) => (a._max.seq ?? 0) + 1),
+          seq: nextSeq,
         },
-      }),
-    ]);
+      });
+    });
 
     return { accepted: true, message: `${action.toUpperCase()} acknowledged`, at };
   }
