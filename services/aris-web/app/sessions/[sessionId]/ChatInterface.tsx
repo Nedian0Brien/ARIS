@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ChangeEvent, ReactNode } from 'react';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
@@ -61,6 +61,7 @@ import {
   FolderTree,
   Brain,
   Bug,
+  Image as ImageIcon,
   MessageSquarePlus,
   MessageSquareText,
   MoreVertical,
@@ -85,7 +86,7 @@ import {
   X,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import type { AgentFlavor, ApprovalPolicy, PermissionRequest, SessionChat, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
+import type { AgentFlavor, ApprovalPolicy, ChatImageAttachment, PermissionRequest, SessionChat, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '@/components/ui/AgentIcons';
 import { CustomizationSidebar } from './CustomizationSidebar';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
@@ -275,7 +276,8 @@ type ComposerModelId = string;
 
 type ContextItem =
   | { id: string; type: 'file'; path: string; content: string; name: string }
-  | { id: string; type: 'text'; text: string };
+  | { id: string; type: 'text'; text: string }
+  | { id: string; type: 'image'; attachment: ChatImageAttachment };
 type ChatRunPhase = ResolvedChatRunPhase;
 type ChatSidebarState = 'default' | 'running' | 'completed' | 'approval' | 'error';
 type ChatSidebarSectionKey = 'pinned' | 'running' | 'completed' | 'history';
@@ -2856,6 +2858,8 @@ export function ChatInterface({
   const [contextItems, setContextItems] = useState<ContextItem[]>([]);
   const [plusMenuMode, setPlusMenuMode] = useState<'closed' | 'menu' | 'file' | 'text'>('closed');
   const [textContextInput, setTextContextInput] = useState('');
+  const [isImageUploading, setIsImageUploading] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<ComposerModelId>(() => {
     const sortedInitialChats = sortSessionChats(initialChats);
     const initialChat = (activeChatId && activeChatId.trim().length > 0
@@ -2937,6 +2941,7 @@ export function ChatInterface({
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerDockRef = useRef<HTMLElement>(null);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
+  const composerImageInputRef = useRef<HTMLInputElement>(null);
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const geminiModeDropdownRef = useRef<HTMLDivElement>(null);
@@ -4045,6 +4050,46 @@ export function ChatInterface({
       setFileBrowserLoading(false);
     }
   }, []);
+
+  const handleImageUploadOpen = useCallback(() => {
+    setPlusMenuMode('closed');
+    setImageUploadError(null);
+    composerImageInputRef.current?.click();
+  }, []);
+
+  const handleComposerImageSelection = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) {
+      return;
+    }
+
+    setIsImageUploading(true);
+    setImageUploadError(null);
+    try {
+      const formData = new FormData();
+      formData.set('file', file);
+
+      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/assets/images`, {
+        method: 'POST',
+        body: formData,
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        attachment?: ChatImageAttachment;
+        error?: string;
+      };
+      const attachment = payload.attachment;
+      if (!response.ok || !attachment) {
+        throw new Error(payload.error ?? '이미지 업로드에 실패했습니다.');
+      }
+
+      setContextItems((prev) => [...prev, { id: genId(), type: 'image', attachment }]);
+    } catch (error) {
+      setImageUploadError(error instanceof Error ? error.message : '이미지 업로드에 실패했습니다.');
+    } finally {
+      setIsImageUploading(false);
+    }
+  }, [sessionId]);
 
   const markSessionAsRead = useCallback(async () => {
     if (!isSessionSyncLeader) {
@@ -5204,12 +5249,17 @@ export function ChatInterface({
     const firstPromptTitle = shouldAutoRenameFromFirstPrompt
       ? buildChatTitleFromFirstPrompt(promptText)
       : null;
+    const imageAttachments = contextItems.flatMap((item) => (
+      item.type === 'image' ? [item.attachment] : []
+    ));
 
     const contextPrefix = contextItems.length > 0
       ? contextItems.map((item) => (
         item.type === 'file'
           ? `<file path="${item.path}">\n${item.content}\n</file>`
-          : `<context>\n${item.text}\n</context>`
+          : item.type === 'text'
+            ? `<context>\n${item.text}\n</context>`
+            : ''
       )).join('\n') + '\n\n'
       : '';
     const finalText = contextPrefix + promptText;
@@ -5233,6 +5283,7 @@ export function ChatInterface({
       model: submitModelId,
       ...(submitGeminiModeId ? { geminiMode: submitGeminiModeId } : {}),
       ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
+      ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
       text: finalText,
       submittedAt: awaitingSince,
     });
@@ -6420,9 +6471,20 @@ export function ChatInterface({
                   <div className={styles.composerChips}>
                     {contextItems.map((item) => (
                       <span key={item.id} className={styles.contextChip}>
-                        {item.type === 'file' ? <Paperclip size={11} /> : <AlignLeft size={11} />}
+                        {item.type === 'file' ? (
+                          <Paperclip size={11} />
+                        ) : item.type === 'text' ? (
+                          <AlignLeft size={11} />
+                        ) : (
+                          <img
+                            src={item.attachment.previewUrl}
+                            alt=""
+                            className={styles.contextChipThumb}
+                            loading="lazy"
+                          />
+                        )}
                         <span className={styles.contextChipLabel}>
-                          {item.type === 'file' ? item.name : '텍스트'}
+                          {item.type === 'file' ? item.name : item.type === 'text' ? '텍스트' : item.attachment.name}
                         </span>
                         <button
                           type="button"
@@ -6436,8 +6498,21 @@ export function ChatInterface({
                     ))}
                   </div>
                 )}
+                {isImageUploading && (
+                  <div className={styles.composerAttachmentStatus}>이미지 업로드 중...</div>
+                )}
+                {imageUploadError && (
+                  <div className={styles.composerAttachmentError} role="alert">{imageUploadError}</div>
+                )}
 
                 <div className={styles.composerInputRow}>
+                  <input
+                    ref={composerImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={handleComposerImageSelection}
+                  />
                   <div className={styles.plusMenuWrap} ref={plusMenuRef}>
                     <button
                       type="button"
@@ -6453,6 +6528,9 @@ export function ChatInterface({
                       <div className={styles.plusMenu}>
                         {plusMenuMode === 'menu' && (
                           <>
+                            <button type="button" className={styles.plusMenuItem} onClick={handleImageUploadOpen}>
+                              <ImageIcon size={14} /> 사진 업로드
+                            </button>
                             <button type="button" className={styles.plusMenuItem} onClick={() => { handleFileBrowserOpen(); }}>
                               <Paperclip size={14} /> 파일 첨부
                             </button>

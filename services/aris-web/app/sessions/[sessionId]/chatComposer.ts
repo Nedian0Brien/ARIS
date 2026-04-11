@@ -1,4 +1,4 @@
-import type { AgentFlavor, UiEvent } from '@/lib/happy/types';
+import type { AgentFlavor, ChatImageAttachment, UiEvent } from '@/lib/happy/types';
 
 type BuildOptimisticUserEventInput = {
   chatId: string;
@@ -8,6 +8,7 @@ type BuildOptimisticUserEventInput = {
   model?: string | null;
   geminiMode?: string | null;
   modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh' | null;
+  attachments?: ChatImageAttachment[];
 };
 
 export function buildOptimisticUserEvent(input: BuildOptimisticUserEventInput): UiEvent {
@@ -24,6 +25,7 @@ export function buildOptimisticUserEvent(input: BuildOptimisticUserEventInput): 
       ...(input.model ? { model: input.model } : {}),
       ...(input.geminiMode ? { geminiMode: input.geminiMode } : {}),
       ...(input.modelReasoningEffort ? { modelReasoningEffort: input.modelReasoningEffort } : {}),
+      ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     },
   };
 }
