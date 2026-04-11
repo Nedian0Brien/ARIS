@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { happyClientTestHooks } from '../src/runtime/happyClient.js';
+import { HappyRuntimeStore, happyClientTestHooks } from '../src/runtime/happyClient.js';
 import { parseGeminiStreamLine } from '../src/runtime/providers/gemini/geminiProtocolMapper.js';
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe('happyClient stream-json parsing', () => {
@@ -443,5 +445,41 @@ registry/controller를 ClaudeSession 중심으로 재편`);
 
     clearInterval(timer);
     expect(activityTick).toBeGreaterThan(0);
+  });
+
+  it('truncates oversized persisted app-server messages before posting them', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const store = new HappyRuntimeStore({
+      serverUrl: 'http://runtime.test',
+      token: 'token',
+      workspaceRoot: '/workspace',
+    }) as unknown as {
+      appendAgentMessage: (
+        sessionId: string,
+        text: string,
+        meta?: Record<string, unknown>,
+        options?: { type?: string; title?: string },
+      ) => Promise<void>;
+    };
+
+    await store.appendAgentMessage('session-1', 'x'.repeat(200_000), { streamEvent: 'command_execution' }, {
+      type: 'tool',
+      title: 'Command Execution',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const payload = JSON.parse(String(requestInit.body)) as {
+      messages: Array<{ content: string }>;
+    };
+    const content = JSON.parse(payload.messages[0]!.content) as { text: string };
+
+    expect(content.text.length).toBeLessThanOrEqual(32_000);
   });
 });

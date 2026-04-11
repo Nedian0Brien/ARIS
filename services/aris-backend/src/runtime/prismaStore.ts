@@ -184,9 +184,25 @@ function getPrismaErrorCode(error: unknown): string | null {
   return typeof code === 'string' ? code : null;
 }
 
+function getErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return '';
+  }
+  return error.message.trim();
+}
+
 function isRetryableSessionMessageWriteError(error: unknown): boolean {
   const code = getPrismaErrorCode(error);
-  return code === 'P2002' || code === 'P2034';
+  if (code === 'P2002' || code === 'P2034') {
+    return true;
+  }
+
+  const message = getErrorMessage(error);
+  return (
+    message.includes('TransactionWriteConflict')
+    || message.includes('could not serialize access')
+    || message.includes('serialization failure')
+  );
 }
 
 export class PrismaRuntimeStore {
