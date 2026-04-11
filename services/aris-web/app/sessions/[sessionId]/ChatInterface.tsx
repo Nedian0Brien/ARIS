@@ -30,6 +30,7 @@ import {
   mergeRenderablePermissions,
   type RenderablePermissionRequest,
 } from '@/lib/happy/permissions';
+import { buildImageAttachmentPromptPrefix } from '@/lib/chatImageAttachments';
 import { buildOptimisticUserEvent } from './chatComposer';
 import {
   readLastSelectedModelId,
@@ -305,6 +306,7 @@ type ChatSubmittedPayload = {
   geminiMode?: string;
   modelReasoningEffort?: ModelReasoningEffort;
   threadId?: string;
+  attachments?: ChatImageAttachment[];
 };
 type ChatRuntimeUiState = {
   isSubmitting: boolean;
@@ -320,6 +322,10 @@ type WorkspaceFileOpenDetail = {
   path: string;
   name?: string;
 };
+
+function extractImageAttachments(items: ContextItem[]): ChatImageAttachment[] {
+  return items.flatMap((item) => (item.type === 'image' ? [item.attachment] : []));
+}
 type SidebarFileRequest = WorkspaceFileOpenDetail & {
   nonce: number;
 };
@@ -5249,9 +5255,8 @@ export function ChatInterface({
     const firstPromptTitle = shouldAutoRenameFromFirstPrompt
       ? buildChatTitleFromFirstPrompt(promptText)
       : null;
-    const imageAttachments = contextItems.flatMap((item) => (
-      item.type === 'image' ? [item.attachment] : []
-    ));
+    const imageAttachments = extractImageAttachments(contextItems);
+    const imagePrefix = buildImageAttachmentPromptPrefix(imageAttachments);
 
     const contextPrefix = contextItems.length > 0
       ? contextItems.map((item) => (
@@ -5262,7 +5267,7 @@ export function ChatInterface({
             : ''
       )).join('\n') + '\n\n'
       : '';
-    const finalText = contextPrefix + promptText;
+    const finalText = imagePrefix + contextPrefix + promptText;
     const submitModelId = normalizeModelId(selectedModelId)
       ?? resolveDefaultModelId(activeAgentFlavor, providerSelections, legacyCustomModels, lastSelectedCodexModelId);
     const submitGeminiModeId = activeAgentFlavor === 'gemini'
@@ -5305,6 +5310,7 @@ export function ChatInterface({
         ...(submitGeminiModeId ? { geminiMode: submitGeminiModeId } : {}),
         ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
         ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
+        ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
       },
     });
     runtimeStartedSinceAwaitingRef.current = false;
@@ -5344,6 +5350,7 @@ export function ChatInterface({
                 }
               : {}),
             ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
+            ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
           },
         }),
       });
@@ -5480,6 +5487,7 @@ export function ChatInterface({
                 }
               : {}),
             ...(lastSubmittedPayload.threadId ? { threadId: lastSubmittedPayload.threadId } : {}),
+            ...(lastSubmittedPayload.attachments?.length ? { attachments: lastSubmittedPayload.attachments } : {}),
           },
         }),
       });
