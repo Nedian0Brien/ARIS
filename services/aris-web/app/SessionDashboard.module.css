@@ -828,18 +828,36 @@
     justify-content: center;
   }
 
+  .sessionSidebarCard {
+    overflow: hidden;
+    padding: 1rem;
+  }
+
   .serverResourceGridHorizontal {
-    grid-template-columns: minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     gap: 0.6rem;
+    margin-bottom: 0.75rem;
   }
 
   .serverDonutCard {
-    padding: 0.55rem 0.45rem 0.5rem;
+    padding: 0.5rem 0.4rem;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .serverDonutChart {
-    height: clamp(132px, 42vw, 160px);
-    min-height: 132px;
+    height: 120px;
+    min-height: 120px;
+    width: 100%;
+  }
+
+  .serverStorageCardFull {
+    padding: 0.75rem;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
   }
 }
 
