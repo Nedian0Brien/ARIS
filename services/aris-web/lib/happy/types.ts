@@ -43,6 +43,18 @@ export type SessionChat = {
   updatedAt: string;
 };
 
+export type ChatImageAttachment = {
+  assetId: string;
+  kind: 'image';
+  name: string;
+  mimeType: string;
+  size: number;
+  width?: number;
+  height?: number;
+  serverPath: string;
+  previewUrl: string;
+};
+
 export type UiEventKind =
   | 'text_reply'
   | 'run_execution'
