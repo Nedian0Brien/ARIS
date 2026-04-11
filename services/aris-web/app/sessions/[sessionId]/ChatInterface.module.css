@@ -1820,8 +1820,8 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 0.45rem;
-  width: 100%;
-  max-width: 48rem;
+  width: fit-content;
+  max-width: min(100%, 48rem);
   min-width: 0;
 }
 
@@ -2096,8 +2096,8 @@
   max-width: 100%;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: keep-all;
 }
 
 .debugReply {
@@ -2156,8 +2156,8 @@
 
 .markdownParagraph {
   margin: 0;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: keep-all;
 }
 
 .markdownHeading {
