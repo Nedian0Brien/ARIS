@@ -56,6 +56,7 @@ deploy/
 4. If `RUNTIME_BACKEND=happy`, also ensure `HAPPY_SERVER_URL`, `HAPPY_SERVER_TOKEN` are set.
 5. If `services/aris-backend/.env` is still maintained for local checks, keep its `RUNTIME_API_TOKEN` aligned with `prod.env`.
 6. After pushing `main`, confirm that the `Deploy on Main Push` workflow run is actually created before deleting the source branch or assuming deploy completed.
+7. When validating direct-to-main operational flows, prefer fast-forwarding a local `main` checkout and pushing `origin main` so the final deploy push is recorded from the `main` ref itself.
 
 ## Standard deployment flows
 
