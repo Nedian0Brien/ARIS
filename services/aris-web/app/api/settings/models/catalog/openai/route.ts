@@ -9,6 +9,7 @@ import {
   isOpenAiTextGenerationModelId,
   type OpenAiCatalogItem,
 } from '@/lib/settings/providerModels';
+import { DEFAULT_CODEX_MODEL_SELECTIONS } from '@/lib/settings/providerModels';
 
 const OPENAI_KEY_SALT = 'aris-openai-settings-v1';
 
@@ -83,7 +84,25 @@ export async function GET(request: NextRequest) {
         return a.id.localeCompare(b.id);
       });
 
-    return NextResponse.json({ items, fetchedAt: new Date().toISOString() });
+    const existingIds = new Set(items.map((item) => item.id));
+    const fallbackItems = DEFAULT_CODEX_MODEL_SELECTIONS
+      .filter((modelId) => !existingIds.has(modelId))
+      .map((modelId) => ({
+        id: modelId,
+        family: deriveOpenAiModelFamily(modelId),
+        label: deriveOpenAiModelLabel(modelId),
+        created: 0,
+        createdAt: null,
+        tags: deriveOpenAiModelTags(modelId),
+      } satisfies OpenAiCatalogItem));
+    const merged = [...items, ...fallbackItems].sort((a, b) => {
+      if (b.created !== a.created) {
+        return b.created - a.created;
+      }
+      return a.id.localeCompare(b.id);
+    });
+
+    return NextResponse.json({ items: merged, fetchedAt: new Date().toISOString() });
   } catch (error) {
     console.error('Failed to load OpenAI catalog:', error);
     return NextResponse.json({ error: 'OpenAI 모델 목록 요청에 실패했습니다.' }, { status: 502 });
