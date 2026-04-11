@@ -170,7 +170,24 @@ describe('chat image upload route', () => {
     expect(await response.json()).toMatchObject({ error: '이미지 파일은 10MB 이하만 업로드할 수 있습니다.' });
   });
 
-  it('rejects oversized requests from the content-length header before multipart parsing', async () => {
+  it('rejects multipart requests whose declared body size exceeds the request ceiling', async () => {
+    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const response = await POST(
+      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+        method: 'POST',
+        body: new FormData(),
+        headers: {
+          'content-length': String(10 * 1024 * 1024 + 256 * 1024 + 1),
+        },
+      }),
+      { params: Promise.resolve({ sessionId: 'session-1' }) },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: '이미지 파일은 10MB 이하만 업로드할 수 있습니다.' });
+  });
+
+  it('does not reject near-limit multipart overhead before the file is parsed', async () => {
     const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
     const response = await POST(
       new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
@@ -184,6 +201,6 @@ describe('chat image upload route', () => {
     );
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({ error: '이미지 파일은 10MB 이하만 업로드할 수 있습니다.' });
+    expect(await response.json()).toMatchObject({ error: '이미지 파일이 필요합니다.' });
   });
 });

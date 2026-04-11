@@ -8,6 +8,7 @@ import type { ChatImageAttachment } from '@/lib/happy/types';
 
 const CHAT_IMAGE_ASSET_ROOT = path.join(getHostHomeDir(), '.aris', 'chat-assets');
 const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_MULTIPART_REQUEST_BYTES = MAX_IMAGE_UPLOAD_BYTES + 256 * 1024;
 
 function sanitizeFilename(name: string): string {
   const base = path.basename(name).trim() || 'image';
@@ -63,7 +64,7 @@ export async function POST(
   }
 
   const contentLength = Number.parseInt(request.headers.get('content-length') ?? '', 10);
-  if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_UPLOAD_BYTES) {
+  if (Number.isFinite(contentLength) && contentLength > MAX_MULTIPART_REQUEST_BYTES) {
     return NextResponse.json({ error: '이미지 파일은 10MB 이하만 업로드할 수 있습니다.' }, { status: 400 });
   }
 
