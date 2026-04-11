@@ -234,6 +234,7 @@ const COMPOSER_MODELS_BY_AGENT: Record<'codex' | 'claude' | 'gemini', ComposerMo
   codex: [
     { id: 'gpt-5.4', shortLabel: 'GPT-5.4', badge: '권장' },
     { id: 'gpt-5.3-codex', shortLabel: 'GPT-5.3 Codex', badge: '유지' },
+    { id: 'gpt-5.3-codex-spark', shortLabel: 'GPT-5.3 Codex Spark', badge: '신규' },
     { id: 'gpt-5', shortLabel: 'GPT-5', badge: '고성능' },
     { id: 'gpt-5-mini', shortLabel: 'GPT-5 mini', badge: '빠름' },
   ],
