@@ -71,13 +71,19 @@ export class ClaudeMessageQueue {
       return this.chain;
     }
 
-    this.chain = this.chain.then(() => this.persist({
-      ...projection,
-      meta: {
-        ...projection.meta,
-        launchMode: this.context.launchMode,
-      },
-    }));
+    this.chain = this.chain
+      .catch(() => undefined)
+      .then(() => this.persist({
+        ...projection,
+        meta: {
+          ...projection.meta,
+          launchMode: this.context.launchMode,
+        },
+      }))
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`failed to persist claude queued message: ${message}`);
+      });
     return this.chain;
   }
 }

@@ -482,4 +482,51 @@ registry/controller를 ClaudeSession 중심으로 재편`);
 
     expect(content.text.length).toBeLessThanOrEqual(32_000);
   });
+
+  it('retries retriable happy runtime message write conflicts before giving up', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        text: async () => '{"error":"TransactionWriteConflict"}',
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        text: async () => '{"error":"deadlock detected"}',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const store = new HappyRuntimeStore({
+      serverUrl: 'http://runtime.test',
+      token: 'token',
+      workspaceRoot: '/workspace',
+    }) as unknown as {
+      appendAgentMessage: (
+        sessionId: string,
+        text: string,
+        meta?: Record<string, unknown>,
+        options?: { type?: string; title?: string },
+      ) => Promise<void>;
+    };
+
+    const appendPromise = store.appendAgentMessage(
+      'session-1',
+      'retry me',
+      { streamEvent: 'agent_message' },
+      { type: 'message', title: 'Retry Test' },
+    );
+
+    await vi.runAllTimersAsync();
+    await appendPromise;
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
 });

@@ -69,7 +69,13 @@ export class GeminiMessageQueue {
       return this.chain;
     }
 
-    this.chain = this.chain.then(() => this.persist(projection));
+    this.chain = this.chain
+      .catch(() => undefined)
+      .then(() => this.persist(projection))
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`failed to persist gemini queued message: ${message}`);
+      });
     return this.chain;
   }
 }

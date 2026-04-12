@@ -95,4 +95,57 @@ describe('ClaudeMessageQueue', () => {
 
     expect(persist).not.toHaveBeenCalled();
   });
+
+  it('continues flushing later projections after a persist failure', async () => {
+    const persisted: PersistedMessageProjection[] = [];
+    let attempts = 0;
+    const persist = vi.fn(async (projection: PersistedMessageProjection) => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new Error('happy runtime error (502): {"error":"TransactionWriteConflict"}');
+      }
+      persisted.push(projection);
+    });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const queue = new ClaudeMessageQueue(
+      {
+        requestedPath: '/workspace/project',
+        launchMode: 'remote',
+      },
+      persist,
+    );
+
+    await queue.enqueueToolAction({
+      action: {
+        actionType: 'command_execution',
+        title: 'Run command',
+        callId: 'call-1',
+        command: 'pwd',
+        output: '/workspace/project',
+        additions: 0,
+        deletions: 0,
+        hasDiffSignal: false,
+      },
+      execCwd: '/home/ubuntu/project/ARIS',
+      threadId: 'claude-session-1',
+    });
+    await queue.enqueueText({
+      output: '완료',
+      execCwd: '/home/ubuntu/project/ARIS',
+      threadId: 'claude-session-1',
+      messageMeta: {
+        streamEvent: 'agent_message',
+      },
+    });
+
+    await expect(queue.flush()).resolves.toBeUndefined();
+
+    expect(persist).toHaveBeenCalledTimes(2);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]?.body).toBe('완료');
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining('failed to persist claude queued message'),
+    );
+    consoleError.mockRestore();
+  });
 });
