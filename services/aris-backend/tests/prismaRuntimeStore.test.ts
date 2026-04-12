@@ -158,3 +158,212 @@ describe('PrismaRuntimeStore.appendMessage', () => {
     expect(update).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('PrismaRuntimeStore chat-scoped events', () => {
+  it('appends chat events with chat-local seq and updates the chat snapshot', async () => {
+    const sessionChat = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'chat-1',
+        sessionId: 'session-1',
+        latestPreview: '',
+      }),
+      update: vi.fn().mockResolvedValue({ id: 'chat-1' }),
+    };
+    const sessionRun = {
+      create: vi.fn().mockResolvedValue({
+        id: 'run-1',
+      }),
+      findFirst: vi.fn().mockResolvedValue(null),
+      update: vi.fn(),
+    };
+    const sessionChatEvent = {
+      aggregate: vi.fn().mockResolvedValue({ _max: { seq: 2 } }),
+      create: vi.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: 'event-3',
+        sessionId: data.sessionId,
+        chatId: data.chatId,
+        runId: data.runId,
+        type: data.type,
+        title: data.title,
+        text: data.text,
+        meta: data.meta,
+        seq: data.seq,
+        createdAt: new Date('2026-04-13T00:00:00.000Z'),
+      })),
+    };
+    const db = {
+      sessionChat,
+      sessionRun,
+      sessionChatEvent,
+      $transaction: vi.fn(async (input: unknown) => {
+        if (typeof input === 'function') {
+          return input({ sessionChat, sessionRun, sessionChatEvent });
+        }
+        return Promise.all(input as Promise<unknown>[]);
+      }),
+    };
+    const store = buildStoreWithMockDb(db) as PrismaRuntimeStore & {
+      appendChatEvent: (
+        chatId: string,
+        input: { sessionId: string; runId?: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
+      ) => Promise<{ meta?: Record<string, unknown> }>;
+    };
+
+    const event = await store.appendChatEvent('chat-1', {
+        sessionId: 'session-1',
+        type: 'message',
+        title: 'Text Reply',
+        text: '완료',
+        meta: { role: 'user' },
+      });
+
+    expect(sessionRun.create).toHaveBeenCalledTimes(1);
+    expect(sessionChatEvent.aggregate).toHaveBeenCalledWith({
+      where: { chatId: 'chat-1' },
+      _max: { seq: true },
+    });
+    expect(sessionChatEvent.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        chatId: 'chat-1',
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+      }),
+    }));
+    expect(sessionChat.update).toHaveBeenCalledTimes(1);
+    expect(event.meta?.seq).toBe(3);
+  });
+
+  it('marks the latest running run as completed when an agent event closes the chat turn', async () => {
+    const sessionChat = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'chat-1',
+        sessionId: 'session-1',
+        latestPreview: '',
+      }),
+      update: vi.fn().mockResolvedValue({ id: 'chat-1' }),
+    };
+    const sessionRun = {
+      create: vi.fn(),
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'run-9',
+        status: 'running',
+      }),
+      update: vi.fn().mockResolvedValue({
+        id: 'run-9',
+        status: 'completed',
+      }),
+    };
+    const sessionChatEvent = {
+      aggregate: vi.fn().mockResolvedValue({ _max: { seq: 0 } }),
+      create: vi.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: 'event-1',
+        sessionId: data.sessionId,
+        chatId: data.chatId,
+        runId: data.runId,
+        type: data.type,
+        title: data.title,
+        text: data.text,
+        meta: data.meta,
+        seq: data.seq,
+        createdAt: new Date('2026-04-13T00:00:00.000Z'),
+      })),
+    };
+    const db = {
+      sessionChat,
+      sessionRun,
+      sessionChatEvent,
+      $transaction: vi.fn(async (input: unknown) => {
+        if (typeof input === 'function') {
+          return input({ sessionChat, sessionRun, sessionChatEvent });
+        }
+        return Promise.all(input as Promise<unknown>[]);
+      }),
+    };
+    const store = buildStoreWithMockDb(db) as PrismaRuntimeStore & {
+      appendChatEvent: (
+        chatId: string,
+        input: { sessionId: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
+      ) => Promise<{ meta?: Record<string, unknown> }>;
+    };
+
+    const event = await store.appendChatEvent('chat-1', {
+      sessionId: 'session-1',
+      type: 'message',
+      title: 'Text Reply',
+      text: '완료',
+      meta: { role: 'agent' },
+    });
+
+    expect(sessionRun.findFirst).toHaveBeenCalledTimes(1);
+    expect(sessionRun.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'run-9' },
+      data: expect.objectContaining({
+        status: 'completed',
+      }),
+    }));
+    expect(event.meta?.runId).toBe('run-9');
+  });
+
+  it('lists chat events using the chat-local sequence cursor', async () => {
+    const sessionChatEvent = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: 'event-2',
+          sessionId: 'session-1',
+          chatId: 'chat-1',
+          runId: 'run-1',
+          type: 'message',
+          title: 'Text Reply',
+          text: '다음 응답',
+          meta: { role: 'agent' },
+          seq: 2,
+          createdAt: new Date('2026-04-13T00:00:00.000Z'),
+        },
+      ]),
+    };
+    const store = buildStoreWithMockDb({ sessionChatEvent }) as PrismaRuntimeStore & {
+      listChatEvents: (
+        chatId: string,
+        options?: { afterSeq?: number; limit?: number },
+      ) => Promise<Array<{ id: string; meta?: Record<string, unknown> }>>;
+    };
+
+    const events = await store.listChatEvents('chat-1', { afterSeq: 1, limit: 20 });
+
+    expect(sessionChatEvent.findMany).toHaveBeenCalledWith({
+      where: { chatId: 'chat-1', seq: { gt: 1 } },
+      orderBy: { seq: 'asc' },
+      take: 20,
+    });
+    expect(events).toEqual([
+      expect.objectContaining({
+        id: 'event-2',
+        meta: expect.objectContaining({ seq: 2, chatId: 'chat-1', runId: 'run-1' }),
+      }),
+    ]);
+  });
+
+  it('treats a chat as running when it has an active run record', async () => {
+    const sessionRun = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'run-1',
+        status: 'running',
+      }),
+    };
+    const store = buildStoreWithMockDb({
+      sessionRun,
+      session: {
+        findUnique: vi.fn().mockResolvedValue({ status: 'idle' }),
+      },
+    });
+
+    const isRunning = await store.isSessionRunning('session-1', 'chat-1');
+
+    expect(sessionRun.findFirst).toHaveBeenCalledWith({
+      where: { sessionId: 'session-1', chatId: 'chat-1', status: 'running' },
+      select: { id: true },
+    });
+    expect(isRunning).toBe(true);
+  });
+});

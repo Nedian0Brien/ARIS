@@ -129,7 +129,7 @@ describe('aris-backend API', () => {
 
     const messagesResponse = await app.inject({
       method: 'GET',
-      url: `/v3/sessions/${sessionId}/messages`,
+      url: `/v3/sessions/${sessionId}/messages?chatId=chat-bridge-1`,
       headers: authHeader(),
     });
 
@@ -139,6 +139,81 @@ describe('aris-backend API', () => {
     };
     expect(messagesPayload.messages.some((message) => message.text === 'OK')).toBe(true);
     expect(messagesPayload.messages.some((message) => message.meta?.role === 'agent' && message.meta?.chatId === 'chat-bridge-1')).toBe(true);
+
+    await app.close();
+  });
+
+  it('appends and lists chat-scoped events through dedicated chat routes', async () => {
+    const app = buildServer({
+      RUNTIME_API_TOKEN: TOKEN,
+      DEFAULT_PROJECT_PATH: '/tmp/project',
+      LOG_LEVEL: 'silent',
+    });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: {
+        ...authHeader(),
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        path: '/tmp/project',
+        flavor: 'claude',
+      }),
+    });
+    expect(createResponse.statusCode).toBe(201);
+    const sessionId = (createResponse.json() as { session: { id: string } }).session.id;
+
+    const appendResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/chats/chat-1/events',
+      headers: {
+        ...authHeader(),
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        sessionId,
+        runId: 'run-1',
+        type: 'message',
+        title: 'Text Reply',
+        text: 'chat scoped',
+        meta: { role: 'agent' },
+      }),
+    });
+
+    expect(appendResponse.statusCode).toBe(201);
+    const appendPayload = appendResponse.json() as { event?: { meta?: { seq?: number; chatId?: string } } };
+    expect(appendPayload.event?.meta?.seq).toBe(1);
+    expect(appendPayload.event?.meta?.chatId).toBe('chat-1');
+
+    const listResponse = await app.inject({
+      method: 'GET',
+      url: '/v1/chats/chat-1/events?after_seq=0&limit=20',
+      headers: authHeader(),
+    });
+
+    expect(listResponse.statusCode).toBe(200);
+    const listPayload = listResponse.json() as { events?: Array<{ text?: string; meta?: { chatId?: string; seq?: number } }> };
+    expect(listPayload.events).toEqual([
+      expect.objectContaining({
+        text: 'chat scoped',
+        meta: expect.objectContaining({
+          chatId: 'chat-1',
+          seq: 1,
+        }),
+      }),
+    ]);
+
+    const compatResponse = await app.inject({
+      method: 'GET',
+      url: `/v3/sessions/${sessionId}/messages?chatId=chat-1&after_seq=0&limit=20`,
+      headers: authHeader(),
+    });
+    expect(compatResponse.statusCode).toBe(200);
+    const compatPayload = compatResponse.json() as { messages?: Array<{ meta?: { chatId?: string; seq?: number } }> };
+    expect(compatPayload.messages?.[0]?.meta?.chatId).toBe('chat-1');
+    expect(compatPayload.messages?.[0]?.meta?.seq).toBe(1);
 
     await app.close();
   });
