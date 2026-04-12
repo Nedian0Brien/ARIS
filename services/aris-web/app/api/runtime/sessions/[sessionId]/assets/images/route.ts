@@ -1,0 +1,210 @@
+import { NextRequest, NextResponse } from 'next/server';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { requireApiUser } from '@/lib/auth/guard';
+import { getHostHomeDir } from '@/lib/fs/pathResolver';
+import { getWorkspaceById } from '@/lib/happy/workspaces';
+import type { ChatImageAttachment } from '@/lib/happy/types';
+
+const CHAT_IMAGE_ASSET_ROOT = path.join(getHostHomeDir(), '.aris', 'chat-assets');
+const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_MULTIPART_REQUEST_BYTES = MAX_IMAGE_UPLOAD_BYTES + 256 * 1024;
+const ALLOWED_IMAGE_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+]);
+const MIME_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+};
+
+function sanitizeFilename(name: string): string {
+  const base = path.basename(name).trim() || 'image';
+  return base.replace(/[^\w.-]+/g, '-');
+}
+
+function normalizeSessionSegment(sessionId: string): string | null {
+  const trimmed = sessionId.trim();
+  if (!trimmed || !/^[A-Za-z0-9._-]+$/.test(trimmed)) {
+    return null;
+  }
+  if (trimmed === '.' || trimmed === '..') {
+    return null;
+  }
+  return trimmed;
+}
+
+function buildAttachment(input: {
+  sessionSegment: string;
+  assetId: string;
+  file: File;
+}): ChatImageAttachment {
+  const safeName = sanitizeFilename(input.file.name);
+  const serverPath = path.join(CHAT_IMAGE_ASSET_ROOT, input.sessionSegment, `${input.assetId}-${safeName}`);
+  return {
+    assetId: input.assetId,
+    kind: 'image',
+    name: safeName,
+    mimeType: input.file.type,
+    size: input.file.size,
+    serverPath,
+    previewUrl: `/api/runtime/sessions/${encodeURIComponent(input.sessionSegment)}/assets/images?path=${encodeURIComponent(serverPath)}`,
+  };
+}
+
+function isAllowedAssetPath(filePath: string): boolean {
+  const resolvedRoot = path.resolve(CHAT_IMAGE_ASSET_ROOT);
+  const resolvedPath = path.resolve(filePath);
+  return resolvedPath === resolvedRoot || resolvedPath.startsWith(`${resolvedRoot}${path.sep}`);
+}
+
+function isAllowedAssetPathForSession(filePath: string, sessionSegment: string): boolean {
+  const sessionRoot = path.resolve(path.join(CHAT_IMAGE_ASSET_ROOT, sessionSegment));
+  const resolvedPath = path.resolve(filePath);
+  return resolvedPath === sessionRoot || resolvedPath.startsWith(`${sessionRoot}${path.sep}`);
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ sessionId: string }> },
+) {
+  const auth = await requireApiUser(request);
+  if ('response' in auth) {
+    return auth.response;
+  }
+
+  if (auth.user.role !== 'operator') {
+    return NextResponse.json({ error: 'Operator role required' }, { status: 403 });
+  }
+
+  const { sessionId } = await params;
+  const sessionSegment = normalizeSessionSegment(sessionId);
+  if (!sessionSegment) {
+    return NextResponse.json({ error: '유효하지 않은 세션 식별자입니다.' }, { status: 400 });
+  }
+  const workspace = await getWorkspaceById(auth.user.id, sessionId);
+  if (!workspace) {
+    return NextResponse.json({ error: '세션을 찾을 수 없습니다.' }, { status: 404 });
+  }
+
+  const contentLength = Number.parseInt(request.headers.get('content-length') ?? '', 10);
+  if (Number.isFinite(contentLength) && contentLength > MAX_MULTIPART_REQUEST_BYTES) {
+    return NextResponse.json({ error: '이미지 파일은 10MB 이하만 업로드할 수 있습니다.' }, { status: 400 });
+  }
+
+  const formData = await request.formData().catch(() => null);
+  const file = formData?.get('file');
+  if (!(file instanceof File) || file.size <= 0) {
+    return NextResponse.json({ error: '이미지 파일이 필요합니다.' }, { status: 400 });
+  }
+
+  if (!ALLOWED_IMAGE_MIME_TYPES.has(file.type)) {
+    return NextResponse.json({ error: '이미지 파일만 업로드할 수 있습니다.' }, { status: 400 });
+  }
+
+  if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+    return NextResponse.json({ error: '이미지 파일은 10MB 이하만 업로드할 수 있습니다.' }, { status: 400 });
+  }
+
+  const assetId = randomUUID();
+  const attachment = buildAttachment({ sessionSegment, assetId, file });
+
+  try {
+    await fs.mkdir(path.dirname(attachment.serverPath), { recursive: true });
+    await fs.writeFile(attachment.serverPath, Buffer.from(await file.arrayBuffer()));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '이미지 저장에 실패했습니다.';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+
+  return NextResponse.json({ attachment });
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ sessionId: string }> },
+) {
+  const auth = await requireApiUser(request);
+  if ('response' in auth) {
+    return auth.response;
+  }
+
+  const { sessionId } = await params;
+  const sessionSegment = normalizeSessionSegment(sessionId);
+  if (!sessionSegment) {
+    return NextResponse.json({ error: '유효하지 않은 세션 식별자입니다.' }, { status: 400 });
+  }
+  const workspace = await getWorkspaceById(auth.user.id, sessionId);
+  if (!workspace) {
+    return NextResponse.json({ error: '세션을 찾을 수 없습니다.' }, { status: 404 });
+  }
+
+  const serverPath = request.nextUrl.searchParams.get('path')?.trim() ?? '';
+  if (!serverPath || !isAllowedAssetPath(serverPath) || !isAllowedAssetPathForSession(serverPath, sessionSegment)) {
+    return NextResponse.json({ error: '유효하지 않은 이미지 경로입니다.' }, { status: 400 });
+  }
+
+  try {
+    const content = await fs.readFile(serverPath);
+    const ext = path.extname(serverPath).slice(1).toLowerCase();
+    return new NextResponse(content, {
+      headers: {
+        'Content-Type': MIME_TYPES[ext] ?? 'application/octet-stream',
+        'Content-Disposition': 'inline',
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '이미지를 읽을 수 없습니다.';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ sessionId: string }> },
+) {
+  const auth = await requireApiUser(request);
+  if ('response' in auth) {
+    return auth.response;
+  }
+
+  if (auth.user.role !== 'operator') {
+    return NextResponse.json({ error: 'Operator role required' }, { status: 403 });
+  }
+
+  const { sessionId } = await params;
+  const sessionSegment = normalizeSessionSegment(sessionId);
+  if (!sessionSegment) {
+    return NextResponse.json({ error: '유효하지 않은 세션 식별자입니다.' }, { status: 400 });
+  }
+  const workspace = await getWorkspaceById(auth.user.id, sessionId);
+  if (!workspace) {
+    return NextResponse.json({ error: '세션을 찾을 수 없습니다.' }, { status: 404 });
+  }
+
+  const body = (await request.json().catch(() => ({}))) as { serverPath?: string };
+  const serverPath = typeof body.serverPath === 'string' ? body.serverPath.trim() : '';
+  if (!serverPath || !isAllowedAssetPath(serverPath) || !isAllowedAssetPathForSession(serverPath, sessionSegment)) {
+    return NextResponse.json({ error: '유효하지 않은 이미지 경로입니다.' }, { status: 400 });
+  }
+
+  try {
+    await fs.unlink(serverPath).catch((error: NodeJS.ErrnoException) => {
+      if (error?.code !== 'ENOENT') {
+        throw error;
+      }
+    });
+    await fs.rmdir(path.dirname(serverPath)).catch(() => {});
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '이미지 삭제에 실패했습니다.';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
+}

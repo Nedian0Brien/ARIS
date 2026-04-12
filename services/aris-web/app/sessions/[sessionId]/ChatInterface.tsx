@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ChangeEvent, ReactNode } from 'react';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
@@ -30,7 +30,9 @@ import {
   mergeRenderablePermissions,
   type RenderablePermissionRequest,
 } from '@/lib/happy/permissions';
+import { readChatImageAttachments, stripImageAttachmentPromptPrefix } from '@/lib/chatImageAttachments';
 import { buildOptimisticUserEvent } from './chatComposer';
+import { buildComposerSubmitText, buildUserMessageMeta } from './chatSubmitPayload';
 import {
   readLastSelectedModelId,
   resolvePreferredModelId,
@@ -61,6 +63,7 @@ import {
   FolderTree,
   Brain,
   Bug,
+  Image as ImageIcon,
   MessageSquarePlus,
   MessageSquareText,
   MoreVertical,
@@ -86,7 +89,7 @@ import {
   X,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import type { AgentFlavor, ApprovalPolicy, PermissionRequest, SessionChat, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
+import type { AgentFlavor, ApprovalPolicy, ChatImageAttachment, PermissionRequest, SessionChat, UiEvent, UiEventKind, UiEventResult } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon, GitLogoIcon, DockerLogoIcon } from '@/components/ui/AgentIcons';
 import { CustomizationSidebar } from './CustomizationSidebar';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
@@ -286,7 +289,8 @@ type ComposerModelId = string;
 
 type ContextItem =
   | { id: string; type: 'file'; path: string; content: string; name: string }
-  | { id: string; type: 'text'; text: string };
+  | { id: string; type: 'text'; text: string }
+  | { id: string; type: 'image'; attachment: ChatImageAttachment };
 type ChatRunPhase = ResolvedChatRunPhase;
 type ChatSidebarState = 'default' | 'running' | 'completed' | 'approval' | 'error';
 type ChatSidebarSectionKey = 'pinned' | 'running' | 'completed' | 'history';
@@ -314,6 +318,7 @@ type ChatSubmittedPayload = {
   geminiMode?: string;
   modelReasoningEffort?: ModelReasoningEffort;
   threadId?: string;
+  attachments?: ChatImageAttachment[];
 };
 type ChatRuntimeUiState = {
   isSubmitting: boolean;
@@ -330,6 +335,10 @@ type WorkspaceFileOpenDetail = {
   name?: string;
   line?: number | null;
 };
+
+function extractImageAttachments(items: ContextItem[]): ChatImageAttachment[] {
+  return items.flatMap((item) => (item.type === 'image' ? [item.attachment] : []));
+}
 type SidebarFileRequest = WorkspaceFileOpenDetail & {
   nonce: number;
 };
@@ -2609,7 +2618,7 @@ function renderEventPayload(
   debugMode: boolean,
 ) {
   if (userEvent) {
-    return <TextReply body={event.body || event.title} isUser />;
+    return <TextReply body={stripImageAttachmentPromptPrefix(event.body || event.title)} isUser />;
   }
 
   if (debugMode) {
@@ -2877,7 +2886,7 @@ export function ChatInterface({
   const [chatMutationLoadingId, setChatMutationLoadingId] = useState<string | null>(null);
   const [chatMutationError, setChatMutationError] = useState<string | null>(null);
   const handleCopyUserMessage = useCallback(async (event: UiEvent) => {
-    const text = (event.body || event.title || '').replace(/\r\n/g, '\n').trim();
+    const text = stripImageAttachmentPromptPrefix((event.body || event.title || '').replace(/\r\n/g, '\n')).trim();
     if (!text) {
       return;
     }
@@ -2929,6 +2938,8 @@ export function ChatInterface({
   const [contextItems, setContextItems] = useState<ContextItem[]>([]);
   const [plusMenuMode, setPlusMenuMode] = useState<'closed' | 'menu' | 'file' | 'text'>('closed');
   const [textContextInput, setTextContextInput] = useState('');
+  const [imageUploadsInFlight, setImageUploadsInFlight] = useState(0);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<ComposerModelId>(() => {
     const sortedInitialChats = sortSessionChats(initialChats);
     const initialChat = (activeChatId && activeChatId.trim().length > 0
@@ -3010,6 +3021,9 @@ export function ChatInterface({
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerDockRef = useRef<HTMLElement>(null);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
+  const composerImageInputRef = useRef<HTMLInputElement>(null);
+  const contextItemsRef = useRef<ContextItem[]>([]);
+  const isSubmittingRef = useRef(false);
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const geminiModeDropdownRef = useRef<HTMLDivElement>(null);
@@ -3028,6 +3042,12 @@ export function ChatInterface({
   const isLeftSidebarOverlayLayout = isMobileLayout
     || (isRightSidebarPinnedLayout && viewportWidth < RIGHT_PIN_PREFERS_LEFT_OVERLAY_MIN_WIDTH_PX);
   const snapshotSyncedEventRef = useRef<Record<string, string>>(buildSnapshotSyncMap(initialChats));
+  useEffect(() => {
+    contextItemsRef.current = contextItems;
+  }, [contextItems]);
+  useEffect(() => {
+    isSubmittingRef.current = isSubmitting;
+  }, [isSubmitting]);
 
   const defaultAgentFlavor = normalizeAgentFlavor(agentFlavor, 'codex');
   const providerSelections = modelSettings?.providers;
@@ -4015,6 +4035,36 @@ export function ChatInterface({
     upsertChatSidebarSnapshot,
   ]);
 
+  const deleteUploadedImageAsset = useCallback((attachment: ChatImageAttachment, keepalive = false) => {
+    void fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/assets/images`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ serverPath: attachment.serverPath }),
+      ...(keepalive ? { keepalive: true } : {}),
+    }).catch(() => {});
+  }, [sessionId]);
+
+  useEffect(() => {
+    const handleDraftCleanup = () => {
+      if (isSubmittingRef.current) {
+        return;
+      }
+      for (const item of contextItemsRef.current) {
+        if (item.type === 'image') {
+          deleteUploadedImageAsset(item.attachment, true);
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleDraftCleanup);
+    window.addEventListener('pagehide', handleDraftCleanup);
+    return () => {
+      handleDraftCleanup();
+      window.removeEventListener('beforeunload', handleDraftCleanup);
+      window.removeEventListener('pagehide', handleDraftCleanup);
+    };
+  }, [deleteUploadedImageAsset]);
+
   useEffect(() => {
     if (plusMenuMode === 'closed' && !isModelDropdownOpen && !isGeminiModeDropdownOpen && !isCommandMenuOpen) return;
     function handleOutsideClick(e: MouseEvent) {
@@ -4035,9 +4085,12 @@ export function ChatInterface({
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [plusMenuMode, isModelDropdownOpen, isGeminiModeDropdownOpen, isCommandMenuOpen]);
 
-  const removeContextItem = useCallback((id: string) => {
-    setContextItems((prev) => prev.filter((item) => item.id !== id));
-  }, []);
+  const removeContextItem = useCallback((itemToRemove: ContextItem) => {
+    if (itemToRemove.type === 'image') {
+      deleteUploadedImageAsset(itemToRemove.attachment);
+    }
+    setContextItems((prev) => prev.filter((item) => item.id !== itemToRemove.id));
+  }, [deleteUploadedImageAsset]);
 
   const handleAddTextContext = useCallback(() => {
     const text = textContextInput.trim();
@@ -4119,6 +4172,49 @@ export function ChatInterface({
       setFileBrowserLoading(false);
     }
   }, []);
+
+  const handleImageUploadOpen = useCallback(() => {
+    if (imageUploadsInFlight > 0) {
+      return;
+    }
+    setPlusMenuMode('closed');
+    setImageUploadError(null);
+    composerImageInputRef.current?.click();
+  }, [imageUploadsInFlight]);
+
+  const handleComposerImageSelection = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) {
+      return;
+    }
+
+    setImageUploadsInFlight((prev) => prev + 1);
+    setImageUploadError(null);
+    try {
+      const formData = new FormData();
+      formData.set('file', file);
+
+      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/assets/images`, {
+        method: 'POST',
+        body: formData,
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        attachment?: ChatImageAttachment;
+        error?: string;
+      };
+      const attachment = payload.attachment;
+      if (!response.ok || !attachment) {
+        throw new Error(payload.error ?? '이미지 업로드에 실패했습니다.');
+      }
+
+      setContextItems((prev) => [...prev, { id: genId(), type: 'image', attachment }]);
+    } catch (error) {
+      setImageUploadError(error instanceof Error ? error.message : '이미지 업로드에 실패했습니다.');
+    } finally {
+      setImageUploadsInFlight((prev) => Math.max(0, prev - 1));
+    }
+  }, [sessionId]);
 
   const markSessionAsRead = useCallback(async () => {
     if (!isSessionSyncLeader) {
@@ -5266,7 +5362,7 @@ export function ChatInterface({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const promptText = prompt.trim();
-    if (!promptText || !isOperator || isAgentRunning || !activeChatIdResolved) return;
+    if (!promptText || !isOperator || isAgentRunning || !activeChatIdResolved || imageUploadsInFlight > 0) return;
     const scopedChatId = activeChatIdResolved;
 
     const hasUserMessageInChat = eventsForChatId === scopedChatId
@@ -5281,15 +5377,26 @@ export function ChatInterface({
     const firstPromptTitle = shouldAutoRenameFromFirstPrompt
       ? buildChatTitleFromFirstPrompt(promptText)
       : null;
-
-    const contextPrefix = contextItems.length > 0
-      ? contextItems.map((item) => (
-        item.type === 'file'
-          ? `<file path="${item.path}">\n${item.content}\n</file>`
-          : `<context>\n${item.text}\n</context>`
-      )).join('\n') + '\n\n'
-      : '';
-    const finalText = contextPrefix + promptText;
+    const imageAttachments = extractImageAttachments(contextItems);
+    const contextBlocks: Array<
+      { type: 'file'; path: string; content: string }
+      | { type: 'text'; text: string }
+    > = contextItems.reduce<Array<
+      { type: 'file'; path: string; content: string }
+      | { type: 'text'; text: string }
+    >>((acc, item) => {
+      if (item.type === 'file') {
+        acc.push({ type: 'file', path: item.path, content: item.content });
+      } else if (item.type === 'text') {
+        acc.push({ type: 'text', text: item.text });
+      }
+      return acc;
+    }, []);
+    const finalText = buildComposerSubmitText({
+      promptText,
+      imageAttachments,
+      contextBlocks,
+    });
     const submitModelId = normalizeModelId(selectedModelId)
       ?? resolveDefaultModelId(activeAgentFlavor, providerSelections, legacyCustomModels, lastSelectedCodexModelId);
     const submitGeminiModeId = activeAgentFlavor === 'gemini'
@@ -5310,6 +5417,7 @@ export function ChatInterface({
       model: submitModelId,
       ...(submitGeminiModeId ? { geminiMode: submitGeminiModeId } : {}),
       ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
+      ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
       text: finalText,
       submittedAt: awaitingSince,
     });
@@ -5331,6 +5439,7 @@ export function ChatInterface({
         ...(submitGeminiModeId ? { geminiMode: submitGeminiModeId } : {}),
         ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
         ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
+        ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
       },
     });
     runtimeStartedSinceAwaitingRef.current = false;
@@ -5357,20 +5466,15 @@ export function ChatInterface({
           type: 'message',
           title: 'User Instruction',
           text: finalText,
-          meta: {
-            role: 'user',
+          meta: buildUserMessageMeta({
             chatId: scopedChatId,
             agent: activeChat?.agent ?? 'codex',
             model: submitModelId,
             ...(submitGeminiModeId ? { geminiMode: submitGeminiModeId } : {}),
-            ...(submitModelReasoningEffort
-              ? {
-                  modelReasoningEffort: submitModelReasoningEffort,
-                  model_reasoning_effort: submitModelReasoningEffort,
-                }
-              : {}),
+            ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
             ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
-          },
+            ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
+          }),
         }),
       });
 
@@ -5473,7 +5577,6 @@ export function ChatInterface({
       return;
     }
     const scopedChatId = lastSubmittedPayload.chatId;
-
     updateChatRuntimeUi(scopedChatId, {
       isSubmitting: true,
       isAwaitingReply: true,
@@ -5486,27 +5589,12 @@ export function ChatInterface({
     disconnectNoticeAwaitingRef.current = null;
 
     try {
-      const response = await fetch(`/api/runtime/sessions/${sessionId}/events`, {
+      const response = await fetch(`/api/runtime/sessions/${sessionId}/actions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: 'message',
-          title: 'User Instruction',
-          text: lastSubmittedPayload.text,
-          meta: {
-            role: 'user',
-            chatId: lastSubmittedPayload.chatId,
-            agent: lastSubmittedPayload.agent,
-            model: lastSubmittedPayload.model,
-            ...(lastSubmittedPayload.geminiMode ? { geminiMode: lastSubmittedPayload.geminiMode } : {}),
-            ...(lastSubmittedPayload.modelReasoningEffort
-              ? {
-                  modelReasoningEffort: lastSubmittedPayload.modelReasoningEffort,
-                  model_reasoning_effort: lastSubmittedPayload.modelReasoningEffort,
-                }
-              : {}),
-            ...(lastSubmittedPayload.threadId ? { threadId: lastSubmittedPayload.threadId } : {}),
-          },
+          action: 'retry',
+          chatId: scopedChatId,
         }),
       });
 
@@ -6314,6 +6402,7 @@ export function ChatInterface({
                         const actionEvent = !userEvent && isActionKind(event.kind);
 
                         if (userEvent) {
+                        const userAttachments = readChatImageAttachments(event.meta);
                         return (
                         <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowUser}`}>
                         <div className={`${styles.msgHeader} ${styles.msgHeaderUser}`}>
@@ -6322,6 +6411,29 @@ export function ChatInterface({
                         </div>
                         <div className={styles.messageBubbleUserStack}>
                           <div className={`${styles.messageBubble} ${styles.messageBubbleUser} ${highlightedEventId === event.id ? styles.messageBubbleHighlight : ''}`}>
+                            {userAttachments.length > 0 && (
+                              <div className={styles.messageAttachmentStrip}>
+                                {userAttachments.map((attachment) => (
+                                  <div key={attachment.assetId} className={styles.messageAttachmentCard}>
+                                    <img
+                                      src={attachment.previewUrl}
+                                      alt={attachment.name}
+                                      className={styles.messageAttachmentImage}
+                                      loading="lazy"
+                                    />
+                                    <div className={styles.messageAttachmentMeta}>
+                                      <span className={styles.messageAttachmentName}>{attachment.name}</span>
+                                      <span className={styles.messageAttachmentSubtle}>
+                                        {attachment.width && attachment.height
+                                          ? `${attachment.width}×${attachment.height} · `
+                                          : ''}
+                                        {Math.max(1, Math.round(attachment.size / 1024))}KB
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                             {renderEventPayload(event, true, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id), isDebugMode)}
                           </div>
                           <button
@@ -6532,14 +6644,25 @@ export function ChatInterface({
                   <div className={styles.composerChips}>
                     {contextItems.map((item) => (
                       <span key={item.id} className={styles.contextChip}>
-                        {item.type === 'file' ? <Paperclip size={11} /> : <AlignLeft size={11} />}
+                        {item.type === 'file' ? (
+                          <Paperclip size={11} />
+                        ) : item.type === 'text' ? (
+                          <AlignLeft size={11} />
+                        ) : (
+                          <img
+                            src={item.attachment.previewUrl}
+                            alt=""
+                            className={styles.contextChipThumb}
+                            loading="lazy"
+                          />
+                        )}
                         <span className={styles.contextChipLabel}>
-                          {item.type === 'file' ? item.name : '텍스트'}
+                          {item.type === 'file' ? item.name : item.type === 'text' ? '텍스트' : item.attachment.name}
                         </span>
                         <button
                           type="button"
                           className={styles.contextChipRemove}
-                          onClick={() => removeContextItem(item.id)}
+                          onClick={() => removeContextItem(item)}
                           aria-label="컨텍스트 제거"
                         >
                           <X size={10} />
@@ -6548,8 +6671,21 @@ export function ChatInterface({
                     ))}
                   </div>
                 )}
+                {imageUploadsInFlight > 0 && (
+                  <div className={styles.composerAttachmentStatus}>이미지 업로드 중...</div>
+                )}
+                {imageUploadError && (
+                  <div className={styles.composerAttachmentError} role="alert">{imageUploadError}</div>
+                )}
 
                 <div className={styles.composerInputRow}>
+                  <input
+                    ref={composerImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={handleComposerImageSelection}
+                  />
                   <div className={styles.plusMenuWrap} ref={plusMenuRef}>
                     <button
                       type="button"
@@ -6565,6 +6701,9 @@ export function ChatInterface({
                       <div className={styles.plusMenu}>
                         {plusMenuMode === 'menu' && (
                           <>
+                            <button type="button" className={styles.plusMenuItem} onClick={handleImageUploadOpen}>
+                              <ImageIcon size={14} /> 사진 업로드
+                            </button>
                             <button type="button" className={styles.plusMenuItem} onClick={() => { handleFileBrowserOpen(); }}>
                               <Paperclip size={14} /> 파일 첨부
                             </button>
@@ -6614,7 +6753,7 @@ export function ChatInterface({
                           ? '메시지를 입력하세요...'
                           : 'Viewer 권한입니다.'
                     }
-                    disabled={!activeChatIdResolved || !isOperator}
+                      disabled={!activeChatIdResolved || !isOperator}
                     className={styles.composerInput}
                   />
 
@@ -6632,7 +6771,7 @@ export function ChatInterface({
                   ) : (
                     <button
                       type="submit"
-                      disabled={!activeChatIdResolved || !prompt.trim() || !isOperator}
+                      disabled={!activeChatIdResolved || !prompt.trim() || !isOperator || imageUploadsInFlight > 0}
                       className={styles.composerSendBtn}
                       aria-label="메시지 전송"
                       title="메시지 전송 (Ctrl/Cmd + Enter)"
