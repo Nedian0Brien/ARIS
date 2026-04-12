@@ -23,6 +23,76 @@ model Session {
   permissions Permission[]
 }
 
+model SessionChat {
+  id                   String   @id
+  sessionId            String
+  userId               String
+  agent                String
+  title                String
+  isPinned             Boolean
+  isDefault            Boolean
+  threadId             String?
+  model                String?
+  geminiMode           String?
+  modelReasoningEffort String?
+  latestPreview        String
+  latestEventId        String?
+  latestEventAt        DateTime?
+  latestEventIsUser    Boolean
+  latestHasErrorSignal Boolean
+  lastReadAt           DateTime?
+  lastReadEventId      String?
+  lastActivityAt       DateTime
+  createdAt            DateTime
+  updatedAt            DateTime
+
+  runs   SessionRun[]
+  events SessionChatEvent[]
+
+  @@index([sessionId, userId, isPinned, lastActivityAt])
+  @@index([userId, updatedAt])
+}
+
+model SessionRun {
+  id          String   @id @default(cuid())
+  sessionId   String
+  chatId      String
+  agent       String
+  model       String?
+  status      String   @default("running")
+  errorMessage String?
+  startedAt   DateTime @default(now())
+  finishedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  chat   SessionChat       @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  events SessionChatEvent[]
+
+  @@index([chatId, status])
+  @@index([sessionId, chatId, startedAt])
+}
+
+model SessionChatEvent {
+  id        String   @id @default(cuid())
+  sessionId String
+  chatId    String
+  runId     String?
+  type      String
+  title     String?
+  text      String
+  meta      Json?
+  seq       Int
+  createdAt DateTime @default(now())
+
+  chat SessionChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  run  SessionRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@unique([chatId, seq])
+  @@index([sessionId, chatId, seq])
+  @@index([chatId, createdAt])
+}
+
 model SessionMessage {
   id        String   @id @default(uuid())
   sessionId String

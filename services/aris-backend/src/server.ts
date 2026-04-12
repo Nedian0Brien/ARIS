@@ -71,6 +71,15 @@ const appendMessageSchema = z.object({
   meta: z.record(z.string(), z.unknown()).optional(),
 });
 
+const appendChatEventSchema = z.object({
+  sessionId: z.string().min(1),
+  runId: z.string().min(1).optional(),
+  type: z.string().min(1),
+  title: z.string().min(1).optional(),
+  text: z.string().min(1),
+  meta: z.record(z.string(), z.unknown()).optional(),
+});
+
 type AppendMessageInput = z.infer<typeof appendMessageSchema>;
 
 type HappyBridgeAppendMessage = {
@@ -213,6 +222,10 @@ function toHappyBridgeMessage(
     type: message.type,
     title: message.title,
   };
+}
+
+function supportsChatScopedRuntime(session: { metadata?: { runtimeModel?: string } }): boolean {
+  return session.metadata?.runtimeModel === 'chat-stream';
 }
 
 export function buildServer(config: ServerConfig) {
@@ -473,6 +486,18 @@ export function buildServer(config: ServerConfig) {
       const chatId = typeof query.chatId === 'string' && query.chatId.trim().length > 0
         ? query.chatId.trim()
         : undefined;
+      if (chatId) {
+        const events = await store.listChatEvents(chatId, {
+          afterSeq: afterCursor,
+          limit,
+        });
+        const cursor = events.reduce((max, event) => {
+          const seqRaw = (event.meta as { seq?: unknown } | undefined)?.seq;
+          const seq = typeof seqRaw === 'number' ? seqRaw : Number.parseInt(String(seqRaw ?? ''), 10);
+          return Number.isFinite(seq) && seq > max ? seq : max;
+        }, afterCursor);
+        return { events, cursor };
+      }
       const payload = await store.listRealtimeEvents(sessionId, {
         afterCursor,
         limit,
@@ -491,7 +516,12 @@ export function buildServer(config: ServerConfig) {
   app.get('/v3/sessions/:sessionId/messages', async (request, reply) => {
     try {
       const { sessionId } = request.params as { sessionId: string };
-      const { after_seq, after_id, limit } = request.query as { after_seq?: string; after_id?: string; limit?: string };
+      const { after_seq, after_id, limit, chatId: chatIdRaw } = request.query as {
+        after_seq?: string;
+        after_id?: string;
+        limit?: string;
+        chatId?: string;
+      };
       const session = await store.getSession(sessionId);
       if (!session) {
         return reply.code(404).send({ error: 'Session not found' });
@@ -506,6 +536,32 @@ export function buildServer(config: ServerConfig) {
       const pageLimit = Number.isFinite(parsedLimit) && parsedLimit > 0
         ? Math.min(1000, parsedLimit)
         : undefined;
+      const chatId = typeof chatIdRaw === 'string' && chatIdRaw.trim().length > 0
+        ? chatIdRaw.trim()
+        : undefined;
+
+      if (chatId) {
+        let chatMessages = await store.listChatEvents(chatId, {
+          ...(afterSeq !== undefined ? { afterSeq } : {}),
+          ...(pageLimit !== undefined ? { limit: pageLimit } : {}),
+        });
+        if (afterId) {
+          const pivot = chatMessages.findIndex((message) => message.id === afterId);
+          chatMessages = pivot >= 0 ? chatMessages.slice(pivot + 1) : chatMessages;
+        }
+        const lastSeq = chatMessages.reduce((max, message) => {
+          const seqRaw = (message.meta as { seq?: unknown } | undefined)?.seq;
+          const seq = typeof seqRaw === 'number' ? seqRaw : Number.parseInt(String(seqRaw ?? ''), 10);
+          if (!Number.isFinite(seq) || seq <= max) {
+            return max;
+          }
+          return seq;
+        }, 0);
+        return {
+          messages: chatMessages,
+          ...(lastSeq > 0 ? { lastSeq } : {}),
+        };
+      }
 
       const readLimit = pageLimit ? pageLimit + 1 : undefined;
       const rawMessages = await store.listMessages(sessionId, {
@@ -540,8 +596,26 @@ export function buildServer(config: ServerConfig) {
     if (bridgeMessages) {
       try {
         const createdMessages = [];
+        const session = await store.getSession(sessionId);
+        if (!session) {
+          return reply.code(404).send({ error: 'Session not found' });
+        }
         for (const bridgeMessage of bridgeMessages) {
-          const createdMessage = await store.appendMessage(sessionId, bridgeMessage.input);
+          const chatId = typeof bridgeMessage.input.meta?.chatId === 'string' && bridgeMessage.input.meta.chatId.trim().length > 0
+            ? bridgeMessage.input.meta.chatId.trim()
+            : undefined;
+          if (chatId && !supportsChatScopedRuntime(session)) {
+            return reply.code(409).send({ error: 'Legacy sessions are read-only for chat-scoped runtime writes.' });
+          }
+          const createdMessage = chatId
+            ? await store.appendChatEvent(chatId, {
+                sessionId,
+                type: bridgeMessage.input.type,
+                title: bridgeMessage.input.title,
+                text: bridgeMessage.input.text,
+                meta: bridgeMessage.input.meta,
+              })
+            : await store.appendMessage(sessionId, bridgeMessage.input);
           createdMessages.push(
             toHappyBridgeMessage(createdMessage, bridgeMessage.localId, bridgeMessage.content),
           );
@@ -563,13 +637,79 @@ export function buildServer(config: ServerConfig) {
     }
 
     try {
-      const message = await store.appendMessage(sessionId, parsed.data);
+      const session = await store.getSession(sessionId);
+      if (!session) {
+        return reply.code(404).send({ error: 'Session not found' });
+      }
+      const chatId = typeof parsed.data.meta?.chatId === 'string' && parsed.data.meta.chatId.trim().length > 0
+        ? parsed.data.meta.chatId.trim()
+        : undefined;
+      if (chatId && !supportsChatScopedRuntime(session)) {
+        return reply.code(409).send({ error: 'Legacy sessions are read-only for chat-scoped runtime writes.' });
+      }
+      const message = chatId
+        ? await store.appendChatEvent(chatId, {
+            sessionId,
+            type: parsed.data.type,
+            title: parsed.data.title,
+            text: parsed.data.text,
+            meta: parsed.data.meta,
+          })
+        : await store.appendMessage(sessionId, parsed.data);
       return reply.code(201).send({ message });
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
         return reply.code(404).send({ error: 'Session not found' });
       }
       const message = toErrorMessage(error, 'Failed to append session message');
+      return reply.code(502).send({ error: message });
+    }
+  });
+
+  app.get('/v1/chats/:chatId/events', async (request, reply) => {
+    try {
+      const { chatId } = request.params as { chatId: string };
+      const { after_seq, limit } = request.query as { after_seq?: string; limit?: string };
+      const parsedAfterSeq = Number.parseInt(String(after_seq ?? ''), 10);
+      const parsedLimit = Number.parseInt(String(limit ?? ''), 10);
+      const afterSeq = Number.isFinite(parsedAfterSeq) && parsedAfterSeq >= 0 ? parsedAfterSeq : undefined;
+      const pageLimit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(1000, parsedLimit) : undefined;
+      const events = await store.listChatEvents(chatId, {
+        ...(afterSeq !== undefined ? { afterSeq } : {}),
+        ...(pageLimit !== undefined ? { limit: pageLimit } : {}),
+      });
+      return { events };
+    } catch (error) {
+      const message = toErrorMessage(error, 'Failed to list chat events');
+      return reply.code(502).send({ error: message });
+    }
+  });
+
+  app.post('/v1/chats/:chatId/events', async (request, reply) => {
+    const { chatId } = request.params as { chatId: string };
+    const parsed = appendChatEventSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid request body' });
+    }
+
+    try {
+      const session = await store.getSession(parsed.data.sessionId);
+      if (!session) {
+        return reply.code(404).send({ error: 'Session not found' });
+      }
+      if (!supportsChatScopedRuntime(session)) {
+        return reply.code(409).send({ error: 'Legacy sessions are read-only for chat-scoped runtime writes.' });
+      }
+      const event = await store.appendChatEvent(chatId, parsed.data);
+      return reply.code(201).send({ event });
+    } catch (error) {
+      if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
+        return reply.code(404).send({ error: 'Session not found' });
+      }
+      if (error instanceof Error && error.message === 'CHAT_NOT_FOUND') {
+        return reply.code(404).send({ error: 'Chat not found' });
+      }
+      const message = toErrorMessage(error, 'Failed to append chat event');
       return reply.code(502).send({ error: message });
     }
   });

@@ -63,31 +63,17 @@ describe('mobile home/workspace layout overflow guards', () => {
     expect(workspaceHomeCss).toMatch(/@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?\.chatItemPreview\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
   });
 
-  it('groups workspace status chat titles into a shrinkable text column', () => {
-    expect(dashboardTsx).toMatch(/className=\{styles\.sessionMiniTextGroup\}/);
-    expect(dashboardCss).toMatch(/\.sessionMiniTextGroup\s*\{[^}]*flex:\s*1;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniTextGroup\s*\{[^}]*min-width:\s*0;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniSubName\s*\{[^}]*max-width:\s*100%;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniSubName\s*\{[^}]*flex-shrink:\s*1;/s);
+  it('does not render the removed workspace status mini-list markup', () => {
+    expect(dashboardTsx).not.toMatch(/className=\{styles\.sessionMiniTextGroup\}/);
+    expect(dashboardTsx).not.toMatch(/chatStats\.runningSample\.map\(chat =>/);
+    expect(dashboardTsx).not.toMatch(/chatStats\.completedSample\.map\(chat =>/);
   });
 
-  it('uses width-based ellipsis for recent completed chat titles', () => {
+  it('does not rely on legacy JS truncation for the removed workspace status mini-list', () => {
     expect(dashboardTsx).not.toMatch(/const WORKSPACE_STATUS_COMPLETED_TITLE_MAX_LEN = \d+;/);
     expect(dashboardTsx).not.toMatch(/function truncateWorkspaceStatusCompletedTitle\(title: string\)/);
-    expect(dashboardTsx).toMatch(/chatStats\.completedSample\.map\(chat =>/);
-    expect(dashboardTsx).toMatch(/className=\{styles\.sessionMiniName\}>\{chat\.title\}<\/span>/);
-    expect(dashboardCss).toMatch(/\.sessionMiniName\s*\{[^}]*text-overflow:\s*ellipsis;/s);
     expect(dashboardCss).toMatch(/\.sessionSidebarCard\s*\{[^}]*max-width:\s*100%;/s);
     expect(dashboardCss).toMatch(/\.sessionDashboardSidebar\s*\{[^}]*max-width:\s*100%;/s);
     expect(dashboardCss).toMatch(/\.sessionDashboardSidebar\s*\{[^}]*min-width:\s*0;/s);
-    expect(dashboardCss).toMatch(/\.sessionStatusSubSection\s*\{[^}]*max-width:\s*100%;/s);
-    expect(dashboardCss).toMatch(/\.sessionStatusSubSection\s*\{[^}]*min-width:\s*0;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniList\s*\{[^}]*width:\s*100%;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniList\s*\{[^}]*max-width:\s*100%;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniItem\s*\{[^}]*width:\s*100%;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniItem\s*\{[^}]*max-width:\s*100%;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniTextGroup\s*\{[^}]*max-width:\s*100%;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniName\s*\{[^}]*display:\s*block;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniName\s*\{[^}]*max-width:\s*100%;/s);
   });
 });

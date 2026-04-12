@@ -309,11 +309,15 @@ async function fetchSessionMessagesPage(
     afterSeq?: number;
     afterId?: string;
     limit: number;
+    chatId?: string;
   },
 ): Promise<{ messages: unknown[]; hasMore: boolean; lastSeq: number }> {
   const params: Record<string, string> = {
     limit: String(clampHappyMessagesWindow(options.limit)),
   };
+  if (typeof options.chatId === 'string' && options.chatId.trim().length > 0) {
+    params.chatId = options.chatId.trim();
+  }
   if (typeof options.afterId === 'string' && options.afterId) {
     params.after_id = options.afterId;
   } else {
@@ -345,7 +349,7 @@ async function fetchSessionMessagesPage(
   };
 }
 
-async function listAllSessionMessages(sessionId: string): Promise<unknown[]> {
+async function listAllSessionMessages(sessionId: string, chatId?: string): Promise<unknown[]> {
   let afterSeq = 0;
   const allMessages: unknown[] = [];
 
@@ -353,6 +357,7 @@ async function listAllSessionMessages(sessionId: string): Promise<unknown[]> {
     const pageResult = await fetchSessionMessagesPage(sessionId, {
       afterSeq,
       limit: HAPPY_MESSAGES_BATCH_LIMIT,
+      ...(chatId ? { chatId } : {}),
     });
     const batch = pageResult.messages;
     if (batch.length === 0) {
@@ -384,6 +389,7 @@ async function listRecentSessionMessages(
     const page = await fetchSessionMessagesPage(sessionId, {
       afterSeq,
       limit: recentWindow,
+      ...(chatId ? { chatId } : {}),
     });
     if (page.messages.length === 0) {
       return [];
@@ -445,7 +451,8 @@ async function listMessagesForAfterCursor(
 
   // Fast path: use after_id for a single DB-level query when the cursor is a UUID
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(options.after);
-  if (isUuid) {
+  const chatId = typeof options.chatId === 'string' ? options.chatId.trim() : '';
+  if (isUuid && !chatId) {
     const page = await fetchSessionMessagesPage(sessionId, {
       afterId: options.after,
       limit: recentWindow,
@@ -463,6 +470,7 @@ async function listMessagesForAfterCursor(
     const page = await fetchSessionMessagesPage(sessionId, {
       afterSeq,
       limit: recentWindow,
+      ...(chatId ? { chatId } : {}),
     });
     if (page.messages.length === 0) {
       break;
@@ -698,12 +706,12 @@ export async function getSessionEvents(
   let messages: unknown[];
   if (latestSeq !== null && !resolvedOptions.before && !resolvedOptions.after) {
     const recent = await listRecentSessionMessages(sessionId, latestSeq, resolvedOptions);
-    messages = recent ?? await listAllSessionMessages(sessionId);
+    messages = recent ?? await listAllSessionMessages(sessionId, resolvedOptions.chatId);
   } else if (latestSeq !== null && resolvedOptions.after && !resolvedOptions.before) {
     const recentAfter = await listMessagesForAfterCursor(sessionId, latestSeq, resolvedOptions);
-    messages = recentAfter ?? await listAllSessionMessages(sessionId);
+    messages = recentAfter ?? await listAllSessionMessages(sessionId, resolvedOptions.chatId);
   } else {
-    messages = await listAllSessionMessages(sessionId);
+    messages = await listAllSessionMessages(sessionId, resolvedOptions.chatId);
   }
 
   const sessionDetail = normalizeSessionDetail(found);
@@ -749,10 +757,10 @@ export async function streamSessionEvents(
   let messages: unknown[];
   if (options.after) {
     const recentAfter = await listMessagesForAfterCursor(sessionId, latestSeq, options);
-    messages = recentAfter ?? await listAllSessionMessages(sessionId);
+    messages = recentAfter ?? await listAllSessionMessages(sessionId, options.chatId);
   } else {
     const recent = await listRecentSessionMessages(sessionId, latestSeq, options);
-    messages = recent ?? await listAllSessionMessages(sessionId);
+    messages = recent ?? await listAllSessionMessages(sessionId, options.chatId);
   }
 
   const filteredOptions: GetSessionEventsOptions = {
@@ -778,18 +786,32 @@ export async function appendSessionMessage(input: {
   text: string;
   meta?: Record<string, unknown>;
 }): Promise<UiEvent> {
-  const raw = await fetchHappy(`/v3/sessions/${encodeURIComponent(input.sessionId)}/messages`, {
-    method: 'POST',
-    body: JSON.stringify({
-      type: input.type,
-      title: input.title,
-      text: input.text,
-      meta: input.meta,
-    }),
-  });
+  const chatId = typeof input.meta?.chatId === 'string' && input.meta.chatId.trim().length > 0
+    ? input.meta.chatId.trim()
+    : null;
+  const raw = chatId
+    ? await fetchHappy(`/v1/chats/${encodeURIComponent(chatId)}/events`, {
+        method: 'POST',
+        body: JSON.stringify({
+          sessionId: input.sessionId,
+          type: input.type,
+          title: input.title,
+          text: input.text,
+          meta: input.meta,
+        }),
+      })
+    : await fetchHappy(`/v3/sessions/${encodeURIComponent(input.sessionId)}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({
+          type: input.type,
+          title: input.title,
+          text: input.text,
+          meta: input.meta,
+        }),
+      });
 
   const obj = asObject(raw);
-  const message = obj?.message;
+  const message = obj?.message ?? obj?.event;
   const normalized = normalizeEvents(message ? [message] : []);
   if (normalized[0]) {
     return normalized[0];
