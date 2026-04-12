@@ -1255,8 +1255,10 @@ export function SessionDashboard({
                           {chatStats.runningSample.map(chat => (
                             <div key={chat.id} className={styles.sessionMiniItem}>
                               <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: 'var(--chart-status-running)' }} />
-                              <span className={styles.sessionMiniName}>{chat.title}</span>
-                              <span className={styles.sessionMiniSubName}>{chat.sessionName}</span>
+                              <span className={styles.sessionMiniTextGroup}>
+                                <span className={styles.sessionMiniName}>{chat.title}</span>
+                                <span className={styles.sessionMiniSubName}>{chat.sessionName}</span>
+                              </span>
                             </div>
                           ))}
                         </div>
@@ -1274,8 +1276,10 @@ export function SessionDashboard({
                               title={`${chat.title} — ${chat.sessionName}`}
                             >
                               <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: 'var(--chart-status-completed)' }} />
-                              <span className={styles.sessionMiniName}>{chat.title}</span>
-                              <span className={styles.sessionMiniSubName}>{chat.sessionName}</span>
+                              <span className={styles.sessionMiniTextGroup}>
+                                <span className={styles.sessionMiniName}>{chat.title}</span>
+                                <span className={styles.sessionMiniSubName}>{chat.sessionName}</span>
+                              </span>
                             </div>
                           ))}
                         </div>

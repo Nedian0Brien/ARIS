@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
-async function login(page) {
+test.setTimeout(90_000);
+
+async function login(page: Page) {
   const email = process.env.MOBILE_OVERFLOW_EMAIL;
   const password = process.env.MOBILE_OVERFLOW_PASSWORD;
 
@@ -8,15 +11,19 @@ async function login(page) {
     throw new Error('MOBILE_OVERFLOW_EMAIL and MOBILE_OVERFLOW_PASSWORD are required');
   }
 
-  await page.goto('/login', { waitUntil: 'networkidle' });
-  await page.locator('input[type="email"]').fill(email);
-  await page.locator('input[type="password"]').fill(password);
-  await page.getByRole('button', { name: /sign in/i }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'));
-  await page.waitForLoadState('networkidle');
+  const response = await page.request.post('/api/auth/login', {
+    data: { email, password, rememberMe: false },
+  });
+  const body = await response.json();
+
+  if (!response.ok || body?.status !== 'success') {
+    throw new Error(`login failed: ${response.status()} ${JSON.stringify(body)}`);
+  }
+
+  await page.goto('/', { waitUntil: 'networkidle' });
 }
 
-async function resolveFirstSessionPath(page) {
+async function resolveFirstSessionPath(page: Page) {
   const sessionId = await page.evaluate(async () => {
     const response = await fetch('/api/runtime/sessions', { credentials: 'include' });
     if (!response.ok) {
@@ -31,7 +38,7 @@ async function resolveFirstSessionPath(page) {
   return sessionId ? `/sessions/${sessionId}` : null;
 }
 
-async function collectOverflow(page, path: string) {
+async function collectOverflow(page: Page, path: string) {
   await page.goto(path, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
   await page.screenshot({
@@ -45,9 +52,12 @@ async function collectOverflow(page, path: string) {
     const queryMetrics = (selector: string) => {
       const element = document.querySelector(selector) as HTMLElement | null;
       if (!element) return null;
+      const rect = element.getBoundingClientRect();
       return {
         clientWidth: element.clientWidth,
         scrollWidth: element.scrollWidth,
+        left: Number(rect.left.toFixed(2)),
+        right: Number(rect.right.toFixed(2)),
       };
     };
 
@@ -96,15 +106,19 @@ async function collectOverflow(page, path: string) {
       dashboardLayout: (() => {
         const element = document.querySelector('[class*="sessionDashboardLayout"]') as HTMLElement | null;
         if (!element) return null;
+        const rect = element.getBoundingClientRect();
         return {
           clientWidth: element.clientWidth,
           scrollWidth: element.scrollWidth,
           gridTemplateColumns: window.getComputedStyle(element).gridTemplateColumns,
+          left: Number(rect.left.toFixed(2)),
+          right: Number(rect.right.toFixed(2)),
         };
       })(),
       appShell: queryMetrics('.app-shell'),
       workspaceHomeRoot: queryMetrics('[class*="WorkspaceHome_homeRoot"]'),
       chatShell: queryMetrics('[class*="ChatInterface_chatShell"]'),
+      dashboardSidebarCard: queryMetrics('[class*="SessionDashboard_sessionSidebarCard"]'),
       workspaceHomeOffenders: offenders.filter((offender) => String(offender?.className ?? '').includes('WorkspaceHome_')),
       offenders,
     };
@@ -114,7 +128,7 @@ async function collectOverflow(page, path: string) {
 test('home and workspace pages stay within the mobile viewport width', async ({ page }) => {
   await login(page);
 
-  const paths = ['/'];
+  const paths = ['/', '/?tab=console', '/?tab=files', '/?tab=settings'];
   const sessionPath = await resolveFirstSessionPath(page);
   if (sessionPath) {
     paths.push(sessionPath);
@@ -133,10 +147,16 @@ test('home and workspace pages stay within the mobile viewport width', async ({ 
     if (path === '/') {
       expect(report.dashboardTitleRow?.clientWidth, `${path} title row width: ${JSON.stringify(report)}`).toBeLessThanOrEqual(report.viewportWidth + 1);
       expect(report.dashboardLayout?.clientWidth, `${path} dashboard width: ${JSON.stringify(report)}`).toBeLessThanOrEqual(report.viewportWidth + 1);
-    } else {
+      expect(report.dashboardLayout?.left, `${path} dashboard left gutter: ${JSON.stringify(report)}`).toBeGreaterThanOrEqual(12);
+      expect(report.viewportWidth - (report.dashboardLayout?.right ?? report.viewportWidth), `${path} dashboard right gutter: ${JSON.stringify(report)}`).toBeGreaterThanOrEqual(12);
+      expect(report.dashboardSidebarCard?.left, `${path} dashboard card left gutter: ${JSON.stringify(report)}`).toBeGreaterThanOrEqual(12);
+      expect(report.viewportWidth - (report.dashboardSidebarCard?.right ?? report.viewportWidth), `${path} dashboard card right gutter: ${JSON.stringify(report)}`).toBeGreaterThanOrEqual(12);
+    } else if (path.startsWith('/sessions/')) {
       expect(report.workspaceHomeRoot?.clientWidth, `${path} workspace home width: ${JSON.stringify(report)}`).toBeLessThanOrEqual(report.viewportWidth + 1);
       expect(report.chatShell?.clientWidth, `${path} chat shell width: ${JSON.stringify(report)}`).toBeLessThanOrEqual(report.viewportWidth + 1);
       expect(report.workspaceHomeOffenders, `${path} workspace home offender overflow: ${JSON.stringify(report)}`).toEqual([]);
+    } else {
+      expect(report.appShell?.clientWidth, `${path} app shell width: ${JSON.stringify(report)}`).toBeLessThanOrEqual(report.viewportWidth + 1);
     }
   }
 });
