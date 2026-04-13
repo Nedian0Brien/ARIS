@@ -15,6 +15,9 @@ export type SessionSummary = {
   approvalPolicy?: ApprovalPolicy;
   alias?: string | null;
   isPinned?: boolean;
+  metadata?: {
+    runtimeModel?: string;
+  };
   // 채팅 집계 (API route에서 주입, happy 서버에서 오지 않음)
   chatAgentCounts?: { claude: number; codex: number; gemini: number; unknown: number };
   totalChats?: number;
