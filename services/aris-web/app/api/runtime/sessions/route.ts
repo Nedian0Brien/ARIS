@@ -174,7 +174,12 @@ export async function POST(request: NextRequest) {
     }
 
     const existingSessions = await listSessions();
-    const existing = existingSessions.find((session) => normalizeProjectPath(session.projectName) === normalizedPath);
+    const existing = existingSessions.find((session) => {
+      if (normalizeProjectPath(session.projectName) !== normalizedPath) {
+        return false;
+      }
+      return session.metadata?.runtimeModel === 'chat-stream';
+    });
     if (existing) {
       await syncWorkspacesForUser(auth.user.id, [existing]);
       return NextResponse.json({ session: existing, reused: true });
