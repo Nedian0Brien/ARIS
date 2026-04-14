@@ -1212,7 +1212,132 @@ export function SessionDashboard({
                   <div className={styles.serverMetricError}>실시간 지표 갱신 실패: {serverMetricsError}</div>
                 )}
 	              </Card>
-	
+
+                {/* Session & Agent Stats Row */}
+                <div className={styles.sessionStatsGrid}>
+                  {/* Session Status */}
+                  <Card className={styles.sessionSidebarCard}>
+                    <h3 className={styles.sessionSidebarTitle}>
+                      <Terminal size={16} color="var(--accent-violet)" /> 워크스페이스 현황
+                    </h3>
+                    {/* 바 차트 — idle 세그먼트 없음 */}
+                    <div className={styles.sessionSummaryBarChart} role="img" aria-label="채팅 상태 요약">
+                      {chatTotal > 0 ? (
+                        <>
+                          <div style={{ width: `${(chatRunning / chatTotal) * 100}%`, backgroundColor: SESSION_UI_STATUS_META.running.color }} className={styles.sessionBarSegment} />
+                          <div style={{ width: `${(chatPending / chatTotal) * 100}%`, backgroundColor: SESSION_UI_STATUS_META.pending.color }} className={styles.sessionBarSegment} />
+                          <div style={{ width: `${(chatCompleted / chatTotal) * 100}%`, backgroundColor: SESSION_UI_STATUS_META.completed.color }} className={styles.sessionBarSegment} />
+                        </>
+                      ) : null}
+                    </div>
+
+                    {/* 레전드 — idle 없음 */}
+                    <div className={styles.sessionSummaryLegend}>
+                      {[
+                        { status: 'running' as const, count: chatRunning },
+                        { status: 'pending' as const, count: chatPending },
+                        { status: 'completed' as const, count: chatCompleted },
+                      ].map(({ status, count }) => (
+                        <div key={status} className={styles.sessionSummaryLegendItem}>
+                          <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: SESSION_UI_STATUS_META[status].color }} />
+                          <span>{SESSION_UI_STATUS_META[status].label}</span>
+                          <strong>{count}</strong>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* 채팅 리스트 섹션 */}
+                    <div className={styles.sessionStatusLists}>
+                      <div className={styles.sessionStatusSubSection}>
+                        <h4 className={styles.sessionStatusSubTitle}>진행 중인 채팅</h4>
+                        {chatStats && chatStats.runningSample.length > 0 ? (
+                          <div className={styles.sessionMiniList}>
+                            {chatStats.runningSample.map(chat => (
+                              <div key={chat.id} className={styles.sessionMiniItem}>
+                                <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: 'var(--chart-status-running)' }} />
+                                <span className={styles.sessionMiniTextGroup}>
+                                  <span className={styles.sessionMiniName}>{chat.title}</span>
+                                  <span className={styles.sessionMiniSubName}>{chat.sessionName}</span>
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : <p className={styles.sessionEmptyHint}>없음</p>}
+                      </div>
+                      <div className={styles.sessionStatusSubSection}>
+                        <h4 className={styles.sessionStatusSubTitle}>최근 완료</h4>
+                        {chatStats && chatStats.completedSample.length > 0 ? (
+                          <div className={styles.sessionMiniList}>
+                            {chatStats.completedSample.map(chat => (
+                              <div
+                                key={chat.id}
+                                className={`${styles.sessionMiniItem} ${styles.sessionMiniItemClickable}`}
+                                onClick={() => router.push(`/sessions/${chat.sessionId}?chat=${chat.id}`)}
+                                title={`${chat.title} — ${chat.sessionName}`}
+                              >
+                                <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: 'var(--chart-status-completed)' }} />
+                                <span className={styles.sessionMiniTextGroup}>
+                                  <span className={styles.sessionMiniName}>{chat.title}</span>
+                                  <span className={styles.sessionMiniSubName}>{chat.sessionName}</span>
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : <p className={styles.sessionEmptyHint}>없음</p>}
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Agent Distribution */}
+                  <Card className={styles.sessionSidebarCard}>
+                    <h4 className={styles.sessionSidebarTitle}>채팅 에이전트 분포</h4>
+                    <div className={styles.agentStatsContent}>
+                      <div className={styles.agentDonutWrap}>
+                        <div className={styles.agentDonutChart}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={agentDistributionData}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius="62%"
+                                outerRadius="86%"
+                                startAngle={90}
+                                endAngle={-270}
+                                dataKey="value"
+                                animationBegin={0}
+                                animationDuration={800}
+                                stroke="none"
+                                paddingAngle={1}
+                                cornerRadius={8}
+                              >
+                                {agentDistributionData.map((entry, index) => (
+                                  <Cell key={`agent-cell-${index}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                            </PieChart>
+                          </ResponsiveContainer>
+                          <div className={styles.agentDonutCenter}>
+                            <div className={styles.agentDonutValue}>{totalChatCount}</div>
+                            <div className={styles.agentDonutLabel}>chats</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className={styles.agentSummaryLegend}>
+                        {AGENT_OPTIONS.map((agent) => (
+                          <div key={`agent-legend-${agent.id}`} className={styles.agentSummaryLegendItem}>
+                            <div className={styles.agentSummaryLegendInfo}>
+                              <span className={styles.sessionSummaryLegendDot} style={{ backgroundColor: agent.accentColor }} />
+                              <span>{agent.label}</span>
+                            </div>
+                            <strong>{chatStats?.agentDistribution[agent.id as 'claude' | 'codex' | 'gemini'] ?? 0}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+
 	            </aside>
 	            <section className={styles.sessionDashboardMain}>
               <div className={styles.sessionMainToolbar}>

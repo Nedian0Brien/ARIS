@@ -63,15 +63,19 @@ describe('mobile home/workspace layout overflow guards', () => {
     expect(workspaceHomeCss).toMatch(/@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?\.chatItemPreview\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
   });
 
-  it('does not render the removed workspace status mini-list markup', () => {
-    expect(dashboardTsx).not.toMatch(/className=\{styles\.sessionMiniTextGroup\}/);
-    expect(dashboardTsx).not.toMatch(/chatStats\.runningSample\.map\(chat =>/);
-    expect(dashboardTsx).not.toMatch(/chatStats\.completedSample\.map\(chat =>/);
-  });
-
-  it('does not rely on legacy JS truncation for the removed workspace status mini-list', () => {
-    expect(dashboardTsx).not.toMatch(/const WORKSPACE_STATUS_COMPLETED_TITLE_MAX_LEN = \d+;/);
-    expect(dashboardTsx).not.toMatch(/function truncateWorkspaceStatusCompletedTitle\(title: string\)/);
+  it('renders the workspace status mini-list with overflow guards', () => {
+    expect(dashboardTsx).toMatch(/className=\{styles\.sessionMiniTextGroup\}/);
+    expect(dashboardTsx).toMatch(/chatStats\.runningSample\.map\(chat =>/);
+    expect(dashboardTsx).toMatch(/chatStats\.completedSample\.map\(chat =>/);
+    expect(dashboardCss).toMatch(/\.sessionMiniList\s*\{[^}]*max-width:\s*100%;/s);
+    expect(dashboardCss).toMatch(/\.sessionMiniItem\s*\{[^}]*min-width:\s*0;/s);
+    expect(dashboardCss).toMatch(/\.sessionMiniTextGroup\s*\{[^}]*min-width:\s*0;/s);
+    expect(dashboardCss).toMatch(/\.sessionMiniName\s*\{[^}]*overflow:\s*hidden;/s);
+    expect(dashboardCss).toMatch(/\.sessionMiniName\s*\{[^}]*text-overflow:\s*ellipsis;/s);
+    expect(dashboardCss).toMatch(/\.sessionMiniName\s*\{[^}]*white-space:\s*nowrap;/s);
+    expect(dashboardCss).toMatch(/\.sessionMiniSubName\s*\{[^}]*overflow:\s*hidden;/s);
+    expect(dashboardCss).toMatch(/\.sessionMiniSubName\s*\{[^}]*text-overflow:\s*ellipsis;/s);
+    expect(dashboardCss).toMatch(/\.sessionMiniSubName\s*\{[^}]*white-space:\s*nowrap;/s);
     expect(dashboardCss).toMatch(/\.sessionSidebarCard\s*\{[^}]*max-width:\s*100%;/s);
     expect(dashboardCss).toMatch(/\.sessionDashboardSidebar\s*\{[^}]*max-width:\s*100%;/s);
     expect(dashboardCss).toMatch(/\.sessionDashboardSidebar\s*\{[^}]*min-width:\s*0;/s);
