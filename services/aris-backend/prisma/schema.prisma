@@ -120,6 +120,7 @@ model Permission {
   reason      String
   risk        String
   state       String    @default("pending")
+  decision    String?
   requestedAt DateTime  @default(now())
   decidedAt   DateTime?
 

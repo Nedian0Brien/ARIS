@@ -240,6 +240,7 @@ export function buildServer(config: ServerConfig) {
     `http://127.0.0.1:${config.PORT}`,
     config.RUNTIME_API_TOKEN,
   );
+  Object.assign(app, { arisRuntimeStore: store });
   const rateLimitBuckets = new Map<string, RequestBucket>();
 
   const isRateLimitExceeded = (path: string, ip: string): boolean => {

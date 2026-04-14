@@ -67,10 +67,16 @@ deploy/
 ### Backend only
 
 ```bash
+cd services/aris-backend && npx prisma migrate deploy && cd /home/ubuntu/project/ARIS
 DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_backend_zero_downtime.sh
 ```
 
 This builds `services/aris-backend`, stages runtime files under `.runtime/aris-backend`, then reloads PM2 in cluster mode.
+
+When the backend release contains Prisma schema changes:
+- Run `npx prisma migrate deploy` in `services/aris-backend` before the backend deploy script.
+- Keep `ARIS_BACKEND_DRAIN_TIMEOUT_MS` aligned with the maximum time you want in-flight agent runs to survive a PM2 reload.
+- `deploy/ecosystem.config.cjs` now maps `ARIS_BACKEND_DRAIN_TIMEOUT_MS` to PM2 `kill_timeout`, so reloads wait for run draining instead of terminating immediately.
 
 ### Web only
 
@@ -90,6 +96,7 @@ Default behavior:
 Useful overrides:
 
 ```bash
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ARIS_BACKEND_DRAIN_TIMEOUT_MS=600000 ./deploy/deploy_backend_zero_downtime.sh
 DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env WEB_DRAIN_SECONDS=12 ./deploy/deploy_web.sh
 DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env PULL_BASE=1 ./deploy/deploy_web.sh
 DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env SKIP_BUILD_IF_UNCHANGED=0 ./deploy/deploy_web.sh
@@ -111,6 +118,11 @@ docker compose --env-file /home/ubuntu/.config/aris/prod.env logs --tail=120 ari
 pm2 logs aris-backend --lines 120 --nostream
 curl -sS http://127.0.0.1:4080/health
 ```
+
+Recommended runtime continuity checks after a backend deploy:
+- Start a long-running agent turn and confirm `/v1/sessions/{id}/runtime` stays `isRunning=true` during `pm2 startOrReload`.
+- While the old worker is draining, approve one pending permission and confirm the turn resumes instead of hanging.
+- Trigger `abort` or disconnected-chat `retry` once during the drain window and confirm the action is honored by the active run/new worker.
 
 Current web routing expectations:
 - Production traffic: `https://aris.lawdigest.cloud` through nginx

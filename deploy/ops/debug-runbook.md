@@ -103,6 +103,34 @@ DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env \
 
 ---
 
+## 재배포 중 런타임 연속성 검증
+
+백엔드가 PM2 reload 되는 동안 진행 중인 에이전트 run이 유지되는지 확인할 때는 아래 순서를 사용한다.
+
+```bash
+# 1) 대상 세션/채팅의 isRunning 확인
+./deploy/ops/debug-session-status.sh <sessionId> <chatId>
+
+# 2) 같은 시점에 백엔드 reload 수행
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env \
+  ARIS_BACKEND_DRAIN_TIMEOUT_MS=600000 \
+  ./deploy/deploy_backend_zero_downtime.sh
+
+# 3) reload 직후에도 isRunning 유지되는지 재확인
+./deploy/ops/debug-session-status.sh <sessionId> <chatId>
+
+# 4) permission 승인/abort/retry 후 로그에서 후속 이벤트 확인
+pm2 logs aris-backend --lines 200 --nostream
+./deploy/ops/debug-chat-log.sh <chatId>
+```
+
+체크 포인트:
+- reload 직후에도 `isRunning=true` 가 유지되어야 한다.
+- pending permission을 승인하면 old worker가 결정을 받아 turn이 계속 진행되어야 한다.
+- `abort` 또는 disconnected-chat `retry` 요청은 DB에 기록된 뒤 active run/new worker에 반영되어야 한다.
+
+---
+
 ## 로그 파일 위치 및 형식
 
 ```

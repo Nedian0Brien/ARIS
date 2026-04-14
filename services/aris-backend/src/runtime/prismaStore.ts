@@ -170,6 +170,7 @@ function toPermissionRequest(row: {
   reason: string;
   risk: string;
   state: string;
+  decision?: string | null;
   requestedAt: Date;
 }): PermissionRequest {
   return {
@@ -182,6 +183,9 @@ function toPermissionRequest(row: {
     risk: row.risk as PermissionRisk,
     state: row.state as PermissionRequest['state'],
     requestedAt: row.requestedAt.toISOString(),
+    ...(typeof row.decision === 'string' && row.decision.trim().length > 0
+      ? { decision: row.decision as PermissionDecision }
+      : {}),
   };
 }
 
@@ -635,6 +639,115 @@ export class PrismaRuntimeStore {
     return rows.map(toPermissionRequest);
   }
 
+  async getLatestUserMessageForAction(sessionId: string, chatId?: string): Promise<AppendMessageInput | null> {
+    const normalizedChatId = typeof chatId === 'string' && chatId.trim().length > 0
+      ? chatId.trim()
+      : null;
+    if (normalizedChatId) {
+      const db = this.db as any;
+      const row = await db.sessionChatEvent.findFirst({
+        where: {
+          sessionId,
+          chatId: normalizedChatId,
+          meta: {
+            path: ['role'],
+            equals: 'user',
+          },
+        },
+        orderBy: { seq: 'desc' },
+      });
+      if (!row) {
+        return null;
+      }
+      return {
+        type: row.type,
+        title: row.title ?? undefined,
+        text: row.text,
+        meta: {
+          ...(row.meta && typeof row.meta === 'object' && !Array.isArray(row.meta) ? row.meta as Record<string, unknown> : {}),
+          chatId: row.chatId,
+          ...(row.runId ? { runId: row.runId } : {}),
+        },
+      };
+    }
+
+    const row = await this.db.sessionMessage.findFirst({
+      where: {
+        sessionId,
+        meta: {
+          path: ['role'],
+          equals: 'user',
+        },
+      },
+      orderBy: { seq: 'desc' },
+    });
+    if (!row) {
+      return null;
+    }
+    return {
+      type: row.type,
+      title: row.title ?? undefined,
+      text: row.text,
+      meta: row.meta && typeof row.meta === 'object' && !Array.isArray(row.meta)
+        ? row.meta as Record<string, unknown>
+        : undefined,
+    };
+  }
+
+  async getPermissionById(permissionId: string): Promise<PermissionRequest | null> {
+    const row = await this.db.permission.findUnique({
+      where: { id: permissionId },
+    });
+    return row ? toPermissionRequest(row) : null;
+  }
+
+  async hasRequestedAction(input: {
+    sessionId: string;
+    action: SessionAction;
+    chatId?: string;
+    createdAfter?: Date;
+  }): Promise<boolean> {
+    const normalizedChatId = typeof input.chatId === 'string' && input.chatId.trim().length > 0
+      ? input.chatId.trim()
+      : null;
+    const createdAfter = input.createdAfter instanceof Date && Number.isFinite(input.createdAfter.getTime())
+      ? input.createdAfter
+      : null;
+    const row = await this.db.sessionMessage.findFirst({
+      where: {
+        sessionId: input.sessionId,
+        ...(createdAfter ? { createdAt: { gt: createdAfter } } : {}),
+        ...(normalizedChatId
+          ? {
+              meta: {
+                path: ['action'],
+                equals: input.action,
+              },
+            }
+          : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, meta: true },
+    });
+
+    if (!row) {
+      return false;
+    }
+
+    const meta = row.meta && typeof row.meta === 'object' && !Array.isArray(row.meta)
+      ? row.meta as Record<string, unknown>
+      : {};
+    const action = typeof meta.action === 'string' ? meta.action.trim() : '';
+    const chatId = typeof meta.chatId === 'string' ? meta.chatId.trim() : '';
+    if (action !== input.action) {
+      return false;
+    }
+    if (normalizedChatId && chatId !== normalizedChatId) {
+      return false;
+    }
+    return true;
+  }
+
   async createPermission(input: CreatePermissionInput): Promise<PermissionRequest> {
     const session = await this.db.session.findUnique({ where: { id: input.sessionId } });
     if (!session) throw new Error('SESSION_NOT_FOUND');
@@ -649,6 +762,7 @@ export class PrismaRuntimeStore {
         reason: input.reason,
         risk: input.risk,
         state: 'pending',
+        decision: null,
       },
     });
     return toPermissionRequest(row);
@@ -662,6 +776,7 @@ export class PrismaRuntimeStore {
       where: { id: permissionId },
       data: {
         state: decision === 'deny' ? 'denied' : 'approved',
+        decision,
         decidedAt: new Date(),
       },
     });

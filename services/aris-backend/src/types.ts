@@ -62,4 +62,5 @@ export type PermissionRequest = {
   risk: PermissionRisk;
   requestedAt: string;
   state: PermissionState;
+  decision?: PermissionDecision | null;
 };

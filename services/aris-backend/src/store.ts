@@ -67,6 +67,7 @@ interface RuntimeStoreBackend {
     chatId: string,
     input: { sessionId: string; runId?: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
   ): Promise<RuntimeMessage>;
+  getLatestUserMessageForAction?(sessionId: string, chatId?: string): Promise<AppendMessageInput | null>;
   applySessionAction(sessionId: string, action: SessionAction, chatId?: string): Promise<{ accepted: boolean; message: string; at: string }>;
   isSessionRunning(sessionId: string, chatId?: string): Promise<boolean>;
   listPermissions(state?: PermissionRequest['state']): Promise<PermissionRequest[]>;
@@ -84,6 +85,8 @@ type RuntimeExecutor = Pick<
   | 'createPermission'
   | 'decidePermission'
   | 'getGeminiSessionCapabilities'
+  | 'beginShutdownDrain'
+  | 'awaitDrain'
 >;
 
 class MockRuntimeStore implements RuntimeStoreBackend {
@@ -303,6 +306,40 @@ class MockRuntimeStore implements RuntimeStoreBackend {
     return message;
   }
 
+  async getLatestUserMessageForAction(sessionId: string, chatId?: string): Promise<AppendMessageInput | null> {
+    if (chatId && chatId.trim().length > 0) {
+      const events = this.chatEvents.get(chatId.trim()) ?? [];
+      for (let index = events.length - 1; index >= 0; index -= 1) {
+        const event = events[index];
+        const role = typeof event.meta?.role === 'string' ? event.meta.role.trim() : '';
+        if (event.sessionId === sessionId && role === 'user') {
+          return {
+            type: event.type,
+            title: event.title,
+            text: event.text,
+            meta: event.meta,
+          };
+        }
+      }
+      return null;
+    }
+
+    const messages = this.messages.get(sessionId) ?? [];
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      const role = typeof message.meta?.role === 'string' ? message.meta.role.trim() : '';
+      if (role === 'user') {
+        return {
+          type: message.type,
+          title: message.title,
+          text: message.text,
+          meta: message.meta,
+        };
+      }
+    }
+    return null;
+  }
+
   async applySessionAction(sessionId: string, action: SessionAction, _chatId?: string): Promise<{ accepted: boolean; message: string; at: string }> {
     const session = this.sessions.get(sessionId);
     if (!session) {
@@ -435,6 +472,23 @@ export class RuntimeStore {
         token: runtimeApiToken ?? '',
         workspaceRoot: defaultProjectPath,
         hostProjectsRoot: hostProjectsRoot ?? '',
+        coordinationStore: {
+          listPermissions: (state) => this.delegate.listPermissions(state),
+          createPermission: (input) => this.delegate.createPermission(input),
+          decidePermission: (permissionId, decision) => this.delegate.decidePermission(permissionId, decision),
+          getPermissionById: (permissionId) => {
+            if (this.delegate instanceof PrismaRuntimeStore) {
+              return this.delegate.getPermissionById(permissionId);
+            }
+            return Promise.resolve(null);
+          },
+          hasRequestedAction: (input) => {
+            if (this.delegate instanceof PrismaRuntimeStore) {
+              return this.delegate.hasRequestedAction(input);
+            }
+            return Promise.resolve(false);
+          },
+        },
       });
       return;
     }
@@ -546,6 +600,16 @@ export class RuntimeStore {
 
   async applySessionAction(sessionId: string, action: SessionAction, chatId?: string) {
     if (this.runtimeExecutor) {
+      if (action === 'retry' || action === 'resume') {
+        const result = await this.delegate.applySessionAction(sessionId, action, chatId);
+        const latestUserMessage = typeof this.delegate.getLatestUserMessageForAction === 'function'
+          ? await this.delegate.getLatestUserMessageForAction(sessionId, chatId)
+          : null;
+        if (latestUserMessage) {
+          await this.runtimeExecutor.triggerPersistedUserMessage(sessionId, latestUserMessage);
+        }
+        return result;
+      }
       if (action === 'kill') {
         await this.runtimeExecutor.applySessionAction(sessionId, 'abort');
         return this.delegate.applySessionAction(sessionId, action, chatId);
@@ -558,9 +622,24 @@ export class RuntimeStore {
 
   async isSessionRunning(sessionId: string, chatId?: string) {
     if (this.runtimeExecutor) {
-      return this.runtimeExecutor.isSessionRunning(sessionId, chatId);
+      const [runtimeRunning, persistedRunning] = await Promise.all([
+        this.runtimeExecutor.isSessionRunning(sessionId, chatId),
+        this.delegate.isSessionRunning(sessionId, chatId),
+      ]);
+      return runtimeRunning || persistedRunning;
     }
     return this.delegate.isSessionRunning(sessionId, chatId);
+  }
+
+  beginShutdownDrain(): void {
+    this.runtimeExecutor?.beginShutdownDrain();
+  }
+
+  async awaitDrain(timeoutMs: number): Promise<void> {
+    if (!this.runtimeExecutor) {
+      return;
+    }
+    await this.runtimeExecutor.awaitDrain(timeoutMs);
   }
 
   async listPermissions(state?: PermissionRequest['state']) {
@@ -579,7 +658,23 @@ export class RuntimeStore {
 
   async decidePermission(permissionId: string, decision: PermissionDecision) {
     if (this.runtimeExecutor) {
-      return this.runtimeExecutor.decidePermission(permissionId, decision);
+      const updated = await this.runtimeExecutor.decidePermission(permissionId, decision);
+      const normalizedChatId = typeof updated.chatId === 'string' && updated.chatId.trim().length > 0
+        ? updated.chatId.trim()
+        : undefined;
+      if (
+        decision !== 'deny'
+        && typeof this.delegate.getLatestUserMessageForAction === 'function'
+      ) {
+        const runtimeStillRunning = await this.runtimeExecutor.isSessionRunning(updated.sessionId, normalizedChatId);
+        if (!runtimeStillRunning) {
+          const latestUserMessage = await this.delegate.getLatestUserMessageForAction(updated.sessionId, normalizedChatId);
+          if (latestUserMessage) {
+            await this.runtimeExecutor.triggerPersistedUserMessage(updated.sessionId, latestUserMessage);
+          }
+        }
+      }
+      return updated;
     }
     return this.delegate.decidePermission(permissionId, decision);
   }
