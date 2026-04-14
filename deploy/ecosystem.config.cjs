@@ -84,6 +84,15 @@ function resolveBackendInstances() {
   return value;
 }
 
+function resolveBackendKillTimeout() {
+  const raw = resolveEnvValue('ARIS_BACKEND_DRAIN_TIMEOUT_MS', '600000');
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isFinite(value) || value < 5000) {
+    return 600000;
+  }
+  return value;
+}
+
 module.exports = {
   apps: [
     {
@@ -93,7 +102,7 @@ module.exports = {
       exec_mode: 'cluster',
       instances: resolveBackendInstances(),
       listen_timeout: 10000,
-      kill_timeout: 5000,
+      kill_timeout: resolveBackendKillTimeout(),
       env: {
         NODE_ENV: 'production',
         HOST: '0.0.0.0',

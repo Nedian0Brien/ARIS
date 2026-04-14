@@ -84,6 +84,8 @@ type RuntimeExecutor = Pick<
   | 'createPermission'
   | 'decidePermission'
   | 'getGeminiSessionCapabilities'
+  | 'beginShutdownDrain'
+  | 'awaitDrain'
 >;
 
 class MockRuntimeStore implements RuntimeStoreBackend {
@@ -435,6 +437,23 @@ export class RuntimeStore {
         token: runtimeApiToken ?? '',
         workspaceRoot: defaultProjectPath,
         hostProjectsRoot: hostProjectsRoot ?? '',
+        coordinationStore: {
+          listPermissions: (state) => this.delegate.listPermissions(state),
+          createPermission: (input) => this.delegate.createPermission(input),
+          decidePermission: (permissionId, decision) => this.delegate.decidePermission(permissionId, decision),
+          getPermissionById: (permissionId) => {
+            if (this.delegate instanceof PrismaRuntimeStore) {
+              return this.delegate.getPermissionById(permissionId);
+            }
+            return Promise.resolve(null);
+          },
+          hasRequestedAction: (input) => {
+            if (this.delegate instanceof PrismaRuntimeStore) {
+              return this.delegate.hasRequestedAction(input);
+            }
+            return Promise.resolve(false);
+          },
+        },
       });
       return;
     }
@@ -558,9 +577,24 @@ export class RuntimeStore {
 
   async isSessionRunning(sessionId: string, chatId?: string) {
     if (this.runtimeExecutor) {
-      return this.runtimeExecutor.isSessionRunning(sessionId, chatId);
+      const [runtimeRunning, persistedRunning] = await Promise.all([
+        this.runtimeExecutor.isSessionRunning(sessionId, chatId),
+        this.delegate.isSessionRunning(sessionId, chatId),
+      ]);
+      return runtimeRunning || persistedRunning;
     }
     return this.delegate.isSessionRunning(sessionId, chatId);
+  }
+
+  beginShutdownDrain(): void {
+    this.runtimeExecutor?.beginShutdownDrain();
+  }
+
+  async awaitDrain(timeoutMs: number): Promise<void> {
+    if (!this.runtimeExecutor) {
+      return;
+    }
+    await this.runtimeExecutor.awaitDrain(timeoutMs);
   }
 
   async listPermissions(state?: PermissionRequest['state']) {

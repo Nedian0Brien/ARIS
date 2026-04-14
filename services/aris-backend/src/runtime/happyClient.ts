@@ -179,6 +179,19 @@ type HappyRuntimePermissionInput = {
   risk: PermissionRisk;
 };
 
+type RuntimeCoordinationStore = {
+  listPermissions(state?: PermissionState): Promise<PermissionRequest[]>;
+  createPermission(input: HappyRuntimePermissionInput): Promise<PermissionRequest>;
+  decidePermission(permissionId: string, decision: PermissionDecision): Promise<PermissionRequest>;
+  getPermissionById(permissionId: string): Promise<PermissionRequest | null>;
+  hasRequestedAction(input: {
+    sessionId: string;
+    action: SessionAction;
+    chatId?: string;
+    createdAfter?: Date;
+  }): Promise<boolean>;
+};
+
 type SessionRealtimeEventRecord = {
   cursor: number;
   event: RuntimeMessage;
@@ -1499,23 +1512,50 @@ export class HappyRuntimeStore {
   private readonly sessionRealtimeEvents = new Map<string, SessionRealtimeEventRecord[]>();
   private readonly sessionRealtimeCursor = new Map<string, number>();
   private readonly geminiPartialTextStates = new Map<string, GeminiPartialTextState>();
+  private readonly coordinationStore: RuntimeCoordinationStore | null;
 
   private readonly serverUrl: string;
   private readonly serverToken: string;
   private readonly workspaceRoot: string;
   private readonly hostProjectsRoot: string;
   private readonly happyEventLogger: HappyEventLogger;
+  private draining = false;
 
   // listSessions() 응답을 1초간 캐시하여 getSession() 호출 시 happy-server 왕복을 줄임
   private sessionListCache: { sessions: RuntimeSession[]; expiresAt: number } | null = null;
   private readonly SESSION_LIST_CACHE_TTL_MS = 1_000;
 
-  constructor(opts: { serverUrl: string; token: string; workspaceRoot?: string; hostProjectsRoot?: string }) {
+  constructor(opts: {
+    serverUrl: string;
+    token: string;
+    workspaceRoot?: string;
+    hostProjectsRoot?: string;
+    coordinationStore?: RuntimeCoordinationStore | null;
+  }) {
     this.serverUrl = opts.serverUrl.replace(/\/+$/, '');
     this.serverToken = opts.token;
     this.workspaceRoot = (opts.workspaceRoot || '/workspace').replace(/\/+$/, '');
     this.hostProjectsRoot = (opts.hostProjectsRoot || '').replace(/\/+$/, '');
+    this.coordinationStore = opts.coordinationStore ?? null;
     this.happyEventLogger = new HappyEventLogger(HAPPY_EVENT_LOG_DIR, HAPPY_EVENT_LOG_MAX_BYTES);
+  }
+
+  beginShutdownDrain(): void {
+    this.draining = true;
+  }
+
+  async awaitDrain(timeoutMs: number): Promise<void> {
+    const deadline = Date.now() + Math.max(0, timeoutMs);
+    while (Date.now() <= deadline) {
+      if (this.getActiveRunCount() === 0) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+
+  private getActiveRunCount(): number {
+    return this.activeRuns.size + this.claudeSessionRegistry.activeRunCount();
   }
 
   private resolveSessionApprovalPolicy(session: RuntimeSession): ApprovalPolicy {
@@ -1668,10 +1708,43 @@ export class HappyRuntimeStore {
     }
   }
 
+  private async waitForPersistedPermissionDecision(
+    permissionId: string,
+    signal?: AbortSignal,
+  ): Promise<PermissionDecision> {
+    if (!this.coordinationStore) {
+      throw new Error('PERSISTED_PERMISSION_COORDINATION_UNAVAILABLE');
+    }
+
+    while (true) {
+      if (signal?.aborted) {
+        throw new Error('The operation was aborted');
+      }
+
+      const persisted = await this.coordinationStore.getPermissionById(permissionId);
+      if (!persisted) {
+        throw new Error('PERMISSION_NOT_FOUND');
+      }
+      this.permissions.set(permissionId, persisted);
+      if (persisted.state === 'denied') {
+        return 'deny';
+      }
+      if (persisted.state === 'approved') {
+        return persisted.decision === 'allow_session' ? 'allow_session' : 'allow_once';
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+  }
+
   private async awaitProviderPermissionDecision(
     permissionId: string,
     signal?: AbortSignal,
   ): Promise<PermissionDecision> {
+    if (this.coordinationStore) {
+      return this.waitForPersistedPermissionDecision(permissionId, signal);
+    }
+
     const knownDecision = this.providerPermissionDecisions.get(permissionId);
     if (knownDecision) {
       return knownDecision;
@@ -1709,6 +1782,70 @@ export class HappyRuntimeStore {
       });
       signal?.addEventListener('abort', handleAbort, { once: true });
     });
+  }
+
+  private watchExternalPermissionDecision(input: {
+    permissionId: string;
+    responder: (decision: PermissionDecision) => Promise<void>;
+    signal?: AbortSignal;
+  }): void {
+    if (!this.coordinationStore) {
+      return;
+    }
+
+    void this.waitForPersistedPermissionDecision(input.permissionId, input.signal)
+      .then((decision) => input.responder(decision))
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.includes('aborted')) {
+          console.error(`failed to resolve persisted permission decision: ${message}`);
+        }
+      });
+  }
+
+  private monitorExternalAbortSignal(input: {
+    sessionId: string;
+    chatId?: string;
+    startedAt: number;
+    controller: AbortController;
+  }): () => void {
+    if (!this.coordinationStore) {
+      return () => {};
+    }
+
+    let disposed = false;
+    const startedAt = new Date(input.startedAt);
+    const tick = async () => {
+      if (disposed || input.controller.signal.aborted) {
+        return;
+      }
+      try {
+        const abortRequested = await this.coordinationStore!.hasRequestedAction({
+          sessionId: input.sessionId,
+          action: 'abort',
+          ...(input.chatId ? { chatId: input.chatId } : {}),
+          createdAfter: startedAt,
+        });
+        if (abortRequested && !input.controller.signal.aborted) {
+          input.controller.abort();
+          return;
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`failed to poll external abort signal: ${message}`);
+      }
+      if (!disposed && !input.controller.signal.aborted) {
+        const timer = setTimeout(() => {
+          void tick();
+        }, 500);
+        timer.unref?.();
+      }
+    };
+
+    void tick();
+    return () => {
+      disposed = true;
+    };
   }
 
   private async handleProviderPermissionRequest(input: {
@@ -2869,7 +3006,15 @@ export class HappyRuntimeStore {
       if (knownPermissionId) {
         const knownPermission = this.permissions.get(knownPermissionId);
         if (knownPermission?.state === 'pending') {
-          this.codexPermissionResponders.set(knownPermissionId, responder);
+          if (this.coordinationStore) {
+            this.watchExternalPermissionDecision({
+              permissionId: knownPermissionId,
+              responder,
+              signal,
+            });
+          } else {
+            this.codexPermissionResponders.set(knownPermissionId, responder);
+          }
           runtimePermissionIds.add(knownPermissionId);
           if (autoApproveAll) {
             await this.decidePermission(knownPermissionId, 'allow_session');
@@ -2889,7 +3034,15 @@ export class HappyRuntimeStore {
       });
 
       this.codexPermissionIndex.set(key, created.id);
-      this.codexPermissionResponders.set(created.id, responder);
+      if (this.coordinationStore) {
+        this.watchExternalPermissionDecision({
+          permissionId: created.id,
+          responder,
+          signal,
+        });
+      } else {
+        this.codexPermissionResponders.set(created.id, responder);
+      }
       runtimePermissionIds.add(created.id);
       if (autoApproveAll) {
         await this.decidePermission(created.id, 'allow_session');
@@ -3479,7 +3632,16 @@ export class HappyRuntimeStore {
 
         const existing = this.permissions.get(permissionId);
         if (existing?.state === 'pending') {
-          this.permissions.set(permissionId, { ...existing, state: 'denied' });
+          if (this.coordinationStore) {
+            try {
+              const denied = await this.coordinationStore.decidePermission(permissionId, 'deny');
+              this.permissions.set(permissionId, denied);
+            } catch {
+              this.permissions.set(permissionId, { ...existing, state: 'denied', decision: 'deny' });
+            }
+          } else {
+            this.permissions.set(permissionId, { ...existing, state: 'denied', decision: 'deny' });
+          }
         }
       }
 
@@ -4074,6 +4236,12 @@ export class HappyRuntimeStore {
       agent: flavor,
       ...(selectedModel ? { model: selectedModel } : {}),
       ...(selectedGeminiMode ? { geminiMode: selectedGeminiMode } : {}),
+    });
+    const stopExternalAbortWatcher = this.monitorExternalAbortSignal({
+      sessionId: session.id,
+      ...(scopedChatId ? { chatId: scopedChatId } : {}),
+      startedAt: Date.now(),
+      controller,
     });
 
     try {
@@ -4729,6 +4897,7 @@ export class HappyRuntimeStore {
         ...(selectedModel ? { model: selectedModel } : {}),
       });
     } finally {
+      stopExternalAbortWatcher();
       if (flavor === 'gemini') {
         this.clearGeminiRealtimePartialsForScope({
           sessionId: session.id,
@@ -5121,6 +5290,13 @@ export class HappyRuntimeStore {
   }
 
   async listPermissions(state?: PermissionState): Promise<PermissionRequest[]> {
+    if (this.coordinationStore) {
+      const persisted = await this.coordinationStore.listPermissions(state);
+      for (const permission of persisted) {
+        this.permissions.set(permission.id, permission);
+      }
+      return persisted;
+    }
     const list = [...this.permissions.values()].sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
     return state ? list.filter((permission) => permission.state === state) : list;
   }
@@ -5131,19 +5307,21 @@ export class HappyRuntimeStore {
       throw new Error('SESSION_NOT_FOUND');
     }
 
-    const permission: PermissionRequest = {
-      id: randomUUID(),
-      sessionId: input.sessionId,
-      ...(typeof input.chatId === 'string' && input.chatId.trim().length > 0
-        ? { chatId: input.chatId.trim() }
-        : {}),
-      agent: input.agent,
-      command: input.command,
-      reason: input.reason,
-      risk: input.risk,
-      requestedAt: new Date().toISOString(),
-      state: 'pending',
-    };
+    const permission = this.coordinationStore
+      ? await this.coordinationStore.createPermission(input)
+      : {
+          id: randomUUID(),
+          sessionId: input.sessionId,
+          ...(typeof input.chatId === 'string' && input.chatId.trim().length > 0
+            ? { chatId: input.chatId.trim() }
+            : {}),
+          agent: input.agent,
+          command: input.command,
+          reason: input.reason,
+          risk: input.risk,
+          requestedAt: new Date().toISOString(),
+          state: 'pending' as const,
+        };
 
     this.permissions.set(permission.id, permission);
     await this.persistPermissionEvent(permission, 'permission_request');
@@ -5158,13 +5336,21 @@ export class HappyRuntimeStore {
   }
 
   async decidePermission(permissionId: string, decision: PermissionDecision): Promise<PermissionRequest> {
-    const permission = this.permissions.get(permissionId);
+    const knownPermission = this.permissions.get(permissionId);
+    const permission = knownPermission
+      ?? await this.coordinationStore?.getPermissionById(permissionId)
+      ?? null;
     if (!permission) {
       throw new Error('PERMISSION_NOT_FOUND');
     }
 
-    const state: PermissionState = decision === 'deny' ? 'denied' : 'approved';
-    const updated = { ...permission, state };
+    const updated = this.coordinationStore
+      ? await this.coordinationStore.decidePermission(permissionId, decision)
+      : {
+          ...permission,
+          state: (decision === 'deny' ? 'denied' : 'approved') as PermissionState,
+          decision,
+        };
     this.permissions.set(permissionId, updated);
     await this.persistPermissionEvent(updated, 'permission_decision', decision);
 

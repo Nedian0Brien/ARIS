@@ -103,4 +103,8 @@ export class ClaudeSessionRegistry implements ClaudeSessionOwner {
     }
     return false;
   }
+
+  activeRunCount(): number {
+    return this.runs.size;
+  }
 }
