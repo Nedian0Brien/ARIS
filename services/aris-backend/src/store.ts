@@ -67,6 +67,7 @@ interface RuntimeStoreBackend {
     chatId: string,
     input: { sessionId: string; runId?: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
   ): Promise<RuntimeMessage>;
+  getLatestUserMessageForAction?(sessionId: string, chatId?: string): Promise<AppendMessageInput | null>;
   applySessionAction(sessionId: string, action: SessionAction, chatId?: string): Promise<{ accepted: boolean; message: string; at: string }>;
   isSessionRunning(sessionId: string, chatId?: string): Promise<boolean>;
   listPermissions(state?: PermissionRequest['state']): Promise<PermissionRequest[]>;
@@ -303,6 +304,40 @@ class MockRuntimeStore implements RuntimeStoreBackend {
     session.updatedAt = message.createdAt;
     this.sessions.set(input.sessionId, session);
     return message;
+  }
+
+  async getLatestUserMessageForAction(sessionId: string, chatId?: string): Promise<AppendMessageInput | null> {
+    if (chatId && chatId.trim().length > 0) {
+      const events = this.chatEvents.get(chatId.trim()) ?? [];
+      for (let index = events.length - 1; index >= 0; index -= 1) {
+        const event = events[index];
+        const role = typeof event.meta?.role === 'string' ? event.meta.role.trim() : '';
+        if (event.sessionId === sessionId && role === 'user') {
+          return {
+            type: event.type,
+            title: event.title,
+            text: event.text,
+            meta: event.meta,
+          };
+        }
+      }
+      return null;
+    }
+
+    const messages = this.messages.get(sessionId) ?? [];
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      const role = typeof message.meta?.role === 'string' ? message.meta.role.trim() : '';
+      if (role === 'user') {
+        return {
+          type: message.type,
+          title: message.title,
+          text: message.text,
+          meta: message.meta,
+        };
+      }
+    }
+    return null;
   }
 
   async applySessionAction(sessionId: string, action: SessionAction, _chatId?: string): Promise<{ accepted: boolean; message: string; at: string }> {
@@ -565,6 +600,16 @@ export class RuntimeStore {
 
   async applySessionAction(sessionId: string, action: SessionAction, chatId?: string) {
     if (this.runtimeExecutor) {
+      if (action === 'retry' || action === 'resume') {
+        const result = await this.delegate.applySessionAction(sessionId, action, chatId);
+        const latestUserMessage = typeof this.delegate.getLatestUserMessageForAction === 'function'
+          ? await this.delegate.getLatestUserMessageForAction(sessionId, chatId)
+          : null;
+        if (latestUserMessage) {
+          await this.runtimeExecutor.triggerPersistedUserMessage(sessionId, latestUserMessage);
+        }
+        return result;
+      }
       if (action === 'kill') {
         await this.runtimeExecutor.applySessionAction(sessionId, 'abort');
         return this.delegate.applySessionAction(sessionId, action, chatId);

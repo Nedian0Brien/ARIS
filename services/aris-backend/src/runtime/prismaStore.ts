@@ -639,6 +639,61 @@ export class PrismaRuntimeStore {
     return rows.map(toPermissionRequest);
   }
 
+  async getLatestUserMessageForAction(sessionId: string, chatId?: string): Promise<AppendMessageInput | null> {
+    const normalizedChatId = typeof chatId === 'string' && chatId.trim().length > 0
+      ? chatId.trim()
+      : null;
+    if (normalizedChatId) {
+      const db = this.db as any;
+      const row = await db.sessionChatEvent.findFirst({
+        where: {
+          sessionId,
+          chatId: normalizedChatId,
+          meta: {
+            path: ['role'],
+            equals: 'user',
+          },
+        },
+        orderBy: { seq: 'desc' },
+      });
+      if (!row) {
+        return null;
+      }
+      return {
+        type: row.type,
+        title: row.title ?? undefined,
+        text: row.text,
+        meta: {
+          ...(row.meta && typeof row.meta === 'object' && !Array.isArray(row.meta) ? row.meta as Record<string, unknown> : {}),
+          chatId: row.chatId,
+          ...(row.runId ? { runId: row.runId } : {}),
+        },
+      };
+    }
+
+    const row = await this.db.sessionMessage.findFirst({
+      where: {
+        sessionId,
+        meta: {
+          path: ['role'],
+          equals: 'user',
+        },
+      },
+      orderBy: { seq: 'desc' },
+    });
+    if (!row) {
+      return null;
+    }
+    return {
+      type: row.type,
+      title: row.title ?? undefined,
+      text: row.text,
+      meta: row.meta && typeof row.meta === 'object' && !Array.isArray(row.meta)
+        ? row.meta as Record<string, unknown>
+        : undefined,
+    };
+  }
+
   async getPermissionById(permissionId: string): Promise<PermissionRequest | null> {
     const row = await this.db.permission.findUnique({
       where: { id: permissionId },
