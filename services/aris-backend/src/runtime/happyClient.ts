@@ -2561,22 +2561,23 @@ export class HappyRuntimeStore {
     meta: Record<string, unknown> = {},
     options: { type?: string; title?: string } = {},
   ): Promise<void> {
-    const cleanedText = trimOutput(text.replace(/\n?0;\s*$/g, '').trim());
-    const localId = `aris-agent-${randomUUID()}`;
-    const type = options.type ?? 'message';
-    const title = options.title ?? (type === 'message' ? 'Text Reply' : 'Command Execution');
-    const content = JSON.stringify({
-      role: 'agent',
-      title,
-      text: cleanedText,
-      type,
-      meta: {
-        source: 'cli-agent',
-        ...meta,
-      },
-    });
-
     try {
+      const textStr = typeof text === 'string' ? text : String(text ?? '');
+      const cleanedText = trimOutput(textStr.replace(/\n?0;\s*$/g, '').trim());
+      const localId = `aris-agent-${randomUUID()}`;
+      const type = options.type ?? 'message';
+      const title = options.title ?? (type === 'message' ? 'Text Reply' : 'Command Execution');
+      const content = JSON.stringify({
+        role: 'agent',
+        title,
+        text: cleanedText,
+        type,
+        meta: {
+          source: 'cli-agent',
+          ...meta,
+        },
+      });
+
       await this.request<HappyMessageResponse>(`/v3/sessions/${encodeURIComponent(sessionId)}/messages`, {
         method: 'POST',
         body: JSON.stringify({

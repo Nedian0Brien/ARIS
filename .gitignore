@@ -20,3 +20,6 @@ services/aris-backend/.env.bak-*
 
 **/logs/
 services/aris-backend/logs/
+.omc
+
+services/aris-web/test-results/
