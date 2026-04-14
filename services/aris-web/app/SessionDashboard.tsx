@@ -15,6 +15,7 @@ import { extractLastDirectoryName } from '@/lib/happy/utils';
 import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
 import { readLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import { reconcileDeletedSessions } from './sessionDashboardState';
 import styles from './SessionDashboard.module.css';
 
 type PathHistoryEntry = {
@@ -222,6 +223,7 @@ export function SessionDashboard({
   const [pendingDeleteSessionIds, setPendingDeleteSessionIds] = useState<string[] | null>(null);
   const [isDeletingSessions, setIsDeletingSessions] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [pendingDeletedSessionIds, setPendingDeletedSessionIds] = useState<Set<string>>(new Set());
 
   // Local mutation state
   const [sessionsList, setSessionsList] = useState<SessionSummary[]>(initialSessions);
@@ -233,18 +235,20 @@ export function SessionDashboard({
   const [serverMetricsError, setServerMetricsError] = useState<string | null>(null);
 
   useEffect(() => {
-    setSessionsList(initialSessions);
+    const reconciled = reconcileDeletedSessions(initialSessions, pendingDeletedSessionIds);
+    setSessionsList(reconciled.sessions);
+    setPendingDeletedSessionIds(reconciled.pendingDeletedIds);
 
     // Initialize pinned and aliases from initialSessions (fetched from DB)
     const pins = new Set<string>();
     const aliases: Record<string, string> = {};
-    initialSessions.forEach(s => {
+    reconciled.sessions.forEach(s => {
       if (s.isPinned) pins.add(s.id);
       if (s.alias) aliases[s.id] = s.alias;
     });
     setPinnedSessions(pins);
     setSessionAliases(aliases);
-  }, [initialSessions]);
+  }, [initialSessions, pendingDeletedSessionIds]);
 
   // 워크스페이스 상태(실행 중 등)를 주기적으로 갱신 — 초기 로드 이후 백엔드 상태 변화를 반영
   useEffect(() => {
@@ -260,7 +264,9 @@ export function SessionDashboard({
         if (disposed || !res.ok) return;
         const data = (await res.json()) as { sessions?: SessionSummary[]; chatStats?: GlobalChatStats };
         if (disposed || !data.sessions) return;
-        setSessionsList(data.sessions);
+        const reconciled = reconcileDeletedSessions(data.sessions, pendingDeletedSessionIds);
+        setSessionsList(reconciled.sessions);
+        setPendingDeletedSessionIds(reconciled.pendingDeletedIds);
         if (data.chatStats) setChatStats(data.chatStats);
       } catch {
         // 네트워크 오류는 무시 — 다음 주기에 재시도
@@ -274,7 +280,7 @@ export function SessionDashboard({
       disposed = true;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [pendingDeletedSessionIds]);
 
   useEffect(() => {
     setSelectedSessionIds((prev) => {
@@ -298,12 +304,14 @@ export function SessionDashboard({
         const data = JSON.parse(event.data as string) as { sessions?: SessionSummary[]; chatStats?: GlobalChatStats };
         if (!Array.isArray(data.sessions)) return;
 
-        setSessionsList(data.sessions);
+        const reconciled = reconcileDeletedSessions(data.sessions, pendingDeletedSessionIds);
+        setSessionsList(reconciled.sessions);
+        setPendingDeletedSessionIds(reconciled.pendingDeletedIds);
         if (data.chatStats) setChatStats(data.chatStats);
 
         const pins = new Set<string>();
         const aliases: Record<string, string> = {};
-        data.sessions.forEach((session) => {
+        reconciled.sessions.forEach((session) => {
           if (session.isPinned) pins.add(session.id);
           if (typeof session.alias === 'string' && session.alias.trim()) {
             aliases[session.id] = session.alias;
@@ -323,7 +331,7 @@ export function SessionDashboard({
     return () => {
       es.close();
     };
-  }, []);
+  }, [pendingDeletedSessionIds]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -759,6 +767,7 @@ export function SessionDashboard({
 
     const removedIds = new Set(pendingDeleteSessionIds.filter((id) => !failedIds.includes(id)));
     if (removedIds.size > 0) {
+      setPendingDeletedSessionIds((prev) => new Set([...prev, ...removedIds]));
       setSessionsList((prev) => prev.filter((session) => !removedIds.has(session.id)));
     }
     setSelectedSessionIds((prev) => {
@@ -775,36 +784,23 @@ export function SessionDashboard({
     setPendingDeleteSessionIds(null);
   };
 
+  const visibleSessionsList = useMemo(
+    () => sessionsList.filter((session) => !pendingDeletedSessionIds.has(session.id)),
+    [sessionsList, pendingDeletedSessionIds],
+  );
+
   const sessionUiStatusById = useMemo(() => {
     const next = new Map<string, SessionUiStatus>();
-    sessionsList.forEach((session) => {
+    visibleSessionsList.forEach((session) => {
       next.set(session.id, resolveSessionUiStatus(session, pendingPermissionSessionIds));
     });
     return next;
-  }, [sessionsList, pendingPermissionSessionIds]);
-
-  const sessionStats = useMemo(() => {
-    let running = 0;
-    let pending = 0;
-    let completed = 0;
-    let idle = 0;
-
-    sessionsList.forEach((session) => {
-      const status = sessionUiStatusById.get(session.id);
-      if (status === 'running') running += 1;
-      else if (status === 'pending') pending += 1;
-      else if (status === 'completed') completed += 1;
-      else idle += 1;
-    });
-
-    return { total: sessionsList.length, idle, running, pending, completed };
-  }, [sessionsList, sessionUiStatusById]);
-
+  }, [visibleSessionsList, pendingPermissionSessionIds]);
 
   const filteredSessions = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
-    return [...sessionsList]
+    return [...visibleSessionsList]
       .filter((session) => {
         const alias = sessionAliases[session.id]?.trim() || '';
         const displayName = alias || extractLastDirectoryName(session.projectName);
@@ -831,7 +827,7 @@ export function SessionDashboard({
         const bTime = Date.parse(b.lastActivityAt || FALLBACK_DATE_ISO);
         return bTime - aTime;
       });
-  }, [sessionsList, searchQuery, sortBy, pinnedSessions, sessionAliases]);
+  }, [visibleSessionsList, searchQuery, sortBy, pinnedSessions, sessionAliases]);
   const selectedCount = selectedSessionIds.size;
   const allVisibleSelected = filteredSessions.length > 0 && filteredSessions.every((session) => selectedSessionIds.has(session.id));
 
@@ -968,7 +964,7 @@ export function SessionDashboard({
                   </div>
                   <div className="history-stack">
                     {pathHistory.map((entry) => {
-                      const isLive = Boolean(entry.sessionId && sessionsList.some(s => s.id === entry.sessionId));
+                      const isLive = Boolean(entry.sessionId && visibleSessionsList.some(s => s.id === entry.sessionId));
 
                       return (
                         <div key={`${entry.path}-${entry.sessionId ?? 'new'}`} className="history-card">
@@ -1101,7 +1097,7 @@ export function SessionDashboard({
       </div>
 
       <div className="animate-in">
-        {sessionsList.length === 0 ? (
+        {visibleSessionsList.length === 0 ? (
           <Card style={{ padding: '6rem 2rem', textAlign: 'center', backgroundColor: 'var(--surface-subtle)', border: '2px dashed var(--line-strong)', borderRadius: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem', color: 'var(--text-muted)' }}>
               <FolderOpen size={80} strokeWidth={1} />
