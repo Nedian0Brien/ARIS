@@ -4205,6 +4205,30 @@
   padding: 2rem;
   gap: 2.5rem;
   animation: fadeIn 0.4s ease-out;
+  position: relative;
+}
+
+.agentSelectorBackButton {
+  position: absolute;
+  top: 1.25rem;
+  left: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.7rem;
+  background: none;
+  border: 1px solid var(--chat-popover-border, rgba(15, 23, 42, 0.12));
+  border-radius: 0.5rem;
+  color: var(--chat-text-muted, #64748b);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.agentSelectorBackButton:hover {
+  background: rgba(15, 23, 42, 0.05);
+  color: var(--chat-text-primary);
 }
 
 .agentSelectorTitle {
@@ -4306,6 +4330,30 @@
 }
 
 /* Background Logo Watermark */
+.emptyChatBackButton {
+  position: absolute;
+  top: 1.25rem;
+  left: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.7rem;
+  background: none;
+  border: 1px solid var(--chat-popover-border, rgba(15, 23, 42, 0.12));
+  border-radius: 0.5rem;
+  color: var(--chat-text-muted, #64748b);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  z-index: 2;
+}
+
+.emptyChatBackButton:hover {
+  background: rgba(15, 23, 42, 0.05);
+  color: var(--chat-text-primary);
+}
+
 .emptyChatState {
   display: flex;
   flex-direction: column;

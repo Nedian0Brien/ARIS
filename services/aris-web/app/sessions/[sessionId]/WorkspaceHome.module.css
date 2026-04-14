@@ -605,3 +605,49 @@
     max-width: 100%;
   }
 }
+
+/* ── 뒤로가기 버튼 ── */
+
+.backButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.625rem;
+  margin-bottom: 0.875rem;
+  background: none;
+  border: 1px solid var(--border, rgba(15, 23, 42, 0.12));
+  border-radius: var(--radius-sm, 0.5rem);
+  color: var(--text-muted, #64748b);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  align-self: flex-start;
+}
+
+.backButton:hover {
+  background: rgba(15, 23, 42, 0.04);
+  color: var(--text-primary, #0f172a);
+  border-color: rgba(15, 23, 42, 0.2);
+}
+
+:global(html[data-theme='dark']) .backButton {
+  border-color: rgba(148, 163, 184, 0.18);
+  color: #94a3b8;
+}
+
+:global(html[data-theme='dark']) .backButton:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+}
+
+/* ── 미읽음 빨간 점 인디케이터 ── */
+
+.unreadDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  flex-shrink: 0;
+}

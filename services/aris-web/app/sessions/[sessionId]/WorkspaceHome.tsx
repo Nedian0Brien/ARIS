@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import {
   MessageSquarePlus,
   FolderOpen,
+  ChevronLeft,
   CheckCircle2,
   Clock,
   Play,
@@ -27,6 +28,7 @@ interface WorkspaceHomeProps {
   chats: SessionChat[];
   onSelectChat: (chatId: string) => void;
   onNewChat: () => void;
+  onBack: () => void;
 }
 
 // --- 유틸 ---
@@ -79,14 +81,14 @@ function resolveAgentMeta(flavor: AgentFlavor | string): {
   }
 }
 
-type ChatStatus = 'running' | 'completed' | 'idle' | 'pinned';
+type ChatStatus = 'running' | 'unread' | 'idle' | 'pinned';
 
 function resolveChatStatus(chat: SessionChat): ChatStatus {
   if (chat.isPinned) return 'pinned';
   if (chat.latestEventAt) {
     const lastActivity = new Date(chat.lastActivityAt).getTime();
     const lastRead = chat.lastReadAt ? new Date(chat.lastReadAt).getTime() : 0;
-    if (lastActivity > lastRead) return 'completed';
+    if (lastActivity > lastRead) return 'unread';
   }
   return 'idle';
 }
@@ -118,9 +120,11 @@ function StatCard({
 }
 
 function ChatStatusBadge({ status }: { status: ChatStatus }) {
-  const meta: Record<ChatStatus, { label: string; className: string }> = {
+  if (status === 'unread') {
+    return <span className={styles.unreadDot} aria-label="미읽음" />;
+  }
+  const meta: Record<Exclude<ChatStatus, 'unread'>, { label: string; className: string }> = {
     running: { label: '실행 중', className: styles.statusRunning },
-    completed: { label: '완료', className: styles.statusCompleted },
     idle: { label: '유휴', className: styles.statusIdle },
     pinned: { label: '고정', className: styles.statusPinned },
   };
@@ -137,6 +141,7 @@ export function WorkspaceHome({
   chats,
   onSelectChat,
   onNewChat,
+  onBack,
 }: WorkspaceHomeProps) {
   const agentMeta = useMemo(() => resolveAgentMeta(agentFlavor), [agentFlavor]);
   const AgentIcon = agentMeta.Icon;
@@ -166,6 +171,12 @@ export function WorkspaceHome({
 
   return (
     <div className={styles.homeRoot}>
+      {/* ── 뒤로가기 ── */}
+      <button type="button" className={styles.backButton} onClick={onBack}>
+        <ChevronLeft size={14} />
+        세션 목록
+      </button>
+
       {/* ── 히어로 카드 ── */}
       <div className={styles.heroCard}>
         <div
@@ -204,7 +215,7 @@ export function WorkspaceHome({
       {/* ── 수치 요약 ── */}
       <div className={styles.statsRow}>
         <StatCard label="전체 채팅" value={stats.total} icon={Layers} accent="var(--primary)" />
-        <StatCard label="미읽음" value={stats.completed} icon={CheckCircle2} accent="var(--accent-emerald)" />
+        <StatCard label="미읽음" value={stats.completed} icon={CheckCircle2} accent="#ef4444" />
         <StatCard label="고정됨" value={stats.pinned} icon={Pin} accent="var(--accent-amber)" />
       </div>
 
