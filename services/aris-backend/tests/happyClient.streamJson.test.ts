@@ -529,4 +529,49 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     expect(fetchMock).toHaveBeenCalledTimes(3);
     vi.useRealTimers();
   });
+
+  it('preserves pending codex permissions during shutdown drain cleanup', async () => {
+    const persistedPermission = {
+      id: 'perm-1',
+      sessionId: 'session-1',
+      chatId: 'chat-1',
+      agent: 'codex' as const,
+      command: 'curl -I https://example.com',
+      reason: 'network approval',
+      risk: 'medium' as const,
+      state: 'pending' as const,
+      requestedAt: '2026-04-14T00:00:00.000Z',
+    };
+    const coordinationStore = {
+      decidePermission: vi.fn(),
+    };
+    const store = new HappyRuntimeStore({
+      serverUrl: 'http://runtime.test',
+      token: 'token',
+      workspaceRoot: '/workspace',
+      coordinationStore: coordinationStore as never,
+    }) as unknown as {
+      permissions: Map<string, typeof persistedPermission>;
+      codexPermissionIndex: Map<string, string>;
+      codexPermissionResponders: Map<string, (decision: 'allow_once' | 'allow_session' | 'deny') => Promise<void>>;
+      draining: boolean;
+    };
+
+    store.permissions.set('perm-1', persistedPermission);
+    store.codexPermissionIndex.set('chat-1:session-1:perm-1', 'perm-1');
+    store.codexPermissionResponders.set('perm-1', vi.fn());
+    store.draining = true;
+
+    await happyClientTestHooks.finalizeCodexRuntimePermissions(store as never, ['perm-1'], {
+      preservePending: true,
+    });
+
+    expect(coordinationStore.decidePermission).not.toHaveBeenCalled();
+    expect(store.permissions.get('perm-1')).toMatchObject({
+      id: 'perm-1',
+      state: 'pending',
+    });
+    expect(store.codexPermissionIndex.size).toBe(0);
+    expect(store.codexPermissionResponders.size).toBe(0);
+  });
 });

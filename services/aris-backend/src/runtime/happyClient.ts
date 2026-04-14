@@ -1492,6 +1492,11 @@ export const happyClientTestHooks = {
   resolveClaudeLaunchMode,
   resolveAgentCommandTimeoutMs,
   resolveGeminiStreamBackendV2Enabled,
+  finalizeCodexRuntimePermissions: (
+    store: HappyRuntimeStore,
+    permissionIds: Iterable<string>,
+    options?: { preservePending?: boolean },
+  ) => (store as any).finalizeCodexRuntimePermissions(permissionIds, options),
 };
 
 export class HappyRuntimeStore {
@@ -1556,6 +1561,38 @@ export class HappyRuntimeStore {
 
   private getActiveRunCount(): number {
     return this.activeRuns.size + this.claudeSessionRegistry.activeRunCount();
+  }
+
+  private async finalizeCodexRuntimePermissions(
+    permissionIds: Iterable<string>,
+    options: { preservePending?: boolean } = {},
+  ): Promise<void> {
+    for (const permissionId of permissionIds) {
+      this.codexPermissionResponders.delete(permissionId);
+
+      for (const [key, mappedPermissionId] of this.codexPermissionIndex.entries()) {
+        if (mappedPermissionId === permissionId) {
+          this.codexPermissionIndex.delete(key);
+        }
+      }
+
+      const existing = this.permissions.get(permissionId);
+      if (!existing || existing.state !== 'pending' || options.preservePending) {
+        continue;
+      }
+
+      if (this.coordinationStore) {
+        try {
+          const denied = await this.coordinationStore.decidePermission(permissionId, 'deny');
+          this.permissions.set(permissionId, denied);
+          continue;
+        } catch {
+          // Fall through to the in-memory copy when the persisted store is unavailable.
+        }
+      }
+
+      this.permissions.set(permissionId, { ...existing, state: 'denied', decision: 'deny' });
+    }
   }
 
   private resolveSessionApprovalPolicy(session: RuntimeSession): ApprovalPolicy {
@@ -3621,29 +3658,9 @@ export class HappyRuntimeStore {
       await permissionChain.catch(() => undefined);
       await appendChain.catch(() => undefined);
 
-      for (const permissionId of runtimePermissionIds) {
-        this.codexPermissionResponders.delete(permissionId);
-
-        for (const [key, mappedPermissionId] of this.codexPermissionIndex.entries()) {
-          if (mappedPermissionId === permissionId) {
-            this.codexPermissionIndex.delete(key);
-          }
-        }
-
-        const existing = this.permissions.get(permissionId);
-        if (existing?.state === 'pending') {
-          if (this.coordinationStore) {
-            try {
-              const denied = await this.coordinationStore.decidePermission(permissionId, 'deny');
-              this.permissions.set(permissionId, denied);
-            } catch {
-              this.permissions.set(permissionId, { ...existing, state: 'denied', decision: 'deny' });
-            }
-          } else {
-            this.permissions.set(permissionId, { ...existing, state: 'denied', decision: 'deny' });
-          }
-        }
-      }
+      await this.finalizeCodexRuntimePermissions(runtimePermissionIds, {
+        preservePending: this.draining && !signal?.aborted,
+      });
 
       if (!turnCompleted && !signal?.aborted && stderr.trim()) {
         if (runStatus === 'running') {

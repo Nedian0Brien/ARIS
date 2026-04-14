@@ -658,7 +658,23 @@ export class RuntimeStore {
 
   async decidePermission(permissionId: string, decision: PermissionDecision) {
     if (this.runtimeExecutor) {
-      return this.runtimeExecutor.decidePermission(permissionId, decision);
+      const updated = await this.runtimeExecutor.decidePermission(permissionId, decision);
+      const normalizedChatId = typeof updated.chatId === 'string' && updated.chatId.trim().length > 0
+        ? updated.chatId.trim()
+        : undefined;
+      if (
+        decision !== 'deny'
+        && typeof this.delegate.getLatestUserMessageForAction === 'function'
+      ) {
+        const runtimeStillRunning = await this.runtimeExecutor.isSessionRunning(updated.sessionId, normalizedChatId);
+        if (!runtimeStillRunning) {
+          const latestUserMessage = await this.delegate.getLatestUserMessageForAction(updated.sessionId, normalizedChatId);
+          if (latestUserMessage) {
+            await this.runtimeExecutor.triggerPersistedUserMessage(updated.sessionId, latestUserMessage);
+          }
+        }
+      }
+      return updated;
     }
     return this.delegate.decidePermission(permissionId, decision);
   }

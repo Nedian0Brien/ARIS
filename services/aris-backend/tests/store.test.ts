@@ -76,3 +76,83 @@ describe('RuntimeStore.applySessionAction', () => {
     });
   });
 });
+
+describe('RuntimeStore.decidePermission', () => {
+  it('replays the latest persisted user message when approval is granted after the active run is gone', async () => {
+    const delegate = {
+      getLatestUserMessageForAction: vi.fn().mockResolvedValue({
+        type: 'message',
+        title: 'User Instruction',
+        text: 'retry the network request',
+        meta: {
+          role: 'user',
+          chatId: 'chat-1',
+          agent: 'codex',
+        },
+      }),
+    };
+    const runtimeExecutor = {
+      decidePermission: vi.fn().mockResolvedValue({
+        id: 'perm-1',
+        sessionId: 'session-1',
+        chatId: 'chat-1',
+        agent: 'codex',
+        command: 'curl -I https://example.com',
+        reason: 'network approval',
+        risk: 'medium',
+        state: 'approved',
+        decision: 'allow_once',
+        requestedAt: '2026-04-14T00:00:00.000Z',
+      }),
+      isSessionRunning: vi.fn().mockResolvedValue(false),
+      triggerPersistedUserMessage: vi.fn().mockResolvedValue(undefined),
+    };
+    const store = buildRuntimeStore({ delegate, runtimeExecutor });
+
+    await expect(store.decidePermission('perm-1', 'allow_once')).resolves.toMatchObject({
+      id: 'perm-1',
+      state: 'approved',
+    });
+
+    expect(runtimeExecutor.isSessionRunning).toHaveBeenCalledWith('session-1', 'chat-1');
+    expect(delegate.getLatestUserMessageForAction).toHaveBeenCalledWith('session-1', 'chat-1');
+    expect(runtimeExecutor.triggerPersistedUserMessage).toHaveBeenCalledWith('session-1', {
+      type: 'message',
+      title: 'User Instruction',
+      text: 'retry the network request',
+      meta: {
+        role: 'user',
+        chatId: 'chat-1',
+        agent: 'codex',
+      },
+    });
+  });
+
+  it('does not replay a user message when the approved run is still active in memory', async () => {
+    const delegate = {
+      getLatestUserMessageForAction: vi.fn(),
+    };
+    const runtimeExecutor = {
+      decidePermission: vi.fn().mockResolvedValue({
+        id: 'perm-1',
+        sessionId: 'session-1',
+        chatId: 'chat-1',
+        agent: 'codex',
+        command: 'curl -I https://example.com',
+        reason: 'network approval',
+        risk: 'medium',
+        state: 'approved',
+        decision: 'allow_once',
+        requestedAt: '2026-04-14T00:00:00.000Z',
+      }),
+      isSessionRunning: vi.fn().mockResolvedValue(true),
+      triggerPersistedUserMessage: vi.fn(),
+    };
+    const store = buildRuntimeStore({ delegate, runtimeExecutor });
+
+    await store.decidePermission('perm-1', 'allow_once');
+
+    expect(delegate.getLatestUserMessageForAction).not.toHaveBeenCalled();
+    expect(runtimeExecutor.triggerPersistedUserMessage).not.toHaveBeenCalled();
+  });
+});
