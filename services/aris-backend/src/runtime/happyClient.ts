@@ -96,6 +96,8 @@ const HAPPY_EVENT_LOG_MAX_BYTES = (() => {
   }
   return 1_024 * 1_024 * 1_024; // 1GB
 })();
+const HAPPY_MESSAGE_WRITE_BASE_DELAY_MS = 50;
+const HAPPY_MESSAGE_WRITE_MAX_RETRIES = 3;
 const CODEX_TURN_TIMEOUT_MS = (() => {
   const parsed = Number.parseInt(process.env.CODEX_TURN_TIMEOUT_MS || '', 10);
   if (Number.isFinite(parsed) && parsed >= 30_000) {
@@ -1432,6 +1434,19 @@ function buildCodexThreadCacheKey(sessionId: string, chatId?: string): string {
   return sessionId;
 }
 
+function isRetryableHappyMessageWriteError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('TransactionWriteConflict')
+    || message.includes('deadlock detected')
+    || message.includes('could not serialize access')
+    || message.includes('serialization failure');
+}
+
+function waitForHappyMessageWriteRetry(attempt: number): Promise<void> {
+  const delayMs = HAPPY_MESSAGE_WRITE_BASE_DELAY_MS * (2 ** (attempt - 1));
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
 function buildAgentCommand(
   agent: RuntimeAgent,
   prompt: string,
@@ -2578,12 +2593,22 @@ export class HappyRuntimeStore {
         },
       });
 
-      await this.request<HappyMessageResponse>(`/v3/sessions/${encodeURIComponent(sessionId)}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({
-          messages: [{ localId, content }],
-        }),
-      });
+      for (let attempt = 1; attempt <= HAPPY_MESSAGE_WRITE_MAX_RETRIES; attempt += 1) {
+        try {
+          await this.request<HappyMessageResponse>(`/v3/sessions/${encodeURIComponent(sessionId)}/messages`, {
+            method: 'POST',
+            body: JSON.stringify({
+              messages: [{ localId, content }],
+            }),
+          });
+          return;
+        } catch (error) {
+          if (!isRetryableHappyMessageWriteError(error) || attempt === HAPPY_MESSAGE_WRITE_MAX_RETRIES) {
+            throw error;
+          }
+          await waitForHappyMessageWriteRetry(attempt);
+        }
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`failed to persist agent message (best-effort, continuing): ${message}`);

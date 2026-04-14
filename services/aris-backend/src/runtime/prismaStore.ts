@@ -50,9 +50,16 @@ function toRuntimeSession(row: {
   status: string;
   approvalPolicy: string;
   model: string | null;
+  metadata?: unknown;
   riskScore: number;
   updatedAt: Date;
 }): RuntimeSession {
+  const metadataRecord = row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+    ? row.metadata as Record<string, unknown>
+    : {};
+  const runtimeModel = typeof metadataRecord.runtimeModel === 'string' && metadataRecord.runtimeModel.trim().length > 0
+    ? metadataRecord.runtimeModel.trim()
+    : undefined;
   return {
     id: row.id,
     metadata: {
@@ -61,6 +68,7 @@ function toRuntimeSession(row: {
       approvalPolicy: row.approvalPolicy as ApprovalPolicy,
       ...(row.model ? { model: row.model } : {}),
       ...(row.branch ? { branch: row.branch } : {}),
+      ...(runtimeModel ? { runtimeModel } : {}),
     },
     state: {
       status: row.status as SessionStatus,
@@ -295,6 +303,7 @@ export class PrismaRuntimeStore {
         branch: input.branch ?? null,
         approvalPolicy: input.approvalPolicy ?? 'on-request',
         model: input.model ?? null,
+        metadata: { runtimeModel: 'chat-stream' },
         status: input.status ?? 'idle',
         riskScore: input.riskScore ?? 20,
       },
@@ -354,6 +363,148 @@ export class PrismaRuntimeStore {
     const events = filteredRows.map(toRuntimeMessage);
     const cursor = rows.length > 0 ? rows[rows.length - 1].seq : afterSeq;
     return { events, cursor };
+  }
+
+  async listChatEvents(
+    chatId: string,
+    options: { afterSeq?: number; limit?: number } = {},
+  ): Promise<RuntimeMessage[]> {
+    const afterSeq = Number.isFinite(options.afterSeq) ? Math.max(0, Math.floor(Number(options.afterSeq))) : 0;
+    const db = this.db as any;
+    const rows = await db.sessionChatEvent.findMany({
+      where: { chatId, seq: { gt: afterSeq } },
+      orderBy: { seq: 'asc' },
+      ...(options.limit ? { take: options.limit } : {}),
+    });
+
+    return rows.map((row: {
+      id: string;
+      sessionId: string;
+      chatId: string;
+      runId?: string | null;
+      type: string;
+      title: string | null;
+      text: string;
+      meta: unknown;
+      seq: number;
+      createdAt: Date;
+    }) => toRuntimeMessage({
+      id: row.id,
+      sessionId: row.sessionId,
+      type: row.type,
+      title: row.title,
+      text: row.text,
+      meta: {
+        ...(row.meta && typeof row.meta === 'object' ? row.meta as Record<string, unknown> : {}),
+        chatId: row.chatId,
+        ...(row.runId ? { runId: row.runId } : {}),
+      },
+      seq: row.seq,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  async appendChatEvent(
+    chatId: string,
+    input: {
+      sessionId: string;
+      runId?: string;
+      type: string;
+      title?: string;
+      text: string;
+      meta?: Record<string, unknown>;
+    },
+  ): Promise<RuntimeMessage> {
+    const db = this.db as any;
+
+    const chat = await db.sessionChat.findFirst({
+      where: { id: chatId, sessionId: input.sessionId },
+      select: { id: true, sessionId: true, latestPreview: true },
+    });
+    if (!chat) {
+      throw new Error('CHAT_NOT_FOUND');
+    }
+
+    const row = await db.$transaction(async (tx: any) => {
+      const role = typeof input.meta?.role === 'string' ? input.meta.role.trim() : '';
+      let resolvedRunId = input.runId;
+      if (!resolvedRunId && role === 'user') {
+        const createdRun = await tx.sessionRun.create({
+          data: {
+            sessionId: input.sessionId,
+            chatId,
+            agent: typeof input.meta?.agent === 'string' && input.meta.agent.trim().length > 0
+              ? input.meta.agent.trim()
+              : 'unknown',
+            model: typeof input.meta?.model === 'string' && input.meta.model.trim().length > 0
+              ? input.meta.model.trim()
+              : null,
+            status: 'running',
+          },
+        });
+        resolvedRunId = createdRun.id;
+      } else if (!resolvedRunId && role === 'agent') {
+        const latestRun = await tx.sessionRun.findFirst({
+          where: { chatId, status: 'running' },
+          orderBy: { startedAt: 'desc' },
+        });
+        if (latestRun) {
+          resolvedRunId = latestRun.id;
+          await tx.sessionRun.update({
+            where: { id: latestRun.id },
+            data: {
+              status: 'completed',
+              finishedAt: new Date(),
+            },
+          });
+        }
+      }
+      const agg = await tx.sessionChatEvent.aggregate({
+        where: { chatId },
+        _max: { seq: true },
+      });
+      const nextSeq = (agg._max.seq ?? 0) + 1;
+      const created = await tx.sessionChatEvent.create({
+        data: {
+          id: randomUUID(),
+          chatId,
+          sessionId: input.sessionId,
+          ...(resolvedRunId ? { runId: resolvedRunId } : {}),
+          type: input.type,
+          title: input.title ?? input.type,
+          text: input.text,
+          meta: (input.meta ?? {}) as Record<string, unknown>,
+          seq: nextSeq,
+        },
+      });
+      await tx.sessionChat.update({
+        where: { id: chatId },
+        data: {
+          latestPreview: input.text.slice(0, 280),
+          latestEventId: created.id,
+          latestEventAt: created.createdAt,
+          latestEventIsUser: input.meta?.role === 'user',
+          latestHasErrorSignal: Boolean(input.meta?.error),
+          lastActivityAt: created.createdAt,
+        },
+      });
+      return created;
+    });
+
+    return toRuntimeMessage({
+      id: row.id,
+      sessionId: row.sessionId,
+      type: row.type,
+      title: row.title,
+      text: row.text,
+      meta: {
+        ...(row.meta && typeof row.meta === 'object' ? row.meta as Record<string, unknown> : {}),
+        chatId: row.chatId,
+        ...(row.runId ? { runId: row.runId } : {}),
+      },
+      seq: row.seq,
+      createdAt: row.createdAt,
+    });
   }
 
   async appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage> {
@@ -461,12 +612,11 @@ export class PrismaRuntimeStore {
       ? _chatId.trim()
       : null;
     if (normalizedChatId) {
-      const rows = await this.db.sessionMessage.findMany({
-        where: { sessionId },
-        orderBy: { seq: 'asc' },
-        take: 200,
+      const activeRun = await (this.db as any).sessionRun.findFirst({
+        where: { sessionId, chatId: normalizedChatId, status: 'running' },
+        select: { id: true },
       });
-      return resolveChatRunningState(rows, normalizedChatId);
+      return Boolean(activeRun);
     }
 
     const row = await this.db.session.findUnique({

@@ -60,8 +60,13 @@ interface RuntimeStoreBackend {
   createSession(input: CreateSessionInput): Promise<RuntimeSession>;
   updateApprovalPolicy?(sessionId: string, approvalPolicy: ApprovalPolicy): Promise<RuntimeSession>;
   listMessages(sessionId: string, options?: { afterSeq?: number; afterId?: string; limit?: number }): Promise<RuntimeMessage[]>;
+  listChatEvents?(chatId: string, options?: { afterSeq?: number; limit?: number }): Promise<RuntimeMessage[]>;
   listRealtimeEvents?(sessionId: string, options?: { afterCursor?: number; limit?: number; chatId?: string }): Promise<{ events: RuntimeMessage[]; cursor: number }>;
   appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage>;
+  appendChatEvent?(
+    chatId: string,
+    input: { sessionId: string; runId?: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
+  ): Promise<RuntimeMessage>;
   applySessionAction(sessionId: string, action: SessionAction, chatId?: string): Promise<{ accepted: boolean; message: string; at: string }>;
   isSessionRunning(sessionId: string, chatId?: string): Promise<boolean>;
   listPermissions(state?: PermissionRequest['state']): Promise<PermissionRequest[]>;
@@ -84,6 +89,7 @@ type RuntimeExecutor = Pick<
 class MockRuntimeStore implements RuntimeStoreBackend {
   private readonly sessions = new Map<string, RuntimeSession>();
   private readonly messages = new Map<string, RuntimeMessage[]>();
+  private readonly chatEvents = new Map<string, RuntimeMessage[]>();
   private readonly permissions = new Map<string, PermissionRequest>();
   private readonly pendingAgentReplies = new Map<string, NodeJS.Timeout>();
 
@@ -136,6 +142,7 @@ class MockRuntimeStore implements RuntimeStoreBackend {
         approvalPolicy: input.approvalPolicy ?? 'on-request',
         ...(model ? { model } : {}),
         ...(input.branch ? { branch: input.branch } : {}),
+        runtimeModel: 'chat-stream',
       },
       state: {
         status: input.status ?? 'idle',
@@ -196,6 +203,20 @@ class MockRuntimeStore implements RuntimeStoreBackend {
     return afterFiltered.slice(0, normalizedLimit);
   }
 
+  async listChatEvents(chatId: string, options: { afterSeq?: number; limit?: number } = {}): Promise<RuntimeMessage[]> {
+    const base = this.chatEvents.get(chatId) ?? [];
+    const afterSeq = Number.isFinite(options.afterSeq) ? Math.max(0, Math.floor(Number(options.afterSeq))) : 0;
+    const filtered = base.filter((message) => {
+      const seqRaw = (message.meta as { seq?: unknown } | undefined)?.seq;
+      const seq = typeof seqRaw === 'number' ? seqRaw : Number.parseInt(String(seqRaw ?? ''), 10);
+      return Number.isFinite(seq) ? seq > afterSeq : true;
+    });
+    const normalizedLimit = Number.isFinite(options.limit)
+      ? Math.max(1, Math.floor(Number(options.limit)))
+      : null;
+    return normalizedLimit === null ? filtered : filtered.slice(0, normalizedLimit);
+  }
+
   async appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage> {
     const session = this.sessions.get(sessionId);
     if (!session) {
@@ -247,6 +268,38 @@ class MockRuntimeStore implements RuntimeStoreBackend {
       this.pendingAgentReplies.set(sessionId, timer);
     }
 
+    return message;
+  }
+
+  async appendChatEvent(
+    chatId: string,
+    input: { sessionId: string; runId?: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
+  ): Promise<RuntimeMessage> {
+    const session = this.sessions.get(input.sessionId);
+    if (!session) {
+      throw new Error('SESSION_NOT_FOUND');
+    }
+
+    const list = this.chatEvents.get(chatId) ?? [];
+    const seq = list.length + 1;
+    const message: RuntimeMessage = {
+      id: randomUUID(),
+      sessionId: input.sessionId,
+      type: input.type,
+      title: input.title ?? input.type,
+      text: input.text,
+      createdAt: new Date().toISOString(),
+      meta: {
+        ...(input.meta ?? {}),
+        chatId,
+        ...(input.runId ? { runId: input.runId } : {}),
+        seq,
+      },
+    };
+    list.push(message);
+    this.chatEvents.set(chatId, list);
+    session.updatedAt = message.createdAt;
+    this.sessions.set(input.sessionId, session);
     return message;
   }
 
@@ -447,12 +500,38 @@ export class RuntimeStore {
     return this.delegate.listMessages(sessionId, options);
   }
 
+  async listChatEvents(chatId: string, options?: { afterSeq?: number; limit?: number }) {
+    if (typeof this.delegate.listChatEvents === 'function') {
+      return this.delegate.listChatEvents(chatId, options);
+    }
+    return [];
+  }
+
   async appendMessage(sessionId: string, input: AppendMessageInput) {
     const created = await this.delegate.appendMessage(sessionId, input);
     if (this.runtimeExecutor && input.meta?.role !== 'agent') {
       await this.runtimeExecutor.triggerPersistedUserMessage(sessionId, input);
     }
     return created;
+  }
+
+  async appendChatEvent(
+    chatId: string,
+    input: { sessionId: string; runId?: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
+  ) {
+    if (typeof this.delegate.appendChatEvent === 'function') {
+      const created = await this.delegate.appendChatEvent(chatId, input);
+      if (this.runtimeExecutor && input.meta?.role !== 'agent') {
+        await this.runtimeExecutor.triggerPersistedUserMessage(input.sessionId, {
+          type: input.type,
+          title: input.title,
+          text: input.text,
+          meta: input.meta,
+        });
+      }
+      return created;
+    }
+    throw new Error('APPEND_CHAT_EVENT_NOT_SUPPORTED');
   }
 
   async listRealtimeEvents(sessionId: string, options?: { afterCursor?: number; limit?: number; chatId?: string }) {

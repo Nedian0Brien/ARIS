@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 test.setTimeout(90_000);
 
-async function login(page) {
+async function login(page: Page) {
   const email = process.env.MOBILE_OVERFLOW_EMAIL;
   const password = process.env.MOBILE_OVERFLOW_PASSWORD;
 
@@ -22,7 +23,7 @@ async function login(page) {
   await page.goto('/', { waitUntil: 'networkidle' });
 }
 
-async function resolveFirstSessionPath(page) {
+async function resolveFirstSessionPath(page: Page) {
   const sessionId = await page.evaluate(async () => {
     const response = await fetch('/api/runtime/sessions', { credentials: 'include' });
     if (!response.ok) {
@@ -37,7 +38,7 @@ async function resolveFirstSessionPath(page) {
   return sessionId ? `/sessions/${sessionId}` : null;
 }
 
-async function collectOverflow(page, path: string) {
+async function collectOverflow(page: Page, path: string) {
   await page.goto(path, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
   await page.screenshot({
