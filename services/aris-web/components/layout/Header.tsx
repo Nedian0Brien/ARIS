@@ -176,7 +176,7 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
         </Link>
 
         {/* Desktop Navigation */}
-        <nav className="flex-desktop" style={{ display: 'none', alignItems: 'center', gap: '0.5rem' }}>
+        <nav className="flex-desktop header-nav" style={{ display: 'none', alignItems: 'center', gap: '0.5rem', flexWrap: 'nowrap' }}>
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -192,11 +192,13 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
                   padding: '0.5rem 0.75rem',
                   borderRadius: 'var(--radius-md)',
                   fontSize: '0.875rem',
+                  whiteSpace: 'nowrap',
                   fontWeight: 600,
                   color: isActive ? 'var(--primary)' : 'var(--text-muted)',
                   background: isActive ? 'var(--accent-sky-bg)' : 'transparent',
                   transition: 'all 0.2s ease',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  flexShrink: 0,
                 }}
                 className="nav-btn"
               >
