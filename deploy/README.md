@@ -94,6 +94,7 @@ DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env WEB_DRAIN_SECONDS=12 ./deploy
 DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env PULL_BASE=1 ./deploy/deploy_web.sh
 DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env SKIP_BUILD_IF_UNCHANGED=0 ./deploy/deploy_web.sh
 DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env STOP_LEGACY_WEB=0 ./deploy/deploy_web.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env WEB_PRUNE_MODE=aggressive WEB_PRUNE_ASYNC=1 ./deploy/deploy_web.sh
 ```
 
 ### Full deploy
@@ -163,5 +164,26 @@ The previous single-slot web deploy script is preserved at:
 ```bash
 DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/legacy/deploy_web_legacy.sh
 ```
+
+### Web deploy cleanup behavior
+
+`deploy/web_zero_downtime.sh` runs optional post-deploy cleanup by default (`WEB_PRUNE_MODE=light`).
+
+```bash
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env WEB_PRUNE_MODE=off ./deploy/deploy_web.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env WEB_PRUNE_MODE=light WEB_PRUNE_ASYNC=1 ./deploy/deploy_web.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env WEB_PRUNE_MODE=aggressive WEB_PRUNE_CACHE_UNTIL=72h WEB_PRUNE_CACHE_KEEP_STORAGE=6gb ./deploy/deploy_web.sh
+```
+
+환경변수
+
+- `WEB_PRUNE_MODE`: `off | light | aggressive`
+  - `off`: 정리 비활성
+  - `light`: `docker image prune -f` + builder 캐시 정리
+  - `aggressive`: `docker image prune -af` + `docker container prune -f` + builder 캐시 정리
+- `WEB_PRUNE_ASYNC`: `1`(기본, 백그라운드 정리) / `0`(동기식)
+- `WEB_PRUNE_CACHE_UNTIL`: builder 캐시 `prune` 조건(예: `168h`, `72h`)
+- `WEB_PRUNE_CACHE_KEEP_STORAGE`: `docker buildx prune --keep-storage`를 쓸 때의 상한(예: `8gb`, `12gb`)
+- 로그: `deploy/.logs/web-prune.log`
 
 Do not use it as the default production path unless explicitly required for rollback or incident handling.
