@@ -395,6 +395,40 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     expect(parsed.output).toBe('Gemini 응답 완료');
   });
 
+  it('spawns codex app-server in its own detached process group', () => {
+    const options = happyClientTestHooks.buildCodexAppServerSpawnOptions({
+      cwd: '/tmp/aris-redeploy-stream-fix',
+      env: { PATH: '/usr/bin' },
+      signal: undefined,
+    });
+
+    expect(options).toMatchObject({
+      cwd: '/tmp/aris-redeploy-stream-fix',
+      detached: true,
+      stdio: 'pipe',
+      env: { PATH: '/usr/bin' },
+    });
+  });
+
+  it('kills the detached codex app-server process group when closing', () => {
+    const killMock = vi.fn();
+
+    happyClientTestHooks.terminateCodexAppServerProcess(
+      {
+        pid: 4321,
+        killed: false,
+        kill: vi.fn(),
+      },
+      killMock,
+    );
+
+    expect(killMock).toHaveBeenCalledWith(-4321, 'SIGTERM');
+  });
+
+  it('uses a loopback websocket transport URL for codex app-server', () => {
+    expect(happyClientTestHooks.buildCodexAppServerListenUrl(38991)).toBe('ws://127.0.0.1:38991');
+  });
+
   it('waits for a quiet window after the latest app-server activity', async () => {
     vi.useFakeTimers();
 

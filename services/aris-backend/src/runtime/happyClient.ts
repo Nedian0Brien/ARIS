@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { execFile, spawn } from 'node:child_process';
+import { execFile, spawn, type SpawnOptionsWithoutStdio } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { createServer } from 'node:net';
 import * as path from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
@@ -1476,6 +1477,241 @@ function buildAgentCommand(
   });
 }
 
+function buildCodexAppServerSpawnOptions(input: {
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  signal?: AbortSignal;
+}): SpawnOptionsWithoutStdio {
+  return {
+    cwd: input.cwd,
+    env: input.env,
+    stdio: 'pipe',
+    signal: input.signal,
+    detached: true,
+  };
+}
+
+function buildCodexAppServerListenUrl(port: number): string {
+  return `ws://127.0.0.1:${port}`;
+}
+
+async function reserveCodexAppServerPort(): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        server.close();
+        reject(new Error('failed to reserve codex app-server websocket port'));
+        return;
+      }
+      const port = address.port;
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(port);
+      });
+    });
+    server.unref?.();
+  });
+}
+
+type CodexAppServerSocket = {
+  readonly readyState: number;
+  send(data: string): void;
+  close(code?: number, reason?: string): void;
+  addEventListener(type: 'open', listener: () => void): void;
+  addEventListener(type: 'message', listener: (event: { data: unknown }) => void): void;
+  addEventListener(type: 'error', listener: (event: unknown) => void): void;
+  addEventListener(type: 'close', listener: () => void): void;
+  removeEventListener(type: 'open', listener: () => void): void;
+  removeEventListener(type: 'message', listener: (event: { data: unknown }) => void): void;
+  removeEventListener(type: 'error', listener: (event: unknown) => void): void;
+  removeEventListener(type: 'close', listener: () => void): void;
+};
+
+function createCodexAppServerSocket(url: string): CodexAppServerSocket {
+  const WebSocketCtor = (globalThis as { WebSocket?: new (url: string) => CodexAppServerSocket }).WebSocket;
+  if (typeof WebSocketCtor !== 'function') {
+    throw new Error('global WebSocket constructor is unavailable');
+  }
+  return new WebSocketCtor(url);
+}
+
+async function connectCodexAppServerSocket(
+  url: string,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<CodexAppServerSocket> {
+  const timeoutMs = options.timeoutMs ?? 5_000;
+  const deadline = Date.now() + timeoutMs;
+  let lastError: Error | null = null;
+
+  while (Date.now() < deadline) {
+    if (options.signal?.aborted) {
+      throw new Error('codex app-server websocket connection aborted');
+    }
+
+    try {
+      const socket = await new Promise<CodexAppServerSocket>((resolve, reject) => {
+        const candidate = createCodexAppServerSocket(url);
+        let settled = false;
+
+        const cleanup = () => {
+          candidate.removeEventListener('open', handleOpen);
+          candidate.removeEventListener('error', handleError);
+          candidate.removeEventListener('close', handleClose);
+          options.signal?.removeEventListener('abort', handleAbort);
+          clearTimeout(timer);
+        };
+
+        const finishResolve = () => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          cleanup();
+          resolve(candidate);
+        };
+
+        const finishReject = (error: Error) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          cleanup();
+          try {
+            candidate.close();
+          } catch {
+            // ignore close failures while cleaning up failed attempts
+          }
+          reject(error);
+        };
+
+        const handleOpen = () => finishResolve();
+        const handleError = () => finishReject(new Error('codex app-server websocket connection failed'));
+        const handleClose = () => finishReject(new Error('codex app-server websocket closed before opening'));
+        const handleAbort = () => finishReject(new Error('codex app-server websocket connection aborted'));
+        const timer = setTimeout(() => finishReject(new Error('timed out waiting for codex app-server websocket')), 750);
+
+        candidate.addEventListener('open', handleOpen);
+        candidate.addEventListener('error', handleError);
+        candidate.addEventListener('close', handleClose);
+        options.signal?.addEventListener('abort', handleAbort, { once: true });
+      });
+      return socket;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (Date.now() >= deadline) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
+  throw lastError ?? new Error('failed to connect to codex app-server websocket');
+}
+
+function normalizeCodexAppServerMessageData(data: unknown): string {
+  if (typeof data === 'string') {
+    return data;
+  }
+  if (data instanceof ArrayBuffer) {
+    return Buffer.from(data).toString('utf8');
+  }
+  if (ArrayBuffer.isView(data)) {
+    return Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString('utf8');
+  }
+  return String(data ?? '');
+}
+
+async function launchDetachedCodexAppServerProcess(input: {
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  args: string[];
+  signal?: AbortSignal;
+}): Promise<number> {
+  const launcherScript = `
+    const { spawn } = require('node:child_process');
+    const command = process.argv[1];
+    const args = JSON.parse(process.argv[2]);
+    const cwd = process.argv[3];
+    try {
+      const child = spawn(command, args, {
+        cwd,
+        env: process.env,
+        detached: true,
+        stdio: 'ignore',
+      });
+      if (!child.pid || !Number.isInteger(child.pid) || child.pid <= 0) {
+        console.error('missing detached codex app-server pid');
+        process.exit(1);
+      }
+      console.log(String(child.pid));
+      child.unref();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(message);
+      process.exit(1);
+    }
+  `;
+  const launcher = spawn(process.execPath, ['-e', launcherScript, 'codex', JSON.stringify(input.args), input.cwd], {
+    cwd: input.cwd,
+    env: input.env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    signal: input.signal,
+  });
+  const stdoutChunks: string[] = [];
+  const stderrChunks: string[] = [];
+  launcher.stdout?.on('data', (chunk: Buffer | string) => {
+    stdoutChunks.push(typeof chunk === 'string' ? chunk : chunk.toString('utf8'));
+  });
+  launcher.stderr?.on('data', (chunk: Buffer | string) => {
+    stderrChunks.push(typeof chunk === 'string' ? chunk : chunk.toString('utf8'));
+  });
+
+  const exitCode = await new Promise<number | null>((resolve, reject) => {
+    launcher.once('error', reject);
+    launcher.once('close', (code) => resolve(code));
+  });
+  if (exitCode !== 0) {
+    const detail = stderrChunks.join('').trim() || stdoutChunks.join('').trim() || `exit code ${exitCode ?? 'null'}`;
+    throw new Error(`failed to launch detached codex app-server: ${detail}`);
+  }
+
+  const pid = Number.parseInt(stdoutChunks.join('').trim(), 10);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    throw new Error(`failed to parse detached codex app-server pid: ${stdoutChunks.join('').trim()}`);
+  }
+  return pid;
+}
+
+function terminateCodexAppServerProcess(
+  child: { pid?: number; killed?: boolean; kill: (signal?: NodeJS.Signals | number) => boolean },
+  killProcess: (pid: number, signal?: NodeJS.Signals | number) => void = process.kill,
+  signal: NodeJS.Signals = 'SIGTERM',
+): void {
+  if (child.killed) {
+    return;
+  }
+
+  const pid = typeof child.pid === 'number' && Number.isInteger(child.pid) && child.pid > 0
+    ? child.pid
+    : null;
+  if (pid !== null) {
+    try {
+      killProcess(-pid, signal);
+      return;
+    } catch {
+      // Fall back to the direct child signal if the process group no longer exists.
+    }
+  }
+
+  child.kill(signal);
+}
+
 export const happyClientTestHooks = {
   parseAgentStreamLine,
   parseAgentStreamOutput,
@@ -1488,6 +1724,9 @@ export const happyClientTestHooks = {
   shouldSkipDuplicateAgentMessage,
   buildClaudeSessionId,
   buildAgentCommand,
+  buildCodexAppServerListenUrl,
+  buildCodexAppServerSpawnOptions,
+  terminateCodexAppServerProcess,
   waitForStableActivity,
   resolveClaudeLaunchMode,
   resolveAgentCommandTimeoutMs,
@@ -2881,17 +3120,19 @@ export class HappyRuntimeStore {
     const autoApproveAll = sessionApprovalPolicy === 'yolo';
     const effectiveSandboxMode = autoApproveAll ? 'danger-full-access' : CODEX_SANDBOX_MODE;
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
+    const listenPort = await reserveCodexAppServerPort();
+    const listenUrl = buildCodexAppServerListenUrl(listenPort);
     const args = [
       ...(selectedModel ? ['-c', `model=${JSON.stringify(selectedModel)}`] : []),
       ...(selectedReasoningEffort ? ['-c', `model_reasoning_effort=${JSON.stringify(selectedReasoningEffort)}`] : []),
       'app-server',
       '--listen',
-      'stdio://',
+      listenUrl,
     ];
-    const child = spawn('codex', args, {
+    const appServerPid = await launchDetachedCodexAppServerProcess({
       cwd: safeCwd,
       env: { ...process.env, PATH: mergedPath },
-      stdio: ['pipe', 'pipe', 'pipe'],
+      args,
       signal,
     });
     this.happyEventLogger.logParsed({
@@ -2905,23 +3146,20 @@ export class HappyRuntimeStore {
       payload: {
         mode: 'app-server',
         args,
+        listenUrl,
+        appServerPid,
       },
     });
 
-    if (!child.stdin || !child.stdout || !child.stderr) {
-      throw new Error('codex app-server stdio streams are unavailable');
-    }
-
-    const stdoutLines = createInterface({ input: child.stdout });
-    let stderr = '';
+    const socket = await connectCodexAppServerSocket(listenUrl, { signal });
     let appendChain: Promise<void> = Promise.resolve();
     let permissionChain: Promise<void> = Promise.resolve();
     let lastAgentMessage = '';
     let pendingAgentMessage = '';
     let streamedPersisted = false;
     let agentMessagePersisted = false;
-    let stdoutActivityTick = 0;
-    let lastStdoutActivityAt = Date.now();
+    let transportActivityTick = 0;
+    let lastTransportActivityAt = Date.now();
     let resolvedThreadId = typeof threadId === 'string' && threadId.trim().length > 0
       ? threadId.trim()
       : '';
@@ -2944,9 +3182,12 @@ export class HappyRuntimeStore {
       resolveTurnCompletion = resolve;
     });
 
-    const childClosed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
-      child.once('error', reject);
-      child.once('close', (code, closeSignal) => resolve({ code, signal: closeSignal }));
+    const transportClosed = new Promise<never>((_, reject) => {
+      const handleClose = () => {
+        socket.removeEventListener('close', handleClose);
+        reject(new Error('codex app-server websocket closed before turn completion'));
+      };
+      socket.addEventListener('close', handleClose);
     });
 
     const enqueueAppend = (
@@ -2976,18 +3217,17 @@ export class HappyRuntimeStore {
     };
 
     const sendJsonRpc = (payload: Record<string, unknown>): Promise<void> => new Promise((resolve, reject) => {
-      if (!child.stdin || child.stdin.destroyed || !child.stdin.writable) {
-        reject(new Error('codex app-server stdin is not writable'));
+      if (socket.readyState !== 1) {
+        reject(new Error('codex app-server websocket is not open'));
         return;
       }
 
-      child.stdin.write(`${JSON.stringify(payload)}\n`, (error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
+      try {
+        socket.send(JSON.stringify(payload));
         resolve();
-      });
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
     });
 
     const sendJsonRpcResult = async (id: JsonRpcId | unknown, result: Record<string, unknown>) => {
@@ -3390,14 +3630,10 @@ export class HappyRuntimeStore {
       }
     };
 
-    child.stderr.on('data', (chunk: Buffer | string) => {
-      stderr += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-    });
-
-    stdoutLines.on('line', (line) => {
-      stdoutActivityTick += 1;
-      lastStdoutActivityAt = Date.now();
-      const rawLine = line.trim();
+    const handleIncomingPayloadText = (rawText: string) => {
+      transportActivityTick += 1;
+      lastTransportActivityAt = Date.now();
+      const rawLine = rawText.trim();
       this.happyEventLogger.logRaw({
         sessionId: session.id,
         agent: 'codex',
@@ -3467,20 +3703,28 @@ export class HappyRuntimeStore {
 
       const resultPayload = asRecord(payload.result) ?? {};
       pending.resolve(resultPayload);
+    };
+
+    socket.addEventListener('message', (event) => {
+      handleIncomingPayloadText(normalizeCodexAppServerMessageData(event.data));
+    });
+    socket.addEventListener('close', () => {
+      for (const [key, pending] of pendingRequests.entries()) {
+        pending.reject(new Error(`JSON-RPC request cancelled: ${pending.method}`));
+        pendingRequests.delete(key);
+      }
     });
 
     const closeChild = async () => {
-      stdoutLines.close();
-      if (child.stdin && !child.stdin.destroyed) {
-        child.stdin.end();
+      try {
+        socket.close(1000, 'turn-complete');
+      } catch {
+        // ignore websocket close failures during shutdown
       }
-      if (!child.killed) {
-        child.kill('SIGTERM');
-      }
-      await Promise.race([
-        childClosed,
-        new Promise<void>((resolve) => setTimeout(resolve, 1_500)),
-      ]).catch(() => undefined);
+      const pseudoChild = { pid: appServerPid, killed: false, kill: () => false };
+      terminateCodexAppServerProcess(pseudoChild, process.kill, 'SIGTERM');
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      terminateCodexAppServerProcess(pseudoChild, process.kill, 'SIGKILL');
     };
 
     const waitForPostTurnDrain = async () => {
@@ -3488,23 +3732,23 @@ export class HappyRuntimeStore {
 
       while (Date.now() < drainDeadline) {
         await waitForStableActivity({
-          getActivityTick: () => stdoutActivityTick,
-          getLastActivityAt: () => lastStdoutActivityAt,
+          getActivityTick: () => transportActivityTick,
+          getLastActivityAt: () => lastTransportActivityAt,
           quietMs: CODEX_APP_SERVER_POST_TURN_QUIET_MS,
           timeoutMs: Math.max(10, drainDeadline - Date.now()),
         });
 
-        const activityTickSnapshot = stdoutActivityTick;
+        const activityTickSnapshot = transportActivityTick;
         const appendSnapshot = appendChain;
         const permissionSnapshot = permissionChain;
         await appendSnapshot;
         await permissionSnapshot;
 
         if (
-          activityTickSnapshot === stdoutActivityTick
+          activityTickSnapshot === transportActivityTick
           && appendSnapshot === appendChain
           && permissionSnapshot === permissionChain
-          && Date.now() - lastStdoutActivityAt >= CODEX_APP_SERVER_POST_TURN_QUIET_MS
+          && Date.now() - lastTransportActivityAt >= CODEX_APP_SERVER_POST_TURN_QUIET_MS
         ) {
           return;
         }
@@ -3597,9 +3841,7 @@ export class HappyRuntimeStore {
       let turnTimeout: NodeJS.Timeout | undefined;
       const completion = await Promise.race([
         turnCompletion,
-        childClosed.then(({ code }) => {
-          throw new Error(`codex app-server closed before turn completion (exit code ${code ?? 'null'})`);
-        }),
+        transportClosed,
         new Promise<{ status: string; errorMessage?: string }>((_resolve, reject) => {
           turnTimeout = setTimeout(() => {
             runStatus = 'timed_out';
@@ -3662,7 +3904,7 @@ export class HappyRuntimeStore {
         preservePending: this.draining && !signal?.aborted,
       });
 
-      if (!turnCompleted && !signal?.aborted && stderr.trim()) {
+      if (!turnCompleted && !signal?.aborted) {
         if (runStatus === 'running') {
           runStatus = 'failed';
           runErrorMessage = 'turn did not complete before process close';
@@ -3678,10 +3920,11 @@ export class HappyRuntimeStore {
           payload: {
             threadId: resolvedThreadId || undefined,
             turnId: activeTurnId || undefined,
-            stderrPreview: stripAnsi(stderr).slice(0, 800),
+            listenUrl,
+            appServerPid,
           },
         });
-        console.error(`codex app-server stderr: ${stripAnsi(stderr).slice(0, 800)}`);
+        console.error(`codex app-server transport closed early; pid=${appServerPid} listenUrl=${listenUrl}`);
       }
       this.happyEventLogger.logParsed({
         sessionId: session.id,
