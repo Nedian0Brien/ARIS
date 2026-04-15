@@ -1050,3 +1050,37 @@ export async function runSessionAction(
     at: new Date().toISOString(),
   };
 }
+
+export async function runWorkspaceDeleteAction(sessionId: string): Promise<SessionActionResult> {
+  const raw = await fetchHappy('/v1/sessions');
+  const sessions = normalizeSessions(extractArrayPayload(raw, 'sessions'));
+  const target = sessions.find((session) => session.id === sessionId);
+
+  if (!target) {
+    return runSessionAction(sessionId, 'kill');
+  }
+
+  const normalizedPath = normalizeWorkspacePath(target.projectName);
+  const relatedSessionIds = Array.from(new Set(
+    sessions
+      .filter((session) => normalizeWorkspacePath(session.projectName) === normalizedPath)
+      .map((session) => session.id),
+  ));
+
+  const orderedSessionIds = [
+    sessionId,
+    ...relatedSessionIds.filter((id) => id !== sessionId),
+  ];
+
+  for (const relatedSessionId of orderedSessionIds) {
+    await runSessionAction(relatedSessionId, 'kill');
+  }
+
+  return {
+    sessionId,
+    action: 'kill',
+    accepted: true,
+    message: `KILL acknowledged (${orderedSessionIds.length} sessions)`,
+    at: new Date().toISOString(),
+  };
+}
