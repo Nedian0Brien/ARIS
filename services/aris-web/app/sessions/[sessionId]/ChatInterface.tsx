@@ -78,6 +78,7 @@ import {
   Pin,
   Plus,
   Square,
+  Loader2,
   ExternalLink,
   GitFork,
   GitPullRequest,
@@ -6528,6 +6529,28 @@ export function ChatInterface({
             })}
               </>
             )}
+
+            {isAgentRunning && (
+              <article className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                <div className={styles.messageWithAvatar}>
+                  <div className={`${styles.msgAvatar} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
+                    <agentMeta.Icon size={14} />
+                  </div>
+                  <div className={styles.msgBody}>
+                    <div className={styles.msgHeader}>
+                      <span className={styles.msgSender}>{agentMeta.label}</span>
+                    </div>
+                    <div className={styles.agentMessageStack}>
+                      <div className={`${styles.messageBubble} ${styles.messageBubbleAgent} ${styles.thinkingBubble}`}>
+                        <div className={styles.thinkingDots}>
+                          <span /><span /><span />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            )}
           </div>
 
           {showScrollToBottom && (
@@ -6664,17 +6687,6 @@ export function ChatInterface({
                       </select>
                     </label>
                   )}
-                  {isAgentRunning && (
-                    <div className={styles.composerRunningBadge} role="status" aria-live="polite">
-                      <span className={styles.runningDots} aria-hidden>
-                        <span /><span /><span />
-                      </span>
-                      {runPhaseLabel ?? '실행 중'}
-                      {awaitingReplySince && (
-                        <ElapsedTimer since={awaitingReplySince} className={styles.composerRunningElapsed} />
-                      )}
-                    </div>
-                  )}
                 </div>
 
                 {contextItems.length > 0 && (
@@ -6795,16 +6807,19 @@ export function ChatInterface({
                   />
 
                   {isAgentRunning ? (
-                    <button
-                      type="button"
-                      className={styles.composerStopBtn}
-                      onClick={handleAbortRun}
-                      disabled={isAborting}
-                      aria-label="실행 중단"
-                      title="실행 중단"
-                    >
-                      <Square size={13} fill="currentColor" />
-                    </button>
+                    <div className={styles.composerRunningBtnWrap}>
+                      <span className={styles.composerRunningBtnPulse} aria-hidden />
+                      <button
+                        type="button"
+                        className={styles.composerRunningBtn}
+                        onClick={handleAbortRun}
+                        disabled={isAborting}
+                        aria-label="실행 중단"
+                        title="클릭하여 실행 중단"
+                      >
+                        <Loader2 size={18} className={styles.composerRunningIcon} />
+                      </button>
+                    </div>
                   ) : (
                     <button
                       type="submit"
