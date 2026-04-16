@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ChangeEvent, ReactNode } from 'react';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
@@ -4666,6 +4666,18 @@ export function ChatInterface({
   useEffect(() => {
     resizeComposerInput();
   }, [prompt, resizeComposerInput]);
+
+  useLayoutEffect(() => {
+    syncComposerDockMetrics();
+  }, [
+    activeChatIdResolved,
+    isChatSidebarOpen,
+    isLeftSidebarOverlayLayout,
+    isNewChatPlaceholder,
+    isRightSidebarPinnedLayout,
+    isWorkspaceHome,
+    syncComposerDockMetrics,
+  ]);
 
   useEffect(() => {
     syncComposerDockMetrics();
