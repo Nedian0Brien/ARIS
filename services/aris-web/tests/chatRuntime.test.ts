@@ -214,6 +214,28 @@ describe('chatRuntime helpers', () => {
     })).toBe('running');
   });
 
+  it('treats turn_started as an active run status even when runtime polling lags', () => {
+    expect(resolveChatRunPhase({
+      isSubmitting: false,
+      isAwaitingReply: false,
+      isAborting: false,
+      hasCompletionSignal: false,
+      runtimeRunning: false,
+      runStatus: 'turn_started',
+    })).toBe('running');
+  });
+
+  it('keeps the run phase active while intermediate statuses like model_normalized are streaming', () => {
+    expect(resolveChatRunPhase({
+      isSubmitting: false,
+      isAwaitingReply: false,
+      isAborting: false,
+      hasCompletionSignal: false,
+      runtimeRunning: false,
+      runStatus: 'model_normalized',
+    })).toBe('running');
+  });
+
   it('drops back to idle when a restart notice arrived even if the last run status was run_started', () => {
     expect(resolveChatRunPhase({
       isSubmitting: false,

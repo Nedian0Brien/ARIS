@@ -2,7 +2,10 @@ import type { UiEvent } from '@/lib/happy/types';
 
 export type RunLifecycleStatus =
   | 'run_started'
+  | 'turn_started'
+  | 'model_normalized'
   | 'waiting_for_approval'
+  | 'run_completed'
   | 'completed'
   | 'failed'
   | 'aborted'
@@ -22,12 +25,19 @@ type ResolveChatRunPhaseInput = {
 };
 
 const TERMINAL_RUN_STATUSES = new Set<RunLifecycleStatus>([
+  'run_completed',
   'completed',
   'failed',
   'aborted',
   'timed_out',
   'turn_incomplete',
   'run_stale_cleanup',
+]);
+
+const ACTIVE_RUN_STATUSES = new Set<RunLifecycleStatus>([
+  'run_started',
+  'turn_started',
+  'model_normalized',
 ]);
 
 function isUserEvent(event: UiEvent): boolean {
@@ -199,7 +209,7 @@ export function resolveChatRunPhase(input: ResolveChatRunPhaseInput): ResolvedCh
   if (runStatus === 'waiting_for_approval') {
     return input.hasPendingPermission ? 'approval' : 'running';
   }
-  if (runStatus === 'run_started') {
+  if (ACTIVE_RUN_STATUSES.has(runStatus as RunLifecycleStatus)) {
     return 'running';
   }
   if (input.runtimeRunning) {
