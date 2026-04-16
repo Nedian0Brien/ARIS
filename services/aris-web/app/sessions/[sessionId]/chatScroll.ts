@@ -19,6 +19,15 @@ type AutoScrollToBottomInput = {
   shouldStickToBottom: boolean;
 };
 
+type RestoreTailScrollOnChatEntryInput = {
+  activeChatId: string | null;
+  eventsForChatId: string | null;
+  hasLoadedCurrentChat: boolean;
+  isWorkspaceHome: boolean;
+  isNewChatPlaceholder: boolean;
+  restoredForChatId: string | null;
+};
+
 export function resolveScrollToBottomTarget(input: ScrollToBottomTargetInput): 'window' | 'stream' {
   if (input.isMobileLayout) {
     return 'window';
@@ -42,4 +51,17 @@ export function shouldAutoScrollToBottom(input: AutoScrollToBottomInput): boolea
     return false;
   }
   return input.shouldStickToBottom;
+}
+
+export function shouldRestoreTailScrollOnChatEntry(input: RestoreTailScrollOnChatEntryInput): boolean {
+  if (input.isWorkspaceHome || input.isNewChatPlaceholder) {
+    return false;
+  }
+  if (!input.activeChatId || !input.hasLoadedCurrentChat) {
+    return false;
+  }
+  if (input.eventsForChatId !== input.activeChatId) {
+    return false;
+  }
+  return input.restoredForChatId !== input.activeChatId;
 }
