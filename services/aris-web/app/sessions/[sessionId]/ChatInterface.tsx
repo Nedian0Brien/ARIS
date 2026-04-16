@@ -101,6 +101,11 @@ import { resolveChatReadMarkerId } from './chatSidebar';
 import { looksLikeShellTranscript, shouldShowDebugToggleInHeader } from './chatDebugMode';
 import { WorkspaceHome } from './WorkspaceHome';
 import { deriveWorkspaceTitle } from './workspaceHome';
+import { buildWorkspacePagerItems, moveWorkspacePager } from './workspace-panels/pagerModel';
+import { WorkspacePager } from './workspace-panels/WorkspacePager';
+import { CreatePanelPage } from './workspace-panels/CreatePanelPage';
+import { PanelPageRenderer } from './workspace-panels/PanelPageRenderer';
+import { useWorkspacePanels } from './workspace-panels/useWorkspacePanels';
 import styles from './ChatInterface.module.css';
 import dynamic from 'next/dynamic';
 import {
@@ -3000,6 +3005,20 @@ export function ChatInterface({
     () => normalizeWorkspaceClientPath(workspaceRootPath),
     [workspaceRootPath],
   );
+  const {
+    layout: workspacePanelLayout,
+    activePageId: activeWorkspacePageId,
+    setActivePageId: setActiveWorkspacePageId,
+    loading: workspacePanelsLoading,
+    error: workspacePanelsError,
+    createPanel: createWorkspacePanel,
+    savePanel: saveWorkspacePanel,
+    deletePanel: deleteWorkspacePanel,
+  } = useWorkspacePanels(sessionId);
+  const workspacePagerItems = useMemo(
+    () => buildWorkspacePagerItems(workspacePanelLayout),
+    [workspacePanelLayout],
+  );
   const [fileBrowserPath, setFileBrowserPath] = useState(normalizedWorkspaceRootPath);
   const [fileBrowserItems, setFileBrowserItems] = useState<Array<{ name: string; path: string; isDirectory: boolean; isFile: boolean }>>([]);
   const [fileBrowserParentPath, setFileBrowserParentPath] = useState<string | null>(null);
@@ -5699,6 +5718,18 @@ export function ChatInterface({
     }
   }
 
+  const handleMoveWorkspacePage = useCallback((direction: 'previous' | 'next') => {
+    setActiveWorkspacePageId((current) => moveWorkspacePager(workspacePagerItems, current, direction));
+  }, [setActiveWorkspacePageId, workspacePagerItems]);
+
+  const handleCreateWorkspacePanel = useCallback(async (type: 'preview' | 'explorer' | 'terminal' | 'bookmark') => {
+    try {
+      await createWorkspacePanel(type);
+    } catch {
+      // The create page renders the shared error banner via workspacePanelsError.
+    }
+  }, [createWorkspacePanel]);
+
   const activeModel = activeComposerModels.find((m) => m.id === activeModelId)
     ?? { id: activeModelId, shortLabel: activeModelId, badge: '커스텀' };
 
@@ -6029,7 +6060,11 @@ export function ChatInterface({
       </aside>
 
       <main className={`${styles.centerPanel} ${isMobileLayout ? styles.centerPanelMobileScroll : ''}`} ref={centerPanelRef}>
-        <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
+        <WorkspacePager
+          items={workspacePagerItems}
+          activePageId={activeWorkspacePageId}
+          renderChatPage={() => (
+            <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
           <header className={styles.centerHeader} ref={centerHeaderRef}>
             <button
               type="button"
@@ -6060,23 +6095,25 @@ export function ChatInterface({
               )}
             </div>
             <div className={styles.centerHeaderActions}>
-              {isCustomizationOverlayLayout && (
-                <button
-                  type="button"
-                  className={styles.sidebarToggleButton}
-                  onClick={() => {
-                    if (isLeftSidebarOverlayLayout) {
-                      setIsChatSidebarOpen(false);
-                    }
-                    setIsContextMenuOpen(false);
-                    setIsCustomizationSidebarOpen((prev) => !prev);
-                  }}
-                  aria-label={isCustomizationSidebarOpen ? '우측 사이드바 닫기' : '우측 사이드바 열기'}
-                  title={isCustomizationSidebarOpen ? '우측 사이드바 닫기' : '우측 사이드바 열기'}
-                >
-                  {isCustomizationSidebarOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
-                </button>
-              )}
+              <button
+                type="button"
+                className={styles.sidebarToggleButton}
+                onClick={() => handleMoveWorkspacePage('previous')}
+                aria-label="이전 작업 화면으로 이동"
+                title="이전 작업 화면으로 이동"
+                disabled={activeWorkspacePageId === 'chat'}
+              >
+                <ChevronLeft size={15} />
+              </button>
+              <button
+                type="button"
+                className={styles.sidebarToggleButton}
+                onClick={() => handleMoveWorkspacePage('next')}
+                aria-label="다음 작업 화면으로 이동"
+                title="다음 작업 화면으로 이동"
+              >
+                <ChevronRight size={15} />
+              </button>
               {showDebugToggleInHeader && (
                 <button
                   type="button"
@@ -6877,6 +6914,53 @@ export function ChatInterface({
             )}
           </>
         </section>
+          )}
+          renderCreatePage={() => (
+            <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
+              <div className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''}`}>
+                {workspacePanelsError ? (
+                  <div className={styles.noticeWrap}>
+                    <BackendNotice message={workspacePanelsError} />
+                  </div>
+                ) : null}
+                {workspacePanelsLoading ? (
+                  <div className={styles.emptyChatState}>
+                    <div className={styles.agentSelectorTitle}>패널 화면을 준비하는 중…</div>
+                  </div>
+                ) : (
+                  <CreatePanelPage onCreatePanel={handleCreateWorkspacePanel} />
+                )}
+              </div>
+            </section>
+          )}
+          renderPanelPage={(item) => {
+            const panel = workspacePanelLayout.panels.find((candidate) => candidate.id === item.panelId);
+
+            return (
+              <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
+                <div className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''}`}>
+                  {workspacePanelsError ? (
+                    <div className={styles.noticeWrap}>
+                      <BackendNotice message={workspacePanelsError} />
+                    </div>
+                  ) : null}
+                  {panel ? (
+                    <PanelPageRenderer
+                      sessionId={sessionId}
+                      panel={panel}
+                      onSavePanel={saveWorkspacePanel}
+                      onDeletePanel={deleteWorkspacePanel}
+                    />
+                  ) : (
+                    <div className={styles.emptyChatState}>
+                      <div className={styles.agentSelectorTitle}>패널을 찾을 수 없습니다.</div>
+                    </div>
+                  )}
+                </div>
+              </section>
+            );
+          }}
+        />
       </main>
 
       {isCustomizationOverlayLayout && (
