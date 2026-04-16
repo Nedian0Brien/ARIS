@@ -4,6 +4,7 @@ import React, { useEffect, useRef, type PointerEvent, type ReactNode } from 'rea
 import styles from './WorkspacePager.module.css';
 import type { WorkspacePagerItem } from './pagerModel';
 import { resolveWorkspacePagerSwipeTarget } from './swipeGesture';
+import { transitionWorkspacePageScrollMemory, type WorkspacePageScrollMemory } from './workspacePageScrollMemory';
 
 const SWIPE_THRESHOLD_PX = 56;
 const GESTURE_LOCK_THRESHOLD_PX = 8;
@@ -27,6 +28,8 @@ export function WorkspacePager({
 }: WorkspacePagerProps) {
   const pagerRef = useRef<HTMLDivElement | null>(null);
   const syncRef = useRef(false);
+  const scrollMemoryRef = useRef<WorkspacePageScrollMemory>({});
+  const previousActivePageIdRef = useRef(activePageId);
   const gestureRef = useRef({
     tracking: false,
     pointerId: -1,
@@ -37,6 +40,25 @@ export function WorkspacePager({
     horizontal: false,
     vertical: false,
   });
+
+  useEffect(() => {
+    const previousPageId = previousActivePageIdRef.current;
+    if (previousPageId !== activePageId && typeof window !== 'undefined') {
+      const { memory, nextScrollTop } = transitionWorkspacePageScrollMemory({
+        memory: scrollMemoryRef.current,
+        previousPageId,
+        previousScrollTop: window.scrollY,
+        nextPageId: activePageId,
+      });
+
+      scrollMemoryRef.current = memory;
+      window.scrollTo({
+        top: nextScrollTop,
+        behavior: 'auto',
+      });
+      previousActivePageIdRef.current = activePageId;
+    }
+  }, [activePageId]);
 
   useEffect(() => {
     const pager = pagerRef.current;
