@@ -1,7 +1,7 @@
 .chatShell {
   --composer-dock-height: 98px;
   --composer-dock-left: 0.75rem;
-  --composer-dock-width: calc(100vw - 1.5rem);
+  --composer-dock-width: calc(100vw - 1.75rem);
   --center-header-height: 60px;
   --global-header-offset-effective: var(--global-header-offset, 64px);
   --safe-area-bottom-effective: max(0px, calc(env(safe-area-inset-bottom) - var(--keyboard-inset-height, 0px)));
@@ -257,6 +257,23 @@
 
 .chatShellSidebarClosed {
   grid-template-columns: 0 minmax(0, 1fr) 320px;
+}
+
+@media (min-width: 961px) {
+  .chatShell {
+    --composer-dock-left: calc(280px + 1.25rem);
+    --composer-dock-width: max(240px, calc(100vw - 280px - 320px - 2.5rem));
+  }
+
+  .chatShellSidebarClosed {
+    --composer-dock-left: 0.75rem;
+    --composer-dock-width: max(240px, calc(100vw - 320px - 1.5rem));
+  }
+
+  .chatShellLeftOverlay {
+    --composer-dock-left: 0.75rem;
+    --composer-dock-width: calc(100vw - 1.75rem);
+  }
 }
 
 .chatShellRightPinned {
