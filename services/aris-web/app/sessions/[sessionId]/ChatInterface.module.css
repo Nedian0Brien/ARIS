@@ -86,7 +86,7 @@
   --chat-agent-gemini-bg: var(--agent-gemini-bg);
   --chat-agent-gemini-accent: var(--agent-gemini-accent);
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  grid-template-columns: 280px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   gap: 1rem;
   height: 100%;
@@ -252,22 +252,22 @@
 }
 
 .chatShellSidebarOpen {
-  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  grid-template-columns: 280px minmax(0, 1fr);
 }
 
 .chatShellSidebarClosed {
-  grid-template-columns: 0 minmax(0, 1fr) 320px;
+  grid-template-columns: 0 minmax(0, 1fr);
 }
 
 @media (min-width: 961px) {
   .chatShell {
     --composer-dock-left: calc(280px + 1.25rem);
-    --composer-dock-width: max(240px, calc(100vw - 280px - 320px - 2.5rem));
+    --composer-dock-width: max(240px, calc(100vw - 280px - 1.5rem));
   }
 
   .chatShellSidebarClosed {
     --composer-dock-left: 0.75rem;
-    --composer-dock-width: max(240px, calc(100vw - 320px - 1.5rem));
+    --composer-dock-width: max(240px, calc(100vw - 1.5rem));
   }
 
   .chatShellLeftOverlay {
@@ -277,14 +277,14 @@
 }
 
 .chatShellRightPinned {
-  grid-template-columns: 280px minmax(720px, 1fr) 320px;
+  grid-template-columns: 280px minmax(720px, 1fr);
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
 }
 
 .chatShellLeftOverlay {
-  grid-template-columns: 0 minmax(720px, 1fr) 320px;
+  grid-template-columns: 0 minmax(720px, 1fr);
 }
 
 .chatShell.chatShellMobileScroll {
@@ -4044,15 +4044,11 @@
   }
 
   .chatShellRightPinned {
-    grid-template-columns: 280px minmax(720px, 1fr) 320px;
+    grid-template-columns: 280px minmax(720px, 1fr);
   }
 
   .chatShellRightPinned.chatShellLeftOverlay {
-    grid-template-columns: 0 minmax(720px, 1fr) 320px;
-  }
-
-  .chatShellRightPinned .rightPanel {
-    display: block;
+    grid-template-columns: 0 minmax(720px, 1fr);
   }
 }
 

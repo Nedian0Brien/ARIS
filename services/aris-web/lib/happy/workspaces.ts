@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import type { SessionSummary } from '@/lib/happy/types';
 import { buildDefaultWorkspacePanel } from '@/lib/workspacePanels/defaults';
@@ -191,7 +192,7 @@ export async function saveWorkspacePanelLayout(input: {
       userId: input.userId,
     },
     data: {
-      panelLayoutJson: normalized,
+      panelLayoutJson: normalized as Prisma.InputJsonValue,
     },
   });
 
