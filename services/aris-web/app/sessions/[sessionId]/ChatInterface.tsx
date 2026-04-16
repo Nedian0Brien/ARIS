@@ -6063,6 +6063,7 @@ export function ChatInterface({
         <WorkspacePager
           items={workspacePagerItems}
           activePageId={activeWorkspacePageId}
+          onActivePageChange={setActiveWorkspacePageId}
           renderChatPage={() => (
             <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
           <header className={styles.centerHeader} ref={centerHeaderRef}>
