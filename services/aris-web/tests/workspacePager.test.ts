@@ -23,12 +23,25 @@ type PagerComponentModule = {
   }) => React.ReactNode;
 };
 
+type PagerGestureModule = {
+  resolveWorkspacePagerSwipeTarget?: (
+    items: PagerItem[],
+    activePageId: string,
+    deltaX: number,
+    thresholdPx: number,
+  ) => string;
+};
+
 async function loadPagerModelModule(): Promise<PagerModelModule> {
   return import('@/app/sessions/[sessionId]/workspace-panels/pagerModel').catch(() => ({}));
 }
 
 async function loadPagerComponentModule(): Promise<PagerComponentModule> {
   return import('@/app/sessions/[sessionId]/workspace-panels/WorkspacePager').catch(() => ({}));
+}
+
+async function loadPagerGestureModule(): Promise<PagerGestureModule> {
+  return import('@/app/sessions/[sessionId]/workspace-panels/swipeGesture').catch(() => ({}));
 }
 
 describe('workspace pager model', () => {
@@ -102,5 +115,23 @@ describe('workspace pager model', () => {
     expect(markup).toContain('Create Panel');
     expect(markup.indexOf('Chat Page')).toBeLessThan(markup.indexOf('Preview Page'));
     expect(markup.indexOf('Preview Page')).toBeLessThan(markup.indexOf('Create Panel'));
+  });
+
+  it('changes page only when the swipe crosses the threshold', async () => {
+    const mod = await loadPagerGestureModule();
+
+    expect(typeof mod.resolveWorkspacePagerSwipeTarget).toBe('function');
+    if (typeof mod.resolveWorkspacePagerSwipeTarget !== 'function') return;
+
+    const items: PagerItem[] = [
+      { id: 'chat', kind: 'chat' },
+      { id: 'panel-preview-1', kind: 'panel', panelId: 'panel-preview-1' },
+      { id: 'create-panel', kind: 'create-panel' },
+    ];
+
+    expect(mod.resolveWorkspacePagerSwipeTarget(items, 'chat', -80, 60)).toBe('panel-preview-1');
+    expect(mod.resolveWorkspacePagerSwipeTarget(items, 'panel-preview-1', 80, 60)).toBe('chat');
+    expect(mod.resolveWorkspacePagerSwipeTarget(items, 'panel-preview-1', -59, 60)).toBe('panel-preview-1');
+    expect(mod.resolveWorkspacePagerSwipeTarget(items, 'create-panel', -120, 60)).toBe('create-panel');
   });
 });
