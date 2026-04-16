@@ -1,9 +1,13 @@
 import React from 'react';
 import type { WorkspacePanelRecord } from '@/lib/workspacePanels/types';
 import { PlaceholderPanelPage } from './PlaceholderPanelPage';
+import { PreviewPanelPage } from './PreviewPanelPage';
 
 type PanelPageRendererProps = {
+  sessionId: string;
   panel: WorkspacePanelRecord;
+  onSavePanel?: (panelId: string, updates: { title?: string; config?: Record<string, unknown> }) => Promise<unknown>;
+  onDeletePanel?: (panelId: string) => Promise<unknown>;
 };
 
 const PLACEHOLDER_DESCRIPTIONS: Record<WorkspacePanelRecord['type'], string> = {
@@ -13,7 +17,18 @@ const PLACEHOLDER_DESCRIPTIONS: Record<WorkspacePanelRecord['type'], string> = {
   bookmark: '스크립트와 문서 바로가기가 여기에 들어옵니다.',
 };
 
-export function PanelPageRenderer({ panel }: PanelPageRendererProps) {
+export function PanelPageRenderer({ sessionId, panel, onSavePanel, onDeletePanel }: PanelPageRendererProps) {
+  if (panel.type === 'preview') {
+    return (
+      <PreviewPanelPage
+        sessionId={sessionId}
+        panel={panel}
+        onSavePanel={onSavePanel}
+        onDeletePanel={onDeletePanel}
+      />
+    );
+  }
+
   return (
     <PlaceholderPanelPage
       title={panel.title}

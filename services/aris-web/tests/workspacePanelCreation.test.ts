@@ -13,12 +13,31 @@ type PlaceholderPanelPageModule = {
   PlaceholderPanelPage?: (props: { title: string; description: string }) => React.ReactNode;
 };
 
+type PanelPageRendererModule = {
+  PanelPageRenderer?: (props: {
+    sessionId: string;
+    panel: {
+      id: string;
+      type: 'preview' | 'explorer' | 'terminal' | 'bookmark';
+      title: string;
+      config: Record<string, unknown>;
+      createdAt: string | null;
+    };
+    onSavePanel?: (panelId: string, updates: { title?: string; config?: Record<string, unknown> }) => Promise<void>;
+    onDeletePanel?: (panelId: string) => Promise<void>;
+  }) => React.ReactNode;
+};
+
 async function loadCreatePanelPageModule(): Promise<CreatePanelPageModule> {
   return import('@/app/sessions/[sessionId]/workspace-panels/CreatePanelPage').catch(() => ({}));
 }
 
 async function loadPlaceholderPanelPageModule(): Promise<PlaceholderPanelPageModule> {
   return import('@/app/sessions/[sessionId]/workspace-panels/PlaceholderPanelPage').catch(() => ({}));
+}
+
+async function loadPanelPageRendererModule(): Promise<PanelPageRendererModule> {
+  return import('@/app/sessions/[sessionId]/workspace-panels/PanelPageRenderer').catch(() => ({}));
 }
 
 function isElement(node: ReactNode): node is AnyElement {
@@ -87,5 +106,29 @@ describe('workspace panel creation surfaces', () => {
     expect(markup).toContain('Explorer');
     expect(markup).toContain('파일 트리와 문서 탐색이 여기에 들어옵니다.');
     expect(markup).toContain('준비 중');
+  });
+
+  it('renders a dedicated preview panel page for preview panels', async () => {
+    const mod = await loadPanelPageRendererModule();
+
+    expect(typeof mod.PanelPageRenderer).toBe('function');
+    if (typeof mod.PanelPageRenderer !== 'function') return;
+
+    const markup = renderToStaticMarkup(React.createElement(mod.PanelPageRenderer, {
+      sessionId: 'session-1',
+      panel: {
+        id: 'panel-preview-1',
+        type: 'preview',
+        title: 'Preview',
+        config: { port: 3305, path: '/' },
+        createdAt: '2026-04-16T00:00:00.000Z',
+      },
+      onSavePanel: vi.fn(async () => {}),
+      onDeletePanel: vi.fn(async () => {}),
+    }));
+
+    expect(markup).toContain('로컬 개발서버');
+    expect(markup).toContain('포트');
+    expect(markup).not.toContain('준비 중');
   });
 });

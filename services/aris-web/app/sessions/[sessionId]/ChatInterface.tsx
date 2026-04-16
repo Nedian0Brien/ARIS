@@ -3012,6 +3012,8 @@ export function ChatInterface({
     loading: workspacePanelsLoading,
     error: workspacePanelsError,
     createPanel: createWorkspacePanel,
+    savePanel: saveWorkspacePanel,
+    deletePanel: deleteWorkspacePanel,
   } = useWorkspacePanels(sessionId);
   const workspacePagerItems = useMemo(
     () => buildWorkspacePagerItems(workspacePanelLayout),
@@ -6943,7 +6945,12 @@ export function ChatInterface({
                     </div>
                   ) : null}
                   {panel ? (
-                    <PanelPageRenderer panel={panel} />
+                    <PanelPageRenderer
+                      sessionId={sessionId}
+                      panel={panel}
+                      onSavePanel={saveWorkspacePanel}
+                      onDeletePanel={deleteWorkspacePanel}
+                    />
                   ) : (
                     <div className={styles.emptyChatState}>
                       <div className={styles.agentSelectorTitle}>패널을 찾을 수 없습니다.</div>

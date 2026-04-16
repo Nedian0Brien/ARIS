@@ -1,0 +1,193 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 100%;
+  padding: 1rem;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 1.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--accent-sky-bg) 78%, transparent);
+  color: color-mix(in srgb, var(--accent-sky) 84%, var(--text) 16%);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.2rem;
+  line-height: 1.2;
+}
+
+.description {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.9rem;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--accent-sky-bg) 28%, transparent), transparent 40%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 95%, white 5%), color-mix(in srgb, var(--surface-secondary) 90%, white 10%));
+}
+
+.fieldRow {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 2.85rem;
+  border-radius: 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  background: color-mix(in srgb, var(--surface) 94%, white 6%);
+  color: var(--text);
+  padding: 0.75rem 0.9rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.button {
+  min-width: 0;
+  min-height: 2.75rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line) 76%, transparent);
+  background: color-mix(in srgb, var(--surface) 92%, white 8%);
+  color: var(--text);
+  padding: 0.65rem 1rem;
+  font-weight: 700;
+}
+
+.buttonPrimary {
+  border-color: color-mix(in srgb, var(--accent-sky) 40%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-sky) 18%, var(--surface) 82%), color-mix(in srgb, var(--accent-emerald) 16%, var(--surface) 84%));
+}
+
+.buttonDanger {
+  border-color: color-mix(in srgb, var(--accent-rose) 34%, transparent);
+  color: color-mix(in srgb, var(--accent-rose) 72%, var(--text) 28%);
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.9rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--surface-secondary) 92%, transparent);
+  color: var(--text-muted);
+}
+
+.statusReady {
+  background: color-mix(in srgb, var(--accent-emerald-bg) 74%, transparent);
+  color: color-mix(in srgb, var(--accent-emerald) 82%, var(--text) 18%);
+}
+
+.statusError {
+  background: color-mix(in srgb, var(--accent-rose-bg) 76%, transparent);
+  color: color-mix(in srgb, var(--accent-rose) 84%, var(--text) 16%);
+}
+
+.statusMeta {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.frameWrap {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 20rem;
+  flex: 1 1 auto;
+  border-radius: 1.2rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--surface-secondary) 86%, black 14%), color-mix(in srgb, var(--surface) 84%, black 16%));
+}
+
+.frame {
+  width: 100%;
+  height: 100%;
+  min-height: 20rem;
+  border: 0;
+  background: white;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 20rem;
+  padding: 1.2rem;
+  color: var(--text-muted);
+}
+
+@media (min-width: 768px) {
+  .fieldRow {
+    grid-template-columns: minmax(0, 10rem) minmax(0, 1fr);
+  }
+}

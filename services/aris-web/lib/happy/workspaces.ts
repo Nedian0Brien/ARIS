@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import type { SessionSummary } from '@/lib/happy/types';
+import { normalizeLocalPreviewConfig } from '@/lib/preview/localPreviewProxy';
 import { buildDefaultWorkspacePanel } from '@/lib/workspacePanels/defaults';
 import { normalizeWorkspacePanelLayout } from '@/lib/workspacePanels/layout';
 import type { WorkspacePanelLayout, WorkspacePanelType } from '@/lib/workspacePanels/types';
@@ -227,6 +228,85 @@ export async function createWorkspacePanel(input: {
       version: 1,
       activePage: { kind: 'panel', panelId: nextPanel.id },
       panels: [...current.panels, nextPanel],
+    },
+  });
+}
+
+export async function updateWorkspacePanel(input: {
+  userId: string;
+  workspaceId: string;
+  panelId: string;
+  title?: string;
+  config?: Record<string, unknown>;
+}): Promise<WorkspacePanelLayout> {
+  const current = await getWorkspacePanelLayout({
+    userId: input.userId,
+    workspaceId: input.workspaceId,
+  });
+
+  const panelIndex = current.panels.findIndex((panel) => panel.id === input.panelId);
+  if (panelIndex < 0) {
+    throw new Error('PANEL_NOT_FOUND');
+  }
+
+  const currentPanel = current.panels[panelIndex];
+  const nextPanel = {
+    ...currentPanel,
+    ...(input.title !== undefined ? { title: input.title } : {}),
+    ...(input.config !== undefined
+      ? {
+          config: currentPanel.type === 'preview'
+            ? normalizeLocalPreviewConfig({ ...currentPanel.config, ...input.config })
+            : { ...currentPanel.config, ...input.config },
+        }
+      : {}),
+  };
+
+  const nextPanels = [...current.panels];
+  nextPanels[panelIndex] = nextPanel;
+
+  return saveWorkspacePanelLayout({
+    userId: input.userId,
+    workspaceId: input.workspaceId,
+    layout: {
+      version: 1,
+      activePage: current.activePage,
+      panels: nextPanels,
+    },
+  });
+}
+
+export async function deleteWorkspacePanel(input: {
+  userId: string;
+  workspaceId: string;
+  panelId: string;
+}): Promise<WorkspacePanelLayout> {
+  const current = await getWorkspacePanelLayout({
+    userId: input.userId,
+    workspaceId: input.workspaceId,
+  });
+
+  const panelIndex = current.panels.findIndex((panel) => panel.id === input.panelId);
+  if (panelIndex < 0) {
+    throw new Error('PANEL_NOT_FOUND');
+  }
+
+  const nextPanels = current.panels.filter((panel) => panel.id !== input.panelId);
+  const fallbackPanel = nextPanels[Math.max(0, panelIndex - 1)] ?? nextPanels[panelIndex] ?? null;
+  const nextActivePage: WorkspacePanelLayout['activePage'] = (
+    current.activePage.kind === 'panel'
+    && current.activePage.panelId === input.panelId
+  )
+    ? (fallbackPanel ? { kind: 'panel', panelId: fallbackPanel.id } : { kind: 'chat' })
+    : current.activePage;
+
+  return saveWorkspacePanelLayout({
+    userId: input.userId,
+    workspaceId: input.workspaceId,
+    layout: {
+      version: 1,
+      activePage: nextActivePage,
+      panels: nextPanels,
     },
   });
 }

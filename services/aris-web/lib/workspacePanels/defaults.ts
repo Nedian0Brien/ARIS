@@ -1,3 +1,4 @@
+import { normalizeLocalPreviewConfig } from '@/lib/preview/localPreviewProxy';
 import type { WorkspacePanelRecord, WorkspacePanelType } from './types';
 
 const PANEL_TITLES: Record<WorkspacePanelType, string> = {
@@ -9,7 +10,7 @@ const PANEL_TITLES: Record<WorkspacePanelType, string> = {
 
 function buildDefaultConfig(type: WorkspacePanelType): Record<string, unknown> {
   if (type === 'preview') {
-    return { port: 3305, path: '/' };
+    return normalizeLocalPreviewConfig({ port: 3305, path: '/' });
   }
 
   return {};

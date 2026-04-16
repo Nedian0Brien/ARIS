@@ -73,6 +73,58 @@ export function useWorkspacePanels(sessionId: string) {
     return nextLayout;
   }, [sessionId]);
 
+  const savePanel = useCallback(async (
+    panelId: string,
+    updates: {
+      title?: string;
+      config?: Record<string, unknown>;
+    },
+  ) => {
+    setError(null);
+
+    const response = await fetch(
+      `/api/runtime/sessions/${encodeURIComponent(sessionId)}/panels/${encodeURIComponent(panelId)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updates),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error('PANEL_SAVE_FAILED');
+    }
+
+    const body = await response.json() as { layout?: unknown };
+    const nextLayout = normalizeWorkspacePanelLayout(body.layout);
+    setLayout(nextLayout);
+    setActivePageId(resolveActivePageId(nextLayout));
+    return nextLayout;
+  }, [sessionId]);
+
+  const deletePanel = useCallback(async (panelId: string) => {
+    setError(null);
+
+    const response = await fetch(
+      `/api/runtime/sessions/${encodeURIComponent(sessionId)}/panels/${encodeURIComponent(panelId)}`,
+      {
+        method: 'DELETE',
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error('PANEL_DELETE_FAILED');
+    }
+
+    const body = await response.json() as { layout?: unknown };
+    const nextLayout = normalizeWorkspacePanelLayout(body.layout);
+    setLayout(nextLayout);
+    setActivePageId(resolveActivePageId(nextLayout));
+    return nextLayout;
+  }, [sessionId]);
+
   const hasPanels = useMemo(() => layout.panels.length > 0, [layout.panels.length]);
 
   return {
@@ -83,5 +135,7 @@ export function useWorkspacePanels(sessionId: string) {
     error,
     hasPanels,
     createPanel,
+    savePanel,
+    deletePanel,
   };
 }

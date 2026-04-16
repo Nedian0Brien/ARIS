@@ -40,7 +40,16 @@ async function resolveFirstSessionPath(page: Page) {
 
 async function collectOverflow(page: Page, path: string) {
   await page.goto(path, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(1200);
+
+  if (path === '/') {
+    await page.locator('[class*="sessionDashboardLayout"]').first().waitFor({ state: 'visible', timeout: 20_000 });
+  } else if (path.startsWith('/sessions/')) {
+    await page.locator('[class*="ChatInterface_chatShell"]').first().waitFor({ state: 'visible', timeout: 20_000 });
+  } else {
+    await page.locator('.app-shell').first().waitFor({ state: 'visible', timeout: 20_000 });
+  }
+
+  await page.waitForTimeout(800);
   await page.screenshot({
     path: `test-results${path === '/' ? '/home-mobile.png' : `/session-mobile.png`}`,
     fullPage: true,
