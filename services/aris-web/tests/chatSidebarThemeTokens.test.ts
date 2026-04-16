@@ -24,11 +24,14 @@ describe('chat sidebar status theming tokens', () => {
   it('uses tokens instead of hard-coded colors in sidebar chat status styles', () => {
     expect(css).toMatch(/\.chatListPreviewIcon\s*\{[^}]*color:\s*var\(--chat-sidebar-preview-icon\)/s);
     expect(css).toMatch(/\.chatListPreviewText\s*\{[^}]*color:\s*var\(--chat-sidebar-preview-text\)/s);
-    expect(css).toMatch(/\.chatListItemStateRunning\s*\{[^}]*border-color:\s*var\(--chat-status-running-border\);[^}]*background:\s*var\(--chat-status-running-bg\);/s);
-    expect(css).toMatch(/\.chatListItemStateCompleted\s*\{[^}]*border-color:\s*var\(--chat-status-completed-border\);[^}]*background:\s*var\(--chat-status-completed-bg\);/s);
-    expect(css).toMatch(/\.chatListItemStateApproval\s*\{[^}]*border-color:\s*var\(--chat-status-approval-border\);[^}]*background:\s*var\(--chat-status-approval-bg\);/s);
-    expect(css).toMatch(/\.chatListItemStateError\s*\{[^}]*border-color:\s*var\(--chat-status-error-border\);[^}]*background:\s*var\(--chat-status-error-bg\);/s);
-    expect(css).toMatch(/\.chatListRunPhaseBadgeSubmitting\s*\{[^}]*background:\s*var\(--chat-status-submitting-badge-bg\);[^}]*color:\s*var\(--chat-status-submitting-text\);/s);
-    expect(css).toMatch(/\.chatListRunPhaseBadgeApproval\s*\{[^}]*background:\s*var\(--chat-status-approval-badge-bg\);[^}]*color:\s*var\(--chat-status-approval-text\);/s);
+    // Phase 1 visual redesign: state is expressed via left accent bar (::before)
+    // using semantic accent tokens instead of full border/background fills.
+    expect(css).toMatch(/\.chatListItemStateRunning::before\s*\{[^}]*background:\s*var\(--accent-sky\)/s);
+    expect(css).toMatch(/\.chatListItemStateCompleted::before\s*\{[^}]*background:\s*color-mix\([^)]*var\(--chat-text-muted\)/s);
+    expect(css).toMatch(/\.chatListItemStateApproval::before\s*\{[^}]*background:\s*var\(--accent-amber\)/s);
+    expect(css).toMatch(/\.chatListItemStateError::before\s*\{[^}]*background:\s*var\(--accent-red\)/s);
+    // Run phase label is inline, muted, and derives color from tokens rather than hard-coded values.
+    expect(css).toMatch(/\.chatListRunPhaseBadgeRunning\s*\{[^}]*color:\s*var\(--accent-sky\)/s);
+    expect(css).toMatch(/\.chatListRunPhaseBadgeApproval\s*\{[^}]*color:\s*var\(--accent-amber\)/s);
   });
 });
