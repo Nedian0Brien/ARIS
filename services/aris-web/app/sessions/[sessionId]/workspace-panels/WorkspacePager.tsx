@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState, type ReactNode, type TouchEvent } from 'react';
+import React, { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import styles from './WorkspacePager.module.css';
 import type { WorkspacePagerItem } from './pagerModel';
 import { resolveWorkspacePagerSwipeTarget } from './swipeGesture';
@@ -33,15 +33,18 @@ export function WorkspacePager({
 
   const [dragOffsetPx, setDragOffsetPx] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const dragOffsetRef = useRef(0);
   const gestureRef = useRef({
     tracking: false,
     horizontal: false,
     vertical: false,
+    pointerId: -1,
     startX: 0,
     startY: 0,
   });
 
   useEffect(() => {
+    dragOffsetRef.current = 0;
     setDragOffsetPx(0);
     setIsDragging(false);
   }, [activePageId]);
@@ -51,37 +54,39 @@ export function WorkspacePager({
       tracking: false,
       horizontal: false,
       vertical: false,
+      pointerId: -1,
       startX: 0,
       startY: 0,
     };
+    dragOffsetRef.current = 0;
     setDragOffsetPx(0);
     setIsDragging(false);
   };
 
-  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
-    const touch = event.touches[0];
-    if (!touch) {
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) {
       return;
     }
 
+    event.currentTarget.setPointerCapture(event.pointerId);
     gestureRef.current = {
       tracking: true,
       horizontal: false,
       vertical: false,
-      startX: touch.clientX,
-      startY: touch.clientY,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
     };
   };
 
-  const handleTouchMove = (event: TouchEvent<HTMLDivElement>) => {
-    const touch = event.touches[0];
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const gesture = gestureRef.current;
-    if (!gesture.tracking || !touch) {
+    if (!gesture.tracking || gesture.pointerId !== event.pointerId) {
       return;
     }
 
-    const deltaX = touch.clientX - gesture.startX;
-    const deltaY = touch.clientY - gesture.startY;
+    const deltaX = event.clientX - gesture.startX;
+    const deltaY = event.clientY - gesture.startY;
     const absDeltaX = Math.abs(deltaX);
     const absDeltaY = Math.abs(deltaY);
 
@@ -113,10 +118,11 @@ export function WorkspacePager({
       ? deltaX * EDGE_RESISTANCE
       : deltaX;
 
+    dragOffsetRef.current = nextOffset;
     setDragOffsetPx(nextOffset);
   };
 
-  const handleTouchEnd = () => {
+  const commitGesture = () => {
     const gesture = gestureRef.current;
     if (!gesture.tracking) {
       return;
@@ -130,7 +136,7 @@ export function WorkspacePager({
     const nextPageId = resolveWorkspacePagerSwipeTarget(
       items,
       activePageId,
-      dragOffsetPx,
+      dragOffsetRef.current,
       SWIPE_THRESHOLD_PX,
     );
     resetGesture();
@@ -139,16 +145,35 @@ export function WorkspacePager({
     }
   };
 
+  const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    if (gesture.pointerId !== event.pointerId) {
+      return;
+    }
+
+    commitGesture();
+  };
+
+  const handlePointerCancel = (event: PointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    if (gesture.pointerId !== event.pointerId) {
+      return;
+    }
+
+    commitGesture();
+  };
+
   const trackTransform = `translate3d(calc(-${activeIndex * 100}% + ${dragOffsetPx}px), 0, 0)`;
 
   return (
     <div
       className={styles.pager}
       data-active-page-id={activePageId}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
+      onLostPointerCapture={commitGesture}
     >
       <div
         className={isDragging ? `${styles.track} ${styles.trackDragging}` : styles.track}
