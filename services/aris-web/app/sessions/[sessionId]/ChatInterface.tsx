@@ -5833,7 +5833,7 @@ export function ChatInterface({
                               <span className={styles.chatListMainContent}>
                                 <span className={styles.chatListTitleWrap}>
                                   <span className={`${styles.chatListAgentAvatar} ${getAgentAvatarToneClass(rowAgentMeta.tone)}`}>
-                                    <RowAgentIcon size={11} />
+                                    <RowAgentIcon size={13} />
                                   </span>
                                   {chat.isPinned && <Pin size={12} className={styles.chatListPinIcon} />}
                                   {isRenaming ? (
@@ -6010,8 +6010,14 @@ export function ChatInterface({
                       );
                     })}
                     {section.key === 'history' && hasMoreChats && (
-                      <div ref={chatListSentinelRef} className={styles.chatSidebarInfiniteSentinel}>
-                        이전 채팅 불러오는 중...
+                      <div
+                        ref={chatListSentinelRef}
+                        className={styles.chatSidebarInfiniteSentinel}
+                        role="status"
+                        aria-label="이전 채팅 불러오는 중"
+                      >
+                        <div className={styles.chatSidebarSkeletonRow} aria-hidden="true" />
+                        <div className={styles.chatSidebarSkeletonRow} aria-hidden="true" />
                       </div>
                     )}
                   </div>
