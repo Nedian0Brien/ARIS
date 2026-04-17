@@ -3056,6 +3056,8 @@ export function ChatInterface({
   const commandMenuRef = useRef<HTMLDivElement>(null);
   const previousActiveChatIdRef = useRef<string | null>(activeChatIdResolved);
   const restoredTailScrollForChatRef = useRef<string | null>(null);
+  const tailRestoreCancelRef = useRef<(() => void) | null>(null);
+  const latestVisibleEventIdRef = useRef<string | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const disconnectNoticeAwaitingRef = useRef<string | null>(null);
   const runtimeStartedSinceAwaitingRef = useRef(false);
@@ -3121,6 +3123,9 @@ export function ChatInterface({
     () => getLatestVisibleEvent(visibleEvents)?.id ?? null,
     [visibleEvents],
   );
+  useEffect(() => {
+    latestVisibleEventIdRef.current = latestVisibleEventId;
+  }, [latestVisibleEventId]);
   const visibleUserEvents = useMemo(
     () => visibleEvents.filter((event) => isUserEvent(event)),
     [visibleEvents],
@@ -4541,7 +4546,9 @@ export function ChatInterface({
   }, [isMobileLayout]);
 
   const restoreConversationToTail = useCallback((behavior: ScrollBehavior = 'auto') => {
-    const anchorId = resolveTailScrollAnchorId({ latestVisibleEventId });
+    const anchorId = resolveTailScrollAnchorId({
+      latestVisibleEventId: latestVisibleEventIdRef.current,
+    });
     if (anchorId) {
       const anchor = document.getElementById(anchorId);
       if (anchor) {
@@ -4550,10 +4557,12 @@ export function ChatInterface({
       }
     }
     scrollConversationToBottom(behavior);
-  }, [latestVisibleEventId, scrollConversationToBottom]);
+  }, [scrollConversationToBottom]);
 
   const readTailLayoutMetrics = useCallback(() => {
-    const anchorId = resolveTailScrollAnchorId({ latestVisibleEventId });
+    const anchorId = resolveTailScrollAnchorId({
+      latestVisibleEventId: latestVisibleEventIdRef.current,
+    });
     const anchor = anchorId ? document.getElementById(anchorId) : null;
 
     return {
@@ -4562,7 +4571,7 @@ export function ChatInterface({
         ? Math.max(document.documentElement.scrollHeight, document.body.scrollHeight)
         : (scrollRef.current?.scrollHeight ?? null),
     };
-  }, [isMobileLayout, latestVisibleEventId]);
+  }, [isMobileLayout]);
 
   const syncScrollToBottomButton = useCallback(() => {
     if (isMobileLayout) {
@@ -4841,6 +4850,10 @@ export function ChatInterface({
 
   useEffect(() => {
     if (isWorkspaceHome || isNewChatPlaceholder || !activeChatIdResolved) {
+      if (tailRestoreCancelRef.current) {
+        tailRestoreCancelRef.current();
+        tailRestoreCancelRef.current = null;
+      }
       restoredTailScrollForChatRef.current = null;
       setIsInitialChatEntryPendingReveal(false);
       setIsTailLayoutSettling(false);
@@ -4860,6 +4873,14 @@ export function ChatInterface({
       return;
     }
 
+    // settle loop은 events sync로 인한 effect 재호출 사이에서도 살아남아야 한다.
+    // cleanup function에서 reveal flag를 토글하면 stable frame이 모이기 전에
+    // stream이 노출되어 마지막 메시지 위쪽에서 멈춘 채 보인다.
+    if (tailRestoreCancelRef.current) {
+      tailRestoreCancelRef.current();
+      tailRestoreCancelRef.current = null;
+    }
+
     restoredTailScrollForChatRef.current = activeChatIdResolved;
     shouldStickToBottomRef.current = true;
     setShowScrollToBottom(false);
@@ -4867,6 +4888,7 @@ export function ChatInterface({
 
     let finished = false;
     let rafId = 0;
+    let timeoutId = 0;
     let stableFrameCount = 0;
     let previousMetrics: ReturnType<typeof readTailLayoutMetrics> | null = null;
 
@@ -4876,6 +4898,10 @@ export function ChatInterface({
       }
       finished = true;
       window.cancelAnimationFrame(rafId);
+      window.clearTimeout(timeoutId);
+      if (tailRestoreCancelRef.current === complete) {
+        tailRestoreCancelRef.current = null;
+      }
       setIsInitialChatEntryPendingReveal(false);
       setIsTailLayoutSettling(false);
     };
@@ -4908,30 +4934,30 @@ export function ChatInterface({
       rafId = window.requestAnimationFrame(settle);
     };
 
+    tailRestoreCancelRef.current = complete;
+
     settle();
 
-    const timeoutId = window.setTimeout(() => {
-      complete();
-    }, TAIL_LAYOUT_SETTLE_TIMEOUT_MS);
-
-    return () => {
-      finished = true;
-      window.cancelAnimationFrame(rafId);
-      window.clearTimeout(timeoutId);
-      setIsInitialChatEntryPendingReveal(false);
-      setIsTailLayoutSettling(false);
-    };
+    timeoutId = window.setTimeout(complete, TAIL_LAYOUT_SETTLE_TIMEOUT_MS);
   }, [
     activeChatIdResolved,
     eventsForChatId,
     hasLoadedCurrentChat,
-    isInitialChatEntryPendingReveal,
     isTailRestoreHydrated,
     isNewChatPlaceholder,
     isWorkspaceHome,
     readTailLayoutMetrics,
     restoreConversationToTail,
   ]);
+
+  useEffect(() => {
+    return () => {
+      if (tailRestoreCancelRef.current) {
+        tailRestoreCancelRef.current();
+        tailRestoreCancelRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!shouldAutoScrollToBottom({
