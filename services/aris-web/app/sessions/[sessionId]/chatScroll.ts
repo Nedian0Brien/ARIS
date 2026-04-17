@@ -8,6 +8,10 @@ type MobileWindowScrollTopInput = {
   viewportHeight: number;
 };
 
+type TailScrollAnchorIdInput = {
+  latestVisibleEventId: string | null;
+};
+
 type ResetScrollForChatChangeInput = {
   previousChatId: string | null;
   nextChatId: string | null;
@@ -37,6 +41,13 @@ export function resolveScrollToBottomTarget(input: ScrollToBottomTargetInput): '
 
 export function resolveMobileWindowScrollTop(input: MobileWindowScrollTopInput): number {
   return Math.max(0, input.scrollHeight - input.viewportHeight);
+}
+
+export function resolveTailScrollAnchorId(input: TailScrollAnchorIdInput): string | null {
+  if (!input.latestVisibleEventId) {
+    return null;
+  }
+  return `event-${input.latestVisibleEventId}`;
 }
 
 export function shouldResetScrollForChatChange(input: ResetScrollForChatChangeInput): boolean {

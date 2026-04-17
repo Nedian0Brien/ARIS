@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  resolveTailScrollAnchorId,
   resolveMobileWindowScrollTop,
   resolveScrollToBottomTarget,
   shouldRestoreTailScrollOnChatEntry,
@@ -17,6 +18,11 @@ describe('chatScroll', () => {
   it('computes the bottom window scroll position from document and viewport height', () => {
     expect(resolveMobileWindowScrollTop({ scrollHeight: 2200, viewportHeight: 700 })).toBe(1500);
     expect(resolveMobileWindowScrollTop({ scrollHeight: 640, viewportHeight: 800 })).toBe(0);
+  });
+
+  it('resolves the latest visible event into a tail restore anchor id', () => {
+    expect(resolveTailScrollAnchorId({ latestVisibleEventId: 'evt-42' })).toBe('event-evt-42');
+    expect(resolveTailScrollAnchorId({ latestVisibleEventId: null })).toBeNull();
   });
 
   it('resets conversation scroll when switching to a different active chat', () => {

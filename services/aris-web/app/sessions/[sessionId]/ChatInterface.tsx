@@ -116,6 +116,7 @@ import {
 import {
   resolveMobileWindowScrollTop,
   resolveScrollToBottomTarget,
+  resolveTailScrollAnchorId,
   shouldAutoScrollToBottom,
   shouldRestoreTailScrollOnChatEntry,
   shouldResetScrollForChatChange,
@@ -3114,6 +3115,10 @@ export function ChatInterface({
     () => nonLifecycleEvents.filter((event) => !isPersistedPermissionEvent(event)),
     [nonLifecycleEvents],
   );
+  const latestVisibleEventId = useMemo(
+    () => getLatestVisibleEvent(visibleEvents)?.id ?? null,
+    [visibleEvents],
+  );
   const visibleUserEvents = useMemo(
     () => visibleEvents.filter((event) => isUserEvent(event)),
     [visibleEvents],
@@ -4491,6 +4496,18 @@ export function ChatInterface({
     stream.scrollTo({ top: stream.scrollHeight, behavior });
   }, [isMobileLayout]);
 
+  const restoreConversationToTail = useCallback((behavior: ScrollBehavior = 'auto') => {
+    const anchorId = resolveTailScrollAnchorId({ latestVisibleEventId });
+    if (anchorId) {
+      const anchor = document.getElementById(anchorId);
+      if (anchor) {
+        anchor.scrollIntoView({ behavior, block: 'end' });
+        return;
+      }
+    }
+    scrollConversationToBottom(behavior);
+  }, [latestVisibleEventId, scrollConversationToBottom]);
+
   const syncScrollToBottomButton = useCallback(() => {
     if (isMobileLayout) {
       setShowScrollToBottom(!isNearWindowBottom());
@@ -4787,16 +4804,16 @@ export function ChatInterface({
     restoredTailScrollForChatRef.current = activeChatIdResolved;
     shouldStickToBottomRef.current = true;
     setShowScrollToBottom(false);
-    scrollConversationToBottom('auto');
+    restoreConversationToTail('auto');
 
     const rafId = window.requestAnimationFrame(() => {
       if (shouldStickToBottomRef.current) {
-        scrollConversationToBottom('auto');
+        restoreConversationToTail('auto');
       }
     });
     const timeoutId = window.setTimeout(() => {
       if (shouldStickToBottomRef.current) {
-        scrollConversationToBottom('auto');
+        restoreConversationToTail('auto');
       }
     }, 140);
 
@@ -4810,7 +4827,7 @@ export function ChatInterface({
     hasLoadedCurrentChat,
     isNewChatPlaceholder,
     isWorkspaceHome,
-    scrollConversationToBottom,
+    restoreConversationToTail,
   ]);
 
   useEffect(() => {
