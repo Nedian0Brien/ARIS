@@ -89,7 +89,7 @@ describe('chatSelection', () => {
     })).toBe(false);
   });
 
-  it('shows transition loading while the chat events are still out of sync', () => {
+  it('shows transition loading only while the initial chat entry reveal is pending', () => {
     expect(shouldShowChatTransitionLoading({
       activeChatIdResolved: null,
       eventsForChatId: null,
@@ -108,7 +108,7 @@ describe('chatSelection', () => {
       isTailRestoreHydrated: false,
       isNewChatPlaceholder: false,
       isTailLayoutSettling: false,
-    })).toBe(true);
+    })).toBe(false);
 
     expect(shouldShowChatTransitionLoading({
       activeChatIdResolved: 'chat-2',
@@ -118,7 +118,7 @@ describe('chatSelection', () => {
       isTailRestoreHydrated: true,
       isNewChatPlaceholder: false,
       isTailLayoutSettling: false,
-    })).toBe(true);
+    })).toBe(false);
 
     expect(shouldShowChatTransitionLoading({
       activeChatIdResolved: 'chat-2',
@@ -128,7 +128,7 @@ describe('chatSelection', () => {
       isTailRestoreHydrated: true,
       isNewChatPlaceholder: false,
       isTailLayoutSettling: true,
-    })).toBe(true);
+    })).toBe(false);
 
     expect(shouldShowChatTransitionLoading({
       activeChatIdResolved: 'chat-2',
@@ -138,7 +138,7 @@ describe('chatSelection', () => {
       isTailRestoreHydrated: false,
       isNewChatPlaceholder: false,
       isTailLayoutSettling: false,
-    })).toBe(true);
+    })).toBe(false);
 
     expect(shouldShowChatTransitionLoading({
       activeChatIdResolved: 'chat-2',
