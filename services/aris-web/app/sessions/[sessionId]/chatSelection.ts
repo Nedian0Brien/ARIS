@@ -62,20 +62,5 @@ export function shouldShowChatTransitionLoading(input: {
   if (input.isNewChatPlaceholder) {
     return false;
   }
-  if (input.isInitialChatEntryPendingReveal) {
-    return true;
-  }
-  if (!input.activeChatIdResolved) {
-    return false;
-  }
-  if (input.isTailLayoutSettling) {
-    return true;
-  }
-  if (!input.isTailRestoreHydrated) {
-    return true;
-  }
-  if (input.eventsForChatId !== input.activeChatIdResolved) {
-    return true;
-  }
-  return !input.hasLoadedCurrentChat;
+  return input.isInitialChatEntryPendingReveal;
 }
