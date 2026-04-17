@@ -43,6 +43,7 @@ export function shouldShowChatTransitionLoading(input: {
   activeChatIdResolved: string | null;
   eventsForChatId: string | null;
   hasLoadedCurrentChat: boolean;
+  isTailRestoreHydrated: boolean;
   isNewChatPlaceholder: boolean;
   isTailLayoutSettling: boolean;
 }): boolean {
@@ -50,6 +51,9 @@ export function shouldShowChatTransitionLoading(input: {
     return false;
   }
   if (input.isTailLayoutSettling) {
+    return true;
+  }
+  if (!input.isTailRestoreHydrated) {
     return true;
   }
   if (input.eventsForChatId !== input.activeChatIdResolved) {

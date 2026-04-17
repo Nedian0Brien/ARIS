@@ -114,6 +114,7 @@ import {
   shouldShowChatTransitionLoading,
 } from './chatSelection';
 import {
+  hasTailRestoreRenderHydrated,
   hasTailLayoutSettled,
   resolveMobileWindowScrollTop,
   resolveScrollToBottomTarget,
@@ -2824,13 +2825,6 @@ export function ChatInterface({
   const lastSubmittedPayload = activeChatRuntimeUi.lastSubmittedPayload;
   const submitError = activeChatRuntimeUi.submitError;
   const [isTailLayoutSettling, setIsTailLayoutSettling] = useState(false);
-  const showChatTransitionLoading = shouldShowChatTransitionLoading({
-    activeChatIdResolved,
-    eventsForChatId,
-    hasLoadedCurrentChat,
-    isNewChatPlaceholder,
-    isTailLayoutSettling,
-  });
   const updateChatRuntimeUi = useCallback((chatId: string | null, patch: Partial<ChatRuntimeUiState>) => {
     if (!chatId) {
       return;
@@ -3148,6 +3142,32 @@ export function ChatInterface({
       return a.id.localeCompare(b.id);
     });
   }, [deferredVisibleNonUserEvents, pendingUserEvents, visibleUserEvents]);
+  const latestRenderableStreamEventId = useMemo(
+    () => getLatestVisibleEvent(renderableStreamEvents)?.id ?? null,
+    [renderableStreamEvents],
+  );
+  const isTailRestoreHydrated = useMemo(
+    () => hasTailRestoreRenderHydrated({
+      latestVisibleEventId,
+      latestRenderableEventId: latestRenderableStreamEventId,
+      visibleNonUserEventCount: visibleNonUserEvents.length,
+      deferredVisibleNonUserEventCount: deferredVisibleNonUserEvents.length,
+    }),
+    [
+      deferredVisibleNonUserEvents.length,
+      latestRenderableStreamEventId,
+      latestVisibleEventId,
+      visibleNonUserEvents.length,
+    ],
+  );
+  const showChatTransitionLoading = shouldShowChatTransitionLoading({
+    activeChatIdResolved,
+    eventsForChatId,
+    hasLoadedCurrentChat,
+    isTailRestoreHydrated,
+    isNewChatPlaceholder,
+    isTailLayoutSettling,
+  });
   const persistedPermissions = useMemo(
     () => hydratePersistedPermissions(nonLifecycleEvents),
     [nonLifecycleEvents],
@@ -4811,6 +4831,7 @@ export function ChatInterface({
       activeChatId: activeChatIdResolved,
       eventsForChatId,
       hasLoadedCurrentChat,
+      isTailRestoreHydrated,
       isWorkspaceHome,
       isNewChatPlaceholder,
       restoredForChatId: restoredTailScrollForChatRef.current,
@@ -4881,6 +4902,7 @@ export function ChatInterface({
     activeChatIdResolved,
     eventsForChatId,
     hasLoadedCurrentChat,
+    isTailRestoreHydrated,
     isNewChatPlaceholder,
     isWorkspaceHome,
     readTailLayoutMetrics,
