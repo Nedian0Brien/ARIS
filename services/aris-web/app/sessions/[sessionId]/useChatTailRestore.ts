@@ -165,6 +165,19 @@ export function useChatTailRestore({
 
   // Tail-restore settle loop
   useEffect(() => {
+    // If a previous settle is still in progress (e.g. isMobileLayout flipped
+    // mid-settle after SSR hydration), the stale closure ran with the wrong
+    // layout. Cancel it and reset the guard so this run can re-settle with
+    // the current layout.
+    const wasMidSettle = tailRestoreCancelRef.current !== null;
+    if (wasMidSettle) {
+      tailRestoreCancelRef.current?.();
+      tailRestoreCancelRef.current = null;
+      if (restoredTailScrollForChatRef.current === activeChatIdResolved) {
+        restoredTailScrollForChatRef.current = null;
+      }
+    }
+
     if (!shouldRestoreTailScrollOnChatEntry({
       activeChatId: activeChatIdResolved,
       eventsForChatId,
@@ -175,11 +188,6 @@ export function useChatTailRestore({
       restoredForChatId: restoredTailScrollForChatRef.current,
     })) {
       return;
-    }
-
-    if (tailRestoreCancelRef.current) {
-      tailRestoreCancelRef.current();
-      tailRestoreCancelRef.current = null;
     }
 
     restoredTailScrollForChatRef.current = activeChatIdResolved;
