@@ -166,6 +166,13 @@ describe('chatScroll', () => {
     })).toBe(false);
   });
 
+  it('clamps mobile pixel-perfect scroll top to zero when viewport exceeds document', () => {
+    expect(resolveMobileWindowScrollTop({ scrollHeight: 500, viewportHeight: 800 })).toBe(0);
+    expect(resolveMobileWindowScrollTop({ scrollHeight: 0, viewportHeight: 0 })).toBe(0);
+    expect(resolveMobileWindowScrollTop({ scrollHeight: 1000, viewportHeight: 1000 })).toBe(0);
+    expect(resolveMobileWindowScrollTop({ scrollHeight: 1001, viewportHeight: 1000 })).toBe(1);
+  });
+
   describe('shouldBlockLoadOlder', () => {
     it('blocks when tail is settling', () => {
       expect(shouldBlockLoadOlder({ isTailLayoutSettling: true, isLoadingOlder: false, hasMoreBefore: true })).toBe(true);
