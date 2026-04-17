@@ -2,7 +2,7 @@
 
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { ChangeEvent, MouseEvent as ReactMouseEvent } from 'react';
+import type { ChangeEvent } from 'react';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
@@ -43,7 +43,6 @@ import { UsageProbeModal } from './UsageProbeModal';
 import { buildPermissionTimelineItems } from './chatTimeline';
 import { renderEventPayload } from './chat-screen/center-pane/renderers/ActionEventCard';
 import { LinkPreviewCarousel } from './chat-screen/center-pane/renderers/LinkPreviewCarousel';
-import { resolveChatReadMarkerId } from './chatSidebar';
 import { shouldShowDebugToggleInHeader } from './chatDebugMode';
 import { WorkspaceHome } from './WorkspaceHome';
 import { deriveWorkspaceTitle } from './workspaceHome';
@@ -61,6 +60,7 @@ import { useChatSidebarState } from './chat-screen/hooks/useChatSidebarState';
 import { useComposerState } from './chat-screen/hooks/useComposerState';
 import { useWorkspaceBrowserState } from './chat-screen/hooks/useWorkspaceBrowserState';
 import { ChatSidebarPane } from './chat-screen/left-sidebar/ChatSidebarPane';
+import { useChatSidebarSectionViews } from './chat-screen/left-sidebar/useChatSidebarSectionViews';
 import { CustomizationSidebarContainer } from './chat-screen/right-pane/CustomizationSidebarContainer';
 import styles from './ChatInterface.module.css';
 import { shouldShowChatTransitionLoading } from './chatSelection';
@@ -2183,6 +2183,54 @@ export function ChatInterface({
     }
   }, [activeChatIdResolved, chatMutationLoadingId, goToChat, sessionId, setChats]);
 
+  const handleSidebarChatMenuToggle = useCallback((chatId: string, rect: DOMRect) => {
+    if (chatActionMenuId === chatId) {
+      setChatActionMenuId(null);
+      setChatActionMenuRect(null);
+      return;
+    }
+    setChatActionMenuId(chatId);
+    setChatActionMenuRect(rect);
+  }, [chatActionMenuId]);
+
+  const handleSidebarTitleDraftChange = useCallback((value: string) => {
+    setChatTitleDraft(value);
+  }, []);
+
+  const handleSidebarRenameSubmit = useCallback((chatId: string, nextTitle: string) => {
+    void handleRenameChat(chatId, nextTitle);
+  }, [handleRenameChat]);
+
+  const handleSidebarRenameCancel = useCallback(() => {
+    setRenamingChatId(null);
+    setChatTitleDraft('');
+  }, []);
+
+  const handleSidebarMarkAsRead = useCallback((chat: SessionChat) => {
+    handleMarkChatAsRead(chat);
+    setChatActionMenuId(null);
+    setChatActionMenuRect(null);
+  }, [handleMarkChatAsRead]);
+
+  const handleSidebarStartRename = useCallback((chat: SessionChat) => {
+    setRenamingChatId(chat.id);
+    setChatTitleDraft(chat.title);
+    setChatActionMenuId(null);
+    setChatActionMenuRect(null);
+  }, []);
+
+  const handleSidebarTogglePin = useCallback((chat: SessionChat) => {
+    void handleToggleChatPin(chat);
+  }, [handleToggleChatPin]);
+
+  const handleSidebarDeleteChat = useCallback((chat: SessionChat) => {
+    void handleDeleteChat(chat);
+  }, [handleDeleteChat]);
+
+  const handleSidebarPermissionChoice = useCallback((chatId: string, decision: 'allow_once' | 'allow_session' | 'deny') => {
+    void handleSidebarPermissionDecision(chatId, decision);
+  }, [handleSidebarPermissionDecision]);
+
   function handleRunChatCommand(commandId: ChatCommandId) {
     setIsCommandMenuOpen(false);
     if (commandId === 'usage' && (activeAgentFlavor === 'codex' || activeAgentFlavor === 'claude')) {
@@ -2527,121 +2575,34 @@ export function ChatInterface({
     }
   }, [createWorkspacePanel]);
 
-  const sidebarSectionViews = sidebarSections.map((section) => ({
-    key: section.key,
-    label: section.label,
-    totalCount: section.totalCount,
-    items: section.chats.map((chat) => {
-      const isActive = chat.id === activeChatIdResolved;
-      const isRenaming = renamingChatId === chat.id;
-      const rowAgentMeta = resolveAgentMeta(chat.agent);
-      const RowAgentIcon = rowAgentMeta.Icon;
-      const sidebarState = resolveChatSidebarState(chat);
-      const sidebarStateClassName = sidebarState === 'running'
-        ? styles.chatListItemStateRunning
-        : sidebarState === 'completed'
-          ? styles.chatListItemStateCompleted
-          : sidebarState === 'approval'
-            ? styles.chatListItemStateApproval
-            : sidebarState === 'error'
-              ? styles.chatListItemStateError
-              : '';
-      const chatPreviewText = resolveChatPreviewText(chat.id);
-      const chatRunPhase = resolveSidebarChatRunPhase(chat);
-      const chatRunPhaseLabel = chatRunPhase === 'idle' ? null : CHAT_RUN_PHASE_LABELS[chatRunPhase];
-      const chatRunStartedAt = (chatRuntimeUiByChat[chat.id]?.awaitingReplySince ?? '').trim() || null;
-      const chatRunPhaseBadgeClassName = chatRunPhase === 'aborting'
-        ? styles.chatListRunPhaseBadgeAborting
-        : chatRunPhase === 'approval'
-          ? styles.chatListRunPhaseBadgeApproval
-          : chatRunPhase === 'waiting'
-            ? styles.chatListRunPhaseBadgeWaiting
-            : chatRunPhase === 'running'
-              ? styles.chatListRunPhaseBadgeRunning
-              : styles.chatListRunPhaseBadgeSubmitting;
-      const approvalFeedback = approvalFeedbackByChat[chat.id] ?? null;
-      const hasPendingApproval = isActive && effectivePendingPermissions.length > 0;
-      const showApprovalPanel = isActive && (
-        hasPendingApproval
-        || sidebarApprovalLoadingChatId === chat.id
-        || Boolean(approvalFeedback)
-      );
-      const approvalBusy = sidebarApprovalLoadingChatId === chat.id || loadingPermissionId !== null;
-      const isMenuOpen = chatActionMenuId === chat.id;
-
-      return {
-        id: chat.id,
-        title: chat.title,
-        isPinned: chat.isPinned,
-        isActive,
-        isRenaming,
-        timestamp: chat.lastActivityAt || chat.createdAt,
-        sidebarStateClassName,
-        agentAvatarToneClassName: getAgentAvatarToneClass(rowAgentMeta.tone),
-        AgentIcon: RowAgentIcon,
-        previewText: chatPreviewText,
-        runPhaseLabel: chatRunPhaseLabel,
-        runPhaseBadgeClassName: chatRunPhaseBadgeClassName,
-        runStartedAt: chatRunStartedAt,
-        approvalFeedback,
-        hasPendingApproval,
-        showApprovalPanel,
-        approvalBusy,
-        isMenuOpen,
-        menuRect: isMenuOpen ? chatActionMenuRect : null,
-        canMarkAsRead: Boolean(resolveChatReadMarkerId({
-          latestEventId: chatSidebarSnapshots[chat.id]?.latestEventId,
-          fallbackLatestEventId: chat.latestEventId,
-        })),
-        chatTitleDraft,
-        mutationBusy: chatMutationLoadingId === chat.id,
-        onSelect: () => goToChat(chat.id),
-        onMenuToggle: (event: ReactMouseEvent<HTMLButtonElement>) => {
-          event.stopPropagation();
-          if (chatActionMenuId === chat.id) {
-            setChatActionMenuId(null);
-            setChatActionMenuRect(null);
-            return;
-          }
-          setChatActionMenuId(chat.id);
-          setChatActionMenuRect(event.currentTarget.getBoundingClientRect());
-        },
-        onTitleDraftChange: (value: string) => setChatTitleDraft(value),
-        onRenameSubmit: () => {
-          void handleRenameChat(chat.id, chatTitleDraft);
-        },
-        onRenameBlur: () => {
-          if (renamingChatId === chat.id) {
-            void handleRenameChat(chat.id, chatTitleDraft);
-          }
-        },
-        onRenameCancel: () => {
-          setRenamingChatId(null);
-          setChatTitleDraft('');
-        },
-        onMarkAsRead: () => {
-          handleMarkChatAsRead(chat);
-          setChatActionMenuId(null);
-          setChatActionMenuRect(null);
-        },
-        onStartRename: () => {
-          setRenamingChatId(chat.id);
-          setChatTitleDraft(chat.title);
-          setChatActionMenuId(null);
-          setChatActionMenuRect(null);
-        },
-        onTogglePin: () => {
-          void handleToggleChatPin(chat);
-        },
-        onDelete: () => {
-          void handleDeleteChat(chat);
-        },
-        onPermissionDecision: (decision: 'allow_once' | 'allow_session' | 'deny') => {
-          void handleSidebarPermissionDecision(chat.id, decision);
-        },
-      };
-    }),
-  }));
+  const sidebarSectionViews = useChatSidebarSectionViews({
+    activeChatIdResolved,
+    approvalFeedbackByChat,
+    chatActionMenuId,
+    chatActionMenuRect,
+    chatMutationLoadingId,
+    chatRuntimeUiByChat,
+    chatSidebarSnapshots,
+    chatTitleDraft,
+    effectivePendingPermissionCount: effectivePendingPermissions.length,
+    loadingPermissionId,
+    renamingChatId,
+    resolveChatPreviewText,
+    resolveChatSidebarState,
+    resolveSidebarChatRunPhase,
+    sidebarApprovalLoadingChatId,
+    sidebarSections,
+    onDeleteChat: handleSidebarDeleteChat,
+    onGoToChat: goToChat,
+    onMarkChatAsRead: handleSidebarMarkAsRead,
+    onPermissionDecision: handleSidebarPermissionChoice,
+    onRenameCancel: handleSidebarRenameCancel,
+    onRenameSubmit: handleSidebarRenameSubmit,
+    onStartRename: handleSidebarStartRename,
+    onTitleDraftChange: handleSidebarTitleDraftChange,
+    onToggleChatMenu: handleSidebarChatMenuToggle,
+    onToggleChatPin: handleSidebarTogglePin,
+  });
 
   const activeModel = activeComposerModels.find((m) => m.id === activeModelId)
     ?? { id: activeModelId, shortLabel: activeModelId, badge: '커스텀' };
