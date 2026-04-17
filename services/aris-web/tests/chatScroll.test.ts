@@ -54,22 +54,22 @@ describe('chatScroll', () => {
     expect(hasTailRestoreRenderHydrated({
       latestVisibleEventId: 'evt-9',
       latestRenderableEventId: 'evt-7',
-      visibleNonUserEventCount: 5,
-      deferredVisibleNonUserEventCount: 3,
+      expectedStreamItemCount: 5,
+      renderedStreamItemCount: 3,
     })).toBe(false);
 
     expect(hasTailRestoreRenderHydrated({
       latestVisibleEventId: 'evt-9',
       latestRenderableEventId: 'evt-9',
-      visibleNonUserEventCount: 5,
-      deferredVisibleNonUserEventCount: 4,
+      expectedStreamItemCount: 5,
+      renderedStreamItemCount: 4,
     })).toBe(false);
 
     expect(hasTailRestoreRenderHydrated({
       latestVisibleEventId: 'evt-9',
       latestRenderableEventId: 'evt-9',
-      visibleNonUserEventCount: 5,
-      deferredVisibleNonUserEventCount: 5,
+      expectedStreamItemCount: 5,
+      renderedStreamItemCount: 5,
     })).toBe(true);
   });
 

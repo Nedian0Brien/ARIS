@@ -2665,6 +2665,7 @@ export function ChatInterface({
   sessionModel,
   approvalPolicy: initialApprovalPolicy,
   initialShowWorkspaceHome = false,
+  initialShowChatEntryLoading = false,
 }: {
   sessionId: string;
   initialEvents: UiEvent[];
@@ -2679,6 +2680,7 @@ export function ChatInterface({
   sessionModel?: string | null;
   approvalPolicy?: ApprovalPolicy;
   initialShowWorkspaceHome?: boolean;
+  initialShowChatEntryLoading?: boolean;
 }) {
   const [approvalPolicy, setApprovalPolicy] = useState<ApprovalPolicy | undefined>(initialApprovalPolicy);
   const [isPolicyChanging, setIsPolicyChanging] = useState(false);
@@ -2790,6 +2792,7 @@ export function ChatInterface({
     initialHasMoreBefore,
     activeChatId,
     isSessionSyncLeader,
+    initialShowChatEntryLoading,
   );
   const { isRunning: runtimeRunning, runtimeError } = useSessionRuntime(
     sessionId,
@@ -2824,6 +2827,7 @@ export function ChatInterface({
   const showDisconnectRetry = activeChatRuntimeUi.showDisconnectRetry;
   const lastSubmittedPayload = activeChatRuntimeUi.lastSubmittedPayload;
   const submitError = activeChatRuntimeUi.submitError;
+  const [isInitialChatEntryPendingReveal, setIsInitialChatEntryPendingReveal] = useState(initialShowChatEntryLoading);
   const [isTailLayoutSettling, setIsTailLayoutSettling] = useState(false);
   const updateChatRuntimeUi = useCallback((chatId: string | null, patch: Partial<ChatRuntimeUiState>) => {
     if (!chatId) {
@@ -3142,32 +3146,52 @@ export function ChatInterface({
       return a.id.localeCompare(b.id);
     });
   }, [deferredVisibleNonUserEvents, pendingUserEvents, visibleUserEvents]);
+  const expectedRenderableStreamEvents = useMemo(() => {
+    const merged = [...visibleNonUserEvents, ...visibleUserEvents, ...pendingUserEvents];
+    return merged.sort((a, b) => {
+      const timestampDiff = a.timestamp.localeCompare(b.timestamp);
+      if (timestampDiff !== 0) {
+        return timestampDiff;
+      }
+      return a.id.localeCompare(b.id);
+    });
+  }, [pendingUserEvents, visibleNonUserEvents, visibleUserEvents]);
   const latestRenderableStreamEventId = useMemo(
     () => getLatestVisibleEvent(renderableStreamEvents)?.id ?? null,
     [renderableStreamEvents],
+  );
+  const expectedStreamItems = useMemo(
+    () => buildStreamRenderItems(expectedRenderableStreamEvents, expandedActionRunIds),
+    [expectedRenderableStreamEvents, expandedActionRunIds],
+  );
+  const streamItems = useMemo(
+    () => buildStreamRenderItems(renderableStreamEvents, expandedActionRunIds),
+    [expandedActionRunIds, renderableStreamEvents],
   );
   const isTailRestoreHydrated = useMemo(
     () => hasTailRestoreRenderHydrated({
       latestVisibleEventId,
       latestRenderableEventId: latestRenderableStreamEventId,
-      visibleNonUserEventCount: visibleNonUserEvents.length,
-      deferredVisibleNonUserEventCount: deferredVisibleNonUserEvents.length,
+      expectedStreamItemCount: expectedStreamItems.length,
+      renderedStreamItemCount: streamItems.length,
     }),
     [
-      deferredVisibleNonUserEvents.length,
+      expectedStreamItems.length,
       latestRenderableStreamEventId,
       latestVisibleEventId,
-      visibleNonUserEvents.length,
+      streamItems.length,
     ],
   );
   const showChatTransitionLoading = shouldShowChatTransitionLoading({
     activeChatIdResolved,
     eventsForChatId,
     hasLoadedCurrentChat,
+    isInitialChatEntryPendingReveal,
     isTailRestoreHydrated,
     isNewChatPlaceholder,
     isTailLayoutSettling,
   });
+  const chatEntryPendingRevealClassName = showChatTransitionLoading ? styles.chatEntryPendingReveal : '';
   const persistedPermissions = useMemo(
     () => hydratePersistedPermissions(nonLifecycleEvents),
     [nonLifecycleEvents],
@@ -3185,10 +3209,6 @@ export function ChatInterface({
   const permissionTimelineItems = useMemo(
     () => buildPermissionTimelineItems(mergedDisplayPermissions),
     [mergedDisplayPermissions],
-  );
-  const streamItems = useMemo(
-    () => buildStreamRenderItems(renderableStreamEvents, expandedActionRunIds),
-    [expandedActionRunIds, renderableStreamEvents],
   );
   const timelineItems = useMemo<TimelineRenderItem[]>(() => {
     const merged: TimelineRenderItem[] = [];
@@ -4822,6 +4842,7 @@ export function ChatInterface({
   useEffect(() => {
     if (isWorkspaceHome || isNewChatPlaceholder || !activeChatIdResolved) {
       restoredTailScrollForChatRef.current = null;
+      setIsInitialChatEntryPendingReveal(false);
       setIsTailLayoutSettling(false);
     }
   }, [activeChatIdResolved, isNewChatPlaceholder, isWorkspaceHome]);
@@ -4855,6 +4876,7 @@ export function ChatInterface({
       }
       finished = true;
       window.cancelAnimationFrame(rafId);
+      setIsInitialChatEntryPendingReveal(false);
       setIsTailLayoutSettling(false);
     };
 
@@ -4896,12 +4918,14 @@ export function ChatInterface({
       finished = true;
       window.cancelAnimationFrame(rafId);
       window.clearTimeout(timeoutId);
+      setIsInitialChatEntryPendingReveal(false);
       setIsTailLayoutSettling(false);
     };
   }, [
     activeChatIdResolved,
     eventsForChatId,
     hasLoadedCurrentChat,
+    isInitialChatEntryPendingReveal,
     isTailRestoreHydrated,
     isNewChatPlaceholder,
     isWorkspaceHome,
@@ -6455,7 +6479,12 @@ export function ChatInterface({
           )}
 
           <>
-          <div className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''}`} ref={scrollRef} onScroll={handleStreamScroll}>
+          <div
+            className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''} ${chatEntryPendingRevealClassName}`}
+            ref={scrollRef}
+            onScroll={handleStreamScroll}
+            aria-hidden={showChatTransitionLoading}
+          >
             {isWorkspaceHome ? (
               <WorkspaceHome
                 sessionId={sessionId}
@@ -6754,7 +6783,7 @@ export function ChatInterface({
             )}
           </div>
 
-          {showScrollToBottom && (
+          {!showChatTransitionLoading && showScrollToBottom && (
             <button
               type="button"
               className={styles.scrollBottomButton}
@@ -6766,7 +6795,7 @@ export function ChatInterface({
             </button>
           )}
 
-          {!isWorkspaceHome && <footer className={styles.composerDock} ref={composerDockRef}>
+          {!isWorkspaceHome && <footer className={`${styles.composerDock} ${showChatTransitionLoading ? styles.chatEntryPendingReveal : ''}`} ref={composerDockRef} aria-hidden={showChatTransitionLoading}>
             <form onSubmit={handleSubmit} className={styles.composerForm}>
               <div className={styles.composerCard}>
                 <div className={styles.composerToolbar}>

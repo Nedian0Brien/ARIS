@@ -3,6 +3,7 @@ import type { SessionChat } from '@/lib/happy/types';
 import {
   resolveActiveChat,
   resolveNextSelectedChatId,
+  shouldStartChatEntryLoading,
   shouldShowChatTransitionLoading,
 } from '@/app/sessions/[sessionId]/chatSelection';
 
@@ -68,11 +69,42 @@ describe('chatSelection', () => {
     })).toBe('chat-1');
   });
 
+  it('starts existing chat entry in loading mode from the first render', () => {
+    expect(shouldStartChatEntryLoading({
+      requestedChatId: 'chat-2',
+      resolvedChatId: 'chat-2',
+      isWorkspaceHome: false,
+    })).toBe(true);
+
+    expect(shouldStartChatEntryLoading({
+      requestedChatId: null,
+      resolvedChatId: 'chat-2',
+      isWorkspaceHome: true,
+    })).toBe(false);
+
+    expect(shouldStartChatEntryLoading({
+      requestedChatId: 'missing-chat',
+      resolvedChatId: null,
+      isWorkspaceHome: false,
+    })).toBe(false);
+  });
+
   it('shows transition loading while the chat events are still out of sync', () => {
+    expect(shouldShowChatTransitionLoading({
+      activeChatIdResolved: null,
+      eventsForChatId: null,
+      hasLoadedCurrentChat: false,
+      isInitialChatEntryPendingReveal: true,
+      isTailRestoreHydrated: false,
+      isNewChatPlaceholder: false,
+      isTailLayoutSettling: false,
+    })).toBe(true);
+
     expect(shouldShowChatTransitionLoading({
       activeChatIdResolved: 'chat-2',
       eventsForChatId: 'chat-1',
       hasLoadedCurrentChat: true,
+      isInitialChatEntryPendingReveal: false,
       isTailRestoreHydrated: false,
       isNewChatPlaceholder: false,
       isTailLayoutSettling: false,
@@ -82,6 +114,7 @@ describe('chatSelection', () => {
       activeChatIdResolved: 'chat-2',
       eventsForChatId: 'chat-2',
       hasLoadedCurrentChat: false,
+      isInitialChatEntryPendingReveal: false,
       isTailRestoreHydrated: true,
       isNewChatPlaceholder: false,
       isTailLayoutSettling: false,
@@ -91,6 +124,7 @@ describe('chatSelection', () => {
       activeChatIdResolved: 'chat-2',
       eventsForChatId: 'chat-2',
       hasLoadedCurrentChat: true,
+      isInitialChatEntryPendingReveal: false,
       isTailRestoreHydrated: true,
       isNewChatPlaceholder: false,
       isTailLayoutSettling: true,
@@ -100,6 +134,7 @@ describe('chatSelection', () => {
       activeChatIdResolved: 'chat-2',
       eventsForChatId: 'chat-2',
       hasLoadedCurrentChat: true,
+      isInitialChatEntryPendingReveal: false,
       isTailRestoreHydrated: false,
       isNewChatPlaceholder: false,
       isTailLayoutSettling: false,
@@ -109,6 +144,7 @@ describe('chatSelection', () => {
       activeChatIdResolved: 'chat-2',
       eventsForChatId: 'chat-2',
       hasLoadedCurrentChat: true,
+      isInitialChatEntryPendingReveal: false,
       isTailRestoreHydrated: true,
       isNewChatPlaceholder: false,
       isTailLayoutSettling: false,
@@ -118,6 +154,7 @@ describe('chatSelection', () => {
       activeChatIdResolved: 'chat-2',
       eventsForChatId: 'chat-1',
       hasLoadedCurrentChat: false,
+      isInitialChatEntryPendingReveal: true,
       isTailRestoreHydrated: false,
       isNewChatPlaceholder: true,
       isTailLayoutSettling: true,

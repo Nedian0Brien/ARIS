@@ -162,6 +162,30 @@ function appendChatFilters(
   }
 }
 
+export function shouldMarkCurrentChatLoadedInitially(input: {
+  initialEventsMatchChat: boolean;
+  waitForInitialClientSync: boolean;
+}): boolean {
+  if (!input.initialEventsMatchChat) {
+    return false;
+  }
+  return !input.waitForInitialClientSync;
+}
+
+export function shouldForceInitialRefreshOnMount(input: {
+  enabled: boolean;
+  existingEventCount: number;
+  waitForInitialClientSync: boolean;
+}): boolean {
+  if (input.enabled) {
+    return true;
+  }
+  if (input.existingEventCount === 0) {
+    return true;
+  }
+  return input.waitForInitialClientSync;
+}
+
 export function useSessionEvents(
   sessionId: string,
   chatId: string | null,
@@ -170,6 +194,7 @@ export function useSessionEvents(
   initialHasMoreBefore = false,
   initialEventsChatId: string | null = chatId,
   enabled = true,
+  waitForInitialClientSync = false,
 ) {
   const initialEventsMatchChat = initialEventsChatId === chatId;
   const hydratedInitialEvents = useMemo(
@@ -187,13 +212,24 @@ export function useSessionEvents(
   const [hasMoreBefore, setHasMoreBefore] = useState<boolean>(hydratedInitialHasMoreBefore);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
-  const [hasLoadedCurrentChat, setHasLoadedCurrentChat] = useState(initialEventsMatchChat);
+  const [hasLoadedCurrentChat, setHasLoadedCurrentChat] = useState(
+    shouldMarkCurrentChatLoadedInitially({
+      initialEventsMatchChat,
+      waitForInitialClientSync,
+    }),
+  );
   const eventsRef = useRef<UiEvent[]>(hydratedInitialEvents);
   const hasMoreBeforeRef = useRef<boolean>(hydratedInitialHasMoreBefore);
   const loadingOlderRef = useRef<boolean>(false);
   const terminalStatusRef = useRef<number | null>(null);
   const pollBackoffMsRef = useRef<number>(FALLBACK_POLL_INTERVAL_MS);
   const rateLimitUntilMsRef = useRef<number | null>(null);
+  const hasCompletedInitialClientSyncRef = useRef(
+    shouldMarkCurrentChatLoadedInitially({
+      initialEventsMatchChat,
+      waitForInitialClientSync,
+    }),
+  );
   // 비동기 콜백(refreshEvents, SSE handler)에서 현재 활성 chatId를 동기적으로 확인하기 위한 ref.
   // 채팅 전환 후 이전 chatId의 in-flight fetch가 완료되어도 상태가 오염되지 않도록 guard 역할.
   const activeChatIdRef = useRef<string | null>(chatId);
@@ -210,7 +246,12 @@ export function useSessionEvents(
     terminalStatusRef.current = null;
     setIsLoadingOlder(false);
     setSyncError(null);
-    setHasLoadedCurrentChat(initialEventsMatchChat);
+    const initiallyLoaded = shouldMarkCurrentChatLoadedInitially({
+      initialEventsMatchChat,
+      waitForInitialClientSync,
+    });
+    hasCompletedInitialClientSyncRef.current = initiallyLoaded;
+    setHasLoadedCurrentChat(initiallyLoaded);
   }, [
     sessionId,
     chatId,
@@ -218,6 +259,7 @@ export function useSessionEvents(
     hydratedInitialEvents,
     hydratedInitialHasMoreBefore,
     initialEventsChatId,
+    waitForInitialClientSync,
   ]);
 
   useEffect(() => {
@@ -246,64 +288,62 @@ export function useSessionEvents(
     // fetch를 시작할 때의 chatId를 캡처하여, 응답 수신 후 chatId가 변경되었는지 검증.
     const snapshotChatId = chatId;
 
-    try {
-      const params = new URLSearchParams();
-      params.set('limit', String(EVENTS_PAGE_LIMIT));
-      appendChatFilters(params, chatId, includeUnassigned);
-      const latestId = findLatestPersistedCursorEventId(eventsRef.current);
-      if (latestId) {
-        params.set('after', latestId);
-      }
+    const params = new URLSearchParams();
+    params.set('limit', String(EVENTS_PAGE_LIMIT));
+    appendChatFilters(params, chatId, includeUnassigned);
+    const latestId = findLatestPersistedCursorEventId(eventsRef.current);
+    if (latestId) {
+      params.set('after', latestId);
+    }
 
-      const query = params.toString();
-      const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/events${query ? `?${query}` : ''}`,
-        { cache: 'no-store' },
+    const query = params.toString();
+    const response = await fetch(
+      `/api/runtime/sessions/${encodeURIComponent(sessionId)}/events${query ? `?${query}` : ''}`,
+      { cache: 'no-store' },
+    );
+    if (response.status === 401) {
+      redirectToLoginWithNext();
+      throw new SessionEventsHttpError(401, '로그인이 만료되었습니다.');
+    }
+    if (response.status === 404) {
+      terminalStatusRef.current = 404;
+      throw new SessionEventsHttpError(404, '워크스페이스가 종료되었거나 삭제되었습니다.');
+    }
+    if (!response.ok) {
+      const retryAfterMs = response.status === 429
+        ? parseRetryAfterHeader(response.headers.get('Retry-After'))
+        : null;
+      throw new SessionEventsHttpError(
+        response.status,
+        `백엔드 이벤트 API 응답 오류 (${response.status})`,
+        retryAfterMs,
       );
-      if (response.status === 401) {
-        redirectToLoginWithNext();
-        throw new SessionEventsHttpError(401, '로그인이 만료되었습니다.');
-      }
-      if (response.status === 404) {
-        terminalStatusRef.current = 404;
-        throw new SessionEventsHttpError(404, '워크스페이스가 종료되었거나 삭제되었습니다.');
-      }
-      if (!response.ok) {
-        const retryAfterMs = response.status === 429
-          ? parseRetryAfterHeader(response.headers.get('Retry-After'))
-          : null;
-        throw new SessionEventsHttpError(
-          response.status,
-          `백엔드 이벤트 API 응답 오류 (${response.status})`,
-          retryAfterMs,
-        );
-      }
+    }
 
-      // 채팅이 전환되었으면 이 응답은 현재 활성 채팅의 것이 아니므로 무시.
+    // 채팅이 전환되었으면 이 응답은 현재 활성 채팅의 것이 아니므로 무시.
+    if (activeChatIdRef.current !== snapshotChatId) {
+      return;
+    }
+
+    const body = (await response.json()) as EventsApiResponse;
+    if (Array.isArray(body.events)) {
+      // 응답 파싱 후에도 한 번 더 검증 (파싱 사이에 전환될 수 있으므로).
       if (activeChatIdRef.current !== snapshotChatId) {
         return;
       }
-
-      const body = (await response.json()) as EventsApiResponse;
-      if (Array.isArray(body.events)) {
-        // 응답 파싱 후에도 한 번 더 검증 (파싱 사이에 전환될 수 있으므로).
-        if (activeChatIdRef.current !== snapshotChatId) {
-          return;
-        }
-        const nextEvents = body.events;
-        setEvents((prev) => {
-          const merged = mergeEvents([...prev, ...nextEvents]);
-          return areEventsEqual(prev, merged) ? prev : merged;
-        });
-        if (!latestId && typeof body.page?.hasMoreBefore === 'boolean') {
-          setHasMoreBefore(body.page.hasMoreBefore);
-        }
-        pollBackoffMsRef.current = FALLBACK_POLL_INTERVAL_MS;
-        rateLimitUntilMsRef.current = null;
-        setSyncError(null);
+      const nextEvents = body.events;
+      setEvents((prev) => {
+        const merged = mergeEvents([...prev, ...nextEvents]);
+        return areEventsEqual(prev, merged) ? prev : merged;
+      });
+      if (!latestId && typeof body.page?.hasMoreBefore === 'boolean') {
+        setHasMoreBefore(body.page.hasMoreBefore);
       }
-    } finally {
-      if (activeChatIdRef.current === snapshotChatId) {
+      pollBackoffMsRef.current = FALLBACK_POLL_INTERVAL_MS;
+      rateLimitUntilMsRef.current = null;
+      setSyncError(null);
+      if (!hasCompletedInitialClientSyncRef.current) {
+        hasCompletedInitialClientSyncRef.current = true;
         setHasLoadedCurrentChat(true);
       }
     }
@@ -683,7 +723,11 @@ export function useSessionEvents(
 
     // Fetch initial data immediately if there is no client-side baseline
     // (e.g. when changing chats dynamically before server components re-render)
-    void refreshEvents(!enabled && eventsRef.current.length === 0).catch((error) => {
+    void refreshEvents(shouldForceInitialRefreshOnMount({
+      enabled,
+      existingEventCount: eventsRef.current.length,
+      waitForInitialClientSync,
+    })).catch((error) => {
       handleRefreshError(error, '백엔드 이벤트 동기화를 확인하세요.');
     });
 
@@ -703,7 +747,7 @@ export function useSessionEvents(
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', resumeRealtime);
     };
-  }, [enabled, sessionId, chatId, includeUnassigned, refreshEvents]);
+  }, [enabled, sessionId, chatId, includeUnassigned, refreshEvents, waitForInitialClientSync]);
 
   const addEvent = (event: UiEvent) => {
     setEventsForChatId(chatId);

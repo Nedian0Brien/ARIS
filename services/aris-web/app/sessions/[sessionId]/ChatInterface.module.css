@@ -1481,6 +1481,11 @@
   background: var(--chat-panel-bg);
 }
 
+.chatEntryPendingReveal {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .chatTransitionOrb {
   position: relative;
   width: 96px;
