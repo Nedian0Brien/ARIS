@@ -116,13 +116,17 @@ import {
 import {
   hasTailRestoreRenderHydrated,
   hasTailLayoutSettled,
+  isNearBottom,
+  isNearWindowBottom,
   resolveMobileWindowScrollTop,
   resolveScrollToBottomTarget,
   resolveTailScrollAnchorId,
   shouldAutoScrollToBottom,
+  shouldBlockLoadOlder,
   shouldRestoreTailScrollOnChatEntry,
   shouldResetScrollForChatChange,
 } from './chatScroll';
+import { useChatTailRestore } from './useChatTailRestore';
 import {
   normalizeLocalPathTarget,
   parseLocalFileReferenceTarget,
@@ -1349,22 +1353,8 @@ function buildStreamRenderItems(events: UiEvent[], expandedActionRunIds: Record<
   return items;
 }
 
-function isNearBottom(element: HTMLElement): boolean {
-  return element.scrollHeight - element.scrollTop - element.clientHeight <= AUTO_SCROLL_THRESHOLD_PX;
-}
-
 function getWindowScrollTop(): number {
   return Math.max(window.scrollY || 0, document.documentElement.scrollTop || 0, document.body.scrollTop || 0);
-}
-
-function isNearWindowBottom(): boolean {
-  const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-  const scrollTop = getWindowScrollTop();
-  const scrollHeight = Math.max(
-    document.documentElement.scrollHeight,
-    document.body.scrollHeight,
-  );
-  return scrollHeight - (scrollTop + viewportHeight) <= AUTO_SCROLL_THRESHOLD_PX;
 }
 
 // --- 6. 컴포넌트 내부 헬퍼 함수 ---
@@ -2827,8 +2817,6 @@ export function ChatInterface({
   const showDisconnectRetry = activeChatRuntimeUi.showDisconnectRetry;
   const lastSubmittedPayload = activeChatRuntimeUi.lastSubmittedPayload;
   const submitError = activeChatRuntimeUi.submitError;
-  const [isInitialChatEntryPendingReveal, setIsInitialChatEntryPendingReveal] = useState(initialShowChatEntryLoading);
-  const [isTailLayoutSettling, setIsTailLayoutSettling] = useState(false);
   const updateChatRuntimeUi = useCallback((chatId: string | null, patch: Partial<ChatRuntimeUiState>) => {
     if (!chatId) {
       return;
@@ -2993,7 +2981,6 @@ export function ChatInterface({
   const [isGeminiModeDropdownOpen, setIsGeminiModeDropdownOpen] = useState(false);
   const [isCommandMenuOpen, setIsCommandMenuOpen] = useState(false);
   const [usageProbeProvider, setUsageProbeProvider] = useState<UsageCommandProvider | null>(null);
-  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   useEffect(() => {
     if (!copiedUserEventId) {
       return undefined;
@@ -3055,10 +3042,7 @@ export function ChatInterface({
   const geminiModeDropdownRef = useRef<HTMLDivElement>(null);
   const commandMenuRef = useRef<HTMLDivElement>(null);
   const previousActiveChatIdRef = useRef<string | null>(activeChatIdResolved);
-  const restoredTailScrollForChatRef = useRef<string | null>(null);
-  const tailRestoreCancelRef = useRef<(() => void) | null>(null);
   const latestVisibleEventIdRef = useRef<string | null>(null);
-  const shouldStickToBottomRef = useRef(true);
   const disconnectNoticeAwaitingRef = useRef<string | null>(null);
   const runtimeStartedSinceAwaitingRef = useRef(false);
   const approvalFeedbackTimersRef = useRef<Record<string, number>>({});
@@ -3187,6 +3171,29 @@ export function ChatInterface({
       streamItems.length,
     ],
   );
+  const {
+    isTailLayoutSettling,
+    isTailLayoutSettlingRef,
+    isInitialChatEntryPendingReveal,
+    shouldStickToBottomRef,
+    showScrollToBottom,
+    setShowScrollToBottom,
+    scrollConversationToBottom,
+    restoreConversationToTail,
+    syncScrollToBottomButton,
+    handleJumpToBottom,
+  } = useChatTailRestore({
+    activeChatIdResolved,
+    eventsForChatId,
+    hasLoadedCurrentChat,
+    isTailRestoreHydrated,
+    isNewChatPlaceholder,
+    isWorkspaceHome,
+    isMobileLayout,
+    initialShowChatEntryLoading,
+    scrollRef,
+    latestVisibleEventIdRef,
+  });
   const showChatTransitionLoading = shouldShowChatTransitionLoading({
     activeChatIdResolved,
     eventsForChatId,
@@ -4445,7 +4452,7 @@ export function ChatInterface({
   }, []);
 
   const loadOlderHistory = useCallback(async () => {
-    if (isLoadingOlder || !hasMoreBefore) {
+    if (shouldBlockLoadOlder({ isTailLayoutSettling, isLoadingOlder, hasMoreBefore })) {
       return;
     }
 
@@ -4484,7 +4491,7 @@ export function ChatInterface({
       const delta = Math.max(0, nextStream.scrollHeight - previousHeight);
       nextStream.scrollTop = previousTop + delta;
     });
-  }, [hasMoreBefore, isLoadingOlder, isMobileLayout, loadOlder]);
+  }, [hasMoreBefore, isLoadingOlder, isMobileLayout, isTailLayoutSettling, loadOlder, shouldBlockLoadOlder]);
 
   const syncComposerDockMetrics = useCallback(() => {
     const shell = chatShellRef.current;
@@ -4523,74 +4530,6 @@ export function ChatInterface({
     input.style.overflowY = nextHeight >= COMPOSER_MAX_HEIGHT_PX ? 'auto' : 'hidden';
     requestAnimationFrame(syncComposerDockMetrics);
   }, [syncComposerDockMetrics]);
-
-  const scrollConversationToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
-    const target = resolveScrollToBottomTarget({
-      isMobileLayout,
-      keyboardOpen: document.documentElement.dataset.keyboardOpen === 'true',
-    });
-    if (target === 'window') {
-      const top = resolveMobileWindowScrollTop({
-        scrollHeight: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
-        viewportHeight: window.visualViewport?.height ?? window.innerHeight,
-      });
-      window.scrollTo({ top, behavior });
-      return;
-    }
-
-    const stream = scrollRef.current;
-    if (!stream) {
-      return;
-    }
-    stream.scrollTo({ top: stream.scrollHeight, behavior });
-  }, [isMobileLayout]);
-
-  const restoreConversationToTail = useCallback((behavior: ScrollBehavior = 'auto') => {
-    const anchorId = resolveTailScrollAnchorId({
-      latestVisibleEventId: latestVisibleEventIdRef.current,
-    });
-    if (anchorId) {
-      const anchor = document.getElementById(anchorId);
-      if (anchor) {
-        anchor.scrollIntoView({ behavior, block: 'end' });
-        return;
-      }
-    }
-    scrollConversationToBottom(behavior);
-  }, [scrollConversationToBottom]);
-
-  const readTailLayoutMetrics = useCallback(() => {
-    const anchorId = resolveTailScrollAnchorId({
-      latestVisibleEventId: latestVisibleEventIdRef.current,
-    });
-    const anchor = anchorId ? document.getElementById(anchorId) : null;
-
-    return {
-      anchorBottom: anchor ? anchor.getBoundingClientRect().bottom : null,
-      scrollHeight: isMobileLayout
-        ? Math.max(document.documentElement.scrollHeight, document.body.scrollHeight)
-        : (scrollRef.current?.scrollHeight ?? null),
-    };
-  }, [isMobileLayout]);
-
-  const syncScrollToBottomButton = useCallback(() => {
-    if (isMobileLayout) {
-      setShowScrollToBottom(!isNearWindowBottom());
-      return;
-    }
-    const stream = scrollRef.current;
-    if (!stream) {
-      setShowScrollToBottom(false);
-      return;
-    }
-    setShowScrollToBottom(!isNearBottom(stream));
-  }, [isMobileLayout]);
-
-  const handleJumpToBottom = useCallback(() => {
-    shouldStickToBottomRef.current = true;
-    setShowScrollToBottom(false);
-    scrollConversationToBottom('smooth');
-  }, [scrollConversationToBottom]);
 
   const handleComposerFocus = useCallback(() => {
     if (isMobileLayout) {
@@ -4830,7 +4769,7 @@ export function ChatInterface({
     }
 
     const onWindowScroll = () => {
-      if (isLoadingOlder || !hasMoreBefore) {
+      if (shouldBlockLoadOlder({ isTailLayoutSettling: isTailLayoutSettlingRef.current, isLoadingOlder, hasMoreBefore })) {
         return;
       }
       if (getWindowScrollTop() <= 96) {
@@ -4847,117 +4786,6 @@ export function ChatInterface({
   useEffect(() => {
     syncScrollToBottomButton();
   }, [events.length, effectivePendingPermissions.length, pendingUserEvents.length, showPermissionQueue, syncScrollToBottomButton]);
-
-  useEffect(() => {
-    if (isWorkspaceHome || isNewChatPlaceholder || !activeChatIdResolved) {
-      if (tailRestoreCancelRef.current) {
-        tailRestoreCancelRef.current();
-        tailRestoreCancelRef.current = null;
-      }
-      restoredTailScrollForChatRef.current = null;
-      setIsInitialChatEntryPendingReveal(false);
-      setIsTailLayoutSettling(false);
-    }
-  }, [activeChatIdResolved, isNewChatPlaceholder, isWorkspaceHome]);
-
-  useEffect(() => {
-    if (!shouldRestoreTailScrollOnChatEntry({
-      activeChatId: activeChatIdResolved,
-      eventsForChatId,
-      hasLoadedCurrentChat,
-      isTailRestoreHydrated,
-      isWorkspaceHome,
-      isNewChatPlaceholder,
-      restoredForChatId: restoredTailScrollForChatRef.current,
-    })) {
-      return;
-    }
-
-    // settle loop은 events sync로 인한 effect 재호출 사이에서도 살아남아야 한다.
-    // cleanup function에서 reveal flag를 토글하면 stable frame이 모이기 전에
-    // stream이 노출되어 마지막 메시지 위쪽에서 멈춘 채 보인다.
-    if (tailRestoreCancelRef.current) {
-      tailRestoreCancelRef.current();
-      tailRestoreCancelRef.current = null;
-    }
-
-    restoredTailScrollForChatRef.current = activeChatIdResolved;
-    shouldStickToBottomRef.current = true;
-    setShowScrollToBottom(false);
-    setIsTailLayoutSettling(true);
-
-    let finished = false;
-    let rafId = 0;
-    let timeoutId = 0;
-    let stableFrameCount = 0;
-    let previousMetrics: ReturnType<typeof readTailLayoutMetrics> | null = null;
-
-    const complete = () => {
-      if (finished) {
-        return;
-      }
-      finished = true;
-      window.cancelAnimationFrame(rafId);
-      window.clearTimeout(timeoutId);
-      if (tailRestoreCancelRef.current === complete) {
-        tailRestoreCancelRef.current = null;
-      }
-      setIsInitialChatEntryPendingReveal(false);
-      setIsTailLayoutSettling(false);
-    };
-
-    const settle = () => {
-      if (finished) {
-        return;
-      }
-      if (shouldStickToBottomRef.current) {
-        restoreConversationToTail('auto');
-      }
-      const nextMetrics = readTailLayoutMetrics();
-      if (previousMetrics && hasTailLayoutSettled({
-        previousAnchorBottom: previousMetrics.anchorBottom,
-        nextAnchorBottom: nextMetrics.anchorBottom,
-        previousScrollHeight: previousMetrics.scrollHeight,
-        nextScrollHeight: nextMetrics.scrollHeight,
-      })) {
-        stableFrameCount += 1;
-      } else {
-        stableFrameCount = 0;
-      }
-      previousMetrics = nextMetrics;
-
-      if (stableFrameCount >= 2) {
-        complete();
-        return;
-      }
-
-      rafId = window.requestAnimationFrame(settle);
-    };
-
-    tailRestoreCancelRef.current = complete;
-
-    settle();
-
-    timeoutId = window.setTimeout(complete, TAIL_LAYOUT_SETTLE_TIMEOUT_MS);
-  }, [
-    activeChatIdResolved,
-    eventsForChatId,
-    hasLoadedCurrentChat,
-    isTailRestoreHydrated,
-    isNewChatPlaceholder,
-    isWorkspaceHome,
-    readTailLayoutMetrics,
-    restoreConversationToTail,
-  ]);
-
-  useEffect(() => {
-    return () => {
-      if (tailRestoreCancelRef.current) {
-        tailRestoreCancelRef.current();
-        tailRestoreCancelRef.current = null;
-      }
-    };
-  }, []);
 
   useEffect(() => {
     if (!shouldAutoScrollToBottom({
@@ -5908,7 +5736,7 @@ export function ChatInterface({
     const nearBottom = isNearBottom(stream);
     shouldStickToBottomRef.current = nearBottom;
     setShowScrollToBottom(!nearBottom);
-    if (!isLoadingOlder && hasMoreBefore && stream.scrollTop <= 96) {
+    if (!shouldBlockLoadOlder({ isTailLayoutSettling: isTailLayoutSettlingRef.current, isLoadingOlder, hasMoreBefore }) && stream.scrollTop <= 96) {
       void loadOlderHistory();
     }
   }
