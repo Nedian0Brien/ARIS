@@ -125,3 +125,16 @@ type ShouldBlockLoadOlderInput = {
 export function shouldBlockLoadOlder(input: ShouldBlockLoadOlderInput): boolean {
   return input.isTailLayoutSettling || input.isLoadingOlder || !input.hasMoreBefore;
 }
+
+const NEAR_BOTTOM_THRESHOLD_PX = 80;
+
+export function isNearBottom(element: HTMLElement): boolean {
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= NEAR_BOTTOM_THRESHOLD_PX;
+}
+
+export function isNearWindowBottom(): boolean {
+  const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+  const scrollTop = Math.max(window.scrollY || 0, document.documentElement.scrollTop || 0, document.body.scrollTop || 0);
+  const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+  return scrollHeight - (scrollTop + viewportHeight) <= NEAR_BOTTOM_THRESHOLD_PX;
+}
