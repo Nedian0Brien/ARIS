@@ -115,3 +115,13 @@ export function shouldRestoreTailScrollOnChatEntry(input: RestoreTailScrollOnCha
   }
   return input.restoredForChatId !== input.activeChatId;
 }
+
+type ShouldBlockLoadOlderInput = {
+  isTailLayoutSettling: boolean;
+  isLoadingOlder: boolean;
+  hasMoreBefore: boolean;
+};
+
+export function shouldBlockLoadOlder(input: ShouldBlockLoadOlderInput): boolean {
+  return input.isTailLayoutSettling || input.isLoadingOlder || !input.hasMoreBefore;
+}

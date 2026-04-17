@@ -8,6 +8,7 @@ import {
   shouldRestoreTailScrollOnChatEntry,
   shouldAutoScrollToBottom,
   shouldResetScrollForChatChange,
+  shouldBlockLoadOlder,
 } from '@/app/sessions/[sessionId]/chatScroll';
 
 describe('chatScroll', () => {
@@ -163,5 +164,20 @@ describe('chatScroll', () => {
       isNewChatPlaceholder: false,
       restoredForChatId: 'chat-2',
     })).toBe(false);
+  });
+
+  describe('shouldBlockLoadOlder', () => {
+    it('blocks when tail is settling', () => {
+      expect(shouldBlockLoadOlder({ isTailLayoutSettling: true, isLoadingOlder: false, hasMoreBefore: true })).toBe(true);
+    });
+    it('blocks when already loading older', () => {
+      expect(shouldBlockLoadOlder({ isTailLayoutSettling: false, isLoadingOlder: true, hasMoreBefore: true })).toBe(true);
+    });
+    it('blocks when no more before', () => {
+      expect(shouldBlockLoadOlder({ isTailLayoutSettling: false, isLoadingOlder: false, hasMoreBefore: false })).toBe(true);
+    });
+    it('allows when all conditions clear', () => {
+      expect(shouldBlockLoadOlder({ isTailLayoutSettling: false, isLoadingOlder: false, hasMoreBefore: true })).toBe(false);
+    });
   });
 });
