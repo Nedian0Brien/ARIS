@@ -1,10 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
-  Blocks,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -18,22 +16,22 @@ import {
   Pin,
   PinOff,
   RefreshCw,
-  Save,
   Trash2,
   X,
 } from 'lucide-react';
-import { WorkspaceFileEditor } from '@/components/files/WorkspaceFileEditor';
 import type { GitTreeNode } from '@/lib/git/sidebarUi';
 import styles from './CustomizationSidebar.module.css';
 import { useCustomizationFilesState } from './customization-sidebar/hooks/useCustomizationFilesState';
 import { useCustomizationGitState } from './customization-sidebar/hooks/useCustomizationGitState';
 import { useCustomizationModalState } from './customization-sidebar/hooks/useCustomizationModalState';
 import { useCustomizationOverviewState } from './customization-sidebar/hooks/useCustomizationOverviewState';
+import { CustomizationContentModal } from './customization-sidebar/modals/CustomizationContentModal';
+import { CustomizationFileActionDialog } from './customization-sidebar/modals/CustomizationFileActionDialog';
+import { CustomizationFileModal } from './customization-sidebar/modals/CustomizationFileModal';
 import { CustomizationFilesSection } from './customization-sidebar/sections/CustomizationFilesSection';
 import { CustomizationGitSection } from './customization-sidebar/sections/CustomizationGitSection';
 import { CustomizationOverviewSection } from './customization-sidebar/sections/CustomizationOverviewSection';
 import {
-  formatBytes,
   formatGitStatusLabel,
   getGitFileName,
   getGitParentLabel,
@@ -95,7 +93,6 @@ export function CustomizationSidebar({
     sessionId,
   });
   const {
-    activeModal,
     activeModalKind,
     closeModal,
     isMounted,
@@ -600,6 +597,69 @@ export function CustomizationSidebar({
     <div className={styles.gitEmptyState}>파일을 선택하면 diff가 표시됩니다.</div>
   );
 
+  const handleInstructionContentChange = useCallback((value: string) => {
+    setInstructionContent(value);
+    setInstructionDirty(true);
+    setInstructionStatus(null);
+  }, [setInstructionContent, setInstructionDirty, setInstructionStatus]);
+
+  const handleFileModalChange = useCallback((nextContent: string) => {
+    setFileContent(nextContent);
+    setFileDirty(true);
+    setFileStatus(null);
+  }, [setFileContent, setFileDirty, setFileStatus]);
+
+  const handleFileActionDialogValueChange = useCallback((value: string) => {
+    setFileActionDialog((current) => (
+      current && 'value' in current ? { ...current, value } : current
+    ));
+  }, [setFileActionDialog]);
+
+  const handleOpenWikilink = useCallback((wikilinkPath: string, fromPath: string) => {
+    void (async () => {
+      const pathWithExt = wikilinkPath.includes('.') ? wikilinkPath : `${wikilinkPath}.md`;
+      let resolvedPath: string | null = null;
+      try {
+        const resp = await fetch(
+          `/api/fs/resolve-wikilink?path=${encodeURIComponent(wikilinkPath)}&from=${encodeURIComponent(fromPath)}`,
+        );
+        const data = await resp.json() as { resolvedPath: string | null };
+        resolvedPath = data.resolvedPath;
+      } catch {
+        // fallback to the wikilink path with markdown extension
+      }
+      const finalPath = resolvedPath ?? pathWithExt;
+      const name = finalPath.split('/').pop() ?? finalPath;
+      openFileModal(finalPath, name, { pushHistory: true });
+    })();
+  }, [openFileModal]);
+
+  const handleFileModalBack = useCallback(() => {
+    const idx = fileNavIndexRef.current - 1;
+    if (idx < 0) return;
+    const path = fileNavHistoryRef.current[idx];
+    if (!path) return;
+    fileNavIndexRef.current = idx;
+    setFileNavState({
+      canGoBack: idx > 0,
+      canGoForward: idx < fileNavHistoryRef.current.length - 1,
+    });
+    openFileModal(path, path.split('/').pop() ?? path);
+  }, [fileNavHistoryRef, fileNavIndexRef, openFileModal, setFileNavState]);
+
+  const handleFileModalForward = useCallback(() => {
+    const idx = fileNavIndexRef.current + 1;
+    if (idx >= fileNavHistoryRef.current.length) return;
+    const path = fileNavHistoryRef.current[idx];
+    if (!path) return;
+    fileNavIndexRef.current = idx;
+    setFileNavState({
+      canGoBack: idx > 0,
+      canGoForward: idx < fileNavHistoryRef.current.length - 1,
+    });
+    openFileModal(path, path.split('/').pop() ?? path);
+  }, [fileNavHistoryRef, fileNavIndexRef, openFileModal, setFileNavState]);
+
   return (
     <section className={`${styles.sidebarRoot} ${isMobileMode ? styles.sidebarRootMobile : ''}`}>
       <div className={styles.header}>
@@ -804,290 +864,56 @@ export function CustomizationSidebar({
           </div>
         )}
       </div>
-      {isMounted && activeModal && createPortal(
-        <div className={styles.modalOverlay} onClick={closeModal}>
-          <section
-            className={`${styles.modalCard}${activeModalKind === 'file' ? ` ${styles.fileModalCard}` : ''}`}
-            onClick={(event) => event.stopPropagation()}
-          >
-            {activeModalKind === 'file' ? (
-              <div className={`${styles.modalBody} ${styles.fileModalBody}`}>
-                {activeFileModal ? (
-                  fileLoading ? (
-                    <div className={styles.loadingState}>
-                      <Loader2 size={16} className={styles.rotate} />
-                      <p>파일을 불러오는 중입니다.</p>
-                    </div>
-                  ) : filePreviewBlock ? (
-                    <div className={styles.filePreviewBlocked}>
-                      <AlertTriangle size={18} />
-                      <div className={styles.filePreviewBlockedText}>
-                        <strong>
-                          {filePreviewBlock.reason === 'binary'
-                            ? '바이너리 파일은 에디터에서 미리보기를 지원하지 않습니다.'
-                            : '큰 파일은 우측 모달에서 직접 열지 않습니다.'}
-                        </strong>
-                        <span>파일 크기: {formatBytes(filePreviewBlock.sizeBytes)}</span>
-                        <span>
-                          {filePreviewBlock.reason === 'binary'
-                            ? '텍스트 파일만 미리보기와 편집을 지원합니다.'
-                            : '대용량 파일은 별도 편집기나 로컬 도구에서 여는 방식을 권장합니다.'}
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {fileStatus ? <div className={styles.fileModalStatus}>{fileStatus}</div> : null}
-                      <WorkspaceFileEditor
-                        fileName={activeFileModal.name}
-                        filePath={activeFileModal.path}
-                        workspaceRootPath={normalizedWorkspaceRootPath}
-                        content={fileContent}
-                        requestedLine={selectedFileLine}
-                        navigationRequestKey={selectedFileNavigationKey}
-                        isSaving={fileSaving}
-                        saveDisabled={fileSaving || fileLoading || !fileDirty}
-                        canGoBack={fileNavState.canGoBack}
-                        canGoForward={fileNavState.canGoForward}
-                        className={styles.fileModalEditor}
-                        onChange={(nextContent) => {
-                          setFileContent(nextContent);
-                          setFileDirty(true);
-                          setFileStatus(null);
-                        }}
-                        onSave={() => void handleSaveFile()}
-                        onClose={closeModal}
-                        onWikilinkClick={(wikilinkPath) => {
-                          void (async () => {
-                            const pathWithExt = wikilinkPath.includes('.') ? wikilinkPath : `${wikilinkPath}.md`;
-                            let resolvedPath: string | null = null;
-                            try {
-                              const resp = await fetch(
-                                `/api/fs/resolve-wikilink?path=${encodeURIComponent(wikilinkPath)}&from=${encodeURIComponent(activeFileModal.path)}`
-                              );
-                              const data = await resp.json() as { resolvedPath: string | null };
-                              resolvedPath = data.resolvedPath;
-                            } catch { /* fallback */ }
-                            const finalPath = resolvedPath ?? pathWithExt;
-                            const name = finalPath.split('/').pop() ?? finalPath;
-                            openFileModal(finalPath, name, { pushHistory: true });
-                          })();
-                        }}
-                        onBack={() => {
-                          const idx = fileNavIndexRef.current - 1;
-                          if (idx < 0) return;
-                          const path = fileNavHistoryRef.current[idx];
-                          if (!path) return;
-                          fileNavIndexRef.current = idx;
-                          setFileNavState({
-                            canGoBack: idx > 0,
-                            canGoForward: idx < fileNavHistoryRef.current.length - 1,
-                          });
-                          openFileModal(path, path.split('/').pop() ?? path);
-                        }}
-                        onForward={() => {
-                          const idx = fileNavIndexRef.current + 1;
-                          if (idx >= fileNavHistoryRef.current.length) return;
-                          const path = fileNavHistoryRef.current[idx];
-                          if (!path) return;
-                          fileNavIndexRef.current = idx;
-                          setFileNavState({
-                            canGoBack: idx > 0,
-                            canGoForward: idx < fileNavHistoryRef.current.length - 1,
-                          });
-                          openFileModal(path, path.split('/').pop() ?? path);
-                        }}
-                      />
-                    </>
-                  )
-                ) : (
-                  <div className={styles.emptyState}>
-                    <FileText size={18} />
-                    <p>편집할 파일을 선택해 주세요.</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <>
-                <div className={styles.modalHeader}>
-                  <div>
-                    <div className={styles.eyebrow}>
-                      {activeModalKind === 'instruction' ? <FileText size={13} /> : <Blocks size={13} />}
-                      {activeModalKind === 'instruction' ? 'Document Editor' : 'Skill Viewer'}
-                    </div>
-                    <h4 className={styles.modalTitle}>
-                      {activeInstructionModal?.name ?? activeSkillModal?.name ?? '선택 없음'}
-                    </h4>
-                    <p className={styles.modalSubtle}>
-                      {activeInstructionModal?.path ?? activeSkillModal?.relativePath ?? '내용을 확인할 수 없습니다.'}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className={styles.modalCloseButton}
-                    onClick={closeModal}
-                    aria-label="모달 닫기"
-                    title="모달 닫기"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-                <div className={styles.modalBody}>
-                  {activeModalKind === 'instruction' ? (
-                    activeInstructionModal ? (
-                      instructionLoading ? (
-                        <div className={styles.loadingState}>
-                          <Loader2 size={16} className={styles.rotate} />
-                          <p>문서를 불러오는 중입니다.</p>
-                        </div>
-                      ) : (
-                        <>
-                          <textarea
-                            className={styles.editor}
-                            value={instructionContent}
-                            onChange={(event) => {
-                              setInstructionContent(event.target.value);
-                              setInstructionDirty(true);
-                              setInstructionStatus(null);
-                            }}
-                            spellCheck={false}
-                          />
-                          <div className={styles.actions}>
-                            <span className={styles.statusText}>
-                              {instructionStatus
-                                ?? (instructionDirty ? '저장되지 않은 변경사항 있음' : '변경사항 없음')}
-                            </span>
-                            <button
-                              type="button"
-                              className={styles.saveButton}
-                              onClick={() => void handleSaveInstruction()}
-                              disabled={instructionSaving || instructionLoading || !instructionDirty}
-                            >
-                              {instructionSaving ? <Loader2 size={14} className={styles.rotate} /> : <Save size={14} />}
-                              저장
-                            </button>
-                          </div>
-                        </>
-                      )
-                    ) : (
-                      <div className={styles.emptyState}>
-                        <FileText size={18} />
-                        <p>편집할 문서를 선택해 주세요.</p>
-                      </div>
-                    )
-                  ) : activeSkillModal ? (
-                    skillLoading ? (
-                      <div className={styles.loadingState}>
-                        <Loader2 size={16} className={styles.rotate} />
-                        <p>스킬 본문을 불러오는 중입니다.</p>
-                      </div>
-                    ) : skillError ? (
-                      <div className={styles.errorState}>
-                        <Blocks size={18} />
-                        <p>{skillError}</p>
-                      </div>
-                    ) : (
-                      <div className={styles.preview}>
-                        <pre>{skillContent}</pre>
-                      </div>
-                    )
-                  ) : (
-                    <div className={styles.emptyState}>
-                      <Blocks size={18} />
-                      <p>확인할 Skill을 선택해 주세요.</p>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </section>
-        </div>,
-        document.body,
-      )}
-      {isMounted && fileActionDialog && createPortal(
-        <div className={styles.modalOverlay} onClick={() => setFileActionDialog(null)}>
-          <section className={styles.actionDialogCard} onClick={(event) => event.stopPropagation()}>
-            <div className={styles.modalHeader}>
-              <div>
-                <div className={styles.eyebrow}>
-                  {fileActionDialog.kind === 'delete' ? <Trash2 size={13} /> : <FolderKanban size={13} />}
-                  {fileActionDialog.kind === 'create-file'
-                    ? 'New File'
-                    : fileActionDialog.kind === 'create-folder'
-                      ? 'New Folder'
-                      : fileActionDialog.kind === 'rename'
-                        ? 'Rename'
-                        : 'Delete'}
-                </div>
-                <h4 className={styles.modalTitle}>
-                  {fileActionDialog.kind === 'create-file'
-                    ? '새 파일 만들기'
-                    : fileActionDialog.kind === 'create-folder'
-                      ? '새 폴더 만들기'
-                      : fileActionDialog.kind === 'rename'
-                        ? `${fileActionDialog.targetName} 이름 변경`
-                        : `${fileActionDialog.targetName} 삭제`}
-                </h4>
-                <p className={styles.modalSubtle}>
-                  {'value' in fileActionDialog ? fileActionDialog.targetPath : `삭제 대상: ${fileActionDialog.targetPath}`}
-                </p>
-              </div>
-              <button
-                type="button"
-                className={styles.modalCloseButton}
-                onClick={() => setFileActionDialog(null)}
-                aria-label="모달 닫기"
-                title="모달 닫기"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className={styles.actionDialogBody}>
-              {'value' in fileActionDialog ? (
-                <input
-                  autoFocus
-                  className={styles.actionDialogInput}
-                  value={fileActionDialog.value}
-                  onChange={(event) => {
-                    setFileActionDialog((current) => (
-                      current && 'value' in current
-                        ? { ...current, value: event.target.value }
-                        : current
-                    ));
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      void handleConfirmFileAction();
-                    }
-                  }}
-                  placeholder={fileActionDialog.kind === 'rename' ? '새 이름' : '이름 입력'}
-                />
-              ) : (
-                <p className={styles.actionDialogCopy}>
-                  이 작업은 되돌릴 수 없습니다. 정말 삭제하시겠습니까?
-                </p>
-              )}
-              <div className={styles.actionDialogActions}>
-                <button
-                  type="button"
-                  className={styles.pathButton}
-                  onClick={() => setFileActionDialog(null)}
-                >
-                  취소
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.pathButton} ${styles.actionDialogConfirm}`}
-                  onClick={() => { void handleConfirmFileAction(); }}
-                >
-                  {fileActionDialog.kind === 'delete' ? '삭제' : '확인'}
-                </button>
-              </div>
-            </div>
-          </section>
-        </div>,
-        document.body,
-      )}
+      <CustomizationFileModal
+        activeFileModal={activeModalKind === 'file' ? activeFileModal : null}
+        fileContent={fileContent}
+        fileDirty={fileDirty}
+        fileLoading={fileLoading}
+        fileNavState={fileNavState}
+        filePreviewBlock={filePreviewBlock}
+        fileSaving={fileSaving}
+        fileStatus={fileStatus}
+        isMounted={isMounted}
+        navigationRequestKey={selectedFileNavigationKey}
+        requestedLine={selectedFileLine}
+        workspaceRootPath={normalizedWorkspaceRootPath}
+        onBack={handleFileModalBack}
+        onChange={handleFileModalChange}
+        onClose={closeModal}
+        onForward={handleFileModalForward}
+        onOpenWikilink={handleOpenWikilink}
+        onSave={() => {
+          void handleSaveFile();
+        }}
+      />
+      <CustomizationContentModal
+        activeInstructionModal={activeInstructionModal}
+        activeModalKind={activeModalKind}
+        activeSkillModal={activeSkillModal}
+        instructionContent={instructionContent}
+        instructionDirty={instructionDirty}
+        instructionLoading={instructionLoading}
+        instructionSaving={instructionSaving}
+        instructionStatus={instructionStatus}
+        isMounted={isMounted}
+        skillContent={skillContent}
+        skillError={skillError}
+        skillLoading={skillLoading}
+        onChangeInstruction={handleInstructionContentChange}
+        onClose={closeModal}
+        onSaveInstruction={() => {
+          void handleSaveInstruction();
+        }}
+      />
+      <CustomizationFileActionDialog
+        dialog={fileActionDialog}
+        isMounted={isMounted}
+        onChangeValue={handleFileActionDialogValueChange}
+        onClose={() => setFileActionDialog(null)}
+        onConfirm={() => {
+          void handleConfirmFileAction();
+        }}
+      />
     </section>
   );
 }

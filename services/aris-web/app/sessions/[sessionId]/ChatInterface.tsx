@@ -18,7 +18,6 @@ import { hydratePersistedPermissions, mergeRenderablePermissions } from '@/lib/h
 import { readChatImageAttachments, stripImageAttachmentPromptPrefix } from '@/lib/chatImageAttachments';
 import { buildOptimisticUserEvent } from './chatComposer';
 import { buildComposerSubmitText, buildUserMessageMeta } from './chatSubmitPayload';
-import { writeLastSelectedModelId } from './chatModelPreferences';
 import { resolveAvailableChatCommands, type ChatCommandId } from './chatCommands';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import {
@@ -37,7 +36,7 @@ import {
   PanelLeftOpen,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import type { AgentFlavor, ApprovalPolicy, ChatImageAttachment, PermissionRequest, SessionChat, UiEvent } from '@/lib/happy/types';
+import type { ApprovalPolicy, ChatImageAttachment, PermissionRequest, SessionChat, UiEvent } from '@/lib/happy/types';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import { UsageProbeModal } from './UsageProbeModal';
 import { buildPermissionTimelineItems } from './chatTimeline';
@@ -51,6 +50,7 @@ import { WorkspacePager } from './workspace-panels/WorkspacePager';
 import { CreatePanelPage } from './workspace-panels/CreatePanelPage';
 import { PanelPageRenderer } from './workspace-panels/PanelPageRenderer';
 import { useWorkspacePanels } from './workspace-panels/useWorkspacePanels';
+import { useChatSessionActions } from './chat-screen/actions/useChatSessionActions';
 import { ChatComposer } from './chat-screen/center-pane/ChatComposer';
 import { FileBrowserModal } from './chat-screen/center-pane/FileBrowserModal';
 import { useChatLayoutState } from './chat-screen/hooks/useChatLayoutState';
@@ -116,7 +116,6 @@ import {
   normalizeAgentFlavor,
   normalizeGeminiModeId,
   normalizeModelId,
-  normalizeModelReasoningEffort,
   normalizeWorkspaceClientPath,
   resolveAgentMeta,
   resolveAgentSubtitle,
@@ -351,15 +350,8 @@ export function ChatInterface({
   } = useChatLayoutState({
     centerHeaderRef,
   });
-  const [chatActionMenuId, setChatActionMenuId] = useState<string | null>(null);
-  const [chatActionMenuRect, setChatActionMenuRect] = useState<DOMRect | null>(null);
   const chatActionMenuRef = useRef<HTMLDivElement>(null);
-  const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
-  const [chatTitleDraft, setChatTitleDraft] = useState('');
-  const [chatMutationLoadingId, setChatMutationLoadingId] = useState<string | null>(null);
-  const [chatMutationError, setChatMutationError] = useState<string | null>(null);
   const [pendingUserEventsByChat, setPendingUserEventsByChat] = useState<Record<string, UiEvent[]>>({});
-  const [isCreatingChat, setIsCreatingChat] = useState(false);
   const handleCopyUserMessage = useCallback(async (event: UiEvent) => {
     const text = stripImageAttachmentPromptPrefix((event.body || event.title || '').replace(/\r\n/g, '\n')).trim();
     if (!text) {
@@ -499,6 +491,53 @@ export function ChatInterface({
     ?? resolveDefaultModelId(activeAgentFlavor, providerSelections, legacyCustomModels, lastSelectedCodexModelId);
   const activeGeminiModeId = normalizeGeminiModeId(selectedGeminiModeId)
     ?? resolveDefaultGeminiModeId(approvalPolicy, providerSelections?.gemini?.defaultModeId);
+  const {
+    chatActionMenuId,
+    chatActionMenuRect,
+    chatMutationError,
+    chatMutationLoadingId,
+    chatTitleDraft,
+    closeSidebarMenu,
+    goToChat,
+    handleCreateChat,
+    handleDeleteChat,
+    handleSelectGeminiMode,
+    handleSelectModel,
+    handleSelectModelReasoningEffort,
+    handleSidebarChatMenuToggle,
+    handleSidebarRenameCancel,
+    handleSidebarRenameSubmit,
+    handleSidebarStartRename,
+    handleSidebarTitleDraftChange,
+    handleToggleChatPin,
+    isCreatingChat,
+    renamingChatId,
+    resetChatUiState,
+    setChatMutationError,
+  } = useChatSessionActions({
+    activeAgentFlavor,
+    activeChat,
+    activeChatIdResolved,
+    approvalPolicy,
+    isCustomizationOverlayLayout,
+    isMobileLayout,
+    lastSelectedCodexModelId,
+    legacyCustomModels,
+    providerSelections,
+    selectedModelReasoningEffort,
+    sessionId,
+    setChats,
+    setIsChatSidebarOpen,
+    setIsCustomizationSidebarOpen,
+    setIsGeminiModeDropdownOpen,
+    setIsModelDropdownOpen,
+    setIsNewChatPlaceholder,
+    setLastSelectedCodexModelId,
+    setSelectedChatId,
+    setSelectedGeminiModeId,
+    setSelectedModelId,
+    setSelectedModelReasoningEffort,
+  });
   const codexReasoningEffort = activeAgentFlavor === 'codex'
     ? selectedModelReasoningEffort
     : undefined;
@@ -812,11 +851,9 @@ export function ChatInterface({
   ]);
 
   useEffect(() => {
-    setChatActionMenuId(null);
-    setRenamingChatId(null);
-    setChatTitleDraft('');
+    resetChatUiState();
     setChatMutationError(null);
-  }, [initialChats, activeChatId]);
+  }, [activeChatId, initialChats, resetChatUiState, setChatMutationError]);
 
   useEffect(() => {
     disconnectNoticeAwaitingRef.current = null;
@@ -1374,22 +1411,20 @@ export function ChatInterface({
       if (target.closest(`.${styles.chatListMenuButton}`)) {
         return;
       }
-      setChatActionMenuId(null);
-      setChatActionMenuRect(null);
+      closeSidebarMenu();
     };
     document.addEventListener('mousedown', onClickOutside);
     return () => {
       document.removeEventListener('mousedown', onClickOutside);
     };
-  }, [chatActionMenuId]);
+  }, [chatActionMenuId, closeSidebarMenu]);
 
   useEffect(() => {
     if (!chatActionMenuId) {
       return;
     }
     const onScroll = () => {
-      setChatActionMenuId(null);
-      setChatActionMenuRect(null);
+      closeSidebarMenu();
     };
     const chatListEl = chatListRef.current;
     if (chatListEl) {
@@ -1402,7 +1437,7 @@ export function ChatInterface({
       }
       window.removeEventListener('scroll', onScroll, { capture: true });
     };
-  }, [chatActionMenuId]);
+  }, [chatActionMenuId, closeSidebarMenu]);
 
   useEffect(() => {
     resizeComposerInput();
@@ -1870,354 +1905,10 @@ export function ChatInterface({
     };
   }, [activeChat?.threadId, activeChatIdResolved, events, eventsForChatId, sessionId, setChats]);
 
-  const buildChatUrlForChat = useCallback((chatId: string) => buildChatUrl(sessionId, chatId), [sessionId]);
-
-  const goToChat = useCallback((chatId: string) => {
-    setIsNewChatPlaceholder(false);
-    setChatActionMenuId(null);
-    setRenamingChatId(null);
-    setChatTitleDraft('');
-    setSelectedChatId(chatId);
-    writeChatIdToHistory(buildChatUrlForChat(chatId));
-
-    if (isMobileLayout) {
-      setIsChatSidebarOpen(false);
-    }
-    if (isCustomizationOverlayLayout) {
-      setIsCustomizationSidebarOpen(false);
-    }
-  }, [
-    buildChatUrlForChat,
-    isCustomizationOverlayLayout,
-    isMobileLayout,
-    setIsChatSidebarOpen,
-    setIsCustomizationSidebarOpen,
-    setIsNewChatPlaceholder,
-    setSelectedChatId,
-  ]);
-
-  const handleSelectModel = useCallback(async (modelId: string) => {
-    const normalizedModelId = normalizeModelId(modelId);
-    if (!activeChatIdResolved || !normalizedModelId) {
-      return;
-    }
-    setSelectedModelId(normalizedModelId);
-    if (activeAgentFlavor === 'codex') {
-      setLastSelectedCodexModelId(normalizedModelId);
-      writeLastSelectedModelId('codex', normalizedModelId);
-    }
-    setIsModelDropdownOpen(false);
-    setChatMutationError(null);
-    setChats((prev) => sortSessionChats(prev.map((chat) => (
-      chat.id === activeChatIdResolved
-        ? { ...chat, model: normalizedModelId }
-        : chat
-    ))));
-    try {
-      const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: normalizedModelId }),
-        },
-      );
-      const payload = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
-      if (!response.ok || !payload.chat) {
-        throw new Error(payload.error ?? '모델 설정 저장에 실패했습니다.');
-      }
-      setChats((prev) => sortSessionChats(prev.map((chat) => (
-        chat.id === payload.chat?.id ? payload.chat : chat
-      ))));
-    } catch (error) {
-      setChatMutationError(error instanceof Error ? error.message : '모델 설정 저장에 실패했습니다.');
-    }
-  }, [
-    activeAgentFlavor,
-    activeChatIdResolved,
-    sessionId,
-    setChats,
-    setIsModelDropdownOpen,
-    setLastSelectedCodexModelId,
-    setSelectedModelId,
-  ]);
-
-  const handleSelectGeminiMode = useCallback(async (modeId: string) => {
-    const normalizedModeId = normalizeGeminiModeId(modeId);
-    if (!activeChatIdResolved || !normalizedModeId || activeAgentFlavor !== 'gemini') {
-      return;
-    }
-    if (normalizedModeId === 'yolo' && approvalPolicy !== 'yolo') {
-      setChatMutationError('YOLO 모드는 세션 승인 정책이 yolo일 때만 사용할 수 있습니다.');
-      return;
-    }
-    const previousModeId = normalizeGeminiModeId(activeChat?.geminiMode) ?? 'default';
-    setSelectedGeminiModeId(normalizedModeId);
-    setIsGeminiModeDropdownOpen(false);
-    setChatMutationError(null);
-    setChats((prev) => sortSessionChats(prev.map((chat) => (
-      chat.id === activeChatIdResolved
-        ? { ...chat, geminiMode: normalizedModeId }
-        : chat
-    ))));
-    try {
-      const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ geminiMode: normalizedModeId }),
-        },
-      );
-      const payload = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
-      if (!response.ok || !payload.chat) {
-        throw new Error(payload.error ?? 'Gemini mode 저장에 실패했습니다.');
-      }
-      setChats((prev) => sortSessionChats(prev.map((chat) => (
-        chat.id === payload.chat?.id ? payload.chat : chat
-      ))));
-    } catch (error) {
-      setSelectedGeminiModeId(previousModeId);
-      setChats((prev) => sortSessionChats(prev.map((chat) => (
-        chat.id === activeChatIdResolved
-          ? { ...chat, geminiMode: previousModeId }
-          : chat
-      ))));
-      setChatMutationError(error instanceof Error ? error.message : 'Gemini mode 저장에 실패했습니다.');
-    }
-  }, [
-    activeAgentFlavor,
-    activeChat?.geminiMode,
-    activeChatIdResolved,
-    approvalPolicy,
-    sessionId,
-    setChats,
-    setIsGeminiModeDropdownOpen,
-    setSelectedGeminiModeId,
-  ]);
-
-  const handleSelectModelReasoningEffort = useCallback(async (value: unknown) => {
-    const normalizedEffort = normalizeModelReasoningEffort(value, 'medium');
-    setSelectedModelReasoningEffort(normalizedEffort);
-    if (!activeChatIdResolved || activeAgentFlavor !== 'codex') {
-      return;
-    }
-    setChatMutationError(null);
-    const previousEffort = normalizeModelReasoningEffort(activeChat?.modelReasoningEffort, 'medium');
-    setChats((prev) => sortSessionChats(prev.map((chat) => (
-      chat.id === activeChatIdResolved
-        ? { ...chat, modelReasoningEffort: normalizedEffort }
-        : chat
-    ))));
-    try {
-      const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ modelReasoningEffort: normalizedEffort }),
-        },
-      );
-      const payload = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
-      if (!response.ok || !payload.chat) {
-        throw new Error(payload.error ?? '모델 effort 저장에 실패했습니다.');
-      }
-      setChats((prev) => sortSessionChats(prev.map((chat) => (
-        chat.id === payload.chat?.id ? payload.chat : chat
-      ))));
-    } catch (error) {
-      setSelectedModelReasoningEffort(previousEffort);
-      setChats((prev) => sortSessionChats(prev.map((chat) => (
-        chat.id === activeChatIdResolved
-          ? { ...chat, modelReasoningEffort: previousEffort }
-          : chat
-      ))));
-      setChatMutationError(error instanceof Error ? error.message : '모델 effort 저장에 실패했습니다.');
-    }
-  }, [
-    activeAgentFlavor,
-    activeChat?.modelReasoningEffort,
-    activeChatIdResolved,
-    sessionId,
-    setChats,
-    setSelectedModelReasoningEffort,
-  ]);
-
-  const handleCreateChat = useCallback(async (agent: AgentFlavor) => {
-    if (isCreatingChat) {
-      return;
-    }
-    setIsCreatingChat(true);
-    setChatMutationError(null);
-    const defaultModelId = resolveDefaultModelId(agent, providerSelections, legacyCustomModels, lastSelectedCodexModelId);
-    const defaultGeminiModeId = agent === 'gemini'
-      ? resolveDefaultGeminiModeId(approvalPolicy, providerSelections?.gemini?.defaultModeId)
-      : undefined;
-    try {
-      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          agent,
-          model: defaultModelId,
-          ...(defaultGeminiModeId ? { geminiMode: defaultGeminiModeId } : {}),
-          ...(agent === 'codex' ? { modelReasoningEffort: selectedModelReasoningEffort } : {}),
-        }),
-      });
-      const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
-      if (!response.ok || !body.chat) {
-        throw new Error(body.error ?? '새 채팅 생성에 실패했습니다.');
-      }
-      setChats((prev) => sortSessionChats([body.chat!, ...prev]));
-      goToChat(body.chat.id);
-    } catch (error) {
-      setChatMutationError(error instanceof Error ? error.message : '새 채팅 생성에 실패했습니다.');
-    } finally {
-      setIsCreatingChat(false);
-    }
-  }, [
-    approvalPolicy,
-    goToChat,
-    isCreatingChat,
-    lastSelectedCodexModelId,
-    legacyCustomModels,
-    providerSelections,
-    selectedModelReasoningEffort,
-    sessionId,
-    setChats,
-  ]);
-
-  const handleToggleChatPin = useCallback(async (chat: SessionChat) => {
-    setChatMutationLoadingId(chat.id);
-    setChatMutationError(null);
-    const nextPinned = !chat.isPinned;
-    setChats((prev) => sortSessionChats(prev.map((item) => (
-      item.id === chat.id ? { ...item, isPinned: nextPinned } : item
-    ))));
-    try {
-      const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chat.id)}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ isPinned: nextPinned }),
-        },
-      );
-      if (!response.ok) {
-        throw new Error('채팅 고정 상태 변경에 실패했습니다.');
-      }
-    } catch (error) {
-      setChats((prev) => sortSessionChats(prev.map((item) => (
-        item.id === chat.id ? { ...item, isPinned: chat.isPinned } : item
-      ))));
-      setChatMutationError(error instanceof Error ? error.message : '채팅 고정 상태 변경에 실패했습니다.');
-    } finally {
-      setChatMutationLoadingId(null);
-      setChatActionMenuId(null);
-    }
-  }, [sessionId, setChats]);
-
-  const handleRenameChat = useCallback(async (chatId: string, nextTitle: string) => {
-    const normalized = nextTitle.trim();
-    if (!normalized) {
-      setRenamingChatId(null);
-      setChatTitleDraft('');
-      return;
-    }
-    setChatMutationLoadingId(chatId);
-    setChatMutationError(null);
-    try {
-      const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chatId)}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: normalized }),
-        },
-      );
-      const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
-      if (!response.ok || !body.chat) {
-        throw new Error(body.error ?? '채팅 이름 변경에 실패했습니다.');
-      }
-      setChats((prev) => sortSessionChats(prev.map((chat) => (
-        chat.id === chatId ? { ...chat, title: body.chat!.title } : chat
-      ))));
-      setRenamingChatId(null);
-      setChatTitleDraft('');
-    } catch (error) {
-      setChatMutationError(error instanceof Error ? error.message : '채팅 이름 변경에 실패했습니다.');
-    } finally {
-      setChatMutationLoadingId(null);
-    }
-  }, [sessionId, setChats]);
-
-  const handleDeleteChat = useCallback(async (chat: SessionChat) => {
-    if (chatMutationLoadingId) {
-      return;
-    }
-    const confirmed = window.confirm(`'${chat.title}' 채팅을 삭제할까요?`);
-    if (!confirmed) {
-      return;
-    }
-    setChatMutationLoadingId(chat.id);
-    setChatMutationError(null);
-    try {
-      const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chat.id)}`,
-        { method: 'DELETE' },
-      );
-      const body = (await response.json().catch(() => ({}))) as { chats?: SessionChat[]; error?: string };
-      if (!response.ok || !Array.isArray(body.chats)) {
-        throw new Error(body.error ?? '채팅 삭제에 실패했습니다.');
-      }
-      const nextChats = sortSessionChats(body.chats);
-      setChats(nextChats);
-      setChatActionMenuId(null);
-      if (chat.id === activeChatIdResolved && nextChats[0]) {
-        goToChat(nextChats[0].id);
-      }
-    } catch (error) {
-      setChatMutationError(error instanceof Error ? error.message : '채팅 삭제에 실패했습니다.');
-    } finally {
-      setChatMutationLoadingId(null);
-    }
-  }, [activeChatIdResolved, chatMutationLoadingId, goToChat, sessionId, setChats]);
-
-  const handleSidebarChatMenuToggle = useCallback((chatId: string, rect: DOMRect) => {
-    if (chatActionMenuId === chatId) {
-      setChatActionMenuId(null);
-      setChatActionMenuRect(null);
-      return;
-    }
-    setChatActionMenuId(chatId);
-    setChatActionMenuRect(rect);
-  }, [chatActionMenuId]);
-
-  const handleSidebarTitleDraftChange = useCallback((value: string) => {
-    setChatTitleDraft(value);
-  }, []);
-
-  const handleSidebarRenameSubmit = useCallback((chatId: string, nextTitle: string) => {
-    void handleRenameChat(chatId, nextTitle);
-  }, [handleRenameChat]);
-
-  const handleSidebarRenameCancel = useCallback(() => {
-    setRenamingChatId(null);
-    setChatTitleDraft('');
-  }, []);
-
   const handleSidebarMarkAsRead = useCallback((chat: SessionChat) => {
     handleMarkChatAsRead(chat);
-    setChatActionMenuId(null);
-    setChatActionMenuRect(null);
-  }, [handleMarkChatAsRead]);
-
-  const handleSidebarStartRename = useCallback((chat: SessionChat) => {
-    setRenamingChatId(chat.id);
-    setChatTitleDraft(chat.title);
-    setChatActionMenuId(null);
-    setChatActionMenuRect(null);
-  }, []);
+    closeSidebarMenu();
+  }, [closeSidebarMenu, handleMarkChatAsRead]);
 
   const handleSidebarTogglePin = useCallback((chat: SessionChat) => {
     void handleToggleChatPin(chat);
