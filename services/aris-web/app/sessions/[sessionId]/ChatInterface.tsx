@@ -38,7 +38,6 @@ import {
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import type { AgentFlavor, ApprovalPolicy, ChatImageAttachment, PermissionRequest, SessionChat, UiEvent } from '@/lib/happy/types';
-import { CustomizationSidebar } from './CustomizationSidebar';
 import { PermissionRequestMessage } from './PermissionRequestMessage';
 import { UsageProbeModal } from './UsageProbeModal';
 import { buildPermissionTimelineItems } from './chatTimeline';
@@ -62,6 +61,7 @@ import { useChatSidebarState } from './chat-screen/hooks/useChatSidebarState';
 import { useComposerState } from './chat-screen/hooks/useComposerState';
 import { useWorkspaceBrowserState } from './chat-screen/hooks/useWorkspaceBrowserState';
 import { ChatSidebarPane } from './chat-screen/left-sidebar/ChatSidebarPane';
+import { CustomizationSidebarContainer } from './chat-screen/right-pane/CustomizationSidebarContainer';
 import styles from './ChatInterface.module.css';
 import { shouldShowChatTransitionLoading } from './chatSelection';
 import {
@@ -3410,7 +3410,7 @@ export function ChatInterface({
             }`}
             aria-hidden={!isCustomizationSidebarOpen}
           >
-            <CustomizationSidebar
+            <CustomizationSidebarContainer
               sessionId={sessionId}
               projectName={projectName}
               workspaceRootPath={normalizedWorkspaceRootPath}
@@ -3425,7 +3425,7 @@ export function ChatInterface({
       )}
 
       <aside className={styles.rightPanel}>
-        <CustomizationSidebar
+        <CustomizationSidebarContainer
           sessionId={sessionId}
           projectName={projectName}
           workspaceRootPath={normalizedWorkspaceRootPath}

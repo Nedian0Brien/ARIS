@@ -4,308 +4,52 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
-  ArrowDownCircle,
-  ArrowUpCircle,
   Blocks,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Copy,
-  FilePlus,
   FileText,
   Folder,
   FolderKanban,
   FolderOpen,
-  FolderPlus,
-  GitBranch,
-  GitCommitHorizontal,
-  type LucideIcon,
   Loader2,
   MoreVertical,
   Pencil,
   Pin,
   PinOff,
-  PlugZap,
   RefreshCw,
   Save,
-  Search,
-  TerminalSquare,
   Trash2,
-  Wrench,
   X,
 } from 'lucide-react';
 import { WorkspaceFileEditor } from '@/components/files/WorkspaceFileEditor';
-import { copyTextToClipboard } from '@/lib/copyTextToClipboard';
-import { describeGitSidebarError } from '@/lib/git/sidebarErrors';
-import { buildGitFileTree, parseGitUnifiedDiff, type GitTreeNode } from '@/lib/git/sidebarUi';
-import { getWorkspaceAbsolutePathForCopy, getWorkspaceRelativePathForCopy } from '@/lib/workspacePathCopy';
+import type { GitTreeNode } from '@/lib/git/sidebarUi';
 import styles from './CustomizationSidebar.module.css';
-
-type SidebarSurface = 'customization' | 'files' | 'git' | 'terminal';
-type CustomizationSection = 'instructions' | 'skills' | 'mcp';
-
-type InstructionDocSummary = {
-  id: string;
-  name: string;
-  path: string;
-  exists: boolean;
-  sizeBytes: number | null;
-  updatedAt: string | null;
-};
-
-type SkillSummary = {
-  id: string;
-  name: string;
-  description: string;
-  source: 'agents' | 'codex';
-  relativePath: string;
-};
-
-type MpcServerSummary = {
-  id: string;
-  name: string;
-  status: 'connected' | 'needs_auth' | 'failed' | 'connecting' | 'unknown';
-  source: string;
-  detail: string;
-  lastSeenAt: string | null;
-};
-
-type CustomizationOverview = {
-  workspacePath: string;
-  instructionDocs: InstructionDocSummary[];
-  skills: SkillSummary[];
-  mcpServers: MpcServerSummary[];
-};
-
-type InstructionPayload = {
-  content: string;
-  summary: InstructionDocSummary;
-};
-
-type SkillPayload = {
-  content: string;
-  summary: SkillSummary;
-};
-
-type WorkspaceFileEntry = {
-  name: string;
-  path: string;
-  isDirectory: boolean;
-  isFile: boolean;
-};
-
-type GitDiffScope = 'working' | 'staged';
-type GitActionName = 'stage' | 'unstage' | 'commit' | 'fetch' | 'pull' | 'push';
-
-type GitFileEntry = {
-  path: string;
-  originalPath: string | null;
-  indexStatus: string;
-  workTreeStatus: string;
-  staged: boolean;
-  unstaged: boolean;
-  untracked: boolean;
-  conflicted: boolean;
-};
-
-type GitOverview = {
-  workspacePath: string;
-  branch: string | null;
-  upstreamBranch: string | null;
-  ahead: number;
-  behind: number;
-  isClean: boolean;
-  stagedCount: number;
-  unstagedCount: number;
-  untrackedCount: number;
-  conflictedCount: number;
-  files: GitFileEntry[];
-};
-
-type FilePreviewBlock = {
-  reason: 'binary' | 'large';
-  sizeBytes: number;
-};
-
-type FileActionDialog =
-  | { kind: 'create-file'; targetPath: string; value: string }
-  | { kind: 'create-folder'; targetPath: string; value: string }
-  | { kind: 'rename'; targetPath: string; targetName: string; value: string }
-  | { kind: 'delete'; targetPath: string; targetName: string };
-
-type RequestedFilePayload = {
-  path: string;
-  name?: string;
-  line?: number | null;
-  nonce: number;
-};
-
-type FilePathCopyKind = 'absolute' | 'relative';
-
-type CustomizationModal =
-  | { kind: 'instruction'; id: string }
-  | { kind: 'skill'; id: string }
-  | { kind: 'file'; id: string }
-  | null;
-
-type Props = {
-  sessionId: string;
-  projectName: string;
-  workspaceRootPath?: string;
-  requestedFile?: RequestedFilePayload | null;
-  isPinned?: boolean;
-  onTogglePinned?: () => void;
-  mode?: 'desktop' | 'mobile';
-  onRequestClose?: () => void;
-};
-
-const SURFACE_ITEMS: Array<{
-  id: SidebarSurface;
-  label: string;
-  hint: string;
-  Icon: LucideIcon;
-  disabled?: boolean;
-}> = [
-  { id: 'customization', label: 'Customization', hint: '활성', Icon: Wrench },
-  { id: 'files', label: 'Files', hint: '활성', Icon: FolderKanban },
-  { id: 'git', label: 'Git', hint: '활성', Icon: GitBranch },
-  { id: 'terminal', label: 'Terminal', hint: '다음 단계', Icon: TerminalSquare, disabled: true },
-];
-
-const SURFACE_COPY: Record<SidebarSurface, { title: string; subtle: string }> = {
-  customization: {
-    title: 'Customization',
-    subtle: '지침 문서, Skills, MCP 상태를 한 곳에서 확인하고 조정합니다.',
-  },
-  files: {
-    title: 'Files',
-    subtle: '워크스페이스 파일을 탐색하고 바로 열어 수정합니다.',
-  },
-  git: {
-    title: 'Source Control',
-    subtle: 'VS Code처럼 변경 파일, 스테이징, diff, 커밋과 동기화를 한 흐름으로 처리합니다.',
-  },
-  terminal: {
-    title: 'Terminal',
-    subtle: '다음 단계에서 연결될 터미널 패널입니다.',
-  },
-};
-
-function formatTimestamp(value: string | null): string {
-  if (!value) return '시간 정보 없음';
-  const parsed = Date.parse(value);
-  if (!Number.isFinite(parsed)) return value;
-  return new Intl.DateTimeFormat('ko-KR', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(parsed);
-}
-
-function formatBytes(value: number | null): string {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-    return '--';
-  }
-  if (value < 1024) return `${value}B`;
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)}KB`;
-  return `${(value / (1024 * 1024)).toFixed(1)}MB`;
-}
-
-function formatGitStatusLabel(code: string): string | null {
-  if (code === 'M') return '수정';
-  if (code === 'A') return '추가';
-  if (code === 'D') return '삭제';
-  if (code === 'R') return '이름 변경';
-  if (code === 'C') return '복사';
-  if (code === 'U') return '충돌';
-  if (code === '?') return '추적 안 됨';
-  return null;
-}
-
-function gitTreeExpansionKey(scope: GitDiffScope, path: string): string {
-  return `${scope}:${path}`;
-}
-
-function expandGitTreeAncestors(
-  current: Record<string, boolean>,
-  scope: GitDiffScope,
-  path: string,
-): Record<string, boolean> {
-  const segments = path.split('/').filter(Boolean);
-  if (segments.length <= 1) {
-    return current;
-  }
-
-  const next = { ...current };
-  let partial = '';
-  for (let index = 0; index < segments.length - 1; index += 1) {
-    partial = partial ? `${partial}/${segments[index]}` : (segments[index] ?? '');
-    next[gitTreeExpansionKey(scope, partial)] = true;
-  }
-  return next;
-}
-
-function getGitFileName(path: string): string {
-  return path.split('/').pop() ?? path;
-}
-
-function getGitParentLabel(path: string): string {
-  const segments = path.split('/');
-  if (segments.length <= 1) {
-    return '루트';
-  }
-  return segments.slice(0, -1).join('/');
-}
-
-function getMcpStatusClass(status: MpcServerSummary['status']): string {
-  if (status === 'connected') return styles.tagGood;
-  if (status === 'needs_auth') return styles.tagWarn;
-  if (status === 'failed') return styles.tagDanger;
-  return styles.tagMuted;
-}
-
-function getMcpStatusLabel(status: MpcServerSummary['status']): string {
-  if (status === 'connected') return '연결됨';
-  if (status === 'needs_auth') return '인증 필요';
-  if (status === 'failed') return '실패';
-  if (status === 'connecting') return '연결 중';
-  return '확인 불가';
-}
-
-function normalizeWorkspaceClientPath(input: string): string {
-  const trimmed = input.trim();
-  if (!trimmed) {
-    return '/';
-  }
-
-  const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-  const normalized = withLeadingSlash.replace(/\/+/g, '/').replace(/\/$/, '');
-  return normalized || '/';
-}
-
-function getParentWorkspacePath(targetPath: string): string | null {
-  const normalized = normalizeWorkspaceClientPath(targetPath);
-  if (normalized === '/') {
-    return null;
-  }
-  const lastSlash = normalized.lastIndexOf('/');
-  return lastSlash <= 0 ? '/' : normalized.slice(0, lastSlash);
-}
-
-function joinWorkspacePath(dirPath: string, name: string): string {
-  const normalizedDir = normalizeWorkspaceClientPath(dirPath);
-  const trimmedName = name.trim().replace(/^\/+/, '');
-  return normalizedDir === '/' ? `/${trimmedName}` : `${normalizedDir}/${trimmedName}`;
-}
-
-function isWorkspacePathWithinRoot(targetPath: string, rootPath: string): boolean {
-  const normalizedTarget = normalizeWorkspaceClientPath(targetPath);
-  const normalizedRoot = normalizeWorkspaceClientPath(rootPath);
-  return normalizedRoot === '/'
-    ? normalizedTarget.startsWith('/')
-    : normalizedTarget === normalizedRoot || normalizedTarget.startsWith(`${normalizedRoot}/`);
-}
+import { useCustomizationFilesState } from './customization-sidebar/hooks/useCustomizationFilesState';
+import { useCustomizationGitState } from './customization-sidebar/hooks/useCustomizationGitState';
+import { useCustomizationModalState } from './customization-sidebar/hooks/useCustomizationModalState';
+import { useCustomizationOverviewState } from './customization-sidebar/hooks/useCustomizationOverviewState';
+import { CustomizationFilesSection } from './customization-sidebar/sections/CustomizationFilesSection';
+import { CustomizationGitSection } from './customization-sidebar/sections/CustomizationGitSection';
+import { CustomizationOverviewSection } from './customization-sidebar/sections/CustomizationOverviewSection';
+import {
+  formatBytes,
+  formatGitStatusLabel,
+  getGitFileName,
+  getGitParentLabel,
+  getParentWorkspacePath,
+  gitTreeExpansionKey,
+  normalizeWorkspaceClientPath,
+  SURFACE_COPY,
+  SURFACE_ITEMS,
+} from './customization-sidebar/shared';
+import type {
+  CustomizationSidebarProps,
+  GitDiffScope,
+  GitFileEntry,
+  SidebarSurface,
+  WorkspaceFileEntry,
+} from './customization-sidebar/types';
 
 export function CustomizationSidebar({
   sessionId,
@@ -316,403 +60,156 @@ export function CustomizationSidebar({
   onTogglePinned,
   mode = 'desktop',
   onRequestClose,
-}: Props) {
+}: CustomizationSidebarProps) {
   const normalizedWorkspaceRootPath = useMemo(
     () => normalizeWorkspaceClientPath(workspaceRootPath),
     [workspaceRootPath],
   );
   const [activeSurface, setActiveSurface] = useState<SidebarSurface>('customization');
-  const [activeSection, setActiveSection] = useState<CustomizationSection>('instructions');
-  const [overview, setOverview] = useState<CustomizationOverview | null>(null);
-  const [overviewLoading, setOverviewLoading] = useState(true);
-  const [overviewError, setOverviewError] = useState<string | null>(null);
-
-  const [selectedInstructionId, setSelectedInstructionId] = useState<string | null>(null);
-  const [instructionContent, setInstructionContent] = useState('');
-  const [instructionLoading, setInstructionLoading] = useState(false);
-  const [instructionSaving, setInstructionSaving] = useState(false);
-  const [instructionDirty, setInstructionDirty] = useState(false);
-  const [instructionStatus, setInstructionStatus] = useState<string | null>(null);
-
-  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
-  const [skillContent, setSkillContent] = useState('');
-  const [skillLoading, setSkillLoading] = useState(false);
-  const [skillError, setSkillError] = useState<string | null>(null);
-  const [filesPath, setFilesPath] = useState(normalizedWorkspaceRootPath);
-  const [filesParentPath, setFilesParentPath] = useState<string | null>(null);
-  const [filesEntries, setFilesEntries] = useState<WorkspaceFileEntry[]>([]);
-  const [filesEntriesByPath, setFilesEntriesByPath] = useState<Record<string, WorkspaceFileEntry[]>>({});
-  const [filesLoadingByPath, setFilesLoadingByPath] = useState<Record<string, boolean>>({});
-  const [filesLoading, setFilesLoading] = useState(false);
-  const [filesError, setFilesError] = useState<string | null>(null);
-  const [filesErrorByPath, setFilesErrorByPath] = useState<Record<string, string | null>>({});
-  const [expandedDirectories, setExpandedDirectories] = useState<Record<string, boolean>>({});
-  const [filesSearchQuery, setFilesSearchQuery] = useState('');
-  const [filesSearchResults, setFilesSearchResults] = useState<WorkspaceFileEntry[] | null>(null);
-  const [filesSearchLoading, setFilesSearchLoading] = useState(false);
-  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
-  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
-  const [selectedFileLine, setSelectedFileLine] = useState<number | null>(null);
-  const [selectedFileNavigationKey, setSelectedFileNavigationKey] = useState(0);
-  const [fileContent, setFileContent] = useState('');
-  const [fileLoading, setFileLoading] = useState(false);
-  const [fileSaving, setFileSaving] = useState(false);
-  const [fileDirty, setFileDirty] = useState(false);
-  const [fileStatus, setFileStatus] = useState<string | null>(null);
-  const [filePreviewBlock, setFilePreviewBlock] = useState<FilePreviewBlock | null>(null);
-  const [fileActionDialog, setFileActionDialog] = useState<FileActionDialog | null>(null);
-  const [fileActionMenuPath, setFileActionMenuPath] = useState<string | null>(null);
-  const [filePathCopyState, setFilePathCopyState] = useState<{ key: string; status: 'copied' | 'failed' } | null>(null);
-  const [gitOverview, setGitOverview] = useState<GitOverview | null>(null);
-  const [gitLoading, setGitLoading] = useState(false);
-  const [gitError, setGitError] = useState<string | null>(null);
-  const [gitActionBusy, setGitActionBusy] = useState<GitActionName | null>(null);
-  const [gitActionStatus, setGitActionStatus] = useState<string | null>(null);
-  const [gitCommitMessage, setGitCommitMessage] = useState('');
-  const [selectedGitPath, setSelectedGitPath] = useState<string | null>(null);
-  const [gitListTab, setGitListTab] = useState<GitDiffScope>('working');
-  const [selectedGitDiffScope, setSelectedGitDiffScope] = useState<GitDiffScope>('working');
-  const [gitExpandedFolders, setGitExpandedFolders] = useState<Record<string, boolean>>({});
-  const [gitDiffText, setGitDiffText] = useState('');
-  const [gitDiffLoading, setGitDiffLoading] = useState(false);
-  const [gitDiffError, setGitDiffError] = useState<string | null>(null);
-  const [activeModal, setActiveModal] = useState<CustomizationModal>(null);
-  const [isMounted, setIsMounted] = useState(false);
+  const {
+    activeSection,
+    handleSaveInstruction,
+    instructionContent,
+    instructionDirty,
+    instructionLoading,
+    instructionSaving,
+    instructionStatus,
+    loadOverview,
+    overview,
+    overviewError,
+    overviewLoading,
+    selectedInstruction,
+    selectedInstructionId,
+    selectedSkill,
+    selectedSkillId,
+    setActiveSection,
+    setInstructionContent,
+    setInstructionDirty,
+    setInstructionStatus,
+    setSelectedInstructionId,
+    setSelectedSkillId,
+    skillContent,
+    skillError,
+    skillLoading,
+  } = useCustomizationOverviewState({
+    sessionId,
+  });
+  const {
+    activeModal,
+    activeModalKind,
+    closeModal,
+    isMounted,
+    setActiveModal,
+  } = useCustomizationModalState();
+  const {
+    expandedDirectories,
+    fileActionDialog,
+    fileActionMenuPath,
+    fileContent,
+    fileDirty,
+    fileLoading,
+    fileNavHistoryRef,
+    fileNavIndexRef,
+    fileNavState,
+    filePathCopyState,
+    filePreviewBlock,
+    fileSaving,
+    fileStatus,
+    filesEntriesByPath,
+    filesError,
+    filesErrorByPath,
+    filesLoading,
+    filesLoadingByPath,
+    filesParentPath,
+    filesPath,
+    filesSearchLoading,
+    filesSearchQuery,
+    filesSearchResults,
+    handleConfirmFileAction,
+    handleCopyFilePath,
+    handleSaveFile,
+    handleToggleDirectory,
+    loadFilesDirectory,
+    openFileModal,
+    searchFiles,
+    selectedFileLine,
+    selectedFileName,
+    selectedFileNavigationKey,
+    selectedFilePath,
+    setExpandedDirectories,
+    setFileActionDialog,
+    setFileActionMenuPath,
+    setFileContent,
+    setFileDirty,
+    setFileNavState,
+    setFileStatus,
+    setFilesSearchQuery,
+    setFilesSearchResults,
+    visibleFiles,
+  } = useCustomizationFilesState({
+    normalizedWorkspaceRootPath,
+    setActiveModal,
+  });
+  const {
+    activeGitFiles,
+    activeGitTree,
+    gitActionBusy,
+    gitActionStatus,
+    gitCommitMessage,
+    gitDiffError,
+    gitDiffLoading,
+    gitDiffText,
+    gitErrorDetails,
+    gitExpandedFolders,
+    gitListTab,
+    gitLoading,
+    gitOverview,
+    handleGitListTabChange,
+    loadGitOverview,
+    parsedGitDiff,
+    runGitAction,
+    selectGitFile,
+    selectedGitDiffScope,
+    selectedGitFile,
+    selectedGitPath,
+    setGitActionStatus,
+    setGitCommitMessage,
+    setGitDiffError,
+    setGitDiffText,
+    setGitError,
+    setGitExpandedFolders,
+    setGitListTab,
+    setGitOverview,
+    setSelectedGitDiffScope,
+    setSelectedGitPath,
+    stagedGitFiles,
+    toggleGitFolder,
+    workingGitFiles,
+  } = useCustomizationGitState({
+    activeSurface,
+    sessionId,
+  });
   const handledRequestedFileNonceRef = useRef<number | null>(null);
-  const filePathCopyResetTimerRef = useRef<number | null>(null);
-
-  // 파일 탐색 히스토리 (wikilink 네비게이션용)
-  const fileNavHistoryRef = useRef<string[]>([]);
-  const fileNavIndexRef = useRef(-1);
-  const [fileNavState, setFileNavState] = useState({ canGoBack: false, canGoForward: false });
-
-  const selectedInstruction = useMemo(
-    () => overview?.instructionDocs.find((doc) => doc.id === selectedInstructionId) ?? null,
-    [overview, selectedInstructionId],
-  );
-  const selectedSkill = useMemo(
-    () => overview?.skills.find((skill) => skill.id === selectedSkillId) ?? null,
-    [overview, selectedSkillId],
-  );
-  const activeModalKind = activeModal?.kind ?? null;
   const activeInstructionModal = activeModalKind === 'instruction' ? selectedInstruction : null;
   const activeSkillModal = activeModalKind === 'skill' ? selectedSkill : null;
   const activeFileModal = activeModalKind === 'file' && selectedFilePath
     ? { path: selectedFilePath, name: selectedFileName ?? selectedFilePath.split('/').pop() ?? selectedFilePath }
     : null;
-  const selectedGitFile = useMemo(
-    () => gitOverview?.files.find((file) => file.path === selectedGitPath) ?? null,
-    [gitOverview, selectedGitPath],
-  );
+  const headerWorkspacePath = overview?.workspacePath ?? gitOverview?.workspacePath ?? projectName;
+  const activeSurfaceItem = SURFACE_ITEMS.find((item) => item.id === activeSurface) ?? SURFACE_ITEMS[0];
+  const headerCopy = SURFACE_COPY[activeSurface];
+  const isMobileMode = mode === 'mobile';
 
-  const loadOverview = useCallback(async () => {
-    setOverviewLoading(true);
-    setOverviewError(null);
-    try {
-      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/customization`, {
-        cache: 'no-store',
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data) {
-        throw new Error(typeof data?.error === 'string' ? data.error : 'Customization 정보를 불러오지 못했습니다.');
-      }
-
-      const nextOverview = data as CustomizationOverview;
-      setOverview(nextOverview);
-      setSelectedInstructionId((prev) => {
-        if (prev && nextOverview.instructionDocs.some((doc) => doc.id === prev)) {
-          return prev;
-        }
-        return nextOverview.instructionDocs.find((doc) => doc.exists)?.id
-          ?? nextOverview.instructionDocs[0]?.id
-          ?? null;
-      });
-      setSelectedSkillId((prev) => {
-        if (prev && nextOverview.skills.some((skill) => skill.id === prev)) {
-          return prev;
-        }
-        return nextOverview.skills[0]?.id ?? null;
-      });
-    } catch (error) {
-      setOverviewError(error instanceof Error ? error.message : 'Customization 정보를 불러오지 못했습니다.');
-    } finally {
-      setOverviewLoading(false);
-    }
-  }, [sessionId]);
-
-  const loadInstruction = useCallback(async (instructionId: string) => {
-    setInstructionLoading(true);
-    setInstructionStatus(null);
-    try {
-      const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/customization?kind=instruction&id=${encodeURIComponent(instructionId)}`,
-        { cache: 'no-store' },
-      );
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data) {
-        throw new Error(typeof data?.error === 'string' ? data.error : '문서를 불러오지 못했습니다.');
-      }
-
-      setInstructionContent((data as InstructionPayload).content);
-      setInstructionDirty(false);
-    } catch (error) {
-      setInstructionStatus(error instanceof Error ? error.message : '문서를 불러오지 못했습니다.');
-      setInstructionContent('');
-    } finally {
-      setInstructionLoading(false);
-    }
-  }, [sessionId]);
-
-  const loadSkill = useCallback(async (skillId: string) => {
-    setSkillLoading(true);
-    setSkillError(null);
-    try {
-      const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/customization?kind=skill&id=${encodeURIComponent(skillId)}`,
-        { cache: 'no-store' },
-      );
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data) {
-        throw new Error(typeof data?.error === 'string' ? data.error : '스킬 내용을 불러오지 못했습니다.');
-      }
-
-      setSkillContent((data as SkillPayload).content);
-    } catch (error) {
-      setSkillError(error instanceof Error ? error.message : '스킬 내용을 불러오지 못했습니다.');
-      setSkillContent('');
-    } finally {
-      setSkillLoading(false);
-    }
-  }, [sessionId]);
-
-  const loadFilesDirectory = useCallback(async (dirPath: string, options?: { focus?: boolean }) => {
-    const normalizedDirPath = normalizeWorkspaceClientPath(dirPath);
-    const shouldFocus = options?.focus ?? true;
-
-    setFilesLoadingByPath((prev) => ({ ...prev, [normalizedDirPath]: true }));
-    setFilesErrorByPath((prev) => ({ ...prev, [normalizedDirPath]: null }));
-    if (shouldFocus) {
-      setFilesLoading(true);
-      setFilesError(null);
-    }
-    try {
-      const response = await fetch(`/api/fs/list?path=${encodeURIComponent(normalizedDirPath)}`, { cache: 'no-store' });
-      const data = await response.json().catch(() => null) as {
-        currentPath?: string;
-        parentPath?: string | null;
-        directories?: WorkspaceFileEntry[];
-        error?: string;
-      } | null;
-      if (!response.ok || !data) {
-        throw new Error(typeof data?.error === 'string' ? data.error : '파일 목록을 불러오지 못했습니다.');
-      }
-
-      const currentPath = normalizeWorkspaceClientPath(data.currentPath ?? normalizedDirPath);
-      const parentPath = data.parentPath && isWorkspacePathWithinRoot(data.parentPath, normalizedWorkspaceRootPath)
-        ? data.parentPath
-        : null;
-      const entries = data.directories ?? [];
-
-      setFilesEntriesByPath((prev) => ({ ...prev, [currentPath]: entries }));
-      if (shouldFocus) {
-        setFilesPath(currentPath);
-        setFilesParentPath(parentPath);
-        setFilesEntries(entries);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '파일 목록을 불러오지 못했습니다.';
-      setFilesErrorByPath((prev) => ({ ...prev, [normalizedDirPath]: message }));
-      if (shouldFocus) {
-        setFilesError(message);
-      }
-    } finally {
-      setFilesLoadingByPath((prev) => ({ ...prev, [normalizedDirPath]: false }));
-      if (shouldFocus) {
-        setFilesLoading(false);
-      }
-    }
-  }, [normalizedWorkspaceRootPath]);
-
-  const searchFiles = useCallback(async (query: string) => {
-    setFilesSearchQuery(query);
-    setFilesError(null);
-    if (!query.trim()) {
-      setFilesSearchResults(null);
-      return;
-    }
-
-    setFilesSearchLoading(true);
-    try {
-      const response = await fetch(
-        `/api/fs/search?q=${encodeURIComponent(query.trim())}&path=${encodeURIComponent(normalizedWorkspaceRootPath)}`,
-        { cache: 'no-store' },
-      );
-      const data = await response.json().catch(() => null) as {
-        results?: Array<{ name: string; path: string; isDirectory: boolean }>;
-        error?: string;
-      } | null;
-      if (!response.ok || !data) {
-        throw new Error(typeof data?.error === 'string' ? data.error : '파일 검색에 실패했습니다.');
-      }
-
-      setFilesSearchResults((data.results ?? []).map((item) => ({
-        ...item,
-        isFile: !item.isDirectory,
-      })));
-    } catch (error) {
-      setFilesError(error instanceof Error ? error.message : '파일 검색에 실패했습니다.');
-      setFilesSearchResults([]);
-    } finally {
-      setFilesSearchLoading(false);
-    }
-  }, [normalizedWorkspaceRootPath]);
-
-  const loadFile = useCallback(async (filePath: string, fileName?: string) => {
-    setFileLoading(true);
-    setFileStatus(null);
-    setFilePreviewBlock(null);
-    setSelectedFilePath(filePath);
-    setSelectedFileName(fileName ?? filePath.split('/').pop() ?? filePath);
-    try {
-      const response = await fetch(`/api/fs/read?path=${encodeURIComponent(filePath)}`, { cache: 'no-store' });
-      const data = await response.json().catch(() => null) as {
-        content?: string;
-        sizeBytes?: number;
-        blockedReason?: 'binary' | 'large';
-        error?: string;
-      } | null;
-      if (!response.ok || !data) {
-        throw new Error(typeof data?.error === 'string' ? data.error : '파일을 불러오지 못했습니다.');
-      }
-
-      if (data.blockedReason) {
-        setFilePreviewBlock({
-          reason: data.blockedReason,
-          sizeBytes: typeof data.sizeBytes === 'number' ? data.sizeBytes : 0,
-        });
-        setFileContent('');
-        setFileDirty(false);
-        return;
-      }
-
-      setFileContent(data.content ?? '');
-      setFileDirty(false);
-    } catch (error) {
-      setFileStatus(error instanceof Error ? error.message : '파일을 불러오지 못했습니다.');
-      setFileContent('');
-    } finally {
-      setFileLoading(false);
-    }
-  }, []);
-
-  const applyGitOverview = useCallback((nextOverview: GitOverview) => {
-    setGitOverview(nextOverview);
-    setGitError(null);
-    setSelectedGitPath((currentPath) => (
-      currentPath && nextOverview.files.some((file) => file.path === currentPath)
-        ? currentPath
-        : nextOverview.files[0]?.path ?? null
-    ));
-  }, []);
-
-  const loadGitOverview = useCallback(async () => {
-    setGitLoading(true);
-    setGitError(null);
-    try {
-      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/git`, {
-        cache: 'no-store',
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data) {
-        throw new Error(typeof data?.error === 'string' ? data.error : 'Git 정보를 불러오지 못했습니다.');
-      }
-
-      applyGitOverview(data as GitOverview);
-    } catch (error) {
-      setGitError(error instanceof Error ? error.message : 'Git 정보를 불러오지 못했습니다.');
-      setGitOverview(null);
-      setSelectedGitPath(null);
-    } finally {
-      setGitLoading(false);
-    }
-  }, [applyGitOverview, sessionId]);
-
-  const loadGitDiff = useCallback(async (filePath: string, scope: GitDiffScope) => {
-    setGitDiffLoading(true);
-    setGitDiffError(null);
-    try {
-      const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/git?kind=diff&path=${encodeURIComponent(filePath)}&scope=${encodeURIComponent(scope)}`,
-        { cache: 'no-store' },
-      );
-      const data = await response.json().catch(() => null) as { diff?: string; error?: string } | null;
-      if (!response.ok || !data) {
-        throw new Error(typeof data?.error === 'string' ? data.error : 'diff를 불러오지 못했습니다.');
-      }
-
-      setGitDiffText(data.diff ?? '');
-    } catch (error) {
-      setGitDiffError(error instanceof Error ? error.message : 'diff를 불러오지 못했습니다.');
-      setGitDiffText('');
-    } finally {
-      setGitDiffLoading(false);
-    }
-  }, [sessionId]);
-
-  const runGitAction = useCallback(async (
-    action: GitActionName,
-    payload?: { paths?: string[]; message?: string },
-  ) => {
-    setGitActionBusy(action);
-    setGitActionStatus(null);
-    setGitError(null);
-    try {
-      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/git`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action,
-          ...(payload?.paths ? { paths: payload.paths } : {}),
-          ...(payload?.message ? { message: payload.message } : {}),
-        }),
-      });
-      const data = await response.json().catch(() => null) as {
-        overview?: GitOverview;
-        output?: string;
-        error?: string;
-      } | null;
-      if (!response.ok || !data) {
-        throw new Error(typeof data?.error === 'string' ? data.error : 'Git 작업을 완료하지 못했습니다.');
-      }
-
-      if (data.overview) {
-        applyGitOverview(data.overview);
-      }
-      setGitActionStatus(data.output ?? 'Git 작업을 완료했습니다.');
-      if (action === 'commit') {
-        setGitCommitMessage('');
-      }
-    } catch (error) {
-      setGitActionStatus(error instanceof Error ? error.message : 'Git 작업을 완료하지 못했습니다.');
-    } finally {
-      setGitActionBusy(null);
-    }
-  }, [applyGitOverview, sessionId]);
+  const openInstructionModal = useCallback((instructionId: string) => {
+    setSelectedInstructionId(instructionId);
+    setActiveModal({ kind: 'instruction', id: instructionId });
+  }, [setActiveModal, setSelectedInstructionId]);
+  const openSkillModal = useCallback((skillId: string) => {
+    setSelectedSkillId(skillId);
+    setActiveModal({ kind: 'skill', id: skillId });
+  }, [setActiveModal, setSelectedSkillId]);
 
   useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  useEffect(() => {
-    setFilesPath(normalizedWorkspaceRootPath);
-    setFilesParentPath(null);
-    setFilesEntries([]);
-    setFilesEntriesByPath({});
-    setFilesErrorByPath({});
-    setFilesLoadingByPath({});
-    setExpandedDirectories({});
-    setFilesSearchQuery('');
-    setFilesSearchResults(null);
     setGitOverview(null);
     setGitError(null);
     setGitActionStatus(null);
@@ -723,344 +220,19 @@ export function CustomizationSidebar({
     setGitExpandedFolders({});
     setGitDiffText('');
     setGitDiffError(null);
-  }, [normalizedWorkspaceRootPath]);
-
-  useEffect(() => {
-    void loadOverview();
-  }, [loadOverview]);
-
-  useEffect(() => {
-    if (!selectedInstructionId) return;
-    void loadInstruction(selectedInstructionId);
-  }, [loadInstruction, selectedInstructionId]);
-
-  useEffect(() => {
-    if (!selectedSkillId) return;
-    void loadSkill(selectedSkillId);
-  }, [loadSkill, selectedSkillId]);
-
-  useEffect(() => {
-    if (activeSurface !== 'files') {
-      return;
-    }
-    if ((filesEntriesByPath[filesPath]?.length ?? 0) > 0 || filesLoading || filesError) {
-      return;
-    }
-    void loadFilesDirectory(filesPath);
-  }, [activeSurface, filesEntriesByPath, filesError, filesLoading, filesPath, loadFilesDirectory]);
-
-  useEffect(() => {
-    if (activeSurface !== 'git') {
-      return;
-    }
-    if (gitOverview || gitLoading || gitError) {
-      return;
-    }
-    void loadGitOverview();
-  }, [activeSurface, gitError, gitLoading, gitOverview, loadGitOverview]);
-
-  useEffect(() => {
-    if (!selectedGitFile) {
-      setGitDiffText('');
-      setGitDiffError(null);
-      return;
-    }
-
-    if (selectedGitDiffScope === 'staged' && !selectedGitFile.staged) {
-      setSelectedGitDiffScope(selectedGitFile.unstaged || selectedGitFile.untracked ? 'working' : 'staged');
-      return;
-    }
-
-    if (selectedGitDiffScope === 'working' && !selectedGitFile.unstaged && !selectedGitFile.untracked && selectedGitFile.staged) {
-      setSelectedGitDiffScope('staged');
-    }
-  }, [selectedGitDiffScope, selectedGitFile]);
-
-  useEffect(() => {
-    if (activeSurface !== 'git' || !selectedGitFile) {
-      return;
-    }
-
-    if (selectedGitDiffScope === 'working' && selectedGitFile.untracked && !selectedGitFile.staged) {
-      setGitDiffText('');
-      setGitDiffError(null);
-      return;
-    }
-
-    if (selectedGitDiffScope === 'staged' && !selectedGitFile.staged) {
-      return;
-    }
-
-    if (selectedGitDiffScope === 'working' && !selectedGitFile.unstaged && !selectedGitFile.untracked) {
-      return;
-    }
-
-    void loadGitDiff(selectedGitFile.path, selectedGitDiffScope);
-  }, [activeSurface, loadGitDiff, selectedGitDiffScope, selectedGitFile]);
-
-  useEffect(() => {
-    if (!activeModal) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setActiveModal(null);
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [activeModal]);
-
-  useEffect(() => {
-    if (!fileActionMenuPath) {
-      return;
-    }
-
-    const handlePointerDown = () => {
-      setFileActionMenuPath(null);
-    };
-
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-    };
-  }, [fileActionMenuPath]);
-
-  useEffect(() => () => {
-    if (filePathCopyResetTimerRef.current !== null && typeof window !== 'undefined') {
-      window.clearTimeout(filePathCopyResetTimerRef.current);
-    }
-  }, []);
-
-  const handleSaveInstruction = useCallback(async () => {
-    if (!selectedInstructionId) return;
-    setInstructionSaving(true);
-    setInstructionStatus(null);
-    try {
-      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/customization`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          kind: 'instruction',
-          id: selectedInstructionId,
-          content: instructionContent,
-        }),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data) {
-        throw new Error(typeof data?.error === 'string' ? data.error : '문서를 저장하지 못했습니다.');
-      }
-
-      setInstructionDirty(false);
-      setInstructionStatus('저장됨');
-      await loadOverview();
-    } catch (error) {
-      setInstructionStatus(error instanceof Error ? error.message : '문서를 저장하지 못했습니다.');
-    } finally {
-      setInstructionSaving(false);
-    }
-  }, [instructionContent, loadOverview, selectedInstructionId, sessionId]);
-
-  const handleSaveFile = useCallback(async () => {
-    if (!selectedFilePath) return;
-    setFileSaving(true);
-    setFileStatus(null);
-    try {
-      const response = await fetch('/api/fs/write', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          path: selectedFilePath,
-          content: fileContent,
-        }),
-      });
-      const data = await response.json().catch(() => null) as { error?: string } | null;
-      if (!response.ok || data?.error) {
-        throw new Error(typeof data?.error === 'string' ? data.error : '파일을 저장하지 못했습니다.');
-      }
-
-      setFileDirty(false);
-      setFileStatus('저장됨');
-      await loadFilesDirectory(filesPath);
-    } catch (error) {
-      setFileStatus(error instanceof Error ? error.message : '파일을 저장하지 못했습니다.');
-    } finally {
-      setFileSaving(false);
-    }
-  }, [fileContent, filesPath, loadFilesDirectory, selectedFilePath]);
-
-  const refreshFocusedFiles = useCallback(async (extraPaths: string[] = []) => {
-    const paths = Array.from(new Set([
-      filesPath,
-      ...Object.entries(expandedDirectories)
-        .filter(([, isExpanded]) => isExpanded)
-        .map(([pathKey]) => pathKey),
-      ...extraPaths,
-    ].filter((value): value is string => Boolean(value))));
-
-    await Promise.all(paths.map((pathKey) => loadFilesDirectory(pathKey, { focus: pathKey === filesPath })));
-  }, [expandedDirectories, filesPath, loadFilesDirectory]);
-
-  const handleToggleDirectory = useCallback((dirPath: string) => {
-    const normalizedDirPath = normalizeWorkspaceClientPath(dirPath);
-    const nextExpanded = !expandedDirectories[normalizedDirPath];
-    setExpandedDirectories((prev) => ({ ...prev, [normalizedDirPath]: nextExpanded }));
-    if (nextExpanded && !filesEntriesByPath[normalizedDirPath] && !filesLoadingByPath[normalizedDirPath]) {
-      void loadFilesDirectory(normalizedDirPath, { focus: false });
-    }
-  }, [expandedDirectories, filesEntriesByPath, filesLoadingByPath, loadFilesDirectory]);
-
-  const setTransientFilePathCopyState = useCallback((key: string, status: 'copied' | 'failed') => {
-    setFilePathCopyState({ key, status });
-    if (typeof window === 'undefined') {
-      return;
-    }
-    if (filePathCopyResetTimerRef.current !== null) {
-      window.clearTimeout(filePathCopyResetTimerRef.current);
-    }
-    filePathCopyResetTimerRef.current = window.setTimeout(() => {
-      setFilePathCopyState((current) => (current?.key === key ? null : current));
-      filePathCopyResetTimerRef.current = null;
-    }, 1800);
-  }, []);
-
-  const handleCopyFilePath = useCallback(async (targetPath: string, kind: FilePathCopyKind) => {
-    const normalizedTargetPath = normalizeWorkspaceClientPath(targetPath);
-    const copyKey = `${normalizedTargetPath}:${kind}`;
-    const copyValue = kind === 'absolute'
-      ? getWorkspaceAbsolutePathForCopy(normalizedTargetPath)
-      : getWorkspaceRelativePathForCopy(normalizedTargetPath, normalizedWorkspaceRootPath);
-
-    try {
-      await copyTextToClipboard(copyValue);
-      setTransientFilePathCopyState(copyKey, 'copied');
-      setFilesError(null);
-    } catch {
-      setTransientFilePathCopyState(copyKey, 'failed');
-      setFilesError(kind === 'absolute' ? '절대경로를 복사하지 못했습니다.' : '상대경로를 복사하지 못했습니다.');
-    }
-  }, [normalizedWorkspaceRootPath, setTransientFilePathCopyState]);
-
-  const openFileModal = useCallback((
-    filePath: string,
-    fileName?: string,
-    opts?: { pushHistory?: boolean; line?: number | null },
-  ) => {
-    void loadFile(filePath, fileName);
-    setActiveModal({ kind: 'file', id: filePath });
-    setSelectedFileLine(opts?.line ?? null);
-    setSelectedFileNavigationKey((current) => current + 1);
-    if (opts?.pushHistory) {
-      const history = fileNavHistoryRef.current;
-      const index = fileNavIndexRef.current;
-      const trimmed = history.slice(0, index + 1);
-      trimmed.push(filePath);
-      fileNavHistoryRef.current = trimmed;
-      fileNavIndexRef.current = trimmed.length - 1;
-      setFileNavState({
-        canGoBack: fileNavIndexRef.current > 0,
-        canGoForward: false,
-      });
-    }
-  }, [loadFile]);
-
-  const handleConfirmFileAction = useCallback(async () => {
-    if (!fileActionDialog) {
-      return;
-    }
-
-    const trimValue = 'value' in fileActionDialog ? fileActionDialog.value.trim() : '';
-    if ('value' in fileActionDialog && !trimValue) {
-      setFilesError('이름을 입력해 주세요.');
-      return;
-    }
-
-    try {
-      if (fileActionDialog.kind === 'create-file') {
-        const nextPath = joinWorkspacePath(fileActionDialog.targetPath, trimValue);
-        const response = await fetch('/api/fs/write', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: nextPath, content: '' }),
-        });
-        const data = await response.json().catch(() => null) as { error?: string } | null;
-        if (!response.ok || data?.error) {
-          throw new Error(typeof data?.error === 'string' ? data.error : '파일을 생성하지 못했습니다.');
-        }
-        await refreshFocusedFiles([fileActionDialog.targetPath]);
-        openFileModal(nextPath, trimValue);
-      } else if (fileActionDialog.kind === 'create-folder') {
-        const nextPath = joinWorkspacePath(fileActionDialog.targetPath, trimValue);
-        const response = await fetch('/api/fs/mkdir', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: nextPath }),
-        });
-        const data = await response.json().catch(() => null) as { error?: string } | null;
-        if (!response.ok || data?.error) {
-          throw new Error(typeof data?.error === 'string' ? data.error : '폴더를 생성하지 못했습니다.');
-        }
-        setExpandedDirectories((prev) => ({ ...prev, [fileActionDialog.targetPath]: true }));
-        await refreshFocusedFiles([fileActionDialog.targetPath]);
-      } else if (fileActionDialog.kind === 'rename') {
-        const parentPath = getParentWorkspacePath(fileActionDialog.targetPath) ?? normalizedWorkspaceRootPath;
-        const nextPath = joinWorkspacePath(parentPath, trimValue);
-        const response = await fetch('/api/fs/move', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ oldPath: fileActionDialog.targetPath, newPath: nextPath }),
-        });
-        const data = await response.json().catch(() => null) as { error?: string } | null;
-        if (!response.ok || data?.error) {
-          throw new Error(typeof data?.error === 'string' ? data.error : '이름을 변경하지 못했습니다.');
-        }
-        if (filesPath === fileActionDialog.targetPath) {
-          setFilesPath(nextPath);
-        }
-        if (selectedFilePath === fileActionDialog.targetPath) {
-          setSelectedFilePath(nextPath);
-          setSelectedFileName(trimValue);
-        }
-        await refreshFocusedFiles([parentPath]);
-      } else {
-        const response = await fetch(`/api/fs/delete?path=${encodeURIComponent(fileActionDialog.targetPath)}`, {
-          method: 'DELETE',
-        });
-        const data = await response.json().catch(() => null) as { error?: string } | null;
-        if (!response.ok || data?.error) {
-          throw new Error(typeof data?.error === 'string' ? data.error : '삭제하지 못했습니다.');
-        }
-        if (selectedFilePath && (selectedFilePath === fileActionDialog.targetPath || selectedFilePath.startsWith(`${fileActionDialog.targetPath}/`))) {
-          setSelectedFilePath(null);
-          setSelectedFileName(null);
-          setActiveModal(null);
-        }
-        await refreshFocusedFiles([getParentWorkspacePath(fileActionDialog.targetPath) ?? filesPath]);
-      }
-
-      setFileActionDialog(null);
-      setFilesError(null);
-    } catch (error) {
-      setFilesError(error instanceof Error ? error.message : '파일 작업을 완료하지 못했습니다.');
-    }
-  }, [fileActionDialog, filesPath, normalizedWorkspaceRootPath, openFileModal, refreshFocusedFiles, selectedFilePath]);
-
-  const headerWorkspacePath = overview?.workspacePath ?? gitOverview?.workspacePath ?? projectName;
-  const activeSurfaceItem = SURFACE_ITEMS.find((item) => item.id === activeSurface) ?? SURFACE_ITEMS[0];
-  const headerCopy = SURFACE_COPY[activeSurface];
-  const isMobileMode = mode === 'mobile';
-  const openInstructionModal = useCallback((instructionId: string) => {
-    setSelectedInstructionId(instructionId);
-    setActiveModal({ kind: 'instruction', id: instructionId });
-  }, []);
-  const openSkillModal = useCallback((skillId: string) => {
-    setSelectedSkillId(skillId);
-    setActiveModal({ kind: 'skill', id: skillId });
-  }, []);
+  }, [
+    normalizedWorkspaceRootPath,
+    setGitActionStatus,
+    setGitCommitMessage,
+    setGitDiffError,
+    setGitDiffText,
+    setGitError,
+    setGitExpandedFolders,
+    setGitListTab,
+    setGitOverview,
+    setSelectedGitDiffScope,
+    setSelectedGitPath,
+  ]);
   useEffect(() => {
     if (!requestedFile || handledRequestedFileNonceRef.current === requestedFile.nonce) {
       return;
@@ -1074,59 +246,40 @@ export function CustomizationSidebar({
     setExpandedDirectories({});
     void loadFilesDirectory(nextParentPath);
     openFileModal(requestedFile.path, requestedFile.name, { line: requestedFile.line ?? null });
-  }, [loadFilesDirectory, normalizedWorkspaceRootPath, openFileModal, requestedFile]);
-  const closeModal = useCallback(() => {
-    setActiveModal(null);
-  }, []);
-  const visibleFiles = filesSearchResults ?? (filesEntriesByPath[filesPath] ?? filesEntries);
+  }, [
+    loadFilesDirectory,
+    normalizedWorkspaceRootPath,
+    openFileModal,
+    requestedFile,
+    setExpandedDirectories,
+    setFilesSearchQuery,
+    setFilesSearchResults,
+  ]);
   const filesCountLabel = filesSearchResults ? `검색 ${visibleFiles.length}개` : `${visibleFiles.length}개`;
-  const stagedGitFiles = gitOverview?.files.filter((file) => file.staged) ?? [];
-  const workingGitFiles = gitOverview?.files.filter((file) => file.unstaged || file.untracked) ?? [];
-  const gitErrorDetails = gitError ? describeGitSidebarError(gitError) : null;
-  const workingGitTree = useMemo(() => buildGitFileTree(workingGitFiles), [workingGitFiles]);
-  const stagedGitTree = useMemo(() => buildGitFileTree(stagedGitFiles), [stagedGitFiles]);
-  const activeGitFiles = gitListTab === 'working' ? workingGitFiles : stagedGitFiles;
-  const activeGitTree = gitListTab === 'working' ? workingGitTree : stagedGitTree;
-  const parsedGitDiff = useMemo(
-    () => parseGitUnifiedDiff(gitDiffText, selectedGitFile?.path ?? selectedGitPath ?? 'diff.txt'),
-    [gitDiffText, selectedGitFile?.path, selectedGitPath],
-  );
-  const selectGitFile = useCallback((path: string, scope: GitDiffScope) => {
-    setSelectedGitPath(path);
-    setGitListTab(scope);
-    setGitDiffError(null);
-    setSelectedGitDiffScope(scope);
-    setGitExpandedFolders((current) => expandGitTreeAncestors(current, scope, path));
-  }, []);
-  const handleGitListTabChange = useCallback((scope: GitDiffScope) => {
-    setGitListTab(scope);
-    const nextFiles = scope === 'working' ? workingGitFiles : stagedGitFiles;
-    const nextSelected = selectedGitPath
-      ? nextFiles.find((file) => file.path === selectedGitPath)
-      : null;
 
-    if (nextSelected) {
-      setSelectedGitDiffScope(scope);
+  useEffect(() => {
+    if (activeSurface !== 'files' || filesSearchQuery.trim()) {
       return;
     }
 
-    if (nextFiles[0]) {
-      selectGitFile(nextFiles[0].path, scope);
+    if (filesLoadingByPath[filesPath]) {
       return;
     }
 
-    setSelectedGitPath(null);
-    setSelectedGitDiffScope(scope);
-    setGitDiffText('');
-    setGitDiffError(null);
-  }, [selectedGitPath, selectGitFile, stagedGitFiles, workingGitFiles]);
-  const toggleGitFolder = useCallback((scope: GitDiffScope, path: string) => {
-    const key = gitTreeExpansionKey(scope, path);
-    setGitExpandedFolders((current) => ({
-      ...current,
-      [key]: !(current[key] ?? true),
-    }));
-  }, []);
+    if (Object.prototype.hasOwnProperty.call(filesEntriesByPath, filesPath)) {
+      return;
+    }
+
+    void loadFilesDirectory(filesPath);
+  }, [
+    activeSurface,
+    filesEntriesByPath,
+    filesLoadingByPath,
+    filesPath,
+    filesSearchQuery,
+    loadFilesDirectory,
+  ]);
+
   const renderFileTree = useCallback((entries: WorkspaceFileEntry[], depth = 0) => (
     entries.map((item) => {
       const isExpanded = Boolean(expandedDirectories[item.path]);
@@ -1275,7 +428,22 @@ export function CustomizationSidebar({
         </div>
       );
     })
-  ), [expandedDirectories, fileActionMenuPath, filePathCopyState, filesEntriesByPath, filesErrorByPath, filesLoadingByPath, handleCopyFilePath, handleToggleDirectory, openFileModal]);
+  ), [
+    expandedDirectories,
+    fileActionMenuPath,
+    fileNavHistoryRef,
+    fileNavIndexRef,
+    filePathCopyState,
+    filesEntriesByPath,
+    filesErrorByPath,
+    filesLoadingByPath,
+    handleCopyFilePath,
+    handleToggleDirectory,
+    openFileModal,
+    setFileActionDialog,
+    setFileActionMenuPath,
+    setFileNavState,
+  ]);
   const renderGitTree = useCallback((
     nodes: Array<GitTreeNode<GitFileEntry>>,
     scope: GitDiffScope,
@@ -1361,19 +529,76 @@ export function CustomizationSidebar({
     })
   ), [gitActionBusy, gitExpandedFolders, runGitAction, selectGitFile, selectedGitDiffScope, selectedGitPath, toggleGitFolder]);
 
-  useEffect(() => {
-    const nextFiles = gitListTab === 'working' ? workingGitFiles : stagedGitFiles;
-    if (nextFiles.length === 0) {
-      if (selectedGitPath && !nextFiles.some((file) => file.path === selectedGitPath)) {
-        setSelectedGitPath(null);
-      }
-      return;
-    }
-
-    if (!selectedGitPath || !nextFiles.some((file) => file.path === selectedGitPath)) {
-      selectGitFile(nextFiles[0].path, gitListTab);
-    }
-  }, [gitListTab, selectGitFile, selectedGitPath, stagedGitFiles, workingGitFiles]);
+  const gitDiffContent = selectedGitFile ? (
+    gitDiffLoading ? (
+      <div className={styles.loadingState}>
+        <Loader2 size={16} className={styles.rotate} />
+        <p>diff를 불러오는 중입니다.</p>
+      </div>
+    ) : gitDiffError ? (
+      <div className={styles.errorState}>
+        <AlertTriangle size={18} />
+        <p>{gitDiffError}</p>
+      </div>
+    ) : selectedGitDiffScope === 'working' && selectedGitFile.untracked && !selectedGitFile.staged ? (
+      <div className={styles.gitEmptyState}>새 파일입니다. Stage 하면 diff와 함께 커밋할 수 있습니다.</div>
+    ) : gitDiffText && parsedGitDiff.sections.length > 0 ? (
+      <div className={styles.gitDiffViewer}>
+        {parsedGitDiff.sections.map((section, sectionIndex) => (
+          section.type === 'meta' ? (
+            <div key={`meta-${sectionIndex}`} className={styles.gitDiffMetaBlock}>
+              {section.lines.map((line, lineIndex) => (
+                <span key={`meta-line-${lineIndex}`} className={styles.gitDiffMetaLine}>{line || ' '}</span>
+              ))}
+            </div>
+          ) : (
+            <section key={`hunk-${sectionIndex}`} className={styles.gitDiffHunk}>
+              <div className={styles.gitDiffHunkHeader}>
+                <span className={styles.gitDiffHunkAt}>@@</span>
+                <span className={styles.gitDiffHunkRangeOld}>-{section.oldRange}</span>
+                <span className={styles.gitDiffHunkRangeNew}>+{section.newRange}</span>
+              </div>
+              <div className={styles.gitDiffCodeTable}>
+                {section.lines.map((line, lineIndex) => (
+                  <div
+                    key={`diff-line-${sectionIndex}-${lineIndex}`}
+                    className={[
+                      styles.gitDiffCodeRow,
+                      line.type === 'add'
+                        ? styles.gitDiffCodeRowAdd
+                        : line.type === 'del'
+                          ? styles.gitDiffCodeRowDel
+                          : line.type === 'note'
+                            ? styles.gitDiffCodeRowNote
+                            : styles.gitDiffCodeRowContext,
+                    ].join(' ')}
+                  >
+                    {line.type === 'note' ? (
+                      <div className={styles.gitDiffCodeNote}>{line.content || ' '}</div>
+                    ) : (
+                      <>
+                        <span className={styles.gitDiffLineNumber}>{line.oldLineNumber ?? ''}</span>
+                        <span className={styles.gitDiffLineNumber}>{line.newLineNumber ?? ''}</span>
+                        <span className={styles.gitDiffLineMarker}>{line.prefix || ' '}</span>
+                        <code
+                          className={styles.gitDiffCodeContent}
+                          dangerouslySetInnerHTML={{ __html: line.highlightedHtml || '&nbsp;' }}
+                        />
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )
+        ))}
+      </div>
+    ) : (
+      <div className={styles.gitEmptyState}>선택한 범위에 표시할 diff가 없습니다.</div>
+    )
+  ) : (
+    <div className={styles.gitEmptyState}>파일을 선택하면 diff가 표시됩니다.</div>
+  );
 
   return (
     <section className={`${styles.sidebarRoot} ${isMobileMode ? styles.sidebarRootMobile : ''}`}>
@@ -1486,503 +711,90 @@ export function CustomizationSidebar({
 
       <div className={styles.body}>
         {activeSurface === 'customization' ? (
-          <>
-            <div className={styles.sectionTabs}>
-              <button
-                type="button"
-                className={`${styles.sectionTab} ${activeSection === 'instructions' ? styles.sectionTabActive : ''}`}
-                onClick={() => setActiveSection('instructions')}
-              >
-                AGENTS.md
-              </button>
-              <button
-                type="button"
-                className={`${styles.sectionTab} ${activeSection === 'skills' ? styles.sectionTabActive : ''}`}
-                onClick={() => setActiveSection('skills')}
-              >
-                Skills
-              </button>
-              <button
-                type="button"
-                className={`${styles.sectionTab} ${activeSection === 'mcp' ? styles.sectionTabActive : ''}`}
-                onClick={() => setActiveSection('mcp')}
-              >
-                MCP
-              </button>
-            </div>
-
-            <div className={styles.content}>
-              {overviewLoading && !overview ? (
-                <div className={styles.loadingState}>
-                  <Loader2 size={18} className={styles.rotate} />
-                  <p>Customization 데이터를 불러오는 중입니다.</p>
-                </div>
-              ) : overviewError ? (
-                <div className={styles.errorState}>
-                  <FileText size={18} />
-                  <p>{overviewError}</p>
-                </div>
-              ) : overview ? (
-                <>
-                  <div className={styles.statsRow}>
-                    <div className={styles.statCard}>
-                      <span className={styles.statValue}>{overview.instructionDocs.filter((doc) => doc.exists).length}</span>
-                      <span className={styles.statLabel}>지침 문서</span>
-                    </div>
-                    <div className={styles.statCard}>
-                      <span className={styles.statValue}>{overview.skills.length}</span>
-                      <span className={styles.statLabel}>Skills</span>
-                    </div>
-                    <div className={styles.statCard}>
-                      <span className={styles.statValue}>{overview.mcpServers.length}</span>
-                      <span className={styles.statLabel}>MCP Servers</span>
-                    </div>
-                  </div>
-
-                  {activeSection === 'instructions' && (
-                    <div className={styles.listCard}>
-                      <div className={styles.cardHeader}>
-                        <span className={styles.cardTitle}>AGENTS.md</span>
-                        <span className={styles.cardMeta}>{overview.instructionDocs.length}개</span>
-                      </div>
-                      <div className={`${styles.itemList} ${styles.documentGrid}`}>
-                        {overview.instructionDocs.map((doc) => (
-                          <button
-                            key={doc.id}
-                            type="button"
-                            className={`${styles.itemButton} ${styles.documentTile} ${selectedInstructionId === doc.id ? styles.itemButtonActive : ''}`}
-                            onClick={() => openInstructionModal(doc.id)}
-                          >
-                            <span className={styles.itemTitleRow}>
-                              <FileText size={14} />
-                              <span className={styles.itemTitle}>{doc.name}</span>
-                            </span>
-                            <span className={styles.itemDescription}>
-                              {doc.exists ? `${formatBytes(doc.sizeBytes)} · ${formatTimestamp(doc.updatedAt)}` : '아직 생성되지 않음'}
-                            </span>
-                            <span className={`${styles.tag} ${doc.exists ? styles.tagGood : styles.tagWarn}`}>
-                              {doc.exists ? '열기' : '새로 작성'}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {activeSection === 'skills' && (
-                    <div className={styles.listCard}>
-                      <div className={styles.cardHeader}>
-                        <span className={styles.cardTitle}>Skill 목록</span>
-                        <span className={styles.cardMeta}>{overview.skills.length}개</span>
-                      </div>
-                      <div className={styles.itemList}>
-                        {overview.skills.map((skill) => (
-                          <button
-                            key={skill.id}
-                            type="button"
-                            className={`${styles.itemButton} ${selectedSkillId === skill.id ? styles.itemButtonActive : ''}`}
-                            onClick={() => openSkillModal(skill.id)}
-                          >
-                            <span className={styles.itemTitleRow}>
-                              <Blocks size={13} />
-                              <span className={styles.itemTitle}>{skill.name}</span>
-                            </span>
-                            <span className={styles.itemDescription}>{skill.description}</span>
-                            <span className={`${styles.tag} ${skill.source === 'codex' ? styles.tagWarn : styles.tagMuted}`}>
-                              {skill.source === 'codex' ? 'Codex' : 'Agents'}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {activeSection === 'mcp' && (
-                    <>
-                      {overview.mcpServers.length === 0 ? (
-                        <div className={styles.emptyState}>
-                          <PlugZap size={18} />
-                          <p>감지된 MCP 서버가 없습니다.</p>
-                        </div>
-                      ) : (
-                        <div className={styles.mcpList}>
-                          {overview.mcpServers.map((server) => (
-                            <article key={server.id} className={styles.mcpCard}>
-                              <div className={styles.mcpHeader}>
-                                <div className={styles.mcpTitle}>{server.name}</div>
-                                <span className={`${styles.tag} ${getMcpStatusClass(server.status)}`}>
-                                  {getMcpStatusLabel(server.status)}
-                                </span>
-                              </div>
-                              <div className={styles.mcpMeta}>
-                                <span className={styles.tag}>{server.source}</span>
-                                <span className={styles.tag}>{formatTimestamp(server.lastSeenAt)}</span>
-                              </div>
-                              <div className={styles.mcpDetail}>{server.detail}</div>
-                            </article>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </>
-              ) : (
-                <div className={styles.emptyState}>
-                  <CheckCircle2 size={18} />
-                  <p>표시할 Customization 데이터가 없습니다.</p>
-                </div>
-              )}
-            </div>
-          </>
+          <CustomizationOverviewSection
+            activeSection={activeSection}
+            overview={overview}
+            overviewLoading={overviewLoading}
+            overviewError={overviewError}
+            selectedInstructionId={selectedInstructionId}
+            selectedSkillId={selectedSkillId}
+            onOpenInstruction={openInstructionModal}
+            onOpenSkill={openSkillModal}
+            onSectionChange={setActiveSection}
+          />
         ) : activeSurface === 'files' ? (
-          <div className={styles.content}>
-            <div className={styles.listCard}>
-              <div className={styles.cardHeader}>
-                <span className={styles.cardTitle}>Workspace Files</span>
-                <span className={styles.cardMeta}>{filesCountLabel}</span>
-              </div>
-              <div className={styles.filesToolbar}>
-                <label className={styles.searchField}>
-                  <Search size={14} />
-                  <input
-                    className={styles.searchInput}
-                    value={filesSearchQuery}
-                    onChange={(event) => { void searchFiles(event.target.value); }}
-                    placeholder="파일 또는 폴더 검색"
-                  />
-                </label>
-                <div className={styles.filesActionRow}>
-                  <button
-                    type="button"
-                    className={styles.pathButton}
-                    onClick={() => {
-                      setFileActionDialog({ kind: 'create-file', targetPath: filesPath, value: '' });
-                    }}
-                  >
-                    <FilePlus size={14} />
-                    새 파일
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.pathButton}
-                    onClick={() => {
-                      setFileActionDialog({ kind: 'create-folder', targetPath: filesPath, value: '' });
-                    }}
-                  >
-                    <FolderPlus size={14} />
-                    새 폴더
-                  </button>
-                </div>
-                <div className={styles.pathRow}>
-                  {filesParentPath !== null && filesSearchResults === null && isWorkspacePathWithinRoot(filesParentPath, normalizedWorkspaceRootPath) ? (
-                    <button
-                      type="button"
-                      className={styles.pathButton}
-                      onClick={() => { void loadFilesDirectory(filesParentPath); }}
-                    >
-                      <ArrowUpCircle size={14} />
-                      상위 폴더
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className={styles.pathButton}
-                    onClick={() => {
-                      setExpandedDirectories({});
-                      void loadFilesDirectory(normalizedWorkspaceRootPath);
-                    }}
-                  >
-                    <FolderKanban size={14} />
-                    워크스페이스 루트
-                  </button>
-                  <span className={styles.pathValue}>{filesSearchResults ? '검색 결과' : filesPath}</span>
-                </div>
-              </div>
-              <div className={styles.itemList}>
-                {filesLoading || filesSearchLoading ? (
-                  <div className={styles.loadingState}>
-                    <Loader2 size={16} className={styles.rotate} />
-                    <p>{filesSearchLoading ? '파일을 검색하는 중입니다.' : '파일 목록을 불러오는 중입니다.'}</p>
-                  </div>
-                ) : filesError ? (
-                  <div className={styles.errorState}>
-                    <FileText size={18} />
-                    <p>{filesError}</p>
-                  </div>
-                ) : visibleFiles.length === 0 ? (
-                  <div className={styles.emptyState}>
-                    <FolderKanban size={18} />
-                    <p>{filesSearchResults ? '검색 결과가 없습니다.' : '표시할 파일이 없습니다.'}</p>
-                  </div>
-                ) : (
-                  renderFileTree(visibleFiles)
-                )}
-              </div>
-            </div>
-          </div>
+          <CustomizationFilesSection
+            filesCountLabel={filesCountLabel}
+            filesError={filesError}
+            filesLoading={filesLoading}
+            filesPath={filesPath}
+            filesParentPath={filesParentPath}
+            filesSearchLoading={filesSearchLoading}
+            filesSearchQuery={filesSearchQuery}
+            hasSearchResults={filesSearchResults !== null}
+            normalizedWorkspaceRootPath={normalizedWorkspaceRootPath}
+            renderedTree={renderFileTree(visibleFiles)}
+            visibleFilesLength={visibleFiles.length}
+            onCreateFile={() => {
+              setFileActionDialog({ kind: 'create-file', targetPath: filesPath, value: '' });
+            }}
+            onCreateFolder={() => {
+              setFileActionDialog({ kind: 'create-folder', targetPath: filesPath, value: '' });
+            }}
+            onGoRoot={() => {
+              setExpandedDirectories({});
+              void loadFilesDirectory(normalizedWorkspaceRootPath);
+            }}
+            onGoParent={() => {
+              if (filesParentPath) {
+                void loadFilesDirectory(filesParentPath);
+              }
+            }}
+            onSearchChange={(value) => {
+              void searchFiles(value);
+            }}
+          />
         ) : activeSurface === 'git' ? (
-          <div className={styles.content}>
-            {gitLoading && !gitOverview ? (
-              <div className={styles.loadingState}>
-                <Loader2 size={18} className={styles.rotate} />
-                <p>Git 정보를 불러오는 중입니다.</p>
-              </div>
-            ) : gitErrorDetails ? (
-              <div className={styles.gitErrorBanner}>
-                <div className={styles.gitErrorBannerHeader}>
-                  <AlertTriangle size={18} />
-                  <div className={styles.gitErrorBannerCopy}>
-                    <p className={styles.gitErrorBannerTitle}>{gitErrorDetails.title}</p>
-                    <p className={styles.gitErrorBannerDetail}>{gitErrorDetails.detail}</p>
-                  </div>
-                </div>
-                <div className={styles.gitErrorBannerFooter}>
-                  {gitErrorDetails.hint ? <p className={styles.gitErrorBannerHint}>{gitErrorDetails.hint}</p> : null}
-                  <button
-                    type="button"
-                    className={styles.gitToolbarButton}
-                    onClick={() => { void loadGitOverview(); }}
-                    disabled={gitLoading || gitActionBusy !== null}
-                  >
-                    다시 시도
-                  </button>
-                </div>
-              </div>
-            ) : gitOverview ? (
-              <div className={styles.gitWorkbench}>
-                <section className={styles.gitPanel}>
-                  <div className={styles.gitTopbar}>
-                    <div className={styles.gitTopbarMeta}>
-                      <div className={styles.gitBranchTitleRow}>
-                        <GitBranch size={14} />
-                        <span className={styles.itemTitle}>{gitOverview.branch ?? 'detached HEAD'}</span>
-                        <span className={styles.gitInlineMeta}>{gitOverview.upstreamBranch ?? 'upstream 없음'}</span>
-                      </div>
-                      <div className={styles.gitTopbarStats}>
-                        <span>{workingGitFiles.length} changes</span>
-                        <span>{stagedGitFiles.length} staged</span>
-                        <span>{gitOverview.ahead} ahead</span>
-                        <span>{gitOverview.behind} behind</span>
-                      </div>
-                    </div>
-                    <div className={styles.gitToolbar}>
-                      <button
-                        type="button"
-                        className={styles.gitToolbarButton}
-                        onClick={() => { void runGitAction('fetch'); }}
-                        disabled={gitActionBusy !== null}
-                        title="Fetch"
-                      >
-                        <RefreshCw size={13} className={gitActionBusy === 'fetch' ? styles.rotate : ''} />
-                        <span>Fetch</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.gitToolbarButton}
-                        onClick={() => { void runGitAction('pull'); }}
-                        disabled={gitActionBusy !== null}
-                        title="Pull"
-                      >
-                        <ArrowDownCircle size={13} />
-                        <span>Pull</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.gitToolbarButton}
-                        onClick={() => { void runGitAction('push'); }}
-                        disabled={gitActionBusy !== null}
-                        title="Push"
-                      >
-                        <ArrowUpCircle size={13} />
-                        <span>Push</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className={styles.gitCommitBox}>
-                    <textarea
-                      className={styles.gitCommitInput}
-                      value={gitCommitMessage}
-                      onChange={(event) => {
-                        setGitCommitMessage(event.target.value);
-                        setGitActionStatus(null);
-                      }}
-                      placeholder="Message (Ctrl+Enter to commit)"
-                      rows={3}
-                    />
-                    <div className={styles.gitCommitFooter}>
-                      <div className={styles.gitTagRow}>
-                        <span className={`${styles.tag} ${gitOverview.isClean ? styles.tagGood : styles.tagMuted}`}>
-                          {gitOverview.isClean ? 'CLEAN' : 'DIRTY'}
-                        </span>
-                        {gitOverview.conflictedCount > 0 ? (
-                          <span className={`${styles.tag} ${styles.tagDanger}`}>CONFLICT {gitOverview.conflictedCount}</span>
-                        ) : null}
-                        {gitOverview.untrackedCount > 0 ? (
-                          <span className={`${styles.tag} ${styles.tagWarn}`}>UNTRACKED {gitOverview.untrackedCount}</span>
-                        ) : null}
-                      </div>
-                      <button
-                        type="button"
-                        className={styles.gitPrimaryButton}
-                        onClick={() => { void runGitAction('commit', { message: gitCommitMessage }); }}
-                        disabled={gitActionBusy !== null || gitOverview.stagedCount === 0 || !gitCommitMessage.trim()}
-                      >
-                        {gitActionBusy === 'commit'
-                          ? <Loader2 size={14} className={styles.rotate} />
-                          : <GitCommitHorizontal size={14} />}
-                        Commit
-                      </button>
-                    </div>
-                    {gitActionStatus ? <div className={styles.gitStatusBanner}>{gitActionStatus}</div> : null}
-                  </div>
-                </section>
-
-                <section className={styles.gitPanel}>
-                  <div className={styles.gitSectionHeader}>
-                    <div className={styles.gitSectionTabs}>
-                      <button
-                        type="button"
-                        className={`${styles.gitSectionTab} ${gitListTab === 'working' ? styles.gitSectionTabActive : ''}`}
-                        onClick={() => handleGitListTabChange('working')}
-                      >
-                        <span>Changes</span>
-                        <span className={styles.gitSectionTabCount}>{workingGitFiles.length}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`${styles.gitSectionTab} ${gitListTab === 'staged' ? styles.gitSectionTabActive : ''}`}
-                        onClick={() => handleGitListTabChange('staged')}
-                      >
-                        <span>Staged Changes</span>
-                        <span className={styles.gitSectionTabCount}>{stagedGitFiles.length}</span>
-                      </button>
-                    </div>
-                    <div className={styles.gitSectionMeta}>
-                      <button
-                        type="button"
-                        className={styles.gitLinkButton}
-                        onClick={() => { void runGitAction(gitListTab === 'working' ? 'stage' : 'unstage'); }}
-                        disabled={gitActionBusy !== null || activeGitFiles.length === 0}
-                      >
-                        {gitListTab === 'working' ? 'Stage All' : 'Unstage All'}
-                      </button>
-                    </div>
-                  </div>
-                  {activeGitFiles.length === 0 ? (
-                    <div className={styles.gitEmptyState}>
-                      {gitListTab === 'working' ? 'No working tree changes.' : 'No staged changes.'}
-                    </div>
-                  ) : (
-                    <div className={styles.gitFileList}>
-                      {renderGitTree(activeGitTree, gitListTab)}
-                    </div>
-                  )}
-                </section>
-
-                <section className={styles.gitPanel}>
-                  <div className={styles.gitSectionHeader}>
-                    <span className={styles.gitSectionTitle}>Diff</span>
-                    <div className={styles.gitScopeTabs}>
-                      <button
-                        type="button"
-                        className={`${styles.gitScopeButton} ${selectedGitDiffScope === 'working' ? styles.gitScopeButtonActive : ''}`}
-                        onClick={() => setSelectedGitDiffScope('working')}
-                        disabled={!selectedGitFile || (!selectedGitFile.unstaged && !selectedGitFile.untracked)}
-                      >
-                        Working
-                      </button>
-                      <button
-                        type="button"
-                        className={`${styles.gitScopeButton} ${selectedGitDiffScope === 'staged' ? styles.gitScopeButtonActive : ''}`}
-                        onClick={() => setSelectedGitDiffScope('staged')}
-                        disabled={!selectedGitFile || !selectedGitFile.staged}
-                      >
-                        Staged
-                      </button>
-                    </div>
-                  </div>
-                  <div className={styles.gitDiffPanel}>
-                    {selectedGitFile ? (
-                      gitDiffLoading ? (
-                        <div className={styles.loadingState}>
-                          <Loader2 size={16} className={styles.rotate} />
-                          <p>diff를 불러오는 중입니다.</p>
-                        </div>
-                      ) : gitDiffError ? (
-                        <div className={styles.errorState}>
-                          <AlertTriangle size={18} />
-                          <p>{gitDiffError}</p>
-                        </div>
-                      ) : selectedGitDiffScope === 'working' && selectedGitFile.untracked && !selectedGitFile.staged ? (
-                        <div className={styles.gitEmptyState}>새 파일입니다. Stage 하면 diff와 함께 커밋할 수 있습니다.</div>
-                      ) : gitDiffText && parsedGitDiff.sections.length > 0 ? (
-                        <div className={styles.gitDiffViewer}>
-                          {parsedGitDiff.sections.map((section, sectionIndex) => (
-                            section.type === 'meta' ? (
-                              <div key={`meta-${sectionIndex}`} className={styles.gitDiffMetaBlock}>
-                                {section.lines.map((line, lineIndex) => (
-                                  <span key={`meta-line-${lineIndex}`} className={styles.gitDiffMetaLine}>{line || ' '}</span>
-                                ))}
-                              </div>
-                            ) : (
-                              <section key={`hunk-${sectionIndex}`} className={styles.gitDiffHunk}>
-                                <div className={styles.gitDiffHunkHeader}>
-                                  <span className={styles.gitDiffHunkAt}>@@</span>
-                                  <span className={styles.gitDiffHunkRangeOld}>-{section.oldRange}</span>
-                                  <span className={styles.gitDiffHunkRangeNew}>+{section.newRange}</span>
-                                </div>
-                                <div className={styles.gitDiffCodeTable}>
-                                  {section.lines.map((line, lineIndex) => (
-                                    <div
-                                      key={`diff-line-${sectionIndex}-${lineIndex}`}
-                                      className={[
-                                        styles.gitDiffCodeRow,
-                                        line.type === 'add'
-                                          ? styles.gitDiffCodeRowAdd
-                                          : line.type === 'del'
-                                            ? styles.gitDiffCodeRowDel
-                                            : line.type === 'note'
-                                              ? styles.gitDiffCodeRowNote
-                                              : styles.gitDiffCodeRowContext,
-                                      ].join(' ')}
-                                    >
-                                      {line.type === 'note' ? (
-                                        <div className={styles.gitDiffCodeNote}>{line.content || ' '}</div>
-                                      ) : (
-                                        <>
-                                          <span className={styles.gitDiffLineNumber}>{line.oldLineNumber ?? ''}</span>
-                                          <span className={styles.gitDiffLineNumber}>{line.newLineNumber ?? ''}</span>
-                                          <span className={styles.gitDiffLineMarker}>{line.prefix || ' '}</span>
-                                          <code
-                                            className={styles.gitDiffCodeContent}
-                                            dangerouslySetInnerHTML={{ __html: line.highlightedHtml || '&nbsp;' }}
-                                          />
-                                        </>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              </section>
-                            )
-                          ))}
-                        </div>
-                      ) : (
-                        <div className={styles.gitEmptyState}>선택한 범위에 표시할 diff가 없습니다.</div>
-                      )
-                    ) : (
-                      <div className={styles.gitEmptyState}>파일을 선택하면 diff가 표시됩니다.</div>
-                    )}
-                  </div>
-                </section>
-              </div>
-            ) : (
-              <div className={styles.emptyState}>
-                <GitBranch size={18} />
-                <p>표시할 Git 데이터가 없습니다.</p>
-              </div>
-            )}
-          </div>
+          <CustomizationGitSection
+            activeGitFilesLength={activeGitFiles.length}
+            activeGitTree={renderGitTree(activeGitTree, gitListTab)}
+            gitActionBusy={gitActionBusy}
+            gitActionStatus={gitActionStatus}
+            gitCommitMessage={gitCommitMessage}
+            gitDiffContent={gitDiffContent}
+            gitErrorDetails={gitErrorDetails}
+            gitListTab={gitListTab}
+            gitLoading={gitLoading}
+            gitOverview={gitOverview}
+            selectedGitDiffScope={selectedGitDiffScope}
+            selectedGitFile={selectedGitFile}
+            stagedGitFilesLength={stagedGitFiles.length}
+            workingGitFilesLength={workingGitFiles.length}
+            onCommit={() => {
+              void runGitAction('commit', { message: gitCommitMessage });
+            }}
+            onCommitMessageChange={(value) => {
+              setGitCommitMessage(value);
+              setGitActionStatus(null);
+            }}
+            onFetch={() => {
+              void runGitAction('fetch');
+            }}
+            onListTabChange={handleGitListTabChange}
+            onPull={() => {
+              void runGitAction('pull');
+            }}
+            onPush={() => {
+              void runGitAction('push');
+            }}
+            onRetry={() => {
+              void loadGitOverview();
+            }}
+            onScopeChange={setSelectedGitDiffScope}
+            onStageToggleAll={() => {
+              void runGitAction(gitListTab === 'working' ? 'stage' : 'unstage');
+            }}
+          />
         ) : (
           <div className={styles.content}>
             <div className={styles.emptyState}>
