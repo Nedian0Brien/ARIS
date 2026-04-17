@@ -77,7 +77,10 @@ describe('mobile home/workspace layout overflow guards', () => {
     expect(dashboardCss).toMatch(/\.sessionMiniSubName\s*\{[^}]*text-overflow:\s*ellipsis;/s);
     expect(dashboardCss).toMatch(/\.sessionMiniSubName\s*\{[^}]*white-space:\s*nowrap;/s);
     expect(dashboardCss).toMatch(/\.sessionSidebarCard\s*\{[^}]*max-width:\s*100%;/s);
+    expect(dashboardCss).toMatch(/\.sessionSidebarCard\s*\{[^}]*box-sizing:\s*border-box;/s);
     expect(dashboardCss).toMatch(/\.sessionDashboardSidebar\s*\{[^}]*max-width:\s*100%;/s);
     expect(dashboardCss).toMatch(/\.sessionDashboardSidebar\s*\{[^}]*min-width:\s*0;/s);
+    expect(dashboardCss).toMatch(/\.sessionDashboardLayout\s*\{[^}]*box-sizing:\s*border-box;/s);
+    expect(dashboardCss).toMatch(/\.serverStorageCardFull\s*\{[^}]*box-sizing:\s*border-box;/s);
   });
 });

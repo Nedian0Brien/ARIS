@@ -3,6 +3,40 @@ import type { Page } from '@playwright/test';
 
 test.setTimeout(90_000);
 
+const LOGIN_RETRY_ATTEMPTS = 5;
+const LOGIN_RETRY_DELAY_MS = 1_500;
+
+async function readLoginPayload(response: Awaited<ReturnType<Page['request']['post']>>) {
+  const contentType = response.headers()['content-type'] ?? '';
+  const bodyText = await response.text();
+
+  if (!contentType.includes('application/json')) {
+    return {
+      ok: false,
+      bodyText,
+      body: null,
+      retryable: response.status() >= 500 || bodyText.startsWith('<!DOCTYPE'),
+    };
+  }
+
+  try {
+    const body = JSON.parse(bodyText);
+    return {
+      ok: true,
+      bodyText,
+      body,
+      retryable: false,
+    };
+  } catch {
+    return {
+      ok: false,
+      bodyText,
+      body: null,
+      retryable: response.status() >= 500,
+    };
+  }
+}
+
 async function login(page: Page) {
   const email = process.env.MOBILE_OVERFLOW_EMAIL;
   const password = process.env.MOBILE_OVERFLOW_PASSWORD;
@@ -11,16 +45,28 @@ async function login(page: Page) {
     throw new Error('MOBILE_OVERFLOW_EMAIL and MOBILE_OVERFLOW_PASSWORD are required');
   }
 
-  const response = await page.request.post('/api/auth/login', {
-    data: { email, password, rememberMe: false },
-  });
-  const body = await response.json();
+  let lastFailure = '';
 
-  if (!response.ok || body?.status !== 'success') {
-    throw new Error(`login failed: ${response.status()} ${JSON.stringify(body)}`);
+  for (let attempt = 1; attempt <= LOGIN_RETRY_ATTEMPTS; attempt += 1) {
+    const response = await page.request.post('/api/auth/login', {
+      data: { email, password, rememberMe: false },
+    });
+    const payload = await readLoginPayload(response);
+
+    if (payload.ok && response.ok() && payload.body?.status === 'success') {
+      await page.goto('/', { waitUntil: 'networkidle' });
+      return;
+    }
+
+    lastFailure = `attempt ${attempt}: status=${response.status()} content-type=${response.headers()['content-type'] ?? 'unknown'} body=${payload.bodyText.slice(0, 180)}`;
+    if (!payload.retryable || attempt === LOGIN_RETRY_ATTEMPTS) {
+      break;
+    }
+
+    await page.waitForTimeout(LOGIN_RETRY_DELAY_MS);
   }
 
-  await page.goto('/', { waitUntil: 'networkidle' });
+  throw new Error(`login failed after retries: ${lastFailure}`);
 }
 
 async function resolveFirstSessionPath(page: Page) {
