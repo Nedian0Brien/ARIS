@@ -4,13 +4,14 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const chatInterfaceTsxPath = resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.tsx');
-const chatInterfaceTsx = readFileSync(chatInterfaceTsxPath, 'utf8');
+// Tail-restore anchor logic lives in the dedicated hook (extracted from ChatInterface)
+const hookPath = resolve(__dirname, '../app/sessions/[sessionId]/useChatTailRestore.ts');
+const hookSource = readFileSync(hookPath, 'utf8');
 
 describe('chat tail restore anchor guards', () => {
   it('restores existing chat entry using the latest visible event anchor', () => {
-    expect(chatInterfaceTsx).toMatch(/resolveTailScrollAnchorId/);
-    expect(chatInterfaceTsx).toMatch(/latestVisibleEventId/);
-    expect(chatInterfaceTsx).toMatch(/scrollIntoView\(\{ behavior, block: 'end' \}\)/);
+    expect(hookSource).toMatch(/resolveTailScrollAnchorId/);
+    expect(hookSource).toMatch(/latestVisibleEventId/);
+    expect(hookSource).toMatch(/scrollIntoView\(\{ behavior, block: 'end' \}\)/);
   });
 });
