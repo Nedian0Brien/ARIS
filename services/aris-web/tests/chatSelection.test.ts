@@ -74,6 +74,7 @@ describe('chatSelection', () => {
       eventsForChatId: 'chat-1',
       hasLoadedCurrentChat: true,
       isNewChatPlaceholder: false,
+      isTailLayoutSettling: false,
     })).toBe(true);
 
     expect(shouldShowChatTransitionLoading({
@@ -81,6 +82,7 @@ describe('chatSelection', () => {
       eventsForChatId: 'chat-2',
       hasLoadedCurrentChat: false,
       isNewChatPlaceholder: false,
+      isTailLayoutSettling: false,
     })).toBe(true);
 
     expect(shouldShowChatTransitionLoading({
@@ -88,6 +90,15 @@ describe('chatSelection', () => {
       eventsForChatId: 'chat-2',
       hasLoadedCurrentChat: true,
       isNewChatPlaceholder: false,
+      isTailLayoutSettling: true,
+    })).toBe(true);
+
+    expect(shouldShowChatTransitionLoading({
+      activeChatIdResolved: 'chat-2',
+      eventsForChatId: 'chat-2',
+      hasLoadedCurrentChat: true,
+      isNewChatPlaceholder: false,
+      isTailLayoutSettling: false,
     })).toBe(false);
 
     expect(shouldShowChatTransitionLoading({
@@ -95,6 +106,7 @@ describe('chatSelection', () => {
       eventsForChatId: 'chat-1',
       hasLoadedCurrentChat: false,
       isNewChatPlaceholder: true,
+      isTailLayoutSettling: true,
     })).toBe(false);
   });
 });

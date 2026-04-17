@@ -114,6 +114,7 @@ import {
   shouldShowChatTransitionLoading,
 } from './chatSelection';
 import {
+  hasTailLayoutSettled,
   resolveMobileWindowScrollTop,
   resolveScrollToBottomTarget,
   resolveTailScrollAnchorId,
@@ -215,6 +216,7 @@ const SIDEBAR_APPROVAL_FEEDBACK_MS = 3000;
 const SIDEBAR_STATUS_REFRESH_MS = 10000;
 const AUX_SYNC_INITIAL_DELAY_MS = 900;
 const SIDEBAR_VISIBLE_CHAT_LIMIT = 8;
+const TAIL_LAYOUT_SETTLE_TIMEOUT_MS = 1200;
 const CHAT_RUN_PHASE_LABELS = {
   submitting: '전송 중',
   waiting: '작업 중',
@@ -2821,11 +2823,13 @@ export function ChatInterface({
   const showDisconnectRetry = activeChatRuntimeUi.showDisconnectRetry;
   const lastSubmittedPayload = activeChatRuntimeUi.lastSubmittedPayload;
   const submitError = activeChatRuntimeUi.submitError;
+  const [isTailLayoutSettling, setIsTailLayoutSettling] = useState(false);
   const showChatTransitionLoading = shouldShowChatTransitionLoading({
     activeChatIdResolved,
     eventsForChatId,
     hasLoadedCurrentChat,
     isNewChatPlaceholder,
+    isTailLayoutSettling,
   });
   const updateChatRuntimeUi = useCallback((chatId: string | null, patch: Partial<ChatRuntimeUiState>) => {
     if (!chatId) {
@@ -4508,6 +4512,18 @@ export function ChatInterface({
     scrollConversationToBottom(behavior);
   }, [latestVisibleEventId, scrollConversationToBottom]);
 
+  const readTailLayoutMetrics = useCallback(() => {
+    const anchorId = resolveTailScrollAnchorId({ latestVisibleEventId });
+    const anchor = anchorId ? document.getElementById(anchorId) : null;
+
+    return {
+      anchorBottom: anchor ? anchor.getBoundingClientRect().bottom : null,
+      scrollHeight: isMobileLayout
+        ? Math.max(document.documentElement.scrollHeight, document.body.scrollHeight)
+        : (scrollRef.current?.scrollHeight ?? null),
+    };
+  }, [isMobileLayout, latestVisibleEventId]);
+
   const syncScrollToBottomButton = useCallback(() => {
     if (isMobileLayout) {
       setShowScrollToBottom(!isNearWindowBottom());
@@ -4786,6 +4802,7 @@ export function ChatInterface({
   useEffect(() => {
     if (isWorkspaceHome || isNewChatPlaceholder || !activeChatIdResolved) {
       restoredTailScrollForChatRef.current = null;
+      setIsTailLayoutSettling(false);
     }
   }, [activeChatIdResolved, isNewChatPlaceholder, isWorkspaceHome]);
 
@@ -4804,22 +4821,61 @@ export function ChatInterface({
     restoredTailScrollForChatRef.current = activeChatIdResolved;
     shouldStickToBottomRef.current = true;
     setShowScrollToBottom(false);
-    restoreConversationToTail('auto');
+    setIsTailLayoutSettling(true);
 
-    const rafId = window.requestAnimationFrame(() => {
+    let finished = false;
+    let rafId = 0;
+    let stableFrameCount = 0;
+    let previousMetrics: ReturnType<typeof readTailLayoutMetrics> | null = null;
+
+    const complete = () => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      window.cancelAnimationFrame(rafId);
+      setIsTailLayoutSettling(false);
+    };
+
+    const settle = () => {
+      if (finished) {
+        return;
+      }
       if (shouldStickToBottomRef.current) {
         restoreConversationToTail('auto');
       }
-    });
+      const nextMetrics = readTailLayoutMetrics();
+      if (previousMetrics && hasTailLayoutSettled({
+        previousAnchorBottom: previousMetrics.anchorBottom,
+        nextAnchorBottom: nextMetrics.anchorBottom,
+        previousScrollHeight: previousMetrics.scrollHeight,
+        nextScrollHeight: nextMetrics.scrollHeight,
+      })) {
+        stableFrameCount += 1;
+      } else {
+        stableFrameCount = 0;
+      }
+      previousMetrics = nextMetrics;
+
+      if (stableFrameCount >= 2) {
+        complete();
+        return;
+      }
+
+      rafId = window.requestAnimationFrame(settle);
+    };
+
+    settle();
+
     const timeoutId = window.setTimeout(() => {
-      if (shouldStickToBottomRef.current) {
-        restoreConversationToTail('auto');
-      }
-    }, 140);
+      complete();
+    }, TAIL_LAYOUT_SETTLE_TIMEOUT_MS);
 
     return () => {
+      finished = true;
       window.cancelAnimationFrame(rafId);
       window.clearTimeout(timeoutId);
+      setIsTailLayoutSettling(false);
     };
   }, [
     activeChatIdResolved,
@@ -4827,6 +4883,7 @@ export function ChatInterface({
     hasLoadedCurrentChat,
     isNewChatPlaceholder,
     isWorkspaceHome,
+    readTailLayoutMetrics,
     restoreConversationToTail,
   ]);
 

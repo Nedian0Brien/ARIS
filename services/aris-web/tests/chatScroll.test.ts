@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  hasTailLayoutSettled,
   resolveTailScrollAnchorId,
   resolveMobileWindowScrollTop,
   resolveScrollToBottomTarget,
@@ -23,6 +24,29 @@ describe('chatScroll', () => {
   it('resolves the latest visible event into a tail restore anchor id', () => {
     expect(resolveTailScrollAnchorId({ latestVisibleEventId: 'evt-42' })).toBe('event-evt-42');
     expect(resolveTailScrollAnchorId({ latestVisibleEventId: null })).toBeNull();
+  });
+
+  it('treats the tail layout as settled only after anchor and scroll height stop moving', () => {
+    expect(hasTailLayoutSettled({
+      previousAnchorBottom: 820,
+      nextAnchorBottom: 820.5,
+      previousScrollHeight: 2400,
+      nextScrollHeight: 2400.4,
+    })).toBe(true);
+
+    expect(hasTailLayoutSettled({
+      previousAnchorBottom: null,
+      nextAnchorBottom: 820,
+      previousScrollHeight: 2400,
+      nextScrollHeight: 2400,
+    })).toBe(false);
+
+    expect(hasTailLayoutSettled({
+      previousAnchorBottom: 820,
+      nextAnchorBottom: 854,
+      previousScrollHeight: 2400,
+      nextScrollHeight: 2472,
+    })).toBe(false);
   });
 
   it('resets conversation scroll when switching to a different active chat', () => {

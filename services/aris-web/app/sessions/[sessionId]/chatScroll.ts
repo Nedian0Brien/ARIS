@@ -12,6 +12,14 @@ type TailScrollAnchorIdInput = {
   latestVisibleEventId: string | null;
 };
 
+type TailLayoutSettledInput = {
+  previousAnchorBottom: number | null;
+  nextAnchorBottom: number | null;
+  previousScrollHeight: number | null;
+  nextScrollHeight: number | null;
+  tolerancePx?: number;
+};
+
 type ResetScrollForChatChangeInput = {
   previousChatId: string | null;
   nextChatId: string | null;
@@ -48,6 +56,21 @@ export function resolveTailScrollAnchorId(input: TailScrollAnchorIdInput): strin
     return null;
   }
   return `event-${input.latestVisibleEventId}`;
+}
+
+export function hasTailLayoutSettled(input: TailLayoutSettledInput): boolean {
+  if (
+    input.previousAnchorBottom === null
+    || input.nextAnchorBottom === null
+    || input.previousScrollHeight === null
+    || input.nextScrollHeight === null
+  ) {
+    return false;
+  }
+
+  const tolerancePx = input.tolerancePx ?? 1;
+  return Math.abs(input.nextAnchorBottom - input.previousAnchorBottom) <= tolerancePx
+    && Math.abs(input.nextScrollHeight - input.previousScrollHeight) <= tolerancePx;
 }
 
 export function shouldResetScrollForChatChange(input: ResetScrollForChatChangeInput): boolean {
