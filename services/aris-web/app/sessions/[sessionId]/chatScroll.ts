@@ -122,8 +122,49 @@ type ShouldBlockLoadOlderInput = {
   hasMoreBefore: boolean;
 };
 
+type WindowScrollFallbackInput = {
+  isMobileLayout: boolean;
+  streamScrollHeight: number | null;
+  streamClientHeight: number | null;
+  documentScrollHeight: number;
+  viewportHeight: number;
+  tolerancePx?: number;
+};
+
+type ManualScrollRestorationInput = {
+  activeChatId: string | null;
+  isWorkspaceHome: boolean;
+  isNewChatPlaceholder: boolean;
+};
+
 export function shouldBlockLoadOlder(input: ShouldBlockLoadOlderInput): boolean {
   return input.isTailLayoutSettling || input.isLoadingOlder || !input.hasMoreBefore;
+}
+
+export function shouldUseWindowScrollFallback(input: WindowScrollFallbackInput): boolean {
+  if (input.isMobileLayout) {
+    return true;
+  }
+
+  const tolerancePx = input.tolerancePx ?? 1;
+  const documentScrollable = input.documentScrollHeight - input.viewportHeight > tolerancePx;
+  if (!documentScrollable) {
+    return false;
+  }
+
+  if (input.streamScrollHeight === null || input.streamClientHeight === null) {
+    return true;
+  }
+
+  const streamScrollable = input.streamScrollHeight - input.streamClientHeight > tolerancePx;
+  return !streamScrollable;
+}
+
+export function shouldUseManualScrollRestoration(input: ManualScrollRestorationInput): boolean {
+  if (input.isWorkspaceHome || input.isNewChatPlaceholder) {
+    return false;
+  }
+  return Boolean(input.activeChatId);
 }
 
 const NEAR_BOTTOM_THRESHOLD_PX = 80;

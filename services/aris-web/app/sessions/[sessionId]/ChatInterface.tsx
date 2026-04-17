@@ -123,6 +123,7 @@ import {
   resolveTailScrollAnchorId,
   shouldAutoScrollToBottom,
   shouldBlockLoadOlder,
+  shouldUseManualScrollRestoration,
   shouldRestoreTailScrollOnChatEntry,
   shouldResetScrollForChatChange,
 } from './chatScroll';
@@ -4786,6 +4787,25 @@ export function ChatInterface({
   useEffect(() => {
     syncScrollToBottomButton();
   }, [events.length, effectivePendingPermissions.length, pendingUserEvents.length, showPermissionQueue, syncScrollToBottomButton]);
+
+  useEffect(() => {
+    const nextMode = shouldUseManualScrollRestoration({
+      activeChatId: activeChatIdResolved,
+      isWorkspaceHome,
+      isNewChatPlaceholder,
+    }) ? 'manual' : 'auto';
+
+    if (window.history.scrollRestoration === nextMode) {
+      return;
+    }
+
+    const previousMode = window.history.scrollRestoration;
+    window.history.scrollRestoration = nextMode;
+
+    return () => {
+      window.history.scrollRestoration = previousMode;
+    };
+  }, [activeChatIdResolved, isNewChatPlaceholder, isWorkspaceHome]);
 
   useEffect(() => {
     if (!shouldAutoScrollToBottom({

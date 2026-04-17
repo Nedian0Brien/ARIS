@@ -18,6 +18,7 @@ import {
   resolveScrollToBottomTarget,
   resolveTailScrollAnchorId,
   shouldRestoreTailScrollOnChatEntry,
+  shouldUseWindowScrollFallback,
 } from './chatScroll';
 
 const TAIL_LAYOUT_SETTLE_TIMEOUT_MS = 1200;
@@ -83,19 +84,28 @@ export function useChatTailRestore({
   const isTailLayoutSettlingRef = useRef(false);
 
   const scrollConversationToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
+    const documentScrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const stream = scrollRef.current;
     const target = resolveScrollToBottomTarget({
       isMobileLayout,
       keyboardOpen: document.documentElement.dataset.keyboardOpen === 'true',
     });
-    if (target === 'window') {
+    const shouldUseWindow = target === 'window' || shouldUseWindowScrollFallback({
+      isMobileLayout,
+      streamScrollHeight: stream?.scrollHeight ?? null,
+      streamClientHeight: stream?.clientHeight ?? null,
+      documentScrollHeight,
+      viewportHeight,
+    });
+    if (shouldUseWindow) {
       const top = resolveMobileWindowScrollTop({
-        scrollHeight: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
-        viewportHeight: window.visualViewport?.height ?? window.innerHeight,
+        scrollHeight: documentScrollHeight,
+        viewportHeight,
       });
       window.scrollTo({ top, behavior });
       return;
     }
-    const stream = scrollRef.current;
     if (!stream) {
       return;
     }
@@ -122,20 +132,37 @@ export function useChatTailRestore({
       latestVisibleEventId: latestVisibleEventIdRef.current,
     });
     const anchor = anchorId ? document.getElementById(anchorId) : null;
+    const stream = scrollRef.current;
+    const documentScrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const shouldUseWindow = shouldUseWindowScrollFallback({
+      isMobileLayout,
+      streamScrollHeight: stream?.scrollHeight ?? null,
+      streamClientHeight: stream?.clientHeight ?? null,
+      documentScrollHeight,
+      viewportHeight,
+    });
     return {
       anchorBottom: anchor ? anchor.getBoundingClientRect().bottom : null,
-      scrollHeight: isMobileLayout
-        ? Math.max(document.documentElement.scrollHeight, document.body.scrollHeight)
-        : (scrollRef.current?.scrollHeight ?? null),
+      scrollHeight: shouldUseWindow ? documentScrollHeight : (stream?.scrollHeight ?? null),
     };
   }, [isMobileLayout, latestVisibleEventIdRef, scrollRef]);
 
   const syncScrollToBottomButton = useCallback(() => {
-    if (isMobileLayout) {
+    const stream = scrollRef.current;
+    const documentScrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const shouldUseWindow = shouldUseWindowScrollFallback({
+      isMobileLayout,
+      streamScrollHeight: stream?.scrollHeight ?? null,
+      streamClientHeight: stream?.clientHeight ?? null,
+      documentScrollHeight,
+      viewportHeight,
+    });
+    if (shouldUseWindow) {
       setShowScrollToBottom(!isNearWindowBottom());
       return;
     }
-    const stream = scrollRef.current;
     if (!stream) {
       setShowScrollToBottom(false);
       return;
@@ -213,12 +240,19 @@ export function useChatTailRestore({
         tailRestoreCancelRef.current = null;
       }
       // Bug1 fix: force pixel-perfect alignment after anchor-based settle
-      if (isMobileLayout) {
-        const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      const stream = scrollRef.current;
+      const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      const shouldUseWindow = shouldUseWindowScrollFallback({
+        isMobileLayout,
+        streamScrollHeight: stream?.scrollHeight ?? null,
+        streamClientHeight: stream?.clientHeight ?? null,
+        documentScrollHeight: scrollHeight,
+        viewportHeight,
+      });
+      if (shouldUseWindow) {
         window.scrollTo({ top: Math.max(0, scrollHeight - viewportHeight), behavior: 'auto' });
       } else {
-        const stream = scrollRef.current;
         if (stream) {
           stream.scrollTop = stream.scrollHeight - stream.clientHeight;
         }

@@ -9,6 +9,8 @@ import {
   shouldAutoScrollToBottom,
   shouldResetScrollForChatChange,
   shouldBlockLoadOlder,
+  shouldUseManualScrollRestoration,
+  shouldUseWindowScrollFallback,
 } from '@/app/sessions/[sessionId]/chatScroll';
 
 describe('chatScroll', () => {
@@ -185,6 +187,52 @@ describe('chatScroll', () => {
     });
     it('allows when all conditions clear', () => {
       expect(shouldBlockLoadOlder({ isTailLayoutSettling: false, isLoadingOlder: false, hasMoreBefore: true })).toBe(false);
+    });
+  });
+
+  describe('shouldUseWindowScrollFallback', () => {
+    it('uses window scroll when the document scrolls but the inner stream does not', () => {
+      expect(shouldUseWindowScrollFallback({
+        isMobileLayout: false,
+        streamScrollHeight: 3923,
+        streamClientHeight: 3923,
+        documentScrollHeight: 5193,
+        viewportHeight: 844,
+      })).toBe(true);
+    });
+
+    it('stays on the stream when the inner stream is actually scrollable', () => {
+      expect(shouldUseWindowScrollFallback({
+        isMobileLayout: false,
+        streamScrollHeight: 3287,
+        streamClientHeight: 767,
+        documentScrollHeight: 900,
+        viewportHeight: 900,
+      })).toBe(false);
+    });
+  });
+
+  describe('shouldUseManualScrollRestoration', () => {
+    it('disables browser restoration for an active chat view', () => {
+      expect(shouldUseManualScrollRestoration({
+        activeChatId: 'chat-1',
+        isWorkspaceHome: false,
+        isNewChatPlaceholder: false,
+      })).toBe(true);
+    });
+
+    it('keeps browser restoration for workspace home and new chat views', () => {
+      expect(shouldUseManualScrollRestoration({
+        activeChatId: null,
+        isWorkspaceHome: true,
+        isNewChatPlaceholder: false,
+      })).toBe(false);
+
+      expect(shouldUseManualScrollRestoration({
+        activeChatId: null,
+        isWorkspaceHome: false,
+        isNewChatPlaceholder: true,
+      })).toBe(false);
     });
   });
 });
