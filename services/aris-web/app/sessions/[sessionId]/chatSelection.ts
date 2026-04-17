@@ -44,9 +44,13 @@ export function shouldShowChatTransitionLoading(input: {
   eventsForChatId: string | null;
   hasLoadedCurrentChat: boolean;
   isNewChatPlaceholder: boolean;
+  isTailLayoutSettling: boolean;
 }): boolean {
   if (input.isNewChatPlaceholder || !input.activeChatIdResolved) {
     return false;
+  }
+  if (input.isTailLayoutSettling) {
+    return true;
   }
   if (input.eventsForChatId !== input.activeChatIdResolved) {
     return true;
