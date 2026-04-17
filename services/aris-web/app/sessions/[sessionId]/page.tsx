@@ -7,6 +7,7 @@ import { BackendNotice } from '@/components/ui/BackendNotice';
 import { Card } from '@/components/ui';
 import Link from 'next/link';
 import { ChatInterface } from './ChatInterface';
+import { shouldStartChatEntryLoading } from './chatSelection';
 import { resolveWorkspaceClientPath } from '@/lib/customization/catalog';
 import { deriveWorkspaceTitle } from './workspaceHome';
 
@@ -152,6 +153,11 @@ export default async function SessionPage({
             approvalPolicy={detail.session.approvalPolicy}
             initialChats={chats}
             activeChatId={activeChat?.id ?? null}
+            initialShowChatEntryLoading={shouldStartChatEntryLoading({
+              requestedChatId,
+              resolvedChatId: activeChat?.id ?? null,
+              isWorkspaceHome: false,
+            })}
           />
         </main>
       </div>

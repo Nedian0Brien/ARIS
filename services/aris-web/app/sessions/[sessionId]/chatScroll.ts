@@ -23,8 +23,8 @@ type TailLayoutSettledInput = {
 type TailRestoreRenderHydratedInput = {
   latestVisibleEventId: string | null;
   latestRenderableEventId: string | null;
-  visibleNonUserEventCount: number;
-  deferredVisibleNonUserEventCount: number;
+  expectedStreamItemCount: number;
+  renderedStreamItemCount: number;
 };
 
 type ResetScrollForChatChangeInput = {
@@ -82,7 +82,7 @@ export function hasTailLayoutSettled(input: TailLayoutSettledInput): boolean {
 }
 
 export function hasTailRestoreRenderHydrated(input: TailRestoreRenderHydratedInput): boolean {
-  if (input.visibleNonUserEventCount !== input.deferredVisibleNonUserEventCount) {
+  if (input.expectedStreamItemCount !== input.renderedStreamItemCount) {
     return false;
   }
 

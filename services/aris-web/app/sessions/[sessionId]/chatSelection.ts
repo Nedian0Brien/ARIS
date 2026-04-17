@@ -8,6 +8,17 @@ type ChatSelectionInput = {
   isWorkspaceHome?: boolean;
 };
 
+export function shouldStartChatEntryLoading(input: {
+  requestedChatId: string | null;
+  resolvedChatId: string | null;
+  isWorkspaceHome: boolean;
+}): boolean {
+  if (input.isWorkspaceHome) {
+    return false;
+  }
+  return Boolean(input.requestedChatId && input.resolvedChatId);
+}
+
 export function resolveActiveChat(
   chats: SessionChat[],
   selectedChatId: string | null,
@@ -43,11 +54,18 @@ export function shouldShowChatTransitionLoading(input: {
   activeChatIdResolved: string | null;
   eventsForChatId: string | null;
   hasLoadedCurrentChat: boolean;
+  isInitialChatEntryPendingReveal: boolean;
   isTailRestoreHydrated: boolean;
   isNewChatPlaceholder: boolean;
   isTailLayoutSettling: boolean;
 }): boolean {
-  if (input.isNewChatPlaceholder || !input.activeChatIdResolved) {
+  if (input.isNewChatPlaceholder) {
+    return false;
+  }
+  if (input.isInitialChatEntryPendingReveal) {
+    return true;
+  }
+  if (!input.activeChatIdResolved) {
     return false;
   }
   if (input.isTailLayoutSettling) {

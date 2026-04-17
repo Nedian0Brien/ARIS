@@ -3,6 +3,8 @@ import type { UiEvent } from '@/lib/happy/types';
 import {
   collapseRealtimeGeminiPartialEvents,
   findLatestPersistedCursorEventId,
+  shouldForceInitialRefreshOnMount,
+  shouldMarkCurrentChatLoadedInitially,
 } from '@/lib/hooks/useSessionEvents';
 
 function buildEvent(overrides: Partial<UiEvent> = {}): UiEvent {
@@ -206,5 +208,50 @@ describe('findLatestPersistedCursorEventId', () => {
     });
 
     expect(findLatestPersistedCursorEventId([persisted, partial])).toBe('persisted-read-1');
+  });
+});
+
+describe('shouldMarkCurrentChatLoadedInitially', () => {
+  it('waits for the first client sync on existing chat entry even when server events are present', () => {
+    expect(shouldMarkCurrentChatLoadedInitially({
+      initialEventsMatchChat: true,
+      waitForInitialClientSync: true,
+    })).toBe(false);
+
+    expect(shouldMarkCurrentChatLoadedInitially({
+      initialEventsMatchChat: true,
+      waitForInitialClientSync: false,
+    })).toBe(true);
+  });
+
+  it('stays false when the server events do not belong to the current chat', () => {
+    expect(shouldMarkCurrentChatLoadedInitially({
+      initialEventsMatchChat: false,
+      waitForInitialClientSync: false,
+    })).toBe(false);
+  });
+});
+
+describe('shouldForceInitialRefreshOnMount', () => {
+  it('forces the first refresh for existing chat entry even when sync leadership is not ready yet', () => {
+    expect(shouldForceInitialRefreshOnMount({
+      enabled: false,
+      existingEventCount: 34,
+      waitForInitialClientSync: true,
+    })).toBe(true);
+
+    expect(shouldForceInitialRefreshOnMount({
+      enabled: false,
+      existingEventCount: 34,
+      waitForInitialClientSync: false,
+    })).toBe(false);
+  });
+
+  it('still forces a refresh when there is no local baseline at all', () => {
+    expect(shouldForceInitialRefreshOnMount({
+      enabled: false,
+      existingEventCount: 0,
+      waitForInitialClientSync: false,
+    })).toBe(true);
   });
 });
