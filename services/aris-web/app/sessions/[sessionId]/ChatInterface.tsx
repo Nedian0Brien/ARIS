@@ -117,6 +117,7 @@ import {
   resolveMobileWindowScrollTop,
   resolveScrollToBottomTarget,
   shouldAutoScrollToBottom,
+  shouldRestoreTailScrollOnChatEntry,
   shouldResetScrollForChatChange,
 } from './chatScroll';
 import {
@@ -3051,6 +3052,7 @@ export function ChatInterface({
   const geminiModeDropdownRef = useRef<HTMLDivElement>(null);
   const commandMenuRef = useRef<HTMLDivElement>(null);
   const previousActiveChatIdRef = useRef<string | null>(activeChatIdResolved);
+  const restoredTailScrollForChatRef = useRef<string | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const disconnectNoticeAwaitingRef = useRef<string | null>(null);
   const runtimeStartedSinceAwaitingRef = useRef(false);
@@ -4763,6 +4765,53 @@ export function ChatInterface({
   useEffect(() => {
     syncScrollToBottomButton();
   }, [events.length, effectivePendingPermissions.length, pendingUserEvents.length, showPermissionQueue, syncScrollToBottomButton]);
+
+  useEffect(() => {
+    if (isWorkspaceHome || isNewChatPlaceholder || !activeChatIdResolved) {
+      restoredTailScrollForChatRef.current = null;
+    }
+  }, [activeChatIdResolved, isNewChatPlaceholder, isWorkspaceHome]);
+
+  useEffect(() => {
+    if (!shouldRestoreTailScrollOnChatEntry({
+      activeChatId: activeChatIdResolved,
+      eventsForChatId,
+      hasLoadedCurrentChat,
+      isWorkspaceHome,
+      isNewChatPlaceholder,
+      restoredForChatId: restoredTailScrollForChatRef.current,
+    })) {
+      return;
+    }
+
+    restoredTailScrollForChatRef.current = activeChatIdResolved;
+    shouldStickToBottomRef.current = true;
+    setShowScrollToBottom(false);
+    scrollConversationToBottom('auto');
+
+    const rafId = window.requestAnimationFrame(() => {
+      if (shouldStickToBottomRef.current) {
+        scrollConversationToBottom('auto');
+      }
+    });
+    const timeoutId = window.setTimeout(() => {
+      if (shouldStickToBottomRef.current) {
+        scrollConversationToBottom('auto');
+      }
+    }, 140);
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    activeChatIdResolved,
+    eventsForChatId,
+    hasLoadedCurrentChat,
+    isNewChatPlaceholder,
+    isWorkspaceHome,
+    scrollConversationToBottom,
+  ]);
 
   useEffect(() => {
     if (!shouldAutoScrollToBottom({

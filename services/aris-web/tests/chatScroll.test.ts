@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   resolveMobileWindowScrollTop,
   resolveScrollToBottomTarget,
+  shouldRestoreTailScrollOnChatEntry,
   shouldAutoScrollToBottom,
   shouldResetScrollForChatChange,
 } from '@/app/sessions/[sessionId]/chatScroll';
@@ -54,5 +55,45 @@ describe('chatScroll', () => {
       isWorkspaceHome: false,
       shouldStickToBottom: true,
     })).toBe(true);
+  });
+
+  it('restores the chat tail when the active chat finishes hydrating and has not been restored yet', () => {
+    expect(shouldRestoreTailScrollOnChatEntry({
+      activeChatId: 'chat-2',
+      eventsForChatId: 'chat-2',
+      hasLoadedCurrentChat: true,
+      isWorkspaceHome: false,
+      isNewChatPlaceholder: false,
+      restoredForChatId: 'chat-1',
+    })).toBe(true);
+  });
+
+  it('does not restore the chat tail before the active chat data is ready or when already restored', () => {
+    expect(shouldRestoreTailScrollOnChatEntry({
+      activeChatId: 'chat-2',
+      eventsForChatId: 'chat-1',
+      hasLoadedCurrentChat: true,
+      isWorkspaceHome: false,
+      isNewChatPlaceholder: false,
+      restoredForChatId: null,
+    })).toBe(false);
+
+    expect(shouldRestoreTailScrollOnChatEntry({
+      activeChatId: 'chat-2',
+      eventsForChatId: 'chat-2',
+      hasLoadedCurrentChat: false,
+      isWorkspaceHome: false,
+      isNewChatPlaceholder: false,
+      restoredForChatId: null,
+    })).toBe(false);
+
+    expect(shouldRestoreTailScrollOnChatEntry({
+      activeChatId: 'chat-2',
+      eventsForChatId: 'chat-2',
+      hasLoadedCurrentChat: true,
+      isWorkspaceHome: false,
+      isNewChatPlaceholder: false,
+      restoredForChatId: 'chat-2',
+    })).toBe(false);
   });
 });
