@@ -20,6 +20,13 @@ type TailLayoutSettledInput = {
   tolerancePx?: number;
 };
 
+type TailRestoreRenderHydratedInput = {
+  latestVisibleEventId: string | null;
+  latestRenderableEventId: string | null;
+  visibleNonUserEventCount: number;
+  deferredVisibleNonUserEventCount: number;
+};
+
 type ResetScrollForChatChangeInput = {
   previousChatId: string | null;
   nextChatId: string | null;
@@ -35,6 +42,7 @@ type RestoreTailScrollOnChatEntryInput = {
   activeChatId: string | null;
   eventsForChatId: string | null;
   hasLoadedCurrentChat: boolean;
+  isTailRestoreHydrated: boolean;
   isWorkspaceHome: boolean;
   isNewChatPlaceholder: boolean;
   restoredForChatId: string | null;
@@ -73,6 +81,14 @@ export function hasTailLayoutSettled(input: TailLayoutSettledInput): boolean {
     && Math.abs(input.nextScrollHeight - input.previousScrollHeight) <= tolerancePx;
 }
 
+export function hasTailRestoreRenderHydrated(input: TailRestoreRenderHydratedInput): boolean {
+  if (input.visibleNonUserEventCount !== input.deferredVisibleNonUserEventCount) {
+    return false;
+  }
+
+  return input.latestVisibleEventId === input.latestRenderableEventId;
+}
+
 export function shouldResetScrollForChatChange(input: ResetScrollForChatChangeInput): boolean {
   if (input.isNewChatPlaceholder || !input.nextChatId) {
     return false;
@@ -91,7 +107,7 @@ export function shouldRestoreTailScrollOnChatEntry(input: RestoreTailScrollOnCha
   if (input.isWorkspaceHome || input.isNewChatPlaceholder) {
     return false;
   }
-  if (!input.activeChatId || !input.hasLoadedCurrentChat) {
+  if (!input.activeChatId || !input.hasLoadedCurrentChat || !input.isTailRestoreHydrated) {
     return false;
   }
   if (input.eventsForChatId !== input.activeChatId) {

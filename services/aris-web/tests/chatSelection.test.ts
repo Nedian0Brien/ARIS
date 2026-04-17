@@ -73,6 +73,7 @@ describe('chatSelection', () => {
       activeChatIdResolved: 'chat-2',
       eventsForChatId: 'chat-1',
       hasLoadedCurrentChat: true,
+      isTailRestoreHydrated: false,
       isNewChatPlaceholder: false,
       isTailLayoutSettling: false,
     })).toBe(true);
@@ -81,6 +82,7 @@ describe('chatSelection', () => {
       activeChatIdResolved: 'chat-2',
       eventsForChatId: 'chat-2',
       hasLoadedCurrentChat: false,
+      isTailRestoreHydrated: true,
       isNewChatPlaceholder: false,
       isTailLayoutSettling: false,
     })).toBe(true);
@@ -89,6 +91,7 @@ describe('chatSelection', () => {
       activeChatIdResolved: 'chat-2',
       eventsForChatId: 'chat-2',
       hasLoadedCurrentChat: true,
+      isTailRestoreHydrated: true,
       isNewChatPlaceholder: false,
       isTailLayoutSettling: true,
     })).toBe(true);
@@ -97,6 +100,16 @@ describe('chatSelection', () => {
       activeChatIdResolved: 'chat-2',
       eventsForChatId: 'chat-2',
       hasLoadedCurrentChat: true,
+      isTailRestoreHydrated: false,
+      isNewChatPlaceholder: false,
+      isTailLayoutSettling: false,
+    })).toBe(true);
+
+    expect(shouldShowChatTransitionLoading({
+      activeChatIdResolved: 'chat-2',
+      eventsForChatId: 'chat-2',
+      hasLoadedCurrentChat: true,
+      isTailRestoreHydrated: true,
       isNewChatPlaceholder: false,
       isTailLayoutSettling: false,
     })).toBe(false);
@@ -105,6 +118,7 @@ describe('chatSelection', () => {
       activeChatIdResolved: 'chat-2',
       eventsForChatId: 'chat-1',
       hasLoadedCurrentChat: false,
+      isTailRestoreHydrated: false,
       isNewChatPlaceholder: true,
       isTailLayoutSettling: true,
     })).toBe(false);

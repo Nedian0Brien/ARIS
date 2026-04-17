@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  hasTailRestoreRenderHydrated,
   hasTailLayoutSettled,
   resolveTailScrollAnchorId,
   resolveMobileWindowScrollTop,
@@ -49,6 +50,29 @@ describe('chatScroll', () => {
     })).toBe(false);
   });
 
+  it('waits for deferred stream rendering before treating the tail restore target as hydrated', () => {
+    expect(hasTailRestoreRenderHydrated({
+      latestVisibleEventId: 'evt-9',
+      latestRenderableEventId: 'evt-7',
+      visibleNonUserEventCount: 5,
+      deferredVisibleNonUserEventCount: 3,
+    })).toBe(false);
+
+    expect(hasTailRestoreRenderHydrated({
+      latestVisibleEventId: 'evt-9',
+      latestRenderableEventId: 'evt-9',
+      visibleNonUserEventCount: 5,
+      deferredVisibleNonUserEventCount: 4,
+    })).toBe(false);
+
+    expect(hasTailRestoreRenderHydrated({
+      latestVisibleEventId: 'evt-9',
+      latestRenderableEventId: 'evt-9',
+      visibleNonUserEventCount: 5,
+      deferredVisibleNonUserEventCount: 5,
+    })).toBe(true);
+  });
+
   it('resets conversation scroll when switching to a different active chat', () => {
     expect(shouldResetScrollForChatChange({
       previousChatId: 'chat-1',
@@ -92,6 +116,7 @@ describe('chatScroll', () => {
       activeChatId: 'chat-2',
       eventsForChatId: 'chat-2',
       hasLoadedCurrentChat: true,
+      isTailRestoreHydrated: true,
       isWorkspaceHome: false,
       isNewChatPlaceholder: false,
       restoredForChatId: 'chat-1',
@@ -103,6 +128,7 @@ describe('chatScroll', () => {
       activeChatId: 'chat-2',
       eventsForChatId: 'chat-1',
       hasLoadedCurrentChat: true,
+      isTailRestoreHydrated: true,
       isWorkspaceHome: false,
       isNewChatPlaceholder: false,
       restoredForChatId: null,
@@ -112,6 +138,7 @@ describe('chatScroll', () => {
       activeChatId: 'chat-2',
       eventsForChatId: 'chat-2',
       hasLoadedCurrentChat: false,
+      isTailRestoreHydrated: true,
       isWorkspaceHome: false,
       isNewChatPlaceholder: false,
       restoredForChatId: null,
@@ -121,6 +148,17 @@ describe('chatScroll', () => {
       activeChatId: 'chat-2',
       eventsForChatId: 'chat-2',
       hasLoadedCurrentChat: true,
+      isTailRestoreHydrated: false,
+      isWorkspaceHome: false,
+      isNewChatPlaceholder: false,
+      restoredForChatId: null,
+    })).toBe(false);
+
+    expect(shouldRestoreTailScrollOnChatEntry({
+      activeChatId: 'chat-2',
+      eventsForChatId: 'chat-2',
+      hasLoadedCurrentChat: true,
+      isTailRestoreHydrated: true,
       isWorkspaceHome: false,
       isNewChatPlaceholder: false,
       restoredForChatId: 'chat-2',
