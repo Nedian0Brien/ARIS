@@ -10,7 +10,7 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e:mobile-overflow": "playwright test tests/e2e/mobile-overflow.spec.ts --config=playwright.config.ts",
+    "test:e2e:mobile-overflow": "node scripts/run-mobile-overflow-e2e.mjs",
     "audit:contrast": "node scripts/contrast-audit.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
