@@ -27,27 +27,18 @@ import { resolveAvailableChatCommands, type ChatCommandId, type UsageCommandProv
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import {
   Activity,
-  AlignLeft,
-  ArrowUp,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronUp,
   ChevronRight,
   CircleAlert,
-  Clock,
   Copy,
   Bug,
-  Image as ImageIcon,
   MessageSquarePlus,
   MoreVertical,
   PanelLeftClose,
   PanelLeftOpen,
-  Paperclip,
-  Plus,
-  Loader2,
-  TerminalSquare,
-  X,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import type { AgentFlavor, ApprovalPolicy, ChatImageAttachment, PermissionRequest, SessionChat, UiEvent } from '@/lib/happy/types';
@@ -66,6 +57,8 @@ import { WorkspacePager } from './workspace-panels/WorkspacePager';
 import { CreatePanelPage } from './workspace-panels/CreatePanelPage';
 import { PanelPageRenderer } from './workspace-panels/PanelPageRenderer';
 import { useWorkspacePanels } from './workspace-panels/useWorkspacePanels';
+import { ChatComposer } from './chat-screen/center-pane/ChatComposer';
+import { FileBrowserModal } from './chat-screen/center-pane/FileBrowserModal';
 import { ChatSidebarPane } from './chat-screen/left-sidebar/ChatSidebarPane';
 import styles from './ChatInterface.module.css';
 import {
@@ -94,7 +87,6 @@ import {
   COMPOSER_MIN_HEIGHT_PX,
   CUSTOMIZATION_OVERLAY_MAX_WIDTH_PX,
   MOBILE_LAYOUT_MAX_WIDTH_PX,
-  MODEL_REASONING_EFFORT_OPTIONS,
   READ_CURSOR_SYNC_DEBOUNCE_MS,
   RIGHT_PIN_PREFERS_LEFT_OVERLAY_MIN_WIDTH_PX,
   RUNTIME_DISCONNECT_GRACE_MS,
@@ -123,7 +115,6 @@ import {
   formatRelative,
   genId,
   getEventKindMeta,
-  getFileIcon,
   getLatestVisibleEvent,
   getRecentFiles,
   getWindowScrollTop,
@@ -4093,280 +4084,71 @@ export function ChatInterface({
             </button>
           )}
 
-          {!isWorkspaceHome && <footer className={`${styles.composerDock} ${showChatTransitionLoading ? styles.chatEntryPendingReveal : ''}`} ref={composerDockRef} aria-hidden={showChatTransitionLoading}>
-            <form onSubmit={handleSubmit} className={styles.composerForm}>
-              <div className={styles.composerCard}>
-                <div className={styles.composerToolbar}>
-                  {availableChatCommands.length > 0 && (
-                    <div className={styles.modelSelectorWrap} ref={commandMenuRef}>
-                      <button
-                        type="button"
-                        className={styles.modelSelectorBtn}
-                        onClick={() => setIsCommandMenuOpen((value) => !value)}
-                        aria-haspopup="listbox"
-                        aria-expanded={isCommandMenuOpen}
-                      >
-                        <TerminalSquare size={13} />
-                        <span>Command</span>
-                        <ChevronDown size={11} />
-                      </button>
-                      {isCommandMenuOpen && (
-                        <div className={styles.modelDropdown} role="listbox">
-                          {availableChatCommands.map((command) => (
-                            <button
-                              key={command.id}
-                              type="button"
-                              role="option"
-                              className={styles.commandOption}
-                              onClick={() => handleRunChatCommand(command.id)}
-                            >
-                              <span className={styles.commandOptionLabel}>{command.label}</span>
-                              <span className={styles.commandOptionMeta}>{command.slashCommand}</span>
-                              <span className={styles.commandOptionDescription}>{command.description}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div className={styles.modelSelectorWrap} ref={modelDropdownRef}>
-                    <button
-                      type="button"
-                      className={styles.modelSelectorBtn}
-                      onClick={() => setIsModelDropdownOpen((v) => !v)}
-                      aria-haspopup="listbox"
-                      aria-expanded={isModelDropdownOpen}
-                    >
-                      <agentMeta.Icon size={13} />
-                      <span>{activeModel.shortLabel}</span>
-                      <ChevronDown size={11} />
-                    </button>
-                    {isModelDropdownOpen && (
-                      <div className={styles.modelDropdown} role="listbox">
-                        {activeComposerModels.map((model) => (
-                          <button
-                            key={model.id}
-                            type="button"
-                            role="option"
-                            aria-selected={activeModelId === model.id}
-                            className={`${styles.modelOption} ${activeModelId === model.id ? styles.modelOptionActive : ''}`}
-                            onClick={() => { void handleSelectModel(model.id); }}
-                          >
-                            <span>{model.shortLabel}</span>
-                            <span className={styles.modelOptionBadge}>{model.badge}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {activeAgentFlavor === 'gemini' && (
-                    <div className={styles.modelSelectorWrap} ref={geminiModeDropdownRef}>
-                      <button
-                        type="button"
-                        className={styles.modelSelectorBtn}
-                        onClick={() => setIsGeminiModeDropdownOpen((v) => !v)}
-                        aria-haspopup="listbox"
-                        aria-expanded={isGeminiModeDropdownOpen}
-                      >
-                        <span>Mode</span>
-                        <span>{activeGeminiMode.shortLabel}</span>
-                        <ChevronDown size={11} />
-                      </button>
-                      {isGeminiModeDropdownOpen && (
-                        <div className={styles.modelDropdown} role="listbox">
-                          {activeGeminiModeOptions.map((mode) => {
-                            const disabled = mode.id === 'yolo' && approvalPolicy !== 'yolo';
-                            return (
-                              <button
-                                key={mode.id}
-                                type="button"
-                                role="option"
-                                aria-selected={activeGeminiModeId === mode.id}
-                                className={`${styles.modelOption} ${activeGeminiModeId === mode.id ? styles.modelOptionActive : ''}`}
-                                onClick={() => { void handleSelectGeminiMode(mode.id); }}
-                                disabled={disabled}
-                                title={disabled ? '세션 승인 정책이 yolo일 때만 사용할 수 있습니다.' : undefined}
-                              >
-                                <span>{mode.shortLabel}</span>
-                                <span className={styles.modelOptionBadge}>
-                                  {disabled ? '잠김' : mode.badge}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {activeAgentFlavor === 'codex' && (
-                    <label className={styles.modelEffortWrap}>
-                      <span className={styles.modelEffortLabel}>Effort</span>
-                      <select
-                        className={styles.modelEffortSelect}
-                        value={selectedModelReasoningEffort}
-                        onChange={(event) => { void handleSelectModelReasoningEffort(event.target.value); }}
-                        aria-label="모델 추론 강도"
-                      >
-                        {MODEL_REASONING_EFFORT_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-                </div>
-
-                {contextItems.length > 0 && (
-                  <div className={styles.composerChips}>
-                    {contextItems.map((item) => (
-                      <span key={item.id} className={styles.contextChip}>
-                        {item.type === 'file' ? (
-                          <Paperclip size={11} />
-                        ) : item.type === 'text' ? (
-                          <AlignLeft size={11} />
-                        ) : (
-                          <img
-                            src={item.attachment.previewUrl}
-                            alt=""
-                            className={styles.contextChipThumb}
-                            loading="lazy"
-                          />
-                        )}
-                        <span className={styles.contextChipLabel}>
-                          {item.type === 'file' ? item.name : item.type === 'text' ? '텍스트' : item.attachment.name}
-                        </span>
-                        <button
-                          type="button"
-                          className={styles.contextChipRemove}
-                          onClick={() => removeContextItem(item)}
-                          aria-label="컨텍스트 제거"
-                        >
-                          <X size={10} />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {imageUploadsInFlight > 0 && (
-                  <div className={styles.composerAttachmentStatus}>이미지 업로드 중...</div>
-                )}
-                {imageUploadError && (
-                  <div className={styles.composerAttachmentError} role="alert">{imageUploadError}</div>
-                )}
-
-                <div className={styles.composerInputRow}>
-                  <input
-                    ref={composerImageInputRef}
-                    type="file"
-                    accept="image/*"
-                    hidden
-                    onChange={handleComposerImageSelection}
-                  />
-                  <div className={styles.plusMenuWrap} ref={plusMenuRef}>
-                    <button
-                      type="button"
-                      className={`${styles.composerPlusBtn} ${plusMenuMode !== 'closed' ? styles.composerPlusBtnActive : ''}`}
-                      onClick={() => { setPlusMenuMode((m) => m === 'closed' ? 'menu' : 'closed'); }}
-                      aria-label="컨텍스트 추가"
-                      title="컨텍스트 추가"
-                      disabled={!isOperator}
-                    >
-                      <Plus size={16} />
-                    </button>
-                    {plusMenuMode !== 'closed' && (
-                      <div className={styles.plusMenu}>
-                        {plusMenuMode === 'menu' && (
-                          <>
-                            <button type="button" className={styles.plusMenuItem} onClick={handleImageUploadOpen}>
-                              <ImageIcon size={14} /> 사진 업로드
-                            </button>
-                            <button type="button" className={styles.plusMenuItem} onClick={() => { handleFileBrowserOpen(); }}>
-                              <Paperclip size={14} /> 파일 첨부
-                            </button>
-                            <button type="button" className={styles.plusMenuItem} onClick={() => { setPlusMenuMode('text'); setTextContextInput(''); }}>
-                              <AlignLeft size={14} /> 텍스트 추가
-                            </button>
-                          </>
-                        )}
-                        {/* file 모드는 모달로 처리 — 아래 fileBrowserModal 참고 */}
-                        {plusMenuMode === 'text' && (
-                          <div className={styles.plusMenuInputArea}>
-                            <div className={styles.plusMenuInputLabel}>텍스트 입력</div>
-                            <textarea
-                              className={styles.plusMenuTextInput}
-                              value={textContextInput}
-                              onChange={(e) => setTextContextInput(e.target.value)}
-                              placeholder="에이전트에게 전달할 추가 맥락 정보..."
-                              rows={4}
-                              autoFocus
-                            />
-                            <div className={styles.plusMenuActions}>
-                              <button type="button" className={styles.plusMenuCancelBtn} onClick={() => setPlusMenuMode('menu')}>취소</button>
-                              <button type="button" className={styles.plusMenuConfirmBtn} onClick={handleAddTextContext} disabled={!textContextInput.trim()}>추가</button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <textarea
-                    ref={composerInputRef}
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    onInput={resizeComposerInput}
-                    onFocus={handleComposerFocus}
-                    rows={1}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                        handleSubmit(e);
-                      }
-                    }}
-                    placeholder={
-                      !activeChatIdResolved
-                        ? '사용할 채팅을 선택하세요.'
-                        : isOperator
-                          ? '메시지를 입력하세요...'
-                          : 'Viewer 권한입니다.'
-                    }
-                      disabled={!activeChatIdResolved || !isOperator}
-                    className={styles.composerInput}
-                  />
-
-                  {isAgentRunning ? (
-                    <div className={styles.composerRunningBtnWrap}>
-                      <span className={styles.composerRunningBtnPulse} aria-hidden />
-                      <button
-                        type="button"
-                        className={styles.composerRunningBtn}
-                        onClick={handleAbortRun}
-                        disabled={isAborting}
-                        aria-label="실행 중단"
-                        title="클릭하여 실행 중단"
-                      >
-                        <Loader2 size={18} className={styles.composerRunningIcon} />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="submit"
-                      disabled={!activeChatIdResolved || !prompt.trim() || !isOperator || imageUploadsInFlight > 0}
-                      className={styles.composerSendBtn}
-                      aria-label="메시지 전송"
-                      title="메시지 전송 (Ctrl/Cmd + Enter)"
-                    >
-                      <ArrowUp size={17} />
-                    </button>
-                  )}
-                </div>
-
-                <div className={styles.composerHint}>
-                  Ctrl + Enter로 전송
-                </div>
-              </div>
-            </form>
-          </footer>}
+          {!isWorkspaceHome && (
+            <ChatComposer
+              showPendingReveal={showChatTransitionLoading}
+              agentFlavor={activeAgentFlavor}
+              AgentIcon={agentMeta.Icon}
+              activeModelShortLabel={activeModel.shortLabel}
+              activeChatIdResolved={activeChatIdResolved}
+              isOperator={isOperator}
+              isAgentRunning={isAgentRunning}
+              isAborting={isAborting}
+              prompt={prompt}
+              contextItems={contextItems}
+              imageUploadsInFlight={imageUploadsInFlight}
+              imageUploadError={imageUploadError}
+              availableChatCommands={availableChatCommands}
+              isCommandMenuOpen={isCommandMenuOpen}
+              isModelDropdownOpen={isModelDropdownOpen}
+              isGeminiModeDropdownOpen={isGeminiModeDropdownOpen}
+              activeComposerModels={activeComposerModels}
+              activeModelId={activeModelId}
+              activeGeminiMode={activeGeminiMode}
+              activeGeminiModeId={activeGeminiModeId}
+              activeGeminiModeOptions={activeGeminiModeOptions}
+              approvalPolicy={approvalPolicy}
+              selectedModelReasoningEffort={selectedModelReasoningEffort}
+              plusMenuMode={plusMenuMode}
+              textContextInput={textContextInput}
+              commandMenuRef={commandMenuRef}
+              modelDropdownRef={modelDropdownRef}
+              geminiModeDropdownRef={geminiModeDropdownRef}
+              plusMenuRef={plusMenuRef}
+              composerDockRef={composerDockRef}
+              composerInputRef={composerInputRef}
+              composerImageInputRef={composerImageInputRef}
+              onSubmit={handleSubmit}
+              onToggleCommandMenu={() => setIsCommandMenuOpen((value) => !value)}
+              onRunChatCommand={handleRunChatCommand}
+              onToggleModelDropdown={() => setIsModelDropdownOpen((value) => !value)}
+              onSelectModel={(modelId) => { void handleSelectModel(modelId); }}
+              onToggleGeminiModeDropdown={() => setIsGeminiModeDropdownOpen((value) => !value)}
+              onSelectGeminiMode={(modeId) => { void handleSelectGeminiMode(modeId); }}
+              onSelectModelReasoningEffort={(value) => { void handleSelectModelReasoningEffort(value); }}
+              onRemoveContextItem={removeContextItem}
+              onImageSelection={handleComposerImageSelection}
+              onTogglePlusMenu={() => { setPlusMenuMode((mode) => mode === 'closed' ? 'menu' : 'closed'); }}
+              onImageUploadOpen={handleImageUploadOpen}
+              onFileBrowserOpen={handleFileBrowserOpen}
+              onOpenTextContextEditor={() => {
+                setPlusMenuMode('text');
+                setTextContextInput('');
+              }}
+              onTextContextInputChange={setTextContextInput}
+              onCancelTextContext={() => setPlusMenuMode('menu')}
+              onAddTextContext={handleAddTextContext}
+              onPromptChange={setPrompt}
+              onPromptInput={resizeComposerInput}
+              onPromptFocus={handleComposerFocus}
+              onPromptKeyDown={(event) => {
+                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                  void handleSubmit(event);
+                }
+              }}
+              onAbortRun={handleAbortRun}
+            />
+          )}
 
             {showChatTransitionLoading && (
               <div
@@ -4481,138 +4263,41 @@ export function ChatInterface({
 
     {/* ── 파일 탐색기 모달 ── */}
     {isMounted && plusMenuMode === 'file' && createPortal(
-      <div className={styles.modalOverlay} onClick={() => setPlusMenuMode('closed')}>
-        <div className={styles.fileBrowserModal} onClick={(e) => e.stopPropagation()}>
-          <div className={styles.fileBrowserHeader}>
-            <div className={styles.fileBrowserTitle}>파일 선택</div>
-            <button type="button" className={styles.btnClose} onClick={() => setPlusMenuMode('closed')}>
-              <X size={16} />
-            </button>
-          </div>
-
-          {/* 검색창 */}
-          <div className={styles.fileBrowserSearchBar}>
-            <input
-              type="text"
-              className={styles.fileBrowserSearchInput}
-              placeholder="파일명 검색..."
-              value={fileBrowserQuery}
-              onChange={(e) => { void handleFileBrowserSearch(e.target.value); }}
-              autoFocus
-            />
-            {fileBrowserQuery && (
-              <button
-                type="button"
-                className={styles.fileBrowserSearchClear}
-                onClick={() => { setFileBrowserQuery(''); setFileBrowserSearchResults(null); }}
-                aria-label="검색 초기화"
-              >
-                <X size={13} />
-              </button>
-            )}
-          </div>
-
-          {/* 검색 결과 또는 디렉토리 탐색 */}
-          {fileBrowserSearchResults !== null ? (
-            <div className={styles.fileBrowserList}>
-              {fileBrowserSearchLoading && (
-                <div className={styles.fileBrowserLoader}>검색 중...</div>
-              )}
-              {!fileBrowserSearchLoading && fileBrowserSearchResults.length === 0 && (
-                <div className={styles.fileBrowserEmpty}>검색 결과가 없습니다</div>
-              )}
-              {!fileBrowserSearchLoading && fileBrowserSearchResults.map((item) => (
-                <button
-                  key={item.path}
-                  type="button"
-                  className={`${styles.fileBrowserItem} ${item.isDirectory ? styles.fileBrowserDir : styles.fileBrowserFile}`}
-                  onClick={() => {
-                    if (item.isDirectory) {
-                      setFileBrowserQuery('');
-                      setFileBrowserSearchResults(null);
-                      void fetchFileBrowserDir(item.path);
-                    } else {
-                      void handleFileBrowserSelect(item.path);
-                    }
-                  }}
-                >
-                  <span className={styles.fileBrowserItemIcon}>{getFileIcon(item.name, item.isDirectory)}</span>
-                  <span className={styles.fileBrowserItemName}>{item.name}</span>
-                  <span className={styles.fileBrowserItemPath}>{item.path}</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <>
-              {/* 최근 파일 */}
-              {recentAttachments.length > 0 && (
-                <div className={styles.fileBrowserRecent}>
-                  <div className={styles.fileBrowserSectionLabel}>
-                    <Clock size={11} /> 최근 파일
-                  </div>
-                  {recentAttachments.map((filePath) => {
-                    const name = filePath.split('/').filter(Boolean).pop() ?? filePath;
-                    return (
-                      <button
-                        key={filePath}
-                        type="button"
-                        className={`${styles.fileBrowserItem} ${styles.fileBrowserFile}`}
-                        onClick={() => { void handleFileBrowserSelect(filePath); }}
-                      >
-                        <span className={styles.fileBrowserItemIcon}>{getFileIcon(name, false)}</span>
-                        <span className={styles.fileBrowserItemName}>{name}</span>
-                        <span className={styles.fileBrowserItemPath}>{filePath}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              <div className={styles.fileBrowserPath}>
-                {fileBrowserParentPath !== null && (
-                  <button
-                    type="button"
-                    className={styles.fileBrowserBackBtn}
-                    onClick={() => { void fetchFileBrowserDir(fileBrowserParentPath!); }}
-                  >
-                    ← 상위 폴더
-                  </button>
-                )}
-                <span className={styles.fileBrowserCurrentPath}>{fileBrowserPath}</span>
-              </div>
-
-              <div className={styles.fileBrowserList}>
-                {fileBrowserLoading && (
-                  <div className={styles.fileBrowserLoader}>불러오는 중...</div>
-                )}
-                {fileBrowserError && (
-                  <div className={styles.fileBrowserError}>{fileBrowserError}</div>
-                )}
-                {!fileBrowserLoading && !fileBrowserError && fileBrowserItems.map((item) => (
-                  <button
-                    key={item.path}
-                    type="button"
-                    className={`${styles.fileBrowserItem} ${item.isDirectory ? styles.fileBrowserDir : styles.fileBrowserFile}`}
-                    onClick={() => {
-                      if (item.isDirectory) {
-                        void fetchFileBrowserDir(item.path);
-                      } else {
-                        void handleFileBrowserSelect(item.path);
-                      }
-                    }}
-                  >
-                    <span className={styles.fileBrowserItemIcon}>{getFileIcon(item.name, item.isDirectory)}</span>
-                    <span className={styles.fileBrowserItemName}>{item.name}</span>
-                  </button>
-                ))}
-                {!fileBrowserLoading && !fileBrowserError && fileBrowserItems.length === 0 && (
-                  <div className={styles.fileBrowserEmpty}>비어있는 디렉토리</div>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      </div>,
+      <FileBrowserModal
+        fileBrowserQuery={fileBrowserQuery}
+        fileBrowserSearchResults={fileBrowserSearchResults}
+        fileBrowserSearchLoading={fileBrowserSearchLoading}
+        recentAttachments={recentAttachments}
+        fileBrowserParentPath={fileBrowserParentPath}
+        fileBrowserPath={fileBrowserPath}
+        fileBrowserLoading={fileBrowserLoading}
+        fileBrowserError={fileBrowserError}
+        fileBrowserItems={fileBrowserItems}
+        onClose={() => setPlusMenuMode('closed')}
+        onSearchChange={(value) => { void handleFileBrowserSearch(value); }}
+        onClearSearch={() => {
+          setFileBrowserQuery('');
+          setFileBrowserSearchResults(null);
+        }}
+        onSearchResultSelect={(item) => {
+          if (item.isDirectory) {
+            setFileBrowserQuery('');
+            setFileBrowserSearchResults(null);
+            void fetchFileBrowserDir(item.path);
+            return;
+          }
+          void handleFileBrowserSelect(item.path);
+        }}
+        onBrowseParent={() => { void fetchFileBrowserDir(fileBrowserParentPath!); }}
+        onBrowseItem={(item) => {
+          if (item.isDirectory) {
+            void fetchFileBrowserDir(item.path);
+            return;
+          }
+          void handleFileBrowserSelect(item.path);
+        }}
+        onRecentAttachmentSelect={(path) => { void handleFileBrowserSelect(path); }}
+      />,
       document.body
     )}
     {isMounted && usageProbeProvider && createPortal(
