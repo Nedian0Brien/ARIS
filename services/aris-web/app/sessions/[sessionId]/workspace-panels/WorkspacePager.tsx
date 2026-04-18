@@ -1,13 +1,9 @@
 'use client';
 
-import React, { useEffect, useRef, type PointerEvent, type ReactNode } from 'react';
+import React, { useEffect, useRef, type ReactNode } from 'react';
 import styles from './WorkspacePager.module.css';
 import type { WorkspacePagerItem } from './pagerModel';
-import { resolveWorkspacePagerSwipeTarget } from './swipeGesture';
 import { transitionWorkspacePageScrollMemory, type WorkspacePageScrollMemory } from './workspacePageScrollMemory';
-
-const SWIPE_THRESHOLD_PX = 56;
-const GESTURE_LOCK_THRESHOLD_PX = 8;
 
 type WorkspacePagerProps = {
   items: WorkspacePagerItem[];
@@ -30,16 +26,6 @@ export function WorkspacePager({
   const syncRef = useRef(false);
   const scrollMemoryRef = useRef<WorkspacePageScrollMemory>({});
   const previousActivePageIdRef = useRef(activePageId);
-  const gestureRef = useRef({
-    tracking: false,
-    pointerId: -1,
-    startX: 0,
-    startY: 0,
-    lastX: 0,
-    lastY: 0,
-    horizontal: false,
-    vertical: false,
-  });
 
   useEffect(() => {
     const previousPageId = previousActivePageIdRef.current;
@@ -71,7 +57,8 @@ export function WorkspacePager({
       return;
     }
 
-    const nextLeft = nextIndex * pager.clientWidth;
+    const nextPage = pager.querySelector<HTMLElement>(`[data-workspace-page-id="${CSS.escape(activePageId)}"]`);
+    const nextLeft = nextPage?.offsetLeft ?? nextIndex * pager.clientWidth;
     if (Math.abs(pager.scrollLeft - nextLeft) < 2) {
       return;
     }
@@ -92,105 +79,11 @@ export function WorkspacePager({
     };
   }, [activePageId, items]);
 
-  const resetGesture = () => {
-    gestureRef.current = {
-      tracking: false,
-      pointerId: -1,
-      startX: 0,
-      startY: 0,
-      lastX: 0,
-      lastY: 0,
-      horizontal: false,
-      vertical: false,
-    };
-  };
-
-  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType === 'mouse') {
-      return;
-    }
-
-    event.currentTarget.setPointerCapture(event.pointerId);
-    gestureRef.current = {
-      tracking: true,
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      lastX: event.clientX,
-      lastY: event.clientY,
-      horizontal: false,
-      vertical: false,
-    };
-  };
-
-  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    const gesture = gestureRef.current;
-    if (!gesture.tracking || gesture.pointerId !== event.pointerId) {
-      return;
-    }
-
-    gesture.lastX = event.clientX;
-    gesture.lastY = event.clientY;
-
-    const deltaX = event.clientX - gesture.startX;
-    const deltaY = event.clientY - gesture.startY;
-    const absDeltaX = Math.abs(deltaX);
-    const absDeltaY = Math.abs(deltaY);
-
-    if (!gesture.horizontal && !gesture.vertical) {
-      if (absDeltaX < GESTURE_LOCK_THRESHOLD_PX && absDeltaY < GESTURE_LOCK_THRESHOLD_PX) {
-        return;
-      }
-
-      if (absDeltaY > absDeltaX) {
-        gesture.vertical = true;
-        return;
-      }
-
-      gesture.horizontal = true;
-    }
-
-    if (gesture.horizontal && event.cancelable) {
-      event.preventDefault();
-    }
-  };
-
-  const commitGesture = () => {
-    const gesture = gestureRef.current;
-    if (!gesture.tracking) {
-      return;
-    }
-
-    const deltaX = gesture.lastX - gesture.startX;
-    const deltaY = gesture.lastY - gesture.startY;
-    resetGesture();
-
-    if (Math.abs(deltaX) < SWIPE_THRESHOLD_PX || Math.abs(deltaY) > Math.abs(deltaX)) {
-      return;
-    }
-
-    const nextPageId = resolveWorkspacePagerSwipeTarget(
-      items,
-      activePageId,
-      deltaX,
-      SWIPE_THRESHOLD_PX,
-    );
-
-    if (nextPageId !== activePageId) {
-      onActivePageChange?.(nextPageId);
-    }
-  };
-
   return (
     <div
       ref={pagerRef}
       className={styles.pager}
       data-active-page-id={activePageId}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={commitGesture}
-      onPointerCancel={commitGesture}
-      onLostPointerCapture={commitGesture}
       onScroll={(event) => {
         if (syncRef.current) {
           return;
