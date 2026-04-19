@@ -661,6 +661,7 @@ export function ChatInterface({
     isNewChatPlaceholder,
     isTailLayoutSettling,
   });
+  const isChatEntryTailRestorePending = isInitialChatEntryPendingReveal || isTailLayoutSettling;
   const chatEntryPendingRevealClassName = showChatTransitionLoading ? styles.chatEntryPendingReveal : '';
   const persistedPermissions = useMemo(
     () => hydratePersistedPermissions(nonLifecycleEvents),
@@ -1643,6 +1644,7 @@ export function ChatInterface({
     if (!shouldAutoScrollToBottom({
       isWorkspaceHome,
       shouldStickToBottom: shouldStickToBottomRef.current,
+      isTailRestorePending: isChatEntryTailRestorePending,
     })) {
       return;
     }
@@ -1669,6 +1671,7 @@ export function ChatInterface({
     effectivePendingPermissions.length,
     isWorkspaceHome,
     pendingUserEvents.length,
+    isChatEntryTailRestorePending,
     scrollConversationToBottom,
     shouldStickToBottomRef,
   ]);
@@ -1681,6 +1684,7 @@ export function ChatInterface({
       previousChatId,
       nextChatId: activeChatIdResolved,
       isNewChatPlaceholder,
+      isTailRestorePending: isChatEntryTailRestorePending,
     })) {
       return;
     }
@@ -1706,6 +1710,7 @@ export function ChatInterface({
     };
   }, [
     activeChatIdResolved,
+    isChatEntryTailRestorePending,
     isNewChatPlaceholder,
     scrollConversationToBottom,
     setShowScrollToBottom,

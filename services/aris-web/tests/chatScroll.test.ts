@@ -102,6 +102,15 @@ describe('chatScroll', () => {
     })).toBe(false);
   });
 
+  it('does not reset conversation scroll while entry tail restore is still pending', () => {
+    expect(shouldResetScrollForChatChange({
+      previousChatId: 'chat-1',
+      nextChatId: 'chat-2',
+      isNewChatPlaceholder: false,
+      isTailRestorePending: true,
+    } as Parameters<typeof shouldResetScrollForChatChange>[0] & { isTailRestorePending: boolean })).toBe(false);
+  });
+
   it('does not auto-scroll to the bottom on workspace home', () => {
     expect(shouldAutoScrollToBottom({
       isWorkspaceHome: true,
@@ -112,6 +121,14 @@ describe('chatScroll', () => {
       isWorkspaceHome: false,
       shouldStickToBottom: true,
     })).toBe(true);
+  });
+
+  it('suppresses generic auto-scroll while entry tail restore is pending', () => {
+    expect(shouldAutoScrollToBottom({
+      isWorkspaceHome: false,
+      shouldStickToBottom: true,
+      isTailRestorePending: true,
+    } as Parameters<typeof shouldAutoScrollToBottom>[0] & { isTailRestorePending: boolean })).toBe(false);
   });
 
   it('restores the chat tail when the active chat finishes hydrating and has not been restored yet', () => {
