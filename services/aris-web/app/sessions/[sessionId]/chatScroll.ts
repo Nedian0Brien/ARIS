@@ -50,6 +50,14 @@ type RestoreTailScrollOnChatEntryInput = {
   restoredForChatId: string | null;
 };
 
+export type SessionScrollPhase =
+  | 'idle'
+  | 'user-scrolling'
+  | 'restoring-tail'
+  | 'loading-older'
+  | 'resuming'
+  | 'viewport-reflow';
+
 export function resolveScrollToBottomTarget(input: ScrollToBottomTargetInput): 'window' | 'stream' {
   if (input.isMobileLayout) {
     return 'window';
@@ -128,6 +136,7 @@ type ShouldBlockLoadOlderInput = {
   isTailLayoutSettling: boolean;
   isLoadingOlder: boolean;
   hasMoreBefore: boolean;
+  scrollPhase?: SessionScrollPhase;
 };
 
 type WindowScrollFallbackInput = {
@@ -146,6 +155,10 @@ type ManualScrollRestorationInput = {
 };
 
 export function shouldBlockLoadOlder(input: ShouldBlockLoadOlderInput): boolean {
+  if (input.scrollPhase === 'resuming' || input.scrollPhase === 'viewport-reflow') {
+    return true;
+  }
+
   return input.isTailLayoutSettling || input.isLoadingOlder || !input.hasMoreBefore;
 }
 

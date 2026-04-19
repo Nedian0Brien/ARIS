@@ -202,6 +202,22 @@ describe('chatScroll', () => {
     it('blocks when no more before', () => {
       expect(shouldBlockLoadOlder({ isTailLayoutSettling: false, isLoadingOlder: false, hasMoreBefore: false })).toBe(true);
     });
+    it('blocks while the chat is resuming from a system-driven scroll restore', () => {
+      expect(shouldBlockLoadOlder({
+        isTailLayoutSettling: false,
+        isLoadingOlder: false,
+        hasMoreBefore: true,
+        scrollPhase: 'resuming',
+      } as Parameters<typeof shouldBlockLoadOlder>[0] & { scrollPhase: 'resuming' })).toBe(true);
+    });
+    it('blocks while the viewport is still reflowing after resume', () => {
+      expect(shouldBlockLoadOlder({
+        isTailLayoutSettling: false,
+        isLoadingOlder: false,
+        hasMoreBefore: true,
+        scrollPhase: 'viewport-reflow',
+      } as Parameters<typeof shouldBlockLoadOlder>[0] & { scrollPhase: 'viewport-reflow' })).toBe(true);
+    });
     it('allows when all conditions clear', () => {
       expect(shouldBlockLoadOlder({ isTailLayoutSettling: false, isLoadingOlder: false, hasMoreBefore: true })).toBe(false);
     });
