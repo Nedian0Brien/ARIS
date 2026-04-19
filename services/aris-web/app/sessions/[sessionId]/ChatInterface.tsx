@@ -53,6 +53,13 @@ import { useWorkspacePanels } from './workspace-panels/useWorkspacePanels';
 import { useChatSessionActions } from './chat-screen/actions/useChatSessionActions';
 import { ChatComposer } from './chat-screen/center-pane/ChatComposer';
 import { FileBrowserModal } from './chat-screen/center-pane/FileBrowserModal';
+import { LastUserMessageJumpBar } from './chat-screen/center-pane/LastUserMessageJumpBar';
+import {
+  resolveLastPassedUserMessageJumpTarget,
+  resolveUserMessageJumpTargets,
+  shouldShowLastUserMessageJumpBar,
+  type LastUserMessageJumpTarget,
+} from './chat-screen/center-pane/lastUserMessageBar';
 import { useChatLayoutState } from './chat-screen/hooks/useChatLayoutState';
 import { useChatRuntimeUi } from './chat-screen/hooks/useChatRuntimeUi';
 import { useChatScreenState } from './chat-screen/hooks/useChatScreenState';
@@ -339,6 +346,7 @@ export function ChatInterface({
     setChatIdCopyState,
     setExpandedActionRunIds,
     setExpandedResultIds,
+    setHighlightedEventId,
     setIdBundleCopyState,
     setIsChatSidebarOpen,
     setIsContextMenuOpen,
@@ -425,6 +433,8 @@ export function ChatInterface({
   const disconnectNoticeAwaitingRef = useRef<string | null>(null);
   const runtimeStartedSinceAwaitingRef = useRef(false);
   const sidebarFileRequestNonceRef = useRef(0);
+  const userMessageBubbleNodesRef = useRef(new Map<string, HTMLDivElement>());
+  const [lastUserMessageJumpTarget, setLastUserMessageJumpTarget] = useState<LastUserMessageJumpTarget | null>(null);
   const isRightSidebarPinnedLayout = !isMobileLayout && (viewportWidth > CUSTOMIZATION_OVERLAY_MAX_WIDTH_PX || isCustomizationPinned);
   const isLeftSidebarOverlayLayout = isMobileLayout
     || (isRightSidebarPinnedLayout && viewportWidth < RIGHT_PIN_PREFERS_LEFT_OVERLAY_MIN_WIDTH_PX);
@@ -617,6 +627,10 @@ export function ChatInterface({
     () => buildStreamRenderItems(renderableStreamEvents, expandedActionRunIds),
     [expandedActionRunIds, renderableStreamEvents],
   );
+  const userMessageJumpTargets = useMemo(
+    () => resolveUserMessageJumpTargets(renderableStreamEvents),
+    [renderableStreamEvents],
+  );
   const isTailRestoreHydrated = useMemo(
     () => hasTailRestoreRenderHydrated({
       latestVisibleEventId,
@@ -662,6 +676,20 @@ export function ChatInterface({
     isNewChatPlaceholder,
     isTailLayoutSettling,
   });
+  const showLastUserMessageJumpBar = useMemo(
+    () => shouldShowLastUserMessageJumpBar({
+      targetEventId: lastUserMessageJumpTarget?.eventId ?? null,
+      isWorkspaceHome,
+      isNewChatPlaceholder,
+      showChatTransitionLoading,
+    }),
+    [
+      isNewChatPlaceholder,
+      isWorkspaceHome,
+      lastUserMessageJumpTarget?.eventId,
+      showChatTransitionLoading,
+    ],
+  );
   const chatEntryPendingRevealClassName = showChatTransitionLoading ? styles.chatEntryPendingReveal : '';
   const persistedPermissions = useMemo(
     () => hydratePersistedPermissions(nonLifecycleEvents),
@@ -1312,6 +1340,76 @@ export function ChatInterface({
     });
   }, [firstPendingPermissionId, setShowPermissionQueue]);
 
+  const syncLastUserMessageJumpTarget = useCallback(() => {
+    if (isWorkspaceHome || isNewChatPlaceholder || showChatTransitionLoading || userMessageJumpTargets.length === 0) {
+      setLastUserMessageJumpTarget(null);
+      return;
+    }
+
+    const scrollBoundary = isMobileLayout
+      ? 0
+      : Math.ceil(scrollRef.current?.getBoundingClientRect().top ?? 0);
+    const bubbleBottomByEventId = new Map<string, number>();
+
+    for (const target of userMessageJumpTargets) {
+      const bubbleNode = userMessageBubbleNodesRef.current.get(target.eventId);
+      if (!bubbleNode) {
+        continue;
+      }
+      bubbleBottomByEventId.set(target.eventId, bubbleNode.getBoundingClientRect().bottom);
+    }
+
+    const nextTarget = resolveLastPassedUserMessageJumpTarget({
+      targets: userMessageJumpTargets,
+      bubbleBottomByEventId,
+      scrollBoundary,
+    });
+
+    setLastUserMessageJumpTarget((current) => (
+      current?.eventId === nextTarget?.eventId
+        && current?.preview === nextTarget?.preview
+        && current?.timestamp === nextTarget?.timestamp
+        ? current
+        : nextTarget
+    ));
+  }, [
+    isMobileLayout,
+    isNewChatPlaceholder,
+    isWorkspaceHome,
+    showChatTransitionLoading,
+    userMessageJumpTargets,
+  ]);
+
+  const handleLastUserMessageJump = useCallback(() => {
+    const targetEventId = lastUserMessageJumpTarget?.eventId;
+    if (!targetEventId) {
+      return;
+    }
+
+    const target = document.getElementById(`event-${targetEventId}`);
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    setHighlightedEventId(null);
+    target.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+      inline: 'nearest',
+    });
+    window.requestAnimationFrame(() => {
+      setHighlightedEventId(targetEventId);
+    });
+  }, [lastUserMessageJumpTarget?.eventId, setHighlightedEventId]);
+
+  const setUserMessageBubbleNode = useCallback((eventId: string, node: HTMLDivElement | null) => {
+    if (node) {
+      userMessageBubbleNodesRef.current.set(eventId, node);
+      return;
+    }
+    userMessageBubbleNodesRef.current.delete(eventId);
+  }, []);
+
   const handleCopyChatId = useCallback(async () => {
     try {
       if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
@@ -1375,6 +1473,43 @@ export function ChatInterface({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isCustomizationOverlayLayout, isCustomizationSidebarOpen, setIsCustomizationSidebarOpen]);
+
+  useLayoutEffect(() => {
+    syncLastUserMessageJumpTarget();
+  }, [syncLastUserMessageJumpTarget]);
+
+  useEffect(() => {
+    let rafId = 0;
+    const scheduleSync = () => {
+      if (rafId) {
+        return;
+      }
+      rafId = window.requestAnimationFrame(() => {
+        rafId = 0;
+        syncLastUserMessageJumpTarget();
+      });
+    };
+
+    window.addEventListener('resize', scheduleSync);
+    window.visualViewport?.addEventListener('resize', scheduleSync, { passive: true } as EventListenerOptions);
+
+    if (isMobileLayout) {
+      window.addEventListener('scroll', scheduleSync, { passive: true });
+      window.visualViewport?.addEventListener('scroll', scheduleSync, { passive: true } as EventListenerOptions);
+    }
+
+    return () => {
+      window.removeEventListener('resize', scheduleSync);
+      window.visualViewport?.removeEventListener('resize', scheduleSync);
+      if (isMobileLayout) {
+        window.removeEventListener('scroll', scheduleSync);
+        window.visualViewport?.removeEventListener('scroll', scheduleSync);
+      }
+      if (rafId) {
+        window.cancelAnimationFrame(rafId);
+      }
+    };
+  }, [isMobileLayout, syncLastUserMessageJumpTarget]);
 
   useEffect(() => {
     if (!isContextMenuOpen) {
@@ -2244,11 +2379,13 @@ export function ChatInterface({
     }
     if (isMobileLayout) {
       syncScrollToBottomButton();
+      syncLastUserMessageJumpTarget();
       return;
     }
     const nearBottom = isNearBottom(stream);
     shouldStickToBottomRef.current = nearBottom;
     setShowScrollToBottom(!nearBottom);
+    syncLastUserMessageJumpTarget();
     if (!shouldBlockLoadOlder({ isTailLayoutSettling: isTailLayoutSettlingRef.current, isLoadingOlder, hasMoreBefore }) && stream.scrollTop <= 96) {
       void loadOlderHistory();
     }
@@ -2595,6 +2732,13 @@ export function ChatInterface({
             </div>
           )}
 
+          {showLastUserMessageJumpBar && lastUserMessageJumpTarget && (
+            <LastUserMessageJumpBar
+              preview={lastUserMessageJumpTarget.preview}
+              onJump={handleLastUserMessageJump}
+            />
+          )}
+
           <>
           <div
             className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''} ${chatEntryPendingRevealClassName}`}
@@ -2789,13 +2933,22 @@ export function ChatInterface({
                         if (userEvent) {
                         const userAttachments = readChatImageAttachments(event.meta);
                         return (
-                        <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowUser}`}>
+                        <article
+                          id={`event-${event.id}`}
+                          key={event.id}
+                          className={`${styles.messageRow} ${styles.messageRowUser}`}
+                        >
                         <div className={`${styles.msgHeader} ${styles.msgHeaderUser}`}>
                           <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
                           <span className={`${styles.msgSender} ${styles.msgSenderUser}`}>YOU</span>
                         </div>
                         <div className={styles.messageBubbleUserStack}>
-                          <div className={`${styles.messageBubble} ${styles.messageBubbleUser} ${highlightedEventId === event.id ? styles.messageBubbleHighlight : ''}`}>
+                          <div
+                            ref={(node) => {
+                              setUserMessageBubbleNode(event.id, node);
+                            }}
+                            className={`${styles.messageBubble} ${styles.messageBubbleUser} ${highlightedEventId === event.id ? styles.messageBubbleHighlight : ''}`}
+                          >
                             {userAttachments.length > 0 && (
                               <div className={styles.messageAttachmentStrip}>
                                 {userAttachments.map((attachment) => (
