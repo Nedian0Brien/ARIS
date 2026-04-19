@@ -2,7 +2,7 @@
 
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { ChangeEvent } from 'react';
+import type { CSSProperties, ChangeEvent } from 'react';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
@@ -30,6 +30,8 @@ import { useWorkspacePanels } from './workspace-panels/useWorkspacePanels';
 import { useChatSessionActions } from './chat-screen/actions/useChatSessionActions';
 import { ChatCenterPane } from './chat-screen/center-pane/ChatCenterPane';
 import { FileBrowserModal } from './chat-screen/center-pane/FileBrowserModal';
+import { NewChatPlaceholderPane } from './chat-screen/center-pane/NewChatPlaceholderPane';
+import { WorkspaceHomePane } from './chat-screen/center-pane/WorkspaceHomePane';
 import { WorkspacePagerShell } from './chat-screen/center-pane/WorkspacePagerShell';
 import { useChatLayoutState } from './chat-screen/hooks/useChatLayoutState';
 import { useChatRuntimeUi } from './chat-screen/hooks/useChatRuntimeUi';
@@ -2416,77 +2418,46 @@ export function ChatInterface({
               />
             )}
             chatBody={isWorkspaceHome ? (
-              <div
-                className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''} ${chatEntryPendingRevealClassName}`}
-                ref={scrollRef}
-                onScroll={handleStreamScroll}
-                aria-hidden={showChatTransitionLoading}
-              >
-                <WorkspaceHome
-                  sessionId={sessionId}
-                  sessionTitle={sessionTitle}
-                  projectPath={projectName}
-                  agentFlavor={agentFlavor}
-                  chats={chats}
-                  onSelectChat={(chatId) => {
-                    setIsWorkspaceHome(false);
-                    setIsNewChatPlaceholder(false);
-                    setSelectedChatId(chatId);
-                    writeChatIdToHistory(buildChatUrl(sessionId, chatId), 'push');
-                  }}
-                  onNewChat={() => {
-                    setIsWorkspaceHome(false);
-                    setIsNewChatPlaceholder(true);
-                    setSelectedChatId(null);
-                    if (isMobileLayout) {
-                      setIsChatSidebarOpen(false);
-                    }
-                  }}
-                  onBack={() => router.back()}
-                />
-              </div>
+              <WorkspaceHomePane
+                sessionId={sessionId}
+                sessionTitle={sessionTitle}
+                projectPath={projectName}
+                agentFlavor={agentFlavor}
+                chats={chats}
+                isMobileLayout={isMobileLayout}
+                chatEntryPendingRevealClassName={chatEntryPendingRevealClassName}
+                showChatTransitionLoading={showChatTransitionLoading}
+                scrollRef={scrollRef}
+                onStreamScroll={handleStreamScroll}
+                onSelectChat={(chatId) => {
+                  setIsWorkspaceHome(false);
+                  setIsNewChatPlaceholder(false);
+                  setSelectedChatId(chatId);
+                  writeChatIdToHistory(buildChatUrl(sessionId, chatId), 'push');
+                }}
+                onNewChat={() => {
+                  setIsWorkspaceHome(false);
+                  setIsNewChatPlaceholder(true);
+                  setSelectedChatId(null);
+                  if (isMobileLayout) {
+                    setIsChatSidebarOpen(false);
+                  }
+                }}
+                onBack={() => router.back()}
+              />
             ) : isNewChatPlaceholder ? (
-              <div
-                className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''} ${chatEntryPendingRevealClassName}`}
-                ref={scrollRef}
-                onScroll={handleStreamScroll}
-                aria-hidden={showChatTransitionLoading}
-              >
-                <div className={styles.agentSelectorContainer}>
-                  <button
-                    type="button"
-                    className={styles.agentSelectorBackButton}
-                    onClick={() => { setIsWorkspaceHome(true); setIsNewChatPlaceholder(false); }}
-                  >
-                    <ChevronLeft size={14} />
-                    뒤로
-                  </button>
-                  <h3 className={styles.agentSelectorTitle}>어떤 에이전트와 대화를 시작할까요?</h3>
-                  <div className={styles.agentSelectorGrid}>
-                    {CHAT_AGENT_CHOICES.map((choice) => {
-                      const choiceMeta = resolveAgentMeta(choice);
-                      const ChoiceIcon = choiceMeta.Icon;
-                      return (
-                        <button
-                          key={choice}
-                          type="button"
-                          className={styles.agentSelectorCard}
-                          onClick={() => void handleCreateChat(choice)}
-                          style={{ '--agent-color': `var(--agent-${choice}-accent)`, '--agent-bg': `var(--agent-${choice}-bg)` } as React.CSSProperties}
-                        >
-                          <div className={styles.agentSelectorIconWrap}>
-                            <ChoiceIcon size={28} />
-                          </div>
-                          <div>
-                            <div className={styles.agentSelectorLabel}>{choiceMeta.label}</div>
-                            <div className={styles.agentSelectorDesc}>{resolveAgentSubtitle(choice)}</div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
+              <NewChatPlaceholderPane
+                isMobileLayout={isMobileLayout}
+                chatEntryPendingRevealClassName={chatEntryPendingRevealClassName}
+                showChatTransitionLoading={showChatTransitionLoading}
+                scrollRef={scrollRef}
+                onStreamScroll={handleStreamScroll}
+                onBack={() => {
+                  setIsWorkspaceHome(true);
+                  setIsNewChatPlaceholder(false);
+                }}
+                onCreateChat={handleCreateChat}
+              />
             ) : (
               <ChatTimeline
                 activeAgentFlavor={activeAgentFlavor}
@@ -2586,7 +2557,7 @@ export function ChatInterface({
                 role="status"
                 aria-live="polite"
                 aria-busy="true"
-                style={{ '--chat-transition-accent': `var(--agent-${activeAgentFlavor}-accent)` } as React.CSSProperties}
+                style={{ '--chat-transition-accent': `var(--agent-${activeAgentFlavor}-accent)` } as CSSProperties}
               >
                 <div className={styles.chatTransitionOrb}>
                   <span className={styles.chatTransitionSpinner} aria-hidden="true" />
