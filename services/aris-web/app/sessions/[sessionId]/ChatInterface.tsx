@@ -19,7 +19,6 @@ import { readChatImageAttachments, stripImageAttachmentPromptPrefix } from '@/li
 import { buildOptimisticUserEvent } from './chatComposer';
 import { buildComposerSubmitText, buildUserMessageMeta } from './chatSubmitPayload';
 import { resolveAvailableChatCommands, type ChatCommandId } from './chatCommands';
-import { BackendNotice } from '@/components/ui/BackendNotice';
 import {
   Activity,
   CheckCircle2,
@@ -47,8 +46,6 @@ import { WorkspaceHome } from './WorkspaceHome';
 import { deriveWorkspaceTitle } from './workspaceHome';
 import { buildWorkspacePagerItems, moveWorkspacePager } from './workspace-panels/pagerModel';
 import { WorkspacePager } from './workspace-panels/WorkspacePager';
-import { CreatePanelPage } from './workspace-panels/CreatePanelPage';
-import { PanelPageRenderer } from './workspace-panels/PanelPageRenderer';
 import { useWorkspacePanels } from './workspace-panels/useWorkspacePanels';
 import { useChatSessionActions } from './chat-screen/actions/useChatSessionActions';
 import { ChatComposer } from './chat-screen/center-pane/ChatComposer';
@@ -64,6 +61,7 @@ import { useWorkspaceBrowserState } from './chat-screen/hooks/useWorkspaceBrowse
 import { ChatSidebarPane } from './chat-screen/left-sidebar/ChatSidebarPane';
 import { useChatSidebarSectionViews } from './chat-screen/left-sidebar/useChatSidebarSectionViews';
 import { CustomizationSidebarContainer } from './chat-screen/right-pane/CustomizationSidebarContainer';
+import { WorkspacePanelsPane } from './chat-screen/right-pane/WorkspacePanelsPane';
 import styles from './ChatInterface.module.css';
 import { shouldShowChatTransitionLoading } from './chatSelection';
 import {
@@ -2828,48 +2826,29 @@ export function ChatInterface({
         </section>
           )}
           renderCreatePage={() => (
-            <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
-              <div className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''}`}>
-                {workspacePanelsError ? (
-                  <div className={styles.noticeWrap}>
-                    <BackendNotice message={workspacePanelsError} />
-                  </div>
-                ) : null}
-                {workspacePanelsLoading ? (
-                  <div className={styles.emptyChatState}>
-                    <div className={styles.agentSelectorTitle}>패널 화면을 준비하는 중…</div>
-                  </div>
-                ) : (
-                  <CreatePanelPage onCreatePanel={handleCreateWorkspacePanel} />
-                )}
-              </div>
-            </section>
+            <WorkspacePanelsPane
+              mode="create"
+              sessionId={sessionId}
+              isMobileLayout={isMobileLayout}
+              workspacePanelsError={workspacePanelsError}
+              workspacePanelsLoading={workspacePanelsLoading}
+              workspacePanelLayout={workspacePanelLayout}
+              onCreatePanel={handleCreateWorkspacePanel}
+            />
           )}
           renderPanelPage={(item) => {
-            const panel = workspacePanelLayout.panels.find((candidate) => candidate.id === item.panelId);
-
             return (
-              <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
-                <div className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''}`}>
-                  {workspacePanelsError ? (
-                    <div className={styles.noticeWrap}>
-                      <BackendNotice message={workspacePanelsError} />
-                    </div>
-                  ) : null}
-                  {panel ? (
-                    <PanelPageRenderer
-                      sessionId={sessionId}
-                      panel={panel}
-                      onSavePanel={saveWorkspacePanel}
-                      onDeletePanel={deleteWorkspacePanel}
-                    />
-                  ) : (
-                    <div className={styles.emptyChatState}>
-                      <div className={styles.agentSelectorTitle}>패널을 찾을 수 없습니다.</div>
-                    </div>
-                  )}
-                </div>
-              </section>
+              <WorkspacePanelsPane
+                mode="panel"
+                sessionId={sessionId}
+                isMobileLayout={isMobileLayout}
+                workspacePanelsError={workspacePanelsError}
+                workspacePanelsLoading={workspacePanelsLoading}
+                workspacePanelLayout={workspacePanelLayout}
+                panelId={item.panelId}
+                onSavePanel={saveWorkspacePanel}
+                onDeletePanel={deleteWorkspacePanel}
+              />
             );
           }}
         />
