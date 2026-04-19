@@ -19,32 +19,17 @@ import { stripImageAttachmentPromptPrefix } from '@/lib/chatImageAttachments';
 import { buildOptimisticUserEvent } from './chatComposer';
 import { buildComposerSubmitText, buildUserMessageMeta } from './chatSubmitPayload';
 import { resolveAvailableChatCommands, type ChatCommandId } from './chatCommands';
-import {
-  Activity,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  CircleAlert,
-  Bug,
-  MoreVertical,
-  PanelLeftClose,
-  PanelLeftOpen,
-} from 'lucide-react';
 import { createPortal } from 'react-dom';
 import type { ApprovalPolicy, ChatImageAttachment, PermissionRequest, SessionChat, UiEvent } from '@/lib/happy/types';
 import { UsageProbeModal } from './UsageProbeModal';
 import { buildPermissionTimelineItems } from './chatTimeline';
 import { shouldShowDebugToggleInHeader } from './chatDebugMode';
-import { WorkspaceHome } from './WorkspaceHome';
 import { deriveWorkspaceTitle } from './workspaceHome';
 import { buildWorkspacePagerItems, moveWorkspacePager } from './workspace-panels/pagerModel';
 import { useWorkspacePanels } from './workspace-panels/useWorkspacePanels';
 import { useChatSessionActions } from './chat-screen/actions/useChatSessionActions';
-import { ChatComposer } from './chat-screen/center-pane/ChatComposer';
-import { ChatTimeline } from './chat-screen/center-pane/ChatTimeline';
+import { ChatCenterPane } from './chat-screen/center-pane/ChatCenterPane';
 import { FileBrowserModal } from './chat-screen/center-pane/FileBrowserModal';
-import { ChatHeader } from './chat-screen/center-pane/ChatHeader';
-import { ChatStatusNotices } from './chat-screen/center-pane/ChatStatusNotices';
 import { WorkspacePagerShell } from './chat-screen/center-pane/WorkspacePagerShell';
 import { useChatLayoutState } from './chat-screen/hooks/useChatLayoutState';
 import { useChatRuntimeUi } from './chat-screen/hooks/useChatRuntimeUi';
@@ -71,7 +56,6 @@ import { useChatTailRestore } from './useChatTailRestore';
 import {
   AGENT_ACTIVITY_SETTLE_MS,
   AGENT_REPLY_TIMEOUT_MS,
-  CHAT_AGENT_CHOICES,
   CHAT_RUN_PHASE_LABELS,
   COMPOSER_MAX_HEIGHT_PX,
   COMPOSER_MIN_HEIGHT_PX,
@@ -107,7 +91,6 @@ import {
   normalizeModelId,
   normalizeWorkspaceClientPath,
   resolveAgentMeta,
-  resolveAgentSubtitle,
   resolveAvailableGeminiModeId,
   resolveComposerModels,
   resolveDefaultGeminiModeId,
@@ -2351,277 +2334,270 @@ export function ChatInterface({
         activeWorkspacePageId={activeWorkspacePageId}
         setActiveWorkspacePageId={setActiveWorkspacePageId}
         renderChatPage={() => (
-          <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
-            <ChatHeader
-              activeChatIdResolved={activeChatIdResolved}
-              activeWorkspacePageId={activeWorkspacePageId}
-              agentMeta={agentMeta}
-              agentAvatarToneClass={getAgentAvatarToneClass(agentMeta.tone)}
-              approvalPolicy={approvalPolicy}
-              chatIdCopyState={chatIdCopyState}
-              centerHeaderRef={centerHeaderRef}
-              connectionLabel={connectionLabel}
-              connectionState={connectionState}
-              contextMenuRef={contextMenuRef}
-              currentChatTitle={currentChatTitle}
-              displayName={displayName}
-              effectivePendingPermissionCount={effectivePendingPermissions.length}
-              handleAbortRun={handleAbortRun}
-              handleCopyChatId={handleCopyChatId}
-              handleCopyChatThreadIdsJson={handleCopyChatThreadIdsJson}
-              handleMoveWorkspacePage={handleMoveWorkspacePage}
-              idBundleCopyState={idBundleCopyState}
-              isAborting={isAborting}
-              isAgentRunning={isAgentRunning}
-              isChatSidebarOpen={isChatSidebarOpen}
-              isContextMenuOpen={isContextMenuOpen}
-              isDebugMode={isDebugMode}
-              isMobileLayout={isMobileLayout}
-              isOperator={isOperator}
-              isPolicyChanging={isPolicyChanging}
-              jumpToPendingPermission={jumpToPendingPermission}
-              onToggleChatSidebar={() => {
-                if (isCustomizationOverlayLayout) {
-                  setIsCustomizationSidebarOpen(false);
-                }
-                setIsChatSidebarOpen((prev) => !prev);
-              }}
-              onToggleContextMenu={() => setIsContextMenuOpen((prev) => !prev)}
-              onToggleDebugMode={toggleDebugMode}
-              onTogglePermissionQueue={() => {
-                setShowPermissionQueue((prev) => !prev);
-              }}
-              onUpdateApprovalPolicy={(next) => {
-                setIsPolicyChanging(true);
-                fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ approvalPolicy: next }),
-                })
-                  .then((res) => {
-                    if (!res.ok) throw new Error('Failed to update policy');
-                    setApprovalPolicy(next);
+          <ChatCenterPane
+            isMobileLayout={isMobileLayout}
+            activeChatIdResolved={activeChatIdResolved}
+            isWorkspaceHome={isWorkspaceHome}
+            isNewChatPlaceholder={isNewChatPlaceholder}
+            showChatTransitionLoading={showChatTransitionLoading}
+            showScrollToBottom={showScrollToBottom}
+            onJumpToBottom={handleJumpToBottom}
+            header={(
+              <ChatHeader
+                activeChatIdResolved={activeChatIdResolved}
+                activeWorkspacePageId={activeWorkspacePageId}
+                agentMeta={agentMeta}
+                agentAvatarToneClass={getAgentAvatarToneClass(agentMeta.tone)}
+                approvalPolicy={approvalPolicy}
+                chatIdCopyState={chatIdCopyState}
+                centerHeaderRef={centerHeaderRef}
+                connectionLabel={connectionLabel}
+                connectionState={connectionState}
+                contextMenuRef={contextMenuRef}
+                currentChatTitle={currentChatTitle}
+                displayName={displayName}
+                effectivePendingPermissionCount={effectivePendingPermissions.length}
+                handleAbortRun={handleAbortRun}
+                handleCopyChatId={handleCopyChatId}
+                handleCopyChatThreadIdsJson={handleCopyChatThreadIdsJson}
+                handleMoveWorkspacePage={handleMoveWorkspacePage}
+                idBundleCopyState={idBundleCopyState}
+                isAborting={isAborting}
+                isAgentRunning={isAgentRunning}
+                isChatSidebarOpen={isChatSidebarOpen}
+                isContextMenuOpen={isContextMenuOpen}
+                isDebugMode={isDebugMode}
+                isMobileLayout={isMobileLayout}
+                isOperator={isOperator}
+                isPolicyChanging={isPolicyChanging}
+                jumpToPendingPermission={jumpToPendingPermission}
+                onToggleChatSidebar={() => {
+                  if (isCustomizationOverlayLayout) {
+                    setIsCustomizationSidebarOpen(false);
+                  }
+                  setIsChatSidebarOpen((prev) => !prev);
+                }}
+                onToggleContextMenu={() => setIsContextMenuOpen((prev) => !prev)}
+                onToggleDebugMode={toggleDebugMode}
+                onTogglePermissionQueue={() => {
+                  setShowPermissionQueue((prev) => !prev);
+                }}
+                onUpdateApprovalPolicy={(next) => {
+                  setIsPolicyChanging(true);
+                  fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ approvalPolicy: next }),
                   })
-                  .catch(() => {})
-                  .finally(() => setIsPolicyChanging(false));
-              }}
-              sessionTitle={sessionTitle}
-              showDebugToggleInHeader={showDebugToggleInHeader}
-              showPermissionQueue={showPermissionQueue}
-            />
-
-            <ChatStatusNotices
-              runtimeNotice={runtimeNotice}
-              showDisconnectRetry={showDisconnectRetry}
-              onRetryDisconnected={() => {
-                void handleRetryDisconnected();
-              }}
-              isRetryDisabled={!isOperator || isAgentRunning || isSubmitting || !lastSubmittedPayload}
-              isSubmitting={isSubmitting}
-              effectivePendingPermissionCount={effectivePendingPermissions.length}
-              pendingPermissionsCount={pendingPermissions.length}
-              onJumpToPendingPermission={jumpToPendingPermission}
-            />
-
-            <>
-              {isWorkspaceHome ? (
-                <div
-                  className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''} ${chatEntryPendingRevealClassName}`}
-                  ref={scrollRef}
-                  onScroll={handleStreamScroll}
-                  aria-hidden={showChatTransitionLoading}
-                >
-                  <WorkspaceHome
-                    sessionId={sessionId}
-                    sessionTitle={sessionTitle}
-                    projectPath={projectName}
-                    agentFlavor={agentFlavor}
-                    chats={chats}
-                    onSelectChat={(chatId) => {
-                      setIsWorkspaceHome(false);
-                      setIsNewChatPlaceholder(false);
-                      setSelectedChatId(chatId);
-                      writeChatIdToHistory(buildChatUrl(sessionId, chatId), 'push');
-                    }}
-                    onNewChat={() => {
-                      setIsWorkspaceHome(false);
-                      setIsNewChatPlaceholder(true);
-                      setSelectedChatId(null);
-                      if (isMobileLayout) {
-                        setIsChatSidebarOpen(false);
-                      }
-                    }}
-                    onBack={() => router.back()}
-                  />
-                </div>
-              ) : isNewChatPlaceholder ? (
-                <div
-                  className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''} ${chatEntryPendingRevealClassName}`}
-                  ref={scrollRef}
-                  onScroll={handleStreamScroll}
-                  aria-hidden={showChatTransitionLoading}
-                >
-                  <div className={styles.agentSelectorContainer}>
-                    <button
-                      type="button"
-                      className={styles.agentSelectorBackButton}
-                      onClick={() => { setIsWorkspaceHome(true); setIsNewChatPlaceholder(false); }}
-                    >
-                      <ChevronLeft size={14} />
-                      뒤로
-                    </button>
-                    <h3 className={styles.agentSelectorTitle}>어떤 에이전트와 대화를 시작할까요?</h3>
-                    <div className={styles.agentSelectorGrid}>
-                      {CHAT_AGENT_CHOICES.map((choice) => {
-                        const choiceMeta = resolveAgentMeta(choice);
-                        const ChoiceIcon = choiceMeta.Icon;
-                        return (
-                          <button
-                            key={choice}
-                            type="button"
-                            className={styles.agentSelectorCard}
-                            onClick={() => void handleCreateChat(choice)}
-                            style={{ '--agent-color': `var(--agent-${choice}-accent)`, '--agent-bg': `var(--agent-${choice}-bg)` } as React.CSSProperties}
-                          >
-                            <div className={styles.agentSelectorIconWrap}>
-                              <ChoiceIcon size={28} />
-                            </div>
-                            <div>
-                              <div className={styles.agentSelectorLabel}>{choiceMeta.label}</div>
-                              <div className={styles.agentSelectorDesc}>{resolveAgentSubtitle(choice)}</div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <ChatTimeline
-                  activeAgentFlavor={activeAgentFlavor}
-                  activeChat={activeChat}
-                  agentMeta={agentMeta}
-                  chatEntryPendingRevealClassName={chatEntryPendingRevealClassName}
-                  copiedUserEventId={copiedUserEventId}
-                  expandedResultIds={expandedResultIds}
-                  highlightedEventId={highlightedEventId}
-                  isAgentRunning={isAgentRunning}
-                  isDebugMode={isDebugMode}
-                  isMobileLayout={isMobileLayout}
-                  isOperator={isOperator}
-                  loadingPermissionId={loadingPermissionId}
-                  scrollRef={scrollRef}
-                  showChatTransitionLoading={showChatTransitionLoading}
-                  timelineItems={timelineItems}
-                  onCopyUserMessage={handleCopyUserMessage}
-                  onDecidePermission={(permissionId, decision) => {
-                    void decidePermission(permissionId, decision);
+                    .then((res) => {
+                      if (!res.ok) throw new Error('Failed to update policy');
+                      setApprovalPolicy(next);
+                    })
+                    .catch(() => {})
+                    .finally(() => setIsPolicyChanging(false));
+                }}
+                sessionTitle={sessionTitle}
+                showDebugToggleInHeader={showDebugToggleInHeader}
+                showPermissionQueue={showPermissionQueue}
+              />
+            )}
+            statusNotices={(
+              <ChatStatusNotices
+                runtimeNotice={runtimeNotice}
+                showDisconnectRetry={showDisconnectRetry}
+                onRetryDisconnected={() => {
+                  void handleRetryDisconnected();
+                }}
+                isRetryDisabled={!isOperator || isAgentRunning || isSubmitting || !lastSubmittedPayload}
+                isSubmitting={isSubmitting}
+                effectivePendingPermissionCount={effectivePendingPermissions.length}
+                pendingPermissionsCount={pendingPermissions.length}
+                onJumpToPendingPermission={jumpToPendingPermission}
+              />
+            )}
+            chatBody={isWorkspaceHome ? (
+              <div
+                className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''} ${chatEntryPendingRevealClassName}`}
+                ref={scrollRef}
+                onScroll={handleStreamScroll}
+                aria-hidden={showChatTransitionLoading}
+              >
+                <WorkspaceHome
+                  sessionId={sessionId}
+                  sessionTitle={sessionTitle}
+                  projectPath={projectName}
+                  agentFlavor={agentFlavor}
+                  chats={chats}
+                  onSelectChat={(chatId) => {
+                    setIsWorkspaceHome(false);
+                    setIsNewChatPlaceholder(false);
+                    setSelectedChatId(chatId);
+                    writeChatIdToHistory(buildChatUrl(sessionId, chatId), 'push');
                   }}
-                  onDeleteEmptyAutoChat={handleDeleteEmptyAutoChat}
-                  onSelectQuickStart={handleSelectQuickStart}
-                  onStreamScroll={handleStreamScroll}
-                  onToggleActionRun={toggleActionRun}
-                  onToggleResult={toggleResult}
-                />
-              )}
-
-              {!showChatTransitionLoading && activeChatIdResolved && !isWorkspaceHome && !isNewChatPlaceholder && showScrollToBottom && (
-                <button
-                  type="button"
-                  className={styles.scrollBottomButton}
-                  onClick={handleJumpToBottom}
-                  aria-label="맨 아래로 이동"
-                  title="맨 아래로 이동"
-                >
-                  <ChevronDown size={16} />
-                </button>
-              )}
-
-              {!isWorkspaceHome && (
-                <ChatComposer
-                  showPendingReveal={showChatTransitionLoading}
-                  agentFlavor={activeAgentFlavor}
-                  AgentIcon={agentMeta.Icon}
-                  activeModelShortLabel={activeModel.shortLabel}
-                  activeChatIdResolved={activeChatIdResolved}
-                  isOperator={isOperator}
-                  isAgentRunning={isAgentRunning}
-                  isAborting={isAborting}
-                  prompt={prompt}
-                  contextItems={contextItems}
-                  imageUploadsInFlight={imageUploadsInFlight}
-                  imageUploadError={imageUploadError}
-                  availableChatCommands={availableChatCommands}
-                  isCommandMenuOpen={isCommandMenuOpen}
-                  isModelDropdownOpen={isModelDropdownOpen}
-                  isGeminiModeDropdownOpen={isGeminiModeDropdownOpen}
-                  activeComposerModels={activeComposerModels}
-                  activeModelId={activeModelId}
-                  activeGeminiMode={activeGeminiMode}
-                  activeGeminiModeId={activeGeminiModeId}
-                  activeGeminiModeOptions={activeGeminiModeOptions}
-                  approvalPolicy={approvalPolicy}
-                  selectedModelReasoningEffort={selectedModelReasoningEffort}
-                  plusMenuMode={plusMenuMode}
-                  textContextInput={textContextInput}
-                  commandMenuRef={commandMenuRef}
-                  modelDropdownRef={modelDropdownRef}
-                  geminiModeDropdownRef={geminiModeDropdownRef}
-                  plusMenuRef={plusMenuRef}
-                  composerDockRef={composerDockRef}
-                  composerInputRef={composerInputRef}
-                  composerImageInputRef={composerImageInputRef}
-                  onSubmit={handleSubmit}
-                  onToggleCommandMenu={() => setIsCommandMenuOpen((value) => !value)}
-                  onRunChatCommand={handleRunChatCommand}
-                  onToggleModelDropdown={() => setIsModelDropdownOpen((value) => !value)}
-                  onSelectModel={(modelId) => { void handleSelectModel(modelId); }}
-                  onToggleGeminiModeDropdown={() => setIsGeminiModeDropdownOpen((value) => !value)}
-                  onSelectGeminiMode={(modeId) => { void handleSelectGeminiMode(modeId); }}
-                  onSelectModelReasoningEffort={(value) => { void handleSelectModelReasoningEffort(value); }}
-                  onRemoveContextItem={removeContextItem}
-                  onImageSelection={handleComposerImageSelection}
-                  onTogglePlusMenu={() => { setPlusMenuMode((mode) => mode === 'closed' ? 'menu' : 'closed'); }}
-                  onImageUploadOpen={handleImageUploadOpen}
-                  onFileBrowserOpen={handleFileBrowserOpen}
-                  onOpenTextContextEditor={() => {
-                    setPlusMenuMode('text');
-                    setTextContextInput('');
-                  }}
-                  onTextContextInputChange={setTextContextInput}
-                  onCancelTextContext={() => setPlusMenuMode('menu')}
-                  onAddTextContext={handleAddTextContext}
-                  onPromptChange={setPrompt}
-                  onPromptInput={resizeComposerInput}
-                  onPromptFocus={handleComposerFocus}
-                  onPromptKeyDown={(event) => {
-                    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                      void handleSubmit(event);
+                  onNewChat={() => {
+                    setIsWorkspaceHome(false);
+                    setIsNewChatPlaceholder(true);
+                    setSelectedChatId(null);
+                    if (isMobileLayout) {
+                      setIsChatSidebarOpen(false);
                     }
                   }}
-                  onAbortRun={handleAbortRun}
+                  onBack={() => router.back()}
                 />
-              )}
-
-              {showChatTransitionLoading && (
-                <div
-                  className={styles.chatTransitionOverlay}
-                  role="status"
-                  aria-live="polite"
-                  aria-busy="true"
-                  style={{ '--chat-transition-accent': `var(--agent-${activeAgentFlavor}-accent)` } as React.CSSProperties}
-                >
-                  <div className={styles.chatTransitionOrb}>
-                    <span className={styles.chatTransitionSpinner} aria-hidden="true" />
-                    <div className={styles.chatTransitionLogo}>
-                      <agentMeta.Icon size={34} />
-                    </div>
+              </div>
+            ) : isNewChatPlaceholder ? (
+              <div
+                className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''} ${chatEntryPendingRevealClassName}`}
+                ref={scrollRef}
+                onScroll={handleStreamScroll}
+                aria-hidden={showChatTransitionLoading}
+              >
+                <div className={styles.agentSelectorContainer}>
+                  <button
+                    type="button"
+                    className={styles.agentSelectorBackButton}
+                    onClick={() => { setIsWorkspaceHome(true); setIsNewChatPlaceholder(false); }}
+                  >
+                    <ChevronLeft size={14} />
+                    뒤로
+                  </button>
+                  <h3 className={styles.agentSelectorTitle}>어떤 에이전트와 대화를 시작할까요?</h3>
+                  <div className={styles.agentSelectorGrid}>
+                    {CHAT_AGENT_CHOICES.map((choice) => {
+                      const choiceMeta = resolveAgentMeta(choice);
+                      const ChoiceIcon = choiceMeta.Icon;
+                      return (
+                        <button
+                          key={choice}
+                          type="button"
+                          className={styles.agentSelectorCard}
+                          onClick={() => void handleCreateChat(choice)}
+                          style={{ '--agent-color': `var(--agent-${choice}-accent)`, '--agent-bg': `var(--agent-${choice}-bg)` } as React.CSSProperties}
+                        >
+                          <div className={styles.agentSelectorIconWrap}>
+                            <ChoiceIcon size={28} />
+                          </div>
+                          <div>
+                            <div className={styles.agentSelectorLabel}>{choiceMeta.label}</div>
+                            <div className={styles.agentSelectorDesc}>{resolveAgentSubtitle(choice)}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
-                  <div className={styles.chatTransitionMessage}>에이전트 채팅 로딩중…</div>
                 </div>
-              )}
-            </>
-          </section>
+              </div>
+            ) : (
+              <ChatTimeline
+                activeAgentFlavor={activeAgentFlavor}
+                activeChat={activeChat}
+                agentMeta={agentMeta}
+                chatEntryPendingRevealClassName={chatEntryPendingRevealClassName}
+                copiedUserEventId={copiedUserEventId}
+                expandedResultIds={expandedResultIds}
+                highlightedEventId={highlightedEventId}
+                isAgentRunning={isAgentRunning}
+                isDebugMode={isDebugMode}
+                isMobileLayout={isMobileLayout}
+                isOperator={isOperator}
+                loadingPermissionId={loadingPermissionId}
+                scrollRef={scrollRef}
+                showChatTransitionLoading={showChatTransitionLoading}
+                timelineItems={timelineItems}
+                onCopyUserMessage={handleCopyUserMessage}
+                onDecidePermission={(permissionId, decision) => {
+                  void decidePermission(permissionId, decision);
+                }}
+                onDeleteEmptyAutoChat={handleDeleteEmptyAutoChat}
+                onSelectQuickStart={handleSelectQuickStart}
+                onStreamScroll={handleStreamScroll}
+                onToggleActionRun={toggleActionRun}
+                onToggleResult={toggleResult}
+              />
+            )}
+            composer={!isWorkspaceHome ? (
+              <ChatComposer
+                showPendingReveal={showChatTransitionLoading}
+                agentFlavor={activeAgentFlavor}
+                AgentIcon={agentMeta.Icon}
+                activeModelShortLabel={activeModel.shortLabel}
+                activeChatIdResolved={activeChatIdResolved}
+                isOperator={isOperator}
+                isAgentRunning={isAgentRunning}
+                isAborting={isAborting}
+                prompt={prompt}
+                contextItems={contextItems}
+                imageUploadsInFlight={imageUploadsInFlight}
+                imageUploadError={imageUploadError}
+                availableChatCommands={availableChatCommands}
+                isCommandMenuOpen={isCommandMenuOpen}
+                isModelDropdownOpen={isModelDropdownOpen}
+                isGeminiModeDropdownOpen={isGeminiModeDropdownOpen}
+                activeComposerModels={activeComposerModels}
+                activeModelId={activeModelId}
+                activeGeminiMode={activeGeminiMode}
+                activeGeminiModeId={activeGeminiModeId}
+                activeGeminiModeOptions={activeGeminiModeOptions}
+                approvalPolicy={approvalPolicy}
+                selectedModelReasoningEffort={selectedModelReasoningEffort}
+                plusMenuMode={plusMenuMode}
+                textContextInput={textContextInput}
+                commandMenuRef={commandMenuRef}
+                modelDropdownRef={modelDropdownRef}
+                geminiModeDropdownRef={geminiModeDropdownRef}
+                plusMenuRef={plusMenuRef}
+                composerDockRef={composerDockRef}
+                composerInputRef={composerInputRef}
+                composerImageInputRef={composerImageInputRef}
+                onSubmit={handleSubmit}
+                onToggleCommandMenu={() => setIsCommandMenuOpen((value) => !value)}
+                onRunChatCommand={handleRunChatCommand}
+                onToggleModelDropdown={() => setIsModelDropdownOpen((value) => !value)}
+                onSelectModel={(modelId) => { void handleSelectModel(modelId); }}
+                onToggleGeminiModeDropdown={() => setIsGeminiModeDropdownOpen((value) => !value)}
+                onSelectGeminiMode={(modeId) => { void handleSelectGeminiMode(modeId); }}
+                onSelectModelReasoningEffort={(value) => { void handleSelectModelReasoningEffort(value); }}
+                onRemoveContextItem={removeContextItem}
+                onImageSelection={handleComposerImageSelection}
+                onTogglePlusMenu={() => { setPlusMenuMode((mode) => mode === 'closed' ? 'menu' : 'closed'); }}
+                onImageUploadOpen={handleImageUploadOpen}
+                onFileBrowserOpen={handleFileBrowserOpen}
+                onOpenTextContextEditor={() => {
+                  setPlusMenuMode('text');
+                  setTextContextInput('');
+                }}
+                onTextContextInputChange={setTextContextInput}
+                onCancelTextContext={() => setPlusMenuMode('menu')}
+                onAddTextContext={handleAddTextContext}
+                onPromptChange={setPrompt}
+                onPromptInput={resizeComposerInput}
+                onPromptFocus={handleComposerFocus}
+                onPromptKeyDown={(event) => {
+                  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                    void handleSubmit(event);
+                  }
+                }}
+                onAbortRun={handleAbortRun}
+              />
+            ) : null}
+            transitionOverlay={showChatTransitionLoading ? (
+              <div
+                className={styles.chatTransitionOverlay}
+                role="status"
+                aria-live="polite"
+                aria-busy="true"
+                style={{ '--chat-transition-accent': `var(--agent-${activeAgentFlavor}-accent)` } as React.CSSProperties}
+              >
+                <div className={styles.chatTransitionOrb}>
+                  <span className={styles.chatTransitionSpinner} aria-hidden="true" />
+                  <div className={styles.chatTransitionLogo}>
+                    <agentMeta.Icon size={34} />
+                  </div>
+                </div>
+                <div className={styles.chatTransitionMessage}>에이전트 채팅 로딩중…</div>
+              </div>
+            ) : null}
+          />
         )}
         renderCreatePage={() => (
           <WorkspacePanelsPane
