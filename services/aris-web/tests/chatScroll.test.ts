@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  hasResumePhaseSettled,
   hasTailRestoreRenderHydrated,
   hasTailLayoutSettled,
+  resolveSessionScrollPhase,
   resolveTailScrollAnchorId,
   resolveMobileWindowScrollTop,
   resolveScrollToBottomTarget,
@@ -50,6 +52,36 @@ describe('chatScroll', () => {
       nextAnchorBottom: 854,
       previousScrollHeight: 2400,
       nextScrollHeight: 2472,
+    })).toBe(false);
+  });
+
+  it('treats resume settling as stable only after scroll top and viewport height stop moving', () => {
+    expect(hasResumePhaseSettled({
+      previousScrollTop: 4069,
+      nextScrollTop: 4069.5,
+      previousViewportHeight: 712,
+      nextViewportHeight: 712.4,
+    })).toBe(true);
+
+    expect(hasResumePhaseSettled({
+      previousScrollTop: null,
+      nextScrollTop: 4069,
+      previousViewportHeight: 712,
+      nextViewportHeight: 712,
+    })).toBe(false);
+
+    expect(hasResumePhaseSettled({
+      previousScrollTop: 4069,
+      nextScrollTop: 4020,
+      previousViewportHeight: 712,
+      nextViewportHeight: 712,
+    })).toBe(false);
+
+    expect(hasResumePhaseSettled({
+      previousScrollTop: 4069,
+      nextScrollTop: 4069,
+      previousViewportHeight: 712,
+      nextViewportHeight: 676,
     })).toBe(false);
   });
 
@@ -202,6 +234,22 @@ describe('chatScroll', () => {
     it('blocks when no more before', () => {
       expect(shouldBlockLoadOlder({ isTailLayoutSettling: false, isLoadingOlder: false, hasMoreBefore: false })).toBe(true);
     });
+    it('blocks while the chat is resuming from a system-driven scroll restore', () => {
+      expect(shouldBlockLoadOlder({
+        isTailLayoutSettling: false,
+        isLoadingOlder: false,
+        hasMoreBefore: true,
+        scrollPhase: 'resuming',
+      } as Parameters<typeof shouldBlockLoadOlder>[0] & { scrollPhase: 'resuming' })).toBe(true);
+    });
+    it('blocks while the viewport is still reflowing after resume', () => {
+      expect(shouldBlockLoadOlder({
+        isTailLayoutSettling: false,
+        isLoadingOlder: false,
+        hasMoreBefore: true,
+        scrollPhase: 'viewport-reflow',
+      } as Parameters<typeof shouldBlockLoadOlder>[0] & { scrollPhase: 'viewport-reflow' })).toBe(true);
+    });
     it('allows when all conditions clear', () => {
       expect(shouldBlockLoadOlder({ isTailLayoutSettling: false, isLoadingOlder: false, hasMoreBefore: true })).toBe(false);
     });
@@ -250,6 +298,34 @@ describe('chatScroll', () => {
         isWorkspaceHome: false,
         isNewChatPlaceholder: true,
       })).toBe(false);
+    });
+  });
+
+  describe('resolveSessionScrollPhase', () => {
+    it('moves into resuming when the tab or app resumes', () => {
+      expect(resolveSessionScrollPhase({
+        currentPhase: 'idle',
+        event: 'resume-start',
+      })).toBe('resuming');
+    });
+
+    it('keeps resume ownership while raw scroll events are still arriving', () => {
+      expect(resolveSessionScrollPhase({
+        currentPhase: 'resuming',
+        event: 'scroll-observed',
+      })).toBe('resuming');
+    });
+
+    it('moves through viewport reflow before returning to idle', () => {
+      expect(resolveSessionScrollPhase({
+        currentPhase: 'resuming',
+        event: 'viewport-changed',
+      })).toBe('viewport-reflow');
+
+      expect(resolveSessionScrollPhase({
+        currentPhase: 'viewport-reflow',
+        event: 'resume-stable',
+      })).toBe('idle');
     });
   });
 });

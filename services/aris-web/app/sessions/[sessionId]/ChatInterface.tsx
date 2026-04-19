@@ -59,9 +59,12 @@ import { RightPaneLayout } from './chat-screen/right-pane/RightPaneLayout';
 import styles from './ChatInterface.module.css';
 import { shouldShowChatTransitionLoading } from './chatSelection';
 import {
+  hasResumePhaseSettled,
   hasTailRestoreRenderHydrated,
   isNearBottom,
   isNearWindowBottom,
+  resolveSessionScrollPhase,
+  type SessionScrollPhase,
   shouldAutoScrollToBottom,
   shouldBlockLoadOlder,
   shouldUseManualScrollRestoration,
@@ -158,6 +161,8 @@ function ElapsedTimer({ since, className }: { since: string; className?: string 
 
   return <span className={className}>{formatElapsedDuration(since, now)}</span>;
 }
+
+const RESUME_SCROLL_SETTLE_TIMEOUT_MS = 240;
 
 export function ChatInterface({
   sessionId,
@@ -663,6 +668,100 @@ export function ChatInterface({
   });
   const isChatEntryTailRestorePending = isInitialChatEntryPendingReveal || isTailLayoutSettling;
   const chatEntryPendingRevealClassName = showChatTransitionLoading ? styles.chatEntryPendingReveal : '';
+  const [sessionScrollPhase, setSessionScrollPhase] = useState<SessionScrollPhase>('idle');
+  const sessionScrollPhaseRef = useRef<SessionScrollPhase>('idle');
+  const resumeSettleRafRef = useRef(0);
+  const resumeSettleTimeoutRef = useRef(0);
+  const resumePreviousMetricsRef = useRef<{ scrollTop: number | null; viewportHeight: number | null } | null>(null);
+  const resumeStableFrameCountRef = useRef(0);
+
+  const commitSessionScrollPhase = useCallback((updater: SessionScrollPhase | ((current: SessionScrollPhase) => SessionScrollPhase)) => {
+    setSessionScrollPhase((current) => {
+      const next = typeof updater === 'function'
+        ? (updater as (value: SessionScrollPhase) => SessionScrollPhase)(current)
+        : updater;
+      sessionScrollPhaseRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const clearResumePhaseSettleLoop = useCallback(() => {
+    if (resumeSettleRafRef.current) {
+      window.cancelAnimationFrame(resumeSettleRafRef.current);
+      resumeSettleRafRef.current = 0;
+    }
+    if (resumeSettleTimeoutRef.current) {
+      window.clearTimeout(resumeSettleTimeoutRef.current);
+      resumeSettleTimeoutRef.current = 0;
+    }
+    resumePreviousMetricsRef.current = null;
+    resumeStableFrameCountRef.current = 0;
+  }, []);
+
+  const completeResumeScrollPhase = useCallback(() => {
+    clearResumePhaseSettleLoop();
+    commitSessionScrollPhase((current) => resolveSessionScrollPhase({
+      currentPhase: current,
+      event: 'resume-stable',
+    }));
+  }, [clearResumePhaseSettleLoop, commitSessionScrollPhase]);
+
+  const startResumeScrollPhase = useCallback(() => {
+    if (!isMobileLayout || isWorkspaceHome || isNewChatPlaceholder || !activeChatIdResolved) {
+      return;
+    }
+
+    clearResumePhaseSettleLoop();
+    commitSessionScrollPhase((current) => resolveSessionScrollPhase({
+      currentPhase: current,
+      event: 'resume-start',
+    }));
+
+    const settle = () => {
+      const currentPhase = sessionScrollPhaseRef.current;
+      if (currentPhase !== 'resuming' && currentPhase !== 'viewport-reflow') {
+        clearResumePhaseSettleLoop();
+        return;
+      }
+
+      const nextMetrics = {
+        scrollTop: getWindowScrollTop(),
+        viewportHeight: window.visualViewport?.height ?? window.innerHeight,
+      };
+
+      if (resumePreviousMetricsRef.current && hasResumePhaseSettled({
+        previousScrollTop: resumePreviousMetricsRef.current.scrollTop,
+        nextScrollTop: nextMetrics.scrollTop,
+        previousViewportHeight: resumePreviousMetricsRef.current.viewportHeight,
+        nextViewportHeight: nextMetrics.viewportHeight,
+      })) {
+        resumeStableFrameCountRef.current += 1;
+      } else {
+        resumeStableFrameCountRef.current = 0;
+      }
+
+      resumePreviousMetricsRef.current = nextMetrics;
+      if (resumeStableFrameCountRef.current >= 2) {
+        completeResumeScrollPhase();
+        return;
+      }
+
+      resumeSettleRafRef.current = window.requestAnimationFrame(settle);
+    };
+
+    resumeSettleRafRef.current = window.requestAnimationFrame(settle);
+    resumeSettleTimeoutRef.current = window.setTimeout(() => {
+      completeResumeScrollPhase();
+    }, RESUME_SCROLL_SETTLE_TIMEOUT_MS);
+  }, [
+    activeChatIdResolved,
+    clearResumePhaseSettleLoop,
+    commitSessionScrollPhase,
+    completeResumeScrollPhase,
+    isMobileLayout,
+    isNewChatPlaceholder,
+    isWorkspaceHome,
+  ]);
   const persistedPermissions = useMemo(
     () => hydratePersistedPermissions(nonLifecycleEvents),
     [nonLifecycleEvents],
@@ -1177,7 +1276,12 @@ export function ChatInterface({
   }, [setExpandedActionRunIds]);
 
   const loadOlderHistory = useCallback(async () => {
-    if (shouldBlockLoadOlder({ isTailLayoutSettling, isLoadingOlder, hasMoreBefore })) {
+    if (shouldBlockLoadOlder({
+      isTailLayoutSettling,
+      isLoadingOlder,
+      hasMoreBefore,
+      scrollPhase: sessionScrollPhase,
+    })) {
       return;
     }
 
@@ -1216,7 +1320,7 @@ export function ChatInterface({
       const delta = Math.max(0, nextStream.scrollHeight - previousHeight);
       nextStream.scrollTop = previousTop + delta;
     });
-  }, [hasMoreBefore, isLoadingOlder, isMobileLayout, isTailLayoutSettling, loadOlder]);
+  }, [hasMoreBefore, isLoadingOlder, isMobileLayout, isTailLayoutSettling, loadOlder, sessionScrollPhase]);
 
   const syncComposerDockMetrics = useCallback(() => {
     const shell = chatShellRef.current;
@@ -1572,6 +1676,54 @@ export function ChatInterface({
   }, [syncLastUserMessageJumpTarget]);
 
   useEffect(() => {
+    if (!isMobileLayout || isWorkspaceHome || isNewChatPlaceholder || !activeChatIdResolved) {
+      clearResumePhaseSettleLoop();
+      commitSessionScrollPhase('idle');
+      return;
+    }
+
+    const onResume = () => {
+      if (document.visibilityState === 'hidden') {
+        return;
+      }
+      startResumeScrollPhase();
+    };
+    const onViewportChanged = () => {
+      const currentPhase = sessionScrollPhaseRef.current;
+      if (currentPhase !== 'resuming' && currentPhase !== 'viewport-reflow') {
+        return;
+      }
+      commitSessionScrollPhase((phase) => resolveSessionScrollPhase({
+        currentPhase: phase,
+        event: 'viewport-changed',
+      }));
+    };
+
+    window.addEventListener('focus', onResume);
+    window.addEventListener('pageshow', onResume);
+    document.addEventListener('visibilitychange', onResume);
+    window.visualViewport?.addEventListener('resize', onViewportChanged);
+    window.visualViewport?.addEventListener('scroll', onViewportChanged);
+
+    return () => {
+      clearResumePhaseSettleLoop();
+      window.removeEventListener('focus', onResume);
+      window.removeEventListener('pageshow', onResume);
+      document.removeEventListener('visibilitychange', onResume);
+      window.visualViewport?.removeEventListener('resize', onViewportChanged);
+      window.visualViewport?.removeEventListener('scroll', onViewportChanged);
+    };
+  }, [
+    activeChatIdResolved,
+    clearResumePhaseSettleLoop,
+    commitSessionScrollPhase,
+    isMobileLayout,
+    isNewChatPlaceholder,
+    isWorkspaceHome,
+    startResumeScrollPhase,
+  ]);
+
+  useEffect(() => {
     if (!isMobileLayout) {
       shouldStickToBottomRef.current = true;
       syncScrollToBottomButton();
@@ -1579,6 +1731,9 @@ export function ChatInterface({
     }
 
     const updateStickState = () => {
+      if (sessionScrollPhaseRef.current === 'resuming' || sessionScrollPhaseRef.current === 'viewport-reflow') {
+        return;
+      }
       const nearBottom = isNearWindowBottom();
       shouldStickToBottomRef.current = nearBottom;
       setShowScrollToBottom(!nearBottom);
@@ -1603,7 +1758,12 @@ export function ChatInterface({
     }
 
     const onWindowScroll = () => {
-      if (shouldBlockLoadOlder({ isTailLayoutSettling: isTailLayoutSettlingRef.current, isLoadingOlder, hasMoreBefore })) {
+      if (shouldBlockLoadOlder({
+        isTailLayoutSettling: isTailLayoutSettlingRef.current,
+        isLoadingOlder,
+        hasMoreBefore,
+        scrollPhase: sessionScrollPhaseRef.current,
+      })) {
         return;
       }
       if (getWindowScrollTop() <= 96) {
@@ -2047,7 +2207,12 @@ export function ChatInterface({
     shouldStickToBottomRef.current = nearBottom;
     setShowScrollToBottom(!nearBottom);
     syncLastUserMessageJumpTarget();
-    if (!shouldBlockLoadOlder({ isTailLayoutSettling: isTailLayoutSettlingRef.current, isLoadingOlder, hasMoreBefore }) && stream.scrollTop <= 96) {
+    if (!shouldBlockLoadOlder({
+      isTailLayoutSettling: isTailLayoutSettlingRef.current,
+      isLoadingOlder,
+      hasMoreBefore,
+      scrollPhase: sessionScrollPhaseRef.current,
+    }) && stream.scrollTop <= 96) {
       void loadOlderHistory();
     }
   }
