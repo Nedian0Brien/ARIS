@@ -12,6 +12,17 @@ type LayoutModule = {
       createdAt: string | null;
     }>;
   };
+  resolveWorkspaceEntryPageId?: (layout: {
+    version: number;
+    activePage: { kind: 'chat' } | { kind: 'panel'; panelId: string };
+    panels: Array<{
+      id: string;
+      type: string;
+      title: string;
+      config: Record<string, unknown>;
+      createdAt: string | null;
+    }>;
+  }) => string;
 };
 
 async function loadLayoutModule(): Promise<LayoutModule> {
@@ -63,5 +74,26 @@ describe('workspace panel layout normalization', () => {
         },
       ],
     });
+  });
+
+  it('enters the workspace on chat even when a panel was previously active', async () => {
+    const mod = await loadLayoutModule();
+
+    expect(typeof mod.resolveWorkspaceEntryPageId).toBe('function');
+    if (typeof mod.resolveWorkspaceEntryPageId !== 'function') return;
+
+    expect(mod.resolveWorkspaceEntryPageId({
+      version: 1,
+      activePage: { kind: 'panel', panelId: 'panel-preview-1' },
+      panels: [
+        {
+          id: 'panel-preview-1',
+          type: 'preview',
+          title: 'Preview',
+          config: { port: 3305, path: '/' },
+          createdAt: '2026-04-16T00:00:00.000Z',
+        },
+      ],
+    })).toBe('chat');
   });
 });
