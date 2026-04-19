@@ -166,7 +166,7 @@ export function trimEventsPageWindow(input: {
   trimFrom: 'start' | 'end';
 }): { events: UiEvent[]; pageSizes: number[]; trimmedCount: number } {
   const { events, maxPages, trimFrom } = input;
-  let nextPageSizes = [...input.pageSizes];
+  const nextPageSizes = [...input.pageSizes];
   let trimmedCount = 0;
 
   while (nextPageSizes.length > maxPages) {
@@ -337,6 +337,7 @@ export function useSessionEvents(
     includeUnassigned,
     hydratedInitialEvents,
     hydratedInitialHasMoreBefore,
+    initialEventsMatchChat,
     initialEventsChatId,
     waitForInitialClientSync,
   ]);

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui';
 import { Sparkles, LogOut, LayoutDashboard, Terminal, FolderTree, Settings, Sun, Moon, Monitor } from 'lucide-react';
 import type { TabType } from './BottomNav';
 import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
+import { primeAutoHideScrollState, reduceAutoHideScrollState } from './mobileScrollAutoHide';
 
 interface HeaderProps {
   userEmail: string;
@@ -15,6 +16,14 @@ interface HeaderProps {
   onTabChange?: (tab: TabType) => void;
   autoHideOnScroll?: boolean;
 }
+
+const AUTO_HIDE_RESUME_GUARD_MS = 240;
+const HEADER_AUTO_HIDE_THRESHOLDS = {
+  nearTopThreshold: 8,
+  hideAfterScrollY: 48,
+  hideDeltaThreshold: 6,
+  revealDeltaThreshold: 2,
+} as const;
 
 export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScroll = false }: HeaderProps) {
   const router = useRouter();
@@ -82,23 +91,44 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
     };
 
     const mobileQuery = window.matchMedia('(max-width: 960px)');
-    let lastScrollY = getScrollY();
     let scrollRaf: number | null = null;
+    let autoHideState = primeAutoHideScrollState({
+      currentY: getScrollY(),
+      now: Date.now(),
+      resumeGuardMs: AUTO_HIDE_RESUME_GUARD_MS,
+    });
+
+    const syncHidden = (nextHidden: boolean) => {
+      setHiddenOnScroll((previous) => (previous === nextHidden ? previous : nextHidden));
+    };
+
+    const resetAutoHideBaseline = (reveal = false) => {
+      const currentY = getScrollY();
+      autoHideState = reveal
+        ? primeAutoHideScrollState({
+            currentY,
+            now: Date.now(),
+            resumeGuardMs: AUTO_HIDE_RESUME_GUARD_MS,
+          })
+        : {
+            ...autoHideState,
+            hidden: mobileQuery.matches ? autoHideState.hidden : false,
+            lastScrollY: currentY,
+            resumeGuardUntil: 0,
+          };
+      syncHidden(autoHideState.hidden);
+    };
 
     const updateVisibility = () => {
       scrollRaf = null;
-      const currentY = getScrollY();
-      const delta = currentY - lastScrollY;
-
-      if (!mobileQuery.matches || currentY < 8) {
-        setHiddenOnScroll(false);
-      } else if (delta > 6 && currentY > 48) {
-        setHiddenOnScroll(true);
-      } else if (delta < -2) {
-        setHiddenOnScroll(false);
-      }
-
-      lastScrollY = currentY;
+      autoHideState = reduceAutoHideScrollState({
+        state: autoHideState,
+        currentY: getScrollY(),
+        now: Date.now(),
+        isMobile: mobileQuery.matches,
+        thresholds: HEADER_AUTO_HIDE_THRESHOLDS,
+      });
+      syncHidden(autoHideState.hidden);
     };
 
     const onScroll = () => {
@@ -107,17 +137,34 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
     };
 
     const onViewportChange = () => {
-      if (!mobileQuery.matches) {
-        setHiddenOnScroll(false);
+      if (scrollRaf !== null) {
+        window.cancelAnimationFrame(scrollRaf);
+        scrollRaf = null;
       }
-      lastScrollY = getScrollY();
+      resetAutoHideBaseline(false);
     };
+
+    const onResume = () => {
+      if (document.visibilityState === 'hidden') {
+        return;
+      }
+      if (scrollRaf !== null) {
+        window.cancelAnimationFrame(scrollRaf);
+        scrollRaf = null;
+      }
+      resetAutoHideBaseline(true);
+    };
+
+    syncHidden(autoHideState.hidden);
 
     window.addEventListener('scroll', onScroll, { passive: true });
     scrollContainer?.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onViewportChange, { passive: true });
     window.visualViewport?.addEventListener('scroll', onScroll, { passive: true } as EventListenerOptions);
     window.visualViewport?.addEventListener('resize', onViewportChange, { passive: true } as EventListenerOptions);
+    window.addEventListener('focus', onResume);
+    window.addEventListener('pageshow', onResume);
+    document.addEventListener('visibilitychange', onResume);
     if (typeof mobileQuery.addEventListener === 'function') {
       mobileQuery.addEventListener('change', onViewportChange);
     } else {
@@ -130,6 +177,9 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
       window.removeEventListener('resize', onViewportChange);
       window.visualViewport?.removeEventListener('scroll', onScroll);
       window.visualViewport?.removeEventListener('resize', onViewportChange);
+      window.removeEventListener('focus', onResume);
+      window.removeEventListener('pageshow', onResume);
+      document.removeEventListener('visibilitychange', onResume);
       if (typeof mobileQuery.removeEventListener === 'function') {
         mobileQuery.removeEventListener('change', onViewportChange);
       } else {
@@ -139,7 +189,7 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
         window.cancelAnimationFrame(scrollRaf);
       }
     };
-  }, [autoHideOnScroll]);
+  }, [activeTab, autoHideOnScroll]);
 
   useEffect(() => {
     const root = document.documentElement;

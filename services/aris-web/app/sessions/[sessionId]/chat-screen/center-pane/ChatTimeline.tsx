@@ -215,6 +215,8 @@ export function ChatTimeline({
                       <div className={styles.messageAttachmentStrip}>
                         {userAttachments.map((attachment) => (
                           <div key={attachment.assetId} className={styles.messageAttachmentCard}>
+                            {/* Runtime-authenticated attachment previews bypass Next image optimization on purpose. */}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                               src={attachment.previewUrl}
                               alt={attachment.name}

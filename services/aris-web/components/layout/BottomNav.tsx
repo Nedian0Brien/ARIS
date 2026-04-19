@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { LayoutDashboard, Terminal, FolderTree, Settings } from 'lucide-react';
+import { primeAutoHideScrollState, reduceAutoHideScrollState } from './mobileScrollAutoHide';
 
 export type TabType = 'sessions' | 'console' | 'files' | 'settings';
 
@@ -9,6 +10,14 @@ interface BottomNavProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
 }
+
+const AUTO_HIDE_RESUME_GUARD_MS = 240;
+const BOTTOM_NAV_AUTO_HIDE_THRESHOLDS = {
+  nearTopThreshold: 32,
+  hideAfterScrollY: 72,
+  hideDeltaThreshold: 8,
+  revealDeltaThreshold: 8,
+} as const;
 
 export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   const [hidden, setHidden] = useState(false);
@@ -29,22 +38,24 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
       setHidden(nextHidden);
     };
 
-    lastScrollY.current = getScrollY();
+    let autoHideState = primeAutoHideScrollState({
+      currentY: getScrollY(),
+      now: Date.now(),
+      resumeGuardMs: AUTO_HIDE_RESUME_GUARD_MS,
+    });
+    lastScrollY.current = autoHideState.lastScrollY;
+    updateHidden(autoHideState.hidden);
 
     const updateVisibility = () => {
-      const currentY = getScrollY();
-      const delta = currentY - lastScrollY.current;
-      const movementThreshold = 8;
-
-      if (currentY < 32) {
-        updateHidden(false);
-      } else if (delta > movementThreshold && currentY > 72) {
-        updateHidden(true);
-      } else if (delta < -movementThreshold) {
-        updateHidden(false);
-      }
-
-      lastScrollY.current = currentY;
+      autoHideState = reduceAutoHideScrollState({
+        state: autoHideState,
+        currentY: getScrollY(),
+        now: Date.now(),
+        isMobile: window.innerWidth < 768,
+        thresholds: BOTTOM_NAV_AUTO_HIDE_THRESHOLDS,
+      });
+      lastScrollY.current = autoHideState.lastScrollY;
+      updateHidden(autoHideState.hidden);
       scrollRafRef.current = null;
     };
 
@@ -54,23 +65,54 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
     };
 
     const onResize = () => {
-      if (window.innerWidth >= 768) {
-        updateHidden(false);
+      if (scrollRafRef.current !== null) {
+        window.cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
       }
-      lastScrollY.current = getScrollY();
+      autoHideState = {
+        ...autoHideState,
+        hidden: window.innerWidth < 768 ? autoHideState.hidden : false,
+        lastScrollY: getScrollY(),
+        resumeGuardUntil: 0,
+      };
+      lastScrollY.current = autoHideState.lastScrollY;
+      updateHidden(autoHideState.hidden);
+    };
+
+    const onResume = () => {
+      if (document.visibilityState === 'hidden') {
+        return;
+      }
+      if (scrollRafRef.current !== null) {
+        window.cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+      autoHideState = primeAutoHideScrollState({
+        currentY: getScrollY(),
+        now: Date.now(),
+        resumeGuardMs: AUTO_HIDE_RESUME_GUARD_MS,
+      });
+      lastScrollY.current = autoHideState.lastScrollY;
+      updateHidden(autoHideState.hidden);
     };
 
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onResize);
+    window.addEventListener('focus', onResume);
+    window.addEventListener('pageshow', onResume);
+    document.addEventListener('visibilitychange', onResume);
     return () => {
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onResize);
+      window.removeEventListener('focus', onResume);
+      window.removeEventListener('pageshow', onResume);
+      document.removeEventListener('visibilitychange', onResume);
       if (scrollRafRef.current !== null) {
         window.cancelAnimationFrame(scrollRafRef.current);
         scrollRafRef.current = null;
       }
     };
-  }, []);
+  }, [activeTab]);
 
   const syncIndicator = useCallback(() => {
     const nav = navRef.current;
