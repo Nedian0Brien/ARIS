@@ -439,6 +439,7 @@ export function ChatInterface({
     hasMoreBefore,
     isLoadingOlder,
     hasLoadedCurrentChat,
+    resetToLatestWindow,
   } = useSessionEvents(
     sessionId,
     activeChatIdResolved,
@@ -647,6 +648,7 @@ export function ChatInterface({
     isWorkspaceHome,
     isMobileLayout,
     initialShowChatEntryLoading,
+    resetToLatestWindow,
     scrollRef,
     latestVisibleEventIdRef,
   });

@@ -6,6 +6,7 @@ const SAFETY_RECONCILE_INTERVAL_MS = 15000;
 const FALLBACK_POLL_INTERVAL_MS = 4000;
 const MAX_POLL_INTERVAL_MS = 30000;
 const EVENTS_PAGE_LIMIT = 40;
+export const MAX_LOADED_EVENT_PAGES = 3;
 const STREAM_RECONNECT_DELAY_MS = 1500;
 const RATE_LIMIT_RETRY_DEFAULT_MS = 10_000;
 const isDocumentVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
@@ -121,6 +122,78 @@ export function getScopedSessionEvents(
   return eventsForChatId === activeChatId ? events : [];
 }
 
+export function appendIncomingCountToPageSizes(
+  pageSizes: number[],
+  incomingCount: number,
+  pageLimit: number,
+): number[] {
+  if (incomingCount <= 0) {
+    return [...pageSizes];
+  }
+
+  const nextPageSizes = [...pageSizes];
+  let remaining = incomingCount;
+
+  if (nextPageSizes.length === 0) {
+    while (remaining > 0) {
+      nextPageSizes.push(Math.min(pageLimit, remaining));
+      remaining -= pageLimit;
+    }
+    return nextPageSizes;
+  }
+
+  const latestPageIndex = nextPageSizes.length - 1;
+  const latestPageSize = nextPageSizes[latestPageIndex] ?? 0;
+  const latestCapacity = Math.max(0, pageLimit - latestPageSize);
+  if (latestCapacity > 0) {
+    const fillCount = Math.min(latestCapacity, remaining);
+    nextPageSizes[latestPageIndex] = latestPageSize + fillCount;
+    remaining -= fillCount;
+  }
+
+  while (remaining > 0) {
+    nextPageSizes.push(Math.min(pageLimit, remaining));
+    remaining -= pageLimit;
+  }
+
+  return nextPageSizes;
+}
+
+export function trimEventsPageWindow(input: {
+  events: UiEvent[];
+  pageSizes: number[];
+  maxPages: number;
+  trimFrom: 'start' | 'end';
+}): { events: UiEvent[]; pageSizes: number[]; trimmedCount: number } {
+  const { events, maxPages, trimFrom } = input;
+  let nextPageSizes = [...input.pageSizes];
+  let trimmedCount = 0;
+
+  while (nextPageSizes.length > maxPages) {
+    if (trimFrom === 'start') {
+      trimmedCount += nextPageSizes.shift() ?? 0;
+    } else {
+      trimmedCount += nextPageSizes.pop() ?? 0;
+    }
+  }
+
+  if (trimmedCount <= 0) {
+    return {
+      events,
+      pageSizes: nextPageSizes,
+      trimmedCount: 0,
+    };
+  }
+
+  return {
+    events: trimFrom === 'start'
+      ? events.slice(trimmedCount)
+      : events.slice(0, Math.max(0, events.length - trimmedCount)),
+    pageSizes: nextPageSizes,
+    trimmedCount,
+  };
+}
+
 function areEventsEqual(prev: UiEvent[], next: UiEvent[]): boolean {
   if (prev.length !== next.length) {
     return false;
@@ -211,6 +284,7 @@ export function useSessionEvents(
   );
   const [hasMoreBefore, setHasMoreBefore] = useState<boolean>(hydratedInitialHasMoreBefore);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const [isResettingToLatest, setIsResettingToLatest] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [hasLoadedCurrentChat, setHasLoadedCurrentChat] = useState(
     shouldMarkCurrentChatLoadedInitially({
@@ -222,8 +296,10 @@ export function useSessionEvents(
   const hasMoreBeforeRef = useRef<boolean>(hydratedInitialHasMoreBefore);
   const loadingOlderRef = useRef<boolean>(false);
   const terminalStatusRef = useRef<number | null>(null);
+  const pageSizesRef = useRef<number[]>(hydratedInitialEvents.length > 0 ? [hydratedInitialEvents.length] : []);
   const pollBackoffMsRef = useRef<number>(FALLBACK_POLL_INTERVAL_MS);
   const rateLimitUntilMsRef = useRef<number | null>(null);
+  const resetToLatestPromiseRef = useRef<Promise<void> | null>(null);
   const hasCompletedInitialClientSyncRef = useRef(
     shouldMarkCurrentChatLoadedInitially({
       initialEventsMatchChat,
@@ -242,9 +318,12 @@ export function useSessionEvents(
     eventsRef.current = hydratedInitialEvents;
     setHasMoreBefore(hydratedInitialHasMoreBefore);
     hasMoreBeforeRef.current = hydratedInitialHasMoreBefore;
+    pageSizesRef.current = hydratedInitialEvents.length > 0 ? [hydratedInitialEvents.length] : [];
     loadingOlderRef.current = false;
     terminalStatusRef.current = null;
     setIsLoadingOlder(false);
+    setIsResettingToLatest(false);
+    resetToLatestPromiseRef.current = null;
     setSyncError(null);
     const initiallyLoaded = shouldMarkCurrentChatLoadedInitially({
       initialEventsMatchChat,
@@ -276,6 +355,42 @@ export function useSessionEvents(
   );
   const scopedHasMoreBefore = eventsForChatId === chatId ? hasMoreBefore : false;
   const scopedIsLoadingOlder = eventsForChatId === chatId ? isLoadingOlder : false;
+
+  const appendIncomingEvents = useCallback((incomingEvents: UiEvent[]) => {
+    if (incomingEvents.length === 0) {
+      return { appendedCount: 0, trimmedCount: 0 };
+    }
+
+    const currentEvents = eventsRef.current;
+    const existingIds = new Set(currentEvents.map((event) => event.id));
+    const uniqueIncomingEvents = incomingEvents.filter((event) => !existingIds.has(event.id));
+    if (uniqueIncomingEvents.length === 0) {
+      return { appendedCount: 0, trimmedCount: 0 };
+    }
+
+    const mergedEvents = mergeEvents([...currentEvents, ...uniqueIncomingEvents]);
+    const nextPageSizes = appendIncomingCountToPageSizes(
+      pageSizesRef.current,
+      uniqueIncomingEvents.length,
+      EVENTS_PAGE_LIMIT,
+    );
+    const trimmed = trimEventsPageWindow({
+      events: mergedEvents,
+      pageSizes: nextPageSizes,
+      maxPages: MAX_LOADED_EVENT_PAGES,
+      trimFrom: 'start',
+    });
+
+    eventsRef.current = trimmed.events;
+    pageSizesRef.current = trimmed.pageSizes;
+    setEventsForChatId(chatId);
+    setEvents((prev) => (areEventsEqual(prev, trimmed.events) ? prev : trimmed.events));
+
+    return {
+      appendedCount: uniqueIncomingEvents.length,
+      trimmedCount: trimmed.trimmedCount,
+    };
+  }, [chatId]);
 
   const refreshEvents = useCallback(async (force = false) => {
     if (!enabled && !force) {
@@ -332,22 +447,21 @@ export function useSessionEvents(
         return;
       }
       const nextEvents = body.events;
-      setEvents((prev) => {
-        const merged = mergeEvents([...prev, ...nextEvents]);
-        return areEventsEqual(prev, merged) ? prev : merged;
-      });
+      const { appendedCount, trimmedCount } = appendIncomingEvents(nextEvents);
       if (!latestId && typeof body.page?.hasMoreBefore === 'boolean') {
         setHasMoreBefore(body.page.hasMoreBefore);
+      } else if (trimmedCount > 0) {
+        setHasMoreBefore(true);
       }
       pollBackoffMsRef.current = FALLBACK_POLL_INTERVAL_MS;
       rateLimitUntilMsRef.current = null;
       setSyncError(null);
-      if (!hasCompletedInitialClientSyncRef.current) {
+      if (!hasCompletedInitialClientSyncRef.current || appendedCount > 0 || nextEvents.length === 0) {
         hasCompletedInitialClientSyncRef.current = true;
         setHasLoadedCurrentChat(true);
       }
     }
-  }, [enabled, sessionId, chatId, includeUnassigned]);
+  }, [appendIncomingEvents, enabled, sessionId, chatId, includeUnassigned]);
 
   const loadOlder = useCallback(async (): Promise<{ loadedCount: number; hasMoreBefore: boolean }> => {
     if (loadingOlderRef.current || !hasMoreBeforeRef.current) {
@@ -403,10 +517,24 @@ export function useSessionEvents(
         return { loadedCount: 0, hasMoreBefore: hasMoreBeforeRef.current };
       }
 
-      setEvents((prev) => {
-        const merged = mergeEvents([...olderEvents, ...prev]);
-        return areEventsEqual(prev, merged) ? prev : merged;
+      const currentEvents = eventsRef.current;
+      const existingIds = new Set(currentEvents.map((event) => event.id));
+      const uniqueOlderEvents = olderEvents.filter((event) => !existingIds.has(event.id));
+      const mergedEvents = mergeEvents([...uniqueOlderEvents, ...currentEvents]);
+      const nextPageSizes = uniqueOlderEvents.length > 0
+        ? [uniqueOlderEvents.length, ...pageSizesRef.current]
+        : [...pageSizesRef.current];
+      const trimmed = trimEventsPageWindow({
+        events: mergedEvents,
+        pageSizes: nextPageSizes,
+        maxPages: MAX_LOADED_EVENT_PAGES,
+        trimFrom: 'end',
       });
+
+      eventsRef.current = trimmed.events;
+      pageSizesRef.current = trimmed.pageSizes;
+      setEventsForChatId(chatId);
+      setEvents((prev) => (areEventsEqual(prev, trimmed.events) ? prev : trimmed.events));
       setHasMoreBefore(nextHasMoreBefore);
       pollBackoffMsRef.current = FALLBACK_POLL_INTERVAL_MS;
       rateLimitUntilMsRef.current = null;
@@ -430,6 +558,69 @@ export function useSessionEvents(
       setIsLoadingOlder(false);
     }
   }, [sessionId, chatId, includeUnassigned]);
+
+  const resetToLatestWindow = useCallback(async () => {
+    if (!chatId) {
+      return;
+    }
+    if (resetToLatestPromiseRef.current) {
+      return resetToLatestPromiseRef.current;
+    }
+
+    const snapshotChatId = chatId;
+    const promise = (async () => {
+      setIsResettingToLatest(true);
+      try {
+        const params = new URLSearchParams();
+        params.set('limit', String(EVENTS_PAGE_LIMIT));
+        appendChatFilters(params, chatId, includeUnassigned);
+
+        const response = await fetch(
+          `/api/runtime/sessions/${encodeURIComponent(sessionId)}/events?${params.toString()}`,
+          { cache: 'no-store' },
+        );
+        if (response.status === 401) {
+          redirectToLoginWithNext();
+          throw new SessionEventsHttpError(401, '로그인이 만료되었습니다.');
+        }
+        if (response.status === 404) {
+          terminalStatusRef.current = 404;
+          throw new SessionEventsHttpError(404, '워크스페이스가 종료되었거나 삭제되었습니다.');
+        }
+        if (!response.ok) {
+          throw new SessionEventsHttpError(response.status, `최신 이벤트 API 응답 오류 (${response.status})`);
+        }
+
+        if (activeChatIdRef.current !== snapshotChatId) {
+          return;
+        }
+
+        const body = (await response.json()) as EventsApiResponse;
+        const nextEvents = Array.isArray(body.events) ? mergeEvents(body.events) : [];
+
+        if (activeChatIdRef.current !== snapshotChatId) {
+          return;
+        }
+
+        eventsRef.current = nextEvents;
+        pageSizesRef.current = nextEvents.length > 0 ? [nextEvents.length] : [];
+        setEventsForChatId(chatId);
+        setEvents((prev) => (areEventsEqual(prev, nextEvents) ? prev : nextEvents));
+        setHasMoreBefore(typeof body.page?.hasMoreBefore === 'boolean' ? body.page.hasMoreBefore : false);
+        setSyncError(null);
+        if (!hasCompletedInitialClientSyncRef.current) {
+          hasCompletedInitialClientSyncRef.current = true;
+          setHasLoadedCurrentChat(true);
+        }
+      } finally {
+        resetToLatestPromiseRef.current = null;
+        setIsResettingToLatest(false);
+      }
+    })();
+
+    resetToLatestPromiseRef.current = promise;
+    return promise;
+  }, [chatId, includeUnassigned, sessionId]);
 
   useEffect(() => {
     let disposed = false;
@@ -605,10 +796,10 @@ export function useSessionEvents(
           if (!payload.event) {
             return;
           }
-          setEvents((prev) => {
-            const merged = mergeEvents([...prev, payload.event!]);
-            return areEventsEqual(prev, merged) ? prev : merged;
-          });
+          const { trimmedCount } = appendIncomingEvents([payload.event!]);
+          if (trimmedCount > 0) {
+            setHasMoreBefore(true);
+          }
           setSyncError(null);
         } catch {
           // Ignore malformed stream payloads and continue receiving subsequent events.
@@ -747,11 +938,13 @@ export function useSessionEvents(
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', resumeRealtime);
     };
-  }, [enabled, sessionId, chatId, includeUnassigned, refreshEvents, waitForInitialClientSync]);
+  }, [appendIncomingEvents, enabled, sessionId, chatId, includeUnassigned, refreshEvents, waitForInitialClientSync]);
 
   const addEvent = (event: UiEvent) => {
-    setEventsForChatId(chatId);
-    setEvents((prev) => mergeEvents([...prev, event]));
+    const { trimmedCount } = appendIncomingEvents([event]);
+    if (trimmedCount > 0) {
+      setHasMoreBefore(true);
+    }
   };
 
   return {
@@ -763,5 +956,7 @@ export function useSessionEvents(
     hasMoreBefore: scopedHasMoreBefore,
     isLoadingOlder: scopedIsLoadingOlder,
     hasLoadedCurrentChat,
+    resetToLatestWindow,
+    isResettingToLatest,
   };
 }
