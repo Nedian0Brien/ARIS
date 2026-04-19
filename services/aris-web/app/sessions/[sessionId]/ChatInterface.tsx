@@ -47,9 +47,9 @@ import { WorkspaceHome } from './WorkspaceHome';
 import { deriveWorkspaceTitle } from './workspaceHome';
 import { buildWorkspacePagerItems, moveWorkspacePager } from './workspace-panels/pagerModel';
 import { WorkspacePager } from './workspace-panels/WorkspacePager';
-import { useWorkspacePanels } from './workspace-panels/useWorkspacePanels';
 import { CreatePanelPage } from './workspace-panels/CreatePanelPage';
 import { PanelPageRenderer } from './workspace-panels/PanelPageRenderer';
+import { useWorkspacePanels } from './workspace-panels/useWorkspacePanels';
 import { useChatSessionActions } from './chat-screen/actions/useChatSessionActions';
 import { ChatComposer } from './chat-screen/center-pane/ChatComposer';
 import { FileBrowserModal } from './chat-screen/center-pane/FileBrowserModal';
@@ -91,6 +91,7 @@ import {
   WORKSPACE_FILE_OPEN_EVENT,
 } from './chat-screen/constants';
 import {
+  approvalPolicyLabel,
   buildChatTitleFromFirstPrompt,
   buildChatUrl,
   buildProgressLabel,
@@ -2352,227 +2353,227 @@ export function ChatInterface({
           onActivePageChange={setActiveWorkspacePageId}
           renderChatPage={() => (
             <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
-              <header className={styles.centerHeader} ref={centerHeaderRef}>
+          <header className={styles.centerHeader} ref={centerHeaderRef}>
+            <button
+              type="button"
+              className={styles.sidebarToggleButton}
+              onClick={() => {
+                if (isCustomizationOverlayLayout) {
+                  setIsCustomizationSidebarOpen(false);
+                }
+                setIsChatSidebarOpen((prev) => !prev);
+              }}
+              aria-label={isChatSidebarOpen ? '채팅 사이드바 닫기' : '채팅 사이드바 열기'}
+              title={isChatSidebarOpen ? '채팅 사이드바 닫기' : '채팅 사이드바 열기'}
+            >
+              {isChatSidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+            </button>
+            <span className={`${styles.agentAvatarHero} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
+              <agentMeta.Icon size={20} />
+            </span>
+            <div className={styles.centerHeaderInfo}>
+              <h2 className={styles.centerTitle}>{isMobileLayout ? sessionTitle : displayName}</h2>
+              {isMobileLayout ? (
+                <div className={styles.centerMetaRow}>
+                  <span className={styles.centerAgentLabel}>{agentMeta.label}</span>
+                  <span className={styles.centerChatLabel}>{currentChatTitle}</span>
+                </div>
+              ) : (
+                <span className={styles.centerAgentLabel}>{agentMeta.label} Agent · {sessionTitle}</span>
+              )}
+            </div>
+            <div className={styles.centerHeaderActions}>
+              <button
+                type="button"
+                className={styles.sidebarToggleButton}
+                onClick={() => handleMoveWorkspacePage('previous')}
+                aria-label="이전 작업 화면으로 이동"
+                title="이전 작업 화면으로 이동"
+                disabled={activeWorkspacePageId === 'chat'}
+              >
+                <ChevronLeft size={15} />
+              </button>
+              <button
+                type="button"
+                className={styles.sidebarToggleButton}
+                onClick={() => handleMoveWorkspacePage('next')}
+                aria-label="다음 작업 화면으로 이동"
+                title="다음 작업 화면으로 이동"
+              >
+                <ChevronRight size={15} />
+              </button>
+              {showDebugToggleInHeader && (
                 <button
                   type="button"
-                  className={styles.sidebarToggleButton}
-                  onClick={() => {
-                    if (isCustomizationOverlayLayout) {
-                      setIsCustomizationSidebarOpen(false);
-                    }
-                    setIsChatSidebarOpen((prev) => !prev);
-                  }}
-                  aria-label={isChatSidebarOpen ? '채팅 사이드바 닫기' : '채팅 사이드바 열기'}
-                  title={isChatSidebarOpen ? '채팅 사이드바 닫기' : '채팅 사이드바 열기'}
+                  className={`${styles.debugToggleButton} ${isDebugMode ? styles.debugToggleButtonActive : ''}`}
+                  onClick={toggleDebugMode}
+                  aria-pressed={isDebugMode}
+                  aria-label={isDebugMode ? '디버그 모드 끄기' : '디버그 모드 켜기'}
+                  title={isDebugMode ? '디버그 모드 끄기' : '디버그 모드 켜기'}
                 >
-                  {isChatSidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+                  <Bug size={14} />
+                  <span>디버그</span>
                 </button>
-                <span className={`${styles.agentAvatarHero} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
-                  <agentMeta.Icon size={20} />
-                </span>
-                <div className={styles.centerHeaderInfo}>
-                  <h2 className={styles.centerTitle}>{isMobileLayout ? sessionTitle : displayName}</h2>
-                  {isMobileLayout ? (
-                    <div className={styles.centerMetaRow}>
-                      <span className={styles.centerAgentLabel}>{agentMeta.label}</span>
-                      <span className={styles.centerChatLabel}>{currentChatTitle}</span>
+              )}
+              <span
+                className={`${styles.connectionPill} ${
+                  connectionState === 'running'
+                    ? styles.connectionRunning
+                    : connectionState === 'connected'
+                      ? styles.connectionGood
+                      : styles.connectionWarn
+                }`}
+              >
+                {connectionState === 'running' ? (
+                  <Activity size={13} className={styles.connectionRunningIcon} />
+                ) : connectionState === 'connected' ? (
+                  <CheckCircle2 size={13} />
+                ) : (
+                  <CircleAlert size={13} />
+                )}
+                {connectionLabel}
+              </span>
+              <div className={styles.contextMenuWrap} ref={contextMenuRef}>
+                <button
+                  type="button"
+                  className={styles.contextMenuButton}
+                  aria-label="워크스페이스 컨텍스트 메뉴"
+                  onClick={() => setIsContextMenuOpen((prev) => !prev)}
+                >
+                  <MoreVertical size={16} />
+                </button>
+                {isContextMenuOpen && (
+                  <div className={styles.contextMenuPanel} role="menu">
+                    <div className={styles.contextMenuMeta}>
+                      <span>Pending: {effectivePendingPermissions.length}</span>
                     </div>
-                  ) : (
-                    <span className={styles.centerAgentLabel}>{agentMeta.label} Agent · {sessionTitle}</span>
-                  )}
-                </div>
-                <div className={styles.centerHeaderActions}>
-                  <button
-                    type="button"
-                    className={styles.sidebarToggleButton}
-                    onClick={() => handleMoveWorkspacePage('previous')}
-                    aria-label="이전 작업 화면으로 이동"
-                    title="이전 작업 화면으로 이동"
-                    disabled={activeWorkspacePageId === 'chat'}
-                  >
-                    <ChevronLeft size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.sidebarToggleButton}
-                    onClick={() => handleMoveWorkspacePage('next')}
-                    aria-label="다음 작업 화면으로 이동"
-                    title="다음 작업 화면으로 이동"
-                  >
-                    <ChevronRight size={15} />
-                  </button>
-                  {showDebugToggleInHeader && (
-                    <button
-                      type="button"
-                      className={`${styles.debugToggleButton} ${isDebugMode ? styles.debugToggleButtonActive : ''}`}
-                      onClick={toggleDebugMode}
-                      aria-pressed={isDebugMode}
-                      aria-label={isDebugMode ? '디버그 모드 끄기' : '디버그 모드 켜기'}
-                      title={isDebugMode ? '디버그 모드 끄기' : '디버그 모드 켜기'}
-                    >
-                      <Bug size={14} />
-                      <span>디버그</span>
-                    </button>
-                  )}
-                  <span
-                    className={`${styles.connectionPill} ${
-                      connectionState === 'running'
-                        ? styles.connectionRunning
-                        : connectionState === 'connected'
-                          ? styles.connectionGood
-                          : styles.connectionWarn
-                    }`}
-                  >
-                    {connectionState === 'running' ? (
-                      <Activity size={13} className={styles.connectionRunningIcon} />
-                    ) : connectionState === 'connected' ? (
-                      <CheckCircle2 size={13} />
-                    ) : (
-                      <CircleAlert size={13} />
-                    )}
-                    {connectionLabel}
-                  </span>
-                  <div className={styles.contextMenuWrap} ref={contextMenuRef}>
-                    <button
-                      type="button"
-                      className={styles.contextMenuButton}
-                      aria-label="워크스페이스 컨텍스트 메뉴"
-                      onClick={() => setIsContextMenuOpen((prev) => !prev)}
-                    >
-                      <MoreVertical size={16} />
-                    </button>
-                    {isContextMenuOpen && (
-                      <div className={styles.contextMenuPanel} role="menu">
-                        <div className={styles.contextMenuMeta}>
-                          <span>Pending: {effectivePendingPermissions.length}</span>
-                        </div>
-                        {isOperator && (
-                          <div className={styles.contextMenuPolicyRow}>
-                            <label htmlFor="approval-policy-select" className={styles.contextMenuPolicyLabel}>
-                              Policy
-                            </label>
-                            <select
-                              id="approval-policy-select"
-                              className={styles.contextMenuPolicySelect}
-                              value={approvalPolicy ?? 'on-request'}
-                              disabled={isPolicyChanging}
-                              onChange={(e) => {
-                                const next = e.target.value as ApprovalPolicy;
-                                setIsPolicyChanging(true);
-                                fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}`, {
-                                  method: 'PATCH',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ approvalPolicy: next }),
-                                })
-                                  .then((res) => {
-                                    if (!res.ok) throw new Error('Failed to update policy');
-                                    setApprovalPolicy(next);
-                                  })
-                                  .catch(() => {})
-                                  .finally(() => setIsPolicyChanging(false));
-                              }}
-                            >
-                              <option value="on-request">ON REQUEST</option>
-                              <option value="on-failure">ON FAILURE</option>
-                              <option value="never">NEVER</option>
-                              <option value="yolo">YOLO</option>
-                            </select>
-                          </div>
-                        )}
-                        {!isOperator && (
-                          <div className={styles.contextMenuMeta}>
-                            <span>Policy: {approvalPolicyLabel(approvalPolicy)}</span>
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          className={styles.contextMenuItem}
-                          disabled={!activeChatIdResolved}
-                          onClick={() => {
-                            void handleCopyChatId();
+                    {isOperator && (
+                      <div className={styles.contextMenuPolicyRow}>
+                        <label htmlFor="approval-policy-select" className={styles.contextMenuPolicyLabel}>
+                          Policy
+                        </label>
+                        <select
+                          id="approval-policy-select"
+                          className={styles.contextMenuPolicySelect}
+                          value={approvalPolicy ?? 'on-request'}
+                          disabled={isPolicyChanging}
+                          onChange={(e) => {
+                            const next = e.target.value as ApprovalPolicy;
+                            setIsPolicyChanging(true);
+                            fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ approvalPolicy: next }),
+                            })
+                              .then((res) => {
+                                if (!res.ok) throw new Error('Failed to update policy');
+                                setApprovalPolicy(next);
+                              })
+                              .catch(() => {})
+                              .finally(() => setIsPolicyChanging(false));
                           }}
                         >
-                          {chatIdCopyState === 'copied'
-                            ? '현재 채팅 ID 복사됨'
-                            : chatIdCopyState === 'failed'
-                              ? '채팅 ID 복사 실패 (다시 시도)'
-                              : '현재 채팅 ID 복사'}
-                        </button>
-                        <button
-                          type="button"
-                          className={styles.contextMenuItem}
-                          disabled={!activeChatIdResolved}
-                          onClick={() => {
-                            void handleCopyChatThreadIdsJson();
-                          }}
-                        >
-                          {idBundleCopyState === 'copied'
-                            ? '채팅/스레드 ID JSON 복사됨'
-                            : idBundleCopyState === 'failed'
-                              ? 'JSON 복사 실패 (다시 시도)'
-                              : '채팅/스레드 ID JSON 복사'}
-                        </button>
-                        <button
-                          type="button"
-                          className={styles.contextMenuItem}
-                          onClick={() => {
-                            setIsContextMenuOpen(false);
-                            void handleAbortRun();
-                          }}
-                          disabled={!isOperator || !isAgentRunning || isAborting}
-                        >
-                          {isAborting ? '중단 중...' : '에이전트 실행 중단'}
-                        </button>
-                        <button
-                          type="button"
-                          className={styles.contextMenuItem}
-                          onClick={() => {
-                            setIsContextMenuOpen(false);
-                            jumpToPendingPermission();
-                          }}
-                          disabled={effectivePendingPermissions.length === 0}
-                        >
-                          대기 승인 바로 이동
-                        </button>
-                        {!showDebugToggleInHeader && (
-                          <button
-                            type="button"
-                            className={`${styles.contextMenuItem} ${isDebugMode ? styles.contextMenuItemActive : ''}`}
-                            onClick={() => {
-                              setIsContextMenuOpen(false);
-                              toggleDebugMode();
-                            }}
-                          >
-                            {isDebugMode ? '디버그 모드 끄기' : '디버그 모드 켜기'}
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className={styles.contextMenuItem}
-                          onClick={() => {
-                            setShowPermissionQueue((prev) => !prev);
-                          }}
-                        >
-                          권한 요청 {showPermissionQueue ? '숨기기' : '표시하기'}
-                        </button>
+                          <option value="on-request">ON REQUEST</option>
+                          <option value="on-failure">ON FAILURE</option>
+                          <option value="never">NEVER</option>
+                          <option value="yolo">YOLO</option>
+                        </select>
                       </div>
                     )}
+                    {!isOperator && (
+                      <div className={styles.contextMenuMeta}>
+                        <span>Policy: {approvalPolicyLabel(approvalPolicy)}</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      className={styles.contextMenuItem}
+                      disabled={!activeChatIdResolved}
+                      onClick={() => {
+                        void handleCopyChatId();
+                      }}
+                    >
+                      {chatIdCopyState === 'copied'
+                        ? '현재 채팅 ID 복사됨'
+                        : chatIdCopyState === 'failed'
+                          ? '채팅 ID 복사 실패 (다시 시도)'
+                          : '현재 채팅 ID 복사'}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.contextMenuItem}
+                      disabled={!activeChatIdResolved}
+                      onClick={() => {
+                        void handleCopyChatThreadIdsJson();
+                      }}
+                    >
+                      {idBundleCopyState === 'copied'
+                        ? '채팅/스레드 ID JSON 복사됨'
+                        : idBundleCopyState === 'failed'
+                          ? 'JSON 복사 실패 (다시 시도)'
+                          : '채팅/스레드 ID JSON 복사'}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.contextMenuItem}
+                      onClick={() => {
+                        setIsContextMenuOpen(false);
+                        void handleAbortRun();
+                      }}
+                      disabled={!isOperator || !isAgentRunning || isAborting}
+                    >
+                      {isAborting ? '중단 중...' : '에이전트 실행 중단'}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.contextMenuItem}
+                      onClick={() => {
+                        setIsContextMenuOpen(false);
+                        jumpToPendingPermission();
+                      }}
+                      disabled={effectivePendingPermissions.length === 0}
+                    >
+                      대기 승인 바로 이동
+                    </button>
+                    {!showDebugToggleInHeader && (
+                      <button
+                        type="button"
+                        className={`${styles.contextMenuItem} ${isDebugMode ? styles.contextMenuItemActive : ''}`}
+                        onClick={() => {
+                          setIsContextMenuOpen(false);
+                          toggleDebugMode();
+                        }}
+                      >
+                        {isDebugMode ? '디버그 모드 끄기' : '디버그 모드 켜기'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className={styles.contextMenuItem}
+                      onClick={() => {
+                        setShowPermissionQueue((prev) => !prev);
+                      }}
+                    >
+                      권한 요청 {showPermissionQueue ? '숨기기' : '표시하기'}
+                    </button>
                   </div>
-                </div>
-              </header>
+                )}
+              </div>
+            </div>
+          </header>
 
-              <ChatStatusNotices
-                runtimeNotice={runtimeNotice}
-                showDisconnectRetry={showDisconnectRetry}
-                onRetryDisconnected={() => {
-                  void handleRetryDisconnected();
-                }}
-                isRetryDisabled={!isOperator || isAgentRunning || isSubmitting || !lastSubmittedPayload}
-                isSubmitting={isSubmitting}
-                effectivePendingPermissionCount={effectivePendingPermissions.length}
-                pendingPermissionsCount={pendingPermissions.length}
-                onJumpToPendingPermission={jumpToPendingPermission}
-              />
+          <ChatStatusNotices
+            runtimeNotice={runtimeNotice}
+            showDisconnectRetry={showDisconnectRetry}
+            onRetryDisconnected={() => {
+              void handleRetryDisconnected();
+            }}
+            isRetryDisabled={!isOperator || isAgentRunning || isSubmitting || !lastSubmittedPayload}
+            isSubmitting={isSubmitting}
+            effectivePendingPermissionCount={effectivePendingPermissions.length}
+            pendingPermissionsCount={pendingPermissions.length}
+            onJumpToPendingPermission={jumpToPendingPermission}
+          />
 
           <>
           <div
