@@ -10,7 +10,7 @@ const SWIPE_THRESHOLD_PX = 56;
 const GESTURE_LOCK_THRESHOLD_PX = 8;
 
 type WorkspacePagerProps = {
-  items: WorkspacePagerItem[];
+  items: readonly WorkspacePagerItem[];
   activePageId: string;
   onActivePageChange?: (pageId: string) => void;
   renderChatPage: () => ReactNode;

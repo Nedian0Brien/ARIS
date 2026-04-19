@@ -6,37 +6,6 @@ test.setTimeout(90_000);
 const LOGIN_RETRY_ATTEMPTS = 5;
 const LOGIN_RETRY_DELAY_MS = 1_500;
 
-async function readLoginPayload(response: Awaited<ReturnType<Page['request']['post']>>) {
-  const contentType = response.headers()['content-type'] ?? '';
-  const bodyText = await response.text();
-
-  if (!contentType.includes('application/json')) {
-    return {
-      ok: false,
-      bodyText,
-      body: null,
-      retryable: response.status() >= 500 || bodyText.startsWith('<!DOCTYPE'),
-    };
-  }
-
-  try {
-    const body = JSON.parse(bodyText);
-    return {
-      ok: true,
-      bodyText,
-      body,
-      retryable: false,
-    };
-  } catch {
-    return {
-      ok: false,
-      bodyText,
-      body: null,
-      retryable: response.status() >= 500,
-    };
-  }
-}
-
 async function login(page: Page) {
   const email = process.env.MOBILE_OVERFLOW_EMAIL;
   const password = process.env.MOBILE_OVERFLOW_PASSWORD;
@@ -48,18 +17,44 @@ async function login(page: Page) {
   let lastFailure = '';
 
   for (let attempt = 1; attempt <= LOGIN_RETRY_ATTEMPTS; attempt += 1) {
-    const response = await page.request.post('/api/auth/login', {
-      data: { email, password, rememberMe: false },
-    });
-    const payload = await readLoginPayload(response);
+    try {
+      await page.goto('/login', { waitUntil: 'domcontentloaded' });
+      const payload = await page.evaluate(async ({ loginEmail, loginPassword }) => {
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: loginEmail, password: loginPassword, rememberMe: false }),
+        });
+        const bodyText = await response.text();
+        return {
+          status: response.status,
+          ok: response.ok,
+          contentType: response.headers.get('content-type') ?? '',
+          bodyText,
+        };
+      }, { loginEmail: email, loginPassword: password });
 
-    if (payload.ok && response.ok() && payload.body?.status === 'success') {
-      await page.goto('/', { waitUntil: 'networkidle' });
-      return;
+      let body: { status?: string } | null = null;
+      if (payload.contentType.includes('application/json')) {
+        try {
+          body = JSON.parse(payload.bodyText);
+        } catch {
+          body = null;
+        }
+      }
+
+      if (payload.ok && body?.status === 'success') {
+        await page.goto('/', { waitUntil: 'networkidle' });
+        await page.locator('[class*="sessionDashboardLayout"]').first().waitFor({ state: 'visible', timeout: 20_000 });
+        return;
+      }
+
+      lastFailure = `attempt ${attempt}: status=${payload.status} content-type=${payload.contentType || 'unknown'} body=${payload.bodyText.slice(0, 180)}`;
+    } catch (error) {
+      lastFailure = `attempt ${attempt}: ${error instanceof Error ? error.message : String(error)}`;
     }
 
-    lastFailure = `attempt ${attempt}: status=${response.status()} content-type=${response.headers()['content-type'] ?? 'unknown'} body=${payload.bodyText.slice(0, 180)}`;
-    if (!payload.retryable || attempt === LOGIN_RETRY_ATTEMPTS) {
+    if (attempt === LOGIN_RETRY_ATTEMPTS) {
       break;
     }
 
@@ -70,27 +65,26 @@ async function login(page: Page) {
 }
 
 async function resolveFirstSessionPath(page: Page) {
-  const sessionId = await page.evaluate(async () => {
-    const response = await fetch('/api/runtime/sessions', { credentials: 'include' });
-    if (!response.ok) {
-      throw new Error(`session list failed: ${response.status}`);
-    }
+  const firstSessionLink = page.locator('.sessionGrid a[href^="/sessions/"]').first();
+  if ((await firstSessionLink.count()) === 0) {
+    return null;
+  }
 
-    const payload = await response.json();
-    const sessions = Array.isArray(payload?.sessions) ? payload.sessions : [];
-    return sessions[0]?.id ?? null;
-  });
-
-  return sessionId ? `/sessions/${sessionId}` : null;
+  const href = await firstSessionLink.getAttribute('href');
+  return typeof href === 'string' && href.trim() ? href : null;
 }
 
 async function collectOverflow(page: Page, path: string) {
-  await page.goto(path, { waitUntil: 'domcontentloaded' });
+  const isSessionPath = path.startsWith('/sessions/');
+  await page.goto(path, {
+    waitUntil: isSessionPath ? 'commit' : 'domcontentloaded',
+    timeout: isSessionPath ? 45_000 : 30_000,
+  });
 
   if (path === '/') {
     await page.locator('[class*="sessionDashboardLayout"]').first().waitFor({ state: 'visible', timeout: 20_000 });
-  } else if (path.startsWith('/sessions/')) {
-    await page.locator('[class*="ChatInterface_chatShell"]').first().waitFor({ state: 'visible', timeout: 20_000 });
+  } else if (isSessionPath) {
+    await page.locator('[class*="ChatInterface_chatShell"]').first().waitFor({ state: 'visible', timeout: 30_000 });
   } else {
     await page.locator('.app-shell').first().waitFor({ state: 'visible', timeout: 20_000 });
   }

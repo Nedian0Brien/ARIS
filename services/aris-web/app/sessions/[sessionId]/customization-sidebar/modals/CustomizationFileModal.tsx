@@ -56,6 +56,7 @@ export function CustomizationFileModal({
   }
 
   const isPreviewBlocked = Boolean(filePreviewBlock);
+  const blockedPreview = filePreviewBlock!;
 
   return createPortal(
     <div
@@ -99,13 +100,13 @@ export function CustomizationFileModal({
                 <AlertTriangle size={18} />
                 <div className={styles.filePreviewBlockedText}>
                   <strong>
-                    {filePreviewBlock.reason === 'binary'
+                    {blockedPreview.reason === 'binary'
                       ? '바이너리 파일은 에디터에서 미리보기를 지원하지 않습니다.'
                       : '큰 파일은 우측 모달에서 직접 열지 않습니다.'}
                   </strong>
-                  <span>파일 크기: {formatBytes(filePreviewBlock.sizeBytes)}</span>
+                  <span>파일 크기: {formatBytes(blockedPreview.sizeBytes)}</span>
                   <span>
-                    {filePreviewBlock.reason === 'binary'
+                    {blockedPreview.reason === 'binary'
                       ? '텍스트 파일만 미리보기와 편집을 지원합니다.'
                       : '대용량 파일은 별도 편집기나 로컬 도구에서 여는 방식을 권장합니다.'}
                   </span>
