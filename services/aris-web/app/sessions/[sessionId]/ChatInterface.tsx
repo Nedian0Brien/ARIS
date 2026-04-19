@@ -60,8 +60,8 @@ import { useComposerState } from './chat-screen/hooks/useComposerState';
 import { useWorkspaceBrowserState } from './chat-screen/hooks/useWorkspaceBrowserState';
 import { ChatSidebarPane } from './chat-screen/left-sidebar/ChatSidebarPane';
 import { useChatSidebarSectionViews } from './chat-screen/left-sidebar/useChatSidebarSectionViews';
-import { CustomizationSidebarContainer } from './chat-screen/right-pane/CustomizationSidebarContainer';
 import { WorkspacePanelsPane } from './chat-screen/right-pane/WorkspacePanelsPane';
+import { RightPaneLayout } from './chat-screen/right-pane/RightPaneLayout';
 import styles from './ChatInterface.module.css';
 import { shouldShowChatTransitionLoading } from './chatSelection';
 import {
@@ -2854,47 +2854,18 @@ export function ChatInterface({
         />
       </main>
 
-      {isCustomizationOverlayLayout && (
-        <>
-          {isCustomizationSidebarOpen && (
-            <button
-              type="button"
-              className={styles.customizationBackdrop}
-              onClick={() => setIsCustomizationSidebarOpen(false)}
-              aria-label="Customization 패널 닫기"
-            />
-          )}
-          <aside
-            className={`${styles.customizationDrawer} ${
-              isCustomizationSidebarOpen ? styles.customizationDrawerOpen : styles.customizationDrawerClosed
-            }`}
-            aria-hidden={!isCustomizationSidebarOpen}
-          >
-            <CustomizationSidebarContainer
-              sessionId={sessionId}
-              projectName={projectName}
-              workspaceRootPath={normalizedWorkspaceRootPath}
-              requestedFile={isCustomizationOverlayLayout ? sidebarFileRequest : null}
-              isPinned={isCustomizationPinned}
-              onTogglePinned={handleToggleCustomizationPinned}
-              mode={isMobileLayout ? 'mobile' : 'desktop'}
-              onRequestClose={() => setIsCustomizationSidebarOpen(false)}
-            />
-          </aside>
-        </>
-      )}
-
-      <aside className={styles.rightPanel}>
-        <CustomizationSidebarContainer
-          sessionId={sessionId}
-          projectName={projectName}
-          workspaceRootPath={normalizedWorkspaceRootPath}
-          requestedFile={isCustomizationOverlayLayout ? null : sidebarFileRequest}
-          isPinned={isCustomizationPinned}
-          onTogglePinned={handleToggleCustomizationPinned}
-          mode="desktop"
-        />
-      </aside>
+      <RightPaneLayout
+        sessionId={sessionId}
+        projectName={projectName}
+        normalizedWorkspaceRootPath={normalizedWorkspaceRootPath}
+        isMobileLayout={isMobileLayout}
+        isCustomizationOverlayLayout={isCustomizationOverlayLayout}
+        isCustomizationSidebarOpen={isCustomizationSidebarOpen}
+        isCustomizationPinned={isCustomizationPinned}
+        sidebarFileRequest={sidebarFileRequest}
+        onToggleCustomizationPinned={handleToggleCustomizationPinned}
+        onCloseCustomizationSidebar={() => setIsCustomizationSidebarOpen(false)}
+      />
     </div>
 
     {/* ── 파일 탐색기 모달 ── */}
