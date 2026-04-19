@@ -45,13 +45,13 @@ import { shouldShowDebugToggleInHeader } from './chatDebugMode';
 import { WorkspaceHome } from './WorkspaceHome';
 import { deriveWorkspaceTitle } from './workspaceHome';
 import { buildWorkspacePagerItems, moveWorkspacePager } from './workspace-panels/pagerModel';
-import { WorkspacePager } from './workspace-panels/WorkspacePager';
 import { useWorkspacePanels } from './workspace-panels/useWorkspacePanels';
 import { useChatSessionActions } from './chat-screen/actions/useChatSessionActions';
 import { ChatComposer } from './chat-screen/center-pane/ChatComposer';
 import { FileBrowserModal } from './chat-screen/center-pane/FileBrowserModal';
 import { ChatHeader } from './chat-screen/center-pane/ChatHeader';
 import { ChatStatusNotices } from './chat-screen/center-pane/ChatStatusNotices';
+import { WorkspacePagerShell } from './chat-screen/center-pane/WorkspacePagerShell';
 import { useChatLayoutState } from './chat-screen/hooks/useChatLayoutState';
 import { useChatRuntimeUi } from './chat-screen/hooks/useChatRuntimeUi';
 import { useChatScreenState } from './chat-screen/hooks/useChatScreenState';
@@ -2344,515 +2344,514 @@ export function ChatInterface({
         ElapsedTimerComponent={ElapsedTimer}
       />
 
-      <main className={`${styles.centerPanel} ${isMobileLayout ? styles.centerPanelMobileScroll : ''}`} ref={centerPanelRef}>
-        <WorkspacePager
-          items={workspacePagerItems}
-          activePageId={activeWorkspacePageId}
-          onActivePageChange={setActiveWorkspacePageId}
-          renderChatPage={() => (
-            <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
+      <WorkspacePagerShell
+        centerPanelRef={centerPanelRef}
+        isMobileLayout={isMobileLayout}
+        workspacePagerItems={workspacePagerItems}
+        activeWorkspacePageId={activeWorkspacePageId}
+        setActiveWorkspacePageId={setActiveWorkspacePageId}
+        renderChatPage={() => (
+          <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
             <ChatHeader
               activeChatIdResolved={activeChatIdResolved}
               activeWorkspacePageId={activeWorkspacePageId}
               agentMeta={agentMeta}
               agentAvatarToneClass={getAgentAvatarToneClass(agentMeta.tone)}
               approvalPolicy={approvalPolicy}
-            chatIdCopyState={chatIdCopyState}
-            centerHeaderRef={centerHeaderRef}
-            connectionLabel={connectionLabel}
-            connectionState={connectionState}
-            contextMenuRef={contextMenuRef}
-            currentChatTitle={currentChatTitle}
-            displayName={displayName}
-            effectivePendingPermissionCount={effectivePendingPermissions.length}
-            handleAbortRun={handleAbortRun}
-            handleCopyChatId={handleCopyChatId}
-            handleCopyChatThreadIdsJson={handleCopyChatThreadIdsJson}
-            handleMoveWorkspacePage={handleMoveWorkspacePage}
-            idBundleCopyState={idBundleCopyState}
-            isAborting={isAborting}
-            isAgentRunning={isAgentRunning}
-            isChatSidebarOpen={isChatSidebarOpen}
-            isContextMenuOpen={isContextMenuOpen}
-            isDebugMode={isDebugMode}
-            isMobileLayout={isMobileLayout}
-            isOperator={isOperator}
-            isPolicyChanging={isPolicyChanging}
-            jumpToPendingPermission={jumpToPendingPermission}
-            onToggleChatSidebar={() => {
-              if (isCustomizationOverlayLayout) {
-                setIsCustomizationSidebarOpen(false);
-              }
-              setIsChatSidebarOpen((prev) => !prev);
-            }}
-            onToggleContextMenu={() => setIsContextMenuOpen((prev) => !prev)}
-            onToggleDebugMode={toggleDebugMode}
-            onTogglePermissionQueue={() => {
-              setShowPermissionQueue((prev) => !prev);
-            }}
-            onUpdateApprovalPolicy={(next) => {
-              setIsPolicyChanging(true);
-              fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ approvalPolicy: next }),
-              })
-                .then((res) => {
-                  if (!res.ok) throw new Error('Failed to update policy');
-                  setApprovalPolicy(next);
+              chatIdCopyState={chatIdCopyState}
+              centerHeaderRef={centerHeaderRef}
+              connectionLabel={connectionLabel}
+              connectionState={connectionState}
+              contextMenuRef={contextMenuRef}
+              currentChatTitle={currentChatTitle}
+              displayName={displayName}
+              effectivePendingPermissionCount={effectivePendingPermissions.length}
+              handleAbortRun={handleAbortRun}
+              handleCopyChatId={handleCopyChatId}
+              handleCopyChatThreadIdsJson={handleCopyChatThreadIdsJson}
+              handleMoveWorkspacePage={handleMoveWorkspacePage}
+              idBundleCopyState={idBundleCopyState}
+              isAborting={isAborting}
+              isAgentRunning={isAgentRunning}
+              isChatSidebarOpen={isChatSidebarOpen}
+              isContextMenuOpen={isContextMenuOpen}
+              isDebugMode={isDebugMode}
+              isMobileLayout={isMobileLayout}
+              isOperator={isOperator}
+              isPolicyChanging={isPolicyChanging}
+              jumpToPendingPermission={jumpToPendingPermission}
+              onToggleChatSidebar={() => {
+                if (isCustomizationOverlayLayout) {
+                  setIsCustomizationSidebarOpen(false);
+                }
+                setIsChatSidebarOpen((prev) => !prev);
+              }}
+              onToggleContextMenu={() => setIsContextMenuOpen((prev) => !prev)}
+              onToggleDebugMode={toggleDebugMode}
+              onTogglePermissionQueue={() => {
+                setShowPermissionQueue((prev) => !prev);
+              }}
+              onUpdateApprovalPolicy={(next) => {
+                setIsPolicyChanging(true);
+                fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ approvalPolicy: next }),
                 })
-                .catch(() => {})
-                .finally(() => setIsPolicyChanging(false));
-            }}
-            sessionTitle={sessionTitle}
-            showDebugToggleInHeader={showDebugToggleInHeader}
-            showPermissionQueue={showPermissionQueue}
-          />
+                  .then((res) => {
+                    if (!res.ok) throw new Error('Failed to update policy');
+                    setApprovalPolicy(next);
+                  })
+                  .catch(() => {})
+                  .finally(() => setIsPolicyChanging(false));
+              }}
+              sessionTitle={sessionTitle}
+              showDebugToggleInHeader={showDebugToggleInHeader}
+              showPermissionQueue={showPermissionQueue}
+            />
 
-          <ChatStatusNotices
-            runtimeNotice={runtimeNotice}
-            showDisconnectRetry={showDisconnectRetry}
-            onRetryDisconnected={() => {
-              void handleRetryDisconnected();
-            }}
-            isRetryDisabled={!isOperator || isAgentRunning || isSubmitting || !lastSubmittedPayload}
-            isSubmitting={isSubmitting}
-            effectivePendingPermissionCount={effectivePendingPermissions.length}
-            pendingPermissionsCount={pendingPermissions.length}
-            onJumpToPendingPermission={jumpToPendingPermission}
-          />
+            <ChatStatusNotices
+              runtimeNotice={runtimeNotice}
+              showDisconnectRetry={showDisconnectRetry}
+              onRetryDisconnected={() => {
+                void handleRetryDisconnected();
+              }}
+              isRetryDisabled={!isOperator || isAgentRunning || isSubmitting || !lastSubmittedPayload}
+              isSubmitting={isSubmitting}
+              effectivePendingPermissionCount={effectivePendingPermissions.length}
+              pendingPermissionsCount={pendingPermissions.length}
+              onJumpToPendingPermission={jumpToPendingPermission}
+            />
 
-          <>
-          <div
-            className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''} ${chatEntryPendingRevealClassName}`}
-            ref={scrollRef}
-            onScroll={handleStreamScroll}
-            aria-hidden={showChatTransitionLoading}
-          >
-            {isWorkspaceHome ? (
-              <WorkspaceHome
-                sessionId={sessionId}
-                sessionTitle={sessionTitle}
-                projectPath={projectName}
-                agentFlavor={agentFlavor}
-                chats={chats}
-                onSelectChat={(chatId) => {
-                  setIsWorkspaceHome(false);
-                  setIsNewChatPlaceholder(false);
-                  setSelectedChatId(chatId);
-                  writeChatIdToHistory(buildChatUrl(sessionId, chatId), 'push');
-                }}
-                onNewChat={() => {
-                  setIsWorkspaceHome(false);
-                  setIsNewChatPlaceholder(true);
-                  setSelectedChatId(null);
-                  if (isMobileLayout) {
-                    setIsChatSidebarOpen(false);
-                  }
-                }}
-                onBack={() => router.back()}
-              />
-            ) : isNewChatPlaceholder ? (
-              <div className={styles.agentSelectorContainer}>
-                <button
-                  type="button"
-                  className={styles.agentSelectorBackButton}
-                  onClick={() => { setIsWorkspaceHome(true); setIsNewChatPlaceholder(false); }}
-                >
-                  <ChevronLeft size={14} />
-                  뒤로
-                </button>
-                <h3 className={styles.agentSelectorTitle}>어떤 에이전트와 대화를 시작할까요?</h3>
-                <div className={styles.agentSelectorGrid}>
-                  {CHAT_AGENT_CHOICES.map((choice) => {
-                    const choiceMeta = resolveAgentMeta(choice);
-                    const ChoiceIcon = choiceMeta.Icon;
-                    return (
-                      <button
-                        key={choice}
-                        type="button"
-                        className={styles.agentSelectorCard}
-                        onClick={() => void handleCreateChat(choice)}
-                        style={{ '--agent-color': `var(--agent-${choice}-accent)`, '--agent-bg': `var(--agent-${choice}-bg)` } as React.CSSProperties}
-                        >
-                        <div className={styles.agentSelectorIconWrap}>
-                          <ChoiceIcon size={28} />
-                        </div>
-                        <div>
-                          <div className={styles.agentSelectorLabel}>{choiceMeta.label}</div>
-                          <div className={styles.agentSelectorDesc}>{resolveAgentSubtitle(choice)}</div>
-                        </div>
-                        </button>
+            <>
+              <div
+                className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''} ${chatEntryPendingRevealClassName}`}
+                ref={scrollRef}
+                onScroll={handleStreamScroll}
+                aria-hidden={showChatTransitionLoading}
+              >
+                {isWorkspaceHome ? (
+                  <WorkspaceHome
+                    sessionId={sessionId}
+                    sessionTitle={sessionTitle}
+                    projectPath={projectName}
+                    agentFlavor={agentFlavor}
+                    chats={chats}
+                    onSelectChat={(chatId) => {
+                      setIsWorkspaceHome(false);
+                      setIsNewChatPlaceholder(false);
+                      setSelectedChatId(chatId);
+                      writeChatIdToHistory(buildChatUrl(sessionId, chatId), 'push');
+                    }}
+                    onNewChat={() => {
+                      setIsWorkspaceHome(false);
+                      setIsNewChatPlaceholder(true);
+                      setSelectedChatId(null);
+                      if (isMobileLayout) {
+                        setIsChatSidebarOpen(false);
+                      }
+                    }}
+                    onBack={() => router.back()}
+                  />
+                ) : isNewChatPlaceholder ? (
+                  <div className={styles.agentSelectorContainer}>
+                    <button
+                      type="button"
+                      className={styles.agentSelectorBackButton}
+                      onClick={() => { setIsWorkspaceHome(true); setIsNewChatPlaceholder(false); }}
+                    >
+                      <ChevronLeft size={14} />
+                      뒤로
+                    </button>
+                    <h3 className={styles.agentSelectorTitle}>어떤 에이전트와 대화를 시작할까요?</h3>
+                    <div className={styles.agentSelectorGrid}>
+                      {CHAT_AGENT_CHOICES.map((choice) => {
+                        const choiceMeta = resolveAgentMeta(choice);
+                        const ChoiceIcon = choiceMeta.Icon;
+                        return (
+                          <button
+                            key={choice}
+                            type="button"
+                            className={styles.agentSelectorCard}
+                            onClick={() => void handleCreateChat(choice)}
+                            style={{ '--agent-color': `var(--agent-${choice}-accent)`, '--agent-bg': `var(--agent-${choice}-bg)` } as React.CSSProperties}
+                          >
+                            <div className={styles.agentSelectorIconWrap}>
+                              <ChoiceIcon size={28} />
+                            </div>
+                            <div>
+                              <div className={styles.agentSelectorLabel}>{choiceMeta.label}</div>
+                              <div className={styles.agentSelectorDesc}>{resolveAgentSubtitle(choice)}</div>
+                            </div>
+                          </button>
                         );
-                        })}
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {timelineItems.length === 0 && activeChat && (() => {
+                      const AgentIcon = agentMeta.Icon;
+                      const quickStarts = AGENT_QUICK_STARTS[activeAgentFlavor] || AGENT_QUICK_STARTS.codex || [];
+                      return (
+                        <div className={styles.emptyChatState}>
+                          {isAutoGeneratedChatTitle(activeChat.title) && (
+                            <button
+                              type="button"
+                              className={styles.emptyChatBackButton}
+                              onClick={() => {
+                                const chatId = activeChat.id;
+                                void fetch(
+                                  `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chatId)}`,
+                                  { method: 'DELETE' },
+                                ).then((r) => r.json()).then((body: { chats?: import('@/lib/happy/types').SessionChat[] }) => {
+                                  if (Array.isArray(body.chats)) {
+                                    setChats(sortSessionChats(body.chats));
+                                  } else {
+                                    setChats((prev) => prev.filter((c) => c.id !== chatId));
+                                  }
+                                }).catch(() => {
+                                  setChats((prev) => prev.filter((c) => c.id !== chatId));
+                                });
+                                setSelectedChatId(null);
+                                setIsWorkspaceHome(true);
+                              }}
+                            >
+                              <ChevronLeft size={14} />
+                              뒤로
+                            </button>
+                          )}
+                          <div className={styles.backgroundLogoContainer} style={{ '--agent-color': `var(--agent-${activeAgentFlavor}-accent)` } as React.CSSProperties}>
+                            <AgentIcon className={styles.backgroundLogoIcon} />
+                          </div>
+                          <div className={styles.quickStartContainer}>
+                            {quickStarts.map((qs, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                className={styles.quickStartChip}
+                                onClick={() => {
+                                  setPrompt(qs);
+                                  setTimeout(() => composerInputRef.current?.focus(), 0);
+                                }}
+                                style={{ '--agent-color': `var(--agent-${activeAgentFlavor}-accent)` } as React.CSSProperties}
+                              >
+                                <MessageSquarePlus size={16} className={styles.quickStartIcon} />
+                                {qs}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        </div>
-                        ) : (
-                        <>
-                          {timelineItems.length === 0 && activeChat && (() => {
-                            const AgentIcon = agentMeta.Icon;
-                            const quickStarts = AGENT_QUICK_STARTS[activeAgentFlavor] || AGENT_QUICK_STARTS.codex || [];
-                            return (
-                              <div className={styles.emptyChatState}>
-                                {isAutoGeneratedChatTitle(activeChat.title) && (
-                                  <button
-                                    type="button"
-                                    className={styles.emptyChatBackButton}
-                                    onClick={() => {
-                                      const chatId = activeChat.id;
-                                      void fetch(
-                                        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chatId)}`,
-                                        { method: 'DELETE' },
-                                      ).then((r) => r.json()).then((body: { chats?: import('@/lib/happy/types').SessionChat[] }) => {
-                                        if (Array.isArray(body.chats)) {
-                                          setChats(sortSessionChats(body.chats));
-                                        } else {
-                                          setChats((prev) => prev.filter((c) => c.id !== chatId));
-                                        }
-                                      }).catch(() => {
-                                        setChats((prev) => prev.filter((c) => c.id !== chatId));
-                                      });
-                                      setSelectedChatId(null);
-                                      setIsWorkspaceHome(true);
-                                    }}
-                                  >
-                                    <ChevronLeft size={14} />
-                                    뒤로
-                                  </button>
-                                )}
-                                <div className={styles.backgroundLogoContainer} style={{ '--agent-color': `var(--agent-${activeAgentFlavor}-accent)` } as React.CSSProperties}>
-                                  <AgentIcon className={styles.backgroundLogoIcon} />
-                                </div>
-                                <div className={styles.quickStartContainer}>
-                                  {quickStarts.map((qs, i) => (
-                                    <button
-                                      key={i}
-                                      type="button"
-                                      className={styles.quickStartChip}
-                                      onClick={() => {
-                                        setPrompt(qs);
-                                        setTimeout(() => composerInputRef.current?.focus(), 0);
-                                      }}
-                                      style={{ '--agent-color': `var(--agent-${activeAgentFlavor}-accent)` } as React.CSSProperties}
-                                    >
-                                      <MessageSquarePlus size={16} className={styles.quickStartIcon} />
-                                      {qs}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })()}
-                          {timelineItems.map((timelineItem) => {                        if (timelineItem.type === 'permission') {
+                      );
+                    })()}
+                    {timelineItems.map((timelineItem) => {
+                      if (timelineItem.type === 'permission') {
                         const permission = timelineItem.permission;
                         return (
-                        <PermissionRequestMessage
-                        key={permission.id}
-                        anchorId={`permission-${permission.id}`}
-                        permission={permission}
-                        disabled={!isOperator}
-                        loading={loadingPermissionId === permission.id}
-                        interactive={permission.availability === 'live'}
-                        pendingHint={permission.availability === 'live'
-                          ? null
-                          : '실시간 승인 세션을 찾을 수 없습니다. 같은 요청을 다시 실행해 주세요.'}
-                        onDecide={(permissionId, decision) => {
-                          void decidePermission(permissionId, decision);
-                        }}
-                        />
+                          <PermissionRequestMessage
+                            key={permission.id}
+                            anchorId={`permission-${permission.id}`}
+                            permission={permission}
+                            disabled={!isOperator}
+                            loading={loadingPermissionId === permission.id}
+                            interactive={permission.availability === 'live'}
+                            pendingHint={permission.availability === 'live'
+                              ? null
+                              : '실시간 승인 세션을 찾을 수 없습니다. 같은 요청을 다시 실행해 주세요.'}
+                            onDecide={(permissionId, decision) => {
+                              void decidePermission(permissionId, decision);
+                            }}
+                          />
                         );
-                        }
+                      }
 
-                        const item = timelineItem.item;
-                        if (item.type === 'action_overflow') {
+                      const item = timelineItem.item;
+                      if (item.type === 'action_overflow') {
                         const overflowKindMeta = getEventKindMeta(item.kind);
                         const OverflowKindIcon = overflowKindMeta.Icon;
                         const title = item.expanded
-                        ? '반복 행동 접기'
-                        : `중간 행동 ${item.hiddenCount}개 펼치기`;
+                          ? '반복 행동 접기'
+                          : `중간 행동 ${item.hiddenCount}개 펼치기`;
                         return (
-                        <article key={`overflow-${item.id}`} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
-                        <button
-                          type="button"
-                          className={`${styles.messageBubble} ${styles.messageBubbleAction} ${styles.actionOverflowBubble} ${styles.actionOverflowToggle}`}
-                          onClick={() => toggleActionRun(item.runId)}
-                          title={title}
-                          aria-label={title}
-                          aria-expanded={item.expanded}
-                        >
-                          <div className={styles.actionOverflowContent}>
-                            {item.expanded ? (
-                              <span className={styles.actionOverflowLabel}>
-                                접기
-                                <ChevronUp size={14} />
-                              </span>
-                            ) : (
-                              <>
-                                <div className={styles.actionOverflowLeft}>
-                                  <span className={`${styles.kindChip} ${getToneClass(overflowKindMeta.tone)}`}>
-                                    <OverflowKindIcon size={12} />
-                                    {overflowKindMeta.label}
+                          <article key={`overflow-${item.id}`} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                            <button
+                              type="button"
+                              className={`${styles.messageBubble} ${styles.messageBubbleAction} ${styles.actionOverflowBubble} ${styles.actionOverflowToggle}`}
+                              onClick={() => toggleActionRun(item.runId)}
+                              title={title}
+                              aria-label={title}
+                              aria-expanded={item.expanded}
+                            >
+                              <div className={styles.actionOverflowContent}>
+                                {item.expanded ? (
+                                  <span className={styles.actionOverflowLabel}>
+                                    접기
+                                    <ChevronUp size={14} />
                                   </span>
-                                </div>
-                                <span className={styles.actionOverflowLabel}>
-                                  {item.hiddenCount}개의 행동 더 보기
-                                  <ChevronDown size={14} />
-                                </span>
-                                <div className={styles.actionOverflowRight}>
-                                  <span className={styles.actionOverflowCount}>+{item.hiddenCount}</span>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </button>
-                        </article>
-                        );
-                        }
-
-                        const event = item.event;
-                        const userEvent = isUserEvent(event);
-                        const actionEvent = !userEvent && isActionKind(event.kind);
-
-                        if (userEvent) {
-                        const userAttachments = readChatImageAttachments(event.meta);
-                        return (
-                        <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowUser}`}>
-                        <div className={`${styles.msgHeader} ${styles.msgHeaderUser}`}>
-                          <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
-                          <span className={`${styles.msgSender} ${styles.msgSenderUser}`}>YOU</span>
-                        </div>
-                        <div className={styles.messageBubbleUserStack}>
-                          <div className={`${styles.messageBubble} ${styles.messageBubbleUser} ${highlightedEventId === event.id ? styles.messageBubbleHighlight : ''}`}>
-                            {userAttachments.length > 0 && (
-                              <div className={styles.messageAttachmentStrip}>
-                                {userAttachments.map((attachment) => (
-                                  <div key={attachment.assetId} className={styles.messageAttachmentCard}>
-                                    <img
-                                      src={attachment.previewUrl}
-                                      alt={attachment.name}
-                                      className={styles.messageAttachmentImage}
-                                      loading="lazy"
-                                    />
-                                    <div className={styles.messageAttachmentMeta}>
-                                      <span className={styles.messageAttachmentName}>{attachment.name}</span>
-                                      <span className={styles.messageAttachmentSubtle}>
-                                        {attachment.width && attachment.height
-                                          ? `${attachment.width}×${attachment.height} · `
-                                          : ''}
-                                        {Math.max(1, Math.round(attachment.size / 1024))}KB
+                                ) : (
+                                  <>
+                                    <div className={styles.actionOverflowLeft}>
+                                      <span className={`${styles.kindChip} ${getToneClass(overflowKindMeta.tone)}`}>
+                                        <OverflowKindIcon size={12} />
+                                        {overflowKindMeta.label}
                                       </span>
                                     </div>
-                                  </div>
-                                ))}
+                                    <span className={styles.actionOverflowLabel}>
+                                      {item.hiddenCount}개의 행동 더 보기
+                                      <ChevronDown size={14} />
+                                    </span>
+                                    <div className={styles.actionOverflowRight}>
+                                      <span className={styles.actionOverflowCount}>+{item.hiddenCount}</span>
+                                    </div>
+                                  </>
+                                )}
                               </div>
-                            )}
-                            {renderEventPayload(event, true, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id), isDebugMode)}
-                          </div>
-                          <button
-                            type="button"
-                            className={styles.messageCopyButton}
-                            onClick={() => void handleCopyUserMessage(event)}
-                            aria-label="사용자 메시지 복사"
-                            title="사용자 메시지 복사"
-                          >
-                            {copiedUserEventId === event.id ? (
-                              <CheckCircle2 size={14} />
-                            ) : (
-                              <Copy size={14} />
-                            )}
-                          </button>
-                        </div>
-                        </article>
+                            </button>
+                          </article>
                         );
-                        }
+                      }
 
-                        if (actionEvent) {
+                      const event = item.event;
+                      const userEvent = isUserEvent(event);
+                      const actionEvent = !userEvent && isActionKind(event.kind);
+
+                      if (userEvent) {
+                        const userAttachments = readChatImageAttachments(event.meta);
+                        return (
+                          <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowUser}`}>
+                            <div className={`${styles.msgHeader} ${styles.msgHeaderUser}`}>
+                              <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
+                              <span className={`${styles.msgSender} ${styles.msgSenderUser}`}>YOU</span>
+                            </div>
+                            <div className={styles.messageBubbleUserStack}>
+                              <div className={`${styles.messageBubble} ${styles.messageBubbleUser} ${highlightedEventId === event.id ? styles.messageBubbleHighlight : ''}`}>
+                                {userAttachments.length > 0 && (
+                                  <div className={styles.messageAttachmentStrip}>
+                                    {userAttachments.map((attachment) => (
+                                      <div key={attachment.assetId} className={styles.messageAttachmentCard}>
+                                        <img
+                                          src={attachment.previewUrl}
+                                          alt={attachment.name}
+                                          className={styles.messageAttachmentImage}
+                                          loading="lazy"
+                                        />
+                                        <div className={styles.messageAttachmentMeta}>
+                                          <span className={styles.messageAttachmentName}>{attachment.name}</span>
+                                          <span className={styles.messageAttachmentSubtle}>
+                                            {attachment.width && attachment.height
+                                              ? `${attachment.width}×${attachment.height} · `
+                                              : ''}
+                                            {Math.max(1, Math.round(attachment.size / 1024))}KB
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {renderEventPayload(event, true, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id), isDebugMode)}
+                              </div>
+                              <button
+                                type="button"
+                                className={styles.messageCopyButton}
+                                onClick={() => void handleCopyUserMessage(event)}
+                                aria-label="사용자 메시지 복사"
+                                title="사용자 메시지 복사"
+                              >
+                                {copiedUserEventId === event.id ? (
+                                  <CheckCircle2 size={14} />
+                                ) : (
+                                  <Copy size={14} />
+                                )}
+                              </button>
+                            </div>
+                          </article>
+                        );
+                      }
+
+                      if (actionEvent) {
                         const expanded = expandedResultIds[event.id] ?? false;
                         return (
-                        <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
-                        <div className={`${styles.messageBubble} ${styles.messageBubbleAction}`}>
-                          {renderEventPayload(event, false, expanded, () => toggleResult(event.id), isDebugMode)}
-                        </div>
-                        </article>
+                          <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                            <div className={`${styles.messageBubble} ${styles.messageBubbleAction}`}>
+                              {renderEventPayload(event, false, expanded, () => toggleResult(event.id), isDebugMode)}
+                            </div>
+                          </article>
                         );
-                        }
+                      }
 
-              return (
-                <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
-                  <div className={styles.messageWithAvatar}>
-                    <div className={`${styles.msgAvatar} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
-                      <agentMeta.Icon size={14} />
-                    </div>
-                    <div className={styles.msgBody}>
-                      <div className={styles.msgHeader}>
-                        <span className={styles.msgSender}>{agentMeta.label}</span>
-                        <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
+                      return (
+                        <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                          <div className={styles.messageWithAvatar}>
+                            <div className={`${styles.msgAvatar} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
+                              <agentMeta.Icon size={14} />
+                            </div>
+                            <div className={styles.msgBody}>
+                              <div className={styles.msgHeader}>
+                                <span className={styles.msgSender}>{agentMeta.label}</span>
+                                <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
+                              </div>
+                              <div className={styles.agentMessageStack}>
+                                <div className={`${styles.messageBubble} ${styles.messageBubbleAgent}`}>
+                                  {renderEventPayload(event, false, expandedResultIds[event.id] ?? false, () => toggleResult(event.id), isDebugMode)}
+                                </div>
+                                {!isDebugMode && !isActionKind(event.kind) && (event.body || event.title) && (
+                                  <LinkPreviewCarousel body={event.body || event.title} />
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </>
+                )}
+
+                {isAgentRunning && (
+                  <article className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                    <div className={styles.messageWithAvatar}>
+                      <div className={`${styles.msgAvatar} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
+                        <agentMeta.Icon size={14} />
                       </div>
-                      <div className={styles.agentMessageStack}>
-                        <div className={`${styles.messageBubble} ${styles.messageBubbleAgent}`}>
-                          {renderEventPayload(event, false, expandedResultIds[event.id] ?? false, () => toggleResult(event.id), isDebugMode)}
+                      <div className={styles.msgBody}>
+                        <div className={styles.msgHeader}>
+                          <span className={styles.msgSender}>{agentMeta.label}</span>
                         </div>
-                        {!isDebugMode && !isActionKind(event.kind) && (event.body || event.title) && (
-                          <LinkPreviewCarousel body={event.body || event.title} />
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-              </>
-            )}
-
-            {isAgentRunning && (
-              <article className={`${styles.messageRow} ${styles.messageRowAgent}`}>
-                <div className={styles.messageWithAvatar}>
-                  <div className={`${styles.msgAvatar} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
-                    <agentMeta.Icon size={14} />
-                  </div>
-                  <div className={styles.msgBody}>
-                    <div className={styles.msgHeader}>
-                      <span className={styles.msgSender}>{agentMeta.label}</span>
-                    </div>
-                    <div className={styles.agentMessageStack}>
-                      <div className={`${styles.messageBubble} ${styles.messageBubbleAgent} ${styles.thinkingBubble}`}>
-                        <div className={styles.thinkingDots}>
-                          <span /><span /><span />
+                        <div className={styles.agentMessageStack}>
+                          <div className={`${styles.messageBubble} ${styles.messageBubbleAgent} ${styles.thinkingBubble}`}>
+                            <div className={styles.thinkingDots}>
+                              <span /><span /><span />
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-              </article>
-            )}
-          </div>
-
-          {!showChatTransitionLoading && showScrollToBottom && (
-            <button
-              type="button"
-              className={styles.scrollBottomButton}
-              onClick={handleJumpToBottom}
-              aria-label="맨 아래로 이동"
-              title="맨 아래로 이동"
-            >
-              <ChevronDown size={16} />
-            </button>
-          )}
-
-          {!isWorkspaceHome && (
-            <ChatComposer
-              showPendingReveal={showChatTransitionLoading}
-              agentFlavor={activeAgentFlavor}
-              AgentIcon={agentMeta.Icon}
-              activeModelShortLabel={activeModel.shortLabel}
-              activeChatIdResolved={activeChatIdResolved}
-              isOperator={isOperator}
-              isAgentRunning={isAgentRunning}
-              isAborting={isAborting}
-              prompt={prompt}
-              contextItems={contextItems}
-              imageUploadsInFlight={imageUploadsInFlight}
-              imageUploadError={imageUploadError}
-              availableChatCommands={availableChatCommands}
-              isCommandMenuOpen={isCommandMenuOpen}
-              isModelDropdownOpen={isModelDropdownOpen}
-              isGeminiModeDropdownOpen={isGeminiModeDropdownOpen}
-              activeComposerModels={activeComposerModels}
-              activeModelId={activeModelId}
-              activeGeminiMode={activeGeminiMode}
-              activeGeminiModeId={activeGeminiModeId}
-              activeGeminiModeOptions={activeGeminiModeOptions}
-              approvalPolicy={approvalPolicy}
-              selectedModelReasoningEffort={selectedModelReasoningEffort}
-              plusMenuMode={plusMenuMode}
-              textContextInput={textContextInput}
-              commandMenuRef={commandMenuRef}
-              modelDropdownRef={modelDropdownRef}
-              geminiModeDropdownRef={geminiModeDropdownRef}
-              plusMenuRef={plusMenuRef}
-              composerDockRef={composerDockRef}
-              composerInputRef={composerInputRef}
-              composerImageInputRef={composerImageInputRef}
-              onSubmit={handleSubmit}
-              onToggleCommandMenu={() => setIsCommandMenuOpen((value) => !value)}
-              onRunChatCommand={handleRunChatCommand}
-              onToggleModelDropdown={() => setIsModelDropdownOpen((value) => !value)}
-              onSelectModel={(modelId) => { void handleSelectModel(modelId); }}
-              onToggleGeminiModeDropdown={() => setIsGeminiModeDropdownOpen((value) => !value)}
-              onSelectGeminiMode={(modeId) => { void handleSelectGeminiMode(modeId); }}
-              onSelectModelReasoningEffort={(value) => { void handleSelectModelReasoningEffort(value); }}
-              onRemoveContextItem={removeContextItem}
-              onImageSelection={handleComposerImageSelection}
-              onTogglePlusMenu={() => { setPlusMenuMode((mode) => mode === 'closed' ? 'menu' : 'closed'); }}
-              onImageUploadOpen={handleImageUploadOpen}
-              onFileBrowserOpen={handleFileBrowserOpen}
-              onOpenTextContextEditor={() => {
-                setPlusMenuMode('text');
-                setTextContextInput('');
-              }}
-              onTextContextInputChange={setTextContextInput}
-              onCancelTextContext={() => setPlusMenuMode('menu')}
-              onAddTextContext={handleAddTextContext}
-              onPromptChange={setPrompt}
-              onPromptInput={resizeComposerInput}
-              onPromptFocus={handleComposerFocus}
-              onPromptKeyDown={(event) => {
-                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                  void handleSubmit(event);
-                }
-              }}
-              onAbortRun={handleAbortRun}
-            />
-          )}
-
-            {showChatTransitionLoading && (
-              <div
-                className={styles.chatTransitionOverlay}
-                role="status"
-                aria-live="polite"
-                aria-busy="true"
-                style={{ '--chat-transition-accent': `var(--agent-${activeAgentFlavor}-accent)` } as React.CSSProperties}
-              >
-                <div className={styles.chatTransitionOrb}>
-                  <span className={styles.chatTransitionSpinner} aria-hidden="true" />
-                  <div className={styles.chatTransitionLogo}>
-                    <agentMeta.Icon size={34} />
-                  </div>
-                </div>
-                <div className={styles.chatTransitionMessage}>에이전트 채팅 로딩중…</div>
+                  </article>
+                )}
               </div>
-            )}
-          </>
-        </section>
-          )}
-          renderCreatePage={() => (
-            <WorkspacePanelsPane
-              mode="create"
-              sessionId={sessionId}
-              isMobileLayout={isMobileLayout}
-              workspacePanelsError={workspacePanelsError}
-              workspacePanelsLoading={workspacePanelsLoading}
-              workspacePanelLayout={workspacePanelLayout}
-              onCreatePanel={handleCreateWorkspacePanel}
-            />
-          )}
-          renderPanelPage={(item) => {
-            return (
-              <WorkspacePanelsPane
-                mode="panel"
-                sessionId={sessionId}
-                isMobileLayout={isMobileLayout}
-                workspacePanelsError={workspacePanelsError}
-                workspacePanelsLoading={workspacePanelsLoading}
-                workspacePanelLayout={workspacePanelLayout}
-                panelId={item.panelId}
-                onSavePanel={saveWorkspacePanel}
-                onDeletePanel={deleteWorkspacePanel}
-              />
-            );
-          }}
-        />
-      </main>
+
+              {!showChatTransitionLoading && showScrollToBottom && (
+                <button
+                  type="button"
+                  className={styles.scrollBottomButton}
+                  onClick={handleJumpToBottom}
+                  aria-label="맨 아래로 이동"
+                  title="맨 아래로 이동"
+                >
+                  <ChevronDown size={16} />
+                </button>
+              )}
+
+              {!isWorkspaceHome && (
+                <ChatComposer
+                  showPendingReveal={showChatTransitionLoading}
+                  agentFlavor={activeAgentFlavor}
+                  AgentIcon={agentMeta.Icon}
+                  activeModelShortLabel={activeModel.shortLabel}
+                  activeChatIdResolved={activeChatIdResolved}
+                  isOperator={isOperator}
+                  isAgentRunning={isAgentRunning}
+                  isAborting={isAborting}
+                  prompt={prompt}
+                  contextItems={contextItems}
+                  imageUploadsInFlight={imageUploadsInFlight}
+                  imageUploadError={imageUploadError}
+                  availableChatCommands={availableChatCommands}
+                  isCommandMenuOpen={isCommandMenuOpen}
+                  isModelDropdownOpen={isModelDropdownOpen}
+                  isGeminiModeDropdownOpen={isGeminiModeDropdownOpen}
+                  activeComposerModels={activeComposerModels}
+                  activeModelId={activeModelId}
+                  activeGeminiMode={activeGeminiMode}
+                  activeGeminiModeId={activeGeminiModeId}
+                  activeGeminiModeOptions={activeGeminiModeOptions}
+                  approvalPolicy={approvalPolicy}
+                  selectedModelReasoningEffort={selectedModelReasoningEffort}
+                  plusMenuMode={plusMenuMode}
+                  textContextInput={textContextInput}
+                  commandMenuRef={commandMenuRef}
+                  modelDropdownRef={modelDropdownRef}
+                  geminiModeDropdownRef={geminiModeDropdownRef}
+                  plusMenuRef={plusMenuRef}
+                  composerDockRef={composerDockRef}
+                  composerInputRef={composerInputRef}
+                  composerImageInputRef={composerImageInputRef}
+                  onSubmit={handleSubmit}
+                  onToggleCommandMenu={() => setIsCommandMenuOpen((value) => !value)}
+                  onRunChatCommand={handleRunChatCommand}
+                  onToggleModelDropdown={() => setIsModelDropdownOpen((value) => !value)}
+                  onSelectModel={(modelId) => { void handleSelectModel(modelId); }}
+                  onToggleGeminiModeDropdown={() => setIsGeminiModeDropdownOpen((value) => !value)}
+                  onSelectGeminiMode={(modeId) => { void handleSelectGeminiMode(modeId); }}
+                  onSelectModelReasoningEffort={(value) => { void handleSelectModelReasoningEffort(value); }}
+                  onRemoveContextItem={removeContextItem}
+                  onImageSelection={handleComposerImageSelection}
+                  onTogglePlusMenu={() => { setPlusMenuMode((mode) => mode === 'closed' ? 'menu' : 'closed'); }}
+                  onImageUploadOpen={handleImageUploadOpen}
+                  onFileBrowserOpen={handleFileBrowserOpen}
+                  onOpenTextContextEditor={() => {
+                    setPlusMenuMode('text');
+                    setTextContextInput('');
+                  }}
+                  onTextContextInputChange={setTextContextInput}
+                  onCancelTextContext={() => setPlusMenuMode('menu')}
+                  onAddTextContext={handleAddTextContext}
+                  onPromptChange={setPrompt}
+                  onPromptInput={resizeComposerInput}
+                  onPromptFocus={handleComposerFocus}
+                  onPromptKeyDown={(event) => {
+                    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                      void handleSubmit(event);
+                    }
+                  }}
+                  onAbortRun={handleAbortRun}
+                />
+              )}
+
+              {showChatTransitionLoading && (
+                <div
+                  className={styles.chatTransitionOverlay}
+                  role="status"
+                  aria-live="polite"
+                  aria-busy="true"
+                  style={{ '--chat-transition-accent': `var(--agent-${activeAgentFlavor}-accent)` } as React.CSSProperties}
+                >
+                  <div className={styles.chatTransitionOrb}>
+                    <span className={styles.chatTransitionSpinner} aria-hidden="true" />
+                    <div className={styles.chatTransitionLogo}>
+                      <agentMeta.Icon size={34} />
+                    </div>
+                  </div>
+                  <div className={styles.chatTransitionMessage}>에이전트 채팅 로딩중…</div>
+                </div>
+              )}
+            </>
+          </section>
+        )}
+        renderCreatePage={() => (
+          <WorkspacePanelsPane
+            mode="create"
+            sessionId={sessionId}
+            isMobileLayout={isMobileLayout}
+            workspacePanelsError={workspacePanelsError}
+            workspacePanelsLoading={workspacePanelsLoading}
+            workspacePanelLayout={workspacePanelLayout}
+            onCreatePanel={handleCreateWorkspacePanel}
+          />
+        )}
+        renderPanelPage={(item) => (
+          <WorkspacePanelsPane
+            mode="panel"
+            sessionId={sessionId}
+            isMobileLayout={isMobileLayout}
+            workspacePanelsError={workspacePanelsError}
+            workspacePanelsLoading={workspacePanelsLoading}
+            workspacePanelLayout={workspacePanelLayout}
+            panelId={item.panelId}
+            onSavePanel={saveWorkspacePanel}
+            onDeletePanel={deleteWorkspacePanel}
+          />
+        )}
+      />
 
       <RightPaneLayout
         sessionId={sessionId}
