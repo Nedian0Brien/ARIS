@@ -103,4 +103,48 @@ describe('mobileScrollAutoHide', () => {
     expect(guarded.hidden).toBe(false);
     expect(guarded.lastScrollY).toBe(860);
   });
+
+  it('stays revealed while session scroll ownership is in a system-managed resume phase', () => {
+    const next = reduceAutoHideScrollState({
+      state: {
+        hidden: true,
+        lastScrollY: 240,
+        resumeGuardUntil: 0,
+      },
+      currentY: 860,
+      now: 3_000,
+      isMobile: true,
+      thresholds,
+      isSessionScrollActive: true,
+      sessionScrollPhase: 'resuming',
+    } as Parameters<typeof reduceAutoHideScrollState>[0] & {
+      isSessionScrollActive: boolean;
+      sessionScrollPhase: 'resuming';
+    });
+
+    expect(next.hidden).toBe(false);
+    expect(next.lastScrollY).toBe(860);
+  });
+
+  it('stays revealed while chat tail restoration owns scroll movement', () => {
+    const next = reduceAutoHideScrollState({
+      state: {
+        hidden: true,
+        lastScrollY: 240,
+        resumeGuardUntil: 0,
+      },
+      currentY: 920,
+      now: 3_000,
+      isMobile: true,
+      thresholds,
+      isSessionScrollActive: true,
+      sessionScrollPhase: 'restoring-tail',
+    } as Parameters<typeof reduceAutoHideScrollState>[0] & {
+      isSessionScrollActive: boolean;
+      sessionScrollPhase: 'restoring-tail';
+    });
+
+    expect(next.hidden).toBe(false);
+    expect(next.lastScrollY).toBe(920);
+  });
 });

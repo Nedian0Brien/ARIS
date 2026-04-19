@@ -63,7 +63,6 @@ import {
   hasTailRestoreRenderHydrated,
   isNearBottom,
   isNearWindowBottom,
-  resolveSessionScrollPhase,
   type SessionScrollPhase,
   shouldAutoScrollToBottom,
   shouldBlockLoadOlder,
@@ -71,6 +70,12 @@ import {
   shouldResetScrollForChatChange,
 } from './chatScroll';
 import { useChatTailRestore } from './useChatTailRestore';
+import {
+  activateSessionScrollOrchestrator,
+  deactivateSessionScrollOrchestrator,
+  dispatchSessionScrollPhaseEvent,
+  useSessionScrollOrchestrator,
+} from './useSessionScrollOrchestrator';
 import {
   AGENT_ACTIVITY_SETTLE_MS,
   AGENT_REPLY_TIMEOUT_MS,
@@ -668,22 +673,16 @@ export function ChatInterface({
   });
   const isChatEntryTailRestorePending = isInitialChatEntryPendingReveal || isTailLayoutSettling;
   const chatEntryPendingRevealClassName = showChatTransitionLoading ? styles.chatEntryPendingReveal : '';
-  const [sessionScrollPhase, setSessionScrollPhase] = useState<SessionScrollPhase>('idle');
+  const { phase: sessionScrollPhase } = useSessionScrollOrchestrator();
   const sessionScrollPhaseRef = useRef<SessionScrollPhase>('idle');
   const resumeSettleRafRef = useRef(0);
   const resumeSettleTimeoutRef = useRef(0);
   const resumePreviousMetricsRef = useRef<{ scrollTop: number | null; viewportHeight: number | null } | null>(null);
   const resumeStableFrameCountRef = useRef(0);
 
-  const commitSessionScrollPhase = useCallback((updater: SessionScrollPhase | ((current: SessionScrollPhase) => SessionScrollPhase)) => {
-    setSessionScrollPhase((current) => {
-      const next = typeof updater === 'function'
-        ? (updater as (value: SessionScrollPhase) => SessionScrollPhase)(current)
-        : updater;
-      sessionScrollPhaseRef.current = next;
-      return next;
-    });
-  }, []);
+  useEffect(() => {
+    sessionScrollPhaseRef.current = sessionScrollPhase;
+  }, [sessionScrollPhase]);
 
   const clearResumePhaseSettleLoop = useCallback(() => {
     if (resumeSettleRafRef.current) {
@@ -700,11 +699,8 @@ export function ChatInterface({
 
   const completeResumeScrollPhase = useCallback(() => {
     clearResumePhaseSettleLoop();
-    commitSessionScrollPhase((current) => resolveSessionScrollPhase({
-      currentPhase: current,
-      event: 'resume-stable',
-    }));
-  }, [clearResumePhaseSettleLoop, commitSessionScrollPhase]);
+    dispatchSessionScrollPhaseEvent('resume-stable');
+  }, [clearResumePhaseSettleLoop]);
 
   const startResumeScrollPhase = useCallback(() => {
     if (!isMobileLayout || isWorkspaceHome || isNewChatPlaceholder || !activeChatIdResolved) {
@@ -712,10 +708,7 @@ export function ChatInterface({
     }
 
     clearResumePhaseSettleLoop();
-    commitSessionScrollPhase((current) => resolveSessionScrollPhase({
-      currentPhase: current,
-      event: 'resume-start',
-    }));
+    dispatchSessionScrollPhaseEvent('resume-start');
 
     const settle = () => {
       const currentPhase = sessionScrollPhaseRef.current;
@@ -756,10 +749,23 @@ export function ChatInterface({
   }, [
     activeChatIdResolved,
     clearResumePhaseSettleLoop,
-    commitSessionScrollPhase,
     completeResumeScrollPhase,
     isMobileLayout,
     isNewChatPlaceholder,
+    isWorkspaceHome,
+  ]);
+
+  useEffect(() => {
+    if (!isMobileLayout || isWorkspaceHome || isNewChatPlaceholder || !activeChatIdResolved) {
+      return;
+    }
+
+    dispatchSessionScrollPhaseEvent(isTailLayoutSettling ? 'tail-restore-start' : 'tail-restore-complete');
+  }, [
+    activeChatIdResolved,
+    isMobileLayout,
+    isNewChatPlaceholder,
+    isTailLayoutSettling,
     isWorkspaceHome,
   ]);
   const persistedPermissions = useMemo(
@@ -1285,6 +1291,12 @@ export function ChatInterface({
       return;
     }
 
+    dispatchSessionScrollPhaseEvent('older-load-start');
+
+    const completeOlderLoad = () => {
+      dispatchSessionScrollPhaseEvent('older-load-complete');
+    };
+
     if (isMobileLayout) {
       const previousDocHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
       const previousTop = getWindowScrollTop();
@@ -1296,6 +1308,7 @@ export function ChatInterface({
         if (delta > 0) {
           window.scrollTo({ top: previousTop + delta, behavior: 'auto' });
         }
+        completeOlderLoad();
       });
       return;
     }
@@ -1304,6 +1317,7 @@ export function ChatInterface({
     if (!stream) {
       await loadOlder().catch(() => {
       });
+      requestAnimationFrame(completeOlderLoad);
       return;
     }
 
@@ -1315,10 +1329,12 @@ export function ChatInterface({
     requestAnimationFrame(() => {
       const nextStream = scrollRef.current;
       if (!nextStream) {
+        completeOlderLoad();
         return;
       }
       const delta = Math.max(0, nextStream.scrollHeight - previousHeight);
       nextStream.scrollTop = previousTop + delta;
+      completeOlderLoad();
     });
   }, [hasMoreBefore, isLoadingOlder, isMobileLayout, isTailLayoutSettling, loadOlder, sessionScrollPhase]);
 
@@ -1678,9 +1694,11 @@ export function ChatInterface({
   useEffect(() => {
     if (!isMobileLayout || isWorkspaceHome || isNewChatPlaceholder || !activeChatIdResolved) {
       clearResumePhaseSettleLoop();
-      commitSessionScrollPhase('idle');
+      deactivateSessionScrollOrchestrator();
       return;
     }
+
+    activateSessionScrollOrchestrator();
 
     const onResume = () => {
       if (document.visibilityState === 'hidden') {
@@ -1693,10 +1711,7 @@ export function ChatInterface({
       if (currentPhase !== 'resuming' && currentPhase !== 'viewport-reflow') {
         return;
       }
-      commitSessionScrollPhase((phase) => resolveSessionScrollPhase({
-        currentPhase: phase,
-        event: 'viewport-changed',
-      }));
+      dispatchSessionScrollPhaseEvent('viewport-changed');
     };
 
     window.addEventListener('focus', onResume);
@@ -1707,6 +1722,7 @@ export function ChatInterface({
 
     return () => {
       clearResumePhaseSettleLoop();
+      deactivateSessionScrollOrchestrator();
       window.removeEventListener('focus', onResume);
       window.removeEventListener('pageshow', onResume);
       document.removeEventListener('visibilitychange', onResume);
@@ -1716,7 +1732,6 @@ export function ChatInterface({
   }, [
     activeChatIdResolved,
     clearResumePhaseSettleLoop,
-    commitSessionScrollPhase,
     isMobileLayout,
     isNewChatPlaceholder,
     isWorkspaceHome,

@@ -1,3 +1,5 @@
+import type { SessionScrollPhase } from '@/app/sessions/[sessionId]/chatScroll';
+
 export type AutoHideScrollState = {
   hidden: boolean;
   lastScrollY: number;
@@ -23,7 +25,23 @@ type ReduceAutoHideScrollStateInput = {
   now: number;
   isMobile: boolean;
   thresholds: AutoHideScrollThresholds;
+  isSessionScrollActive?: boolean;
+  sessionScrollPhase?: SessionScrollPhase;
 };
+
+function shouldForceVisibleForSessionPhase(input: {
+  isSessionScrollActive?: boolean;
+  sessionScrollPhase?: SessionScrollPhase;
+}): boolean {
+  if (!input.isSessionScrollActive) {
+    return false;
+  }
+
+  return input.sessionScrollPhase === 'resuming'
+    || input.sessionScrollPhase === 'viewport-reflow'
+    || input.sessionScrollPhase === 'restoring-tail'
+    || input.sessionScrollPhase === 'loading-older';
+}
 
 export function primeAutoHideScrollState({
   currentY,
@@ -43,12 +61,22 @@ export function reduceAutoHideScrollState({
   now,
   isMobile,
   thresholds,
+  isSessionScrollActive,
+  sessionScrollPhase,
 }: ReduceAutoHideScrollStateInput): AutoHideScrollState {
   if (!isMobile) {
     return {
       hidden: false,
       lastScrollY: currentY,
       resumeGuardUntil: 0,
+    };
+  }
+
+  if (shouldForceVisibleForSessionPhase({ isSessionScrollActive, sessionScrollPhase })) {
+    return {
+      hidden: false,
+      lastScrollY: currentY,
+      resumeGuardUntil: state.resumeGuardUntil,
     };
   }
 
