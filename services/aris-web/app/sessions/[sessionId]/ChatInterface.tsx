@@ -29,11 +29,16 @@ import { buildWorkspacePagerItems, moveWorkspacePager } from './workspace-panels
 import { useWorkspacePanels } from './workspace-panels/useWorkspacePanels';
 import { useChatSessionActions } from './chat-screen/actions/useChatSessionActions';
 import { ChatCenterPane } from './chat-screen/center-pane/ChatCenterPane';
+import { ChatComposer } from './chat-screen/center-pane/ChatComposer';
+import { ChatHeader } from './chat-screen/center-pane/ChatHeader';
+import { ChatStatusNotices } from './chat-screen/center-pane/ChatStatusNotices';
+import { ChatTimeline } from './chat-screen/center-pane/ChatTimeline';
 import { FileBrowserModal } from './chat-screen/center-pane/FileBrowserModal';
 import { NewChatPlaceholderPane } from './chat-screen/center-pane/NewChatPlaceholderPane';
 import { WorkspaceHomePane } from './chat-screen/center-pane/WorkspaceHomePane';
 import { WorkspacePagerShell } from './chat-screen/center-pane/WorkspacePagerShell';
 import { useChatLayoutState } from './chat-screen/hooks/useChatLayoutState';
+import { useChatHeaderStatusControls } from './chat-screen/hooks/useChatHeaderStatusControls';
 import { useChatRuntimeUi } from './chat-screen/hooks/useChatRuntimeUi';
 import { useChatScreenState } from './chat-screen/hooks/useChatScreenState';
 import { useChatSidebarState } from './chat-screen/hooks/useChatSidebarState';
@@ -1282,66 +1287,37 @@ export function ChatInterface({
     });
   }, [isMobileLayout, scrollConversationToBottom, shouldStickToBottomRef]);
 
-  const jumpToPendingPermission = useCallback(() => {
-    if (!firstPendingPermissionId) {
-      return;
-    }
-    setShowPermissionQueue(true);
-    requestAnimationFrame(() => {
-      const target = document.getElementById(`permission-${firstPendingPermissionId}`);
-      if (!target) {
-        return;
-      }
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  }, [firstPendingPermissionId, setShowPermissionQueue]);
-
-  const handleCopyChatId = useCallback(async () => {
-    try {
-      if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
-        throw new Error('clipboard-unavailable');
-      }
-      if (!activeChatIdResolved) {
-        throw new Error('chat-id-unavailable');
-      }
-      await navigator.clipboard.writeText(activeChatIdResolved);
-      setChatIdCopyState('copied');
-      window.setTimeout(() => {
-        setChatIdCopyState((current) => (current === 'copied' ? 'idle' : current));
-      }, 1800);
-    } catch {
-      setChatIdCopyState('failed');
-      window.setTimeout(() => {
-        setChatIdCopyState((current) => (current === 'failed' ? 'idle' : current));
-      }, 2200);
-    }
-  }, [activeChatIdResolved, setChatIdCopyState]);
-
-  const handleCopyChatThreadIdsJson = useCallback(async () => {
-    try {
-      if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
-        throw new Error('clipboard-unavailable');
-      }
-      if (!activeChatIdResolved) {
-        throw new Error('chat-id-unavailable');
-      }
-
-      const payload = {
-        chatId: activeChatIdResolved,
-        threadId: activeChat?.threadId ?? null,
-      };
-      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-      setIdBundleCopyState('copied');
-      window.setTimeout(() => {
-        setIdBundleCopyState((current) => (current === 'copied' ? 'idle' : current));
-      }, 1800);
-    } catch {
-      setIdBundleCopyState('failed');
-      window.setTimeout(() => {
-        setIdBundleCopyState((current) => (current === 'failed' ? 'idle' : current));
-      }, 2200);
-    }
-  }, [activeChat?.threadId, activeChatIdResolved, setIdBundleCopyState]);
+  const {
+    handleCopyChatId,
+    handleCopyChatThreadIdsJson,
+    handleRetryDisconnected,
+    handleToggleChatSidebar,
+    handleToggleContextMenu,
+    handleTogglePermissionQueue,
+    handleUpdateApprovalPolicy,
+    jumpToPendingPermission,
+  } = useChatHeaderStatusControls({
+    activeChat,
+    activeChatIdResolved,
+    addEvent,
+    disconnectNoticeAwaitingRef,
+    firstPendingPermissionId,
+    isAgentRunning,
+    isCustomizationOverlayLayout,
+    isOperator,
+    lastSubmittedPayload,
+    sessionId,
+    setApprovalPolicy,
+    setChatIdCopyState,
+    setIdBundleCopyState,
+    setIsChatSidebarOpen,
+    setIsContextMenuOpen,
+    setIsCustomizationSidebarOpen,
+    setIsPolicyChanging,
+    setShowPermissionQueue,
+    updateChatRuntimeUi,
+    runtimeStartedSinceAwaitingRef,
+  });
 
   useEffect(() => {
     if (!isCustomizationOverlayLayout || !isCustomizationSidebarOpen) {
@@ -2126,58 +2102,6 @@ export function ChatInterface({
     }
   }
 
-  async function handleRetryDisconnected() {
-    if (!isOperator || isAgentRunning || !lastSubmittedPayload) {
-      return;
-    }
-    const scopedChatId = lastSubmittedPayload.chatId;
-    updateChatRuntimeUi(scopedChatId, {
-      isSubmitting: true,
-      isAwaitingReply: true,
-      hasCompletionSignal: false,
-      awaitingReplySince: new Date().toISOString(),
-      submitError: null,
-      showDisconnectRetry: false,
-    });
-    runtimeStartedSinceAwaitingRef.current = false;
-    disconnectNoticeAwaitingRef.current = null;
-
-    try {
-      const response = await fetch(`/api/runtime/sessions/${sessionId}/actions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'retry',
-          chatId: scopedChatId,
-        }),
-      });
-
-      const body = (await response.json().catch(() => ({ error: '백엔드 응답을 읽을 수 없습니다.' }))) as {
-        event?: UiEvent;
-        error?: string;
-      };
-
-      if (!response.ok) {
-        throw new Error(body.error ?? '재시도 전송에 실패했습니다.');
-      }
-
-      if (body.event) {
-        addEvent(body.event);
-      }
-    } catch (error) {
-      updateChatRuntimeUi(scopedChatId, {
-        isAwaitingReply: false,
-        hasCompletionSignal: false,
-        awaitingReplySince: null,
-        submitError: error instanceof Error ? error.message : '재시도 중 오류가 발생했습니다.',
-        showDisconnectRetry: true,
-      });
-      runtimeStartedSinceAwaitingRef.current = false;
-    } finally {
-      updateChatRuntimeUi(scopedChatId, { isSubmitting: false });
-    }
-  }
-
   async function handleAbortRun() {
     if (!isOperator || !isAgentRunning || isAborting || !activeChatIdResolved) {
       return;
@@ -2373,31 +2297,11 @@ export function ChatInterface({
                 isOperator={isOperator}
                 isPolicyChanging={isPolicyChanging}
                 jumpToPendingPermission={jumpToPendingPermission}
-                onToggleChatSidebar={() => {
-                  if (isCustomizationOverlayLayout) {
-                    setIsCustomizationSidebarOpen(false);
-                  }
-                  setIsChatSidebarOpen((prev) => !prev);
-                }}
-                onToggleContextMenu={() => setIsContextMenuOpen((prev) => !prev)}
+                onToggleChatSidebar={handleToggleChatSidebar}
+                onToggleContextMenu={handleToggleContextMenu}
                 onToggleDebugMode={toggleDebugMode}
-                onTogglePermissionQueue={() => {
-                  setShowPermissionQueue((prev) => !prev);
-                }}
-                onUpdateApprovalPolicy={(next) => {
-                  setIsPolicyChanging(true);
-                  fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ approvalPolicy: next }),
-                  })
-                    .then((res) => {
-                      if (!res.ok) throw new Error('Failed to update policy');
-                      setApprovalPolicy(next);
-                    })
-                    .catch(() => {})
-                    .finally(() => setIsPolicyChanging(false));
-                }}
+                onTogglePermissionQueue={handleTogglePermissionQueue}
+                onUpdateApprovalPolicy={handleUpdateApprovalPolicy}
                 sessionTitle={sessionTitle}
                 showDebugToggleInHeader={showDebugToggleInHeader}
                 showPermissionQueue={showPermissionQueue}
@@ -2407,9 +2311,7 @@ export function ChatInterface({
               <ChatStatusNotices
                 runtimeNotice={runtimeNotice}
                 showDisconnectRetry={showDisconnectRetry}
-                onRetryDisconnected={() => {
-                  void handleRetryDisconnected();
-                }}
+                onRetryDisconnected={handleRetryDisconnected}
                 isRetryDisabled={!isOperator || isAgentRunning || isSubmitting || !lastSubmittedPayload}
                 isSubmitting={isSubmitting}
                 effectivePendingPermissionCount={effectivePendingPermissions.length}
