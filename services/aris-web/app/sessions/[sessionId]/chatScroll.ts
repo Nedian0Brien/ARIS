@@ -31,11 +31,13 @@ type ResetScrollForChatChangeInput = {
   previousChatId: string | null;
   nextChatId: string | null;
   isNewChatPlaceholder: boolean;
+  isTailRestorePending?: boolean;
 };
 
 type AutoScrollToBottomInput = {
   isWorkspaceHome: boolean;
   shouldStickToBottom: boolean;
+  isTailRestorePending?: boolean;
 };
 
 type RestoreTailScrollOnChatEntryInput = {
@@ -93,11 +95,17 @@ export function shouldResetScrollForChatChange(input: ResetScrollForChatChangeIn
   if (input.isNewChatPlaceholder || !input.nextChatId) {
     return false;
   }
+  if (input.isTailRestorePending) {
+    return false;
+  }
   return input.previousChatId !== input.nextChatId;
 }
 
 export function shouldAutoScrollToBottom(input: AutoScrollToBottomInput): boolean {
   if (input.isWorkspaceHome) {
+    return false;
+  }
+  if (input.isTailRestorePending) {
     return false;
   }
   return input.shouldStickToBottom;
