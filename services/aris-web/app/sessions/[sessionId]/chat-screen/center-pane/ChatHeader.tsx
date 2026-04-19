@@ -24,6 +24,7 @@ type ChatHeaderProps = {
   activeChatIdResolved: string | null;
   activeWorkspacePageId: string;
   agentMeta: AgentMeta;
+  agentAvatarToneClass: string;
   approvalPolicy: ApprovalPolicy | undefined;
   chatIdCopyState: ChatCopyState;
   centerHeaderRef: RefObject<HTMLElement>;
@@ -61,6 +62,7 @@ export function ChatHeader({
   activeChatIdResolved,
   activeWorkspacePageId,
   agentMeta,
+  agentAvatarToneClass,
   approvalPolicy,
   chatIdCopyState,
   centerHeaderRef,
@@ -104,7 +106,7 @@ export function ChatHeader({
       >
         {isChatSidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
       </button>
-      <span className={styles.agentAvatarHero}>
+      <span className={`${styles.agentAvatarHero} ${agentAvatarToneClass}`}>
         <agentMeta.Icon size={20} />
       </span>
       <div className={styles.centerHeaderInfo}>

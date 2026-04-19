@@ -2353,11 +2353,12 @@ export function ChatInterface({
           onActivePageChange={setActiveWorkspacePageId}
           renderChatPage={() => (
             <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
-          <ChatHeader
-            activeChatIdResolved={activeChatIdResolved}
-            activeWorkspacePageId={activeWorkspacePageId}
-            agentMeta={agentMeta}
-            approvalPolicy={approvalPolicy}
+            <ChatHeader
+              activeChatIdResolved={activeChatIdResolved}
+              activeWorkspacePageId={activeWorkspacePageId}
+              agentMeta={agentMeta}
+              agentAvatarToneClass={getAgentAvatarToneClass(agentMeta.tone)}
+              approvalPolicy={approvalPolicy}
             chatIdCopyState={chatIdCopyState}
             centerHeaderRef={centerHeaderRef}
             connectionLabel={connectionLabel}
