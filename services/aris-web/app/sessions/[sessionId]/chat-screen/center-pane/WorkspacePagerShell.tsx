@@ -1,9 +1,10 @@
 'use client';
 
+import React from 'react';
 import type { ReactNode, RefObject } from 'react';
 import type { WorkspacePagerItem } from '../../workspace-panels/pagerModel';
 import { WorkspacePager } from '../../workspace-panels/WorkspacePager';
-import styles from '../ChatInterface.module.css';
+import styles from '../../ChatInterface.module.css';
 
 type WorkspacePagerShellProps = {
   centerPanelRef: RefObject<HTMLElement>;
