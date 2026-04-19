@@ -36,6 +36,7 @@ export type UseChatTailRestoreInput = {
   isWorkspaceHome: boolean;
   isMobileLayout: boolean;
   initialShowChatEntryLoading: boolean;
+  resetToLatestWindow: () => Promise<void>;
   scrollRef: RefObject<HTMLDivElement | null>;
   latestVisibleEventIdRef: RefObject<string | null>;
 };
@@ -62,6 +63,19 @@ export type UseChatTailRestoreOutput = {
   handleJumpToBottom: () => void;
 };
 
+export async function jumpToLatestPageWindow(input: {
+  shouldStickToBottomRef: MutableRefObject<boolean> | { current: boolean };
+  setShowScrollToBottom: Dispatch<SetStateAction<boolean>> | ((value: boolean) => void);
+  resetToLatestWindow: () => Promise<void>;
+  restoreConversationToTail: (behavior?: ScrollBehavior) => void;
+  behavior?: ScrollBehavior;
+}): Promise<void> {
+  input.shouldStickToBottomRef.current = true;
+  input.setShowScrollToBottom(false);
+  await input.resetToLatestWindow();
+  input.restoreConversationToTail(input.behavior ?? 'smooth');
+}
+
 export function useChatTailRestore({
   activeChatIdResolved,
   eventsForChatId,
@@ -71,6 +85,7 @@ export function useChatTailRestore({
   isWorkspaceHome,
   isMobileLayout,
   initialShowChatEntryLoading,
+  resetToLatestWindow,
   scrollRef,
   latestVisibleEventIdRef,
 }: UseChatTailRestoreInput): UseChatTailRestoreOutput {
@@ -82,6 +97,7 @@ export function useChatTailRestore({
   const tailRestoreCancelRef = useRef<(() => void) | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const isTailLayoutSettlingRef = useRef(false);
+  const isJumpingToLatestRef = useRef(false);
 
   const scrollConversationToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const documentScrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
@@ -171,10 +187,20 @@ export function useChatTailRestore({
   }, [isMobileLayout, scrollRef]);
 
   const handleJumpToBottom = useCallback(() => {
-    shouldStickToBottomRef.current = true;
-    setShowScrollToBottom(false);
-    scrollConversationToBottom('smooth');
-  }, [scrollConversationToBottom]);
+    if (isJumpingToLatestRef.current) {
+      return;
+    }
+    isJumpingToLatestRef.current = true;
+    void jumpToLatestPageWindow({
+      shouldStickToBottomRef,
+      setShowScrollToBottom,
+      resetToLatestWindow,
+      restoreConversationToTail,
+      behavior: 'smooth',
+    }).finally(() => {
+      isJumpingToLatestRef.current = false;
+    });
+  }, [resetToLatestWindow, restoreConversationToTail]);
 
   // Reset on workspace/new-chat transition
   useEffect(() => {
