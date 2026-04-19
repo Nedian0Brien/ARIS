@@ -2,6 +2,7 @@
 
 import React from 'react';
 import type { CSSProperties, RefObject } from 'react';
+import type { AgentFlavor } from '@/lib/happy/types';
 import { ChevronLeft } from 'lucide-react';
 import { CHAT_AGENT_CHOICES } from '../constants';
 import { resolveAgentMeta, resolveAgentSubtitle } from '../helpers';
@@ -13,7 +14,7 @@ type NewChatPlaceholderPaneProps = {
   scrollRef: RefObject<HTMLDivElement | null>;
   showChatTransitionLoading: boolean;
   onBack: () => void;
-  onCreateChat: (agentFlavor: string) => void | Promise<void>;
+  onCreateChat: (agentFlavor: AgentFlavor) => void | Promise<void>;
   onStreamScroll: () => void;
 };
 

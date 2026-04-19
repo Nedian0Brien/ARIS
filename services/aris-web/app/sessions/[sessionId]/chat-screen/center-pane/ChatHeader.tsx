@@ -27,10 +27,10 @@ type ChatHeaderProps = {
   agentAvatarToneClass: string;
   approvalPolicy: ApprovalPolicy | undefined;
   chatIdCopyState: ChatCopyState;
-  centerHeaderRef: RefObject<HTMLElement>;
+  centerHeaderRef: RefObject<HTMLElement | null>;
   connectionLabel: string;
   connectionState: ChatConnectionState;
-  contextMenuRef: RefObject<HTMLDivElement>;
+  contextMenuRef: RefObject<HTMLDivElement | null>;
   currentChatTitle: string;
   displayName: string;
   effectivePendingPermissionCount: number;

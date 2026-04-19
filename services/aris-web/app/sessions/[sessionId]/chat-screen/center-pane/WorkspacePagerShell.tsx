@@ -7,9 +7,9 @@ import { WorkspacePager } from '../../workspace-panels/WorkspacePager';
 import styles from '../../ChatInterface.module.css';
 
 type WorkspacePagerShellProps = {
-  centerPanelRef: RefObject<HTMLElement>;
+  centerPanelRef: RefObject<HTMLElement | null>;
   isMobileLayout: boolean;
-  workspacePagerItems: WorkspacePagerItem[];
+  workspacePagerItems: readonly WorkspacePagerItem[];
   activeWorkspacePageId: string;
   setActiveWorkspacePageId: (pageId: string) => void;
   renderChatPage: () => ReactNode;
