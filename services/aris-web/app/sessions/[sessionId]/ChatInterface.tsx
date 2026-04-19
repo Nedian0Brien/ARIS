@@ -37,6 +37,7 @@ import { FileBrowserModal } from './chat-screen/center-pane/FileBrowserModal';
 import { NewChatPlaceholderPane } from './chat-screen/center-pane/NewChatPlaceholderPane';
 import { WorkspaceHomePane } from './chat-screen/center-pane/WorkspaceHomePane';
 import { WorkspacePagerShell } from './chat-screen/center-pane/WorkspacePagerShell';
+import { useChatCenterNavigationActions } from './chat-screen/hooks/useChatCenterNavigationActions';
 import { useChatLayoutState } from './chat-screen/hooks/useChatLayoutState';
 import { useChatHeaderStatusControls } from './chat-screen/hooks/useChatHeaderStatusControls';
 import { useChatRuntimeUi } from './chat-screen/hooks/useChatRuntimeUi';
@@ -75,7 +76,6 @@ import {
 } from './chat-screen/constants';
 import {
   buildChatTitleFromFirstPrompt,
-  buildChatUrl,
   buildProgressLabel,
   buildStreamRenderItems,
   copyTextToClipboard,
@@ -105,7 +105,6 @@ import {
   resolveGeminiModeOptions,
   saveRecentFile,
   sortSessionChats,
-  writeChatIdToHistory,
 } from './chat-screen/helpers';
 import type {
   AgentMeta,
@@ -1288,6 +1287,21 @@ export function ChatInterface({
   }, [isMobileLayout, scrollConversationToBottom, shouldStickToBottomRef]);
 
   const {
+    handleBackFromWorkspaceHome,
+    handleGoHome,
+    handleOpenNewChat,
+    handleReturnToWorkspaceHome,
+    handleSelectWorkspaceChat,
+  } = useChatCenterNavigationActions({
+    isMobileLayout,
+    router,
+    sessionId,
+    setIsChatSidebarOpen,
+    setIsNewChatPlaceholder,
+    setIsWorkspaceHome,
+    setSelectedChatId,
+  });
+  const {
     handleCopyChatId,
     handleCopyChatThreadIdsJson,
     handleRetryDisconnected,
@@ -2233,22 +2247,8 @@ export function ChatInterface({
         chatListSentinelRef={chatListSentinelRef}
         actionMenuRef={chatActionMenuRef}
         onCloseSidebar={() => setIsChatSidebarOpen(false)}
-        onGoHome={() => {
-          setIsWorkspaceHome(true);
-          setIsNewChatPlaceholder(false);
-          setSelectedChatId(null);
-          if (isMobileLayout) {
-            setIsChatSidebarOpen(false);
-          }
-        }}
-        onCreateChat={() => {
-          setIsWorkspaceHome(false);
-          setIsNewChatPlaceholder(true);
-          setSelectedChatId(null);
-          if (isMobileLayout) {
-            setIsChatSidebarOpen(false);
-          }
-        }}
+        onGoHome={handleGoHome}
+        onCreateChat={handleOpenNewChat}
         RelativeTimeComponent={RelativeTime}
         ElapsedTimerComponent={ElapsedTimer}
       />
@@ -2331,21 +2331,9 @@ export function ChatInterface({
                 showChatTransitionLoading={showChatTransitionLoading}
                 scrollRef={scrollRef}
                 onStreamScroll={handleStreamScroll}
-                onSelectChat={(chatId) => {
-                  setIsWorkspaceHome(false);
-                  setIsNewChatPlaceholder(false);
-                  setSelectedChatId(chatId);
-                  writeChatIdToHistory(buildChatUrl(sessionId, chatId), 'push');
-                }}
-                onNewChat={() => {
-                  setIsWorkspaceHome(false);
-                  setIsNewChatPlaceholder(true);
-                  setSelectedChatId(null);
-                  if (isMobileLayout) {
-                    setIsChatSidebarOpen(false);
-                  }
-                }}
-                onBack={() => router.back()}
+                onSelectChat={handleSelectWorkspaceChat}
+                onNewChat={handleOpenNewChat}
+                onBack={handleBackFromWorkspaceHome}
               />
             ) : isNewChatPlaceholder ? (
               <NewChatPlaceholderPane
@@ -2354,10 +2342,7 @@ export function ChatInterface({
                 showChatTransitionLoading={showChatTransitionLoading}
                 scrollRef={scrollRef}
                 onStreamScroll={handleStreamScroll}
-                onBack={() => {
-                  setIsWorkspaceHome(true);
-                  setIsNewChatPlaceholder(false);
-                }}
+                onBack={handleReturnToWorkspaceHome}
                 onCreateChat={handleCreateChat}
               />
             ) : (
