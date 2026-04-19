@@ -2,6 +2,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import {
+  MOBILE_OVERFLOW_PREFLIGHT_DELAY_MS,
+  MOBILE_OVERFLOW_PREFLIGHT_RETRY_ATTEMPTS,
+  MOBILE_OVERFLOW_PREFLIGHT_TIMEOUT_MS,
+  shouldRetryMobileOverflowPreflight,
+} from '../tests/e2e/mobileOverflowSupport.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -54,28 +60,60 @@ function firstDefined(...values) {
 }
 
 async function assertServerHealthy(baseUrl) {
-  const timeout = AbortSignal.timeout(5_000);
+  let lastDetail = 'unknown';
+  let lastStatus = null;
 
-  let response;
-  try {
-    response = await fetch(`${baseUrl}/login`, {
-      redirect: 'manual',
-      signal: timeout,
-    });
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `mobile-overflow E2E preflight failed: ${baseUrl}/login is unreachable (${detail}). `
-      + 'Start a dev server for this worktree and/or set MOBILE_OVERFLOW_BASE_URL explicitly.',
-    );
+  for (let attempt = 1; attempt <= MOBILE_OVERFLOW_PREFLIGHT_RETRY_ATTEMPTS; attempt += 1) {
+    const timeout = AbortSignal.timeout(MOBILE_OVERFLOW_PREFLIGHT_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(`${baseUrl}/login`, {
+        redirect: 'manual',
+        signal: timeout,
+      });
+
+      if (response.ok) {
+        return;
+      }
+
+      lastStatus = response.status;
+      lastDetail = await response.text();
+      if (
+        attempt < MOBILE_OVERFLOW_PREFLIGHT_RETRY_ATTEMPTS
+        && shouldRetryMobileOverflowPreflight({ status: response.status, detail: lastDetail })
+      ) {
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, MOBILE_OVERFLOW_PREFLIGHT_DELAY_MS));
+        continue;
+      }
+
+      throw new Error(
+        `mobile-overflow E2E preflight failed: ${baseUrl}/login returned HTTP ${response.status}. `
+        + 'This usually means the selected dev server is stale or serving the wrong app.',
+      );
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      lastDetail = detail;
+
+      if (
+        attempt < MOBILE_OVERFLOW_PREFLIGHT_RETRY_ATTEMPTS
+        && shouldRetryMobileOverflowPreflight({ status: lastStatus ?? undefined, detail })
+      ) {
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, MOBILE_OVERFLOW_PREFLIGHT_DELAY_MS));
+        continue;
+      }
+
+      throw new Error(
+        `mobile-overflow E2E preflight failed: ${baseUrl}/login is unreachable (${detail}). `
+        + 'Start a dev server for this worktree and/or set MOBILE_OVERFLOW_BASE_URL explicitly.',
+      );
+    }
   }
 
-  if (!response.ok) {
-    throw new Error(
-      `mobile-overflow E2E preflight failed: ${baseUrl}/login returned HTTP ${response.status}. `
-      + 'This usually means the selected dev server is stale or serving the wrong app.',
-    );
-  }
+  throw new Error(
+    `mobile-overflow E2E preflight failed: ${baseUrl}/login did not become ready`
+    + ` after ${MOBILE_OVERFLOW_PREFLIGHT_RETRY_ATTEMPTS} attempts`
+    + ` (status=${lastStatus ?? 'n/a'}, detail=${lastDetail.slice(0, 180)}).`,
+  );
 }
 
 async function main() {

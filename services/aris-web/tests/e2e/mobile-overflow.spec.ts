@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { isIgnorableMobileOverflowScreenshotError } from './mobileOverflowSupport.mjs';
 
 test.setTimeout(90_000);
 
@@ -96,10 +97,16 @@ async function collectOverflow(page: Page, path: string) {
   }
 
   await page.waitForTimeout(800);
-  await page.screenshot({
-    path: `test-results${path === '/' ? '/home-mobile.png' : `/session-mobile.png`}`,
-    fullPage: true,
-  });
+  try {
+    await page.screenshot({
+      path: `test-results${path === '/' ? '/home-mobile.png' : `/session-mobile.png`}`,
+      fullPage: true,
+    });
+  } catch (error) {
+    if (!isIgnorableMobileOverflowScreenshotError(error)) {
+      throw error;
+    }
+  }
 
   return page.evaluate(() => {
     const viewportWidth = window.innerWidth;
