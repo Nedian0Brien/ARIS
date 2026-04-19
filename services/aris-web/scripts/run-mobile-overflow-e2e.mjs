@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import {
   MOBILE_OVERFLOW_PREFLIGHT_DELAY_MS,
@@ -59,46 +59,38 @@ function firstDefined(...values) {
   return undefined;
 }
 
-async function assertServerHealthy(baseUrl) {
+function defaultSleep(delayMs) {
+  return new Promise((resolveDelay) => setTimeout(resolveDelay, delayMs));
+}
+
+export async function assertServerHealthy(baseUrl, options = {}) {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const sleep = options.sleep ?? defaultSleep;
+  const retryAttempts = options.retryAttempts ?? MOBILE_OVERFLOW_PREFLIGHT_RETRY_ATTEMPTS;
+  const delayMs = options.delayMs ?? MOBILE_OVERFLOW_PREFLIGHT_DELAY_MS;
+  const timeoutMs = options.timeoutMs ?? MOBILE_OVERFLOW_PREFLIGHT_TIMEOUT_MS;
   let lastDetail = 'unknown';
   let lastStatus = null;
 
-  for (let attempt = 1; attempt <= MOBILE_OVERFLOW_PREFLIGHT_RETRY_ATTEMPTS; attempt += 1) {
-    const timeout = AbortSignal.timeout(MOBILE_OVERFLOW_PREFLIGHT_TIMEOUT_MS);
+  for (let attempt = 1; attempt <= retryAttempts; attempt += 1) {
+    const timeout = AbortSignal.timeout(timeoutMs);
+    let response;
 
     try {
-      const response = await fetch(`${baseUrl}/login`, {
+      response = await fetchImpl(`${baseUrl}/login`, {
         redirect: 'manual',
         signal: timeout,
       });
-
-      if (response.ok) {
-        return;
-      }
-
-      lastStatus = response.status;
-      lastDetail = await response.text();
-      if (
-        attempt < MOBILE_OVERFLOW_PREFLIGHT_RETRY_ATTEMPTS
-        && shouldRetryMobileOverflowPreflight({ status: response.status, detail: lastDetail })
-      ) {
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, MOBILE_OVERFLOW_PREFLIGHT_DELAY_MS));
-        continue;
-      }
-
-      throw new Error(
-        `mobile-overflow E2E preflight failed: ${baseUrl}/login returned HTTP ${response.status}. `
-        + 'This usually means the selected dev server is stale or serving the wrong app.',
-      );
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       lastDetail = detail;
+      lastStatus = null;
 
       if (
-        attempt < MOBILE_OVERFLOW_PREFLIGHT_RETRY_ATTEMPTS
-        && shouldRetryMobileOverflowPreflight({ status: lastStatus ?? undefined, detail })
+        attempt < retryAttempts
+        && shouldRetryMobileOverflowPreflight({ detail })
       ) {
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, MOBILE_OVERFLOW_PREFLIGHT_DELAY_MS));
+        await sleep(delayMs);
         continue;
       }
 
@@ -107,11 +99,30 @@ async function assertServerHealthy(baseUrl) {
         + 'Start a dev server for this worktree and/or set MOBILE_OVERFLOW_BASE_URL explicitly.',
       );
     }
+
+    if (response.ok) {
+      return;
+    }
+
+    lastStatus = response.status;
+    lastDetail = await response.text();
+    if (
+      attempt < retryAttempts
+      && shouldRetryMobileOverflowPreflight({ status: response.status, detail: lastDetail })
+    ) {
+      await sleep(delayMs);
+      continue;
+    }
+
+    throw new Error(
+      `mobile-overflow E2E preflight failed: ${baseUrl}/login returned HTTP ${response.status}. `
+      + 'This usually means the selected dev server is stale or serving the wrong app.',
+    );
   }
 
   throw new Error(
     `mobile-overflow E2E preflight failed: ${baseUrl}/login did not become ready`
-    + ` after ${MOBILE_OVERFLOW_PREFLIGHT_RETRY_ATTEMPTS} attempts`
+    + ` after ${retryAttempts} attempts`
     + ` (status=${lastStatus ?? 'n/a'}, detail=${lastDetail.slice(0, 180)}).`,
   );
 }
@@ -182,13 +193,15 @@ async function main() {
   });
 }
 
-main().catch((error) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
-  console.error(
-    `Hint: run DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env SKIP_DB_PREPARE=1 WEB_DEV_PORT=3315 `
-    + `${resolve(repoRoot, 'deploy', 'dev', 'run_web_dev_hot_reload.sh')} and retry with `
-    + 'MOBILE_OVERFLOW_BASE_URL=http://127.0.0.1:3315 if you are testing from a worktree.',
-  );
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    console.error(
+      `Hint: run DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env SKIP_DB_PREPARE=1 WEB_DEV_PORT=3315 `
+      + `${resolve(repoRoot, 'deploy', 'dev', 'run_web_dev_hot_reload.sh')} and retry with `
+      + 'MOBILE_OVERFLOW_BASE_URL=http://127.0.0.1:3315 if you are testing from a worktree.',
+    );
+    process.exit(1);
+  });
+}

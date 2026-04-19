@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { assertServerHealthy } from '@/scripts/run-mobile-overflow-e2e.mjs';
 
 type MobileOverflowSupportModule = {
   isIgnorableMobileOverflowScreenshotError?: (error: unknown) => boolean;
@@ -64,5 +65,65 @@ describe('mobile overflow support helpers', () => {
       status: 404,
       detail: 'Not Found',
     })).toBe(false);
+  });
+
+  it('keeps retrying fetch failures until the login page becomes reachable', async () => {
+    let attempts = 0;
+    const sleepCalls: number[] = [];
+
+    await expect(assertServerHealthy('http://127.0.0.1:3999', {
+      retryAttempts: 4,
+      delayMs: 25,
+      fetchImpl: async () => {
+        attempts += 1;
+        if (attempts < 3) {
+          throw new TypeError('fetch failed');
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          text: async () => 'ok',
+        };
+      },
+      sleep: async (delayMs: number) => {
+        sleepCalls.push(delayMs);
+      },
+    })).resolves.toBeUndefined();
+
+    expect(attempts).toBe(3);
+    expect(sleepCalls).toEqual([25, 25]);
+  });
+
+  it('retries compile-time 503 responses before treating the server as unhealthy', async () => {
+    let attempts = 0;
+    const sleepCalls: number[] = [];
+
+    await expect(assertServerHealthy('http://127.0.0.1:3999', {
+      retryAttempts: 3,
+      delayMs: 10,
+      fetchImpl: async () => {
+        attempts += 1;
+        if (attempts < 3) {
+          return {
+            ok: false,
+            status: 503,
+            text: async () => '<!DOCTYPE html><html><body>Compiling...</body></html>',
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          text: async () => 'ok',
+        };
+      },
+      sleep: async (delayMs: number) => {
+        sleepCalls.push(delayMs);
+      },
+    })).resolves.toBeUndefined();
+
+    expect(attempts).toBe(3);
+    expect(sleepCalls).toEqual([10, 10]);
   });
 });
