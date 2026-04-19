@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -10,11 +10,12 @@ import {
   MoreVertical, Activity, Pin, Edit2, RotateCw, Square, Trash2, HardDrive,
 } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
+import { DeferredResponsiveContainer } from '@/components/charts/DeferredResponsiveContainer';
 import type { GlobalChatStats, SessionSummary } from '@/lib/happy/types';
 import { extractLastDirectoryName } from '@/lib/happy/utils';
 import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
 import { readLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell } from 'recharts';
 import { reconcileDeletedSessions } from './sessionDashboardState';
 import styles from './SessionDashboard.module.css';
 
@@ -1128,7 +1129,7 @@ export function SessionDashboard({
                 <div className={styles.serverResourceGridHorizontal}>
                   <div className={styles.serverDonutCard}>
                     <div className={styles.serverDonutChart}>
-                      <ResponsiveContainer width="100%" height="100%">
+                      <DeferredResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={140}>
                         <PieChart>
                           <Pie
                             data={cpuPieData}
@@ -1150,7 +1151,7 @@ export function SessionDashboard({
                             ))}
                           </Pie>
                         </PieChart>
-                      </ResponsiveContainer>
+                      </DeferredResponsiveContainer>
                       <div className={styles.serverDonutCenter}>
                         <div className={styles.serverDonutValue}>{cpuValueText}</div>
                         <div className={styles.serverDonutLabel}>CPU</div>
@@ -1160,7 +1161,7 @@ export function SessionDashboard({
 
                   <div className={styles.serverDonutCard}>
                     <div className={styles.serverDonutChart}>
-                      <ResponsiveContainer width="100%" height="100%">
+                      <DeferredResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={140}>
                         <PieChart>
                           <Pie
                             data={ramPieData}
@@ -1182,7 +1183,7 @@ export function SessionDashboard({
                             ))}
                           </Pie>
                         </PieChart>
-                      </ResponsiveContainer>
+                      </DeferredResponsiveContainer>
                       <div className={styles.serverDonutCenter}>
                         <div className={styles.serverDonutValue}>{ramValueText}</div>
                         <div className={styles.serverDonutLabel}>RAM</div>
@@ -1290,7 +1291,7 @@ export function SessionDashboard({
                     <div className={styles.agentStatsContent}>
                       <div className={styles.agentDonutWrap}>
                         <div className={styles.agentDonutChart}>
-                          <ResponsiveContainer width="100%" height="100%">
+                          <DeferredResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={120}>
                             <PieChart>
                               <Pie
                                 data={agentDistributionData}
@@ -1312,7 +1313,7 @@ export function SessionDashboard({
                                 ))}
                               </Pie>
                             </PieChart>
-                          </ResponsiveContainer>
+                          </DeferredResponsiveContainer>
                           <div className={styles.agentDonutCenter}>
                             <div className={styles.agentDonutValue}>{totalChatCount}</div>
                             <div className={styles.agentDonutLabel}>chats</div>

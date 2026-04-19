@@ -2227,6 +2227,7 @@ export function ChatInterface({
             workspacePanelsLoading={workspacePanelsLoading}
             workspacePanelLayout={workspacePanelLayout}
             onCreatePanel={handleCreateWorkspacePanel}
+            onReturnToChat={() => setActiveWorkspacePageId('chat')}
           />
         )}
         renderPanelPage={(item) => (
@@ -2240,6 +2241,7 @@ export function ChatInterface({
             panelId={item.panelId}
             onSavePanel={saveWorkspacePanel}
             onDeletePanel={deleteWorkspacePanel}
+            onReturnToChat={() => setActiveWorkspacePageId('chat')}
           />
         )}
       />

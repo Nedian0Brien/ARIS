@@ -17,6 +17,7 @@ type WorkspacePanelsPaneBaseProps = {
 type WorkspacePanelsCreatePaneProps = WorkspacePanelsPaneBaseProps & {
   mode: 'create';
   onCreatePanel: (type: WorkspacePanelType) => void;
+  onReturnToChat?: () => void;
 };
 
 type WorkspacePanelsPanelPaneProps = WorkspacePanelsPaneBaseProps & {
@@ -24,6 +25,7 @@ type WorkspacePanelsPanelPaneProps = WorkspacePanelsPaneBaseProps & {
   panelId: string;
   onSavePanel: (panelId: string, updates: { title?: string; config?: Record<string, unknown> }) => Promise<unknown>;
   onDeletePanel: (panelId: string) => Promise<unknown>;
+  onReturnToChat?: () => void;
 };
 
 type WorkspacePanelsPaneProps = WorkspacePanelsCreatePaneProps | WorkspacePanelsPanelPaneProps;
@@ -46,7 +48,10 @@ export function WorkspacePanelsPane(props: WorkspacePanelsPaneProps) {
               <div className={styles.agentSelectorTitle}>패널 화면을 준비하는 중…</div>
             </div>
           ) : (
-            <CreatePanelPage onCreatePanel={props.onCreatePanel} />
+            <CreatePanelPage
+              onCreatePanel={props.onCreatePanel}
+              onReturnToChat={props.onReturnToChat}
+            />
           )
         ) : (
           (() => {
@@ -58,6 +63,7 @@ export function WorkspacePanelsPane(props: WorkspacePanelsPaneProps) {
                 panel={panel}
                 onSavePanel={props.onSavePanel}
                 onDeletePanel={props.onDeletePanel}
+                onReturnToChat={props.onReturnToChat}
               />
             ) : (
               <div className={styles.emptyChatState}>
