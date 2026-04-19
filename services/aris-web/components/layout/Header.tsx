@@ -8,6 +8,7 @@ import { Sparkles, LogOut, LayoutDashboard, Terminal, FolderTree, Settings, Sun,
 import type { TabType } from './BottomNav';
 import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
 import { primeAutoHideScrollState, reduceAutoHideScrollState } from './mobileScrollAutoHide';
+import { useSessionScrollOrchestrator } from '@/app/sessions/[sessionId]/useSessionScrollOrchestrator';
 
 interface HeaderProps {
   userEmail: string;
@@ -29,6 +30,7 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
   const router = useRouter();
   const [hiddenOnScroll, setHiddenOnScroll] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
+  const { isActive: isSessionScrollActive, phase: sessionScrollPhase } = useSessionScrollOrchestrator();
   const navItems = [
     { id: 'sessions', label: '워크스페이스', icon: LayoutDashboard },
     { id: 'console', label: '콘솔', icon: Terminal },
@@ -127,6 +129,8 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
         now: Date.now(),
         isMobile: mobileQuery.matches,
         thresholds: HEADER_AUTO_HIDE_THRESHOLDS,
+        isSessionScrollActive,
+        sessionScrollPhase,
       });
       syncHidden(autoHideState.hidden);
     };
@@ -189,7 +193,7 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
         window.cancelAnimationFrame(scrollRaf);
       }
     };
-  }, [activeTab, autoHideOnScroll]);
+  }, [activeTab, autoHideOnScroll, isSessionScrollActive, sessionScrollPhase]);
 
   useEffect(() => {
     const root = document.documentElement;

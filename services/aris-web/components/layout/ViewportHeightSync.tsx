@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { dispatchSessionScrollPhaseEvent } from '@/app/sessions/[sessionId]/useSessionScrollOrchestrator';
 
 export function ViewportHeightSync() {
   useEffect(() => {
@@ -32,6 +33,7 @@ export function ViewportHeightSync() {
       root.style.setProperty('--visual-viewport-offset-top', `${viewportOffsetTop}px`);
       root.style.setProperty('--keyboard-inset-height', `${keyboardInset}px`);
       root.dataset.keyboardOpen = keyboardOpen ? 'true' : 'false';
+      dispatchSessionScrollPhaseEvent('viewport-changed');
     };
 
     updateViewportHeight();

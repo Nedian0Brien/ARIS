@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { LayoutDashboard, Terminal, FolderTree, Settings } from 'lucide-react';
 import { primeAutoHideScrollState, reduceAutoHideScrollState } from './mobileScrollAutoHide';
+import { useSessionScrollOrchestrator } from '@/app/sessions/[sessionId]/useSessionScrollOrchestrator';
 
 export type TabType = 'sessions' | 'console' | 'files' | 'settings';
 
@@ -21,6 +22,7 @@ const BOTTOM_NAV_AUTO_HIDE_THRESHOLDS = {
 
 export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   const [hidden, setHidden] = useState(false);
+  const { isActive: isSessionScrollActive, phase: sessionScrollPhase } = useSessionScrollOrchestrator();
   const lastScrollY = useRef(0);
   const hiddenRef = useRef(false);
   const scrollRafRef = useRef<number | null>(null);
@@ -53,6 +55,8 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
         now: Date.now(),
         isMobile: window.innerWidth < 768,
         thresholds: BOTTOM_NAV_AUTO_HIDE_THRESHOLDS,
+        isSessionScrollActive,
+        sessionScrollPhase,
       });
       lastScrollY.current = autoHideState.lastScrollY;
       updateHidden(autoHideState.hidden);
@@ -112,7 +116,7 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
         scrollRafRef.current = null;
       }
     };
-  }, [activeTab]);
+  }, [activeTab, isSessionScrollActive, sessionScrollPhase]);
 
   const syncIndicator = useCallback(() => {
     const nav = navRef.current;
