@@ -16,6 +16,19 @@
   gap: 0.35rem;
 }
 
+.backButton {
+  align-self: flex-start;
+  min-height: 2.4rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line) 76%, transparent);
+  background: color-mix(in srgb, var(--surface) 94%, white 6%);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .title {
   margin: 0;
   font-size: 1.2rem;

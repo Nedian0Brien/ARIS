@@ -3011,7 +3011,10 @@ export function ChatInterface({
                     <div className={styles.agentSelectorTitle}>패널 화면을 준비하는 중…</div>
                   </div>
                 ) : (
-                  <CreatePanelPage onCreatePanel={handleCreateWorkspacePanel} />
+                  <CreatePanelPage
+                    onCreatePanel={handleCreateWorkspacePanel}
+                    onReturnToChat={() => setActiveWorkspacePageId('chat')}
+                  />
                 )}
               </div>
             </section>
@@ -3033,6 +3036,7 @@ export function ChatInterface({
                       panel={panel}
                       onSavePanel={saveWorkspacePanel}
                       onDeletePanel={deleteWorkspacePanel}
+                      onReturnToChat={() => setActiveWorkspacePageId('chat')}
                     />
                   ) : (
                     <div className={styles.emptyChatState}>

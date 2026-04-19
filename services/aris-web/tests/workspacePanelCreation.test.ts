@@ -6,11 +6,18 @@ import { describe, expect, it, vi } from 'vitest';
 type AnyElement = ReactElement<{ children?: ReactNode; onClick?: () => void }>;
 
 type CreatePanelPageModule = {
-  CreatePanelPage?: (props: { onCreatePanel: (type: 'preview' | 'explorer' | 'terminal' | 'bookmark') => void }) => React.ReactNode;
+  CreatePanelPage?: (props: {
+    onCreatePanel: (type: 'preview' | 'explorer' | 'terminal' | 'bookmark') => void;
+    onReturnToChat?: () => void;
+  }) => React.ReactNode;
 };
 
 type PlaceholderPanelPageModule = {
-  PlaceholderPanelPage?: (props: { title: string; description: string }) => React.ReactNode;
+  PlaceholderPanelPage?: (props: {
+    title: string;
+    description: string;
+    onReturnToChat?: () => void;
+  }) => React.ReactNode;
 };
 
 type PanelPageRendererModule = {
@@ -25,6 +32,7 @@ type PanelPageRendererModule = {
     };
     onSavePanel?: (panelId: string, updates: { title?: string; config?: Record<string, unknown> }) => Promise<void>;
     onDeletePanel?: (panelId: string) => Promise<void>;
+    onReturnToChat?: () => void;
   }) => React.ReactNode;
 };
 
@@ -73,6 +81,20 @@ describe('workspace panel creation surfaces', () => {
     expect(markup).toContain('Bookmark');
   });
 
+  it('renders a back-to-chat escape hatch on the create panel page', async () => {
+    const mod = await loadCreatePanelPageModule();
+
+    expect(typeof mod.CreatePanelPage).toBe('function');
+    if (typeof mod.CreatePanelPage !== 'function') return;
+
+    const markup = renderToStaticMarkup(React.createElement(mod.CreatePanelPage, {
+      onCreatePanel: vi.fn(),
+      onReturnToChat: vi.fn(),
+    }));
+
+    expect(markup).toContain('채팅으로 돌아가기');
+  });
+
   it('calls back with the selected panel type', async () => {
     const mod = await loadCreatePanelPageModule();
 
@@ -108,6 +130,28 @@ describe('workspace panel creation surfaces', () => {
     expect(markup).toContain('준비 중');
   });
 
+  it('renders a back-to-chat escape hatch on placeholder pages', async () => {
+    const mod = await loadPlaceholderPanelPageModule();
+
+    expect(typeof mod.PlaceholderPanelPage).toBe('function');
+    if (typeof mod.PlaceholderPanelPage !== 'function') return;
+
+    const onReturnToChat = vi.fn();
+    const tree = mod.PlaceholderPanelPage({
+      title: 'Explorer',
+      description: '파일 트리와 문서 탐색이 여기에 들어옵니다.',
+      onReturnToChat,
+    });
+    const backButton = flattenElements(tree).find((element) => {
+      const text = renderToStaticMarkup(React.createElement(React.Fragment, null, element.props.children));
+      return element.type === 'button' && text.includes('채팅으로 돌아가기');
+    });
+
+    expect(backButton).toBeTruthy();
+    backButton?.props.onClick?.();
+    expect(onReturnToChat).toHaveBeenCalledTimes(1);
+  });
+
   it('renders a dedicated preview panel page for preview panels', async () => {
     const mod = await loadPanelPageRendererModule();
 
@@ -125,10 +169,12 @@ describe('workspace panel creation surfaces', () => {
       },
       onSavePanel: vi.fn(async () => {}),
       onDeletePanel: vi.fn(async () => {}),
+      onReturnToChat: vi.fn(),
     }));
 
     expect(markup).toContain('로컬 개발서버');
     expect(markup).toContain('포트');
+    expect(markup).toContain('채팅으로 돌아가기');
     expect(markup).not.toContain('준비 중');
   });
 });
