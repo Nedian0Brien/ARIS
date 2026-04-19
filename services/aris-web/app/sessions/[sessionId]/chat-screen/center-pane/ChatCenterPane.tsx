@@ -15,6 +15,7 @@ type ChatCenterPaneProps = {
   onJumpToBottom: () => void;
   header: ReactNode;
   statusNotices: ReactNode;
+  jumpBar?: ReactNode;
   chatBody: ReactNode;
   composer: ReactNode;
   transitionOverlay: ReactNode;
@@ -30,6 +31,7 @@ export function ChatCenterPane({
   onJumpToBottom,
   header,
   statusNotices,
+  jumpBar,
   chatBody,
   composer,
   transitionOverlay,
@@ -38,6 +40,7 @@ export function ChatCenterPane({
     <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
       {header}
       {statusNotices}
+      {jumpBar}
       <>
         {chatBody}
 

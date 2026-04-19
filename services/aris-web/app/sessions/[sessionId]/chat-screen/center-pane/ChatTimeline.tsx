@@ -55,6 +55,7 @@ export function ChatTimeline({
   onCopyUserMessage,
   onDecidePermission,
   onDeleteEmptyAutoChat,
+  onUserMessageBubbleRef,
   onSelectQuickStart,
   onStreamScroll,
   onToggleActionRun,
@@ -78,6 +79,7 @@ export function ChatTimeline({
   onCopyUserMessage: (event: UiEvent) => void | Promise<void>;
   onDecidePermission: (permissionId: string, decision: PermissionDecision) => void | Promise<void>;
   onDeleteEmptyAutoChat: () => void;
+  onUserMessageBubbleRef?: (eventId: string, node: HTMLDivElement | null) => void;
   onSelectQuickStart: (prompt: string) => void;
   onStreamScroll: () => void;
   onToggleActionRun: (runId: string) => void;
@@ -203,7 +205,12 @@ export function ChatTimeline({
                   <span className={`${styles.msgSender} ${styles.msgSenderUser}`}>YOU</span>
                 </div>
                 <div className={styles.messageBubbleUserStack}>
-                  <div className={`${styles.messageBubble} ${styles.messageBubbleUser} ${highlightedEventId === event.id ? styles.messageBubbleHighlight : ''}`}>
+                  <div
+                    ref={(node) => {
+                      onUserMessageBubbleRef?.(event.id, node);
+                    }}
+                    className={`${styles.messageBubble} ${styles.messageBubbleUser} ${highlightedEventId === event.id ? styles.messageBubbleHighlight : ''}`}
+                  >
                     {userAttachments.length > 0 && (
                       <div className={styles.messageAttachmentStrip}>
                         {userAttachments.map((attachment) => (

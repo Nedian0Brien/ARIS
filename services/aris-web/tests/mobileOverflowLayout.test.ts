@@ -9,12 +9,14 @@ const dashboardTsxPath = resolve(__dirname, '../app/SessionDashboard.tsx');
 const uiCssPath = resolve(__dirname, '../app/styles/ui.css');
 const fabCssPath = resolve(__dirname, '../app/styles/fab.css');
 const workspaceHomeCssPath = resolve(__dirname, '../app/sessions/[sessionId]/WorkspaceHome.module.css');
+const chatInterfaceCssPath = resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.module.css');
 
 const dashboardCss = readFileSync(dashboardCssPath, 'utf8');
 const dashboardTsx = readFileSync(dashboardTsxPath, 'utf8');
 const uiCss = readFileSync(uiCssPath, 'utf8');
 const fabCss = readFileSync(fabCssPath, 'utf8');
 const workspaceHomeCss = readFileSync(workspaceHomeCssPath, 'utf8');
+const chatInterfaceCss = readFileSync(chatInterfaceCssPath, 'utf8');
 
 describe('mobile home/workspace layout overflow guards', () => {
   it('stacks the home dashboard title row and primary action on phones', () => {
@@ -82,5 +84,14 @@ describe('mobile home/workspace layout overflow guards', () => {
     expect(dashboardCss).toMatch(/\.sessionDashboardSidebar\s*\{[^}]*min-width:\s*0;/s);
     expect(dashboardCss).toMatch(/\.sessionDashboardLayout\s*\{[^}]*box-sizing:\s*border-box;/s);
     expect(dashboardCss).toMatch(/\.serverStorageCardFull\s*\{[^}]*box-sizing:\s*border-box;/s);
+  });
+
+  it('keeps the last-user jump bar shrinkable on narrow screens', () => {
+    expect(chatInterfaceCss).toMatch(/\.lastUserJumpButton\s*\{[^}]*width:\s*100%;/s);
+    expect(chatInterfaceCss).toMatch(/\.lastUserJumpButton\s*\{[^}]*max-width:\s*100%;/s);
+    expect(chatInterfaceCss).toMatch(/\.lastUserJumpPreview\s*\{[^}]*min-width:\s*0;/s);
+    expect(chatInterfaceCss).toMatch(/\.lastUserJumpPreview\s*\{[^}]*overflow:\s*hidden;/s);
+    expect(chatInterfaceCss).toMatch(/\.lastUserJumpPreview\s*\{[^}]*text-overflow:\s*ellipsis;/s);
+    expect(chatInterfaceCss).toMatch(/@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?\.lastUserJumpButton\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
   });
 });

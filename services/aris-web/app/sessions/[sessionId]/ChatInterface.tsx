@@ -30,12 +30,19 @@ import { useChatSessionActions } from './chat-screen/actions/useChatSessionActio
 import { ChatCenterPane } from './chat-screen/center-pane/ChatCenterPane';
 import { ChatComposer } from './chat-screen/center-pane/ChatComposer';
 import { ChatHeader } from './chat-screen/center-pane/ChatHeader';
+import { LastUserMessageJumpBar } from './chat-screen/center-pane/LastUserMessageJumpBar';
 import { ChatStatusNotices } from './chat-screen/center-pane/ChatStatusNotices';
 import { ChatTimeline } from './chat-screen/center-pane/ChatTimeline';
 import { FileBrowserModal } from './chat-screen/center-pane/FileBrowserModal';
 import { NewChatPlaceholderPane } from './chat-screen/center-pane/NewChatPlaceholderPane';
 import { WorkspaceHomePane } from './chat-screen/center-pane/WorkspaceHomePane';
 import { WorkspacePagerShell } from './chat-screen/center-pane/WorkspacePagerShell';
+import {
+  resolveLastPassedUserMessageJumpTarget,
+  resolveUserMessageJumpTargets,
+  shouldShowLastUserMessageJumpBar,
+  type LastUserMessageJumpTarget,
+} from './chat-screen/center-pane/lastUserMessageBar';
 import { useChatComposerInteractions } from './chat-screen/hooks/useChatComposerInteractions';
 import { useChatCenterNavigationActions } from './chat-screen/hooks/useChatCenterNavigationActions';
 import { useChatLayoutState } from './chat-screen/hooks/useChatLayoutState';
@@ -297,6 +304,7 @@ export function ChatInterface({
     setChatIdCopyState,
     setExpandedActionRunIds,
     setExpandedResultIds,
+    setHighlightedEventId,
     setIdBundleCopyState,
     setIsChatSidebarOpen,
     setIsContextMenuOpen,
@@ -383,6 +391,8 @@ export function ChatInterface({
   const disconnectNoticeAwaitingRef = useRef<string | null>(null);
   const runtimeStartedSinceAwaitingRef = useRef(false);
   const sidebarFileRequestNonceRef = useRef(0);
+  const userMessageBubbleNodesRef = useRef(new Map<string, HTMLDivElement>());
+  const [lastUserMessageJumpTarget, setLastUserMessageJumpTarget] = useState<LastUserMessageJumpTarget | null>(null);
   const handleDeleteEmptyAutoChat = useCallback(() => {
     if (!activeChat) {
       return;
@@ -578,6 +588,10 @@ export function ChatInterface({
       return a.id.localeCompare(b.id);
     });
   }, [deferredVisibleNonUserEvents, pendingUserEvents, visibleUserEvents]);
+  const userMessageJumpTargets = useMemo(
+    () => resolveUserMessageJumpTargets(renderableStreamEvents),
+    [renderableStreamEvents],
+  );
   const expectedRenderableStreamEvents = useMemo(() => {
     const merged = [...visibleNonUserEvents, ...visibleUserEvents, ...pendingUserEvents];
     return merged.sort((a, b) => {
@@ -1356,6 +1370,68 @@ export function ChatInterface({
     updateChatRuntimeUi,
     runtimeStartedSinceAwaitingRef,
   });
+  const syncLastUserMessageJumpTarget = useCallback(() => {
+    if (isWorkspaceHome || isNewChatPlaceholder || showChatTransitionLoading || userMessageJumpTargets.length === 0) {
+      setLastUserMessageJumpTarget(null);
+      return;
+    }
+
+    const scrollBoundary = isMobileLayout
+      ? 0
+      : Math.ceil(scrollRef.current?.getBoundingClientRect().top ?? 0);
+    const bubbleBottomByEventId = new Map<string, number>();
+
+    userMessageBubbleNodesRef.current.forEach((node, eventId) => {
+      bubbleBottomByEventId.set(eventId, node.getBoundingClientRect().bottom);
+    });
+
+    setLastUserMessageJumpTarget(resolveLastPassedUserMessageJumpTarget({
+      targets: userMessageJumpTargets,
+      bubbleBottomByEventId,
+      scrollBoundary,
+    }));
+  }, [
+    isMobileLayout,
+    isNewChatPlaceholder,
+    isWorkspaceHome,
+    scrollRef,
+    showChatTransitionLoading,
+    userMessageJumpTargets,
+  ]);
+
+  const showLastUserMessageJumpBar = useMemo(() => shouldShowLastUserMessageJumpBar({
+    targetEventId: lastUserMessageJumpTarget?.eventId ?? null,
+    isWorkspaceHome,
+    isNewChatPlaceholder,
+    showChatTransitionLoading,
+  }), [isNewChatPlaceholder, isWorkspaceHome, lastUserMessageJumpTarget?.eventId, showChatTransitionLoading]);
+
+  const handleLastUserMessageJump = useCallback(() => {
+    const targetEventId = lastUserMessageJumpTarget?.eventId;
+    if (!targetEventId) {
+      return;
+    }
+
+    const eventElement = document.getElementById(`event-${targetEventId}`);
+    if (!eventElement) {
+      return;
+    }
+
+    eventElement.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
+    setHighlightedEventId(null);
+    window.requestAnimationFrame(() => {
+      setHighlightedEventId(targetEventId);
+    });
+  }, [lastUserMessageJumpTarget?.eventId, setHighlightedEventId]);
+
+  const setUserMessageBubbleNode = useCallback((eventId: string, node: HTMLDivElement | null) => {
+    if (node) {
+      userMessageBubbleNodesRef.current.set(eventId, node);
+      return;
+    }
+
+    userMessageBubbleNodesRef.current.delete(eventId);
+  }, []);
 
   useEffect(() => {
     if (!isCustomizationOverlayLayout || !isCustomizationSidebarOpen) {
@@ -1453,6 +1529,10 @@ export function ChatInterface({
     syncComposerDockMetrics,
   ]);
 
+  useLayoutEffect(() => {
+    syncLastUserMessageJumpTarget();
+  }, [syncLastUserMessageJumpTarget]);
+
   useEffect(() => {
     syncComposerDockMetrics();
     const handleResize = () => syncComposerDockMetrics();
@@ -1468,6 +1548,25 @@ export function ChatInterface({
       window.visualViewport?.removeEventListener('scroll', handleResize);
     };
   }, [syncComposerDockMetrics]);
+
+  useEffect(() => {
+    const scheduleSync = () => {
+      window.requestAnimationFrame(syncLastUserMessageJumpTarget);
+    };
+
+    scheduleSync();
+    window.addEventListener('resize', scheduleSync, { passive: true });
+    window.addEventListener('scroll', scheduleSync, { passive: true });
+    window.visualViewport?.addEventListener('resize', scheduleSync);
+    window.visualViewport?.addEventListener('scroll', scheduleSync);
+
+    return () => {
+      window.removeEventListener('resize', scheduleSync);
+      window.removeEventListener('scroll', scheduleSync);
+      window.visualViewport?.removeEventListener('resize', scheduleSync);
+      window.visualViewport?.removeEventListener('scroll', scheduleSync);
+    };
+  }, [syncLastUserMessageJumpTarget]);
 
   useEffect(() => {
     if (!isMobileLayout) {
@@ -1934,11 +2033,13 @@ export function ChatInterface({
     }
     if (isMobileLayout) {
       syncScrollToBottomButton();
+      syncLastUserMessageJumpTarget();
       return;
     }
     const nearBottom = isNearBottom(stream);
     shouldStickToBottomRef.current = nearBottom;
     setShowScrollToBottom(!nearBottom);
+    syncLastUserMessageJumpTarget();
     if (!shouldBlockLoadOlder({ isTailLayoutSettling: isTailLayoutSettlingRef.current, isLoadingOlder, hasMoreBefore }) && stream.scrollTop <= 96) {
       void loadOlderHistory();
     }
@@ -2087,6 +2188,12 @@ export function ChatInterface({
                 onJumpToPendingPermission={jumpToPendingPermission}
               />
             )}
+            jumpBar={showLastUserMessageJumpBar ? (
+              <LastUserMessageJumpBar
+                preview={lastUserMessageJumpTarget?.preview ?? ''}
+                onJump={handleLastUserMessageJump}
+              />
+            ) : null}
             chatBody={isWorkspaceHome ? (
               <WorkspaceHomePane
                 sessionId={sessionId}
@@ -2135,6 +2242,7 @@ export function ChatInterface({
                   void decidePermission(permissionId, decision);
                 }}
                 onDeleteEmptyAutoChat={handleDeleteEmptyAutoChat}
+                onUserMessageBubbleRef={setUserMessageBubbleNode}
                 onSelectQuickStart={handleSelectQuickStart}
                 onStreamScroll={handleStreamScroll}
                 onToggleActionRun={toggleActionRun}

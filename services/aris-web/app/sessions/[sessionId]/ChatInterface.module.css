@@ -1818,6 +1818,63 @@
   background: var(--chat-popover-bg);
 }
 
+.lastUserJumpBar {
+  padding: 0.65rem 0.95rem 0;
+  max-width: 100%;
+}
+
+.lastUserJumpButton {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.62rem 0.78rem;
+  border: 1px solid var(--chat-panel-border);
+  border-radius: 12px;
+  background: var(--chat-control-bg);
+  color: var(--chat-text-primary);
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.lastUserJumpButton:hover {
+  border-color: var(--chat-item-hover-border);
+  background: var(--chat-surface-hover);
+}
+
+.lastUserJumpLabel {
+  font-size: 0.69rem;
+  font-weight: 800;
+  color: var(--chat-text-muted);
+  white-space: nowrap;
+}
+
+.lastUserJumpPreview {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--chat-text-primary);
+}
+
+.lastUserJumpAction {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--chat-accent);
+}
+
 .stream {
   flex: 1;
   height: 0;
@@ -4238,6 +4295,16 @@
 @media (max-width: 640px) {
   .centerHeader {
     gap: 0.6rem;
+  }
+
+  .lastUserJumpButton {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.28rem;
+  }
+
+  .lastUserJumpLabel,
+  .lastUserJumpAction {
+    justify-self: start;
   }
 
   .customizationDrawer {
