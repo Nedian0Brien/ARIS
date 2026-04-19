@@ -37,6 +37,7 @@ import { FileBrowserModal } from './chat-screen/center-pane/FileBrowserModal';
 import { NewChatPlaceholderPane } from './chat-screen/center-pane/NewChatPlaceholderPane';
 import { WorkspaceHomePane } from './chat-screen/center-pane/WorkspaceHomePane';
 import { WorkspacePagerShell } from './chat-screen/center-pane/WorkspacePagerShell';
+import { useChatComposerInteractions } from './chat-screen/hooks/useChatComposerInteractions';
 import { useChatCenterNavigationActions } from './chat-screen/hooks/useChatCenterNavigationActions';
 import { useChatLayoutState } from './chat-screen/hooks/useChatLayoutState';
 import { useChatHeaderStatusControls } from './chat-screen/hooks/useChatHeaderStatusControls';
@@ -1287,6 +1288,28 @@ export function ChatInterface({
   }, [isMobileLayout, scrollConversationToBottom, shouldStickToBottomRef]);
 
   const {
+    handleCancelTextContext,
+    handleGeminiModeSelect,
+    handleModelReasoningEffortSelect,
+    handleModelSelect,
+    handleOpenTextContextEditor,
+    handlePromptKeyDown,
+    handleToggleCommandMenu,
+    handleToggleGeminiModeDropdown,
+    handleToggleModelDropdown,
+    handleTogglePlusMenu,
+  } = useChatComposerInteractions({
+    handleSelectGeminiMode,
+    handleSelectModel,
+    handleSelectModelReasoningEffort,
+    handleSubmit,
+    setIsCommandMenuOpen,
+    setIsGeminiModeDropdownOpen,
+    setIsModelDropdownOpen,
+    setPlusMenuMode,
+    setTextContextInput,
+  });
+  const {
     handleBackFromWorkspaceHome,
     handleGoHome,
     handleOpenNewChat,
@@ -2408,33 +2431,26 @@ export function ChatInterface({
                 composerInputRef={composerInputRef}
                 composerImageInputRef={composerImageInputRef}
                 onSubmit={handleSubmit}
-                onToggleCommandMenu={() => setIsCommandMenuOpen((value) => !value)}
+                onToggleCommandMenu={handleToggleCommandMenu}
                 onRunChatCommand={handleRunChatCommand}
-                onToggleModelDropdown={() => setIsModelDropdownOpen((value) => !value)}
-                onSelectModel={(modelId) => { void handleSelectModel(modelId); }}
-                onToggleGeminiModeDropdown={() => setIsGeminiModeDropdownOpen((value) => !value)}
-                onSelectGeminiMode={(modeId) => { void handleSelectGeminiMode(modeId); }}
-                onSelectModelReasoningEffort={(value) => { void handleSelectModelReasoningEffort(value); }}
+                onToggleModelDropdown={handleToggleModelDropdown}
+                onSelectModel={handleModelSelect}
+                onToggleGeminiModeDropdown={handleToggleGeminiModeDropdown}
+                onSelectGeminiMode={handleGeminiModeSelect}
+                onSelectModelReasoningEffort={handleModelReasoningEffortSelect}
                 onRemoveContextItem={removeContextItem}
                 onImageSelection={handleComposerImageSelection}
-                onTogglePlusMenu={() => { setPlusMenuMode((mode) => mode === 'closed' ? 'menu' : 'closed'); }}
+                onTogglePlusMenu={handleTogglePlusMenu}
                 onImageUploadOpen={handleImageUploadOpen}
                 onFileBrowserOpen={handleFileBrowserOpen}
-                onOpenTextContextEditor={() => {
-                  setPlusMenuMode('text');
-                  setTextContextInput('');
-                }}
+                onOpenTextContextEditor={handleOpenTextContextEditor}
                 onTextContextInputChange={setTextContextInput}
-                onCancelTextContext={() => setPlusMenuMode('menu')}
+                onCancelTextContext={handleCancelTextContext}
                 onAddTextContext={handleAddTextContext}
                 onPromptChange={setPrompt}
                 onPromptInput={resizeComposerInput}
                 onPromptFocus={handleComposerFocus}
-                onPromptKeyDown={(event) => {
-                  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                    void handleSubmit(event);
-                  }
-                }}
+                onPromptKeyDown={handlePromptKeyDown}
                 onAbortRun={handleAbortRun}
               />
             ) : null}
