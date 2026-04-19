@@ -21,6 +21,7 @@ import { buildComposerSubmitText, buildUserMessageMeta } from './chatSubmitPaylo
 import { resolveAvailableChatCommands, type ChatCommandId } from './chatCommands';
 import {
   Activity,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
@@ -2511,19 +2512,29 @@ export function ChatInterface({
                   loadingPermissionId={loadingPermissionId}
                   scrollRef={scrollRef}
                   showChatTransitionLoading={showChatTransitionLoading}
-                  showScrollToBottom={showScrollToBottom}
                   timelineItems={timelineItems}
                   onCopyUserMessage={handleCopyUserMessage}
                   onDecidePermission={(permissionId, decision) => {
                     void decidePermission(permissionId, decision);
                   }}
                   onDeleteEmptyAutoChat={handleDeleteEmptyAutoChat}
-                  onJumpToBottom={handleJumpToBottom}
                   onSelectQuickStart={handleSelectQuickStart}
                   onStreamScroll={handleStreamScroll}
                   onToggleActionRun={toggleActionRun}
                   onToggleResult={toggleResult}
                 />
+              )}
+
+              {!showChatTransitionLoading && activeChatIdResolved && !isWorkspaceHome && !isNewChatPlaceholder && showScrollToBottom && (
+                <button
+                  type="button"
+                  className={styles.scrollBottomButton}
+                  onClick={handleJumpToBottom}
+                  aria-label="맨 아래로 이동"
+                  title="맨 아래로 이동"
+                >
+                  <ChevronDown size={16} />
+                </button>
               )}
 
               {!isWorkspaceHome && (

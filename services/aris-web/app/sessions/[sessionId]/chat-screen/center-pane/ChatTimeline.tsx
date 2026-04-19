@@ -51,12 +51,10 @@ export function ChatTimeline({
   loadingPermissionId,
   scrollRef,
   showChatTransitionLoading,
-  showScrollToBottom,
   timelineItems,
   onCopyUserMessage,
   onDecidePermission,
   onDeleteEmptyAutoChat,
-  onJumpToBottom,
   onSelectQuickStart,
   onStreamScroll,
   onToggleActionRun,
@@ -76,12 +74,10 @@ export function ChatTimeline({
   loadingPermissionId: string | null;
   scrollRef: RefObject<HTMLDivElement | null>;
   showChatTransitionLoading: boolean;
-  showScrollToBottom: boolean;
   timelineItems: TimelineRenderItem[];
   onCopyUserMessage: (event: UiEvent) => void | Promise<void>;
   onDecidePermission: (permissionId: string, decision: PermissionDecision) => void | Promise<void>;
   onDeleteEmptyAutoChat: () => void;
-  onJumpToBottom: () => void;
   onSelectQuickStart: (prompt: string) => void;
   onStreamScroll: () => void;
   onToggleActionRun: (runId: string) => void;
@@ -310,17 +306,6 @@ export function ChatTimeline({
         )}
       </div>
 
-      {!showChatTransitionLoading && showScrollToBottom && (
-        <button
-          type="button"
-          className={styles.scrollBottomButton}
-          onClick={onJumpToBottom}
-          aria-label="맨 아래로 이동"
-          title="맨 아래로 이동"
-        >
-          <ChevronDown size={16} />
-        </button>
-      )}
     </>
   );
 }

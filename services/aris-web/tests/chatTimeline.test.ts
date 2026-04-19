@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ChatTimeline } from '@/app/sessions/[sessionId]/chat-screen/center-pane/ChatTimeline';
 import { PermissionRequestMessage } from '@/app/sessions/[sessionId]/PermissionRequestMessage';
 import { AGENT_QUICK_STARTS } from '@/app/sessions/[sessionId]/chat-screen/constants';
+import { ActionEventCard } from '@/app/sessions/[sessionId]/chat-screen/center-pane/renderers/ActionEventCard';
 import type { AgentMeta, TimelineRenderItem } from '@/app/sessions/[sessionId]/chat-screen/types';
 import type { RenderablePermissionRequest } from '@/lib/happy/permissions';
 import type { SessionChat, UiEvent } from '@/lib/happy/types';
@@ -140,12 +141,10 @@ function buildTimelineProps(overrides: Partial<React.ComponentProps<typeof ChatT
     loadingPermissionId: null,
     scrollRef: { current: null },
     showChatTransitionLoading: false,
-    showScrollToBottom: true,
     timelineItems,
     onCopyUserMessage: vi.fn(),
     onDecidePermission: vi.fn(),
     onDeleteEmptyAutoChat: vi.fn(),
-    onJumpToBottom: vi.fn(),
     onSelectQuickStart: vi.fn(),
     onStreamScroll: vi.fn(),
     onToggleActionRun: vi.fn(),
@@ -178,7 +177,6 @@ describe('ChatTimeline', () => {
       React.createElement(ChatTimeline, buildTimelineProps({
         activeChat: buildChat({ title: '새 채팅' }),
         isAgentRunning: false,
-        showScrollToBottom: false,
         timelineItems: [],
       })),
     );
@@ -187,17 +185,40 @@ describe('ChatTimeline', () => {
     expect(markup).toContain(AGENT_QUICK_STARTS.codex?.[0] ?? '');
   });
 
+  it('forwards the empty-state callback seams', () => {
+    const onDeleteEmptyAutoChat = vi.fn();
+    const onSelectQuickStart = vi.fn();
+    const tree = ChatTimeline(buildTimelineProps({
+      activeChat: buildChat({ title: '새 채팅' }),
+      isAgentRunning: false,
+      onDeleteEmptyAutoChat,
+      onSelectQuickStart,
+      timelineItems: [],
+    }));
+    const elements = collectElements(tree);
+
+    const backButton = elements.find((element) => getElementProp<string | undefined>(element, 'className')?.includes('emptyChatBackButton'));
+    expect(backButton).toBeDefined();
+    getElementProp<() => void>(backButton!, 'onClick')();
+    expect(onDeleteEmptyAutoChat).toHaveBeenCalledTimes(1);
+
+    const quickStartButton = elements.find((element) => getElementProp<string | undefined>(element, 'className')?.includes('quickStartChip'));
+    expect(quickStartButton).toBeDefined();
+    getElementProp<() => void>(quickStartButton!, 'onClick')();
+    expect(onSelectQuickStart).toHaveBeenCalledWith(AGENT_QUICK_STARTS.codex?.[0]);
+  });
+
   it('renders mixed timeline rows and forwards the main callback seams', () => {
     const onCopyUserMessage = vi.fn();
     const onDecidePermission = vi.fn();
-    const onJumpToBottom = vi.fn();
     const onToggleActionRun = vi.fn();
+    const onToggleResult = vi.fn();
 
     const seamProps = buildTimelineProps({
       onCopyUserMessage,
       onDecidePermission,
-      onJumpToBottom,
       onToggleActionRun,
+      onToggleResult,
     });
     const tree = ChatTimeline(seamProps);
     const elements = collectElements(tree);
@@ -208,7 +229,6 @@ describe('ChatTimeline', () => {
     expect(markup).toContain('YOU');
     expect(markup).toContain('에이전트 응답');
     expect(markup).toContain('2개의 행동 더 보기');
-    expect(markup).toContain('맨 아래로 이동');
 
     const permissionMessage = elements.find((element) => element.type === PermissionRequestMessage);
     expect(permissionMessage).toBeDefined();
@@ -225,9 +245,20 @@ describe('ChatTimeline', () => {
     getElementProp<() => void>(copyButton!, 'onClick')();
     expect(onCopyUserMessage).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }));
 
-    const scrollButton = elements.find((element) => getElementProp<string | undefined>(element, 'aria-label') === '맨 아래로 이동');
-    expect(scrollButton).toBeDefined();
-    getElementProp<() => void>(scrollButton!, 'onClick')();
-    expect(onJumpToBottom).toHaveBeenCalledTimes(1);
+    const actionCard = elements.find((element) => element.type === ActionEventCard);
+    expect(actionCard).toBeDefined();
+    getElementProp<() => void>(actionCard!, 'onToggle')();
+    expect(onToggleResult).toHaveBeenCalledWith('action-1');
+  });
+
+  it('hides timeline content from assistive tech while the chat transition overlay is active', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(ChatTimeline, buildTimelineProps({
+        showChatTransitionLoading: true,
+        timelineItems: buildTimelineProps().timelineItems.filter((item) => item.type !== 'permission'),
+      })),
+    );
+
+    expect(markup).toContain('aria-hidden="true"');
   });
 });
