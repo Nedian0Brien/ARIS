@@ -5,6 +5,7 @@ import styles from './WorkspacePager.module.css';
 import type { WorkspacePagerItem } from './pagerModel';
 import { resolveWorkspacePagerSwipeTarget } from './swipeGesture';
 import { transitionWorkspacePageScrollMemory, type WorkspacePageScrollMemory } from './workspacePageScrollMemory';
+import { recordScrollDebugEvent } from '../scrollDebug';
 
 const SWIPE_THRESHOLD_PX = 56;
 const GESTURE_LOCK_THRESHOLD_PX = 8;
@@ -57,6 +58,16 @@ export function WorkspacePager({
 
       scrollMemoryRef.current = memory;
       if (nextScrollTop !== null) {
+        recordScrollDebugEvent({
+          kind: 'write',
+          source: 'workspacePager:window-restore',
+          top: nextScrollTop,
+          behavior: 'auto',
+          detail: {
+            previousPageId,
+            activePageId,
+          },
+        });
         window.scrollTo({
           top: nextScrollTop,
           behavior: 'auto',
