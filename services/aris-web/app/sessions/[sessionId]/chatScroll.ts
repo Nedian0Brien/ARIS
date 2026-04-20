@@ -220,7 +220,11 @@ type ManualScrollRestorationInput = {
 };
 
 export function shouldBlockLoadOlder(input: ShouldBlockLoadOlderInput): boolean {
-  if (input.scrollPhase === 'resuming' || input.scrollPhase === 'viewport-reflow') {
+  if (
+    input.scrollPhase === 'resuming'
+    || input.scrollPhase === 'viewport-reflow'
+    || input.scrollPhase === 'restoring-tail'
+  ) {
     return true;
   }
 
