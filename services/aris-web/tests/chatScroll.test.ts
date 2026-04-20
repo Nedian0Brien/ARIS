@@ -13,6 +13,7 @@ import {
   shouldRestoreTailScrollOnChatEntry,
   shouldAutoScrollToBottom,
   shouldResetScrollForChatChange,
+  shouldAllowSystemScrollWrite,
   shouldBlockLoadOlder,
   resolveMobileBottomLockState,
   shouldUseManualScrollRestoration,
@@ -182,6 +183,26 @@ describe('chatScroll', () => {
       shouldStickToBottom: true,
       isTailRestorePending: true,
     } as Parameters<typeof shouldAutoScrollToBottom>[0] & { isTailRestorePending: boolean })).toBe(false);
+  });
+
+  it('suppresses generic auto-scroll while resume or tail restore owns scroll writes', () => {
+    expect(shouldAutoScrollToBottom({
+      isWorkspaceHome: false,
+      shouldStickToBottom: true,
+      scrollPhase: 'resuming',
+    } as Parameters<typeof shouldAutoScrollToBottom>[0] & { scrollPhase: 'resuming' })).toBe(false);
+
+    expect(shouldAutoScrollToBottom({
+      isWorkspaceHome: false,
+      shouldStickToBottom: true,
+      scrollPhase: 'viewport-reflow',
+    } as Parameters<typeof shouldAutoScrollToBottom>[0] & { scrollPhase: 'viewport-reflow' })).toBe(false);
+
+    expect(shouldAutoScrollToBottom({
+      isWorkspaceHome: false,
+      shouldStickToBottom: true,
+      scrollPhase: 'restoring-tail',
+    } as Parameters<typeof shouldAutoScrollToBottom>[0] & { scrollPhase: 'restoring-tail' })).toBe(false);
   });
 
   it('restores the chat tail when the active chat finishes hydrating and has not been restored yet', () => {
@@ -457,6 +478,44 @@ describe('chatScroll', () => {
         currentPhase: 'viewport-reflow',
         event: 'resume-stable',
       })).toBe('idle');
+    });
+  });
+
+  describe('shouldAllowSystemScrollWrite', () => {
+    it('gives resume ownership exclusive control during resume reflow phases', () => {
+      expect(shouldAllowSystemScrollWrite({
+        writer: 'auto-scroll',
+        scrollPhase: 'resuming',
+      })).toBe(false);
+
+      expect(shouldAllowSystemScrollWrite({
+        writer: 'resume',
+        scrollPhase: 'resuming',
+      })).toBe(true);
+
+      expect(shouldAllowSystemScrollWrite({
+        writer: 'auto-scroll',
+        scrollPhase: 'viewport-reflow',
+      })).toBe(false);
+    });
+
+    it('gives tail restore ownership exclusive control while tail settling is active', () => {
+      expect(shouldAllowSystemScrollWrite({
+        writer: 'auto-scroll',
+        scrollPhase: 'restoring-tail',
+      })).toBe(false);
+
+      expect(shouldAllowSystemScrollWrite({
+        writer: 'tail-restore',
+        scrollPhase: 'restoring-tail',
+      })).toBe(true);
+    });
+
+    it('leaves idle scrolling available to generic auto-scroll writers', () => {
+      expect(shouldAllowSystemScrollWrite({
+        writer: 'auto-scroll',
+        scrollPhase: 'idle',
+      })).toBe(true);
     });
   });
 });

@@ -48,6 +48,7 @@ type AutoScrollToBottomInput = {
   isWorkspaceHome: boolean;
   shouldStickToBottom: boolean;
   isTailRestorePending?: boolean;
+  scrollPhase?: SessionScrollPhase;
 };
 
 type MobileBottomLockStateInput = {
@@ -106,6 +107,13 @@ type ResolveSessionScrollPhaseInput = {
     | 'older-load-start'
     | 'older-load-complete'
     | 'user-scroll';
+};
+
+export type SystemScrollWriter = 'auto-scroll' | 'tail-restore' | 'resume';
+
+type ShouldAllowSystemScrollWriteInput = {
+  writer: SystemScrollWriter;
+  scrollPhase?: SessionScrollPhase;
 };
 
 export function resolveScrollToBottomTarget(input: ScrollToBottomTargetInput): 'window' | 'stream' {
@@ -205,6 +213,12 @@ export function shouldResetScrollForChatChange(input: ResetScrollForChatChangeIn
 }
 
 export function shouldAutoScrollToBottom(input: AutoScrollToBottomInput): boolean {
+  if (!shouldAllowSystemScrollWrite({
+    writer: 'auto-scroll',
+    scrollPhase: input.scrollPhase,
+  })) {
+    return false;
+  }
   if (input.isWorkspaceHome) {
     return false;
   }
@@ -251,6 +265,18 @@ export function shouldRestoreTailScrollOnChatEntry(input: RestoreTailScrollOnCha
     return false;
   }
   return input.restoredForChatId !== input.activeChatId;
+}
+
+export function shouldAllowSystemScrollWrite(input: ShouldAllowSystemScrollWriteInput): boolean {
+  switch (input.scrollPhase) {
+    case 'resuming':
+    case 'viewport-reflow':
+      return input.writer === 'resume';
+    case 'restoring-tail':
+      return input.writer === 'tail-restore';
+    default:
+      return true;
+  }
 }
 
 export function resolveSessionScrollPhase(input: ResolveSessionScrollPhaseInput): SessionScrollPhase {
