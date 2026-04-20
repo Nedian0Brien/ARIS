@@ -268,6 +268,13 @@ describe('chatScroll', () => {
       isMobileLayoutHydrated: false,
       isViewportLayoutReady: false,
       isComposerDockLayoutReady: false,
+    })).toBe(false);
+
+    expect(resolveTailRestoreLayoutReady({
+      isMobileLayout: false,
+      isMobileLayoutHydrated: true,
+      isViewportLayoutReady: false,
+      isComposerDockLayoutReady: false,
     })).toBe(true);
 
     expect(resolveTailRestoreLayoutReady({

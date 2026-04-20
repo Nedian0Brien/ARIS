@@ -61,7 +61,7 @@ export function shouldShowLastUserMessageJumpBar(input: ShouldShowLastUserMessag
   if (!input.targetEventId) {
     return false;
   }
-  if (input.isWorkspaceHome || input.isNewChatPlaceholder || input.showChatTransitionLoading) {
+  if (input.isWorkspaceHome || input.isNewChatPlaceholder) {
     return false;
   }
   return true;
