@@ -36,12 +36,18 @@ const PANEL_CHOICES: Array<{
 
 type CreatePanelPageProps = {
   onCreatePanel: (type: WorkspacePanelType) => void;
+  onReturnToChat?: () => void;
 };
 
-export function CreatePanelPage({ onCreatePanel }: CreatePanelPageProps) {
+export function CreatePanelPage({ onCreatePanel, onReturnToChat }: CreatePanelPageProps) {
   return (
     <section className={styles.root}>
       <div className={styles.hero}>
+        {onReturnToChat ? (
+          <button type="button" className={styles.backButton} onClick={onReturnToChat}>
+            채팅으로 돌아가기
+          </button>
+        ) : null}
         <h3 className={styles.title}>새 패널 만들기</h3>
         <p className={styles.description}>오른쪽 작업 화면에 추가할 패널 타입을 고르세요.</p>
       </div>
