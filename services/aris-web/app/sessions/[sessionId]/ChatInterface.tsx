@@ -76,6 +76,7 @@ import {
   dispatchSessionScrollPhaseEvent,
   useSessionScrollOrchestrator,
 } from './useSessionScrollOrchestrator';
+import { recordScrollDebugEvent } from './scrollDebug';
 import {
   AGENT_ACTIVITY_SETTLE_MS,
   AGENT_REPLY_TIMEOUT_MS,
@@ -168,6 +169,7 @@ function ElapsedTimer({ since, className }: { since: string; className?: string 
 }
 
 const RESUME_SCROLL_SETTLE_TIMEOUT_MS = 240;
+const SYSTEM_SCROLL_AUTOSCROLL_COOLDOWN_MS = 900;
 
 export function ChatInterface({
   sessionId,
@@ -397,6 +399,8 @@ export function ChatInterface({
   const geminiModeDropdownRef = useRef<HTMLDivElement>(null);
   const commandMenuRef = useRef<HTMLDivElement>(null);
   const previousActiveChatIdRef = useRef<string | null>(activeChatIdResolved);
+  const previousTailLayoutSettlingRef = useRef(false);
+  const genericAutoScrollCooldownUntilRef = useRef(0);
   const latestVisibleEventIdRef = useRef<string | null>(null);
   const disconnectNoticeAwaitingRef = useRef<string | null>(null);
   const runtimeStartedSinceAwaitingRef = useRef(false);
@@ -1245,8 +1249,16 @@ export function ChatInterface({
     }
 
     shell.scrollLeft = 0;
+    recordScrollDebugEvent({
+      kind: 'write',
+      source: 'chat:centerPanel:scrollIntoView',
+      detail: {
+        isCustomizationPinned,
+        isRightSidebarPinnedLayout,
+      },
+    });
     centerPanel.scrollIntoView({ block: 'nearest', inline: 'start' });
-  }, []);
+  }, [isCustomizationPinned, isRightSidebarPinnedLayout]);
 
   useEffect(() => {
     if (!isCustomizationPinned || !isRightSidebarPinnedLayout) {
@@ -1300,12 +1312,33 @@ export function ChatInterface({
     if (isMobileLayout) {
       const previousDocHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
       const previousTop = getWindowScrollTop();
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'history:loadOlder:start:window',
+        top: previousTop,
+        detail: {
+          previousDocHeight,
+          sessionScrollPhase,
+        },
+      });
       await loadOlder().catch(() => {
       });
       requestAnimationFrame(() => {
         const nextDocHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
         const delta = Math.max(0, nextDocHeight - previousDocHeight);
         if (delta > 0) {
+          recordScrollDebugEvent({
+            kind: 'write',
+            source: 'history:loadOlder:restore:window',
+            top: previousTop + delta,
+            behavior: 'auto',
+            detail: {
+              previousTop,
+              previousDocHeight,
+              nextDocHeight,
+              delta,
+            },
+          });
           window.scrollTo({ top: previousTop + delta, behavior: 'auto' });
         }
         completeOlderLoad();
@@ -1323,6 +1356,15 @@ export function ChatInterface({
 
     const previousHeight = stream.scrollHeight;
     const previousTop = stream.scrollTop;
+    recordScrollDebugEvent({
+      kind: 'trigger',
+      source: 'history:loadOlder:start:stream',
+      top: previousTop,
+      detail: {
+        previousHeight,
+        sessionScrollPhase,
+      },
+    });
     await loadOlder().catch(() => {
     });
 
@@ -1333,6 +1375,18 @@ export function ChatInterface({
         return;
       }
       const delta = Math.max(0, nextStream.scrollHeight - previousHeight);
+      recordScrollDebugEvent({
+        kind: 'write',
+        source: 'history:loadOlder:restore:stream',
+        top: previousTop + delta,
+        behavior: 'auto',
+        detail: {
+          previousTop,
+          previousHeight,
+          nextHeight: nextStream.scrollHeight,
+          delta,
+        },
+      });
       nextStream.scrollTop = previousTop + delta;
       completeOlderLoad();
     });
@@ -1384,6 +1438,10 @@ export function ChatInterface({
 
     shouldStickToBottomRef.current = true;
     requestAnimationFrame(() => {
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'chat:composer-focus:auto-scroll',
+      });
       scrollConversationToBottom('auto');
     });
   }, [isMobileLayout, scrollConversationToBottom, shouldStickToBottomRef]);
@@ -1781,7 +1839,18 @@ export function ChatInterface({
       })) {
         return;
       }
-      if (getWindowScrollTop() <= 96) {
+      const top = getWindowScrollTop();
+      if (top <= 96) {
+        recordScrollDebugEvent({
+          kind: 'trigger',
+          source: 'history:loadOlder:window-threshold',
+          top,
+          detail: {
+            hasMoreBefore,
+            isLoadingOlder,
+            scrollPhase: sessionScrollPhaseRef.current,
+          },
+        });
         void loadOlderHistory();
       }
     };
@@ -1795,6 +1864,41 @@ export function ChatInterface({
   useEffect(() => {
     syncScrollToBottomButton();
   }, [events.length, effectivePendingPermissions.length, pendingUserEvents.length, showPermissionQueue, syncScrollToBottomButton]);
+
+  useEffect(() => {
+    if (!isMobileLayout) {
+      previousTailLayoutSettlingRef.current = isTailLayoutSettling;
+      genericAutoScrollCooldownUntilRef.current = 0;
+      return;
+    }
+
+    if (previousTailLayoutSettlingRef.current && !isTailLayoutSettling) {
+      genericAutoScrollCooldownUntilRef.current = Date.now() + SYSTEM_SCROLL_AUTOSCROLL_COOLDOWN_MS;
+    }
+
+    previousTailLayoutSettlingRef.current = isTailLayoutSettling;
+  }, [isMobileLayout, isTailLayoutSettling]);
+
+  const autoScrollTriggerKey = useMemo(
+    () => [
+      eventsForChatId ?? '',
+      events.length,
+      latestVisibleEventId ?? '',
+      pendingUserEvents.length,
+      effectivePendingPermissions.length,
+      isAwaitingReply ? '1' : '0',
+      showPermissionQueue ? '1' : '0',
+    ].join(':'),
+    [
+      effectivePendingPermissions.length,
+      events.length,
+      eventsForChatId,
+      isAwaitingReply,
+      latestVisibleEventId,
+      pendingUserEvents.length,
+      showPermissionQueue,
+    ],
+  );
 
   useEffect(() => {
     const nextMode = shouldUseManualScrollRestoration({
@@ -1816,6 +1920,18 @@ export function ChatInterface({
   }, [activeChatIdResolved, isNewChatPlaceholder, isWorkspaceHome]);
 
   useEffect(() => {
+    if (isMobileLayout && Date.now() < genericAutoScrollCooldownUntilRef.current) {
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'chat:auto-scroll-effect:suppressed',
+        detail: {
+          cooldownUntil: genericAutoScrollCooldownUntilRef.current,
+          now: Date.now(),
+        },
+      });
+      return;
+    }
+
     if (!shouldAutoScrollToBottom({
       isWorkspaceHome,
       shouldStickToBottom: shouldStickToBottomRef.current,
@@ -1823,15 +1939,37 @@ export function ChatInterface({
     })) {
       return;
     }
+    recordScrollDebugEvent({
+      kind: 'trigger',
+      source: 'chat:auto-scroll-effect:immediate',
+      detail: {
+        autoScrollTriggerKey,
+        eventsForChatId,
+        events: events.length,
+        pendingUserEvents: pendingUserEvents.length,
+        effectivePendingPermissions: effectivePendingPermissions.length,
+        isAwaitingReply,
+        isChatEntryTailRestorePending,
+        latestVisibleEventId,
+      },
+    });
     scrollConversationToBottom('auto');
 
     const rafId = window.requestAnimationFrame(() => {
       if (shouldStickToBottomRef.current) {
+        recordScrollDebugEvent({
+          kind: 'trigger',
+          source: 'chat:auto-scroll-effect:raf',
+        });
         scrollConversationToBottom('auto');
       }
     });
     const timeoutId = window.setTimeout(() => {
       if (shouldStickToBottomRef.current) {
+        recordScrollDebugEvent({
+          kind: 'trigger',
+          source: 'chat:auto-scroll-effect:timeout',
+        });
         scrollConversationToBottom('auto');
       }
     }, 140);
@@ -1841,12 +1979,16 @@ export function ChatInterface({
       window.clearTimeout(timeoutId);
     };
   }, [
-    events,
-    isAwaitingReply,
+    autoScrollTriggerKey,
     effectivePendingPermissions.length,
+    events.length,
+    eventsForChatId,
+    isAwaitingReply,
+    isMobileLayout,
     isWorkspaceHome,
-    pendingUserEvents.length,
     isChatEntryTailRestorePending,
+    latestVisibleEventId,
+    pendingUserEvents.length,
     scrollConversationToBottom,
     shouldStickToBottomRef,
   ]);
@@ -1866,15 +2008,32 @@ export function ChatInterface({
 
     shouldStickToBottomRef.current = true;
     setShowScrollToBottom(false);
+    recordScrollDebugEvent({
+      kind: 'trigger',
+      source: 'chat:chat-change-reset:immediate',
+      detail: {
+        previousChatId,
+        activeChatIdResolved,
+        isChatEntryTailRestorePending,
+      },
+    });
     scrollConversationToBottom('auto');
 
     const rafId = window.requestAnimationFrame(() => {
       if (shouldStickToBottomRef.current) {
+        recordScrollDebugEvent({
+          kind: 'trigger',
+          source: 'chat:chat-change-reset:raf',
+        });
         scrollConversationToBottom('auto');
       }
     });
     const timeoutId = window.setTimeout(() => {
       if (shouldStickToBottomRef.current) {
+        recordScrollDebugEvent({
+          kind: 'trigger',
+          source: 'chat:chat-change-reset:timeout',
+        });
         scrollConversationToBottom('auto');
       }
     }, 140);
@@ -2228,6 +2387,16 @@ export function ChatInterface({
       hasMoreBefore,
       scrollPhase: sessionScrollPhaseRef.current,
     }) && stream.scrollTop <= 96) {
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'history:loadOlder:stream-threshold',
+        top: stream.scrollTop,
+        detail: {
+          hasMoreBefore,
+          isLoadingOlder,
+          scrollPhase: sessionScrollPhaseRef.current,
+        },
+      });
       void loadOlderHistory();
     }
   }

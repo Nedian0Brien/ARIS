@@ -20,6 +20,7 @@ import {
   shouldRestoreTailScrollOnChatEntry,
   shouldUseWindowScrollFallback,
 } from './chatScroll';
+import { recordScrollDebugEvent } from './scrollDebug';
 
 const TAIL_LAYOUT_SETTLE_TIMEOUT_MS = 1200;
 
@@ -98,6 +99,28 @@ export function useChatTailRestore({
   const shouldStickToBottomRef = useRef(true);
   const isTailLayoutSettlingRef = useRef(false);
   const isJumpingToLatestRef = useRef(false);
+  const debugInstanceIdRef = useRef(Math.random().toString(36).slice(2, 8));
+
+  useEffect(() => {
+    const instanceId = debugInstanceIdRef.current;
+    recordScrollDebugEvent({
+      kind: 'trigger',
+      source: 'tail:hook:mounted',
+      detail: {
+        instanceId,
+      },
+    });
+
+    return () => {
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'tail:hook:unmounted',
+        detail: {
+          instanceId,
+        },
+      });
+    };
+  }, []);
 
   const scrollConversationToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const documentScrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
@@ -119,6 +142,16 @@ export function useChatTailRestore({
         scrollHeight: documentScrollHeight,
         viewportHeight,
       });
+      recordScrollDebugEvent({
+        kind: 'write',
+        source: 'tail:scrollConversationToBottom:window',
+        top,
+        behavior,
+        detail: {
+          documentScrollHeight,
+          viewportHeight,
+        },
+      });
       window.scrollTo({ top, behavior });
       return;
     }
@@ -126,6 +159,12 @@ export function useChatTailRestore({
       return;
     }
     // scrollHeight - clientHeight = maximum valid scrollTop; explicit for precision
+    recordScrollDebugEvent({
+      kind: 'write',
+      source: 'tail:scrollConversationToBottom:stream',
+      top: stream.scrollHeight - stream.clientHeight,
+      behavior,
+    });
     stream.scrollTo({ top: stream.scrollHeight - stream.clientHeight, behavior });
   }, [isMobileLayout, scrollRef]);
 
@@ -136,6 +175,14 @@ export function useChatTailRestore({
     if (anchorId) {
       const anchor = document.getElementById(anchorId);
       if (anchor) {
+        recordScrollDebugEvent({
+          kind: 'write',
+          source: 'tail:restoreConversationToTail:anchor',
+          behavior,
+          detail: {
+            anchorId,
+          },
+        });
         anchor.scrollIntoView({ behavior, block: 'end' });
         return;
       }
@@ -220,30 +267,49 @@ export function useChatTailRestore({
   useEffect(() => {
     // If a previous settle is still in progress (e.g. isMobileLayout flipped
     // mid-settle after SSR hydration), the stale closure ran with the wrong
-    // layout. Cancel it and reset the guard so this run can re-settle with
-    // the current layout.
+    // layout. Cancel it and let the same chat continue settling with the
+    // current layout instead of re-qualifying as a fresh entry restore.
     const wasMidSettle = tailRestoreCancelRef.current !== null;
+    const shouldContinueCurrentChatSettle = wasMidSettle
+      && restoredTailScrollForChatRef.current === activeChatIdResolved;
     if (wasMidSettle) {
       tailRestoreCancelRef.current?.();
       tailRestoreCancelRef.current = null;
-      if (restoredTailScrollForChatRef.current === activeChatIdResolved) {
-        restoredTailScrollForChatRef.current = null;
-      }
     }
 
-    if (!shouldRestoreTailScrollOnChatEntry({
-      activeChatId: activeChatIdResolved,
-      eventsForChatId,
-      hasLoadedCurrentChat,
-      isTailRestoreHydrated,
-      isWorkspaceHome,
-      isNewChatPlaceholder,
-      restoredForChatId: restoredTailScrollForChatRef.current,
-    })) {
+    if (
+      !shouldContinueCurrentChatSettle
+      && !shouldRestoreTailScrollOnChatEntry({
+        activeChatId: activeChatIdResolved,
+        eventsForChatId,
+        hasLoadedCurrentChat,
+        isTailRestoreHydrated,
+        isWorkspaceHome,
+        isNewChatPlaceholder,
+        restoredForChatId: restoredTailScrollForChatRef.current,
+      })
+    ) {
       return;
     }
 
-    restoredTailScrollForChatRef.current = activeChatIdResolved;
+    recordScrollDebugEvent({
+      kind: 'trigger',
+      source: shouldContinueCurrentChatSettle
+        ? 'tail:restore-entry:continue-settle'
+        : 'tail:restore-entry:eligible',
+      detail: {
+        instanceId: debugInstanceIdRef.current,
+        activeChatIdResolved,
+        eventsForChatId,
+        hasLoadedCurrentChat,
+        isTailRestoreHydrated,
+        restoredForChatId: restoredTailScrollForChatRef.current,
+      },
+    });
+
+    if (!shouldContinueCurrentChatSettle) {
+      restoredTailScrollForChatRef.current = activeChatIdResolved;
+    }
     shouldStickToBottomRef.current = true;
     setShowScrollToBottom(false);
     isTailLayoutSettlingRef.current = true;
@@ -277,9 +343,25 @@ export function useChatTailRestore({
         viewportHeight,
       });
       if (shouldUseWindow) {
+        recordScrollDebugEvent({
+          kind: 'write',
+          source: 'tail:settle:complete:window',
+          top: Math.max(0, scrollHeight - viewportHeight),
+          behavior: 'auto',
+          detail: {
+            scrollHeight,
+            viewportHeight,
+          },
+        });
         window.scrollTo({ top: Math.max(0, scrollHeight - viewportHeight), behavior: 'auto' });
       } else {
         if (stream) {
+          recordScrollDebugEvent({
+            kind: 'write',
+            source: 'tail:settle:complete:stream',
+            top: stream.scrollHeight - stream.clientHeight,
+            behavior: 'auto',
+          });
           stream.scrollTop = stream.scrollHeight - stream.clientHeight;
         }
       }

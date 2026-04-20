@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from 'react';
 
 import { resolveSessionScrollPhase, type SessionScrollPhase } from './chatScroll';
+import { recordScrollDebugEvent } from './scrollDebug';
 
 export type SessionScrollPhaseEvent =
   | 'resume-start'
@@ -110,7 +111,20 @@ export function deactivateSessionScrollOrchestrator() {
 }
 
 export function dispatchSessionScrollPhaseEvent(event: SessionScrollPhaseEvent) {
+  const previous = sessionScrollOrchestratorStore.getSnapshot();
   sessionScrollOrchestratorStore.dispatch(event);
+  const next = sessionScrollOrchestratorStore.getSnapshot();
+  if (previous.isActive || next.isActive) {
+    recordScrollDebugEvent({
+      kind: 'phase',
+      source: `session-scroll:${event}`,
+      phase: next.phase,
+      detail: {
+        previousPhase: previous.phase,
+        nextActive: next.isActive,
+      },
+    });
+  }
 }
 
 export function getSessionScrollOrchestratorSnapshot() {
