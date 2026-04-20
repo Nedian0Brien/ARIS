@@ -44,21 +44,27 @@ export function WorkspacePager({
   useEffect(() => {
     const previousPageId = previousActivePageIdRef.current;
     if (previousPageId !== activePageId && typeof window !== 'undefined') {
+      const previousPage = items.find((item) => item.id === previousPageId);
+      const activePage = items.find((item) => item.id === activePageId);
       const { memory, nextScrollTop } = transitionWorkspacePageScrollMemory({
         memory: scrollMemoryRef.current,
         previousPageId,
         previousScrollTop: window.scrollY,
         nextPageId: activePageId,
+        shouldStorePreviousPage: previousPage?.kind !== 'chat',
+        shouldRestoreNextPage: activePage?.kind !== 'chat',
       });
 
       scrollMemoryRef.current = memory;
-      window.scrollTo({
-        top: nextScrollTop,
-        behavior: 'auto',
-      });
+      if (nextScrollTop !== null) {
+        window.scrollTo({
+          top: nextScrollTop,
+          behavior: 'auto',
+        });
+      }
       previousActivePageIdRef.current = activePageId;
     }
-  }, [activePageId]);
+  }, [activePageId, items]);
 
   useEffect(() => {
     const pager = pagerRef.current;
