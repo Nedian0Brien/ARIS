@@ -36,10 +36,23 @@ export type UseChatTailRestoreInput = {
   isNewChatPlaceholder: boolean;
   isWorkspaceHome: boolean;
   isMobileLayout: boolean;
+  isMobileLayoutHydrated: boolean;
   initialShowChatEntryLoading: boolean;
   resetToLatestWindow: () => Promise<void>;
   scrollRef: RefObject<HTMLDivElement | null>;
   latestVisibleEventIdRef: RefObject<string | null>;
+};
+
+type ResolveTailRestoreSettleActionInput = {
+  activeChatIdResolved: string | null;
+  eventsForChatId: string | null;
+  hasLoadedCurrentChat: boolean;
+  isMobileLayoutHydrated: boolean;
+  isSettleInFlight: boolean;
+  isTailRestoreHydrated: boolean;
+  isNewChatPlaceholder: boolean;
+  isWorkspaceHome: boolean;
+  restoredForChatId: string | null;
 };
 
 export type UseChatTailRestoreOutput = {
@@ -77,6 +90,32 @@ export async function jumpToLatestPageWindow(input: {
   input.restoreConversationToTail(input.behavior ?? 'smooth');
 }
 
+export function resolveTailRestoreSettleAction(
+  input: ResolveTailRestoreSettleActionInput,
+): 'skip' | 'start' | 'continue' {
+  if (!input.isMobileLayoutHydrated) {
+    return 'skip';
+  }
+
+  if (input.isSettleInFlight && input.restoredForChatId === input.activeChatIdResolved) {
+    return 'continue';
+  }
+
+  if (shouldRestoreTailScrollOnChatEntry({
+    activeChatId: input.activeChatIdResolved,
+    eventsForChatId: input.eventsForChatId,
+    hasLoadedCurrentChat: input.hasLoadedCurrentChat,
+    isTailRestoreHydrated: input.isTailRestoreHydrated,
+    isWorkspaceHome: input.isWorkspaceHome,
+    isNewChatPlaceholder: input.isNewChatPlaceholder,
+    restoredForChatId: input.restoredForChatId,
+  })) {
+    return 'start';
+  }
+
+  return 'skip';
+}
+
 export function useChatTailRestore({
   activeChatIdResolved,
   eventsForChatId,
@@ -85,6 +124,7 @@ export function useChatTailRestore({
   isNewChatPlaceholder,
   isWorkspaceHome,
   isMobileLayout,
+  isMobileLayoutHydrated,
   initialShowChatEntryLoading,
   resetToLatestWindow,
   scrollRef,
@@ -95,10 +135,6 @@ export function useChatTailRestore({
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   const restoredTailScrollForChatRef = useRef<string | null>(null);
-  // Tracks the isMobileLayout value used when the last restore completed.
-  // If isMobileLayout flips after complete(), the wrong scroll axis was used
-  // (stream vs window), so we must re-settle with the current layout.
-  const restoredTailScrollLayoutRef = useRef<boolean | null>(null);
   const tailRestoreCancelRef = useRef<(() => void) | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const isTailLayoutSettlingRef = useRef(false);
@@ -261,7 +297,6 @@ export function useChatTailRestore({
         tailRestoreCancelRef.current = null;
       }
       restoredTailScrollForChatRef.current = null;
-      restoredTailScrollLayoutRef.current = null;
       setIsInitialChatEntryPendingReveal(false);
       isTailLayoutSettlingRef.current = false;
       setIsTailLayoutSettling(false);
@@ -270,60 +305,35 @@ export function useChatTailRestore({
 
   // Tail-restore settle loop
   useEffect(() => {
-    // If a previous settle is still in progress (e.g. isMobileLayout flipped
-    // mid-settle after SSR hydration), the stale closure ran with the wrong
-    // layout. Cancel it and let the same chat continue settling with the
-    // current layout instead of re-qualifying as a fresh entry restore.
+    if (!isMobileLayoutHydrated) {
+      return;
+    }
+
     const wasMidSettle = tailRestoreCancelRef.current !== null;
-    const shouldContinueCurrentChatSettle = wasMidSettle
-      && restoredTailScrollForChatRef.current === activeChatIdResolved;
+    const settleAction = resolveTailRestoreSettleAction({
+      activeChatIdResolved,
+      eventsForChatId,
+      hasLoadedCurrentChat,
+      isMobileLayoutHydrated,
+      isSettleInFlight: wasMidSettle,
+      isTailRestoreHydrated,
+      isNewChatPlaceholder,
+      isWorkspaceHome,
+      restoredForChatId: restoredTailScrollForChatRef.current,
+    });
+
     if (wasMidSettle) {
       tailRestoreCancelRef.current?.();
       tailRestoreCancelRef.current = null;
     }
 
-    // isMobileLayout may flip false→true after SSR hydration. If complete()
-    // already ran with the wrong layout (stream scroll instead of window scroll),
-    // window.scrollY is still 0, which would immediately trigger loadOlderHistory.
-    // Detect this by comparing the layout used at complete() time with the current
-    // layout, and clear the restored flag so the settle re-runs with the correct axis.
-    const wasRestoredWithWrongLayout = !wasMidSettle
-      && restoredTailScrollForChatRef.current === activeChatIdResolved
-      && restoredTailScrollLayoutRef.current !== null
-      && restoredTailScrollLayoutRef.current !== isMobileLayout;
-    if (wasRestoredWithWrongLayout) {
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'tail:restore-entry:layout-mismatch-re-restore',
-        detail: {
-          instanceId: debugInstanceIdRef.current,
-          previousLayout: restoredTailScrollLayoutRef.current,
-          isMobileLayout,
-          activeChatIdResolved,
-        },
-      });
-      restoredTailScrollForChatRef.current = null;
-      restoredTailScrollLayoutRef.current = null;
-    }
-
-    if (
-      !shouldContinueCurrentChatSettle
-      && !shouldRestoreTailScrollOnChatEntry({
-        activeChatId: activeChatIdResolved,
-        eventsForChatId,
-        hasLoadedCurrentChat,
-        isTailRestoreHydrated,
-        isWorkspaceHome,
-        isNewChatPlaceholder,
-        restoredForChatId: restoredTailScrollForChatRef.current,
-      })
-    ) {
+    if (settleAction === 'skip') {
       return;
     }
 
     recordScrollDebugEvent({
       kind: 'trigger',
-      source: shouldContinueCurrentChatSettle
+      source: settleAction === 'continue'
         ? 'tail:restore-entry:continue-settle'
         : 'tail:restore-entry:eligible',
       detail: {
@@ -336,7 +346,7 @@ export function useChatTailRestore({
       },
     });
 
-    if (!shouldContinueCurrentChatSettle) {
+    if (settleAction === 'start') {
       restoredTailScrollForChatRef.current = activeChatIdResolved;
     }
     shouldStickToBottomRef.current = true;
@@ -394,7 +404,6 @@ export function useChatTailRestore({
           stream.scrollTop = stream.scrollHeight - stream.clientHeight;
         }
       }
-      restoredTailScrollLayoutRef.current = isMobileLayout;
       setIsInitialChatEntryPendingReveal(false);
       isTailLayoutSettlingRef.current = false;
       setIsTailLayoutSettling(false);
@@ -434,6 +443,7 @@ export function useChatTailRestore({
     eventsForChatId,
     hasLoadedCurrentChat,
     isMobileLayout,
+    isMobileLayoutHydrated,
     isTailRestoreHydrated,
     isNewChatPlaceholder,
     isWorkspaceHome,
