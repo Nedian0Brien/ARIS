@@ -660,7 +660,6 @@ export function ChatInterface({
   });
   const {
     isTailLayoutSettling,
-    isTailLayoutSettlingRef,
     isInitialChatEntryPendingReveal,
     shouldStickToBottomRef,
     showScrollToBottom,
@@ -1372,88 +1371,25 @@ export function ChatInterface({
       dispatchSessionScrollPhaseEvent('older-load-complete');
     };
 
-    if (isMobileLayout) {
-      const previousDocHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-      const previousTop = getWindowScrollTop();
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'history:loadOlder:start:window',
-        top: previousTop,
-        detail: {
-          previousDocHeight,
-          sessionScrollPhase,
-        },
-      });
-      await loadOlder().catch(() => {
-      });
-      requestAnimationFrame(() => {
-        const nextDocHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-        const delta = Math.max(0, nextDocHeight - previousDocHeight);
-        if (delta > 0) {
-          recordScrollDebugEvent({
-            kind: 'write',
-            source: 'history:loadOlder:restore:window',
-            top: previousTop + delta,
-            behavior: 'auto',
-            detail: {
-              previousTop,
-              previousDocHeight,
-              nextDocHeight,
-              delta,
-            },
-          });
-          window.scrollTo({ top: previousTop + delta, behavior: 'auto' });
-        }
-        completeOlderLoad();
-      });
-      return;
-    }
-
-    const stream = scrollRef.current;
-    if (!stream) {
-      await loadOlder().catch(() => {
-      });
-      requestAnimationFrame(completeOlderLoad);
-      return;
-    }
-
-    const previousHeight = stream.scrollHeight;
-    const previousTop = stream.scrollTop;
     recordScrollDebugEvent({
       kind: 'trigger',
-      source: 'history:loadOlder:start:stream',
-      top: previousTop,
+      source: isMobileLayout ? 'history:loadOlder:button:window' : 'history:loadOlder:button:stream',
+      top: isMobileLayout ? getWindowScrollTop() : (scrollRef.current?.scrollTop ?? 0),
       detail: {
-        previousHeight,
+        hasMoreBefore,
+        isLoadingOlder,
         sessionScrollPhase,
       },
     });
     await loadOlder().catch(() => {
     });
 
-    requestAnimationFrame(() => {
-      const nextStream = scrollRef.current;
-      if (!nextStream) {
-        completeOlderLoad();
-        return;
-      }
-      const delta = Math.max(0, nextStream.scrollHeight - previousHeight);
-      recordScrollDebugEvent({
-        kind: 'write',
-        source: 'history:loadOlder:restore:stream',
-        top: previousTop + delta,
-        behavior: 'auto',
-        detail: {
-          previousTop,
-          previousHeight,
-          nextHeight: nextStream.scrollHeight,
-          delta,
-        },
-      });
-      nextStream.scrollTop = previousTop + delta;
-      completeOlderLoad();
-    });
+    requestAnimationFrame(completeOlderLoad);
   }, [hasMoreBefore, isLoadingOlder, isMobileLayout, isTailLayoutSettling, loadOlder, sessionScrollPhase]);
+
+  const handleLoadOlderButtonClick = useCallback(() => {
+    void loadOlderHistory();
+  }, [loadOlderHistory]);
 
   const syncComposerDockMetrics = useCallback(() => {
     const shell = chatShellRef.current;
@@ -1983,64 +1919,6 @@ export function ChatInterface({
     shouldStickToBottomRef,
     syncScrollToBottomButton,
   ]);
-
-  useEffect(() => {
-    if (!isMobileLayout) {
-      return;
-    }
-
-    const onWindowScroll = () => {
-      const blocked = shouldBlockLoadOlder({
-        isTailLayoutSettling: isTailLayoutSettlingRef.current,
-        isLoadingOlder,
-        hasMoreBefore,
-        scrollPhase: sessionScrollPhaseRef.current,
-      });
-      if (blocked) {
-        recordScrollDebugEvent({
-          kind: 'trigger',
-          source: 'history:onWindowScroll:blocked',
-          streamElement: scrollRef.current,
-          detail: {
-            hasMoreBefore,
-            isLoadingOlder,
-            scrollPhase: sessionScrollPhaseRef.current,
-          },
-        });
-        return;
-      }
-      const top = getWindowScrollTop();
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'history:onWindowScroll',
-        top,
-        streamElement: scrollRef.current,
-        detail: {
-          hasMoreBefore,
-          isLoadingOlder,
-          scrollPhase: sessionScrollPhaseRef.current,
-        },
-      });
-      if (top <= 96) {
-        recordScrollDebugEvent({
-          kind: 'trigger',
-          source: 'history:loadOlder:window-threshold',
-          top,
-          detail: {
-            hasMoreBefore,
-            isLoadingOlder,
-            scrollPhase: sessionScrollPhaseRef.current,
-          },
-        });
-        void loadOlderHistory();
-      }
-    };
-
-    window.addEventListener('scroll', onWindowScroll, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', onWindowScroll);
-    };
-  }, [hasMoreBefore, isLoadingOlder, isMobileLayout, isTailLayoutSettlingRef, loadOlderHistory]);
 
   useEffect(() => {
     syncScrollToBottomButton();
@@ -2584,24 +2462,6 @@ export function ChatInterface({
     shouldStickToBottomRef.current = nearBottom;
     setShowScrollToBottom(!nearBottom);
     syncLastUserMessageJumpTarget();
-    if (!shouldBlockLoadOlder({
-      isTailLayoutSettling: isTailLayoutSettlingRef.current,
-      isLoadingOlder,
-      hasMoreBefore,
-      scrollPhase: sessionScrollPhaseRef.current,
-    }) && stream.scrollTop <= 96) {
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'history:loadOlder:stream-threshold',
-        top: stream.scrollTop,
-        detail: {
-          hasMoreBefore,
-          isLoadingOlder,
-          scrollPhase: sessionScrollPhaseRef.current,
-        },
-      });
-      void loadOlderHistory();
-    }
   }
 
   const handleMoveWorkspacePage = useCallback((direction: 'previous' | 'next') => {
@@ -2788,12 +2648,21 @@ export function ChatInterface({
                 chatEntryPendingRevealClassName={chatEntryPendingRevealClassName}
                 copiedUserEventId={copiedUserEventId}
                 expandedResultIds={expandedResultIds}
+                hasMoreBefore={hasMoreBefore}
                 highlightedEventId={highlightedEventId}
                 isAgentRunning={isAgentRunning}
                 isDebugMode={isDebugMode}
+                isLoadingOlder={isLoadingOlder}
+                isLoadOlderDisabled={shouldBlockLoadOlder({
+                  isTailLayoutSettling,
+                  isLoadingOlder,
+                  hasMoreBefore,
+                  scrollPhase: sessionScrollPhase,
+                })}
                 isMobileLayout={isMobileLayout}
                 isOperator={isOperator}
                 loadingPermissionId={loadingPermissionId}
+                onLoadOlder={handleLoadOlderButtonClick}
                 scrollRef={scrollRef}
                 showChatTransitionLoading={showChatTransitionLoading}
                 timelineItems={timelineItems}

@@ -138,10 +138,13 @@ function buildTimelineProps(overrides: Partial<React.ComponentProps<typeof ChatT
     isDebugMode: false,
     isMobileLayout: false,
     isOperator: true,
+    hasMoreBefore: false,
+    isLoadingOlder: false,
     loadingPermissionId: null,
     scrollRef: { current: null },
     showChatTransitionLoading: false,
     timelineItems,
+    onLoadOlder: vi.fn(),
     onCopyUserMessage: vi.fn(),
     onDecidePermission: vi.fn(),
     onDeleteEmptyAutoChat: vi.fn(),
@@ -249,6 +252,33 @@ describe('ChatTimeline', () => {
     expect(actionCard).toBeDefined();
     getElementProp<() => void>(actionCard!, 'onToggle')();
     expect(onToggleResult).toHaveBeenCalledWith('action-1');
+  });
+
+  it('renders a manual history load button at the top of the loaded timeline and forwards the click seam', () => {
+    const onLoadOlder = vi.fn();
+    const tree = ChatTimeline(buildTimelineProps({
+      hasMoreBefore: true,
+      onLoadOlder,
+    }));
+    const elements = collectElements(tree);
+    const loadOlderButton = elements.find((element) => getElementProp<string | undefined>(element, 'aria-label') === '이전 메시지 더 불러오기');
+
+    expect(loadOlderButton).toBeDefined();
+    getElementProp<() => void>(loadOlderButton!, 'onClick')();
+    expect(onLoadOlder).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the manual history load button disabled while older messages are loading', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(ChatTimeline, buildTimelineProps({
+        hasMoreBefore: true,
+        isLoadingOlder: true,
+        timelineItems: buildTimelineProps().timelineItems.filter((item) => item.type !== 'permission'),
+      })),
+    );
+
+    expect(markup).toContain('이전 메시지 불러오는 중');
+    expect(markup).toContain('disabled=""');
   });
 
   it('hides timeline content from assistive tech while the chat transition overlay is active', () => {
