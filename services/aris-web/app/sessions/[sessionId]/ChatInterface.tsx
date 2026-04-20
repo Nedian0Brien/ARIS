@@ -1662,7 +1662,7 @@ export function ChatInterface({
     runtimeStartedSinceAwaitingRef,
   });
   const syncLastUserMessageJumpTarget = useCallback(() => {
-    if (isWorkspaceHome || isNewChatPlaceholder || showChatTransitionLoading || userMessageJumpTargets.length === 0) {
+    if (isWorkspaceHome || isNewChatPlaceholder || userMessageJumpTargets.length === 0) {
       setLastUserMessageJumpTarget(null);
       return;
     }
@@ -1686,7 +1686,6 @@ export function ChatInterface({
     isNewChatPlaceholder,
     isWorkspaceHome,
     scrollRef,
-    showChatTransitionLoading,
     userMessageJumpTargets,
   ]);
 
@@ -2751,6 +2750,7 @@ export function ChatInterface({
             jumpBar={showLastUserMessageJumpBar ? (
               <LastUserMessageJumpBar
                 preview={lastUserMessageJumpTarget?.preview ?? ''}
+                showPendingReveal={showChatTransitionLoading}
                 onJump={handleLastUserMessageJump}
               />
             ) : null}
