@@ -17,6 +17,8 @@ type TailLayoutSettledInput = {
   nextAnchorBottom: number | null;
   previousScrollHeight: number | null;
   nextScrollHeight: number | null;
+  previousViewportHeight: number | null;
+  nextViewportHeight: number | null;
   tolerancePx?: number;
 };
 
@@ -51,6 +53,19 @@ type AutoScrollToBottomInput = {
 type MobileBottomLockStateInput = {
   isNearBottom: boolean;
   isTailRestorePending?: boolean;
+};
+
+export type ComposerDockMetrics = {
+  height: number;
+  left: number;
+  width: number;
+};
+
+type TailRestoreLayoutReadinessInput = {
+  isMobileLayout: boolean;
+  isMobileLayoutHydrated: boolean;
+  isViewportLayoutReady: boolean;
+  isComposerDockLayoutReady: boolean;
 };
 
 type RestoreTailScrollOnChatEntryInput = {
@@ -109,13 +124,16 @@ export function hasTailLayoutSettled(input: TailLayoutSettledInput): boolean {
     || input.nextAnchorBottom === null
     || input.previousScrollHeight === null
     || input.nextScrollHeight === null
+    || input.previousViewportHeight === null
+    || input.nextViewportHeight === null
   ) {
     return false;
   }
 
   const tolerancePx = input.tolerancePx ?? 1;
   return Math.abs(input.nextAnchorBottom - input.previousAnchorBottom) <= tolerancePx
-    && Math.abs(input.nextScrollHeight - input.previousScrollHeight) <= tolerancePx;
+    && Math.abs(input.nextScrollHeight - input.previousScrollHeight) <= tolerancePx
+    && Math.abs(input.nextViewportHeight - input.previousViewportHeight) <= tolerancePx;
 }
 
 export function hasTailRestoreRenderHydrated(input: TailRestoreRenderHydratedInput): boolean {
@@ -139,6 +157,29 @@ export function hasResumePhaseSettled(input: ResumePhaseSettledInput): boolean {
   const tolerancePx = input.tolerancePx ?? 1;
   return Math.abs(input.nextScrollTop - input.previousScrollTop) <= tolerancePx
     && Math.abs(input.nextViewportHeight - input.previousViewportHeight) <= tolerancePx;
+}
+
+export function resolveTailRestoreLayoutReady(input: TailRestoreLayoutReadinessInput): boolean {
+  if (!input.isMobileLayout) {
+    return true;
+  }
+
+  return input.isMobileLayoutHydrated
+    && input.isViewportLayoutReady
+    && input.isComposerDockLayoutReady;
+}
+
+export function haveComposerDockMetricsChanged(
+  previousMetrics: ComposerDockMetrics | null,
+  nextMetrics: ComposerDockMetrics,
+): boolean {
+  if (!previousMetrics) {
+    return true;
+  }
+
+  return previousMetrics.height !== nextMetrics.height
+    || previousMetrics.left !== nextMetrics.left
+    || previousMetrics.width !== nextMetrics.width;
 }
 
 export function shouldResetScrollForChatChange(input: ResetScrollForChatChangeInput): boolean {

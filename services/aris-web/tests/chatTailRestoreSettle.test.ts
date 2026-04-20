@@ -12,24 +12,24 @@ const baseInput = {
 };
 
 describe('chat tail restore settle action', () => {
-  it('waits for the mobile layout decision before starting settle, then starts exactly once', () => {
+  it('waits for required layout measurements before starting settle, then starts exactly once', () => {
     expect(resolveTailRestoreSettleAction({
       ...baseInput,
-      isMobileLayoutHydrated: false,
+      isTailRestoreLayoutReady: false,
       isSettleInFlight: false,
       restoredForChatId: null,
     })).toBe('skip');
 
     expect(resolveTailRestoreSettleAction({
       ...baseInput,
-      isMobileLayoutHydrated: true,
+      isTailRestoreLayoutReady: true,
       isSettleInFlight: false,
       restoredForChatId: null,
     })).toBe('start');
 
     expect(resolveTailRestoreSettleAction({
       ...baseInput,
-      isMobileLayoutHydrated: true,
+      isTailRestoreLayoutReady: true,
       isSettleInFlight: false,
       restoredForChatId: 'chat-2',
     })).toBe('skip');
@@ -38,7 +38,16 @@ describe('chat tail restore settle action', () => {
   it('continues an in-flight settle for the same chat without qualifying as a new restore', () => {
     expect(resolveTailRestoreSettleAction({
       ...baseInput,
-      isMobileLayoutHydrated: true,
+      isTailRestoreLayoutReady: true,
+      isSettleInFlight: true,
+      restoredForChatId: 'chat-2',
+    })).toBe('continue');
+  });
+
+  it('continues an in-flight settle even when layout readiness temporarily drops again', () => {
+    expect(resolveTailRestoreSettleAction({
+      ...baseInput,
+      isTailRestoreLayoutReady: false,
       isSettleInFlight: true,
       restoredForChatId: 'chat-2',
     })).toBe('continue');

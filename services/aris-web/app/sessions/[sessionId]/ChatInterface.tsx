@@ -59,11 +59,14 @@ import { RightPaneLayout } from './chat-screen/right-pane/RightPaneLayout';
 import styles from './ChatInterface.module.css';
 import { shouldShowChatTransitionLoading } from './chatSelection';
 import {
+  haveComposerDockMetricsChanged,
   hasResumePhaseSettled,
   hasTailRestoreRenderHydrated,
   isNearBottom,
   isNearWindowBottom,
+  resolveTailRestoreLayoutReady,
   resolveMobileBottomLockState,
+  type ComposerDockMetrics,
   type SessionScrollPhase,
   shouldAutoScrollToBottom,
   shouldBlockLoadOlder,
@@ -315,6 +318,7 @@ export function ChatInterface({
     isMobileLayout,
     isMobileLayoutHydrated,
     isMounted,
+    isViewportLayoutReady,
     setChatIdCopyState,
     setExpandedActionRunIds,
     setExpandedResultIds,
@@ -394,6 +398,8 @@ export function ChatInterface({
   const composerDockRef = useRef<HTMLElement>(null);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const composerImageInputRef = useRef<HTMLInputElement>(null);
+  const composerDockMetricsRef = useRef<ComposerDockMetrics | null>(null);
+  const composerDockLayoutReadyTimeoutRef = useRef(0);
   const contextItemsRef = useRef<ContextItem[]>([]);
   const isSubmittingRef = useRef(false);
   const plusMenuRef = useRef<HTMLDivElement>(null);
@@ -408,6 +414,7 @@ export function ChatInterface({
   const runtimeStartedSinceAwaitingRef = useRef(false);
   const sidebarFileRequestNonceRef = useRef(0);
   const userMessageBubbleNodesRef = useRef(new Map<string, HTMLDivElement>());
+  const [isComposerDockLayoutReady, setIsComposerDockLayoutReady] = useState(false);
   const [lastUserMessageJumpTarget, setLastUserMessageJumpTarget] = useState<LastUserMessageJumpTarget | null>(null);
   const handleDeleteEmptyAutoChat = useCallback(() => {
     if (!activeChat) {
@@ -645,6 +652,12 @@ export function ChatInterface({
       streamItems.length,
     ],
   );
+  const isTailRestoreLayoutReady = resolveTailRestoreLayoutReady({
+    isMobileLayout,
+    isMobileLayoutHydrated,
+    isViewportLayoutReady,
+    isComposerDockLayoutReady,
+  });
   const {
     isTailLayoutSettling,
     isTailLayoutSettlingRef,
@@ -663,7 +676,7 @@ export function ChatInterface({
     isNewChatPlaceholder,
     isWorkspaceHome,
     isMobileLayout,
-    isMobileLayoutHydrated,
+    isTailRestoreLayoutReady,
     initialShowChatEntryLoading,
     resetToLatestWindow,
     scrollRef,
@@ -690,6 +703,14 @@ export function ChatInterface({
   useEffect(() => {
     sessionScrollPhaseRef.current = sessionScrollPhase;
   }, [sessionScrollPhase]);
+
+  useEffect(() => {
+    return () => {
+      if (composerDockLayoutReadyTimeoutRef.current) {
+        window.clearTimeout(composerDockLayoutReadyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const clearResumePhaseSettleLoop = useCallback(() => {
     if (resumeSettleRafRef.current) {
@@ -1405,20 +1426,41 @@ export function ChatInterface({
 
     const height = Math.ceil(dock.getBoundingClientRect().height);
     shell.style.setProperty('--composer-dock-height', `${height}px`);
+    let left = 0;
+    let nextWidth = 0;
+    if (centerPanel) {
+      const viewportWidth = window.innerWidth;
+      const rect = centerPanel.getBoundingClientRect();
+      const inset = viewportWidth <= 960 ? 10 : 12;
+      left = Math.max(inset, Math.round(rect.left) + inset);
+      const maxWidth = Math.max(240, viewportWidth - inset * 2);
+      nextWidth = Math.max(240, Math.min(maxWidth, Math.round(rect.width) - inset * 2));
+    }
+
+    const nextMetrics = {
+      height,
+      left,
+      width: nextWidth,
+    };
+    if (isMobileLayout && haveComposerDockMetricsChanged(composerDockMetricsRef.current, nextMetrics)) {
+      composerDockMetricsRef.current = nextMetrics;
+      if (composerDockLayoutReadyTimeoutRef.current) {
+        window.clearTimeout(composerDockLayoutReadyTimeoutRef.current);
+      }
+      setIsComposerDockLayoutReady(false);
+      composerDockLayoutReadyTimeoutRef.current = window.setTimeout(() => {
+        composerDockLayoutReadyTimeoutRef.current = 0;
+        setIsComposerDockLayoutReady(true);
+      }, 160);
+    }
 
     if (!centerPanel) {
       return;
     }
 
-    const viewportWidth = window.innerWidth;
-    const rect = centerPanel.getBoundingClientRect();
-    const inset = viewportWidth <= 960 ? 10 : 12;
-    const left = Math.max(inset, Math.round(rect.left) + inset);
-    const maxWidth = Math.max(240, viewportWidth - inset * 2);
-    const nextWidth = Math.max(240, Math.min(maxWidth, Math.round(rect.width) - inset * 2));
     shell.style.setProperty('--composer-dock-left', `${left}px`);
     shell.style.setProperty('--composer-dock-width', `${nextWidth}px`);
-  }, []);
+  }, [isMobileLayout]);
 
   const resizeComposerInput = useCallback(() => {
     const input = composerInputRef.current;
