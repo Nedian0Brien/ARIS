@@ -160,6 +160,10 @@ export function hasResumePhaseSettled(input: ResumePhaseSettledInput): boolean {
 }
 
 export function resolveTailRestoreLayoutReady(input: TailRestoreLayoutReadinessInput): boolean {
+  if (!input.isMobileLayoutHydrated) {
+    return false;
+  }
+
   if (!input.isMobileLayout) {
     return true;
   }
