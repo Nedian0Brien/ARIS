@@ -56,6 +56,29 @@ type ResolveTailRestoreSettleActionInput = {
   restoredForChatId: string | null;
 };
 
+export function resolveTailRestoreLoopTransition(input: {
+  wasMidSettle: boolean;
+  settleAction: 'skip' | 'start' | 'continue';
+}): {
+  shouldCancelExistingSettle: boolean;
+  shouldRestartSettle: boolean;
+  shouldResetTailRestoreState: boolean;
+} {
+  if (input.settleAction === 'skip') {
+    return {
+      shouldCancelExistingSettle: input.wasMidSettle,
+      shouldRestartSettle: false,
+      shouldResetTailRestoreState: input.wasMidSettle,
+    };
+  }
+
+  return {
+    shouldCancelExistingSettle: input.wasMidSettle,
+    shouldRestartSettle: true,
+    shouldResetTailRestoreState: false,
+  };
+}
+
 export type UseChatTailRestoreOutput = {
   isTailLayoutSettling: boolean;
   /**
@@ -385,13 +408,22 @@ export function useChatTailRestore({
       isWorkspaceHome,
       restoredForChatId: restoredTailScrollForChatRef.current,
     });
+    const loopTransition = resolveTailRestoreLoopTransition({
+      wasMidSettle,
+      settleAction,
+    });
 
-    if (wasMidSettle) {
+    if (loopTransition.shouldCancelExistingSettle) {
       tailRestoreCancelRef.current?.();
       tailRestoreCancelRef.current = null;
     }
 
-    if (settleAction === 'skip') {
+    if (!loopTransition.shouldRestartSettle) {
+      if (loopTransition.shouldResetTailRestoreState) {
+        setIsInitialChatEntryPendingReveal(false);
+        isTailLayoutSettlingRef.current = false;
+        setIsTailLayoutSettling(false);
+      }
       recordScrollDebugEvent({
         kind: 'trigger',
         source: 'tail:restore-entry:skip',
@@ -439,6 +471,27 @@ export function useChatTailRestore({
     let stableSinceAt = 0;
     let previousMetrics: ReturnType<typeof readTailLayoutMetrics> | null = null;
 
+    const cancel = () => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      window.cancelAnimationFrame(rafId);
+      window.clearTimeout(timeoutId);
+      if (tailRestoreCancelRef.current === cancel) {
+        tailRestoreCancelRef.current = null;
+      }
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'tail:settle:cancel',
+        streamElement: scrollRef.current,
+        detail: {
+          activeChatIdResolved,
+          stableSinceAt,
+        },
+      });
+    };
+
     const complete = () => {
       if (finished) {
         return;
@@ -455,7 +508,7 @@ export function useChatTailRestore({
       finished = true;
       window.cancelAnimationFrame(rafId);
       window.clearTimeout(timeoutId);
-      if (tailRestoreCancelRef.current === complete) {
+      if (tailRestoreCancelRef.current === cancel) {
         tailRestoreCancelRef.current = null;
       }
       // Bug1 fix: force pixel-perfect alignment after anchor-based settle
@@ -547,7 +600,7 @@ export function useChatTailRestore({
       rafId = window.requestAnimationFrame(settle);
     };
 
-    tailRestoreCancelRef.current = complete;
+    tailRestoreCancelRef.current = cancel;
     settle();
     timeoutId = window.setTimeout(complete, TAIL_LAYOUT_SETTLE_TIMEOUT_MS);
   }, [

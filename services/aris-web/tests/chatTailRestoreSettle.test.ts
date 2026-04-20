@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveTailRestoreSettleAction } from '@/app/sessions/[sessionId]/useChatTailRestore';
+import {
+  resolveTailRestoreLoopTransition,
+  resolveTailRestoreSettleAction,
+} from '@/app/sessions/[sessionId]/useChatTailRestore';
 
 const baseInput = {
   activeChatIdResolved: 'chat-2',
@@ -51,5 +54,36 @@ describe('chat tail restore settle action', () => {
       isSettleInFlight: true,
       restoredForChatId: 'chat-2',
     })).toBe('continue');
+  });
+
+  it('cancels and resets state when an in-flight settle becomes ineligible', () => {
+    expect(resolveTailRestoreLoopTransition({
+      wasMidSettle: true,
+      settleAction: 'skip',
+    })).toEqual({
+      shouldCancelExistingSettle: true,
+      shouldRestartSettle: false,
+      shouldResetTailRestoreState: true,
+    });
+  });
+
+  it('cancels without force-finishing when an in-flight settle restarts for the same chat', () => {
+    expect(resolveTailRestoreLoopTransition({
+      wasMidSettle: true,
+      settleAction: 'continue',
+    })).toEqual({
+      shouldCancelExistingSettle: true,
+      shouldRestartSettle: true,
+      shouldResetTailRestoreState: false,
+    });
+
+    expect(resolveTailRestoreLoopTransition({
+      wasMidSettle: true,
+      settleAction: 'start',
+    })).toEqual({
+      shouldCancelExistingSettle: true,
+      shouldRestartSettle: true,
+      shouldResetTailRestoreState: false,
+    });
   });
 });

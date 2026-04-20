@@ -1695,7 +1695,14 @@ export function ChatInterface({
     isWorkspaceHome,
     isNewChatPlaceholder,
     showChatTransitionLoading,
-  }), [isNewChatPlaceholder, isWorkspaceHome, lastUserMessageJumpTarget?.eventId, showChatTransitionLoading]);
+    showScrollToBottom,
+  }), [
+    isNewChatPlaceholder,
+    isWorkspaceHome,
+    lastUserMessageJumpTarget?.eventId,
+    showChatTransitionLoading,
+    showScrollToBottom,
+  ]);
 
   const handleLastUserMessageJump = useCallback(() => {
     const targetEventId = lastUserMessageJumpTarget?.eventId;
