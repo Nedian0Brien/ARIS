@@ -25,6 +25,11 @@ describe('chat entry loading visibility guards', () => {
     expect(chatInterfaceTsx).toContain('showPendingReveal={showChatTransitionLoading}');
   });
 
+  it('keeps last-user jump-bar layout reserved during entry loading', () => {
+    expect(chatInterfaceTsx).not.toContain('isWorkspaceHome || isNewChatPlaceholder || showChatTransitionLoading || userMessageJumpTargets.length === 0');
+    expect(chatInterfaceTsx).toMatch(/<LastUserMessageJumpBar[\s\S]*showPendingReveal=\{showChatTransitionLoading\}/);
+  });
+
   it('shows the scroll-to-bottom affordance only on the active chat timeline', () => {
     expect(chatCenterPaneTsx).toContain('!showChatTransitionLoading && activeChatIdResolved && !isWorkspaceHome && !isNewChatPlaceholder && showScrollToBottom');
   });
