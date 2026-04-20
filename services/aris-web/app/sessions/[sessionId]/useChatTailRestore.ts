@@ -75,6 +75,14 @@ export function resolveTailRestoreLoopTransition(input: {
     };
   }
 
+  if (input.settleAction === 'continue') {
+    return {
+      shouldCancelExistingSettle: false,
+      shouldRestartSettle: false,
+      shouldResetTailRestoreState: false,
+    };
+  }
+
   return {
     shouldCancelExistingSettle: input.wasMidSettle,
     shouldRestartSettle: true,
@@ -427,6 +435,20 @@ export function useChatTailRestore({
       isWorkspaceHome,
       isNewChatPlaceholder,
       restoredForChatId: restoredTailScrollForChatRef.current,
+    });
+    recordScrollDebugEvent({
+      kind: 'trigger',
+      source: 'tail:restore-entry:prime-decision',
+      streamElement: scrollRef.current,
+      detail: {
+        activeChatIdResolved,
+        shouldPrimeTailRestore,
+        isMobileLayout,
+        isTailRestoreHydrated,
+        isWorkspaceHome,
+        isNewChatPlaceholder,
+        restoredForChatId: restoredTailScrollForChatRef.current,
+      },
     });
     if (!shouldPrimeTailRestore || !activeChatIdResolved) {
       return;

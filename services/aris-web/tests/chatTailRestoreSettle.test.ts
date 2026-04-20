@@ -78,16 +78,18 @@ describe('chat tail restore settle action', () => {
     });
   });
 
-  it('cancels without force-finishing when an in-flight settle restarts for the same chat', () => {
+  it('lets an in-flight settle continue without restarting for the same chat', () => {
     expect(resolveTailRestoreLoopTransition({
       wasMidSettle: true,
       settleAction: 'continue',
     })).toEqual({
-      shouldCancelExistingSettle: true,
-      shouldRestartSettle: true,
+      shouldCancelExistingSettle: false,
+      shouldRestartSettle: false,
       shouldResetTailRestoreState: false,
     });
+  });
 
+  it('cancels without force-finishing when a new settle starts for the same chat', () => {
     expect(resolveTailRestoreLoopTransition({
       wasMidSettle: true,
       settleAction: 'start',

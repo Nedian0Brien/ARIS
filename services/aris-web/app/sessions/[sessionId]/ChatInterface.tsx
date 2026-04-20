@@ -672,25 +672,74 @@ export function ChatInterface({
   useEffect(() => {
     setHasLatchedViewportLayoutReady(false);
     setHasLatchedComposerDockLayoutReady(false);
+    recordScrollDebugEvent({
+      kind: 'trigger',
+      source: 'layout:tailRestoreLatches:reset',
+      detail: {
+        activeChatIdResolved,
+        isMobileLayout,
+        isNewChatPlaceholder,
+        isWorkspaceHome,
+      },
+    });
   }, [activeChatIdResolved, isMobileLayout, isNewChatPlaceholder, isWorkspaceHome]);
 
   useEffect(() => {
     if (isViewportLayoutReady) {
       setHasLatchedViewportLayoutReady(true);
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'layout:tailRestoreLatches:viewport:true',
+        detail: {
+          activeChatIdResolved,
+        },
+      });
     }
-  }, [isViewportLayoutReady]);
+  }, [activeChatIdResolved, isViewportLayoutReady]);
 
   useEffect(() => {
     if (isComposerDockLayoutReady) {
       setHasLatchedComposerDockLayoutReady(true);
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'layout:tailRestoreLatches:dock:true',
+        detail: {
+          activeChatIdResolved,
+        },
+      });
     }
-  }, [isComposerDockLayoutReady]);
+  }, [activeChatIdResolved, isComposerDockLayoutReady]);
   const isTailRestoreLayoutReady = resolveTailRestoreLayoutReady({
     isMobileLayout,
     isMobileLayoutHydrated,
     isViewportLayoutReady: isViewportLayoutReady || hasLatchedViewportLayoutReady,
     isComposerDockLayoutReady: isComposerDockLayoutReady || hasLatchedComposerDockLayoutReady,
   });
+  useEffect(() => {
+    recordScrollDebugEvent({
+      kind: 'trigger',
+      source: 'layout:tailRestoreLayoutReady',
+      detail: {
+        activeChatIdResolved,
+        isTailRestoreLayoutReady,
+        isMobileLayout,
+        isMobileLayoutHydrated,
+        isViewportLayoutReady,
+        hasLatchedViewportLayoutReady,
+        isComposerDockLayoutReady,
+        hasLatchedComposerDockLayoutReady,
+      },
+    });
+  }, [
+    activeChatIdResolved,
+    hasLatchedComposerDockLayoutReady,
+    hasLatchedViewportLayoutReady,
+    isComposerDockLayoutReady,
+    isMobileLayout,
+    isMobileLayoutHydrated,
+    isTailRestoreLayoutReady,
+    isViewportLayoutReady,
+  ]);
   const {
     isChatEntryTailRestorePending,
     isTailLayoutSettling,

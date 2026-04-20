@@ -268,7 +268,7 @@ describe('chatScroll', () => {
     })).toBe(true);
   });
 
-  it('primes the mobile window to the latest bottom before tail hydration finishes', () => {
+  it('keeps priming the mobile window until the active chat tail has actually been restored', () => {
     expect(shouldPrimeTailRestoreWindow({
       activeChatId: 'chat-2',
       isTailRestoreHydrated: false,
@@ -283,15 +283,15 @@ describe('chatScroll', () => {
       isWorkspaceHome: false,
       isNewChatPlaceholder: false,
       restoredForChatId: null,
-    })).toBe(false);
+    })).toBe(true);
 
     expect(shouldPrimeTailRestoreWindow({
       activeChatId: 'chat-2',
       isTailRestoreHydrated: false,
       isWorkspaceHome: false,
       isNewChatPlaceholder: false,
-      restoredForChatId: null,
-    })).toBe(true);
+      restoredForChatId: 'chat-2',
+    })).toBe(false);
   });
 
   it('clamps mobile pixel-perfect scroll top to zero when viewport exceeds document', () => {

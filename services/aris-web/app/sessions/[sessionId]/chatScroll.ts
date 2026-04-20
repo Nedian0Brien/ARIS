@@ -269,9 +269,6 @@ export function shouldPrimeTailRestoreWindow(input: PrimeTailRestoreWindowInput)
   if (input.isWorkspaceHome || input.isNewChatPlaceholder || !input.activeChatId) {
     return false;
   }
-  if (input.isTailRestoreHydrated) {
-    return false;
-  }
   return input.restoredForChatId !== input.activeChatId;
 }
 
