@@ -16,6 +16,13 @@ describe('chat composer dock desktop layout guards', () => {
     expect(chatInterfaceTsx).toMatch(/useLayoutEffect\(\(\) => \{\s*syncComposerDockMetrics\(\);/s);
   });
 
+  it('opens mobile tail restore only after composer layout metrics reach a quiet window', () => {
+    expect(chatInterfaceTsx).toContain('const isTailRestoreLayoutReady = resolveTailRestoreLayoutReady({');
+    expect(chatInterfaceTsx).toContain('isViewportLayoutReady');
+    expect(chatInterfaceTsx).toContain('haveComposerDockMetricsChanged(composerDockMetricsRef.current, nextMetrics)');
+    expect(chatInterfaceTsx).toMatch(/window\.setTimeout\(\(\) => \{\s*composerDockLayoutReadyTimeoutRef\.current = 0;\s*setIsComposerDockLayoutReady\(true\);/s);
+  });
+
   it('uses a desktop-safe default dock width instead of expanding across the full viewport', () => {
     expect(chatInterfaceCss).not.toContain('--composer-dock-width: calc(100vw - 1.5rem);');
   });

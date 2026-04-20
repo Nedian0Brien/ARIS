@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  haveComposerDockMetricsChanged,
   hasResumePhaseSettled,
   hasTailRestoreRenderHydrated,
   hasTailLayoutSettled,
+  resolveTailRestoreLayoutReady,
   resolveSessionScrollPhase,
   resolveTailScrollAnchorId,
   resolveMobileWindowScrollTop,
@@ -39,6 +41,8 @@ describe('chatScroll', () => {
       nextAnchorBottom: 820.5,
       previousScrollHeight: 2400,
       nextScrollHeight: 2400.4,
+      previousViewportHeight: 712,
+      nextViewportHeight: 712.4,
     })).toBe(true);
 
     expect(hasTailLayoutSettled({
@@ -46,6 +50,8 @@ describe('chatScroll', () => {
       nextAnchorBottom: 820,
       previousScrollHeight: 2400,
       nextScrollHeight: 2400,
+      previousViewportHeight: 712,
+      nextViewportHeight: 712,
     })).toBe(false);
 
     expect(hasTailLayoutSettled({
@@ -53,6 +59,19 @@ describe('chatScroll', () => {
       nextAnchorBottom: 854,
       previousScrollHeight: 2400,
       nextScrollHeight: 2472,
+      previousViewportHeight: 712,
+      nextViewportHeight: 712,
+    })).toBe(false);
+  });
+
+  it('keeps the tail settle loop open while the mobile viewport height is still changing', () => {
+    expect(hasTailLayoutSettled({
+      previousAnchorBottom: 820,
+      nextAnchorBottom: 820,
+      previousScrollHeight: 2400,
+      nextScrollHeight: 2400,
+      previousViewportHeight: 712,
+      nextViewportHeight: 676,
     })).toBe(false);
   });
 
@@ -241,6 +260,60 @@ describe('chatScroll', () => {
       shouldStickToBottom: false,
       showScrollToBottom: true,
     });
+  });
+
+  it('waits for all mobile scroll-affecting layout inputs before marking tail restore layout ready', () => {
+    expect(resolveTailRestoreLayoutReady({
+      isMobileLayout: false,
+      isMobileLayoutHydrated: false,
+      isViewportLayoutReady: false,
+      isComposerDockLayoutReady: false,
+    })).toBe(true);
+
+    expect(resolveTailRestoreLayoutReady({
+      isMobileLayout: true,
+      isMobileLayoutHydrated: false,
+      isViewportLayoutReady: true,
+      isComposerDockLayoutReady: true,
+    })).toBe(false);
+
+    expect(resolveTailRestoreLayoutReady({
+      isMobileLayout: true,
+      isMobileLayoutHydrated: true,
+      isViewportLayoutReady: false,
+      isComposerDockLayoutReady: true,
+    })).toBe(false);
+
+    expect(resolveTailRestoreLayoutReady({
+      isMobileLayout: true,
+      isMobileLayoutHydrated: true,
+      isViewportLayoutReady: true,
+      isComposerDockLayoutReady: false,
+    })).toBe(false);
+
+    expect(resolveTailRestoreLayoutReady({
+      isMobileLayout: true,
+      isMobileLayoutHydrated: true,
+      isViewportLayoutReady: true,
+      isComposerDockLayoutReady: true,
+    })).toBe(true);
+  });
+
+  it('treats composer dock metrics as changed only when scroll-affecting geometry actually moves', () => {
+    expect(haveComposerDockMetricsChanged(
+      null,
+      { height: 98, left: 14, width: 402 },
+    )).toBe(true);
+
+    expect(haveComposerDockMetricsChanged(
+      { height: 98, left: 14, width: 402 },
+      { height: 98, left: 14, width: 402 },
+    )).toBe(false);
+
+    expect(haveComposerDockMetricsChanged(
+      { height: 98, left: 14, width: 402 },
+      { height: 112, left: 14, width: 402 },
+    )).toBe(true);
   });
 
   describe('shouldBlockLoadOlder', () => {

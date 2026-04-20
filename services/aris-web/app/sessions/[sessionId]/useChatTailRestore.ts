@@ -23,6 +23,7 @@ import {
 import { recordScrollDebugEvent } from './scrollDebug';
 
 const TAIL_LAYOUT_SETTLE_TIMEOUT_MS = 1200;
+const TAIL_LAYOUT_SETTLE_IDLE_MS = 160;
 
 export type UseChatTailRestoreInput = {
   activeChatIdResolved: string | null;
@@ -36,7 +37,7 @@ export type UseChatTailRestoreInput = {
   isNewChatPlaceholder: boolean;
   isWorkspaceHome: boolean;
   isMobileLayout: boolean;
-  isMobileLayoutHydrated: boolean;
+  isTailRestoreLayoutReady: boolean;
   initialShowChatEntryLoading: boolean;
   resetToLatestWindow: () => Promise<void>;
   scrollRef: RefObject<HTMLDivElement | null>;
@@ -47,7 +48,7 @@ type ResolveTailRestoreSettleActionInput = {
   activeChatIdResolved: string | null;
   eventsForChatId: string | null;
   hasLoadedCurrentChat: boolean;
-  isMobileLayoutHydrated: boolean;
+  isTailRestoreLayoutReady: boolean;
   isSettleInFlight: boolean;
   isTailRestoreHydrated: boolean;
   isNewChatPlaceholder: boolean;
@@ -93,12 +94,12 @@ export async function jumpToLatestPageWindow(input: {
 export function resolveTailRestoreSettleAction(
   input: ResolveTailRestoreSettleActionInput,
 ): 'skip' | 'start' | 'continue' {
-  if (!input.isMobileLayoutHydrated) {
-    return 'skip';
-  }
-
   if (input.isSettleInFlight && input.restoredForChatId === input.activeChatIdResolved) {
     return 'continue';
+  }
+
+  if (!input.isTailRestoreLayoutReady) {
+    return 'skip';
   }
 
   if (shouldRestoreTailScrollOnChatEntry({
@@ -124,7 +125,7 @@ export function useChatTailRestore({
   isNewChatPlaceholder,
   isWorkspaceHome,
   isMobileLayout,
-  isMobileLayoutHydrated,
+  isTailRestoreLayoutReady,
   initialShowChatEntryLoading,
   resetToLatestWindow,
   scrollRef,
@@ -248,6 +249,7 @@ export function useChatTailRestore({
     return {
       anchorBottom: anchor ? anchor.getBoundingClientRect().bottom : null,
       scrollHeight: shouldUseWindow ? documentScrollHeight : (stream?.scrollHeight ?? null),
+      viewportHeight,
     };
   }, [isMobileLayout, latestVisibleEventIdRef, scrollRef]);
 
@@ -305,16 +307,12 @@ export function useChatTailRestore({
 
   // Tail-restore settle loop
   useEffect(() => {
-    if (!isMobileLayoutHydrated) {
-      return;
-    }
-
     const wasMidSettle = tailRestoreCancelRef.current !== null;
     const settleAction = resolveTailRestoreSettleAction({
       activeChatIdResolved,
       eventsForChatId,
       hasLoadedCurrentChat,
-      isMobileLayoutHydrated,
+      isTailRestoreLayoutReady,
       isSettleInFlight: wasMidSettle,
       isTailRestoreHydrated,
       isNewChatPlaceholder,
@@ -357,7 +355,7 @@ export function useChatTailRestore({
     let finished = false;
     let rafId = 0;
     let timeoutId = 0;
-    let stableFrameCount = 0;
+    let stableSinceAt = 0;
     let previousMetrics: ReturnType<typeof readTailLayoutMetrics> | null = null;
 
     const complete = () => {
@@ -422,13 +420,17 @@ export function useChatTailRestore({
         nextAnchorBottom: nextMetrics.anchorBottom,
         previousScrollHeight: previousMetrics.scrollHeight,
         nextScrollHeight: nextMetrics.scrollHeight,
+        previousViewportHeight: previousMetrics.viewportHeight,
+        nextViewportHeight: nextMetrics.viewportHeight,
       })) {
-        stableFrameCount += 1;
+        if (stableSinceAt === 0) {
+          stableSinceAt = window.performance.now();
+        }
       } else {
-        stableFrameCount = 0;
+        stableSinceAt = 0;
       }
       previousMetrics = nextMetrics;
-      if (stableFrameCount >= 2) {
+      if (stableSinceAt !== 0 && window.performance.now() - stableSinceAt >= TAIL_LAYOUT_SETTLE_IDLE_MS) {
         complete();
         return;
       }
@@ -443,7 +445,7 @@ export function useChatTailRestore({
     eventsForChatId,
     hasLoadedCurrentChat,
     isMobileLayout,
-    isMobileLayoutHydrated,
+    isTailRestoreLayoutReady,
     isTailRestoreHydrated,
     isNewChatPlaceholder,
     isWorkspaceHome,

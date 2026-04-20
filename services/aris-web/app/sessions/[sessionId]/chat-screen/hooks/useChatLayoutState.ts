@@ -1,9 +1,12 @@
 import { useEffect, useState, type RefObject } from 'react';
+import { VIEWPORT_LAYOUT_CHANGE_EVENT } from '@/components/layout/ViewportHeightSync';
 import {
   CUSTOMIZATION_OVERLAY_MAX_WIDTH_PX,
   MOBILE_LAYOUT_MAX_WIDTH_PX,
   RIGHT_PIN_PREFERS_LEFT_OVERLAY_MIN_WIDTH_PX,
 } from '../constants';
+
+const VIEWPORT_LAYOUT_READY_IDLE_MS = 160;
 
 type UseChatLayoutStateParams = {
   centerHeaderRef: RefObject<HTMLElement | null>;
@@ -14,6 +17,7 @@ export function useChatLayoutState({
 }: UseChatLayoutStateParams) {
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [isMobileLayoutHydrated, setIsMobileLayoutHydrated] = useState(false);
+  const [isViewportLayoutReady, setIsViewportLayoutReady] = useState(false);
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
   const [expandedActionRunIds, setExpandedActionRunIds] = useState<Record<string, boolean>>({});
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
@@ -32,6 +36,27 @@ export function useChatLayoutState({
 
   useEffect(() => {
     setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    let readyTimeoutId = 0;
+
+    const scheduleViewportLayoutReady = () => {
+      window.clearTimeout(readyTimeoutId);
+      setIsViewportLayoutReady(false);
+      readyTimeoutId = window.setTimeout(() => {
+        const hasViewportMeasurement = document.documentElement.style.getPropertyValue('--app-vh').trim().length > 0;
+        setIsViewportLayoutReady(hasViewportMeasurement);
+      }, VIEWPORT_LAYOUT_READY_IDLE_MS);
+    };
+
+    scheduleViewportLayoutReady();
+    window.addEventListener(VIEWPORT_LAYOUT_CHANGE_EVENT, scheduleViewportLayoutReady);
+
+    return () => {
+      window.clearTimeout(readyTimeoutId);
+      window.removeEventListener(VIEWPORT_LAYOUT_CHANGE_EVENT, scheduleViewportLayoutReady);
+    };
   }, []);
 
   useEffect(() => {
@@ -146,6 +171,7 @@ export function useChatLayoutState({
     isMobileLayout,
     isMobileLayoutHydrated,
     isMounted,
+    isViewportLayoutReady,
     setChatIdCopyState,
     setExpandedActionRunIds,
     setExpandedResultIds,
