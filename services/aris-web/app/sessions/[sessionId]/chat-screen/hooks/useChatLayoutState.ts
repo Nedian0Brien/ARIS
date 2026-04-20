@@ -13,6 +13,7 @@ export function useChatLayoutState({
   centerHeaderRef,
 }: UseChatLayoutStateParams) {
   const [isMobileLayout, setIsMobileLayout] = useState(false);
+  const [isMobileLayoutHydrated, setIsMobileLayoutHydrated] = useState(false);
   const [expandedResultIds, setExpandedResultIds] = useState<Record<string, boolean>>({});
   const [expandedActionRunIds, setExpandedActionRunIds] = useState<Record<string, boolean>>({});
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
@@ -78,6 +79,7 @@ export function useChatLayoutState({
     };
 
     syncLayout();
+    setIsMobileLayoutHydrated(true);
     if (typeof mobileQuery.addEventListener === 'function') {
       mobileQuery.addEventListener('change', syncLayout);
       customizationOverlayQuery.addEventListener('change', syncLayout);
@@ -142,6 +144,7 @@ export function useChatLayoutState({
     isCustomizationSidebarOpen,
     isDebugMode,
     isMobileLayout,
+    isMobileLayoutHydrated,
     isMounted,
     setChatIdCopyState,
     setExpandedActionRunIds,

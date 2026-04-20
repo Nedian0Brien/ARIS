@@ -250,13 +250,13 @@ describe('chatScroll', () => {
         scrollPhase: 'viewport-reflow',
       } as Parameters<typeof shouldBlockLoadOlder>[0] & { scrollPhase: 'viewport-reflow' })).toBe(true);
     });
-    it('blocks while tail scroll is being restored', () => {
+    it('does not block solely because tail restoration currently owns scroll phase', () => {
       expect(shouldBlockLoadOlder({
         isTailLayoutSettling: false,
         isLoadingOlder: false,
         hasMoreBefore: true,
         scrollPhase: 'restoring-tail',
-      } as Parameters<typeof shouldBlockLoadOlder>[0] & { scrollPhase: 'restoring-tail' })).toBe(true);
+      } as Parameters<typeof shouldBlockLoadOlder>[0] & { scrollPhase: 'restoring-tail' })).toBe(false);
     });
     it('allows when all conditions clear', () => {
       expect(shouldBlockLoadOlder({ isTailLayoutSettling: false, isLoadingOlder: false, hasMoreBefore: true })).toBe(false);
