@@ -85,6 +85,13 @@ export async function jumpToLatestPageWindow(input: {
   restoreConversationToTail: (behavior?: ScrollBehavior) => void;
   behavior?: ScrollBehavior;
 }): Promise<void> {
+  recordScrollDebugEvent({
+    kind: 'trigger',
+    source: 'tail:jumpToLatestPageWindow:start',
+    detail: {
+      behavior: input.behavior ?? 'smooth',
+    },
+  });
   input.shouldStickToBottomRef.current = true;
   input.setShowScrollToBottom(false);
   await input.resetToLatestWindow();
@@ -246,11 +253,22 @@ export function useChatTailRestore({
       documentScrollHeight,
       viewportHeight,
     });
-    return {
+    const nextMetrics = {
       anchorBottom: anchor ? anchor.getBoundingClientRect().bottom : null,
       scrollHeight: shouldUseWindow ? documentScrollHeight : (stream?.scrollHeight ?? null),
       viewportHeight,
     };
+    recordScrollDebugEvent({
+      kind: 'trigger',
+      source: 'tail:readTailLayoutMetrics',
+      streamElement: stream,
+      detail: {
+        anchorId,
+        shouldUseWindow,
+        ...nextMetrics,
+      },
+    });
+    return nextMetrics;
   }, [isMobileLayout, latestVisibleEventIdRef, scrollRef]);
 
   const syncScrollToBottomButton = useCallback(() => {
@@ -265,20 +283,57 @@ export function useChatTailRestore({
       viewportHeight,
     });
     if (shouldUseWindow) {
-      setShowScrollToBottom(!isNearWindowBottom());
+      const nextShowScrollToBottom = !isNearWindowBottom();
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'tail:syncScrollToBottomButton:window',
+        streamElement: stream,
+        detail: {
+          shouldUseWindow,
+          nextShowScrollToBottom,
+          documentScrollHeight,
+          viewportHeight,
+        },
+      });
+      setShowScrollToBottom(nextShowScrollToBottom);
       return;
     }
     if (!stream) {
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'tail:syncScrollToBottomButton:no-stream',
+        detail: {
+          shouldUseWindow,
+        },
+      });
       setShowScrollToBottom(false);
       return;
     }
-    setShowScrollToBottom(!isNearBottom(stream));
+    const nextShowScrollToBottom = !isNearBottom(stream);
+    recordScrollDebugEvent({
+      kind: 'trigger',
+      source: 'tail:syncScrollToBottomButton:stream',
+      streamElement: stream,
+      detail: {
+        shouldUseWindow,
+        nextShowScrollToBottom,
+      },
+    });
+    setShowScrollToBottom(nextShowScrollToBottom);
   }, [isMobileLayout, scrollRef]);
 
   const handleJumpToBottom = useCallback(() => {
     if (isJumpingToLatestRef.current) {
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'tail:handleJumpToBottom:ignored',
+      });
       return;
     }
+    recordScrollDebugEvent({
+      kind: 'trigger',
+      source: 'tail:handleJumpToBottom:start',
+    });
     isJumpingToLatestRef.current = true;
     void jumpToLatestPageWindow({
       shouldStickToBottomRef,
@@ -294,6 +349,17 @@ export function useChatTailRestore({
   // Reset on workspace/new-chat transition
   useEffect(() => {
     if (isWorkspaceHome || isNewChatPlaceholder || !activeChatIdResolved) {
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'tail:reset-on-chat-context-change',
+        streamElement: scrollRef.current,
+        detail: {
+          activeChatIdResolved,
+          isWorkspaceHome,
+          isNewChatPlaceholder,
+          hadCancelRef: tailRestoreCancelRef.current !== null,
+        },
+      });
       if (tailRestoreCancelRef.current) {
         tailRestoreCancelRef.current();
         tailRestoreCancelRef.current = null;
@@ -303,7 +369,7 @@ export function useChatTailRestore({
       isTailLayoutSettlingRef.current = false;
       setIsTailLayoutSettling(false);
     }
-  }, [activeChatIdResolved, isNewChatPlaceholder, isWorkspaceHome]);
+  }, [activeChatIdResolved, isNewChatPlaceholder, isWorkspaceHome, scrollRef]);
 
   // Tail-restore settle loop
   useEffect(() => {
@@ -326,6 +392,21 @@ export function useChatTailRestore({
     }
 
     if (settleAction === 'skip') {
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'tail:restore-entry:skip',
+        streamElement: scrollRef.current,
+        detail: {
+          activeChatIdResolved,
+          eventsForChatId,
+          hasLoadedCurrentChat,
+          isTailRestoreLayoutReady,
+          isTailRestoreHydrated,
+          isWorkspaceHome,
+          isNewChatPlaceholder,
+          restoredForChatId: restoredTailScrollForChatRef.current,
+        },
+      });
       return;
     }
 
@@ -362,6 +443,15 @@ export function useChatTailRestore({
       if (finished) {
         return;
       }
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'tail:settle:complete:start',
+        streamElement: scrollRef.current,
+        detail: {
+          activeChatIdResolved,
+          stableSinceAt,
+        },
+      });
       finished = true;
       window.cancelAnimationFrame(rafId);
       window.clearTimeout(timeoutId);
@@ -405,6 +495,14 @@ export function useChatTailRestore({
       setIsInitialChatEntryPendingReveal(false);
       isTailLayoutSettlingRef.current = false;
       setIsTailLayoutSettling(false);
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'tail:settle:complete:done',
+        streamElement: scrollRef.current,
+        detail: {
+          activeChatIdResolved,
+        },
+      });
     };
 
     const settle = () => {
@@ -429,6 +527,18 @@ export function useChatTailRestore({
       } else {
         stableSinceAt = 0;
       }
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'tail:settle:frame',
+        streamElement: scrollRef.current,
+        detail: {
+          activeChatIdResolved,
+          shouldStickToBottom: shouldStickToBottomRef.current,
+          stableSinceAt,
+          previousMetrics,
+          nextMetrics,
+        },
+      });
       previousMetrics = nextMetrics;
       if (stableSinceAt !== 0 && window.performance.now() - stableSinceAt >= TAIL_LAYOUT_SETTLE_IDLE_MS) {
         complete();

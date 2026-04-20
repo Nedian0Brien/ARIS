@@ -7,7 +7,23 @@ export type ScrollDebugEvent = {
   top?: number | null;
   behavior?: ScrollBehavior | null;
   phase?: string | null;
+  snapshot?: ScrollDebugSnapshot | null;
   detail?: Record<string, unknown>;
+};
+
+export type ScrollDebugSnapshot = {
+  windowScrollTop: number;
+  documentScrollHeight: number;
+  documentClientHeight: number;
+  windowInnerHeight: number;
+  windowInnerWidth: number;
+  visualViewportHeight: number | null;
+  visualViewportOffsetTop: number | null;
+  visualViewportPageTop: number | null;
+  keyboardOpen: boolean;
+  streamScrollTop: number | null;
+  streamScrollHeight: number | null;
+  streamClientHeight: number | null;
 };
 
 type ScrollDebugStore = {
@@ -21,7 +37,7 @@ declare global {
   }
 }
 
-const MAX_SCROLL_DEBUG_EVENTS = 200;
+const MAX_SCROLL_DEBUG_EVENTS = 1000;
 const SCROLL_DEBUG_QUERY = 'scrollDebug=1';
 const SCROLL_DEBUG_STORAGE_KEY = 'aris:scroll-debug';
 
@@ -65,15 +81,49 @@ function getScrollDebugStore(): ScrollDebugStore | null {
   return window.__ARIS_SCROLL_DEBUG__;
 }
 
-export function recordScrollDebugEvent(event: Omit<ScrollDebugEvent, 'at'>) {
+export function createScrollDebugSnapshot(
+  streamElement?: Pick<HTMLElement, 'scrollTop' | 'scrollHeight' | 'clientHeight'> | null,
+): ScrollDebugSnapshot | null {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return null;
+  }
+
+  return {
+    windowScrollTop: Math.max(window.scrollY || 0, document.documentElement.scrollTop || 0, document.body.scrollTop || 0),
+    documentScrollHeight: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
+    documentClientHeight: document.documentElement.clientHeight,
+    windowInnerHeight: window.innerHeight || 0,
+    windowInnerWidth: window.innerWidth || 0,
+    visualViewportHeight: window.visualViewport?.height ?? null,
+    visualViewportOffsetTop: window.visualViewport?.offsetTop ?? null,
+    visualViewportPageTop: window.visualViewport?.pageTop ?? null,
+    keyboardOpen: document.documentElement.dataset.keyboardOpen === 'true',
+    streamScrollTop: streamElement?.scrollTop ?? null,
+    streamScrollHeight: streamElement?.scrollHeight ?? null,
+    streamClientHeight: streamElement?.clientHeight ?? null,
+  };
+}
+
+export function recordScrollDebugEvent(
+  event: Omit<ScrollDebugEvent, 'at' | 'snapshot'> & {
+    snapshot?: ScrollDebugSnapshot | null;
+    streamElement?: Pick<HTMLElement, 'scrollTop' | 'scrollHeight' | 'clientHeight'> | null;
+  },
+) {
   const store = getScrollDebugStore();
   if (!store) {
     return;
   }
 
+  const {
+    streamElement,
+    snapshot = createScrollDebugSnapshot(streamElement),
+    ...rest
+  } = event;
   const nextEvent: ScrollDebugEvent = {
     at: Date.now(),
-    ...event,
+    ...rest,
+    snapshot,
   };
 
   store.events.push(nextEvent);

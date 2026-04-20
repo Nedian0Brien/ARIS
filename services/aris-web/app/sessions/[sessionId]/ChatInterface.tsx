@@ -726,16 +726,43 @@ export function ChatInterface({
   }, []);
 
   const completeResumeScrollPhase = useCallback(() => {
+    recordScrollDebugEvent({
+      kind: 'trigger',
+      source: 'resume:complete',
+      streamElement: scrollRef.current,
+      detail: {
+        currentPhase: sessionScrollPhaseRef.current,
+      },
+    });
     clearResumePhaseSettleLoop();
     dispatchSessionScrollPhaseEvent('resume-stable');
   }, [clearResumePhaseSettleLoop]);
 
   const startResumeScrollPhase = useCallback(() => {
     if (!isMobileLayout || isWorkspaceHome || isNewChatPlaceholder || !activeChatIdResolved) {
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'resume:start:skipped',
+        streamElement: scrollRef.current,
+        detail: {
+          isMobileLayout,
+          isWorkspaceHome,
+          isNewChatPlaceholder,
+          activeChatIdResolved,
+        },
+      });
       return;
     }
 
     clearResumePhaseSettleLoop();
+    recordScrollDebugEvent({
+      kind: 'trigger',
+      source: 'resume:start',
+      streamElement: scrollRef.current,
+      detail: {
+        activeChatIdResolved,
+      },
+    });
     dispatchSessionScrollPhaseEvent('resume-start');
 
     const settle = () => {
@@ -760,6 +787,18 @@ export function ChatInterface({
       } else {
         resumeStableFrameCountRef.current = 0;
       }
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'resume:settle:frame',
+        streamElement: scrollRef.current,
+        detail: {
+          currentPhase,
+          activeChatIdResolved,
+          nextMetrics,
+          previousMetrics: resumePreviousMetricsRef.current,
+          stableFrameCount: resumeStableFrameCountRef.current,
+        },
+      });
 
       resumePreviousMetricsRef.current = nextMetrics;
       if (resumeStableFrameCountRef.current >= 2) {
@@ -1442,15 +1481,41 @@ export function ChatInterface({
       left,
       width: nextWidth,
     };
+    recordScrollDebugEvent({
+      kind: 'trigger',
+      source: 'composer:syncDockMetrics',
+      streamElement: scrollRef.current,
+      detail: {
+        nextMetrics,
+        hasCenterPanel: Boolean(centerPanel),
+        isMobileLayout,
+      },
+    });
     if (isMobileLayout && haveComposerDockMetricsChanged(composerDockMetricsRef.current, nextMetrics)) {
       composerDockMetricsRef.current = nextMetrics;
       if (composerDockLayoutReadyTimeoutRef.current) {
         window.clearTimeout(composerDockLayoutReadyTimeoutRef.current);
       }
       setIsComposerDockLayoutReady(false);
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'composer:dockLayoutReady:false',
+        streamElement: scrollRef.current,
+        detail: {
+          nextMetrics,
+        },
+      });
       composerDockLayoutReadyTimeoutRef.current = window.setTimeout(() => {
         composerDockLayoutReadyTimeoutRef.current = 0;
         setIsComposerDockLayoutReady(true);
+        recordScrollDebugEvent({
+          kind: 'trigger',
+          source: 'composer:dockLayoutReady:true',
+          streamElement: scrollRef.current,
+          detail: {
+            nextMetrics,
+          },
+        });
       }, 160);
     }
 
@@ -1804,6 +1869,14 @@ export function ChatInterface({
     activateSessionScrollOrchestrator();
 
     const onResume = () => {
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'resume:onResume',
+        streamElement: scrollRef.current,
+        detail: {
+          visibilityState: document.visibilityState,
+        },
+      });
       if (document.visibilityState === 'hidden') {
         return;
       }
@@ -1811,6 +1884,14 @@ export function ChatInterface({
     };
     const onViewportChanged = () => {
       const currentPhase = sessionScrollPhaseRef.current;
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'resume:onViewportChanged',
+        streamElement: scrollRef.current,
+        detail: {
+          currentPhase,
+        },
+      });
       if (currentPhase !== 'resuming' && currentPhase !== 'viewport-reflow') {
         return;
       }
@@ -1850,11 +1931,29 @@ export function ChatInterface({
 
     const updateStickState = () => {
       if (sessionScrollPhaseRef.current === 'resuming' || sessionScrollPhaseRef.current === 'viewport-reflow') {
+        recordScrollDebugEvent({
+          kind: 'trigger',
+          source: 'chat:updateStickState:suppressed',
+          streamElement: scrollRef.current,
+          detail: {
+            currentPhase: sessionScrollPhaseRef.current,
+          },
+        });
         return;
       }
       const nextState = resolveMobileBottomLockState({
         isNearBottom: isNearWindowBottom(),
         isTailRestorePending: isChatEntryTailRestorePending,
+      });
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'chat:updateStickState',
+        streamElement: scrollRef.current,
+        detail: {
+          currentPhase: sessionScrollPhaseRef.current,
+          isChatEntryTailRestorePending,
+          nextState,
+        },
       });
       shouldStickToBottomRef.current = nextState.shouldStickToBottom;
       setShowScrollToBottom(nextState.showScrollToBottom);
@@ -1885,15 +1984,37 @@ export function ChatInterface({
     }
 
     const onWindowScroll = () => {
-      if (shouldBlockLoadOlder({
+      const blocked = shouldBlockLoadOlder({
         isTailLayoutSettling: isTailLayoutSettlingRef.current,
         isLoadingOlder,
         hasMoreBefore,
         scrollPhase: sessionScrollPhaseRef.current,
-      })) {
+      });
+      if (blocked) {
+        recordScrollDebugEvent({
+          kind: 'trigger',
+          source: 'history:onWindowScroll:blocked',
+          streamElement: scrollRef.current,
+          detail: {
+            hasMoreBefore,
+            isLoadingOlder,
+            scrollPhase: sessionScrollPhaseRef.current,
+          },
+        });
         return;
       }
       const top = getWindowScrollTop();
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'history:onWindowScroll',
+        top,
+        streamElement: scrollRef.current,
+        detail: {
+          hasMoreBefore,
+          isLoadingOlder,
+          scrollPhase: sessionScrollPhaseRef.current,
+        },
+      });
       if (top <= 96) {
         recordScrollDebugEvent({
           kind: 'trigger',
@@ -1962,14 +2083,36 @@ export function ChatInterface({
     }) ? 'manual' : 'auto';
 
     if (window.history.scrollRestoration === nextMode) {
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'chat:scrollRestoration:unchanged',
+        detail: {
+          nextMode,
+        },
+      });
       return;
     }
 
     const previousMode = window.history.scrollRestoration;
     window.history.scrollRestoration = nextMode;
+    recordScrollDebugEvent({
+      kind: 'trigger',
+      source: 'chat:scrollRestoration:set',
+      detail: {
+        previousMode,
+        nextMode,
+      },
+    });
 
     return () => {
       window.history.scrollRestoration = previousMode;
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'chat:scrollRestoration:restore',
+        detail: {
+          previousMode,
+        },
+      });
     };
   }, [activeChatIdResolved, isNewChatPlaceholder, isWorkspaceHome]);
 

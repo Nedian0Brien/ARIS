@@ -5,6 +5,7 @@ import {
   MOBILE_LAYOUT_MAX_WIDTH_PX,
   RIGHT_PIN_PREFERS_LEFT_OVERLAY_MIN_WIDTH_PX,
 } from '../constants';
+import { recordScrollDebugEvent } from '../../scrollDebug';
 
 const VIEWPORT_LAYOUT_READY_IDLE_MS = 160;
 
@@ -44,9 +45,23 @@ export function useChatLayoutState({
     const scheduleViewportLayoutReady = () => {
       window.clearTimeout(readyTimeoutId);
       setIsViewportLayoutReady(false);
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'layout:scheduleViewportLayoutReady',
+        detail: {
+          phase: 'pending',
+        },
+      });
       readyTimeoutId = window.setTimeout(() => {
         const hasViewportMeasurement = document.documentElement.style.getPropertyValue('--app-vh').trim().length > 0;
         setIsViewportLayoutReady(hasViewportMeasurement);
+        recordScrollDebugEvent({
+          kind: 'trigger',
+          source: 'layout:viewportLayoutReady:resolved',
+          detail: {
+            hasViewportMeasurement,
+          },
+        });
       }, VIEWPORT_LAYOUT_READY_IDLE_MS);
     };
 
@@ -98,6 +113,17 @@ export function useChatLayoutState({
       setIsMobileLayout(nextIsMobile);
       setIsCustomizationOverlayLayout(nextUsesCustomizationOverlay);
       setIsChatSidebarOpen(!nextUsesLeftSidebarOverlay);
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'layout:syncLayout',
+        detail: {
+          nextIsMobile,
+          nextViewportWidth,
+          nextUsesCustomizationOverlay,
+          nextUsesLeftSidebarOverlay,
+          isCustomizationPinned,
+        },
+      });
       if (!nextUsesCustomizationOverlay) {
         setIsCustomizationSidebarOpen(false);
       }
@@ -105,6 +131,13 @@ export function useChatLayoutState({
 
     syncLayout();
     setIsMobileLayoutHydrated(true);
+    recordScrollDebugEvent({
+      kind: 'trigger',
+      source: 'layout:isMobileLayoutHydrated',
+      detail: {
+        hydrated: true,
+      },
+    });
     if (typeof mobileQuery.addEventListener === 'function') {
       mobileQuery.addEventListener('change', syncLayout);
       customizationOverlayQuery.addEventListener('change', syncLayout);
