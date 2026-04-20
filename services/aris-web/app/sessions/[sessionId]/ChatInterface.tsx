@@ -69,6 +69,7 @@ import {
   type ComposerDockMetrics,
   type SessionScrollPhase,
   shouldAutoScrollToBottom,
+  shouldAllowSystemScrollWrite,
   shouldBlockLoadOlder,
   shouldUseManualScrollRestoration,
   shouldResetScrollForChatChange,
@@ -1516,6 +1517,7 @@ export function ChatInterface({
     prompt,
     providerSelections,
     runtimeStartedSinceAwaitingRef,
+    sessionScrollPhase,
     scrollConversationToBottom,
     selectedGeminiModeId,
     selectedModelId,
@@ -2017,6 +2019,7 @@ export function ChatInterface({
       isWorkspaceHome,
       shouldStickToBottom: shouldStickToBottomRef.current,
       isTailRestorePending: isChatEntryTailRestorePending,
+      scrollPhase: sessionScrollPhase,
     })) {
       return;
     }
@@ -2070,6 +2073,7 @@ export function ChatInterface({
     isChatEntryTailRestorePending,
     latestVisibleEventId,
     pendingUserEvents.length,
+    sessionScrollPhase,
     scrollConversationToBottom,
     shouldStickToBottomRef,
   ]);
@@ -2084,6 +2088,22 @@ export function ChatInterface({
       isNewChatPlaceholder,
       isTailRestorePending: isChatEntryTailRestorePending,
     })) {
+      return;
+    }
+
+    if (!shouldAllowSystemScrollWrite({
+      writer: 'auto-scroll',
+      scrollPhase: sessionScrollPhase,
+    })) {
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'chat:chat-change-reset:suppressed',
+        detail: {
+          previousChatId,
+          activeChatIdResolved,
+          sessionScrollPhase,
+        },
+      });
       return;
     }
 
@@ -2127,6 +2147,7 @@ export function ChatInterface({
     activeChatIdResolved,
     isChatEntryTailRestorePending,
     isNewChatPlaceholder,
+    sessionScrollPhase,
     scrollConversationToBottom,
     setShowScrollToBottom,
     shouldStickToBottomRef,

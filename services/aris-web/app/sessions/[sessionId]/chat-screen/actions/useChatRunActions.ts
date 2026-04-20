@@ -3,6 +3,7 @@
 import { useCallback, type Dispatch, type FormEvent, type MutableRefObject, type SetStateAction } from 'react';
 import type { AgentFlavor, ApprovalPolicy, SessionChat, UiEvent } from '@/lib/happy/types';
 import { buildOptimisticUserEvent } from '../../chatComposer';
+import { shouldAllowSystemScrollWrite, type SessionScrollPhase } from '../../chatScroll';
 import { buildComposerSubmitText, buildUserMessageMeta } from '../../chatSubmitPayload';
 import {
   buildChatTitleFromFirstPrompt,
@@ -42,6 +43,7 @@ type Params = {
   prompt: string;
   providerSelections?: Parameters<typeof resolveDefaultModelId>[1];
   runtimeStartedSinceAwaitingRef: MutableRefObject<boolean>;
+  sessionScrollPhase: SessionScrollPhase;
   scrollConversationToBottom: (behavior?: ScrollBehavior) => void;
   selectedGeminiModeId: string;
   selectedModelId: string;
@@ -93,6 +95,7 @@ export function useChatRunActions({
   prompt,
   providerSelections,
   runtimeStartedSinceAwaitingRef,
+  sessionScrollPhase,
   scrollConversationToBottom,
   selectedGeminiModeId,
   selectedModelId,
@@ -194,7 +197,10 @@ export function useChatRunActions({
       ...prev,
       [scopedChatId]: [...(prev[scopedChatId] ?? []), optimisticUserEvent],
     }));
-    if (wasStickyAtSubmit) {
+    if (wasStickyAtSubmit && shouldAllowSystemScrollWrite({
+      writer: 'auto-scroll',
+      scrollPhase: sessionScrollPhase,
+    })) {
       shouldStickToBottomRef.current = true;
       setShowScrollToBottom(false);
       requestAnimationFrame(() => {
@@ -317,6 +323,7 @@ export function useChatRunActions({
     prompt,
     providerSelections,
     runtimeStartedSinceAwaitingRef,
+    sessionScrollPhase,
     scrollConversationToBottom,
     selectedGeminiModeId,
     selectedModelId,
