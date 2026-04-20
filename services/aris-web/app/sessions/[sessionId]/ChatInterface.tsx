@@ -63,6 +63,7 @@ import {
   hasTailRestoreRenderHydrated,
   isNearBottom,
   isNearWindowBottom,
+  resolveMobileBottomLockState,
   type SessionScrollPhase,
   shouldAutoScrollToBottom,
   shouldBlockLoadOlder,
@@ -1809,9 +1810,12 @@ export function ChatInterface({
       if (sessionScrollPhaseRef.current === 'resuming' || sessionScrollPhaseRef.current === 'viewport-reflow') {
         return;
       }
-      const nearBottom = isNearWindowBottom();
-      shouldStickToBottomRef.current = nearBottom;
-      setShowScrollToBottom(!nearBottom);
+      const nextState = resolveMobileBottomLockState({
+        isNearBottom: isNearWindowBottom(),
+        isTailRestorePending: isChatEntryTailRestorePending,
+      });
+      shouldStickToBottomRef.current = nextState.shouldStickToBottom;
+      setShowScrollToBottom(nextState.showScrollToBottom);
     };
 
     const rafId = window.requestAnimationFrame(updateStickState);
@@ -1825,7 +1829,13 @@ export function ChatInterface({
       window.visualViewport?.removeEventListener('scroll', updateStickState);
       window.visualViewport?.removeEventListener('resize', updateStickState);
     };
-  }, [isMobileLayout, setShowScrollToBottom, shouldStickToBottomRef, syncScrollToBottomButton]);
+  }, [
+    isChatEntryTailRestorePending,
+    isMobileLayout,
+    setShowScrollToBottom,
+    shouldStickToBottomRef,
+    syncScrollToBottomButton,
+  ]);
 
   useEffect(() => {
     if (!isMobileLayout) {

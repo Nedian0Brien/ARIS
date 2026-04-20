@@ -11,6 +11,7 @@ import {
   shouldAutoScrollToBottom,
   shouldResetScrollForChatChange,
   shouldBlockLoadOlder,
+  resolveMobileBottomLockState,
   shouldUseManualScrollRestoration,
   shouldUseWindowScrollFallback,
 } from '@/app/sessions/[sessionId]/chatScroll';
@@ -222,6 +223,24 @@ describe('chatScroll', () => {
     expect(resolveMobileWindowScrollTop({ scrollHeight: 0, viewportHeight: 0 })).toBe(0);
     expect(resolveMobileWindowScrollTop({ scrollHeight: 1000, viewportHeight: 1000 })).toBe(0);
     expect(resolveMobileWindowScrollTop({ scrollHeight: 1001, viewportHeight: 1000 })).toBe(1);
+  });
+
+  it('keeps mobile bottom lock pinned while initial tail restore is still pending', () => {
+    expect(resolveMobileBottomLockState({
+      isNearBottom: false,
+      isTailRestorePending: true,
+    })).toEqual({
+      shouldStickToBottom: true,
+      showScrollToBottom: false,
+    });
+
+    expect(resolveMobileBottomLockState({
+      isNearBottom: false,
+      isTailRestorePending: false,
+    })).toEqual({
+      shouldStickToBottom: false,
+      showScrollToBottom: true,
+    });
   });
 
   describe('shouldBlockLoadOlder', () => {

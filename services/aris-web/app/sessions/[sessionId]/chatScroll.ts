@@ -48,6 +48,11 @@ type AutoScrollToBottomInput = {
   isTailRestorePending?: boolean;
 };
 
+type MobileBottomLockStateInput = {
+  isNearBottom: boolean;
+  isTailRestorePending?: boolean;
+};
+
 type RestoreTailScrollOnChatEntryInput = {
   activeChatId: string | null;
   eventsForChatId: string | null;
@@ -154,6 +159,23 @@ export function shouldAutoScrollToBottom(input: AutoScrollToBottomInput): boolea
     return false;
   }
   return input.shouldStickToBottom;
+}
+
+export function resolveMobileBottomLockState(input: MobileBottomLockStateInput): {
+  shouldStickToBottom: boolean;
+  showScrollToBottom: boolean;
+} {
+  if (input.isTailRestorePending) {
+    return {
+      shouldStickToBottom: true,
+      showScrollToBottom: false,
+    };
+  }
+
+  return {
+    shouldStickToBottom: input.isNearBottom,
+    showScrollToBottom: !input.isNearBottom,
+  };
 }
 
 export function shouldRestoreTailScrollOnChatEntry(input: RestoreTailScrollOnChatEntryInput): boolean {
