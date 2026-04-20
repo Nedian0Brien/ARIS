@@ -95,6 +95,10 @@ export function useChatTailRestore({
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   const restoredTailScrollForChatRef = useRef<string | null>(null);
+  // Tracks the isMobileLayout value used when the last restore completed.
+  // If isMobileLayout flips after complete(), the wrong scroll axis was used
+  // (stream vs window), so we must re-settle with the current layout.
+  const restoredTailScrollLayoutRef = useRef<boolean | null>(null);
   const tailRestoreCancelRef = useRef<(() => void) | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const isTailLayoutSettlingRef = useRef(false);
@@ -257,6 +261,7 @@ export function useChatTailRestore({
         tailRestoreCancelRef.current = null;
       }
       restoredTailScrollForChatRef.current = null;
+      restoredTailScrollLayoutRef.current = null;
       setIsInitialChatEntryPendingReveal(false);
       isTailLayoutSettlingRef.current = false;
       setIsTailLayoutSettling(false);
@@ -275,6 +280,30 @@ export function useChatTailRestore({
     if (wasMidSettle) {
       tailRestoreCancelRef.current?.();
       tailRestoreCancelRef.current = null;
+    }
+
+    // isMobileLayout may flip false→true after SSR hydration. If complete()
+    // already ran with the wrong layout (stream scroll instead of window scroll),
+    // window.scrollY is still 0, which would immediately trigger loadOlderHistory.
+    // Detect this by comparing the layout used at complete() time with the current
+    // layout, and clear the restored flag so the settle re-runs with the correct axis.
+    const wasRestoredWithWrongLayout = !wasMidSettle
+      && restoredTailScrollForChatRef.current === activeChatIdResolved
+      && restoredTailScrollLayoutRef.current !== null
+      && restoredTailScrollLayoutRef.current !== isMobileLayout;
+    if (wasRestoredWithWrongLayout) {
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'tail:restore-entry:layout-mismatch-re-restore',
+        detail: {
+          instanceId: debugInstanceIdRef.current,
+          previousLayout: restoredTailScrollLayoutRef.current,
+          isMobileLayout,
+          activeChatIdResolved,
+        },
+      });
+      restoredTailScrollForChatRef.current = null;
+      restoredTailScrollLayoutRef.current = null;
     }
 
     if (
@@ -365,6 +394,7 @@ export function useChatTailRestore({
           stream.scrollTop = stream.scrollHeight - stream.clientHeight;
         }
       }
+      restoredTailScrollLayoutRef.current = isMobileLayout;
       setIsInitialChatEntryPendingReveal(false);
       isTailLayoutSettlingRef.current = false;
       setIsTailLayoutSettling(false);
