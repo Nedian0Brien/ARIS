@@ -89,7 +89,7 @@ describe('chatSelection', () => {
     })).toBe(false);
   });
 
-  it('shows transition loading only while the initial chat entry reveal is pending', () => {
+  it('shows transition loading only while entry reveal is pending or tail settle is actively running', () => {
     expect(shouldShowChatTransitionLoading({
       activeChatIdResolved: null,
       eventsForChatId: null,
@@ -128,7 +128,7 @@ describe('chatSelection', () => {
       isTailRestoreHydrated: true,
       isNewChatPlaceholder: false,
       isTailLayoutSettling: true,
-    })).toBe(false);
+    })).toBe(true);
 
     expect(shouldShowChatTransitionLoading({
       activeChatIdResolved: 'chat-2',

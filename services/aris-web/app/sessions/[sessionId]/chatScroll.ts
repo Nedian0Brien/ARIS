@@ -78,6 +78,23 @@ type RestoreTailScrollOnChatEntryInput = {
   restoredForChatId: string | null;
 };
 
+type ChatEntryTailRestorePendingInput = {
+  activeChatId: string | null;
+  isWorkspaceHome: boolean;
+  isNewChatPlaceholder: boolean;
+  restoredForChatId: string | null;
+  isInitialChatEntryPendingReveal: boolean;
+  isTailLayoutSettling: boolean;
+};
+
+type PrimeTailRestoreWindowInput = {
+  activeChatId: string | null;
+  isTailRestoreHydrated: boolean;
+  isWorkspaceHome: boolean;
+  isNewChatPlaceholder: boolean;
+  restoredForChatId: string | null;
+};
+
 export type SessionScrollPhase =
   | 'idle'
   | 'user-scrolling'
@@ -231,6 +248,28 @@ export function shouldRestoreTailScrollOnChatEntry(input: RestoreTailScrollOnCha
     return false;
   }
   if (input.eventsForChatId !== input.activeChatId) {
+    return false;
+  }
+  return input.restoredForChatId !== input.activeChatId;
+}
+
+export function resolveChatEntryTailRestorePending(input: ChatEntryTailRestorePendingInput): boolean {
+  if (input.isWorkspaceHome || input.isNewChatPlaceholder || !input.activeChatId) {
+    return false;
+  }
+
+  if (input.isInitialChatEntryPendingReveal || input.isTailLayoutSettling) {
+    return true;
+  }
+
+  return input.restoredForChatId !== input.activeChatId;
+}
+
+export function shouldPrimeTailRestoreWindow(input: PrimeTailRestoreWindowInput): boolean {
+  if (input.isWorkspaceHome || input.isNewChatPlaceholder || !input.activeChatId) {
+    return false;
+  }
+  if (input.isTailRestoreHydrated) {
     return false;
   }
   return input.restoredForChatId !== input.activeChatId;

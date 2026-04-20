@@ -67,6 +67,17 @@ describe('chat tail restore settle action', () => {
     });
   });
 
+  it('keeps the pre-start state intact while tail restore is still waiting to become eligible', () => {
+    expect(resolveTailRestoreLoopTransition({
+      wasMidSettle: false,
+      settleAction: 'skip',
+    })).toEqual({
+      shouldCancelExistingSettle: false,
+      shouldRestartSettle: false,
+      shouldResetTailRestoreState: false,
+    });
+  });
+
   it('cancels without force-finishing when an in-flight settle restarts for the same chat', () => {
     expect(resolveTailRestoreLoopTransition({
       wasMidSettle: true,

@@ -14,9 +14,11 @@ import {
   hasTailLayoutSettled,
   isNearBottom,
   isNearWindowBottom,
+  resolveChatEntryTailRestorePending,
   resolveMobileWindowScrollTop,
   resolveScrollToBottomTarget,
   resolveTailScrollAnchorId,
+  shouldPrimeTailRestoreWindow,
   shouldRestoreTailScrollOnChatEntry,
   shouldUseWindowScrollFallback,
 } from './chatScroll';
@@ -38,6 +40,7 @@ export type UseChatTailRestoreInput = {
   isWorkspaceHome: boolean;
   isMobileLayout: boolean;
   isTailRestoreLayoutReady: boolean;
+  tailRestoreRenderVersion: string;
   initialShowChatEntryLoading: boolean;
   resetToLatestWindow: () => Promise<void>;
   scrollRef: RefObject<HTMLDivElement | null>;
@@ -80,6 +83,7 @@ export function resolveTailRestoreLoopTransition(input: {
 }
 
 export type UseChatTailRestoreOutput = {
+  isChatEntryTailRestorePending: boolean;
   isTailLayoutSettling: boolean;
   /**
    * Ref mirror of isTailLayoutSettling. Use this (not the state value) inside
@@ -156,6 +160,7 @@ export function useChatTailRestore({
   isWorkspaceHome,
   isMobileLayout,
   isTailRestoreLayoutReady,
+  tailRestoreRenderVersion,
   initialShowChatEntryLoading,
   resetToLatestWindow,
   scrollRef,
@@ -166,7 +171,9 @@ export function useChatTailRestore({
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   const restoredTailScrollForChatRef = useRef<string | null>(null);
+  const primedTailScrollForChatRef = useRef<string | null>(null);
   const tailRestoreCancelRef = useRef<(() => void) | null>(null);
+  const tailRestorePrimeLoopCancelRef = useRef<(() => void) | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const isTailLayoutSettlingRef = useRef(false);
   const isJumpingToLatestRef = useRef(false);
@@ -192,6 +199,15 @@ export function useChatTailRestore({
       });
     };
   }, []);
+
+  const isChatEntryTailRestorePending = resolveChatEntryTailRestorePending({
+    activeChatId: activeChatIdResolved,
+    isWorkspaceHome,
+    isNewChatPlaceholder,
+    restoredForChatId: restoredTailScrollForChatRef.current,
+    isInitialChatEntryPendingReveal,
+    isTailLayoutSettling,
+  });
 
   const scrollConversationToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const documentScrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
@@ -387,12 +403,88 @@ export function useChatTailRestore({
         tailRestoreCancelRef.current();
         tailRestoreCancelRef.current = null;
       }
+      if (tailRestorePrimeLoopCancelRef.current) {
+        tailRestorePrimeLoopCancelRef.current();
+        tailRestorePrimeLoopCancelRef.current = null;
+      }
       restoredTailScrollForChatRef.current = null;
+      primedTailScrollForChatRef.current = null;
       setIsInitialChatEntryPendingReveal(false);
       isTailLayoutSettlingRef.current = false;
       setIsTailLayoutSettling(false);
     }
   }, [activeChatIdResolved, isNewChatPlaceholder, isWorkspaceHome, scrollRef]);
+
+  useEffect(() => {
+    if (tailRestorePrimeLoopCancelRef.current) {
+      tailRestorePrimeLoopCancelRef.current();
+      tailRestorePrimeLoopCancelRef.current = null;
+    }
+
+    const shouldPrimeTailRestore = isMobileLayout && shouldPrimeTailRestoreWindow({
+      activeChatId: activeChatIdResolved,
+      isTailRestoreHydrated,
+      isWorkspaceHome,
+      isNewChatPlaceholder,
+      restoredForChatId: restoredTailScrollForChatRef.current,
+    });
+    if (!shouldPrimeTailRestore || !activeChatIdResolved) {
+      return;
+    }
+
+    let cancelled = false;
+    let rafId = 0;
+    const cancel = () => {
+      cancelled = true;
+      window.cancelAnimationFrame(rafId);
+    };
+    tailRestorePrimeLoopCancelRef.current = cancel;
+
+    const tick = () => {
+      if (cancelled) {
+        return;
+      }
+      const isFirstPrimeForChat = primedTailScrollForChatRef.current !== activeChatIdResolved;
+      primedTailScrollForChatRef.current = activeChatIdResolved;
+      shouldStickToBottomRef.current = true;
+      setShowScrollToBottom(false);
+      if (isFirstPrimeForChat) {
+        recordScrollDebugEvent({
+          kind: 'trigger',
+          source: 'tail:restore-entry:prime',
+          streamElement: scrollRef.current,
+          detail: {
+            activeChatIdResolved,
+            eventsForChatId,
+          },
+        });
+      }
+      scrollConversationToBottom('auto');
+      if (isInitialChatEntryPendingReveal) {
+        setIsInitialChatEntryPendingReveal(false);
+      }
+      rafId = window.requestAnimationFrame(tick);
+    };
+
+    tick();
+    return () => {
+      cancel();
+      if (tailRestorePrimeLoopCancelRef.current === cancel) {
+        tailRestorePrimeLoopCancelRef.current = null;
+      }
+    };
+  }, [
+    activeChatIdResolved,
+    eventsForChatId,
+    isInitialChatEntryPendingReveal,
+    isMobileLayout,
+    isNewChatPlaceholder,
+    isTailRestoreHydrated,
+    isTailRestoreLayoutReady,
+    isWorkspaceHome,
+    scrollConversationToBottom,
+    scrollRef,
+  ]);
 
   // Tail-restore settle loop
   useEffect(() => {
@@ -459,6 +551,12 @@ export function useChatTailRestore({
 
     if (settleAction === 'start') {
       restoredTailScrollForChatRef.current = activeChatIdResolved;
+    }
+    if (
+      !isInitialChatEntryPendingReveal
+      && primedTailScrollForChatRef.current !== activeChatIdResolved
+    ) {
+      setIsInitialChatEntryPendingReveal(true);
     }
     shouldStickToBottomRef.current = true;
     setShowScrollToBottom(false);
@@ -608,6 +706,7 @@ export function useChatTailRestore({
     eventsForChatId,
     hasLoadedCurrentChat,
     isMobileLayout,
+    isInitialChatEntryPendingReveal,
     isTailRestoreLayoutReady,
     isTailRestoreHydrated,
     isNewChatPlaceholder,
@@ -615,11 +714,16 @@ export function useChatTailRestore({
     readTailLayoutMetrics,
     restoreConversationToTail,
     scrollRef,
+    tailRestoreRenderVersion,
   ]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      if (tailRestorePrimeLoopCancelRef.current) {
+        tailRestorePrimeLoopCancelRef.current();
+        tailRestorePrimeLoopCancelRef.current = null;
+      }
       if (tailRestoreCancelRef.current) {
         tailRestoreCancelRef.current();
         tailRestoreCancelRef.current = null;
@@ -628,6 +732,7 @@ export function useChatTailRestore({
   }, []);
 
   return {
+    isChatEntryTailRestorePending,
     isTailLayoutSettling,
     isTailLayoutSettlingRef,
     isInitialChatEntryPendingReveal,

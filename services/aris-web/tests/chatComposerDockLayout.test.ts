@@ -16,6 +16,10 @@ describe('chat composer dock desktop layout guards', () => {
     expect(chatInterfaceTsx).toMatch(/useLayoutEffect\(\(\) => \{\s*syncComposerDockMetrics\(\);/s);
   });
 
+  it('re-syncs composer dock metrics immediately when mobile layout hydration flips on', () => {
+    expect(chatInterfaceTsx).toMatch(/useLayoutEffect\(\(\) => \{\s*if \(!isMobileLayout\) \{\s*return;\s*\}\s*syncComposerDockMetrics\(\);\s*\}, \[isMobileLayout, syncComposerDockMetrics\]\);/s);
+  });
+
   it('opens mobile tail restore only after composer layout metrics reach a quiet window', () => {
     expect(chatInterfaceTsx).toContain('const isTailRestoreLayoutReady = resolveTailRestoreLayoutReady({');
     expect(chatInterfaceTsx).toContain('isViewportLayoutReady');

@@ -88,6 +88,7 @@ import {
   COMPOSER_MAX_HEIGHT_PX,
   COMPOSER_MIN_HEIGHT_PX,
   CUSTOMIZATION_OVERLAY_MAX_WIDTH_PX,
+  MOBILE_LAYOUT_MAX_WIDTH_PX,
   READ_CURSOR_SYNC_DEBOUNCE_MS,
   RIGHT_PIN_PREFERS_LEFT_OVERLAY_MIN_WIDTH_PX,
   RUNTIME_DISCONNECT_GRACE_MS,
@@ -415,6 +416,8 @@ export function ChatInterface({
   const sidebarFileRequestNonceRef = useRef(0);
   const userMessageBubbleNodesRef = useRef(new Map<string, HTMLDivElement>());
   const [isComposerDockLayoutReady, setIsComposerDockLayoutReady] = useState(false);
+  const [hasLatchedViewportLayoutReady, setHasLatchedViewportLayoutReady] = useState(false);
+  const [hasLatchedComposerDockLayoutReady, setHasLatchedComposerDockLayoutReady] = useState(false);
   const [lastUserMessageJumpTarget, setLastUserMessageJumpTarget] = useState<LastUserMessageJumpTarget | null>(null);
   const handleDeleteEmptyAutoChat = useCallback(() => {
     if (!activeChat) {
@@ -652,13 +655,44 @@ export function ChatInterface({
       streamItems.length,
     ],
   );
+  const tailRestoreRenderVersion = useMemo(
+    () => [
+      latestVisibleEventId ?? '',
+      latestRenderableStreamEventId ?? '',
+      expectedStreamItems.length,
+      streamItems.length,
+    ].join(':'),
+    [
+      expectedStreamItems.length,
+      latestRenderableStreamEventId,
+      latestVisibleEventId,
+      streamItems.length,
+    ],
+  );
+  useEffect(() => {
+    setHasLatchedViewportLayoutReady(false);
+    setHasLatchedComposerDockLayoutReady(false);
+  }, [activeChatIdResolved, isMobileLayout, isNewChatPlaceholder, isWorkspaceHome]);
+
+  useEffect(() => {
+    if (isViewportLayoutReady) {
+      setHasLatchedViewportLayoutReady(true);
+    }
+  }, [isViewportLayoutReady]);
+
+  useEffect(() => {
+    if (isComposerDockLayoutReady) {
+      setHasLatchedComposerDockLayoutReady(true);
+    }
+  }, [isComposerDockLayoutReady]);
   const isTailRestoreLayoutReady = resolveTailRestoreLayoutReady({
     isMobileLayout,
     isMobileLayoutHydrated,
-    isViewportLayoutReady,
-    isComposerDockLayoutReady,
+    isViewportLayoutReady: isViewportLayoutReady || hasLatchedViewportLayoutReady,
+    isComposerDockLayoutReady: isComposerDockLayoutReady || hasLatchedComposerDockLayoutReady,
   });
   const {
+    isChatEntryTailRestorePending,
     isTailLayoutSettling,
     isTailLayoutSettlingRef,
     isInitialChatEntryPendingReveal,
@@ -677,6 +711,7 @@ export function ChatInterface({
     isWorkspaceHome,
     isMobileLayout,
     isTailRestoreLayoutReady,
+    tailRestoreRenderVersion,
     initialShowChatEntryLoading,
     resetToLatestWindow,
     scrollRef,
@@ -691,7 +726,6 @@ export function ChatInterface({
     isNewChatPlaceholder,
     isTailLayoutSettling,
   });
-  const isChatEntryTailRestorePending = isInitialChatEntryPendingReveal || isTailLayoutSettling;
   const chatEntryPendingRevealClassName = showChatTransitionLoading ? styles.chatEntryPendingReveal : '';
   const { phase: sessionScrollPhase } = useSessionScrollOrchestrator();
   const sessionScrollPhaseRef = useRef<SessionScrollPhase>('idle');
@@ -1463,6 +1497,7 @@ export function ChatInterface({
       return;
     }
 
+    const isMobileLayoutNow = window.innerWidth <= MOBILE_LAYOUT_MAX_WIDTH_PX;
     const height = Math.ceil(dock.getBoundingClientRect().height);
     shell.style.setProperty('--composer-dock-height', `${height}px`);
     let left = 0;
@@ -1488,10 +1523,10 @@ export function ChatInterface({
       detail: {
         nextMetrics,
         hasCenterPanel: Boolean(centerPanel),
-        isMobileLayout,
+        isMobileLayout: isMobileLayoutNow,
       },
     });
-    if (isMobileLayout && haveComposerDockMetricsChanged(composerDockMetricsRef.current, nextMetrics)) {
+    if (isMobileLayoutNow && haveComposerDockMetricsChanged(composerDockMetricsRef.current, nextMetrics)) {
       composerDockMetricsRef.current = nextMetrics;
       if (composerDockLayoutReadyTimeoutRef.current) {
         window.clearTimeout(composerDockLayoutReadyTimeoutRef.current);
@@ -1525,7 +1560,7 @@ export function ChatInterface({
 
     shell.style.setProperty('--composer-dock-left', `${left}px`);
     shell.style.setProperty('--composer-dock-width', `${nextWidth}px`);
-  }, [isMobileLayout]);
+  }, []);
 
   const resizeComposerInput = useCallback(() => {
     const input = composerInputRef.current;
@@ -1825,6 +1860,13 @@ export function ChatInterface({
     isWorkspaceHome,
     syncComposerDockMetrics,
   ]);
+
+  useLayoutEffect(() => {
+    if (!isMobileLayout) {
+      return;
+    }
+    syncComposerDockMetrics();
+  }, [isMobileLayout, syncComposerDockMetrics]);
 
   useLayoutEffect(() => {
     syncLastUserMessageJumpTarget();

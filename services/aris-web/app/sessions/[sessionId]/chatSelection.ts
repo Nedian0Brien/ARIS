@@ -62,5 +62,5 @@ export function shouldShowChatTransitionLoading(input: {
   if (input.isNewChatPlaceholder) {
     return false;
   }
-  return input.isInitialChatEntryPendingReveal;
+  return input.isInitialChatEntryPendingReveal || input.isTailLayoutSettling;
 }

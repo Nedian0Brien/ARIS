@@ -9,6 +9,8 @@ import {
   resolveTailScrollAnchorId,
   resolveMobileWindowScrollTop,
   resolveScrollToBottomTarget,
+  resolveChatEntryTailRestorePending,
+  shouldPrimeTailRestoreWindow,
   shouldRestoreTailScrollOnChatEntry,
   shouldAutoScrollToBottom,
   shouldResetScrollForChatChange,
@@ -235,6 +237,61 @@ describe('chatScroll', () => {
       isNewChatPlaceholder: false,
       restoredForChatId: 'chat-2',
     })).toBe(false);
+  });
+
+  it('keeps chat-entry tail restore pending until the active mobile chat has actually been restored', () => {
+    expect(resolveChatEntryTailRestorePending({
+      activeChatId: 'chat-2',
+      isWorkspaceHome: false,
+      isNewChatPlaceholder: false,
+      restoredForChatId: null,
+      isInitialChatEntryPendingReveal: false,
+      isTailLayoutSettling: false,
+    })).toBe(true);
+
+    expect(resolveChatEntryTailRestorePending({
+      activeChatId: 'chat-2',
+      isWorkspaceHome: false,
+      isNewChatPlaceholder: false,
+      restoredForChatId: 'chat-2',
+      isInitialChatEntryPendingReveal: false,
+      isTailLayoutSettling: false,
+    })).toBe(false);
+
+    expect(resolveChatEntryTailRestorePending({
+      activeChatId: 'chat-2',
+      isWorkspaceHome: false,
+      isNewChatPlaceholder: false,
+      restoredForChatId: 'chat-2',
+      isInitialChatEntryPendingReveal: false,
+      isTailLayoutSettling: true,
+    })).toBe(true);
+  });
+
+  it('primes the mobile window to the latest bottom before tail hydration finishes', () => {
+    expect(shouldPrimeTailRestoreWindow({
+      activeChatId: 'chat-2',
+      isTailRestoreHydrated: false,
+      isWorkspaceHome: false,
+      isNewChatPlaceholder: false,
+      restoredForChatId: null,
+    })).toBe(true);
+
+    expect(shouldPrimeTailRestoreWindow({
+      activeChatId: 'chat-2',
+      isTailRestoreHydrated: true,
+      isWorkspaceHome: false,
+      isNewChatPlaceholder: false,
+      restoredForChatId: null,
+    })).toBe(false);
+
+    expect(shouldPrimeTailRestoreWindow({
+      activeChatId: 'chat-2',
+      isTailRestoreHydrated: false,
+      isWorkspaceHome: false,
+      isNewChatPlaceholder: false,
+      restoredForChatId: null,
+    })).toBe(true);
   });
 
   it('clamps mobile pixel-perfect scroll top to zero when viewport exceeds document', () => {
