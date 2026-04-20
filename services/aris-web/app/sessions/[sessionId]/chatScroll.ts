@@ -55,6 +55,14 @@ type MobileBottomLockStateInput = {
   isTailRestorePending?: boolean;
 };
 
+type TailSettleCompletionScrollInput = {
+  isMobileLayout: boolean;
+  shouldUseWindow: boolean;
+  anchorBottom: number | null;
+  viewportHeight: number;
+  tolerancePx?: number;
+};
+
 export type ComposerDockMetrics = {
   height: number;
   left: number;
@@ -221,6 +229,15 @@ export function resolveMobileBottomLockState(input: MobileBottomLockStateInput):
     shouldStickToBottom: input.isNearBottom,
     showScrollToBottom: !input.isNearBottom,
   };
+}
+
+export function shouldSkipTailSettleCompletionScroll(input: TailSettleCompletionScrollInput): boolean {
+  if (!input.isMobileLayout || !input.shouldUseWindow || input.anchorBottom === null) {
+    return false;
+  }
+
+  const tolerancePx = input.tolerancePx ?? 1;
+  return Math.abs(input.anchorBottom - input.viewportHeight) <= tolerancePx;
 }
 
 export function shouldRestoreTailScrollOnChatEntry(input: RestoreTailScrollOnChatEntryInput): boolean {
