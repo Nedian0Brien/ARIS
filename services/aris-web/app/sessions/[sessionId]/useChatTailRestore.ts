@@ -17,6 +17,7 @@ import {
   resolveMobileWindowScrollTop,
   resolveScrollToBottomTarget,
   resolveTailScrollAnchorId,
+  shouldSkipTailSettleCompletionScroll,
   shouldRestoreTailScrollOnChatEntry,
   shouldUseWindowScrollFallback,
 } from './chatScroll';
@@ -523,6 +524,21 @@ export function useChatTailRestore({
         viewportHeight,
       });
       if (shouldUseWindow) {
+        if (shouldSkipTailSettleCompletionScroll({
+          isMobileLayout,
+          shouldUseWindow,
+          anchorBottom: previousMetrics?.anchorBottom ?? null,
+          viewportHeight,
+        })) {
+          recordScrollDebugEvent({
+            kind: 'trigger',
+            source: 'tail:settle:complete:window-skipped',
+            detail: {
+              anchorBottom: previousMetrics?.anchorBottom ?? null,
+              viewportHeight,
+            },
+          });
+        } else {
         recordScrollDebugEvent({
           kind: 'write',
           source: 'tail:settle:complete:window',
@@ -534,6 +550,7 @@ export function useChatTailRestore({
           },
         });
         window.scrollTo({ top: Math.max(0, scrollHeight - viewportHeight), behavior: 'auto' });
+        }
       } else {
         if (stream) {
           recordScrollDebugEvent({

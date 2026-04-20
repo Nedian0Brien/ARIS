@@ -4,6 +4,7 @@ import {
   hasResumePhaseSettled,
   hasTailRestoreRenderHydrated,
   hasTailLayoutSettled,
+  shouldSkipTailSettleCompletionScroll,
   resolveTailRestoreLayoutReady,
   resolveSessionScrollPhase,
   resolveTailScrollAnchorId,
@@ -260,6 +261,29 @@ describe('chatScroll', () => {
       shouldStickToBottom: false,
       showScrollToBottom: true,
     });
+  });
+
+  it('skips the mobile tail completion scroll when the anchor is already aligned to the viewport bottom', () => {
+    expect(shouldSkipTailSettleCompletionScroll({
+      isMobileLayout: true,
+      shouldUseWindow: true,
+      anchorBottom: 664,
+      viewportHeight: 664,
+    })).toBe(true);
+
+    expect(shouldSkipTailSettleCompletionScroll({
+      isMobileLayout: false,
+      shouldUseWindow: true,
+      anchorBottom: 664,
+      viewportHeight: 664,
+    })).toBe(false);
+
+    expect(shouldSkipTailSettleCompletionScroll({
+      isMobileLayout: true,
+      shouldUseWindow: true,
+      anchorBottom: 620,
+      viewportHeight: 664,
+    })).toBe(false);
   });
 
   it('waits for all mobile scroll-affecting layout inputs before marking tail restore layout ready', () => {
