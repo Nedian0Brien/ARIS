@@ -2,8 +2,6 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { LayoutDashboard, Terminal, FolderTree, Settings } from 'lucide-react';
-import { primeAutoHideScrollState, reduceAutoHideScrollState } from './mobileScrollAutoHide';
-import { useSessionScrollOrchestrator } from '@/app/sessions/[sessionId]/useSessionScrollOrchestrator';
 
 export type TabType = 'sessions' | 'console' | 'files' | 'settings';
 
@@ -12,17 +10,8 @@ interface BottomNavProps {
   onTabChange: (tab: TabType) => void;
 }
 
-const AUTO_HIDE_RESUME_GUARD_MS = 240;
-const BOTTOM_NAV_AUTO_HIDE_THRESHOLDS = {
-  nearTopThreshold: 32,
-  hideAfterScrollY: 72,
-  hideDeltaThreshold: 8,
-  revealDeltaThreshold: 8,
-} as const;
-
 export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   const [hidden, setHidden] = useState(false);
-  const { isActive: isSessionScrollActive, phase: sessionScrollPhase } = useSessionScrollOrchestrator();
   const lastScrollY = useRef(0);
   const hiddenRef = useRef(false);
   const scrollRafRef = useRef<number | null>(null);
@@ -40,26 +29,22 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
       setHidden(nextHidden);
     };
 
-    let autoHideState = primeAutoHideScrollState({
-      currentY: getScrollY(),
-      now: Date.now(),
-      resumeGuardMs: AUTO_HIDE_RESUME_GUARD_MS,
-    });
-    lastScrollY.current = autoHideState.lastScrollY;
-    updateHidden(autoHideState.hidden);
+    lastScrollY.current = getScrollY();
 
     const updateVisibility = () => {
-      autoHideState = reduceAutoHideScrollState({
-        state: autoHideState,
-        currentY: getScrollY(),
-        now: Date.now(),
-        isMobile: window.innerWidth < 768,
-        thresholds: BOTTOM_NAV_AUTO_HIDE_THRESHOLDS,
-        isSessionScrollActive,
-        sessionScrollPhase,
-      });
-      lastScrollY.current = autoHideState.lastScrollY;
-      updateHidden(autoHideState.hidden);
+      const currentY = getScrollY();
+      const delta = currentY - lastScrollY.current;
+      const movementThreshold = 8;
+
+      if (currentY < 32) {
+        updateHidden(false);
+      } else if (delta > movementThreshold && currentY > 72) {
+        updateHidden(true);
+      } else if (delta < -movementThreshold) {
+        updateHidden(false);
+      }
+
+      lastScrollY.current = currentY;
       scrollRafRef.current = null;
     };
 
@@ -69,54 +54,23 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
     };
 
     const onResize = () => {
-      if (scrollRafRef.current !== null) {
-        window.cancelAnimationFrame(scrollRafRef.current);
-        scrollRafRef.current = null;
+      if (window.innerWidth >= 768) {
+        updateHidden(false);
       }
-      autoHideState = {
-        ...autoHideState,
-        hidden: window.innerWidth < 768 ? autoHideState.hidden : false,
-        lastScrollY: getScrollY(),
-        resumeGuardUntil: 0,
-      };
-      lastScrollY.current = autoHideState.lastScrollY;
-      updateHidden(autoHideState.hidden);
-    };
-
-    const onResume = () => {
-      if (document.visibilityState === 'hidden') {
-        return;
-      }
-      if (scrollRafRef.current !== null) {
-        window.cancelAnimationFrame(scrollRafRef.current);
-        scrollRafRef.current = null;
-      }
-      autoHideState = primeAutoHideScrollState({
-        currentY: getScrollY(),
-        now: Date.now(),
-        resumeGuardMs: AUTO_HIDE_RESUME_GUARD_MS,
-      });
-      lastScrollY.current = autoHideState.lastScrollY;
-      updateHidden(autoHideState.hidden);
+      lastScrollY.current = getScrollY();
     };
 
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onResize);
-    window.addEventListener('focus', onResume);
-    window.addEventListener('pageshow', onResume);
-    document.addEventListener('visibilitychange', onResume);
     return () => {
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onResize);
-      window.removeEventListener('focus', onResume);
-      window.removeEventListener('pageshow', onResume);
-      document.removeEventListener('visibilitychange', onResume);
       if (scrollRafRef.current !== null) {
         window.cancelAnimationFrame(scrollRafRef.current);
         scrollRafRef.current = null;
       }
     };
-  }, [activeTab, isSessionScrollActive, sessionScrollPhase]);
+  }, []);
 
   const syncIndicator = useCallback(() => {
     const nav = navRef.current;

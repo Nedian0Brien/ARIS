@@ -1532,19 +1532,8 @@
   overflow: hidden;
 }
 
-.fileModalBlockedOverlay {
-  padding: 1rem;
-  align-items: center;
-  justify-content: center;
-}
-
 .fileModalCard {
   width: min(1180px, 100%);
-}
-
-.fileModalBlockedCard {
-  width: min(32rem, 100%);
-  max-height: min(28rem, calc(100vh - 2rem));
 }
 
 .modalHeader {
@@ -1572,10 +1561,10 @@
 }
 
 .modalCloseButton {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border: 1px solid var(--chat-control-border);
-  border-radius: 12px;
+  border-radius: 11px;
   background: var(--sidebar-surface);
   color: var(--chat-control-text);
   display: inline-flex;
@@ -1600,10 +1589,6 @@
   min-height: clamp(560px, 78vh, 920px);
 }
 
-.fileModalBlockedBody {
-  min-height: auto;
-}
-
 .fileModalStatus {
   padding: 0.58rem 0.9rem;
   border-bottom: 1px solid var(--sidebar-border);
@@ -1625,8 +1610,6 @@
   gap: 0.8rem;
   align-items: flex-start;
   color: var(--chat-text-primary);
-  overflow-y: auto;
-  max-width: 100%;
 }
 
 .filePreviewBlockedText {
@@ -1635,9 +1618,6 @@
   gap: 0.28rem;
   font-size: 0.78rem;
   line-height: 1.5;
-  min-width: 0;
-  max-width: 100%;
-  overflow-wrap: anywhere;
 }
 
 .actionDialogCard {
@@ -1815,28 +1795,7 @@
 
   .fileModalBody {
     padding: 0;
-    min-height: 0;
-  }
-
-  .fileModalBlockedOverlay {
-    padding: 1rem;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .fileModalBlockedCard {
-    width: min(32rem, 100%);
-    max-height: min(28rem, calc(100vh - 2rem));
-    border-radius: 22px;
-  }
-
-  .fileModalBlockedBody {
-    min-height: auto;
-  }
-
-  .filePreviewBlocked {
-    padding: 1rem;
-    flex-direction: column;
+    min-height: 100%;
   }
 
   .actionDialogCard {

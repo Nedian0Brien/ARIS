@@ -17,8 +17,6 @@ type TailLayoutSettledInput = {
   nextAnchorBottom: number | null;
   previousScrollHeight: number | null;
   nextScrollHeight: number | null;
-  previousViewportHeight: number | null;
-  nextViewportHeight: number | null;
   tolerancePx?: number;
 };
 
@@ -29,43 +27,15 @@ type TailRestoreRenderHydratedInput = {
   renderedStreamItemCount: number;
 };
 
-type ResumePhaseSettledInput = {
-  previousScrollTop: number | null;
-  nextScrollTop: number | null;
-  previousViewportHeight: number | null;
-  nextViewportHeight: number | null;
-  tolerancePx?: number;
-};
-
 type ResetScrollForChatChangeInput = {
   previousChatId: string | null;
   nextChatId: string | null;
   isNewChatPlaceholder: boolean;
-  isTailRestorePending?: boolean;
 };
 
 type AutoScrollToBottomInput = {
   isWorkspaceHome: boolean;
   shouldStickToBottom: boolean;
-  isTailRestorePending?: boolean;
-};
-
-type MobileBottomLockStateInput = {
-  isNearBottom: boolean;
-  isTailRestorePending?: boolean;
-};
-
-export type ComposerDockMetrics = {
-  height: number;
-  left: number;
-  width: number;
-};
-
-type TailRestoreLayoutReadinessInput = {
-  isMobileLayout: boolean;
-  isMobileLayoutHydrated: boolean;
-  isViewportLayoutReady: boolean;
-  isComposerDockLayoutReady: boolean;
 };
 
 type RestoreTailScrollOnChatEntryInput = {
@@ -76,28 +46,6 @@ type RestoreTailScrollOnChatEntryInput = {
   isWorkspaceHome: boolean;
   isNewChatPlaceholder: boolean;
   restoredForChatId: string | null;
-};
-
-export type SessionScrollPhase =
-  | 'idle'
-  | 'user-scrolling'
-  | 'restoring-tail'
-  | 'loading-older'
-  | 'resuming'
-  | 'viewport-reflow';
-
-type ResolveSessionScrollPhaseInput = {
-  currentPhase: SessionScrollPhase;
-  event:
-    | 'resume-start'
-    | 'scroll-observed'
-    | 'viewport-changed'
-    | 'resume-stable'
-    | 'tail-restore-start'
-    | 'tail-restore-complete'
-    | 'older-load-start'
-    | 'older-load-complete'
-    | 'user-scroll';
 };
 
 export function resolveScrollToBottomTarget(input: ScrollToBottomTargetInput): 'window' | 'stream' {
@@ -124,16 +72,13 @@ export function hasTailLayoutSettled(input: TailLayoutSettledInput): boolean {
     || input.nextAnchorBottom === null
     || input.previousScrollHeight === null
     || input.nextScrollHeight === null
-    || input.previousViewportHeight === null
-    || input.nextViewportHeight === null
   ) {
     return false;
   }
 
   const tolerancePx = input.tolerancePx ?? 1;
   return Math.abs(input.nextAnchorBottom - input.previousAnchorBottom) <= tolerancePx
-    && Math.abs(input.nextScrollHeight - input.previousScrollHeight) <= tolerancePx
-    && Math.abs(input.nextViewportHeight - input.previousViewportHeight) <= tolerancePx;
+    && Math.abs(input.nextScrollHeight - input.previousScrollHeight) <= tolerancePx;
 }
 
 export function hasTailRestoreRenderHydrated(input: TailRestoreRenderHydratedInput): boolean {
@@ -144,53 +89,8 @@ export function hasTailRestoreRenderHydrated(input: TailRestoreRenderHydratedInp
   return input.latestVisibleEventId === input.latestRenderableEventId;
 }
 
-export function hasResumePhaseSettled(input: ResumePhaseSettledInput): boolean {
-  if (
-    input.previousScrollTop === null
-    || input.nextScrollTop === null
-    || input.previousViewportHeight === null
-    || input.nextViewportHeight === null
-  ) {
-    return false;
-  }
-
-  const tolerancePx = input.tolerancePx ?? 1;
-  return Math.abs(input.nextScrollTop - input.previousScrollTop) <= tolerancePx
-    && Math.abs(input.nextViewportHeight - input.previousViewportHeight) <= tolerancePx;
-}
-
-export function resolveTailRestoreLayoutReady(input: TailRestoreLayoutReadinessInput): boolean {
-  if (!input.isMobileLayoutHydrated) {
-    return false;
-  }
-
-  if (!input.isMobileLayout) {
-    return true;
-  }
-
-  return input.isMobileLayoutHydrated
-    && input.isViewportLayoutReady
-    && input.isComposerDockLayoutReady;
-}
-
-export function haveComposerDockMetricsChanged(
-  previousMetrics: ComposerDockMetrics | null,
-  nextMetrics: ComposerDockMetrics,
-): boolean {
-  if (!previousMetrics) {
-    return true;
-  }
-
-  return previousMetrics.height !== nextMetrics.height
-    || previousMetrics.left !== nextMetrics.left
-    || previousMetrics.width !== nextMetrics.width;
-}
-
 export function shouldResetScrollForChatChange(input: ResetScrollForChatChangeInput): boolean {
   if (input.isNewChatPlaceholder || !input.nextChatId) {
-    return false;
-  }
-  if (input.isTailRestorePending) {
     return false;
   }
   return input.previousChatId !== input.nextChatId;
@@ -200,27 +100,7 @@ export function shouldAutoScrollToBottom(input: AutoScrollToBottomInput): boolea
   if (input.isWorkspaceHome) {
     return false;
   }
-  if (input.isTailRestorePending) {
-    return false;
-  }
   return input.shouldStickToBottom;
-}
-
-export function resolveMobileBottomLockState(input: MobileBottomLockStateInput): {
-  shouldStickToBottom: boolean;
-  showScrollToBottom: boolean;
-} {
-  if (input.isTailRestorePending) {
-    return {
-      shouldStickToBottom: true,
-      showScrollToBottom: false,
-    };
-  }
-
-  return {
-    shouldStickToBottom: input.isNearBottom,
-    showScrollToBottom: !input.isNearBottom,
-  };
 }
 
 export function shouldRestoreTailScrollOnChatEntry(input: RestoreTailScrollOnChatEntryInput): boolean {
@@ -236,39 +116,10 @@ export function shouldRestoreTailScrollOnChatEntry(input: RestoreTailScrollOnCha
   return input.restoredForChatId !== input.activeChatId;
 }
 
-export function resolveSessionScrollPhase(input: ResolveSessionScrollPhaseInput): SessionScrollPhase {
-  switch (input.event) {
-    case 'resume-start':
-      return 'resuming';
-    case 'viewport-changed':
-      return input.currentPhase === 'resuming' || input.currentPhase === 'viewport-reflow'
-        ? 'viewport-reflow'
-        : input.currentPhase;
-    case 'resume-stable':
-      return input.currentPhase === 'resuming' || input.currentPhase === 'viewport-reflow'
-        ? 'idle'
-        : input.currentPhase;
-    case 'tail-restore-start':
-      return 'restoring-tail';
-    case 'tail-restore-complete':
-      return input.currentPhase === 'restoring-tail' ? 'idle' : input.currentPhase;
-    case 'older-load-start':
-      return 'loading-older';
-    case 'older-load-complete':
-      return input.currentPhase === 'loading-older' ? 'idle' : input.currentPhase;
-    case 'user-scroll':
-      return input.currentPhase === 'idle' ? 'user-scrolling' : input.currentPhase;
-    case 'scroll-observed':
-    default:
-      return input.currentPhase;
-  }
-}
-
 type ShouldBlockLoadOlderInput = {
   isTailLayoutSettling: boolean;
   isLoadingOlder: boolean;
   hasMoreBefore: boolean;
-  scrollPhase?: SessionScrollPhase;
 };
 
 type WindowScrollFallbackInput = {
@@ -287,13 +138,6 @@ type ManualScrollRestorationInput = {
 };
 
 export function shouldBlockLoadOlder(input: ShouldBlockLoadOlderInput): boolean {
-  if (
-    input.scrollPhase === 'resuming'
-    || input.scrollPhase === 'viewport-reflow'
-  ) {
-    return true;
-  }
-
   return input.isTailLayoutSettling || input.isLoadingOlder || !input.hasMoreBefore;
 }
 

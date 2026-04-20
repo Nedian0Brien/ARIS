@@ -8,7 +8,6 @@ type PanelPageRendererProps = {
   panel: WorkspacePanelRecord;
   onSavePanel?: (panelId: string, updates: { title?: string; config?: Record<string, unknown> }) => Promise<unknown>;
   onDeletePanel?: (panelId: string) => Promise<unknown>;
-  onReturnToChat?: () => void;
 };
 
 const PLACEHOLDER_DESCRIPTIONS: Record<WorkspacePanelRecord['type'], string> = {
@@ -18,13 +17,7 @@ const PLACEHOLDER_DESCRIPTIONS: Record<WorkspacePanelRecord['type'], string> = {
   bookmark: '스크립트와 문서 바로가기가 여기에 들어옵니다.',
 };
 
-export function PanelPageRenderer({
-  sessionId,
-  panel,
-  onSavePanel,
-  onDeletePanel,
-  onReturnToChat,
-}: PanelPageRendererProps) {
+export function PanelPageRenderer({ sessionId, panel, onSavePanel, onDeletePanel }: PanelPageRendererProps) {
   if (panel.type === 'preview') {
     return (
       <PreviewPanelPage
@@ -32,7 +25,6 @@ export function PanelPageRenderer({
         panel={panel}
         onSavePanel={onSavePanel}
         onDeletePanel={onDeletePanel}
-        onReturnToChat={onReturnToChat}
       />
     );
   }
@@ -41,7 +33,6 @@ export function PanelPageRenderer({
     <PlaceholderPanelPage
       title={panel.title}
       description={PLACEHOLDER_DESCRIPTIONS[panel.type]}
-      onReturnToChat={onReturnToChat}
     />
   );
 }

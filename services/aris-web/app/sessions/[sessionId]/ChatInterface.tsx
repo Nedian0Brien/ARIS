@@ -2,7 +2,7 @@
 
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { CSSProperties, ChangeEvent } from 'react';
+import type { ChangeEvent } from 'react';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
@@ -15,38 +15,52 @@ import {
   resolveChatRunPhase as resolveRunPhaseState,
 } from '@/lib/happy/chatRuntime';
 import { hydratePersistedPermissions, mergeRenderablePermissions } from '@/lib/happy/permissions';
-import { stripImageAttachmentPromptPrefix } from '@/lib/chatImageAttachments';
+import { readChatImageAttachments, stripImageAttachmentPromptPrefix } from '@/lib/chatImageAttachments';
+import { buildOptimisticUserEvent } from './chatComposer';
+import { buildComposerSubmitText, buildUserMessageMeta } from './chatSubmitPayload';
 import { resolveAvailableChatCommands, type ChatCommandId } from './chatCommands';
+import { BackendNotice } from '@/components/ui/BackendNotice';
+import {
+  Activity,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronUp,
+  ChevronRight,
+  CircleAlert,
+  Copy,
+  Bug,
+  MessageSquarePlus,
+  MoreVertical,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from 'lucide-react';
 import { createPortal } from 'react-dom';
 import type { ApprovalPolicy, ChatImageAttachment, PermissionRequest, SessionChat, UiEvent } from '@/lib/happy/types';
+import { PermissionRequestMessage } from './PermissionRequestMessage';
 import { UsageProbeModal } from './UsageProbeModal';
 import { buildPermissionTimelineItems } from './chatTimeline';
+import { renderEventPayload } from './chat-screen/center-pane/renderers/ActionEventCard';
+import { LinkPreviewCarousel } from './chat-screen/center-pane/renderers/LinkPreviewCarousel';
 import { shouldShowDebugToggleInHeader } from './chatDebugMode';
+import { WorkspaceHome } from './WorkspaceHome';
 import { deriveWorkspaceTitle } from './workspaceHome';
 import { buildWorkspacePagerItems, moveWorkspacePager } from './workspace-panels/pagerModel';
+import { WorkspacePager } from './workspace-panels/WorkspacePager';
+import { CreatePanelPage } from './workspace-panels/CreatePanelPage';
+import { PanelPageRenderer } from './workspace-panels/PanelPageRenderer';
 import { useWorkspacePanels } from './workspace-panels/useWorkspacePanels';
-import { useChatRunActions } from './chat-screen/actions/useChatRunActions';
 import { useChatSessionActions } from './chat-screen/actions/useChatSessionActions';
-import { ChatCenterPane } from './chat-screen/center-pane/ChatCenterPane';
 import { ChatComposer } from './chat-screen/center-pane/ChatComposer';
-import { ChatHeader } from './chat-screen/center-pane/ChatHeader';
-import { LastUserMessageJumpBar } from './chat-screen/center-pane/LastUserMessageJumpBar';
-import { ChatStatusNotices } from './chat-screen/center-pane/ChatStatusNotices';
-import { ChatTimeline } from './chat-screen/center-pane/ChatTimeline';
 import { FileBrowserModal } from './chat-screen/center-pane/FileBrowserModal';
-import { NewChatPlaceholderPane } from './chat-screen/center-pane/NewChatPlaceholderPane';
-import { WorkspaceHomePane } from './chat-screen/center-pane/WorkspaceHomePane';
-import { WorkspacePagerShell } from './chat-screen/center-pane/WorkspacePagerShell';
+import { LastUserMessageJumpBar } from './chat-screen/center-pane/LastUserMessageJumpBar';
 import {
   resolveLastPassedUserMessageJumpTarget,
   resolveUserMessageJumpTargets,
   shouldShowLastUserMessageJumpBar,
   type LastUserMessageJumpTarget,
 } from './chat-screen/center-pane/lastUserMessageBar';
-import { useChatComposerInteractions } from './chat-screen/hooks/useChatComposerInteractions';
-import { useChatCenterNavigationActions } from './chat-screen/hooks/useChatCenterNavigationActions';
 import { useChatLayoutState } from './chat-screen/hooks/useChatLayoutState';
-import { useChatHeaderStatusControls } from './chat-screen/hooks/useChatHeaderStatusControls';
 import { useChatRuntimeUi } from './chat-screen/hooks/useChatRuntimeUi';
 import { useChatScreenState } from './chat-screen/hooks/useChatScreenState';
 import { useChatSidebarState } from './chat-screen/hooks/useChatSidebarState';
@@ -54,20 +68,13 @@ import { useComposerState } from './chat-screen/hooks/useComposerState';
 import { useWorkspaceBrowserState } from './chat-screen/hooks/useWorkspaceBrowserState';
 import { ChatSidebarPane } from './chat-screen/left-sidebar/ChatSidebarPane';
 import { useChatSidebarSectionViews } from './chat-screen/left-sidebar/useChatSidebarSectionViews';
-import { WorkspacePanelsPane } from './chat-screen/right-pane/WorkspacePanelsPane';
-import { RightPaneLayout } from './chat-screen/right-pane/RightPaneLayout';
+import { CustomizationSidebarContainer } from './chat-screen/right-pane/CustomizationSidebarContainer';
 import styles from './ChatInterface.module.css';
 import { shouldShowChatTransitionLoading } from './chatSelection';
 import {
-  haveComposerDockMetricsChanged,
-  hasResumePhaseSettled,
   hasTailRestoreRenderHydrated,
   isNearBottom,
   isNearWindowBottom,
-  resolveTailRestoreLayoutReady,
-  resolveMobileBottomLockState,
-  type ComposerDockMetrics,
-  type SessionScrollPhase,
   shouldAutoScrollToBottom,
   shouldBlockLoadOlder,
   shouldUseManualScrollRestoration,
@@ -75,15 +82,10 @@ import {
 } from './chatScroll';
 import { useChatTailRestore } from './useChatTailRestore';
 import {
-  activateSessionScrollOrchestrator,
-  deactivateSessionScrollOrchestrator,
-  dispatchSessionScrollPhaseEvent,
-  useSessionScrollOrchestrator,
-} from './useSessionScrollOrchestrator';
-import { recordScrollDebugEvent } from './scrollDebug';
-import {
   AGENT_ACTIVITY_SETTLE_MS,
+  AGENT_QUICK_STARTS,
   AGENT_REPLY_TIMEOUT_MS,
+  CHAT_AGENT_CHOICES,
   CHAT_RUN_PHASE_LABELS,
   COMPOSER_MAX_HEIGHT_PX,
   COMPOSER_MIN_HEIGHT_PX,
@@ -91,20 +93,29 @@ import {
   READ_CURSOR_SYNC_DEBOUNCE_MS,
   RIGHT_PIN_PREFERS_LEFT_OVERLAY_MIN_WIDTH_PX,
   RUNTIME_DISCONNECT_GRACE_MS,
+  SIDEBAR_CHAT_PAGE_SIZE,
   WORKSPACE_FILE_OPEN_EVENT,
 } from './chat-screen/constants';
 import {
+  approvalPolicyLabel,
+  buildChatTitleFromFirstPrompt,
+  buildChatUrl,
   buildProgressLabel,
   buildStreamRenderItems,
   copyTextToClipboard,
   deriveGeminiModeLabel,
+  extractImageAttachments,
   extractProgressMeta,
+  formatClock,
   formatElapsedDuration,
   formatRelative,
   genId,
+  getEventKindMeta,
   getLatestVisibleEvent,
   getRecentFiles,
   getWindowScrollTop,
+  isActionKind,
+  isAutoGeneratedChatTitle,
   isPersistedPermissionEvent,
   isUserEvent,
   isWorkspacePathWithinRoot,
@@ -114,23 +125,41 @@ import {
   normalizeModelId,
   normalizeWorkspaceClientPath,
   resolveAgentMeta,
+  resolveAgentSubtitle,
+  resolveAvailableGeminiModeId,
   resolveComposerModels,
   resolveDefaultGeminiModeId,
   resolveDefaultModelId,
   resolveGeminiModeOptions,
   saveRecentFile,
   sortSessionChats,
+  writeChatIdToHistory,
 } from './chat-screen/helpers';
 import type {
   AgentMeta,
   ChatRunPhase,
   ContextItem,
   TimelineRenderItem,
+  Tone,
   WorkspaceFileOpenDetail,
 } from './chat-screen/types';
 
 // --- 1. 런타임 초기화 안전 장치 (TDZ 에러 방지를 위해 파일 상단에 유지) ---
 // styles 객체 및 복잡한 객체 참조를 함수 호출 시점으로 지연시킴
+
+function getToneClass(tone: Tone): string {
+  const map: Record<Tone, string> = {
+    sky: styles.toneSky,
+    amber: styles.toneAmber,
+    cyan: styles.toneCyan,
+    emerald: styles.toneEmerald,
+    violet: styles.toneViolet,
+    red: styles.toneRed,
+    git: styles.toneGit,
+    docker: styles.toneDocker,
+  };
+  return map[tone] || '';
+}
 
 function getAgentAvatarToneClass(tone: AgentMeta['tone']): string {
   const map: Record<AgentMeta['tone'], string> = {
@@ -171,9 +200,6 @@ function ElapsedTimer({ since, className }: { since: string; className?: string 
 
   return <span className={className}>{formatElapsedDuration(since, now)}</span>;
 }
-
-const RESUME_SCROLL_SETTLE_TIMEOUT_MS = 240;
-const SYSTEM_SCROLL_AUTOSCROLL_COOLDOWN_MS = 900;
 
 export function ChatInterface({
   sessionId,
@@ -316,9 +342,7 @@ export function ChatInterface({
     isCustomizationSidebarOpen,
     isDebugMode,
     isMobileLayout,
-    isMobileLayoutHydrated,
     isMounted,
-    isViewportLayoutReady,
     setChatIdCopyState,
     setExpandedActionRunIds,
     setExpandedResultIds,
@@ -398,8 +422,6 @@ export function ChatInterface({
   const composerDockRef = useRef<HTMLElement>(null);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const composerImageInputRef = useRef<HTMLInputElement>(null);
-  const composerDockMetricsRef = useRef<ComposerDockMetrics | null>(null);
-  const composerDockLayoutReadyTimeoutRef = useRef(0);
   const contextItemsRef = useRef<ContextItem[]>([]);
   const isSubmittingRef = useRef(false);
   const plusMenuRef = useRef<HTMLDivElement>(null);
@@ -407,40 +429,12 @@ export function ChatInterface({
   const geminiModeDropdownRef = useRef<HTMLDivElement>(null);
   const commandMenuRef = useRef<HTMLDivElement>(null);
   const previousActiveChatIdRef = useRef<string | null>(activeChatIdResolved);
-  const previousTailLayoutSettlingRef = useRef(false);
-  const genericAutoScrollCooldownUntilRef = useRef(0);
   const latestVisibleEventIdRef = useRef<string | null>(null);
   const disconnectNoticeAwaitingRef = useRef<string | null>(null);
   const runtimeStartedSinceAwaitingRef = useRef(false);
   const sidebarFileRequestNonceRef = useRef(0);
   const userMessageBubbleNodesRef = useRef(new Map<string, HTMLDivElement>());
-  const [isComposerDockLayoutReady, setIsComposerDockLayoutReady] = useState(false);
   const [lastUserMessageJumpTarget, setLastUserMessageJumpTarget] = useState<LastUserMessageJumpTarget | null>(null);
-  const handleDeleteEmptyAutoChat = useCallback(() => {
-    if (!activeChat) {
-      return;
-    }
-
-    const chatId = activeChat.id;
-    void fetch(
-      `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chatId)}`,
-      { method: 'DELETE' },
-    ).then((r) => r.json()).then((body: { chats?: SessionChat[] }) => {
-      if (Array.isArray(body.chats)) {
-        setChats(sortSessionChats(body.chats));
-      } else {
-        setChats((prev) => prev.filter((c) => c.id !== chatId));
-      }
-    }).catch(() => {
-      setChats((prev) => prev.filter((c) => c.id !== chatId));
-    });
-    setSelectedChatId(null);
-    setIsWorkspaceHome(true);
-  }, [activeChat, sessionId, setChats, setIsWorkspaceHome, setSelectedChatId]);
-  const handleSelectQuickStart = useCallback((value: string) => {
-    setPrompt(value);
-    setTimeout(() => composerInputRef.current?.focus(), 0);
-  }, [setPrompt]);
   const isRightSidebarPinnedLayout = !isMobileLayout && (viewportWidth > CUSTOMIZATION_OVERLAY_MAX_WIDTH_PX || isCustomizationPinned);
   const isLeftSidebarOverlayLayout = isMobileLayout
     || (isRightSidebarPinnedLayout && viewportWidth < RIGHT_PIN_PREFERS_LEFT_OVERLAY_MIN_WIDTH_PX);
@@ -462,7 +456,6 @@ export function ChatInterface({
     hasMoreBefore,
     isLoadingOlder,
     hasLoadedCurrentChat,
-    resetToLatestWindow,
   } = useSessionEvents(
     sessionId,
     activeChatIdResolved,
@@ -612,10 +605,6 @@ export function ChatInterface({
       return a.id.localeCompare(b.id);
     });
   }, [deferredVisibleNonUserEvents, pendingUserEvents, visibleUserEvents]);
-  const userMessageJumpTargets = useMemo(
-    () => resolveUserMessageJumpTargets(renderableStreamEvents),
-    [renderableStreamEvents],
-  );
   const expectedRenderableStreamEvents = useMemo(() => {
     const merged = [...visibleNonUserEvents, ...visibleUserEvents, ...pendingUserEvents];
     return merged.sort((a, b) => {
@@ -638,6 +627,10 @@ export function ChatInterface({
     () => buildStreamRenderItems(renderableStreamEvents, expandedActionRunIds),
     [expandedActionRunIds, renderableStreamEvents],
   );
+  const userMessageJumpTargets = useMemo(
+    () => resolveUserMessageJumpTargets(renderableStreamEvents),
+    [renderableStreamEvents],
+  );
   const isTailRestoreHydrated = useMemo(
     () => hasTailRestoreRenderHydrated({
       latestVisibleEventId,
@@ -652,14 +645,9 @@ export function ChatInterface({
       streamItems.length,
     ],
   );
-  const isTailRestoreLayoutReady = resolveTailRestoreLayoutReady({
-    isMobileLayout,
-    isMobileLayoutHydrated,
-    isViewportLayoutReady,
-    isComposerDockLayoutReady,
-  });
   const {
     isTailLayoutSettling,
+    isTailLayoutSettlingRef,
     isInitialChatEntryPendingReveal,
     shouldStickToBottomRef,
     showScrollToBottom,
@@ -675,9 +663,7 @@ export function ChatInterface({
     isNewChatPlaceholder,
     isWorkspaceHome,
     isMobileLayout,
-    isTailRestoreLayoutReady,
     initialShowChatEntryLoading,
-    resetToLatestWindow,
     scrollRef,
     latestVisibleEventIdRef,
   });
@@ -690,150 +676,21 @@ export function ChatInterface({
     isNewChatPlaceholder,
     isTailLayoutSettling,
   });
-  const isChatEntryTailRestorePending = isInitialChatEntryPendingReveal || isTailLayoutSettling;
+  const showLastUserMessageJumpBar = useMemo(
+    () => shouldShowLastUserMessageJumpBar({
+      targetEventId: lastUserMessageJumpTarget?.eventId ?? null,
+      isWorkspaceHome,
+      isNewChatPlaceholder,
+      showChatTransitionLoading,
+    }),
+    [
+      isNewChatPlaceholder,
+      isWorkspaceHome,
+      lastUserMessageJumpTarget?.eventId,
+      showChatTransitionLoading,
+    ],
+  );
   const chatEntryPendingRevealClassName = showChatTransitionLoading ? styles.chatEntryPendingReveal : '';
-  const { phase: sessionScrollPhase } = useSessionScrollOrchestrator();
-  const sessionScrollPhaseRef = useRef<SessionScrollPhase>('idle');
-  const resumeSettleRafRef = useRef(0);
-  const resumeSettleTimeoutRef = useRef(0);
-  const resumePreviousMetricsRef = useRef<{ scrollTop: number | null; viewportHeight: number | null } | null>(null);
-  const resumeStableFrameCountRef = useRef(0);
-
-  useEffect(() => {
-    sessionScrollPhaseRef.current = sessionScrollPhase;
-  }, [sessionScrollPhase]);
-
-  useEffect(() => {
-    return () => {
-      if (composerDockLayoutReadyTimeoutRef.current) {
-        window.clearTimeout(composerDockLayoutReadyTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const clearResumePhaseSettleLoop = useCallback(() => {
-    if (resumeSettleRafRef.current) {
-      window.cancelAnimationFrame(resumeSettleRafRef.current);
-      resumeSettleRafRef.current = 0;
-    }
-    if (resumeSettleTimeoutRef.current) {
-      window.clearTimeout(resumeSettleTimeoutRef.current);
-      resumeSettleTimeoutRef.current = 0;
-    }
-    resumePreviousMetricsRef.current = null;
-    resumeStableFrameCountRef.current = 0;
-  }, []);
-
-  const completeResumeScrollPhase = useCallback(() => {
-    recordScrollDebugEvent({
-      kind: 'trigger',
-      source: 'resume:complete',
-      streamElement: scrollRef.current,
-      detail: {
-        currentPhase: sessionScrollPhaseRef.current,
-      },
-    });
-    clearResumePhaseSettleLoop();
-    dispatchSessionScrollPhaseEvent('resume-stable');
-  }, [clearResumePhaseSettleLoop]);
-
-  const startResumeScrollPhase = useCallback(() => {
-    if (!isMobileLayout || isWorkspaceHome || isNewChatPlaceholder || !activeChatIdResolved) {
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'resume:start:skipped',
-        streamElement: scrollRef.current,
-        detail: {
-          isMobileLayout,
-          isWorkspaceHome,
-          isNewChatPlaceholder,
-          activeChatIdResolved,
-        },
-      });
-      return;
-    }
-
-    clearResumePhaseSettleLoop();
-    recordScrollDebugEvent({
-      kind: 'trigger',
-      source: 'resume:start',
-      streamElement: scrollRef.current,
-      detail: {
-        activeChatIdResolved,
-      },
-    });
-    dispatchSessionScrollPhaseEvent('resume-start');
-
-    const settle = () => {
-      const currentPhase = sessionScrollPhaseRef.current;
-      if (currentPhase !== 'resuming' && currentPhase !== 'viewport-reflow') {
-        clearResumePhaseSettleLoop();
-        return;
-      }
-
-      const nextMetrics = {
-        scrollTop: getWindowScrollTop(),
-        viewportHeight: window.visualViewport?.height ?? window.innerHeight,
-      };
-
-      if (resumePreviousMetricsRef.current && hasResumePhaseSettled({
-        previousScrollTop: resumePreviousMetricsRef.current.scrollTop,
-        nextScrollTop: nextMetrics.scrollTop,
-        previousViewportHeight: resumePreviousMetricsRef.current.viewportHeight,
-        nextViewportHeight: nextMetrics.viewportHeight,
-      })) {
-        resumeStableFrameCountRef.current += 1;
-      } else {
-        resumeStableFrameCountRef.current = 0;
-      }
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'resume:settle:frame',
-        streamElement: scrollRef.current,
-        detail: {
-          currentPhase,
-          activeChatIdResolved,
-          nextMetrics,
-          previousMetrics: resumePreviousMetricsRef.current,
-          stableFrameCount: resumeStableFrameCountRef.current,
-        },
-      });
-
-      resumePreviousMetricsRef.current = nextMetrics;
-      if (resumeStableFrameCountRef.current >= 2) {
-        completeResumeScrollPhase();
-        return;
-      }
-
-      resumeSettleRafRef.current = window.requestAnimationFrame(settle);
-    };
-
-    resumeSettleRafRef.current = window.requestAnimationFrame(settle);
-    resumeSettleTimeoutRef.current = window.setTimeout(() => {
-      completeResumeScrollPhase();
-    }, RESUME_SCROLL_SETTLE_TIMEOUT_MS);
-  }, [
-    activeChatIdResolved,
-    clearResumePhaseSettleLoop,
-    completeResumeScrollPhase,
-    isMobileLayout,
-    isNewChatPlaceholder,
-    isWorkspaceHome,
-  ]);
-
-  useEffect(() => {
-    if (!isMobileLayout || isWorkspaceHome || isNewChatPlaceholder || !activeChatIdResolved) {
-      return;
-    }
-
-    dispatchSessionScrollPhaseEvent(isTailLayoutSettling ? 'tail-restore-start' : 'tail-restore-complete');
-  }, [
-    activeChatIdResolved,
-    isMobileLayout,
-    isNewChatPlaceholder,
-    isTailLayoutSettling,
-    isWorkspaceHome,
-  ]);
   const persistedPermissions = useMemo(
     () => hydratePersistedPermissions(nonLifecycleEvents),
     [nonLifecycleEvents],
@@ -912,12 +769,14 @@ export function ChatInterface({
   const {
     approvalFeedbackByChat,
     chatSidebarSnapshots,
+    groupedSidebarChats,
     handleMarkChatAsRead,
     handleSidebarPermissionDecision,
     hasMoreChats,
     resolveChatPreviewText,
     resolveChatSidebarState,
     resolveSidebarChatRunPhase,
+    setChatVisibleCount,
     sidebarApprovalLoadingChatId,
     sidebarSections,
   } = useChatSidebarState({
@@ -947,9 +806,6 @@ export function ChatInterface({
     isAwaitingReply,
     isSubmitting,
     isAborting,
-    chatListRef,
-    chatListSentinelRef,
-    isChatSidebarOpen,
     setChats,
   });
 
@@ -1031,6 +887,37 @@ export function ChatInterface({
     disconnectNoticeAwaitingRef.current = null;
     runtimeStartedSinceAwaitingRef.current = false;
   }, [activeChatIdResolved]);
+
+  useEffect(() => {
+    const listElement = chatListRef.current;
+    const sentinelElement = chatListSentinelRef.current;
+    if (!isChatSidebarOpen || !listElement || !sentinelElement || !hasMoreChats) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) {
+          return;
+        }
+        setChatVisibleCount((prev) => (
+          prev >= groupedSidebarChats.history.length
+            ? prev
+            : Math.min(prev + SIDEBAR_CHAT_PAGE_SIZE, groupedSidebarChats.history.length)
+        ));
+      },
+      {
+        root: listElement,
+        rootMargin: '0px 0px 140px 0px',
+        threshold: 0.1,
+      },
+    );
+
+    observer.observe(sentinelElement);
+    return () => {
+      observer.disconnect();
+    };
+  }, [groupedSidebarChats.history.length, hasMoreChats, isChatSidebarOpen, setChatVisibleCount]);
 
   const deleteUploadedImageAsset = useCallback((attachment: ChatImageAttachment, keepalive = false) => {
     void fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/assets/images`, {
@@ -1311,16 +1198,8 @@ export function ChatInterface({
     }
 
     shell.scrollLeft = 0;
-    recordScrollDebugEvent({
-      kind: 'write',
-      source: 'chat:centerPanel:scrollIntoView',
-      detail: {
-        isCustomizationPinned,
-        isRightSidebarPinnedLayout,
-      },
-    });
     centerPanel.scrollIntoView({ block: 'nearest', inline: 'start' });
-  }, [isCustomizationPinned, isRightSidebarPinnedLayout]);
+  }, []);
 
   useEffect(() => {
     if (!isCustomizationPinned || !isRightSidebarPinnedLayout) {
@@ -1356,40 +1235,46 @@ export function ChatInterface({
   }, [setExpandedActionRunIds]);
 
   const loadOlderHistory = useCallback(async () => {
-    if (shouldBlockLoadOlder({
-      isTailLayoutSettling,
-      isLoadingOlder,
-      hasMoreBefore,
-      scrollPhase: sessionScrollPhase,
-    })) {
+    if (shouldBlockLoadOlder({ isTailLayoutSettling, isLoadingOlder, hasMoreBefore })) {
       return;
     }
 
-    dispatchSessionScrollPhaseEvent('older-load-start');
+    if (isMobileLayout) {
+      const previousDocHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      const previousTop = getWindowScrollTop();
+      await loadOlder().catch(() => {
+      });
+      requestAnimationFrame(() => {
+        const nextDocHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+        const delta = Math.max(0, nextDocHeight - previousDocHeight);
+        if (delta > 0) {
+          window.scrollTo({ top: previousTop + delta, behavior: 'auto' });
+        }
+      });
+      return;
+    }
 
-    const completeOlderLoad = () => {
-      dispatchSessionScrollPhaseEvent('older-load-complete');
-    };
+    const stream = scrollRef.current;
+    if (!stream) {
+      await loadOlder().catch(() => {
+      });
+      return;
+    }
 
-    recordScrollDebugEvent({
-      kind: 'trigger',
-      source: isMobileLayout ? 'history:loadOlder:button:window' : 'history:loadOlder:button:stream',
-      top: isMobileLayout ? getWindowScrollTop() : (scrollRef.current?.scrollTop ?? 0),
-      detail: {
-        hasMoreBefore,
-        isLoadingOlder,
-        sessionScrollPhase,
-      },
-    });
+    const previousHeight = stream.scrollHeight;
+    const previousTop = stream.scrollTop;
     await loadOlder().catch(() => {
     });
 
-    requestAnimationFrame(completeOlderLoad);
-  }, [hasMoreBefore, isLoadingOlder, isMobileLayout, isTailLayoutSettling, loadOlder, sessionScrollPhase]);
-
-  const handleLoadOlderButtonClick = useCallback(() => {
-    void loadOlderHistory();
-  }, [loadOlderHistory]);
+    requestAnimationFrame(() => {
+      const nextStream = scrollRef.current;
+      if (!nextStream) {
+        return;
+      }
+      const delta = Math.max(0, nextStream.scrollHeight - previousHeight);
+      nextStream.scrollTop = previousTop + delta;
+    });
+  }, [hasMoreBefore, isLoadingOlder, isMobileLayout, isTailLayoutSettling, loadOlder]);
 
   const syncComposerDockMetrics = useCallback(() => {
     const shell = chatShellRef.current;
@@ -1401,67 +1286,20 @@ export function ChatInterface({
 
     const height = Math.ceil(dock.getBoundingClientRect().height);
     shell.style.setProperty('--composer-dock-height', `${height}px`);
-    let left = 0;
-    let nextWidth = 0;
-    if (centerPanel) {
-      const viewportWidth = window.innerWidth;
-      const rect = centerPanel.getBoundingClientRect();
-      const inset = viewportWidth <= 960 ? 10 : 12;
-      left = Math.max(inset, Math.round(rect.left) + inset);
-      const maxWidth = Math.max(240, viewportWidth - inset * 2);
-      nextWidth = Math.max(240, Math.min(maxWidth, Math.round(rect.width) - inset * 2));
-    }
-
-    const nextMetrics = {
-      height,
-      left,
-      width: nextWidth,
-    };
-    recordScrollDebugEvent({
-      kind: 'trigger',
-      source: 'composer:syncDockMetrics',
-      streamElement: scrollRef.current,
-      detail: {
-        nextMetrics,
-        hasCenterPanel: Boolean(centerPanel),
-        isMobileLayout,
-      },
-    });
-    if (isMobileLayout && haveComposerDockMetricsChanged(composerDockMetricsRef.current, nextMetrics)) {
-      composerDockMetricsRef.current = nextMetrics;
-      if (composerDockLayoutReadyTimeoutRef.current) {
-        window.clearTimeout(composerDockLayoutReadyTimeoutRef.current);
-      }
-      setIsComposerDockLayoutReady(false);
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'composer:dockLayoutReady:false',
-        streamElement: scrollRef.current,
-        detail: {
-          nextMetrics,
-        },
-      });
-      composerDockLayoutReadyTimeoutRef.current = window.setTimeout(() => {
-        composerDockLayoutReadyTimeoutRef.current = 0;
-        setIsComposerDockLayoutReady(true);
-        recordScrollDebugEvent({
-          kind: 'trigger',
-          source: 'composer:dockLayoutReady:true',
-          streamElement: scrollRef.current,
-          detail: {
-            nextMetrics,
-          },
-        });
-      }, 160);
-    }
 
     if (!centerPanel) {
       return;
     }
 
+    const viewportWidth = window.innerWidth;
+    const rect = centerPanel.getBoundingClientRect();
+    const inset = viewportWidth <= 960 ? 10 : 12;
+    const left = Math.max(inset, Math.round(rect.left) + inset);
+    const maxWidth = Math.max(240, viewportWidth - inset * 2);
+    const nextWidth = Math.max(240, Math.min(maxWidth, Math.round(rect.width) - inset * 2));
     shell.style.setProperty('--composer-dock-left', `${left}px`);
     shell.style.setProperty('--composer-dock-width', `${nextWidth}px`);
-  }, [isMobileLayout]);
+  }, []);
 
   const resizeComposerInput = useCallback(() => {
     const input = composerInputRef.current;
@@ -1484,121 +1322,26 @@ export function ChatInterface({
 
     shouldStickToBottomRef.current = true;
     requestAnimationFrame(() => {
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'chat:composer-focus:auto-scroll',
-      });
       scrollConversationToBottom('auto');
     });
   }, [isMobileLayout, scrollConversationToBottom, shouldStickToBottomRef]);
 
-  const {
-    handleAbortRun,
-    handleSubmit,
-  } = useChatRunActions({
-    activeAgentFlavor,
-    activeChat,
-    activeChatIdResolved,
-    addEvent,
-    approvalPolicy,
-    codexReasoningEffort: codexReasoningEffort ?? 'medium',
-    contextItems,
-    disconnectNoticeAwaitingRef,
-    events,
-    eventsForChatId,
-    imageUploadsInFlight,
-    isAborting,
-    isAgentRunning,
-    isOperator,
-    lastSelectedCodexModelId,
-    legacyCustomModels,
-    pendingUserEvents,
-    prompt,
-    providerSelections,
-    runtimeStartedSinceAwaitingRef,
-    scrollConversationToBottom,
-    selectedGeminiModeId,
-    selectedModelId,
-    sessionId,
-    setChats,
-    setContextItems,
-    setPendingUserEventsByChat,
-    setPrompt,
-    setShowScrollToBottom,
-    shouldStickToBottomRef,
-    updateChatRuntimeUi,
-  });
+  const jumpToPendingPermission = useCallback(() => {
+    if (!firstPendingPermissionId) {
+      return;
+    }
+    setShowPermissionQueue(true);
+    requestAnimationFrame(() => {
+      const target = document.getElementById(`permission-${firstPendingPermissionId}`);
+      if (!target) {
+        return;
+      }
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [firstPendingPermissionId, setShowPermissionQueue]);
 
-  const {
-    handleCancelTextContext,
-    handleGeminiModeSelect,
-    handleModelReasoningEffortSelect,
-    handleModelSelect,
-    handleOpenTextContextEditor,
-    handlePromptKeyDown,
-    handleToggleCommandMenu,
-    handleToggleGeminiModeDropdown,
-    handleToggleModelDropdown,
-    handleTogglePlusMenu,
-  } = useChatComposerInteractions({
-    handleSelectGeminiMode,
-    handleSelectModel,
-    handleSelectModelReasoningEffort,
-    handleSubmit,
-    setIsCommandMenuOpen,
-    setIsGeminiModeDropdownOpen,
-    setIsModelDropdownOpen,
-    setPlusMenuMode,
-    setTextContextInput,
-  });
-  const {
-    handleBackFromWorkspaceHome,
-    handleGoHome,
-    handleOpenNewChat,
-    handleReturnToWorkspaceHome,
-    handleSelectWorkspaceChat,
-  } = useChatCenterNavigationActions({
-    isMobileLayout,
-    router,
-    sessionId,
-    setIsChatSidebarOpen,
-    setIsNewChatPlaceholder,
-    setIsWorkspaceHome,
-    setSelectedChatId,
-  });
-  const {
-    handleCopyChatId,
-    handleCopyChatThreadIdsJson,
-    handleRetryDisconnected,
-    handleToggleChatSidebar,
-    handleToggleContextMenu,
-    handleTogglePermissionQueue,
-    handleUpdateApprovalPolicy,
-    jumpToPendingPermission,
-  } = useChatHeaderStatusControls({
-    activeChat,
-    activeChatIdResolved,
-    addEvent,
-    disconnectNoticeAwaitingRef,
-    firstPendingPermissionId,
-    isAgentRunning,
-    isCustomizationOverlayLayout,
-    isOperator,
-    lastSubmittedPayload,
-    sessionId,
-    setApprovalPolicy,
-    setChatIdCopyState,
-    setIdBundleCopyState,
-    setIsChatSidebarOpen,
-    setIsContextMenuOpen,
-    setIsCustomizationSidebarOpen,
-    setIsPolicyChanging,
-    setShowPermissionQueue,
-    updateChatRuntimeUi,
-    runtimeStartedSinceAwaitingRef,
-  });
   const syncLastUserMessageJumpTarget = useCallback(() => {
-    if (isWorkspaceHome || isNewChatPlaceholder || userMessageJumpTargets.length === 0) {
+    if (isWorkspaceHome || isNewChatPlaceholder || showChatTransitionLoading || userMessageJumpTargets.length === 0) {
       setLastUserMessageJumpTarget(null);
       return;
     }
@@ -1608,35 +1351,33 @@ export function ChatInterface({
       : Math.ceil(scrollRef.current?.getBoundingClientRect().top ?? 0);
     const bubbleBottomByEventId = new Map<string, number>();
 
-    userMessageBubbleNodesRef.current.forEach((node, eventId) => {
-      bubbleBottomByEventId.set(eventId, node.getBoundingClientRect().bottom);
-    });
+    for (const target of userMessageJumpTargets) {
+      const bubbleNode = userMessageBubbleNodesRef.current.get(target.eventId);
+      if (!bubbleNode) {
+        continue;
+      }
+      bubbleBottomByEventId.set(target.eventId, bubbleNode.getBoundingClientRect().bottom);
+    }
 
-    setLastUserMessageJumpTarget(resolveLastPassedUserMessageJumpTarget({
+    const nextTarget = resolveLastPassedUserMessageJumpTarget({
       targets: userMessageJumpTargets,
       bubbleBottomByEventId,
       scrollBoundary,
-    }));
+    });
+
+    setLastUserMessageJumpTarget((current) => (
+      current?.eventId === nextTarget?.eventId
+        && current?.preview === nextTarget?.preview
+        && current?.timestamp === nextTarget?.timestamp
+        ? current
+        : nextTarget
+    ));
   }, [
     isMobileLayout,
     isNewChatPlaceholder,
     isWorkspaceHome,
-    scrollRef,
+    showChatTransitionLoading,
     userMessageJumpTargets,
-  ]);
-
-  const showLastUserMessageJumpBar = useMemo(() => shouldShowLastUserMessageJumpBar({
-    targetEventId: lastUserMessageJumpTarget?.eventId ?? null,
-    isWorkspaceHome,
-    isNewChatPlaceholder,
-    showChatTransitionLoading,
-    showScrollToBottom,
-  }), [
-    isNewChatPlaceholder,
-    isWorkspaceHome,
-    lastUserMessageJumpTarget?.eventId,
-    showChatTransitionLoading,
-    showScrollToBottom,
   ]);
 
   const handleLastUserMessageJump = useCallback(() => {
@@ -1645,13 +1386,17 @@ export function ChatInterface({
       return;
     }
 
-    const eventElement = document.getElementById(`event-${targetEventId}`);
-    if (!eventElement) {
+    const target = document.getElementById(`event-${targetEventId}`);
+    if (!(target instanceof HTMLElement)) {
       return;
     }
 
-    eventElement.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
     setHighlightedEventId(null);
+    target.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+      inline: 'nearest',
+    });
     window.requestAnimationFrame(() => {
       setHighlightedEventId(targetEventId);
     });
@@ -1662,9 +1407,55 @@ export function ChatInterface({
       userMessageBubbleNodesRef.current.set(eventId, node);
       return;
     }
-
     userMessageBubbleNodesRef.current.delete(eventId);
   }, []);
+
+  const handleCopyChatId = useCallback(async () => {
+    try {
+      if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+        throw new Error('clipboard-unavailable');
+      }
+      if (!activeChatIdResolved) {
+        throw new Error('chat-id-unavailable');
+      }
+      await navigator.clipboard.writeText(activeChatIdResolved);
+      setChatIdCopyState('copied');
+      window.setTimeout(() => {
+        setChatIdCopyState((current) => (current === 'copied' ? 'idle' : current));
+      }, 1800);
+    } catch {
+      setChatIdCopyState('failed');
+      window.setTimeout(() => {
+        setChatIdCopyState((current) => (current === 'failed' ? 'idle' : current));
+      }, 2200);
+    }
+  }, [activeChatIdResolved, setChatIdCopyState]);
+
+  const handleCopyChatThreadIdsJson = useCallback(async () => {
+    try {
+      if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+        throw new Error('clipboard-unavailable');
+      }
+      if (!activeChatIdResolved) {
+        throw new Error('chat-id-unavailable');
+      }
+
+      const payload = {
+        chatId: activeChatIdResolved,
+        threadId: activeChat?.threadId ?? null,
+      };
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      setIdBundleCopyState('copied');
+      window.setTimeout(() => {
+        setIdBundleCopyState((current) => (current === 'copied' ? 'idle' : current));
+      }, 1800);
+    } catch {
+      setIdBundleCopyState('failed');
+      window.setTimeout(() => {
+        setIdBundleCopyState((current) => (current === 'failed' ? 'idle' : current));
+      }, 2200);
+    }
+  }, [activeChat?.threadId, activeChatIdResolved, setIdBundleCopyState]);
 
   useEffect(() => {
     if (!isCustomizationOverlayLayout || !isCustomizationSidebarOpen) {
@@ -1682,6 +1473,43 @@ export function ChatInterface({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isCustomizationOverlayLayout, isCustomizationSidebarOpen, setIsCustomizationSidebarOpen]);
+
+  useLayoutEffect(() => {
+    syncLastUserMessageJumpTarget();
+  }, [syncLastUserMessageJumpTarget]);
+
+  useEffect(() => {
+    let rafId = 0;
+    const scheduleSync = () => {
+      if (rafId) {
+        return;
+      }
+      rafId = window.requestAnimationFrame(() => {
+        rafId = 0;
+        syncLastUserMessageJumpTarget();
+      });
+    };
+
+    window.addEventListener('resize', scheduleSync);
+    window.visualViewport?.addEventListener('resize', scheduleSync, { passive: true } as EventListenerOptions);
+
+    if (isMobileLayout) {
+      window.addEventListener('scroll', scheduleSync, { passive: true });
+      window.visualViewport?.addEventListener('scroll', scheduleSync, { passive: true } as EventListenerOptions);
+    }
+
+    return () => {
+      window.removeEventListener('resize', scheduleSync);
+      window.visualViewport?.removeEventListener('resize', scheduleSync);
+      if (isMobileLayout) {
+        window.removeEventListener('scroll', scheduleSync);
+        window.visualViewport?.removeEventListener('scroll', scheduleSync);
+      }
+      if (rafId) {
+        window.cancelAnimationFrame(rafId);
+      }
+    };
+  }, [isMobileLayout, syncLastUserMessageJumpTarget]);
 
   useEffect(() => {
     if (!isContextMenuOpen) {
@@ -1762,10 +1590,6 @@ export function ChatInterface({
     syncComposerDockMetrics,
   ]);
 
-  useLayoutEffect(() => {
-    syncLastUserMessageJumpTarget();
-  }, [syncLastUserMessageJumpTarget]);
-
   useEffect(() => {
     syncComposerDockMetrics();
     const handleResize = () => syncComposerDockMetrics();
@@ -1783,88 +1607,6 @@ export function ChatInterface({
   }, [syncComposerDockMetrics]);
 
   useEffect(() => {
-    const scheduleSync = () => {
-      window.requestAnimationFrame(syncLastUserMessageJumpTarget);
-    };
-
-    scheduleSync();
-    window.addEventListener('resize', scheduleSync, { passive: true });
-    window.addEventListener('scroll', scheduleSync, { passive: true });
-    window.visualViewport?.addEventListener('resize', scheduleSync);
-    window.visualViewport?.addEventListener('scroll', scheduleSync);
-
-    return () => {
-      window.removeEventListener('resize', scheduleSync);
-      window.removeEventListener('scroll', scheduleSync);
-      window.visualViewport?.removeEventListener('resize', scheduleSync);
-      window.visualViewport?.removeEventListener('scroll', scheduleSync);
-    };
-  }, [syncLastUserMessageJumpTarget]);
-
-  useEffect(() => {
-    if (!isMobileLayout || isWorkspaceHome || isNewChatPlaceholder || !activeChatIdResolved) {
-      clearResumePhaseSettleLoop();
-      deactivateSessionScrollOrchestrator();
-      return;
-    }
-
-    activateSessionScrollOrchestrator();
-
-    const onResume = () => {
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'resume:onResume',
-        streamElement: scrollRef.current,
-        detail: {
-          visibilityState: document.visibilityState,
-        },
-      });
-      if (document.visibilityState === 'hidden') {
-        return;
-      }
-      startResumeScrollPhase();
-    };
-    const onViewportChanged = () => {
-      const currentPhase = sessionScrollPhaseRef.current;
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'resume:onViewportChanged',
-        streamElement: scrollRef.current,
-        detail: {
-          currentPhase,
-        },
-      });
-      if (currentPhase !== 'resuming' && currentPhase !== 'viewport-reflow') {
-        return;
-      }
-      dispatchSessionScrollPhaseEvent('viewport-changed');
-    };
-
-    window.addEventListener('focus', onResume);
-    window.addEventListener('pageshow', onResume);
-    document.addEventListener('visibilitychange', onResume);
-    window.visualViewport?.addEventListener('resize', onViewportChanged);
-    window.visualViewport?.addEventListener('scroll', onViewportChanged);
-
-    return () => {
-      clearResumePhaseSettleLoop();
-      deactivateSessionScrollOrchestrator();
-      window.removeEventListener('focus', onResume);
-      window.removeEventListener('pageshow', onResume);
-      document.removeEventListener('visibilitychange', onResume);
-      window.visualViewport?.removeEventListener('resize', onViewportChanged);
-      window.visualViewport?.removeEventListener('scroll', onViewportChanged);
-    };
-  }, [
-    activeChatIdResolved,
-    clearResumePhaseSettleLoop,
-    isMobileLayout,
-    isNewChatPlaceholder,
-    isWorkspaceHome,
-    startResumeScrollPhase,
-  ]);
-
-  useEffect(() => {
     if (!isMobileLayout) {
       shouldStickToBottomRef.current = true;
       syncScrollToBottomButton();
@@ -1872,33 +1614,9 @@ export function ChatInterface({
     }
 
     const updateStickState = () => {
-      if (sessionScrollPhaseRef.current === 'resuming' || sessionScrollPhaseRef.current === 'viewport-reflow') {
-        recordScrollDebugEvent({
-          kind: 'trigger',
-          source: 'chat:updateStickState:suppressed',
-          streamElement: scrollRef.current,
-          detail: {
-            currentPhase: sessionScrollPhaseRef.current,
-          },
-        });
-        return;
-      }
-      const nextState = resolveMobileBottomLockState({
-        isNearBottom: isNearWindowBottom(),
-        isTailRestorePending: isChatEntryTailRestorePending,
-      });
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'chat:updateStickState',
-        streamElement: scrollRef.current,
-        detail: {
-          currentPhase: sessionScrollPhaseRef.current,
-          isChatEntryTailRestorePending,
-          nextState,
-        },
-      });
-      shouldStickToBottomRef.current = nextState.shouldStickToBottom;
-      setShowScrollToBottom(nextState.showScrollToBottom);
+      const nearBottom = isNearWindowBottom();
+      shouldStickToBottomRef.current = nearBottom;
+      setShowScrollToBottom(!nearBottom);
     };
 
     const rafId = window.requestAnimationFrame(updateStickState);
@@ -1912,52 +1630,31 @@ export function ChatInterface({
       window.visualViewport?.removeEventListener('scroll', updateStickState);
       window.visualViewport?.removeEventListener('resize', updateStickState);
     };
-  }, [
-    isChatEntryTailRestorePending,
-    isMobileLayout,
-    setShowScrollToBottom,
-    shouldStickToBottomRef,
-    syncScrollToBottomButton,
-  ]);
+  }, [isMobileLayout, setShowScrollToBottom, shouldStickToBottomRef, syncScrollToBottomButton]);
+
+  useEffect(() => {
+    if (!isMobileLayout) {
+      return;
+    }
+
+    const onWindowScroll = () => {
+      if (shouldBlockLoadOlder({ isTailLayoutSettling: isTailLayoutSettlingRef.current, isLoadingOlder, hasMoreBefore })) {
+        return;
+      }
+      if (getWindowScrollTop() <= 96) {
+        void loadOlderHistory();
+      }
+    };
+
+    window.addEventListener('scroll', onWindowScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onWindowScroll);
+    };
+  }, [hasMoreBefore, isLoadingOlder, isMobileLayout, isTailLayoutSettlingRef, loadOlderHistory]);
 
   useEffect(() => {
     syncScrollToBottomButton();
   }, [events.length, effectivePendingPermissions.length, pendingUserEvents.length, showPermissionQueue, syncScrollToBottomButton]);
-
-  useEffect(() => {
-    if (!isMobileLayout) {
-      previousTailLayoutSettlingRef.current = isTailLayoutSettling;
-      genericAutoScrollCooldownUntilRef.current = 0;
-      return;
-    }
-
-    if (previousTailLayoutSettlingRef.current && !isTailLayoutSettling) {
-      genericAutoScrollCooldownUntilRef.current = Date.now() + SYSTEM_SCROLL_AUTOSCROLL_COOLDOWN_MS;
-    }
-
-    previousTailLayoutSettlingRef.current = isTailLayoutSettling;
-  }, [isMobileLayout, isTailLayoutSettling]);
-
-  const autoScrollTriggerKey = useMemo(
-    () => [
-      eventsForChatId ?? '',
-      events.length,
-      latestVisibleEventId ?? '',
-      pendingUserEvents.length,
-      effectivePendingPermissions.length,
-      isAwaitingReply ? '1' : '0',
-      showPermissionQueue ? '1' : '0',
-    ].join(':'),
-    [
-      effectivePendingPermissions.length,
-      events.length,
-      eventsForChatId,
-      isAwaitingReply,
-      latestVisibleEventId,
-      pendingUserEvents.length,
-      showPermissionQueue,
-    ],
-  );
 
   useEffect(() => {
     const nextMode = shouldUseManualScrollRestoration({
@@ -1967,90 +1664,33 @@ export function ChatInterface({
     }) ? 'manual' : 'auto';
 
     if (window.history.scrollRestoration === nextMode) {
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'chat:scrollRestoration:unchanged',
-        detail: {
-          nextMode,
-        },
-      });
       return;
     }
 
     const previousMode = window.history.scrollRestoration;
     window.history.scrollRestoration = nextMode;
-    recordScrollDebugEvent({
-      kind: 'trigger',
-      source: 'chat:scrollRestoration:set',
-      detail: {
-        previousMode,
-        nextMode,
-      },
-    });
 
     return () => {
       window.history.scrollRestoration = previousMode;
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'chat:scrollRestoration:restore',
-        detail: {
-          previousMode,
-        },
-      });
     };
   }, [activeChatIdResolved, isNewChatPlaceholder, isWorkspaceHome]);
 
   useEffect(() => {
-    if (isMobileLayout && Date.now() < genericAutoScrollCooldownUntilRef.current) {
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'chat:auto-scroll-effect:suppressed',
-        detail: {
-          cooldownUntil: genericAutoScrollCooldownUntilRef.current,
-          now: Date.now(),
-        },
-      });
-      return;
-    }
-
     if (!shouldAutoScrollToBottom({
       isWorkspaceHome,
       shouldStickToBottom: shouldStickToBottomRef.current,
-      isTailRestorePending: isChatEntryTailRestorePending,
     })) {
       return;
     }
-    recordScrollDebugEvent({
-      kind: 'trigger',
-      source: 'chat:auto-scroll-effect:immediate',
-      detail: {
-        autoScrollTriggerKey,
-        eventsForChatId,
-        events: events.length,
-        pendingUserEvents: pendingUserEvents.length,
-        effectivePendingPermissions: effectivePendingPermissions.length,
-        isAwaitingReply,
-        isChatEntryTailRestorePending,
-        latestVisibleEventId,
-      },
-    });
     scrollConversationToBottom('auto');
 
     const rafId = window.requestAnimationFrame(() => {
       if (shouldStickToBottomRef.current) {
-        recordScrollDebugEvent({
-          kind: 'trigger',
-          source: 'chat:auto-scroll-effect:raf',
-        });
         scrollConversationToBottom('auto');
       }
     });
     const timeoutId = window.setTimeout(() => {
       if (shouldStickToBottomRef.current) {
-        recordScrollDebugEvent({
-          kind: 'trigger',
-          source: 'chat:auto-scroll-effect:timeout',
-        });
         scrollConversationToBottom('auto');
       }
     }, 140);
@@ -2060,15 +1700,10 @@ export function ChatInterface({
       window.clearTimeout(timeoutId);
     };
   }, [
-    autoScrollTriggerKey,
-    effectivePendingPermissions.length,
-    events.length,
-    eventsForChatId,
+    events,
     isAwaitingReply,
-    isMobileLayout,
+    effectivePendingPermissions.length,
     isWorkspaceHome,
-    isChatEntryTailRestorePending,
-    latestVisibleEventId,
     pendingUserEvents.length,
     scrollConversationToBottom,
     shouldStickToBottomRef,
@@ -2082,39 +1717,21 @@ export function ChatInterface({
       previousChatId,
       nextChatId: activeChatIdResolved,
       isNewChatPlaceholder,
-      isTailRestorePending: isChatEntryTailRestorePending,
     })) {
       return;
     }
 
     shouldStickToBottomRef.current = true;
     setShowScrollToBottom(false);
-    recordScrollDebugEvent({
-      kind: 'trigger',
-      source: 'chat:chat-change-reset:immediate',
-      detail: {
-        previousChatId,
-        activeChatIdResolved,
-        isChatEntryTailRestorePending,
-      },
-    });
     scrollConversationToBottom('auto');
 
     const rafId = window.requestAnimationFrame(() => {
       if (shouldStickToBottomRef.current) {
-        recordScrollDebugEvent({
-          kind: 'trigger',
-          source: 'chat:chat-change-reset:raf',
-        });
         scrollConversationToBottom('auto');
       }
     });
     const timeoutId = window.setTimeout(() => {
       if (shouldStickToBottomRef.current) {
-        recordScrollDebugEvent({
-          kind: 'trigger',
-          source: 'chat:chat-change-reset:timeout',
-        });
         scrollConversationToBottom('auto');
       }
     }, 140);
@@ -2125,7 +1742,6 @@ export function ChatInterface({
     };
   }, [
     activeChatIdResolved,
-    isChatEntryTailRestorePending,
     isNewChatPlaceholder,
     scrollConversationToBottom,
     setShowScrollToBottom,
@@ -2448,6 +2064,314 @@ export function ChatInterface({
     }
   }
 
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const promptText = prompt.trim();
+    if (!promptText || !isOperator || isAgentRunning || !activeChatIdResolved || imageUploadsInFlight > 0) return;
+    const scopedChatId = activeChatIdResolved;
+
+    const hasUserMessageInChat = eventsForChatId === scopedChatId
+      ? events.some((event) => isUserEvent(event)) || pendingUserEvents.length > 0
+      : false;
+    const isFirstUserMessageInChat = !hasUserMessageInChat;
+    const shouldAutoRenameFromFirstPrompt = Boolean(
+      activeChat
+      && isAutoGeneratedChatTitle(activeChat.title)
+      && isFirstUserMessageInChat,
+    );
+    const firstPromptTitle = shouldAutoRenameFromFirstPrompt
+      ? buildChatTitleFromFirstPrompt(promptText)
+      : null;
+    const imageAttachments = extractImageAttachments(contextItems);
+    const contextBlocks: Array<
+      { type: 'file'; path: string; content: string }
+      | { type: 'text'; text: string }
+    > = contextItems.reduce<Array<
+      { type: 'file'; path: string; content: string }
+      | { type: 'text'; text: string }
+    >>((acc, item) => {
+      if (item.type === 'file') {
+        acc.push({ type: 'file', path: item.path, content: item.content });
+      } else if (item.type === 'text') {
+        acc.push({ type: 'text', text: item.text });
+      }
+      return acc;
+    }, []);
+    const finalText = buildComposerSubmitText({
+      promptText,
+      imageAttachments,
+      contextBlocks,
+    });
+    const submitModelId = normalizeModelId(selectedModelId)
+      ?? resolveDefaultModelId(activeAgentFlavor, providerSelections, legacyCustomModels, lastSelectedCodexModelId);
+    const submitGeminiModeId = activeAgentFlavor === 'gemini'
+      ? resolveAvailableGeminiModeId({
+          requestedMode: selectedGeminiModeId,
+          approvalPolicy,
+          configuredModeId: providerSelections?.gemini?.defaultModeId,
+        })
+      : undefined;
+    const submitModelReasoningEffort = codexReasoningEffort;
+
+    const awaitingSince = new Date().toISOString();
+    const optimisticUserEvent = buildOptimisticUserEvent({
+      chatId: scopedChatId,
+      agent: activeChat?.agent === 'claude' || activeChat?.agent === 'codex' || activeChat?.agent === 'gemini'
+        ? activeChat.agent
+        : 'codex',
+      model: submitModelId,
+      ...(submitGeminiModeId ? { geminiMode: submitGeminiModeId } : {}),
+      ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
+      ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
+      text: finalText,
+      submittedAt: awaitingSince,
+    });
+    const wasStickyAtSubmit = shouldStickToBottomRef.current;
+    updateChatRuntimeUi(scopedChatId, {
+      isSubmitting: true,
+      isAwaitingReply: true,
+      hasCompletionSignal: false,
+      awaitingReplySince: awaitingSince,
+      submitError: null,
+      showDisconnectRetry: false,
+      lastSubmittedPayload: {
+        text: finalText,
+        chatId: scopedChatId,
+        agent: activeChat?.agent === 'claude' || activeChat?.agent === 'codex' || activeChat?.agent === 'gemini'
+          ? activeChat.agent
+          : 'codex',
+        model: submitModelId,
+        ...(submitGeminiModeId ? { geminiMode: submitGeminiModeId } : {}),
+        ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
+        ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
+        ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
+      },
+    });
+    runtimeStartedSinceAwaitingRef.current = false;
+    disconnectNoticeAwaitingRef.current = null;
+    setPendingUserEventsByChat((prev) => ({
+      ...prev,
+      [scopedChatId]: [...(prev[scopedChatId] ?? []), optimisticUserEvent],
+    }));
+    if (wasStickyAtSubmit) {
+      shouldStickToBottomRef.current = true;
+      setShowScrollToBottom(false);
+      requestAnimationFrame(() => {
+        if (shouldStickToBottomRef.current) {
+          scrollConversationToBottom('auto');
+        }
+      });
+    }
+
+    try {
+      const response = await fetch(`/api/runtime/sessions/${sessionId}/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'message',
+          title: 'User Instruction',
+          text: finalText,
+          meta: buildUserMessageMeta({
+            chatId: scopedChatId,
+            agent: activeChat?.agent ?? 'codex',
+            model: submitModelId,
+            ...(submitGeminiModeId ? { geminiMode: submitGeminiModeId } : {}),
+            ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
+            ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
+            ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
+          }),
+        }),
+      });
+
+      const body = (await response.json().catch(() => ({ error: '백엔드 응답을 읽을 수 없습니다.' }))) as {
+        event?: UiEvent;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(body.error ?? '메시지 전송에 실패했습니다.');
+      }
+
+      setPendingUserEventsByChat((prev) => {
+        const current = prev[scopedChatId] ?? [];
+        if (!current.some((event) => event.id === optimisticUserEvent.id)) {
+          return prev;
+        }
+        const next = current.filter((event) => event.id !== optimisticUserEvent.id);
+        return {
+          ...prev,
+          [scopedChatId]: next,
+        };
+      });
+      if (body.event) {
+        addEvent(body.event);
+      }
+      const touchedAt = new Date().toISOString();
+      setChats((prev) => sortSessionChats(prev.map((chat) => (
+        chat.id === scopedChatId
+          ? {
+              ...chat,
+              lastActivityAt: touchedAt,
+              ...(firstPromptTitle ? { title: firstPromptTitle } : {}),
+            }
+          : chat
+      ))));
+      void fetch(
+        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(scopedChatId)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            touchActivity: true,
+            model: submitModelId,
+            ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
+            ...(firstPromptTitle ? { title: firstPromptTitle } : {}),
+          }),
+        },
+      )
+        .then(async (response) => {
+          if (!response.ok) {
+            return;
+          }
+          const payload = (await response.json().catch(() => ({}))) as { chat?: SessionChat };
+          if (!payload.chat) {
+            return;
+          }
+          setChats((prev) => sortSessionChats(prev.map((chat) => (
+                chat.id === scopedChatId
+                  ? {
+                      ...chat,
+                      title: payload.chat?.title ?? chat.title,
+                      model: payload.chat?.model ?? chat.model,
+                      modelReasoningEffort: payload.chat?.modelReasoningEffort ?? chat.modelReasoningEffort,
+                      lastActivityAt: payload.chat?.lastActivityAt ?? chat.lastActivityAt,
+                    }
+                  : chat
+          ))));
+        })
+        .catch(() => {
+        });
+      setPrompt('');
+      setContextItems([]);
+    } catch (error) {
+      setPendingUserEventsByChat((prev) => {
+        const current = prev[scopedChatId] ?? [];
+        if (!current.some((event) => event.id === optimisticUserEvent.id)) {
+          return prev;
+        }
+        const next = current.filter((event) => event.id !== optimisticUserEvent.id);
+        return {
+          ...prev,
+          [scopedChatId]: next,
+        };
+      });
+      updateChatRuntimeUi(scopedChatId, {
+        isAwaitingReply: false,
+        hasCompletionSignal: false,
+        awaitingReplySince: null,
+        submitError: error instanceof Error ? error.message : '백엔드 연결 상태를 확인해 주세요.',
+      });
+      runtimeStartedSinceAwaitingRef.current = false;
+    } finally {
+      updateChatRuntimeUi(scopedChatId, { isSubmitting: false });
+    }
+  }
+
+  async function handleRetryDisconnected() {
+    if (!isOperator || isAgentRunning || !lastSubmittedPayload) {
+      return;
+    }
+    const scopedChatId = lastSubmittedPayload.chatId;
+    updateChatRuntimeUi(scopedChatId, {
+      isSubmitting: true,
+      isAwaitingReply: true,
+      hasCompletionSignal: false,
+      awaitingReplySince: new Date().toISOString(),
+      submitError: null,
+      showDisconnectRetry: false,
+    });
+    runtimeStartedSinceAwaitingRef.current = false;
+    disconnectNoticeAwaitingRef.current = null;
+
+    try {
+      const response = await fetch(`/api/runtime/sessions/${sessionId}/actions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'retry',
+          chatId: scopedChatId,
+        }),
+      });
+
+      const body = (await response.json().catch(() => ({ error: '백엔드 응답을 읽을 수 없습니다.' }))) as {
+        event?: UiEvent;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(body.error ?? '재시도 전송에 실패했습니다.');
+      }
+
+      if (body.event) {
+        addEvent(body.event);
+      }
+    } catch (error) {
+      updateChatRuntimeUi(scopedChatId, {
+        isAwaitingReply: false,
+        hasCompletionSignal: false,
+        awaitingReplySince: null,
+        submitError: error instanceof Error ? error.message : '재시도 중 오류가 발생했습니다.',
+        showDisconnectRetry: true,
+      });
+      runtimeStartedSinceAwaitingRef.current = false;
+    } finally {
+      updateChatRuntimeUi(scopedChatId, { isSubmitting: false });
+    }
+  }
+
+  async function handleAbortRun() {
+    if (!isOperator || !isAgentRunning || isAborting || !activeChatIdResolved) {
+      return;
+    }
+    const scopedChatId = activeChatIdResolved;
+
+    updateChatRuntimeUi(scopedChatId, { isAborting: true });
+
+    try {
+      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/actions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'abort', chatId: scopedChatId }),
+      });
+      const body = (await response.json().catch(() => ({ error: '중단 응답을 읽을 수 없습니다.' }))) as {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(body.error ?? '에이전트 실행 중단에 실패했습니다.');
+      }
+
+      updateChatRuntimeUi(scopedChatId, {
+        isAwaitingReply: false,
+        hasCompletionSignal: false,
+        awaitingReplySince: null,
+        submitError: null,
+        showDisconnectRetry: false,
+      });
+      runtimeStartedSinceAwaitingRef.current = false;
+      disconnectNoticeAwaitingRef.current = null;
+    } catch (error) {
+      updateChatRuntimeUi(scopedChatId, {
+        submitError: error instanceof Error ? error.message : '에이전트 실행 중단 중 오류가 발생했습니다.',
+      });
+    } finally {
+      updateChatRuntimeUi(scopedChatId, {
+        isAborting: false,
+        isSubmitting: false,
+      });
+    }
+  }
+
   function handleStreamScroll() {
     const stream = scrollRef.current;
     if (!stream) {
@@ -2462,6 +2386,9 @@ export function ChatInterface({
     shouldStickToBottomRef.current = nearBottom;
     setShowScrollToBottom(!nearBottom);
     syncLastUserMessageJumpTarget();
+    if (!shouldBlockLoadOlder({ isTailLayoutSettling: isTailLayoutSettlingRef.current, isLoadingOlder, hasMoreBefore }) && stream.scrollTop <= 96) {
+      void loadOlderHistory();
+    }
   }
 
   const handleMoveWorkspacePage = useCallback((direction: 'previous' | 'next') => {
@@ -2535,214 +2462,682 @@ export function ChatInterface({
         chatListSentinelRef={chatListSentinelRef}
         actionMenuRef={chatActionMenuRef}
         onCloseSidebar={() => setIsChatSidebarOpen(false)}
-        onGoHome={handleGoHome}
-        onCreateChat={handleOpenNewChat}
+        onGoHome={() => {
+          setIsWorkspaceHome(true);
+          setIsNewChatPlaceholder(false);
+          setSelectedChatId(null);
+          if (isMobileLayout) {
+            setIsChatSidebarOpen(false);
+          }
+        }}
+        onCreateChat={() => {
+          setIsWorkspaceHome(false);
+          setIsNewChatPlaceholder(true);
+          setSelectedChatId(null);
+          if (isMobileLayout) {
+            setIsChatSidebarOpen(false);
+          }
+        }}
         RelativeTimeComponent={RelativeTime}
         ElapsedTimerComponent={ElapsedTimer}
       />
 
-      <WorkspacePagerShell
-        centerPanelRef={centerPanelRef}
-        isMobileLayout={isMobileLayout}
-        workspacePagerItems={workspacePagerItems}
-        activeWorkspacePageId={activeWorkspacePageId}
-        setActiveWorkspacePageId={setActiveWorkspacePageId}
-        renderChatPage={() => (
-          <ChatCenterPane
-            isMobileLayout={isMobileLayout}
-            activeChatIdResolved={activeChatIdResolved}
-            isWorkspaceHome={isWorkspaceHome}
-            isNewChatPlaceholder={isNewChatPlaceholder}
-            showChatTransitionLoading={showChatTransitionLoading}
-            showScrollToBottom={showScrollToBottom}
-            onJumpToBottom={handleJumpToBottom}
-            header={(
-              <ChatHeader
-                activeChatIdResolved={activeChatIdResolved}
-                activeWorkspacePageId={activeWorkspacePageId}
-                agentMeta={agentMeta}
-                agentAvatarToneClass={getAgentAvatarToneClass(agentMeta.tone)}
-                approvalPolicy={approvalPolicy}
-                chatIdCopyState={chatIdCopyState}
-                centerHeaderRef={centerHeaderRef}
-                connectionLabel={connectionLabel}
-                connectionState={connectionState}
-                contextMenuRef={contextMenuRef}
-                currentChatTitle={currentChatTitle}
-                displayName={displayName}
-                effectivePendingPermissionCount={effectivePendingPermissions.length}
-                handleAbortRun={handleAbortRun}
-                handleCopyChatId={handleCopyChatId}
-                handleCopyChatThreadIdsJson={handleCopyChatThreadIdsJson}
-                handleMoveWorkspacePage={handleMoveWorkspacePage}
-                idBundleCopyState={idBundleCopyState}
-                isAborting={isAborting}
-                isAgentRunning={isAgentRunning}
-                isChatSidebarOpen={isChatSidebarOpen}
-                isContextMenuOpen={isContextMenuOpen}
-                isDebugMode={isDebugMode}
-                isMobileLayout={isMobileLayout}
-                isOperator={isOperator}
-                isPolicyChanging={isPolicyChanging}
-                jumpToPendingPermission={jumpToPendingPermission}
-                onToggleChatSidebar={handleToggleChatSidebar}
-                onToggleContextMenu={handleToggleContextMenu}
-                onToggleDebugMode={toggleDebugMode}
-                onTogglePermissionQueue={handleTogglePermissionQueue}
-                onUpdateApprovalPolicy={handleUpdateApprovalPolicy}
-                sessionTitle={sessionTitle}
-                showDebugToggleInHeader={showDebugToggleInHeader}
-                showPermissionQueue={showPermissionQueue}
-              />
-            )}
-            statusNotices={(
-              <ChatStatusNotices
-                runtimeNotice={runtimeNotice}
-                showDisconnectRetry={showDisconnectRetry}
-                onRetryDisconnected={handleRetryDisconnected}
-                isRetryDisabled={!isOperator || isAgentRunning || isSubmitting || !lastSubmittedPayload}
-                isSubmitting={isSubmitting}
-                effectivePendingPermissionCount={effectivePendingPermissions.length}
-                pendingPermissionsCount={pendingPermissions.length}
-                onJumpToPendingPermission={jumpToPendingPermission}
-              />
-            )}
-            jumpBar={showLastUserMessageJumpBar ? (
-              <LastUserMessageJumpBar
-                preview={lastUserMessageJumpTarget?.preview ?? ''}
-                showPendingReveal={showChatTransitionLoading}
-                onJump={handleLastUserMessageJump}
-              />
-            ) : null}
-            chatBody={isWorkspaceHome ? (
-              <WorkspaceHomePane
+      <main className={`${styles.centerPanel} ${isMobileLayout ? styles.centerPanelMobileScroll : ''}`} ref={centerPanelRef}>
+        <WorkspacePager
+          items={workspacePagerItems}
+          activePageId={activeWorkspacePageId}
+          onActivePageChange={setActiveWorkspacePageId}
+          renderChatPage={() => (
+            <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
+          <header className={styles.centerHeader} ref={centerHeaderRef}>
+            <button
+              type="button"
+              className={styles.sidebarToggleButton}
+              onClick={() => {
+                if (isCustomizationOverlayLayout) {
+                  setIsCustomizationSidebarOpen(false);
+                }
+                setIsChatSidebarOpen((prev) => !prev);
+              }}
+              aria-label={isChatSidebarOpen ? '채팅 사이드바 닫기' : '채팅 사이드바 열기'}
+              title={isChatSidebarOpen ? '채팅 사이드바 닫기' : '채팅 사이드바 열기'}
+            >
+              {isChatSidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+            </button>
+            <span className={`${styles.agentAvatarHero} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
+              <agentMeta.Icon size={20} />
+            </span>
+            <div className={styles.centerHeaderInfo}>
+              <h2 className={styles.centerTitle}>{isMobileLayout ? sessionTitle : displayName}</h2>
+              {isMobileLayout ? (
+                <div className={styles.centerMetaRow}>
+                  <span className={styles.centerAgentLabel}>{agentMeta.label}</span>
+                  <span className={styles.centerChatLabel}>{currentChatTitle}</span>
+                </div>
+              ) : (
+                <span className={styles.centerAgentLabel}>{agentMeta.label} Agent · {sessionTitle}</span>
+              )}
+            </div>
+            <div className={styles.centerHeaderActions}>
+              <button
+                type="button"
+                className={styles.sidebarToggleButton}
+                onClick={() => handleMoveWorkspacePage('previous')}
+                aria-label="이전 작업 화면으로 이동"
+                title="이전 작업 화면으로 이동"
+                disabled={activeWorkspacePageId === 'chat'}
+              >
+                <ChevronLeft size={15} />
+              </button>
+              <button
+                type="button"
+                className={styles.sidebarToggleButton}
+                onClick={() => handleMoveWorkspacePage('next')}
+                aria-label="다음 작업 화면으로 이동"
+                title="다음 작업 화면으로 이동"
+              >
+                <ChevronRight size={15} />
+              </button>
+              {showDebugToggleInHeader && (
+                <button
+                  type="button"
+                  className={`${styles.debugToggleButton} ${isDebugMode ? styles.debugToggleButtonActive : ''}`}
+                  onClick={toggleDebugMode}
+                  aria-pressed={isDebugMode}
+                  aria-label={isDebugMode ? '디버그 모드 끄기' : '디버그 모드 켜기'}
+                  title={isDebugMode ? '디버그 모드 끄기' : '디버그 모드 켜기'}
+                >
+                  <Bug size={14} />
+                  <span>디버그</span>
+                </button>
+              )}
+              <span
+                className={`${styles.connectionPill} ${
+                  connectionState === 'running'
+                    ? styles.connectionRunning
+                    : connectionState === 'connected'
+                      ? styles.connectionGood
+                      : styles.connectionWarn
+                }`}
+              >
+                {connectionState === 'running' ? (
+                  <Activity size={13} className={styles.connectionRunningIcon} />
+                ) : connectionState === 'connected' ? (
+                  <CheckCircle2 size={13} />
+                ) : (
+                  <CircleAlert size={13} />
+                )}
+                {connectionLabel}
+              </span>
+              <div className={styles.contextMenuWrap} ref={contextMenuRef}>
+                <button
+                  type="button"
+                  className={styles.contextMenuButton}
+                  aria-label="워크스페이스 컨텍스트 메뉴"
+                  onClick={() => setIsContextMenuOpen((prev) => !prev)}
+                >
+                  <MoreVertical size={16} />
+                </button>
+                {isContextMenuOpen && (
+                  <div className={styles.contextMenuPanel} role="menu">
+                    <div className={styles.contextMenuMeta}>
+                      <span>Pending: {effectivePendingPermissions.length}</span>
+                    </div>
+                    {isOperator && (
+                      <div className={styles.contextMenuPolicyRow}>
+                        <label htmlFor="approval-policy-select" className={styles.contextMenuPolicyLabel}>
+                          Policy
+                        </label>
+                        <select
+                          id="approval-policy-select"
+                          className={styles.contextMenuPolicySelect}
+                          value={approvalPolicy ?? 'on-request'}
+                          disabled={isPolicyChanging}
+                          onChange={(e) => {
+                            const next = e.target.value as ApprovalPolicy;
+                            setIsPolicyChanging(true);
+                            fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ approvalPolicy: next }),
+                            })
+                              .then((res) => {
+                                if (!res.ok) throw new Error('Failed to update policy');
+                                setApprovalPolicy(next);
+                              })
+                              .catch(() => {})
+                              .finally(() => setIsPolicyChanging(false));
+                          }}
+                        >
+                          <option value="on-request">ON REQUEST</option>
+                          <option value="on-failure">ON FAILURE</option>
+                          <option value="never">NEVER</option>
+                          <option value="yolo">YOLO</option>
+                        </select>
+                      </div>
+                    )}
+                    {!isOperator && (
+                      <div className={styles.contextMenuMeta}>
+                        <span>Policy: {approvalPolicyLabel(approvalPolicy)}</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      className={styles.contextMenuItem}
+                      disabled={!activeChatIdResolved}
+                      onClick={() => {
+                        void handleCopyChatId();
+                      }}
+                    >
+                      {chatIdCopyState === 'copied'
+                        ? '현재 채팅 ID 복사됨'
+                        : chatIdCopyState === 'failed'
+                          ? '채팅 ID 복사 실패 (다시 시도)'
+                          : '현재 채팅 ID 복사'}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.contextMenuItem}
+                      disabled={!activeChatIdResolved}
+                      onClick={() => {
+                        void handleCopyChatThreadIdsJson();
+                      }}
+                    >
+                      {idBundleCopyState === 'copied'
+                        ? '채팅/스레드 ID JSON 복사됨'
+                        : idBundleCopyState === 'failed'
+                          ? 'JSON 복사 실패 (다시 시도)'
+                          : '채팅/스레드 ID JSON 복사'}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.contextMenuItem}
+                      onClick={() => {
+                        setIsContextMenuOpen(false);
+                        void handleAbortRun();
+                      }}
+                      disabled={!isOperator || !isAgentRunning || isAborting}
+                    >
+                      {isAborting ? '중단 중...' : '에이전트 실행 중단'}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.contextMenuItem}
+                      onClick={() => {
+                        setIsContextMenuOpen(false);
+                        jumpToPendingPermission();
+                      }}
+                      disabled={effectivePendingPermissions.length === 0}
+                    >
+                      대기 승인 바로 이동
+                    </button>
+                    {!showDebugToggleInHeader && (
+                      <button
+                        type="button"
+                        className={`${styles.contextMenuItem} ${isDebugMode ? styles.contextMenuItemActive : ''}`}
+                        onClick={() => {
+                          setIsContextMenuOpen(false);
+                          toggleDebugMode();
+                        }}
+                      >
+                        {isDebugMode ? '디버그 모드 끄기' : '디버그 모드 켜기'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className={styles.contextMenuItem}
+                      onClick={() => {
+                        setShowPermissionQueue((prev) => !prev);
+                      }}
+                    >
+                      권한 요청 {showPermissionQueue ? '숨기기' : '표시하기'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </header>
+
+          {runtimeNotice && (
+            <div className={styles.noticeWrap}>
+              <BackendNotice message={`백엔드 연결 상태: ${runtimeNotice}`} />
+            </div>
+          )}
+
+          {showDisconnectRetry && (
+            <div className={styles.disconnectNoticeBar} role="status" aria-live="polite">
+              <span>에이전트 연결이 중단되었습니다.</span>
+              <button
+                type="button"
+                className={styles.disconnectNoticeAction}
+                onClick={() => {
+                  void handleRetryDisconnected();
+                }}
+                disabled={!isOperator || isAgentRunning || isSubmitting || !lastSubmittedPayload}
+              >
+                {isSubmitting ? '재시도 중...' : '재시도'}
+              </button>
+            </div>
+          )}
+
+          {effectivePendingPermissions.length > 0 && (
+            <div className={styles.permissionNoticeBar} role="status" aria-live="polite">
+              <span>
+                승인 요청 {effectivePendingPermissions.length}건이 대기 중입니다.
+                {pendingPermissions.length === 0 ? ' 실시간 승인 세션이 없어 재실행이 필요할 수 있습니다.' : ''}
+              </span>
+              <button type="button" className={styles.permissionNoticeAction} onClick={jumpToPendingPermission}>
+                바로 보기
+              </button>
+            </div>
+          )}
+
+          {showLastUserMessageJumpBar && lastUserMessageJumpTarget && (
+            <LastUserMessageJumpBar
+              preview={lastUserMessageJumpTarget.preview}
+              onJump={handleLastUserMessageJump}
+            />
+          )}
+
+          <>
+          <div
+            className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''} ${chatEntryPendingRevealClassName}`}
+            ref={scrollRef}
+            onScroll={handleStreamScroll}
+            aria-hidden={showChatTransitionLoading}
+          >
+            {isWorkspaceHome ? (
+              <WorkspaceHome
                 sessionId={sessionId}
                 sessionTitle={sessionTitle}
                 projectPath={projectName}
                 agentFlavor={agentFlavor}
                 chats={chats}
-                isMobileLayout={isMobileLayout}
-                chatEntryPendingRevealClassName={chatEntryPendingRevealClassName}
-                showChatTransitionLoading={showChatTransitionLoading}
-                scrollRef={scrollRef}
-                onStreamScroll={handleStreamScroll}
-                onSelectChat={handleSelectWorkspaceChat}
-                onNewChat={handleOpenNewChat}
-                onBack={handleBackFromWorkspaceHome}
+                onSelectChat={(chatId) => {
+                  setIsWorkspaceHome(false);
+                  setIsNewChatPlaceholder(false);
+                  setSelectedChatId(chatId);
+                  writeChatIdToHistory(buildChatUrl(sessionId, chatId), 'push');
+                }}
+                onNewChat={() => {
+                  setIsWorkspaceHome(false);
+                  setIsNewChatPlaceholder(true);
+                  setSelectedChatId(null);
+                  if (isMobileLayout) {
+                    setIsChatSidebarOpen(false);
+                  }
+                }}
+                onBack={() => router.back()}
               />
             ) : isNewChatPlaceholder ? (
-              <NewChatPlaceholderPane
-                isMobileLayout={isMobileLayout}
-                chatEntryPendingRevealClassName={chatEntryPendingRevealClassName}
-                showChatTransitionLoading={showChatTransitionLoading}
-                scrollRef={scrollRef}
-                onStreamScroll={handleStreamScroll}
-                onBack={handleReturnToWorkspaceHome}
-                onCreateChat={handleCreateChat}
-              />
-            ) : (
-              <ChatTimeline
-                activeAgentFlavor={activeAgentFlavor}
-                activeChat={activeChat}
-                agentMeta={agentMeta}
-                chatEntryPendingRevealClassName={chatEntryPendingRevealClassName}
-                copiedUserEventId={copiedUserEventId}
-                expandedResultIds={expandedResultIds}
-                hasMoreBefore={hasMoreBefore}
-                highlightedEventId={highlightedEventId}
-                isAgentRunning={isAgentRunning}
-                isDebugMode={isDebugMode}
-                isLoadingOlder={isLoadingOlder}
-                isLoadOlderDisabled={shouldBlockLoadOlder({
-                  isTailLayoutSettling,
-                  isLoadingOlder,
-                  hasMoreBefore,
-                  scrollPhase: sessionScrollPhase,
-                })}
-                isMobileLayout={isMobileLayout}
-                isOperator={isOperator}
-                loadingPermissionId={loadingPermissionId}
-                onLoadOlder={handleLoadOlderButtonClick}
-                scrollRef={scrollRef}
-                showChatTransitionLoading={showChatTransitionLoading}
-                timelineItems={timelineItems}
-                onCopyUserMessage={handleCopyUserMessage}
-                onDecidePermission={(permissionId, decision) => {
-                  void decidePermission(permissionId, decision);
-                }}
-                onDeleteEmptyAutoChat={handleDeleteEmptyAutoChat}
-                onUserMessageBubbleRef={setUserMessageBubbleNode}
-                onSelectQuickStart={handleSelectQuickStart}
-                onStreamScroll={handleStreamScroll}
-                onToggleActionRun={toggleActionRun}
-                onToggleResult={toggleResult}
-              />
+              <div className={styles.agentSelectorContainer}>
+                <button
+                  type="button"
+                  className={styles.agentSelectorBackButton}
+                  onClick={() => { setIsWorkspaceHome(true); setIsNewChatPlaceholder(false); }}
+                >
+                  <ChevronLeft size={14} />
+                  뒤로
+                </button>
+                <h3 className={styles.agentSelectorTitle}>어떤 에이전트와 대화를 시작할까요?</h3>
+                <div className={styles.agentSelectorGrid}>
+                  {CHAT_AGENT_CHOICES.map((choice) => {
+                    const choiceMeta = resolveAgentMeta(choice);
+                    const ChoiceIcon = choiceMeta.Icon;
+                    return (
+                      <button
+                        key={choice}
+                        type="button"
+                        className={styles.agentSelectorCard}
+                        onClick={() => void handleCreateChat(choice)}
+                        style={{ '--agent-color': `var(--agent-${choice}-accent)`, '--agent-bg': `var(--agent-${choice}-bg)` } as React.CSSProperties}
+                        >
+                        <div className={styles.agentSelectorIconWrap}>
+                          <ChoiceIcon size={28} />
+                        </div>
+                        <div>
+                          <div className={styles.agentSelectorLabel}>{choiceMeta.label}</div>
+                          <div className={styles.agentSelectorDesc}>{resolveAgentSubtitle(choice)}</div>
+                        </div>
+                        </button>
+                        );
+                        })}
+                        </div>
+                        </div>
+                        ) : (
+                        <>
+                          {timelineItems.length === 0 && activeChat && (() => {
+                            const AgentIcon = agentMeta.Icon;
+                            const quickStarts = AGENT_QUICK_STARTS[activeAgentFlavor] || AGENT_QUICK_STARTS.codex || [];
+                            return (
+                              <div className={styles.emptyChatState}>
+                                {isAutoGeneratedChatTitle(activeChat.title) && (
+                                  <button
+                                    type="button"
+                                    className={styles.emptyChatBackButton}
+                                    onClick={() => {
+                                      const chatId = activeChat.id;
+                                      void fetch(
+                                        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chatId)}`,
+                                        { method: 'DELETE' },
+                                      ).then((r) => r.json()).then((body: { chats?: import('@/lib/happy/types').SessionChat[] }) => {
+                                        if (Array.isArray(body.chats)) {
+                                          setChats(sortSessionChats(body.chats));
+                                        } else {
+                                          setChats((prev) => prev.filter((c) => c.id !== chatId));
+                                        }
+                                      }).catch(() => {
+                                        setChats((prev) => prev.filter((c) => c.id !== chatId));
+                                      });
+                                      setSelectedChatId(null);
+                                      setIsWorkspaceHome(true);
+                                    }}
+                                  >
+                                    <ChevronLeft size={14} />
+                                    뒤로
+                                  </button>
+                                )}
+                                <div className={styles.backgroundLogoContainer} style={{ '--agent-color': `var(--agent-${activeAgentFlavor}-accent)` } as React.CSSProperties}>
+                                  <AgentIcon className={styles.backgroundLogoIcon} />
+                                </div>
+                                <div className={styles.quickStartContainer}>
+                                  {quickStarts.map((qs, i) => (
+                                    <button
+                                      key={i}
+                                      type="button"
+                                      className={styles.quickStartChip}
+                                      onClick={() => {
+                                        setPrompt(qs);
+                                        setTimeout(() => composerInputRef.current?.focus(), 0);
+                                      }}
+                                      style={{ '--agent-color': `var(--agent-${activeAgentFlavor}-accent)` } as React.CSSProperties}
+                                    >
+                                      <MessageSquarePlus size={16} className={styles.quickStartIcon} />
+                                      {qs}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                          {timelineItems.map((timelineItem) => {                        if (timelineItem.type === 'permission') {
+                        const permission = timelineItem.permission;
+                        return (
+                        <PermissionRequestMessage
+                        key={permission.id}
+                        anchorId={`permission-${permission.id}`}
+                        permission={permission}
+                        disabled={!isOperator}
+                        loading={loadingPermissionId === permission.id}
+                        interactive={permission.availability === 'live'}
+                        pendingHint={permission.availability === 'live'
+                          ? null
+                          : '실시간 승인 세션을 찾을 수 없습니다. 같은 요청을 다시 실행해 주세요.'}
+                        onDecide={(permissionId, decision) => {
+                          void decidePermission(permissionId, decision);
+                        }}
+                        />
+                        );
+                        }
+
+                        const item = timelineItem.item;
+                        if (item.type === 'action_overflow') {
+                        const overflowKindMeta = getEventKindMeta(item.kind);
+                        const OverflowKindIcon = overflowKindMeta.Icon;
+                        const title = item.expanded
+                        ? '반복 행동 접기'
+                        : `중간 행동 ${item.hiddenCount}개 펼치기`;
+                        return (
+                        <article key={`overflow-${item.id}`} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                        <button
+                          type="button"
+                          className={`${styles.messageBubble} ${styles.messageBubbleAction} ${styles.actionOverflowBubble} ${styles.actionOverflowToggle}`}
+                          onClick={() => toggleActionRun(item.runId)}
+                          title={title}
+                          aria-label={title}
+                          aria-expanded={item.expanded}
+                        >
+                          <div className={styles.actionOverflowContent}>
+                            {item.expanded ? (
+                              <span className={styles.actionOverflowLabel}>
+                                접기
+                                <ChevronUp size={14} />
+                              </span>
+                            ) : (
+                              <>
+                                <div className={styles.actionOverflowLeft}>
+                                  <span className={`${styles.kindChip} ${getToneClass(overflowKindMeta.tone)}`}>
+                                    <OverflowKindIcon size={12} />
+                                    {overflowKindMeta.label}
+                                  </span>
+                                </div>
+                                <span className={styles.actionOverflowLabel}>
+                                  {item.hiddenCount}개의 행동 더 보기
+                                  <ChevronDown size={14} />
+                                </span>
+                                <div className={styles.actionOverflowRight}>
+                                  <span className={styles.actionOverflowCount}>+{item.hiddenCount}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </button>
+                        </article>
+                        );
+                        }
+
+                        const event = item.event;
+                        const userEvent = isUserEvent(event);
+                        const actionEvent = !userEvent && isActionKind(event.kind);
+
+                        if (userEvent) {
+                        const userAttachments = readChatImageAttachments(event.meta);
+                        return (
+                        <article
+                          id={`event-${event.id}`}
+                          key={event.id}
+                          className={`${styles.messageRow} ${styles.messageRowUser}`}
+                        >
+                        <div className={`${styles.msgHeader} ${styles.msgHeaderUser}`}>
+                          <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
+                          <span className={`${styles.msgSender} ${styles.msgSenderUser}`}>YOU</span>
+                        </div>
+                        <div className={styles.messageBubbleUserStack}>
+                          <div
+                            ref={(node) => {
+                              setUserMessageBubbleNode(event.id, node);
+                            }}
+                            className={`${styles.messageBubble} ${styles.messageBubbleUser} ${highlightedEventId === event.id ? styles.messageBubbleHighlight : ''}`}
+                          >
+                            {userAttachments.length > 0 && (
+                              <div className={styles.messageAttachmentStrip}>
+                                {userAttachments.map((attachment) => (
+                                  <div key={attachment.assetId} className={styles.messageAttachmentCard}>
+                                    <img
+                                      src={attachment.previewUrl}
+                                      alt={attachment.name}
+                                      className={styles.messageAttachmentImage}
+                                      loading="lazy"
+                                    />
+                                    <div className={styles.messageAttachmentMeta}>
+                                      <span className={styles.messageAttachmentName}>{attachment.name}</span>
+                                      <span className={styles.messageAttachmentSubtle}>
+                                        {attachment.width && attachment.height
+                                          ? `${attachment.width}×${attachment.height} · `
+                                          : ''}
+                                        {Math.max(1, Math.round(attachment.size / 1024))}KB
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {renderEventPayload(event, true, Boolean(expandedResultIds[event.id]), () => toggleResult(event.id), isDebugMode)}
+                          </div>
+                          <button
+                            type="button"
+                            className={styles.messageCopyButton}
+                            onClick={() => void handleCopyUserMessage(event)}
+                            aria-label="사용자 메시지 복사"
+                            title="사용자 메시지 복사"
+                          >
+                            {copiedUserEventId === event.id ? (
+                              <CheckCircle2 size={14} />
+                            ) : (
+                              <Copy size={14} />
+                            )}
+                          </button>
+                        </div>
+                        </article>
+                        );
+                        }
+
+                        if (actionEvent) {
+                        const expanded = expandedResultIds[event.id] ?? false;
+                        return (
+                        <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                        <div className={`${styles.messageBubble} ${styles.messageBubbleAction}`}>
+                          {renderEventPayload(event, false, expanded, () => toggleResult(event.id), isDebugMode)}
+                        </div>
+                        </article>
+                        );
+                        }
+
+              return (
+                <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                  <div className={styles.messageWithAvatar}>
+                    <div className={`${styles.msgAvatar} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
+                      <agentMeta.Icon size={14} />
+                    </div>
+                    <div className={styles.msgBody}>
+                      <div className={styles.msgHeader}>
+                        <span className={styles.msgSender}>{agentMeta.label}</span>
+                        <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
+                      </div>
+                      <div className={styles.agentMessageStack}>
+                        <div className={`${styles.messageBubble} ${styles.messageBubbleAgent}`}>
+                          {renderEventPayload(event, false, expandedResultIds[event.id] ?? false, () => toggleResult(event.id), isDebugMode)}
+                        </div>
+                        {!isDebugMode && !isActionKind(event.kind) && (event.body || event.title) && (
+                          <LinkPreviewCarousel body={event.body || event.title} />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+              </>
             )}
-            composer={!isWorkspaceHome ? (
-              <ChatComposer
-                showPendingReveal={showChatTransitionLoading}
-                agentFlavor={activeAgentFlavor}
-                AgentIcon={agentMeta.Icon}
-                activeModelShortLabel={activeModel.shortLabel}
-                activeChatIdResolved={activeChatIdResolved}
-                isOperator={isOperator}
-                isAgentRunning={isAgentRunning}
-                isAborting={isAborting}
-                prompt={prompt}
-                contextItems={contextItems}
-                imageUploadsInFlight={imageUploadsInFlight}
-                imageUploadError={imageUploadError}
-                availableChatCommands={availableChatCommands}
-                isCommandMenuOpen={isCommandMenuOpen}
-                isModelDropdownOpen={isModelDropdownOpen}
-                isGeminiModeDropdownOpen={isGeminiModeDropdownOpen}
-                activeComposerModels={activeComposerModels}
-                activeModelId={activeModelId}
-                activeGeminiMode={activeGeminiMode}
-                activeGeminiModeId={activeGeminiModeId}
-                activeGeminiModeOptions={activeGeminiModeOptions}
-                approvalPolicy={approvalPolicy}
-                selectedModelReasoningEffort={selectedModelReasoningEffort}
-                plusMenuMode={plusMenuMode}
-                textContextInput={textContextInput}
-                commandMenuRef={commandMenuRef}
-                modelDropdownRef={modelDropdownRef}
-                geminiModeDropdownRef={geminiModeDropdownRef}
-                plusMenuRef={plusMenuRef}
-                composerDockRef={composerDockRef}
-                composerInputRef={composerInputRef}
-                composerImageInputRef={composerImageInputRef}
-                onSubmit={handleSubmit}
-                onToggleCommandMenu={handleToggleCommandMenu}
-                onRunChatCommand={handleRunChatCommand}
-                onToggleModelDropdown={handleToggleModelDropdown}
-                onSelectModel={handleModelSelect}
-                onToggleGeminiModeDropdown={handleToggleGeminiModeDropdown}
-                onSelectGeminiMode={handleGeminiModeSelect}
-                onSelectModelReasoningEffort={handleModelReasoningEffortSelect}
-                onRemoveContextItem={removeContextItem}
-                onImageSelection={handleComposerImageSelection}
-                onTogglePlusMenu={handleTogglePlusMenu}
-                onImageUploadOpen={handleImageUploadOpen}
-                onFileBrowserOpen={handleFileBrowserOpen}
-                onOpenTextContextEditor={handleOpenTextContextEditor}
-                onTextContextInputChange={setTextContextInput}
-                onCancelTextContext={handleCancelTextContext}
-                onAddTextContext={handleAddTextContext}
-                onPromptChange={setPrompt}
-                onPromptInput={resizeComposerInput}
-                onPromptFocus={handleComposerFocus}
-                onPromptKeyDown={handlePromptKeyDown}
-                onAbortRun={handleAbortRun}
-              />
-            ) : null}
-            transitionOverlay={showChatTransitionLoading ? (
+
+            {isAgentRunning && (
+              <article className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                <div className={styles.messageWithAvatar}>
+                  <div className={`${styles.msgAvatar} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
+                    <agentMeta.Icon size={14} />
+                  </div>
+                  <div className={styles.msgBody}>
+                    <div className={styles.msgHeader}>
+                      <span className={styles.msgSender}>{agentMeta.label}</span>
+                    </div>
+                    <div className={styles.agentMessageStack}>
+                      <div className={`${styles.messageBubble} ${styles.messageBubbleAgent} ${styles.thinkingBubble}`}>
+                        <div className={styles.thinkingDots}>
+                          <span /><span /><span />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            )}
+          </div>
+
+          {!showChatTransitionLoading && showScrollToBottom && (
+            <button
+              type="button"
+              className={styles.scrollBottomButton}
+              onClick={handleJumpToBottom}
+              aria-label="맨 아래로 이동"
+              title="맨 아래로 이동"
+            >
+              <ChevronDown size={16} />
+            </button>
+          )}
+
+          {!isWorkspaceHome && (
+            <ChatComposer
+              showPendingReveal={showChatTransitionLoading}
+              agentFlavor={activeAgentFlavor}
+              AgentIcon={agentMeta.Icon}
+              activeModelShortLabel={activeModel.shortLabel}
+              activeChatIdResolved={activeChatIdResolved}
+              isOperator={isOperator}
+              isAgentRunning={isAgentRunning}
+              isAborting={isAborting}
+              prompt={prompt}
+              contextItems={contextItems}
+              imageUploadsInFlight={imageUploadsInFlight}
+              imageUploadError={imageUploadError}
+              availableChatCommands={availableChatCommands}
+              isCommandMenuOpen={isCommandMenuOpen}
+              isModelDropdownOpen={isModelDropdownOpen}
+              isGeminiModeDropdownOpen={isGeminiModeDropdownOpen}
+              activeComposerModels={activeComposerModels}
+              activeModelId={activeModelId}
+              activeGeminiMode={activeGeminiMode}
+              activeGeminiModeId={activeGeminiModeId}
+              activeGeminiModeOptions={activeGeminiModeOptions}
+              approvalPolicy={approvalPolicy}
+              selectedModelReasoningEffort={selectedModelReasoningEffort}
+              plusMenuMode={plusMenuMode}
+              textContextInput={textContextInput}
+              commandMenuRef={commandMenuRef}
+              modelDropdownRef={modelDropdownRef}
+              geminiModeDropdownRef={geminiModeDropdownRef}
+              plusMenuRef={plusMenuRef}
+              composerDockRef={composerDockRef}
+              composerInputRef={composerInputRef}
+              composerImageInputRef={composerImageInputRef}
+              onSubmit={handleSubmit}
+              onToggleCommandMenu={() => setIsCommandMenuOpen((value) => !value)}
+              onRunChatCommand={handleRunChatCommand}
+              onToggleModelDropdown={() => setIsModelDropdownOpen((value) => !value)}
+              onSelectModel={(modelId) => { void handleSelectModel(modelId); }}
+              onToggleGeminiModeDropdown={() => setIsGeminiModeDropdownOpen((value) => !value)}
+              onSelectGeminiMode={(modeId) => { void handleSelectGeminiMode(modeId); }}
+              onSelectModelReasoningEffort={(value) => { void handleSelectModelReasoningEffort(value); }}
+              onRemoveContextItem={removeContextItem}
+              onImageSelection={handleComposerImageSelection}
+              onTogglePlusMenu={() => { setPlusMenuMode((mode) => mode === 'closed' ? 'menu' : 'closed'); }}
+              onImageUploadOpen={handleImageUploadOpen}
+              onFileBrowserOpen={handleFileBrowserOpen}
+              onOpenTextContextEditor={() => {
+                setPlusMenuMode('text');
+                setTextContextInput('');
+              }}
+              onTextContextInputChange={setTextContextInput}
+              onCancelTextContext={() => setPlusMenuMode('menu')}
+              onAddTextContext={handleAddTextContext}
+              onPromptChange={setPrompt}
+              onPromptInput={resizeComposerInput}
+              onPromptFocus={handleComposerFocus}
+              onPromptKeyDown={(event) => {
+                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                  void handleSubmit(event);
+                }
+              }}
+              onAbortRun={handleAbortRun}
+            />
+          )}
+
+            {showChatTransitionLoading && (
               <div
                 className={styles.chatTransitionOverlay}
                 role="status"
                 aria-live="polite"
                 aria-busy="true"
-                style={{ '--chat-transition-accent': `var(--agent-${activeAgentFlavor}-accent)` } as CSSProperties}
+                style={{ '--chat-transition-accent': `var(--agent-${activeAgentFlavor}-accent)` } as React.CSSProperties}
               >
                 <div className={styles.chatTransitionOrb}>
                   <span className={styles.chatTransitionSpinner} aria-hidden="true" />
@@ -2752,49 +3147,99 @@ export function ChatInterface({
                 </div>
                 <div className={styles.chatTransitionMessage}>에이전트 채팅 로딩중…</div>
               </div>
-            ) : null}
-          />
-        )}
-        renderCreatePage={() => (
-          <WorkspacePanelsPane
-            mode="create"
-            sessionId={sessionId}
-            isMobileLayout={isMobileLayout}
-            workspacePanelsError={workspacePanelsError}
-            workspacePanelsLoading={workspacePanelsLoading}
-            workspacePanelLayout={workspacePanelLayout}
-            onCreatePanel={handleCreateWorkspacePanel}
-            onReturnToChat={() => setActiveWorkspacePageId('chat')}
-          />
-        )}
-        renderPanelPage={(item) => (
-          <WorkspacePanelsPane
-            mode="panel"
-            sessionId={sessionId}
-            isMobileLayout={isMobileLayout}
-            workspacePanelsError={workspacePanelsError}
-            workspacePanelsLoading={workspacePanelsLoading}
-            workspacePanelLayout={workspacePanelLayout}
-            panelId={item.panelId}
-            onSavePanel={saveWorkspacePanel}
-            onDeletePanel={deleteWorkspacePanel}
-            onReturnToChat={() => setActiveWorkspacePageId('chat')}
-          />
-        )}
-      />
+            )}
+          </>
+        </section>
+          )}
+          renderCreatePage={() => (
+            <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
+              <div className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''}`}>
+                {workspacePanelsError ? (
+                  <div className={styles.noticeWrap}>
+                    <BackendNotice message={workspacePanelsError} />
+                  </div>
+                ) : null}
+                {workspacePanelsLoading ? (
+                  <div className={styles.emptyChatState}>
+                    <div className={styles.agentSelectorTitle}>패널 화면을 준비하는 중…</div>
+                  </div>
+                ) : (
+                  <CreatePanelPage onCreatePanel={handleCreateWorkspacePanel} />
+                )}
+              </div>
+            </section>
+          )}
+          renderPanelPage={(item) => {
+            const panel = workspacePanelLayout.panels.find((candidate) => candidate.id === item.panelId);
 
-      <RightPaneLayout
-        sessionId={sessionId}
-        projectName={projectName}
-        normalizedWorkspaceRootPath={normalizedWorkspaceRootPath}
-        isMobileLayout={isMobileLayout}
-        isCustomizationOverlayLayout={isCustomizationOverlayLayout}
-        isCustomizationSidebarOpen={isCustomizationSidebarOpen}
-        isCustomizationPinned={isCustomizationPinned}
-        sidebarFileRequest={sidebarFileRequest}
-        onToggleCustomizationPinned={handleToggleCustomizationPinned}
-        onCloseCustomizationSidebar={() => setIsCustomizationSidebarOpen(false)}
-      />
+            return (
+              <section className={`${styles.centerFrame} ${isMobileLayout ? styles.centerFrameMobileScroll : ''}`}>
+                <div className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''}`}>
+                  {workspacePanelsError ? (
+                    <div className={styles.noticeWrap}>
+                      <BackendNotice message={workspacePanelsError} />
+                    </div>
+                  ) : null}
+                  {panel ? (
+                    <PanelPageRenderer
+                      sessionId={sessionId}
+                      panel={panel}
+                      onSavePanel={saveWorkspacePanel}
+                      onDeletePanel={deleteWorkspacePanel}
+                    />
+                  ) : (
+                    <div className={styles.emptyChatState}>
+                      <div className={styles.agentSelectorTitle}>패널을 찾을 수 없습니다.</div>
+                    </div>
+                  )}
+                </div>
+              </section>
+            );
+          }}
+        />
+      </main>
+
+      {isCustomizationOverlayLayout && (
+        <>
+          {isCustomizationSidebarOpen && (
+            <button
+              type="button"
+              className={styles.customizationBackdrop}
+              onClick={() => setIsCustomizationSidebarOpen(false)}
+              aria-label="Customization 패널 닫기"
+            />
+          )}
+          <aside
+            className={`${styles.customizationDrawer} ${
+              isCustomizationSidebarOpen ? styles.customizationDrawerOpen : styles.customizationDrawerClosed
+            }`}
+            aria-hidden={!isCustomizationSidebarOpen}
+          >
+            <CustomizationSidebarContainer
+              sessionId={sessionId}
+              projectName={projectName}
+              workspaceRootPath={normalizedWorkspaceRootPath}
+              requestedFile={isCustomizationOverlayLayout ? sidebarFileRequest : null}
+              isPinned={isCustomizationPinned}
+              onTogglePinned={handleToggleCustomizationPinned}
+              mode={isMobileLayout ? 'mobile' : 'desktop'}
+              onRequestClose={() => setIsCustomizationSidebarOpen(false)}
+            />
+          </aside>
+        </>
+      )}
+
+      <aside className={styles.rightPanel}>
+        <CustomizationSidebarContainer
+          sessionId={sessionId}
+          projectName={projectName}
+          workspaceRootPath={normalizedWorkspaceRootPath}
+          requestedFile={isCustomizationOverlayLayout ? null : sidebarFileRequest}
+          isPinned={isCustomizationPinned}
+          onTogglePinned={handleToggleCustomizationPinned}
+          mode="desktop"
+        />
+      </aside>
     </div>
 
     {/* ── 파일 탐색기 모달 ── */}

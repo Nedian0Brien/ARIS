@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  haveComposerDockMetricsChanged,
-  hasResumePhaseSettled,
   hasTailRestoreRenderHydrated,
   hasTailLayoutSettled,
-  resolveTailRestoreLayoutReady,
-  resolveSessionScrollPhase,
   resolveTailScrollAnchorId,
   resolveMobileWindowScrollTop,
   resolveScrollToBottomTarget,
@@ -13,7 +9,6 @@ import {
   shouldAutoScrollToBottom,
   shouldResetScrollForChatChange,
   shouldBlockLoadOlder,
-  resolveMobileBottomLockState,
   shouldUseManualScrollRestoration,
   shouldUseWindowScrollFallback,
 } from '@/app/sessions/[sessionId]/chatScroll';
@@ -41,8 +36,6 @@ describe('chatScroll', () => {
       nextAnchorBottom: 820.5,
       previousScrollHeight: 2400,
       nextScrollHeight: 2400.4,
-      previousViewportHeight: 712,
-      nextViewportHeight: 712.4,
     })).toBe(true);
 
     expect(hasTailLayoutSettled({
@@ -50,8 +43,6 @@ describe('chatScroll', () => {
       nextAnchorBottom: 820,
       previousScrollHeight: 2400,
       nextScrollHeight: 2400,
-      previousViewportHeight: 712,
-      nextViewportHeight: 712,
     })).toBe(false);
 
     expect(hasTailLayoutSettled({
@@ -59,49 +50,6 @@ describe('chatScroll', () => {
       nextAnchorBottom: 854,
       previousScrollHeight: 2400,
       nextScrollHeight: 2472,
-      previousViewportHeight: 712,
-      nextViewportHeight: 712,
-    })).toBe(false);
-  });
-
-  it('keeps the tail settle loop open while the mobile viewport height is still changing', () => {
-    expect(hasTailLayoutSettled({
-      previousAnchorBottom: 820,
-      nextAnchorBottom: 820,
-      previousScrollHeight: 2400,
-      nextScrollHeight: 2400,
-      previousViewportHeight: 712,
-      nextViewportHeight: 676,
-    })).toBe(false);
-  });
-
-  it('treats resume settling as stable only after scroll top and viewport height stop moving', () => {
-    expect(hasResumePhaseSettled({
-      previousScrollTop: 4069,
-      nextScrollTop: 4069.5,
-      previousViewportHeight: 712,
-      nextViewportHeight: 712.4,
-    })).toBe(true);
-
-    expect(hasResumePhaseSettled({
-      previousScrollTop: null,
-      nextScrollTop: 4069,
-      previousViewportHeight: 712,
-      nextViewportHeight: 712,
-    })).toBe(false);
-
-    expect(hasResumePhaseSettled({
-      previousScrollTop: 4069,
-      nextScrollTop: 4020,
-      previousViewportHeight: 712,
-      nextViewportHeight: 712,
-    })).toBe(false);
-
-    expect(hasResumePhaseSettled({
-      previousScrollTop: 4069,
-      nextScrollTop: 4069,
-      previousViewportHeight: 712,
-      nextViewportHeight: 676,
     })).toBe(false);
   });
 
@@ -154,15 +102,6 @@ describe('chatScroll', () => {
     })).toBe(false);
   });
 
-  it('does not reset conversation scroll while entry tail restore is still pending', () => {
-    expect(shouldResetScrollForChatChange({
-      previousChatId: 'chat-1',
-      nextChatId: 'chat-2',
-      isNewChatPlaceholder: false,
-      isTailRestorePending: true,
-    } as Parameters<typeof shouldResetScrollForChatChange>[0] & { isTailRestorePending: boolean })).toBe(false);
-  });
-
   it('does not auto-scroll to the bottom on workspace home', () => {
     expect(shouldAutoScrollToBottom({
       isWorkspaceHome: true,
@@ -173,14 +112,6 @@ describe('chatScroll', () => {
       isWorkspaceHome: false,
       shouldStickToBottom: true,
     })).toBe(true);
-  });
-
-  it('suppresses generic auto-scroll while entry tail restore is pending', () => {
-    expect(shouldAutoScrollToBottom({
-      isWorkspaceHome: false,
-      shouldStickToBottom: true,
-      isTailRestorePending: true,
-    } as Parameters<typeof shouldAutoScrollToBottom>[0] & { isTailRestorePending: boolean })).toBe(false);
   });
 
   it('restores the chat tail when the active chat finishes hydrating and has not been restored yet', () => {
@@ -244,85 +175,6 @@ describe('chatScroll', () => {
     expect(resolveMobileWindowScrollTop({ scrollHeight: 1001, viewportHeight: 1000 })).toBe(1);
   });
 
-  it('keeps mobile bottom lock pinned while initial tail restore is still pending', () => {
-    expect(resolveMobileBottomLockState({
-      isNearBottom: false,
-      isTailRestorePending: true,
-    })).toEqual({
-      shouldStickToBottom: true,
-      showScrollToBottom: false,
-    });
-
-    expect(resolveMobileBottomLockState({
-      isNearBottom: false,
-      isTailRestorePending: false,
-    })).toEqual({
-      shouldStickToBottom: false,
-      showScrollToBottom: true,
-    });
-  });
-
-  it('waits for all mobile scroll-affecting layout inputs before marking tail restore layout ready', () => {
-    expect(resolveTailRestoreLayoutReady({
-      isMobileLayout: false,
-      isMobileLayoutHydrated: false,
-      isViewportLayoutReady: false,
-      isComposerDockLayoutReady: false,
-    })).toBe(false);
-
-    expect(resolveTailRestoreLayoutReady({
-      isMobileLayout: false,
-      isMobileLayoutHydrated: true,
-      isViewportLayoutReady: false,
-      isComposerDockLayoutReady: false,
-    })).toBe(true);
-
-    expect(resolveTailRestoreLayoutReady({
-      isMobileLayout: true,
-      isMobileLayoutHydrated: false,
-      isViewportLayoutReady: true,
-      isComposerDockLayoutReady: true,
-    })).toBe(false);
-
-    expect(resolveTailRestoreLayoutReady({
-      isMobileLayout: true,
-      isMobileLayoutHydrated: true,
-      isViewportLayoutReady: false,
-      isComposerDockLayoutReady: true,
-    })).toBe(false);
-
-    expect(resolveTailRestoreLayoutReady({
-      isMobileLayout: true,
-      isMobileLayoutHydrated: true,
-      isViewportLayoutReady: true,
-      isComposerDockLayoutReady: false,
-    })).toBe(false);
-
-    expect(resolveTailRestoreLayoutReady({
-      isMobileLayout: true,
-      isMobileLayoutHydrated: true,
-      isViewportLayoutReady: true,
-      isComposerDockLayoutReady: true,
-    })).toBe(true);
-  });
-
-  it('treats composer dock metrics as changed only when scroll-affecting geometry actually moves', () => {
-    expect(haveComposerDockMetricsChanged(
-      null,
-      { height: 98, left: 14, width: 402 },
-    )).toBe(true);
-
-    expect(haveComposerDockMetricsChanged(
-      { height: 98, left: 14, width: 402 },
-      { height: 98, left: 14, width: 402 },
-    )).toBe(false);
-
-    expect(haveComposerDockMetricsChanged(
-      { height: 98, left: 14, width: 402 },
-      { height: 112, left: 14, width: 402 },
-    )).toBe(true);
-  });
-
   describe('shouldBlockLoadOlder', () => {
     it('blocks when tail is settling', () => {
       expect(shouldBlockLoadOlder({ isTailLayoutSettling: true, isLoadingOlder: false, hasMoreBefore: true })).toBe(true);
@@ -332,30 +184,6 @@ describe('chatScroll', () => {
     });
     it('blocks when no more before', () => {
       expect(shouldBlockLoadOlder({ isTailLayoutSettling: false, isLoadingOlder: false, hasMoreBefore: false })).toBe(true);
-    });
-    it('blocks while the chat is resuming from a system-driven scroll restore', () => {
-      expect(shouldBlockLoadOlder({
-        isTailLayoutSettling: false,
-        isLoadingOlder: false,
-        hasMoreBefore: true,
-        scrollPhase: 'resuming',
-      } as Parameters<typeof shouldBlockLoadOlder>[0] & { scrollPhase: 'resuming' })).toBe(true);
-    });
-    it('blocks while the viewport is still reflowing after resume', () => {
-      expect(shouldBlockLoadOlder({
-        isTailLayoutSettling: false,
-        isLoadingOlder: false,
-        hasMoreBefore: true,
-        scrollPhase: 'viewport-reflow',
-      } as Parameters<typeof shouldBlockLoadOlder>[0] & { scrollPhase: 'viewport-reflow' })).toBe(true);
-    });
-    it('does not block solely because tail restoration currently owns scroll phase', () => {
-      expect(shouldBlockLoadOlder({
-        isTailLayoutSettling: false,
-        isLoadingOlder: false,
-        hasMoreBefore: true,
-        scrollPhase: 'restoring-tail',
-      } as Parameters<typeof shouldBlockLoadOlder>[0] & { scrollPhase: 'restoring-tail' })).toBe(false);
     });
     it('allows when all conditions clear', () => {
       expect(shouldBlockLoadOlder({ isTailLayoutSettling: false, isLoadingOlder: false, hasMoreBefore: true })).toBe(false);
@@ -405,34 +233,6 @@ describe('chatScroll', () => {
         isWorkspaceHome: false,
         isNewChatPlaceholder: true,
       })).toBe(false);
-    });
-  });
-
-  describe('resolveSessionScrollPhase', () => {
-    it('moves into resuming when the tab or app resumes', () => {
-      expect(resolveSessionScrollPhase({
-        currentPhase: 'idle',
-        event: 'resume-start',
-      })).toBe('resuming');
-    });
-
-    it('keeps resume ownership while raw scroll events are still arriving', () => {
-      expect(resolveSessionScrollPhase({
-        currentPhase: 'resuming',
-        event: 'scroll-observed',
-      })).toBe('resuming');
-    });
-
-    it('moves through viewport reflow before returning to idle', () => {
-      expect(resolveSessionScrollPhase({
-        currentPhase: 'resuming',
-        event: 'viewport-changed',
-      })).toBe('viewport-reflow');
-
-      expect(resolveSessionScrollPhase({
-        currentPhase: 'viewport-reflow',
-        event: 'resume-stable',
-      })).toBe('idle');
     });
   });
 });

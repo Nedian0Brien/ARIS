@@ -151,39 +151,19 @@ describe('last user message jump bar', () => {
     })).toBeNull();
   });
 
-  it('shows the jump bar only after entry loading has finished and the chat is no longer bottom-locked', () => {
+  it('shows the jump bar only while a passed target exists and the chat view is active', () => {
     expect(shouldShowLastUserMessageJumpBar({
       targetEventId: 'user-1',
       isWorkspaceHome: false,
       isNewChatPlaceholder: false,
       showChatTransitionLoading: false,
-      showScrollToBottom: true,
     })).toBe(true);
-
-    expect(shouldShowLastUserMessageJumpBar({
-      targetEventId: 'user-1',
-      isWorkspaceHome: false,
-      isNewChatPlaceholder: false,
-      showChatTransitionLoading: true,
-      showScrollToBottom: true,
-    })).toBe(false);
 
     expect(shouldShowLastUserMessageJumpBar({
       targetEventId: null,
       isWorkspaceHome: false,
       isNewChatPlaceholder: false,
       showChatTransitionLoading: false,
-      showScrollToBottom: true,
-    })).toBe(false);
-  });
-
-  it('keeps the jump bar hidden while the chat is already bottom-locked', () => {
-    expect(shouldShowLastUserMessageJumpBar({
-      targetEventId: 'user-1',
-      isWorkspaceHome: false,
-      isNewChatPlaceholder: false,
-      showChatTransitionLoading: false,
-      showScrollToBottom: false,
     })).toBe(false);
   });
 

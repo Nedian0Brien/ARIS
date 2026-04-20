@@ -19,7 +19,6 @@ type ShouldShowLastUserMessageJumpBarInput = {
   isWorkspaceHome: boolean;
   isNewChatPlaceholder: boolean;
   showChatTransitionLoading: boolean;
-  showScrollToBottom: boolean;
 };
 
 export function resolveUserMessageJumpTargets(events: UiEvent[]): LastUserMessageJumpTarget[] {
@@ -62,12 +61,7 @@ export function shouldShowLastUserMessageJumpBar(input: ShouldShowLastUserMessag
   if (!input.targetEventId) {
     return false;
   }
-  if (
-    input.isWorkspaceHome
-    || input.isNewChatPlaceholder
-    || input.showChatTransitionLoading
-    || !input.showScrollToBottom
-  ) {
+  if (input.isWorkspaceHome || input.isNewChatPlaceholder || input.showChatTransitionLoading) {
     return false;
   }
   return true;

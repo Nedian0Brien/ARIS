@@ -1,7 +1,7 @@
 import type { WorkspacePagerItem } from './pagerModel';
 
 export function resolveWorkspacePagerSwipeTarget(
-  items: readonly WorkspacePagerItem[],
+  items: WorkspacePagerItem[],
   activePageId: string,
   deltaX: number,
   thresholdPx: number,

@@ -190,7 +190,7 @@ export function UsageProbeModal({ provider, commandId, workspacePath, onClose }:
       fitAddonRef.current = null;
       setConnected(false);
     };
-  }, [appendProbeEvent, clearAutomationTimers, descriptor.renderMode, probeNonce, provider, runAutomation]);
+  }, [clearAutomationTimers, probeNonce, runAutomation]);
 
   return (
     <div className={styles.overlay} onClick={onClose}>

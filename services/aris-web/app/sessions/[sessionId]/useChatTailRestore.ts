@@ -20,10 +20,8 @@ import {
   shouldRestoreTailScrollOnChatEntry,
   shouldUseWindowScrollFallback,
 } from './chatScroll';
-import { recordScrollDebugEvent } from './scrollDebug';
 
 const TAIL_LAYOUT_SETTLE_TIMEOUT_MS = 1200;
-const TAIL_LAYOUT_SETTLE_IDLE_MS = 160;
 
 export type UseChatTailRestoreInput = {
   activeChatIdResolved: string | null;
@@ -37,47 +35,10 @@ export type UseChatTailRestoreInput = {
   isNewChatPlaceholder: boolean;
   isWorkspaceHome: boolean;
   isMobileLayout: boolean;
-  isTailRestoreLayoutReady: boolean;
   initialShowChatEntryLoading: boolean;
-  resetToLatestWindow: () => Promise<void>;
   scrollRef: RefObject<HTMLDivElement | null>;
   latestVisibleEventIdRef: RefObject<string | null>;
 };
-
-type ResolveTailRestoreSettleActionInput = {
-  activeChatIdResolved: string | null;
-  eventsForChatId: string | null;
-  hasLoadedCurrentChat: boolean;
-  isTailRestoreLayoutReady: boolean;
-  isSettleInFlight: boolean;
-  isTailRestoreHydrated: boolean;
-  isNewChatPlaceholder: boolean;
-  isWorkspaceHome: boolean;
-  restoredForChatId: string | null;
-};
-
-export function resolveTailRestoreLoopTransition(input: {
-  wasMidSettle: boolean;
-  settleAction: 'skip' | 'start' | 'continue';
-}): {
-  shouldCancelExistingSettle: boolean;
-  shouldRestartSettle: boolean;
-  shouldResetTailRestoreState: boolean;
-} {
-  if (input.settleAction === 'skip') {
-    return {
-      shouldCancelExistingSettle: input.wasMidSettle,
-      shouldRestartSettle: false,
-      shouldResetTailRestoreState: input.wasMidSettle,
-    };
-  }
-
-  return {
-    shouldCancelExistingSettle: input.wasMidSettle,
-    shouldRestartSettle: true,
-    shouldResetTailRestoreState: false,
-  };
-}
 
 export type UseChatTailRestoreOutput = {
   isTailLayoutSettling: boolean;
@@ -101,52 +62,6 @@ export type UseChatTailRestoreOutput = {
   handleJumpToBottom: () => void;
 };
 
-export async function jumpToLatestPageWindow(input: {
-  shouldStickToBottomRef: MutableRefObject<boolean> | { current: boolean };
-  setShowScrollToBottom: Dispatch<SetStateAction<boolean>> | ((value: boolean) => void);
-  resetToLatestWindow: () => Promise<void>;
-  restoreConversationToTail: (behavior?: ScrollBehavior) => void;
-  behavior?: ScrollBehavior;
-}): Promise<void> {
-  recordScrollDebugEvent({
-    kind: 'trigger',
-    source: 'tail:jumpToLatestPageWindow:start',
-    detail: {
-      behavior: input.behavior ?? 'smooth',
-    },
-  });
-  input.shouldStickToBottomRef.current = true;
-  input.setShowScrollToBottom(false);
-  await input.resetToLatestWindow();
-  input.restoreConversationToTail(input.behavior ?? 'smooth');
-}
-
-export function resolveTailRestoreSettleAction(
-  input: ResolveTailRestoreSettleActionInput,
-): 'skip' | 'start' | 'continue' {
-  if (input.isSettleInFlight && input.restoredForChatId === input.activeChatIdResolved) {
-    return 'continue';
-  }
-
-  if (!input.isTailRestoreLayoutReady) {
-    return 'skip';
-  }
-
-  if (shouldRestoreTailScrollOnChatEntry({
-    activeChatId: input.activeChatIdResolved,
-    eventsForChatId: input.eventsForChatId,
-    hasLoadedCurrentChat: input.hasLoadedCurrentChat,
-    isTailRestoreHydrated: input.isTailRestoreHydrated,
-    isWorkspaceHome: input.isWorkspaceHome,
-    isNewChatPlaceholder: input.isNewChatPlaceholder,
-    restoredForChatId: input.restoredForChatId,
-  })) {
-    return 'start';
-  }
-
-  return 'skip';
-}
-
 export function useChatTailRestore({
   activeChatIdResolved,
   eventsForChatId,
@@ -155,9 +70,7 @@ export function useChatTailRestore({
   isNewChatPlaceholder,
   isWorkspaceHome,
   isMobileLayout,
-  isTailRestoreLayoutReady,
   initialShowChatEntryLoading,
-  resetToLatestWindow,
   scrollRef,
   latestVisibleEventIdRef,
 }: UseChatTailRestoreInput): UseChatTailRestoreOutput {
@@ -169,29 +82,6 @@ export function useChatTailRestore({
   const tailRestoreCancelRef = useRef<(() => void) | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const isTailLayoutSettlingRef = useRef(false);
-  const isJumpingToLatestRef = useRef(false);
-  const debugInstanceIdRef = useRef(Math.random().toString(36).slice(2, 8));
-
-  useEffect(() => {
-    const instanceId = debugInstanceIdRef.current;
-    recordScrollDebugEvent({
-      kind: 'trigger',
-      source: 'tail:hook:mounted',
-      detail: {
-        instanceId,
-      },
-    });
-
-    return () => {
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'tail:hook:unmounted',
-        detail: {
-          instanceId,
-        },
-      });
-    };
-  }, []);
 
   const scrollConversationToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const documentScrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
@@ -213,16 +103,6 @@ export function useChatTailRestore({
         scrollHeight: documentScrollHeight,
         viewportHeight,
       });
-      recordScrollDebugEvent({
-        kind: 'write',
-        source: 'tail:scrollConversationToBottom:window',
-        top,
-        behavior,
-        detail: {
-          documentScrollHeight,
-          viewportHeight,
-        },
-      });
       window.scrollTo({ top, behavior });
       return;
     }
@@ -230,12 +110,6 @@ export function useChatTailRestore({
       return;
     }
     // scrollHeight - clientHeight = maximum valid scrollTop; explicit for precision
-    recordScrollDebugEvent({
-      kind: 'write',
-      source: 'tail:scrollConversationToBottom:stream',
-      top: stream.scrollHeight - stream.clientHeight,
-      behavior,
-    });
     stream.scrollTo({ top: stream.scrollHeight - stream.clientHeight, behavior });
   }, [isMobileLayout, scrollRef]);
 
@@ -246,14 +120,6 @@ export function useChatTailRestore({
     if (anchorId) {
       const anchor = document.getElementById(anchorId);
       if (anchor) {
-        recordScrollDebugEvent({
-          kind: 'write',
-          source: 'tail:restoreConversationToTail:anchor',
-          behavior,
-          detail: {
-            anchorId,
-          },
-        });
         anchor.scrollIntoView({ behavior, block: 'end' });
         return;
       }
@@ -276,22 +142,10 @@ export function useChatTailRestore({
       documentScrollHeight,
       viewportHeight,
     });
-    const nextMetrics = {
+    return {
       anchorBottom: anchor ? anchor.getBoundingClientRect().bottom : null,
       scrollHeight: shouldUseWindow ? documentScrollHeight : (stream?.scrollHeight ?? null),
-      viewportHeight,
     };
-    recordScrollDebugEvent({
-      kind: 'trigger',
-      source: 'tail:readTailLayoutMetrics',
-      streamElement: stream,
-      detail: {
-        anchorId,
-        shouldUseWindow,
-        ...nextMetrics,
-      },
-    });
-    return nextMetrics;
   }, [isMobileLayout, latestVisibleEventIdRef, scrollRef]);
 
   const syncScrollToBottomButton = useCallback(() => {
@@ -306,83 +160,25 @@ export function useChatTailRestore({
       viewportHeight,
     });
     if (shouldUseWindow) {
-      const nextShowScrollToBottom = !isNearWindowBottom();
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'tail:syncScrollToBottomButton:window',
-        streamElement: stream,
-        detail: {
-          shouldUseWindow,
-          nextShowScrollToBottom,
-          documentScrollHeight,
-          viewportHeight,
-        },
-      });
-      setShowScrollToBottom(nextShowScrollToBottom);
+      setShowScrollToBottom(!isNearWindowBottom());
       return;
     }
     if (!stream) {
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'tail:syncScrollToBottomButton:no-stream',
-        detail: {
-          shouldUseWindow,
-        },
-      });
       setShowScrollToBottom(false);
       return;
     }
-    const nextShowScrollToBottom = !isNearBottom(stream);
-    recordScrollDebugEvent({
-      kind: 'trigger',
-      source: 'tail:syncScrollToBottomButton:stream',
-      streamElement: stream,
-      detail: {
-        shouldUseWindow,
-        nextShowScrollToBottom,
-      },
-    });
-    setShowScrollToBottom(nextShowScrollToBottom);
+    setShowScrollToBottom(!isNearBottom(stream));
   }, [isMobileLayout, scrollRef]);
 
   const handleJumpToBottom = useCallback(() => {
-    if (isJumpingToLatestRef.current) {
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'tail:handleJumpToBottom:ignored',
-      });
-      return;
-    }
-    recordScrollDebugEvent({
-      kind: 'trigger',
-      source: 'tail:handleJumpToBottom:start',
-    });
-    isJumpingToLatestRef.current = true;
-    void jumpToLatestPageWindow({
-      shouldStickToBottomRef,
-      setShowScrollToBottom,
-      resetToLatestWindow,
-      restoreConversationToTail,
-      behavior: 'smooth',
-    }).finally(() => {
-      isJumpingToLatestRef.current = false;
-    });
-  }, [resetToLatestWindow, restoreConversationToTail]);
+    shouldStickToBottomRef.current = true;
+    setShowScrollToBottom(false);
+    scrollConversationToBottom('smooth');
+  }, [scrollConversationToBottom]);
 
   // Reset on workspace/new-chat transition
   useEffect(() => {
     if (isWorkspaceHome || isNewChatPlaceholder || !activeChatIdResolved) {
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'tail:reset-on-chat-context-change',
-        streamElement: scrollRef.current,
-        detail: {
-          activeChatIdResolved,
-          isWorkspaceHome,
-          isNewChatPlaceholder,
-          hadCancelRef: tailRestoreCancelRef.current !== null,
-        },
-      });
       if (tailRestoreCancelRef.current) {
         tailRestoreCancelRef.current();
         tailRestoreCancelRef.current = null;
@@ -392,74 +188,36 @@ export function useChatTailRestore({
       isTailLayoutSettlingRef.current = false;
       setIsTailLayoutSettling(false);
     }
-  }, [activeChatIdResolved, isNewChatPlaceholder, isWorkspaceHome, scrollRef]);
+  }, [activeChatIdResolved, isNewChatPlaceholder, isWorkspaceHome]);
 
   // Tail-restore settle loop
   useEffect(() => {
+    // If a previous settle is still in progress (e.g. isMobileLayout flipped
+    // mid-settle after SSR hydration), the stale closure ran with the wrong
+    // layout. Cancel it and reset the guard so this run can re-settle with
+    // the current layout.
     const wasMidSettle = tailRestoreCancelRef.current !== null;
-    const settleAction = resolveTailRestoreSettleAction({
-      activeChatIdResolved,
-      eventsForChatId,
-      hasLoadedCurrentChat,
-      isTailRestoreLayoutReady,
-      isSettleInFlight: wasMidSettle,
-      isTailRestoreHydrated,
-      isNewChatPlaceholder,
-      isWorkspaceHome,
-      restoredForChatId: restoredTailScrollForChatRef.current,
-    });
-    const loopTransition = resolveTailRestoreLoopTransition({
-      wasMidSettle,
-      settleAction,
-    });
-
-    if (loopTransition.shouldCancelExistingSettle) {
+    if (wasMidSettle) {
       tailRestoreCancelRef.current?.();
       tailRestoreCancelRef.current = null;
+      if (restoredTailScrollForChatRef.current === activeChatIdResolved) {
+        restoredTailScrollForChatRef.current = null;
+      }
     }
 
-    if (!loopTransition.shouldRestartSettle) {
-      if (loopTransition.shouldResetTailRestoreState) {
-        setIsInitialChatEntryPendingReveal(false);
-        isTailLayoutSettlingRef.current = false;
-        setIsTailLayoutSettling(false);
-      }
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'tail:restore-entry:skip',
-        streamElement: scrollRef.current,
-        detail: {
-          activeChatIdResolved,
-          eventsForChatId,
-          hasLoadedCurrentChat,
-          isTailRestoreLayoutReady,
-          isTailRestoreHydrated,
-          isWorkspaceHome,
-          isNewChatPlaceholder,
-          restoredForChatId: restoredTailScrollForChatRef.current,
-        },
-      });
+    if (!shouldRestoreTailScrollOnChatEntry({
+      activeChatId: activeChatIdResolved,
+      eventsForChatId,
+      hasLoadedCurrentChat,
+      isTailRestoreHydrated,
+      isWorkspaceHome,
+      isNewChatPlaceholder,
+      restoredForChatId: restoredTailScrollForChatRef.current,
+    })) {
       return;
     }
 
-    recordScrollDebugEvent({
-      kind: 'trigger',
-      source: settleAction === 'continue'
-        ? 'tail:restore-entry:continue-settle'
-        : 'tail:restore-entry:eligible',
-      detail: {
-        instanceId: debugInstanceIdRef.current,
-        activeChatIdResolved,
-        eventsForChatId,
-        hasLoadedCurrentChat,
-        isTailRestoreHydrated,
-        restoredForChatId: restoredTailScrollForChatRef.current,
-      },
-    });
-
-    if (settleAction === 'start') {
-      restoredTailScrollForChatRef.current = activeChatIdResolved;
-    }
+    restoredTailScrollForChatRef.current = activeChatIdResolved;
     shouldStickToBottomRef.current = true;
     setShowScrollToBottom(false);
     isTailLayoutSettlingRef.current = true;
@@ -468,47 +226,17 @@ export function useChatTailRestore({
     let finished = false;
     let rafId = 0;
     let timeoutId = 0;
-    let stableSinceAt = 0;
+    let stableFrameCount = 0;
     let previousMetrics: ReturnType<typeof readTailLayoutMetrics> | null = null;
-
-    const cancel = () => {
-      if (finished) {
-        return;
-      }
-      finished = true;
-      window.cancelAnimationFrame(rafId);
-      window.clearTimeout(timeoutId);
-      if (tailRestoreCancelRef.current === cancel) {
-        tailRestoreCancelRef.current = null;
-      }
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'tail:settle:cancel',
-        streamElement: scrollRef.current,
-        detail: {
-          activeChatIdResolved,
-          stableSinceAt,
-        },
-      });
-    };
 
     const complete = () => {
       if (finished) {
         return;
       }
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'tail:settle:complete:start',
-        streamElement: scrollRef.current,
-        detail: {
-          activeChatIdResolved,
-          stableSinceAt,
-        },
-      });
       finished = true;
       window.cancelAnimationFrame(rafId);
       window.clearTimeout(timeoutId);
-      if (tailRestoreCancelRef.current === cancel) {
+      if (tailRestoreCancelRef.current === complete) {
         tailRestoreCancelRef.current = null;
       }
       // Bug1 fix: force pixel-perfect alignment after anchor-based settle
@@ -523,39 +251,15 @@ export function useChatTailRestore({
         viewportHeight,
       });
       if (shouldUseWindow) {
-        recordScrollDebugEvent({
-          kind: 'write',
-          source: 'tail:settle:complete:window',
-          top: Math.max(0, scrollHeight - viewportHeight),
-          behavior: 'auto',
-          detail: {
-            scrollHeight,
-            viewportHeight,
-          },
-        });
         window.scrollTo({ top: Math.max(0, scrollHeight - viewportHeight), behavior: 'auto' });
       } else {
         if (stream) {
-          recordScrollDebugEvent({
-            kind: 'write',
-            source: 'tail:settle:complete:stream',
-            top: stream.scrollHeight - stream.clientHeight,
-            behavior: 'auto',
-          });
           stream.scrollTop = stream.scrollHeight - stream.clientHeight;
         }
       }
       setIsInitialChatEntryPendingReveal(false);
       isTailLayoutSettlingRef.current = false;
       setIsTailLayoutSettling(false);
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'tail:settle:complete:done',
-        streamElement: scrollRef.current,
-        detail: {
-          activeChatIdResolved,
-        },
-      });
     };
 
     const settle = () => {
@@ -571,36 +275,20 @@ export function useChatTailRestore({
         nextAnchorBottom: nextMetrics.anchorBottom,
         previousScrollHeight: previousMetrics.scrollHeight,
         nextScrollHeight: nextMetrics.scrollHeight,
-        previousViewportHeight: previousMetrics.viewportHeight,
-        nextViewportHeight: nextMetrics.viewportHeight,
       })) {
-        if (stableSinceAt === 0) {
-          stableSinceAt = window.performance.now();
-        }
+        stableFrameCount += 1;
       } else {
-        stableSinceAt = 0;
+        stableFrameCount = 0;
       }
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'tail:settle:frame',
-        streamElement: scrollRef.current,
-        detail: {
-          activeChatIdResolved,
-          shouldStickToBottom: shouldStickToBottomRef.current,
-          stableSinceAt,
-          previousMetrics,
-          nextMetrics,
-        },
-      });
       previousMetrics = nextMetrics;
-      if (stableSinceAt !== 0 && window.performance.now() - stableSinceAt >= TAIL_LAYOUT_SETTLE_IDLE_MS) {
+      if (stableFrameCount >= 2) {
         complete();
         return;
       }
       rafId = window.requestAnimationFrame(settle);
     };
 
-    tailRestoreCancelRef.current = cancel;
+    tailRestoreCancelRef.current = complete;
     settle();
     timeoutId = window.setTimeout(complete, TAIL_LAYOUT_SETTLE_TIMEOUT_MS);
   }, [
@@ -608,7 +296,6 @@ export function useChatTailRestore({
     eventsForChatId,
     hasLoadedCurrentChat,
     isMobileLayout,
-    isTailRestoreLayoutReady,
     isTailRestoreHydrated,
     isNewChatPlaceholder,
     isWorkspaceHome,

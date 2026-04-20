@@ -1,14 +1,22 @@
-import { useCallback, useMemo, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   getLatestRunStatusSince,
   resolveChatRunPhase as resolveRunPhaseState,
 } from '@/lib/happy/chatRuntime';
 import type { RenderablePermissionRequest } from '@/lib/happy/permissions';
 import type { PermissionRequest, SessionChat, UiEvent } from '@/lib/happy/types';
-import { CHAT_SIDEBAR_SECTION_LABELS, DEFAULT_CHAT_RUNTIME_UI_STATE } from '../constants';
+import {
+  SIDEBAR_APPROVAL_FEEDBACK_MS,
+  SIDEBAR_CHAT_PAGE_SIZE,
+  SIDEBAR_STATUS_REFRESH_MS,
+  SIDEBAR_VISIBLE_CHAT_LIMIT,
+} from '../constants';
 import {
   buildReadMarkerMap,
   buildSnapshotFromChat,
+  buildSnapshotSyncMap,
+  CHAT_SIDEBAR_SECTION_LABELS,
+  DEFAULT_CHAT_RUNTIME_UI_STATE,
   getLatestVisibleEvent,
   hasChatErrorSignal,
   isUserEvent,
@@ -16,10 +24,8 @@ import {
   sortSessionChats,
 } from '../helpers';
 import { resolveChatReadMarkerId } from '../../chatSidebar';
-import { useChatSidebarApprovalState } from './useChatSidebarApprovalState';
-import { useChatSidebarPagination } from './useChatSidebarPagination';
-import { useChatSidebarSyncEffects } from './useChatSidebarSyncEffects';
 import type {
+  ChatApprovalFeedback,
   ChatRunPhase,
   ChatRuntimeUiState,
   ChatSidebarSection,
@@ -55,9 +61,6 @@ type UseChatSidebarStateParams = {
   isAwaitingReply: boolean;
   isSubmitting: boolean;
   isAborting: boolean;
-  chatListRef: RefObject<HTMLDivElement | null>;
-  chatListSentinelRef: RefObject<HTMLDivElement | null>;
-  isChatSidebarOpen: boolean;
   setChats: React.Dispatch<React.SetStateAction<SessionChat[]>>;
 };
 
@@ -76,7 +79,6 @@ export function useChatSidebarState({
   isAgentRunning,
   isAuxSyncReady,
   isAwaitingReply,
-  isChatSidebarOpen,
   isOperator,
   isSessionSyncLeader,
   isSubmitting,
@@ -90,8 +92,6 @@ export function useChatSidebarState({
   submitError,
   syncError,
   visibleEvents,
-  chatListRef,
-  chatListSentinelRef,
 }: UseChatSidebarStateParams) {
   const [chatSidebarSnapshots, setChatSidebarSnapshots] = useState<Record<string, ChatSidebarSnapshot>>(() => {
     const sortedInitialChats = sortSessionChats(initialChats);
@@ -126,18 +126,15 @@ export function useChatSidebarState({
     };
   });
   const [chatReadMarkers, setChatReadMarkers] = useState<Record<string, string>>(() => buildReadMarkerMap(initialChats));
-  const {
-    approvalFeedbackByChat,
-    handleSidebarPermissionDecision,
-    setApprovalFeedbackByChat,
-    setSidebarApprovalLoadingChatId,
-    sidebarApprovalLoadingChatId,
-  } = useChatSidebarApprovalState({
-    decidePermission,
-    isOperator,
-    pendingPermissions,
-    setChatMutationError,
-  });
+  const [approvalFeedbackByChat, setApprovalFeedbackByChat] = useState<Record<string, ChatApprovalFeedback>>({});
+  const [sidebarApprovalLoadingChatId, setSidebarApprovalLoadingChatId] = useState<string | null>(null);
+  const [chatVisibleCount, setChatVisibleCount] = useState(SIDEBAR_CHAT_PAGE_SIZE);
+  const approvalFeedbackTimersRef = useRef<Record<string, number>>({});
+  const chatSidebarFetchInFlightRef = useRef<Record<string, boolean>>({});
+  const readMarkerSyncInFlightRef = useRef<Record<string, boolean>>({});
+  const readMarkerSyncedRef = useRef<Record<string, string>>(buildReadMarkerMap(initialChats));
+  const snapshotSyncInFlightRef = useRef<Record<string, boolean>>({});
+  const snapshotSyncedEventRef = useRef<Record<string, string>>(buildSnapshotSyncMap(initialChats));
 
   const latestRunStatus = useMemo(
     () => getLatestRunStatusSince(events, null),
@@ -195,6 +192,24 @@ export function useChatSidebarState({
           }
     ));
   }, [chatSidebarSnapshots]);
+
+  const scheduleApprovalFeedbackReset = useCallback((chatId: string) => {
+    const currentTimer = approvalFeedbackTimersRef.current[chatId];
+    if (currentTimer) {
+      window.clearTimeout(currentTimer);
+    }
+    approvalFeedbackTimersRef.current[chatId] = window.setTimeout(() => {
+      setApprovalFeedbackByChat((prev) => {
+        if (!prev[chatId]) {
+          return prev;
+        }
+        const next = { ...prev };
+        delete next[chatId];
+        return next;
+      });
+      delete approvalFeedbackTimersRef.current[chatId];
+    }, SIDEBAR_APPROVAL_FEEDBACK_MS);
+  }, []);
 
   const hasUnreadMessages = useCallback((chatId: string): boolean => {
     const snapshot = chatSidebarSnapshots[chatId];
@@ -321,15 +336,6 @@ export function useChatSidebarState({
     }
     return grouped;
   }, [chats, resolveChatSidebarSection]);
-  const {
-    chatVisibleCount,
-    hasMoreChats,
-  } = useChatSidebarPagination({
-    chatHistoryCount: groupedSidebarChats.history.length,
-    chatListRef,
-    chatListSentinelRef,
-    isChatSidebarOpen,
-  });
 
   const visibleHistoryChats = useMemo(() => {
     const visibleIds = new Set(groupedSidebarChats.history.slice(0, chatVisibleCount).map((chat) => chat.id));
@@ -378,44 +384,447 @@ export function useChatSidebarState({
     ],
     [groupedSidebarChats, visibleHistoryChats],
   );
+  const hasMoreChats = groupedSidebarChats.history.length > visibleHistoryChats.length;
 
-  useChatSidebarSyncEffects({
-    activeChatId,
+  const handleSidebarPermissionDecision = useCallback(async (
+    chatId: string,
+    decision: 'allow_once' | 'allow_session' | 'deny',
+  ) => {
+    if (!isOperator) {
+      return;
+    }
+    const targetPermission = pendingPermissions[0];
+    if (!targetPermission) {
+      return;
+    }
+
+    setSidebarApprovalLoadingChatId(chatId);
+    setChatMutationError(null);
+    const result = await decidePermission(targetPermission.id, decision);
+    setSidebarApprovalLoadingChatId(null);
+
+    if (!result.success) {
+      setChatMutationError(result.error ?? '승인 요청 처리에 실패했습니다.');
+      return;
+    }
+
+    setApprovalFeedbackByChat((prev) => ({
+      ...prev,
+      [chatId]: decision === 'deny' ? 'denied' : 'approved',
+    }));
+    scheduleApprovalFeedbackReset(chatId);
+  }, [decidePermission, isOperator, pendingPermissions, scheduleApprovalFeedbackReset, setChatMutationError]);
+
+  useEffect(() => {
+    const sortedInitialChats = sortSessionChats(initialChats);
+    const persistedReadMarkers = buildReadMarkerMap(sortedInitialChats);
+    setChatReadMarkers((prev) => {
+      const merged = { ...persistedReadMarkers };
+      for (const chat of sortedInitialChats) {
+        const localMarker = prev[chat.id];
+        if (localMarker) {
+          merged[chat.id] = localMarker;
+        }
+      }
+      return merged;
+    });
+    readMarkerSyncedRef.current = { ...persistedReadMarkers };
+  }, [initialChats, activeChatId]);
+
+  useEffect(() => {
+    setSidebarApprovalLoadingChatId(null);
+  }, [activeChatIdResolved]);
+
+  useEffect(() => {
+    setChatVisibleCount((prev) => {
+      const nextMax = Math.max(SIDEBAR_CHAT_PAGE_SIZE, groupedSidebarChats.history.length);
+      return Math.min(prev, nextMax);
+    });
+  }, [groupedSidebarChats.history.length]);
+
+  useEffect(() => {
+    return () => {
+      for (const timerId of Object.values(approvalFeedbackTimersRef.current)) {
+        window.clearTimeout(timerId);
+      }
+      approvalFeedbackTimersRef.current = {};
+    };
+  }, []);
+
+  useEffect(() => {
+    const chatIds = new Set(chats.map((chat) => chat.id));
+    setChatSidebarSnapshots((prev) => {
+      const nextEntries = Object.entries(prev).filter(([chatId]) => chatIds.has(chatId));
+      if (nextEntries.length === Object.keys(prev).length) {
+        return prev;
+      }
+      return Object.fromEntries(nextEntries);
+    });
+    setApprovalFeedbackByChat((prev) => {
+      const next: Record<string, ChatApprovalFeedback> = {};
+      for (const [chatId, state] of Object.entries(prev)) {
+        if (!chatIds.has(chatId)) {
+          const timerId = approvalFeedbackTimersRef.current[chatId];
+          if (timerId) {
+            window.clearTimeout(timerId);
+            delete approvalFeedbackTimersRef.current[chatId];
+          }
+          continue;
+        }
+        next[chatId] = state;
+      }
+      if (Object.keys(next).length === Object.keys(prev).length) {
+        return prev;
+      }
+      return next;
+    });
+    setChatReadMarkers((prev) => {
+      const next: Record<string, string> = {};
+      for (const [chatId, marker] of Object.entries(prev)) {
+        if (chatIds.has(chatId)) {
+          next[chatId] = marker;
+        }
+      }
+      if (Object.keys(next).length === Object.keys(prev).length) {
+        return prev;
+      }
+      return next;
+    });
+
+    const nextInFlight: Record<string, boolean> = {};
+    for (const [chatId, value] of Object.entries(chatSidebarFetchInFlightRef.current)) {
+      if (chatIds.has(chatId)) {
+        nextInFlight[chatId] = value;
+      }
+    }
+    chatSidebarFetchInFlightRef.current = nextInFlight;
+
+    const nextReadSyncInFlight: Record<string, boolean> = {};
+    for (const [chatId, value] of Object.entries(readMarkerSyncInFlightRef.current)) {
+      if (chatIds.has(chatId)) {
+        nextReadSyncInFlight[chatId] = value;
+      }
+    }
+    readMarkerSyncInFlightRef.current = nextReadSyncInFlight;
+
+    const nextReadSynced: Record<string, string> = {};
+    for (const [chatId, marker] of Object.entries(readMarkerSyncedRef.current)) {
+      if (chatIds.has(chatId)) {
+        nextReadSynced[chatId] = marker;
+      }
+    }
+    readMarkerSyncedRef.current = nextReadSynced;
+
+    const nextSnapshotSyncInFlight: Record<string, boolean> = {};
+    for (const [chatId, inFlight] of Object.entries(snapshotSyncInFlightRef.current)) {
+      if (chatIds.has(chatId)) {
+        nextSnapshotSyncInFlight[chatId] = inFlight;
+      }
+    }
+    snapshotSyncInFlightRef.current = nextSnapshotSyncInFlight;
+
+    const nextSnapshotSyncedEvent: Record<string, string> = {};
+    for (const [chatId, eventId] of Object.entries(snapshotSyncedEventRef.current)) {
+      if (chatIds.has(chatId)) {
+        nextSnapshotSyncedEvent[chatId] = eventId;
+      }
+    }
+    snapshotSyncedEventRef.current = nextSnapshotSyncedEvent;
+  }, [chats]);
+
+  useEffect(() => {
+    for (const chat of chats) {
+      const seeded = buildSnapshotFromChat(chat);
+      if (!seeded) {
+        continue;
+      }
+      const current = chatSidebarSnapshots[chat.id];
+      const currentHasData = Boolean(current?.latestEventId) || Boolean(current?.preview?.trim());
+      if (currentHasData) {
+        continue;
+      }
+      upsertChatSidebarSnapshot(chat.id, seeded);
+    }
+  }, [chats, chatSidebarSnapshots, upsertChatSidebarSnapshot]);
+
+  useEffect(() => {
+    if (!isSessionSyncLeader || !activeChatIdResolved) {
+      return;
+    }
+    if (eventsForChatId !== activeChatIdResolved) {
+      return;
+    }
+    const latestVisibleEvent = getLatestVisibleEvent(visibleEvents);
+    const latestEvent = events[events.length - 1];
+    upsertChatSidebarSnapshot(activeChatIdResolved, {
+      preview: latestVisibleEvent ? resolveRecentSummary(latestVisibleEvent) : '',
+      hasEvents: visibleEvents.length > 0,
+      hasErrorSignal: hasChatErrorSignal(latestEvent),
+      latestEventId: latestVisibleEvent?.id ?? null,
+      latestEventAt: latestVisibleEvent?.timestamp ?? null,
+      latestEventIsUser: Boolean(latestVisibleEvent ? isUserEvent(latestVisibleEvent) : false),
+      isRunning: isAgentRunning,
+    });
+  }, [
     activeChatIdResolved,
-    chatReadMarkers,
-    chatSidebarSnapshots,
-    chats,
     events,
     eventsForChatId,
-    initialChats,
-    isAborting,
     isAgentRunning,
+    isSessionSyncLeader,
+    upsertChatSidebarSnapshot,
+    visibleEvents,
+  ]);
+
+  useEffect(() => {
+    if (!activeChatIdResolved) {
+      return;
+    }
+    if (eventsForChatId !== activeChatIdResolved) {
+      return;
+    }
+    const latestEvent = getLatestVisibleEvent(visibleEvents);
+    const nextReadMarker = resolveChatReadMarkerId({
+      latestEventId: latestEvent?.id,
+      fallbackLatestEventId: chatSidebarSnapshots[activeChatIdResolved]?.latestEventId,
+    });
+    if (!nextReadMarker) {
+      return;
+    }
+    setChatReadMarkers((prev) => (
+      prev[activeChatIdResolved] === nextReadMarker
+        ? prev
+        : {
+            ...prev,
+            [activeChatIdResolved]: nextReadMarker,
+          }
+    ));
+  }, [activeChatIdResolved, chatSidebarSnapshots, eventsForChatId, visibleEvents]);
+
+  useEffect(() => {
+    if (!activeChatIdResolved || !isSessionSyncLeader) {
+      return;
+    }
+    const snapshot = chatSidebarSnapshots[activeChatIdResolved];
+    const latestEventId = snapshot?.latestEventId?.trim() ?? '';
+    if (!latestEventId) {
+      return;
+    }
+    if (snapshotSyncedEventRef.current[activeChatIdResolved] === latestEventId) {
+      return;
+    }
+    if (snapshotSyncInFlightRef.current[activeChatIdResolved]) {
+      return;
+    }
+
+    const latestEventAt = snapshot.latestEventAt;
+    const timer = window.setTimeout(() => {
+      snapshotSyncInFlightRef.current[activeChatIdResolved] = true;
+      void fetch(
+        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            latestPreview: snapshot.preview,
+            latestEventId,
+            latestEventAt,
+            latestEventIsUser: snapshot.latestEventIsUser,
+            latestHasErrorSignal: snapshot.hasErrorSignal,
+          }),
+        },
+      )
+        .then(async (response) => {
+          if (!response.ok) {
+            return;
+          }
+          snapshotSyncedEventRef.current[activeChatIdResolved] = latestEventId;
+          const payload = (await response.json().catch(() => ({}))) as { chat?: SessionChat };
+          if (!payload.chat) {
+            return;
+          }
+          setChats((prev) => sortSessionChats(prev.map((chat) => (
+            chat.id === payload.chat?.id ? payload.chat : chat
+          ))));
+        })
+        .catch(() => {})
+        .finally(() => {
+          delete snapshotSyncInFlightRef.current[activeChatIdResolved];
+        });
+    }, 600);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [activeChatIdResolved, chatSidebarSnapshots, isSessionSyncLeader, sessionId, setChats]);
+
+  useEffect(() => {
+    if (!isSessionSyncLeader) {
+      return;
+    }
+
+    const pending = Object.entries(chatReadMarkers).filter(([chatId, marker]) => (
+      marker
+      && marker !== readMarkerSyncedRef.current[chatId]
+      && !readMarkerSyncInFlightRef.current[chatId]
+    ));
+    if (pending.length === 0) {
+      return;
+    }
+    let cancelled = false;
+
+    for (const [chatId, marker] of pending) {
+      readMarkerSyncInFlightRef.current[chatId] = true;
+      const readAt = chatSidebarSnapshots[chatId]?.latestEventAt ?? new Date().toISOString();
+      void fetch(
+        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chatId)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lastReadEventId: marker,
+            lastReadAt: readAt,
+          }),
+        },
+      )
+        .then((response) => {
+          if (!response.ok || cancelled) {
+            return;
+          }
+          readMarkerSyncedRef.current[chatId] = marker;
+        })
+        .catch(() => {})
+        .finally(() => {
+          delete readMarkerSyncInFlightRef.current[chatId];
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chatReadMarkers, chatSidebarSnapshots, isSessionSyncLeader, sessionId]);
+
+  useEffect(() => {
+    if (!isSessionSyncLeader || (!isAuxSyncReady && !isAwaitingReply && !isSubmitting && !isAborting)) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const refreshVisibleChats = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+
+      const recentChats = renderedSidebarChats.slice(0, SIDEBAR_VISIBLE_CHAT_LIMIT);
+      const activeChat = chats.find((chat) => chat.id === activeChatIdResolved);
+      if (activeChat && !recentChats.some((chat) => chat.id === activeChat.id)) {
+        recentChats.push(activeChat);
+      }
+
+      const targets = recentChats.filter((chat) => !chatSidebarFetchInFlightRef.current[chat.id]);
+      if (targets.length === 0) {
+        return;
+      }
+
+      for (const chat of targets) {
+        chatSidebarFetchInFlightRef.current[chat.id] = true;
+      }
+
+      try {
+        const params = new URLSearchParams();
+        for (const chat of targets) {
+          params.append('chatId', chat.id);
+        }
+        if (activeChatIdResolved) {
+          params.set('activeChatId', activeChatIdResolved);
+        }
+        const response = await fetch(
+          `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/sidebar?${params.toString()}`,
+          { cache: 'no-store' },
+        );
+        if (!response.ok) {
+          return;
+        }
+        const payload = (await response.json().catch(() => ({}))) as {
+          snapshots?: Array<{
+            chatId: string;
+            preview: string;
+            hasEvents: boolean;
+            hasErrorSignal: boolean;
+            latestEventId: string | null;
+            latestEventAt: string | null;
+            latestEventIsUser: boolean;
+            isRunning: boolean;
+          }>;
+        };
+        if (!Array.isArray(payload.snapshots) || cancelled) {
+          return;
+        }
+        for (const snapshot of payload.snapshots) {
+          if (!snapshot?.chatId) {
+            continue;
+          }
+          upsertChatSidebarSnapshot(snapshot.chatId, {
+            preview: snapshot.preview,
+            hasEvents: snapshot.hasEvents,
+            hasErrorSignal: snapshot.hasErrorSignal,
+            latestEventId: snapshot.latestEventId,
+            latestEventAt: snapshot.latestEventAt,
+            latestEventIsUser: snapshot.latestEventIsUser,
+            isRunning: snapshot.isRunning,
+          });
+        }
+      } catch {
+        // keep previous snapshot on transient failures
+      } finally {
+        for (const chat of targets) {
+          delete chatSidebarFetchInFlightRef.current[chat.id];
+        }
+      }
+    };
+
+    void refreshVisibleChats();
+    const intervalId = window.setInterval(() => {
+      void refreshVisibleChats();
+    }, SIDEBAR_STATUS_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [
+    activeChatIdResolved,
+    chats,
+    isAborting,
     isAuxSyncReady,
     isAwaitingReply,
     isSessionSyncLeader,
     isSubmitting,
     renderedSidebarChats,
     sessionId,
-    setApprovalFeedbackByChat,
-    setChatReadMarkers,
-    setChatSidebarSnapshots,
-    setChats,
-    setSidebarApprovalLoadingChatId,
     upsertChatSidebarSnapshot,
-    visibleEvents,
-  });
+  ]);
 
   return {
     approvalFeedbackByChat,
+    chatReadMarkers,
     chatSidebarSnapshots,
+    chatVisibleCount,
+    groupedSidebarChats,
     handleMarkChatAsRead,
     handleSidebarPermissionDecision,
     hasMoreChats,
     hasUnreadMessages,
+    renderedSidebarChats,
     resolveChatPreviewText,
     resolveChatSidebarState,
     resolveSidebarChatRunPhase,
+    setApprovalFeedbackByChat,
+    setChatReadMarkers,
+    setChatSidebarSnapshots,
+    setChatVisibleCount,
+    setSidebarApprovalLoadingChatId,
     sidebarApprovalLoadingChatId,
     sidebarSections,
+    upsertChatSidebarSnapshot,
+    visibleHistoryChats,
   };
 }

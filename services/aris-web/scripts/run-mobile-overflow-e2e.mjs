@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -10,9 +10,6 @@ const repoRoot = resolve(webRoot, '..', '..');
 
 const DEFAULT_BASE_PORT = process.env.WEB_DEV_PORT?.trim() || '3305';
 const defaultBaseUrl = `http://127.0.0.1:${DEFAULT_BASE_PORT}`;
-const SERVER_HEALTHCHECK_ATTEMPTS = 3;
-const SERVER_HEALTHCHECK_TIMEOUT_MS = 20_000;
-const SERVER_HEALTHCHECK_RETRY_DELAY_MS = 1_500;
 
 function parseEnvFile(filePath) {
   if (!existsSync(filePath)) {
@@ -57,46 +54,28 @@ function firstDefined(...values) {
 }
 
 async function assertServerHealthy(baseUrl) {
-  const loginUrl = `${baseUrl}/login`;
-  let lastFailure = 'unknown error';
+  const timeout = AbortSignal.timeout(5_000);
 
-  for (let attempt = 1; attempt <= SERVER_HEALTHCHECK_ATTEMPTS; attempt += 1) {
-    const timeout = AbortSignal.timeout(SERVER_HEALTHCHECK_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(loginUrl, {
-        redirect: 'manual',
-        signal: timeout,
-      });
-      if (response.ok) {
-        return;
-      }
-      lastFailure = `fetch returned HTTP ${response.status}`;
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      const curlResult = spawnSync(
-        'curl',
-        ['-sSI', '--max-time', String(Math.ceil(SERVER_HEALTHCHECK_TIMEOUT_MS / 1_000)), loginUrl],
-        { encoding: 'utf8' },
-      );
-      if (curlResult.status === 0 && /\b200\b/.test(curlResult.stdout)) {
-        return;
-      }
-      const curlDetail = curlResult.stderr?.trim() || curlResult.stdout?.trim() || 'curl preflight failed';
-      lastFailure = `fetch=${detail}; curl=${curlDetail}`;
-    }
-
-    if (attempt < SERVER_HEALTHCHECK_ATTEMPTS) {
-      await new Promise((resolve) => {
-        setTimeout(resolve, SERVER_HEALTHCHECK_RETRY_DELAY_MS);
-      });
-    }
+  let response;
+  try {
+    response = await fetch(`${baseUrl}/login`, {
+      redirect: 'manual',
+      signal: timeout,
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `mobile-overflow E2E preflight failed: ${baseUrl}/login is unreachable (${detail}). `
+      + 'Start a dev server for this worktree and/or set MOBILE_OVERFLOW_BASE_URL explicitly.',
+    );
   }
 
-  throw new Error(
-    `mobile-overflow E2E preflight failed: ${loginUrl} is unreachable (${lastFailure}). `
-    + 'Start a dev server for this worktree and/or set MOBILE_OVERFLOW_BASE_URL explicitly.',
-  );
+  if (!response.ok) {
+    throw new Error(
+      `mobile-overflow E2E preflight failed: ${baseUrl}/login returned HTTP ${response.status}. `
+      + 'This usually means the selected dev server is stale or serving the wrong app.',
+    );
+  }
 }
 
 async function main() {

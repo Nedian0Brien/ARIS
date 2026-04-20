@@ -11,7 +11,6 @@ type PreviewPanelPageProps = {
   panel: WorkspacePanelRecord;
   onSavePanel?: (panelId: string, updates: { title?: string; config?: Record<string, unknown> }) => Promise<unknown>;
   onDeletePanel?: (panelId: string) => Promise<unknown>;
-  onReturnToChat?: () => void;
 };
 
 type PreviewStatus = 'idle' | 'connecting' | 'ready' | 'saving' | 'error';
@@ -36,7 +35,6 @@ export function PreviewPanelPage({
   panel,
   onSavePanel,
   onDeletePanel,
-  onReturnToChat,
 }: PreviewPanelPageProps) {
   const initialConfig = normalizeLocalPreviewConfig(panel.config);
   const [draftPort, setDraftPort] = useState(String(initialConfig.port));
@@ -128,11 +126,6 @@ export function PreviewPanelPage({
   return (
     <section className={styles.root}>
       <div className={styles.hero}>
-        {onReturnToChat ? (
-          <button type="button" className={styles.backButton} onClick={onReturnToChat}>
-            채팅으로 돌아가기
-          </button>
-        ) : null}
         <span className={styles.eyebrow}>Live Preview</span>
         <h3 className={styles.title}>{panel.title}</h3>
         <p className={styles.description}>로컬 개발서버를 같은 세션 워크스페이스 안에서 바로 열어 둡니다.</p>
