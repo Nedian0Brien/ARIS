@@ -13,12 +13,8 @@ import {
 import {
   hasTailLayoutSettled,
   isNearBottom,
-  isNearWindowBottom,
-  resolveMobileWindowScrollTop,
-  resolveScrollToBottomTarget,
   resolveTailScrollAnchorId,
   shouldRestoreTailScrollOnChatEntry,
-  shouldUseWindowScrollFallback,
 } from './chatScroll';
 import { recordScrollDebugEvent } from './scrollDebug';
 
@@ -36,7 +32,6 @@ export type UseChatTailRestoreInput = {
   isTailRestoreHydrated: boolean;
   isNewChatPlaceholder: boolean;
   isWorkspaceHome: boolean;
-  isMobileLayout: boolean;
   isTailRestoreLayoutReady: boolean;
   initialShowChatEntryLoading: boolean;
   resetToLatestWindow: () => Promise<void>;
@@ -154,7 +149,6 @@ export function useChatTailRestore({
   isTailRestoreHydrated,
   isNewChatPlaceholder,
   isWorkspaceHome,
-  isMobileLayout,
   isTailRestoreLayoutReady,
   initialShowChatEntryLoading,
   resetToLatestWindow,
@@ -194,50 +188,26 @@ export function useChatTailRestore({
   }, []);
 
   const scrollConversationToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
-    const documentScrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
     const stream = scrollRef.current;
-    const target = resolveScrollToBottomTarget({
-      isMobileLayout,
-      keyboardOpen: document.documentElement.dataset.keyboardOpen === 'true',
-    });
-    const shouldUseWindow = target === 'window' || shouldUseWindowScrollFallback({
-      isMobileLayout,
-      streamScrollHeight: stream?.scrollHeight ?? null,
-      streamClientHeight: stream?.clientHeight ?? null,
-      documentScrollHeight,
-      viewportHeight,
-    });
-    if (shouldUseWindow) {
-      const top = resolveMobileWindowScrollTop({
-        scrollHeight: documentScrollHeight,
-        viewportHeight,
-      });
+    if (!stream) {
       recordScrollDebugEvent({
-        kind: 'write',
-        source: 'tail:scrollConversationToBottom:window',
-        top,
-        behavior,
+        kind: 'trigger',
+        source: 'tail:scrollConversationToBottom:no-stream',
         detail: {
-          documentScrollHeight,
-          viewportHeight,
+          behavior,
         },
       });
-      window.scrollTo({ top, behavior });
       return;
     }
-    if (!stream) {
-      return;
-    }
-    // scrollHeight - clientHeight = maximum valid scrollTop; explicit for precision
+    const top = Math.max(0, stream.scrollHeight - stream.clientHeight);
     recordScrollDebugEvent({
       kind: 'write',
       source: 'tail:scrollConversationToBottom:stream',
-      top: stream.scrollHeight - stream.clientHeight,
+      top,
       behavior,
     });
-    stream.scrollTo({ top: stream.scrollHeight - stream.clientHeight, behavior });
-  }, [isMobileLayout, scrollRef]);
+    stream.scrollTo({ top, behavior });
+  }, [scrollRef]);
 
   const restoreConversationToTail = useCallback((behavior: ScrollBehavior = 'auto') => {
     const anchorId = resolveTailScrollAnchorId({
@@ -267,19 +237,10 @@ export function useChatTailRestore({
     });
     const anchor = anchorId ? document.getElementById(anchorId) : null;
     const stream = scrollRef.current;
-    const documentScrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-    const shouldUseWindow = shouldUseWindowScrollFallback({
-      isMobileLayout,
-      streamScrollHeight: stream?.scrollHeight ?? null,
-      streamClientHeight: stream?.clientHeight ?? null,
-      documentScrollHeight,
-      viewportHeight,
-    });
     const nextMetrics = {
       anchorBottom: anchor ? anchor.getBoundingClientRect().bottom : null,
-      scrollHeight: shouldUseWindow ? documentScrollHeight : (stream?.scrollHeight ?? null),
-      viewportHeight,
+      scrollHeight: stream?.scrollHeight ?? null,
+      viewportHeight: stream?.clientHeight ?? null,
     };
     recordScrollDebugEvent({
       kind: 'trigger',
@@ -287,47 +248,18 @@ export function useChatTailRestore({
       streamElement: stream,
       detail: {
         anchorId,
-        shouldUseWindow,
         ...nextMetrics,
       },
     });
     return nextMetrics;
-  }, [isMobileLayout, latestVisibleEventIdRef, scrollRef]);
+  }, [latestVisibleEventIdRef, scrollRef]);
 
   const syncScrollToBottomButton = useCallback(() => {
     const stream = scrollRef.current;
-    const documentScrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-    const shouldUseWindow = shouldUseWindowScrollFallback({
-      isMobileLayout,
-      streamScrollHeight: stream?.scrollHeight ?? null,
-      streamClientHeight: stream?.clientHeight ?? null,
-      documentScrollHeight,
-      viewportHeight,
-    });
-    if (shouldUseWindow) {
-      const nextShowScrollToBottom = !isNearWindowBottom();
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'tail:syncScrollToBottomButton:window',
-        streamElement: stream,
-        detail: {
-          shouldUseWindow,
-          nextShowScrollToBottom,
-          documentScrollHeight,
-          viewportHeight,
-        },
-      });
-      setShowScrollToBottom(nextShowScrollToBottom);
-      return;
-    }
     if (!stream) {
       recordScrollDebugEvent({
         kind: 'trigger',
         source: 'tail:syncScrollToBottomButton:no-stream',
-        detail: {
-          shouldUseWindow,
-        },
       });
       setShowScrollToBottom(false);
       return;
@@ -338,12 +270,11 @@ export function useChatTailRestore({
       source: 'tail:syncScrollToBottomButton:stream',
       streamElement: stream,
       detail: {
-        shouldUseWindow,
         nextShowScrollToBottom,
       },
     });
     setShowScrollToBottom(nextShowScrollToBottom);
-  }, [isMobileLayout, scrollRef]);
+  }, [scrollRef]);
 
   const handleJumpToBottom = useCallback(() => {
     if (isJumpingToLatestRef.current) {
@@ -511,39 +442,16 @@ export function useChatTailRestore({
       if (tailRestoreCancelRef.current === cancel) {
         tailRestoreCancelRef.current = null;
       }
-      // Bug1 fix: force pixel-perfect alignment after anchor-based settle
       const stream = scrollRef.current;
-      const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-      const shouldUseWindow = shouldUseWindowScrollFallback({
-        isMobileLayout,
-        streamScrollHeight: stream?.scrollHeight ?? null,
-        streamClientHeight: stream?.clientHeight ?? null,
-        documentScrollHeight: scrollHeight,
-        viewportHeight,
-      });
-      if (shouldUseWindow) {
+      if (stream) {
+        const top = Math.max(0, stream.scrollHeight - stream.clientHeight);
         recordScrollDebugEvent({
           kind: 'write',
-          source: 'tail:settle:complete:window',
-          top: Math.max(0, scrollHeight - viewportHeight),
+          source: 'tail:settle:complete:stream',
+          top,
           behavior: 'auto',
-          detail: {
-            scrollHeight,
-            viewportHeight,
-          },
         });
-        window.scrollTo({ top: Math.max(0, scrollHeight - viewportHeight), behavior: 'auto' });
-      } else {
-        if (stream) {
-          recordScrollDebugEvent({
-            kind: 'write',
-            source: 'tail:settle:complete:stream',
-            top: stream.scrollHeight - stream.clientHeight,
-            behavior: 'auto',
-          });
-          stream.scrollTop = stream.scrollHeight - stream.clientHeight;
-        }
+        stream.scrollTop = top;
       }
       setIsInitialChatEntryPendingReveal(false);
       isTailLayoutSettlingRef.current = false;
@@ -607,7 +515,6 @@ export function useChatTailRestore({
     activeChatIdResolved,
     eventsForChatId,
     hasLoadedCurrentChat,
-    isMobileLayout,
     isTailRestoreLayoutReady,
     isTailRestoreHydrated,
     isNewChatPlaceholder,

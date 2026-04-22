@@ -63,7 +63,6 @@ import {
   hasResumePhaseSettled,
   hasTailRestoreRenderHydrated,
   isNearBottom,
-  isNearWindowBottom,
   resolveTailRestoreLayoutReady,
   resolveMobileBottomLockState,
   type ComposerDockMetrics,
@@ -104,7 +103,6 @@ import {
   genId,
   getLatestVisibleEvent,
   getRecentFiles,
-  getWindowScrollTop,
   isPersistedPermissionEvent,
   isUserEvent,
   isWorkspacePathWithinRoot,
@@ -674,7 +672,6 @@ export function ChatInterface({
     isTailRestoreHydrated,
     isNewChatPlaceholder,
     isWorkspaceHome,
-    isMobileLayout,
     isTailRestoreLayoutReady,
     initialShowChatEntryLoading,
     resetToLatestWindow,
@@ -771,9 +768,10 @@ export function ChatInterface({
         return;
       }
 
+      const stream = scrollRef.current;
       const nextMetrics = {
-        scrollTop: getWindowScrollTop(),
-        viewportHeight: window.visualViewport?.height ?? window.innerHeight,
+        scrollTop: stream?.scrollTop ?? null,
+        viewportHeight: stream?.clientHeight ?? null,
       };
 
       if (resumePreviousMetricsRef.current && hasResumePhaseSettled({
@@ -1373,8 +1371,8 @@ export function ChatInterface({
 
     recordScrollDebugEvent({
       kind: 'trigger',
-      source: isMobileLayout ? 'history:loadOlder:button:window' : 'history:loadOlder:button:stream',
-      top: isMobileLayout ? getWindowScrollTop() : (scrollRef.current?.scrollTop ?? 0),
+      source: 'history:loadOlder:button:stream',
+      top: scrollRef.current?.scrollTop ?? 0,
       detail: {
         hasMoreBefore,
         isLoadingOlder,
@@ -1385,7 +1383,7 @@ export function ChatInterface({
     });
 
     requestAnimationFrame(completeOlderLoad);
-  }, [hasMoreBefore, isLoadingOlder, isMobileLayout, isTailLayoutSettling, loadOlder, sessionScrollPhase]);
+  }, [hasMoreBefore, isLoadingOlder, isTailLayoutSettling, loadOlder, sessionScrollPhase]);
 
   const handleLoadOlderButtonClick = useCallback(() => {
     void loadOlderHistory();
@@ -1603,9 +1601,7 @@ export function ChatInterface({
       return;
     }
 
-    const scrollBoundary = isMobileLayout
-      ? 0
-      : Math.ceil(scrollRef.current?.getBoundingClientRect().top ?? 0);
+    const scrollBoundary = Math.ceil(scrollRef.current?.getBoundingClientRect().top ?? 0);
     const bubbleBottomByEventId = new Map<string, number>();
 
     userMessageBubbleNodesRef.current.forEach((node, eventId) => {
@@ -1618,11 +1614,58 @@ export function ChatInterface({
       scrollBoundary,
     }));
   }, [
-    isMobileLayout,
     isNewChatPlaceholder,
     isWorkspaceHome,
     scrollRef,
     userMessageJumpTargets,
+  ]);
+
+  const syncConversationScrollState = useCallback(() => {
+    const stream = scrollRef.current;
+    if (!stream) {
+      return;
+    }
+
+    if (isMobileLayout) {
+      if (sessionScrollPhaseRef.current === 'resuming' || sessionScrollPhaseRef.current === 'viewport-reflow') {
+        recordScrollDebugEvent({
+          kind: 'trigger',
+          source: 'chat:updateStickState:suppressed',
+          streamElement: stream,
+          detail: {
+            currentPhase: sessionScrollPhaseRef.current,
+          },
+        });
+        return;
+      }
+
+      const nextState = resolveMobileBottomLockState({
+        isNearBottom: isNearBottom(stream),
+        isTailRestorePending: isChatEntryTailRestorePending,
+      });
+      recordScrollDebugEvent({
+        kind: 'trigger',
+        source: 'chat:updateStickState',
+        streamElement: stream,
+        detail: {
+          currentPhase: sessionScrollPhaseRef.current,
+          isChatEntryTailRestorePending,
+          nextState,
+        },
+      });
+      shouldStickToBottomRef.current = nextState.shouldStickToBottom;
+      setShowScrollToBottom(nextState.showScrollToBottom);
+      return;
+    }
+
+    const nearBottom = isNearBottom(stream);
+    shouldStickToBottomRef.current = nearBottom;
+    setShowScrollToBottom(!nearBottom);
+  }, [
+    isChatEntryTailRestorePending,
+    isMobileLayout,
+    setShowScrollToBottom,
+    shouldStickToBottomRef,
   ]);
 
   const showLastUserMessageJumpBar = useMemo(() => shouldShowLastUserMessageJumpBar({
@@ -1770,15 +1813,11 @@ export function ChatInterface({
     syncComposerDockMetrics();
     const handleResize = () => syncComposerDockMetrics();
     window.addEventListener('resize', handleResize, { passive: true });
-    window.addEventListener('scroll', handleResize, { passive: true });
     window.visualViewport?.addEventListener('resize', handleResize);
-    window.visualViewport?.addEventListener('scroll', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('scroll', handleResize);
       window.visualViewport?.removeEventListener('resize', handleResize);
-      window.visualViewport?.removeEventListener('scroll', handleResize);
     };
   }, [syncComposerDockMetrics]);
 
@@ -1789,15 +1828,11 @@ export function ChatInterface({
 
     scheduleSync();
     window.addEventListener('resize', scheduleSync, { passive: true });
-    window.addEventListener('scroll', scheduleSync, { passive: true });
     window.visualViewport?.addEventListener('resize', scheduleSync);
-    window.visualViewport?.addEventListener('scroll', scheduleSync);
 
     return () => {
       window.removeEventListener('resize', scheduleSync);
-      window.removeEventListener('scroll', scheduleSync);
       window.visualViewport?.removeEventListener('resize', scheduleSync);
-      window.visualViewport?.removeEventListener('scroll', scheduleSync);
     };
   }, [syncLastUserMessageJumpTarget]);
 
@@ -1871,52 +1906,24 @@ export function ChatInterface({
       return;
     }
 
-    const updateStickState = () => {
-      if (sessionScrollPhaseRef.current === 'resuming' || sessionScrollPhaseRef.current === 'viewport-reflow') {
-        recordScrollDebugEvent({
-          kind: 'trigger',
-          source: 'chat:updateStickState:suppressed',
-          streamElement: scrollRef.current,
-          detail: {
-            currentPhase: sessionScrollPhaseRef.current,
-          },
-        });
-        return;
-      }
-      const nextState = resolveMobileBottomLockState({
-        isNearBottom: isNearWindowBottom(),
-        isTailRestorePending: isChatEntryTailRestorePending,
-      });
-      recordScrollDebugEvent({
-        kind: 'trigger',
-        source: 'chat:updateStickState',
-        streamElement: scrollRef.current,
-        detail: {
-          currentPhase: sessionScrollPhaseRef.current,
-          isChatEntryTailRestorePending,
-          nextState,
-        },
-      });
-      shouldStickToBottomRef.current = nextState.shouldStickToBottom;
-      setShowScrollToBottom(nextState.showScrollToBottom);
+    const scheduleSync = () => {
+      window.requestAnimationFrame(syncConversationScrollState);
     };
 
-    const rafId = window.requestAnimationFrame(updateStickState);
-    window.addEventListener('scroll', updateStickState, { passive: true });
-    window.visualViewport?.addEventListener('scroll', updateStickState, { passive: true } as EventListenerOptions);
-    window.visualViewport?.addEventListener('resize', updateStickState, { passive: true } as EventListenerOptions);
+    const rafId = window.requestAnimationFrame(syncConversationScrollState);
+    window.addEventListener('resize', scheduleSync, { passive: true });
+    window.visualViewport?.addEventListener('resize', scheduleSync);
 
     return () => {
       window.cancelAnimationFrame(rafId);
-      window.removeEventListener('scroll', updateStickState);
-      window.visualViewport?.removeEventListener('scroll', updateStickState);
-      window.visualViewport?.removeEventListener('resize', updateStickState);
+      window.removeEventListener('resize', scheduleSync);
+      window.visualViewport?.removeEventListener('resize', scheduleSync);
     };
   }, [
-    isChatEntryTailRestorePending,
     isMobileLayout,
-    setShowScrollToBottom,
+    sessionScrollPhase,
     shouldStickToBottomRef,
+    syncConversationScrollState,
     syncScrollToBottomButton,
   ]);
 
@@ -2449,18 +2456,7 @@ export function ChatInterface({
   }
 
   function handleStreamScroll() {
-    const stream = scrollRef.current;
-    if (!stream) {
-      return;
-    }
-    if (isMobileLayout) {
-      syncScrollToBottomButton();
-      syncLastUserMessageJumpTarget();
-      return;
-    }
-    const nearBottom = isNearBottom(stream);
-    shouldStickToBottomRef.current = nearBottom;
-    setShowScrollToBottom(!nearBottom);
+    syncConversationScrollState();
     syncLastUserMessageJumpTarget();
   }
 
