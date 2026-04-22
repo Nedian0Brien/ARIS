@@ -58,21 +58,73 @@ function mergeEvents(events: UiEvent[]): UiEvent[] {
 }
 
 
+function readTrimmedStreamEvent(event: UiEvent): string {
+  return typeof event.meta?.streamEvent === 'string'
+    ? event.meta.streamEvent.trim()
+    : '';
+}
+
+function readTrimmedMetaString(event: UiEvent, key: string): string {
+  const value = event.meta?.[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 function isGeminiPendingActionEvent(event: UiEvent): boolean {
-  return event.meta?.streamEvent === 'gemini_action_pending';
+  return readTrimmedStreamEvent(event) === 'gemini_action_pending';
 }
 
 function isGeminiFinalActionEvent(event: UiEvent): boolean {
   return event.meta?.agent === 'gemini'
-    && event.meta?.streamEvent === 'agent_stream_action';
+    && readTrimmedStreamEvent(event) === 'agent_stream_action';
+}
+
+function isGeminiRealtimeTextEvent(event: UiEvent): boolean {
+  const streamEvent = readTrimmedStreamEvent(event);
+  return streamEvent === 'agent_message_partial' || streamEvent === 'agent_commentary_partial';
+}
+
+function isGeminiPersistedTextEvent(event: UiEvent): boolean {
+  const streamEvent = readTrimmedStreamEvent(event);
+  return (
+    streamEvent === 'agent_message'
+    || streamEvent === 'agent_message_recovered'
+    || streamEvent === 'agent_commentary'
+  );
+}
+
+function readGeminiTextEventIdentity(event: UiEvent): string | null {
+  if (!isGeminiRealtimeTextEvent(event) && !isGeminiPersistedTextEvent(event)) {
+    return null;
+  }
+
+  const streamEvent = readTrimmedStreamEvent(event);
+  const messagePhase = readTrimmedMetaString(event, 'messagePhase');
+  const phase = (
+    streamEvent === 'agent_commentary_partial'
+    || streamEvent === 'agent_commentary'
+    || messagePhase === 'commentary'
+  )
+    ? 'commentary'
+    : 'final';
+  const turnId = readTrimmedMetaString(event, 'sessionTurnId') || readTrimmedMetaString(event, 'threadId');
+  const itemId = readTrimmedMetaString(event, 'sessionItemId');
+  if (!turnId && !itemId) {
+    return null;
+  }
+
+  return [
+    phase,
+    turnId || '__turn__',
+    itemId || '__item__',
+  ].join(':');
 }
 
 function isRealtimeOnlyEvent(event: UiEvent): boolean {
-  const streamEvent = typeof event.meta?.streamEvent === 'string'
-    ? event.meta.streamEvent.trim()
-    : '';
+  const streamEvent = readTrimmedStreamEvent(event);
   return (
     streamEvent === 'gemini_action_pending'
+    || streamEvent === 'agent_message_partial'
+    || streamEvent === 'agent_commentary_partial'
     || streamEvent === 'runtime_disconnected'
     || streamEvent === 'stream_error'
     || streamEvent === 'runtime_error'
@@ -92,13 +144,20 @@ export function findLatestPersistedCursorEventId(events: UiEvent[]): string | nu
 
 export function collapseRealtimeGeminiPartialEvents(events: UiEvent[]): UiEvent[] {
   const finalizedActionCallIds = new Set<string>();
+  const finalizedTextEventIdentities = new Set<string>();
   for (const event of events) {
-    if (!isGeminiFinalActionEvent(event)) {
-      continue;
+    if (isGeminiFinalActionEvent(event)) {
+      const callId = typeof event.meta?.sessionCallId === 'string' ? event.meta.sessionCallId.trim() : '';
+      if (callId) {
+        finalizedActionCallIds.add(callId);
+      }
     }
-    const callId = typeof event.meta?.sessionCallId === 'string' ? event.meta.sessionCallId.trim() : '';
-    if (callId) {
-      finalizedActionCallIds.add(callId);
+
+    if (isGeminiPersistedTextEvent(event)) {
+      const identity = readGeminiTextEventIdentity(event);
+      if (identity) {
+        finalizedTextEventIdentities.add(identity);
+      }
     }
   }
 
@@ -109,6 +168,13 @@ export function collapseRealtimeGeminiPartialEvents(events: UiEvent[]): UiEvent[
         return true;
       }
       return !finalizedActionCallIds.has(callId);
+    }
+    if (isGeminiRealtimeTextEvent(event)) {
+      const identity = readGeminiTextEventIdentity(event);
+      if (!identity) {
+        return true;
+      }
+      return !finalizedTextEventIdentities.has(identity);
     }
     return true;
   });
