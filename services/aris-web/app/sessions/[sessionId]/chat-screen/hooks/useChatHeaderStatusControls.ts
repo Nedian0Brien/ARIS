@@ -15,7 +15,6 @@ type UseChatHeaderStatusControlsParams = {
   disconnectNoticeAwaitingRef: MutableRefObject<string | null>;
   firstPendingPermissionId: string | null;
   isAgentRunning: boolean;
-  isCustomizationOverlayLayout: boolean;
   isOperator: boolean;
   lastSubmittedPayload: ChatSubmittedPayload | null;
   sessionId: string;
@@ -24,7 +23,6 @@ type UseChatHeaderStatusControlsParams = {
   setIdBundleCopyState: SetCopyState;
   setIsChatSidebarOpen: SetBooleanState;
   setIsContextMenuOpen: SetBooleanState;
-  setIsCustomizationSidebarOpen: SetBooleanState;
   setIsPolicyChanging: (value: boolean) => void;
   setShowPermissionQueue: SetBooleanState;
   updateChatRuntimeUi: (chatId: string | null, patch: Partial<ChatRuntimeUiState>) => void;
@@ -44,7 +42,6 @@ export function useChatHeaderStatusControls({
   disconnectNoticeAwaitingRef,
   firstPendingPermissionId,
   isAgentRunning,
-  isCustomizationOverlayLayout,
   isOperator,
   lastSubmittedPayload,
   sessionId,
@@ -53,7 +50,6 @@ export function useChatHeaderStatusControls({
   setIdBundleCopyState,
   setIsChatSidebarOpen,
   setIsContextMenuOpen,
-  setIsCustomizationSidebarOpen,
   setIsPolicyChanging,
   setShowPermissionQueue,
   updateChatRuntimeUi,
@@ -114,15 +110,8 @@ export function useChatHeaderStatusControls({
   }, [activeChat?.threadId, activeChatIdResolved, setIdBundleCopyState]);
 
   const handleToggleChatSidebar = useCallback(() => {
-    if (isCustomizationOverlayLayout) {
-      setIsCustomizationSidebarOpen(false);
-    }
     setIsChatSidebarOpen((prev) => !prev);
-  }, [
-    isCustomizationOverlayLayout,
-    setIsChatSidebarOpen,
-    setIsCustomizationSidebarOpen,
-  ]);
+  }, [setIsChatSidebarOpen]);
 
   const handleToggleContextMenu = useCallback(() => {
     setIsContextMenuOpen((prev) => !prev);

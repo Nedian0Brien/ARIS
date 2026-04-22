@@ -1,6 +1,7 @@
 'use client';
 
 import { BackendNotice } from '@/components/ui/BackendNotice';
+import type { RequestedFilePayload } from '../../customization-sidebar/types';
 import type { WorkspacePanelLayout, WorkspacePanelType } from '@/lib/workspacePanels/types';
 import { CreatePanelPage } from '../../workspace-panels/CreatePanelPage';
 import { PanelPageRenderer } from '../../workspace-panels/PanelPageRenderer';
@@ -8,10 +9,13 @@ import styles from '../../ChatInterface.module.css';
 
 type WorkspacePanelsPaneBaseProps = {
   sessionId: string;
+  projectName: string;
+  workspaceRootPath: string;
   isMobileLayout: boolean;
   workspacePanelsError: string | null;
   workspacePanelsLoading: boolean;
   workspacePanelLayout: WorkspacePanelLayout;
+  requestedFile?: RequestedFilePayload | null;
 };
 
 type WorkspacePanelsCreatePaneProps = WorkspacePanelsPaneBaseProps & {
@@ -61,6 +65,10 @@ export function WorkspacePanelsPane(props: WorkspacePanelsPaneProps) {
               <PanelPageRenderer
                 sessionId={props.sessionId}
                 panel={panel}
+                projectName={props.projectName}
+                workspaceRootPath={props.workspaceRootPath}
+                requestedFile={props.requestedFile}
+                isMobileLayout={props.isMobileLayout}
                 onSavePanel={props.onSavePanel}
                 onDeletePanel={props.onDeletePanel}
                 onReturnToChat={props.onReturnToChat}

@@ -102,7 +102,7 @@ export function CustomizationFileModal({
                   <strong>
                     {blockedPreview.reason === 'binary'
                       ? '바이너리 파일은 에디터에서 미리보기를 지원하지 않습니다.'
-                      : '큰 파일은 우측 모달에서 직접 열지 않습니다.'}
+                      : '큰 파일은 이 모달에서 직접 열지 않습니다.'}
                   </strong>
                   <span>파일 크기: {formatBytes(blockedPreview.sizeBytes)}</span>
                   <span>

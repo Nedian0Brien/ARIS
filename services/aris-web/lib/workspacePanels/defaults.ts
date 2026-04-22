@@ -3,7 +3,7 @@ import type { WorkspacePanelRecord, WorkspacePanelType } from './types';
 
 const PANEL_TITLES: Record<WorkspacePanelType, string> = {
   preview: 'Preview',
-  explorer: 'Explorer',
+  explorer: 'Workspace',
   terminal: 'Terminal',
   bookmark: 'Bookmark',
 };

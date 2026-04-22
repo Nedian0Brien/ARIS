@@ -3,6 +3,10 @@ import type { ReactElement, ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
+vi.mock('@/app/sessions/[sessionId]/workspace-panels/WorkspaceToolsPanelPage', () => ({
+  WorkspaceToolsPanelPage: () => React.createElement('div', null, 'Workspace Tools Mock'),
+}));
+
 type AnyElement = ReactElement<{ children?: ReactNode; onClick?: () => void }>;
 
 type CreatePanelPageModule = {
@@ -23,6 +27,8 @@ type PlaceholderPanelPageModule = {
 type PanelPageRendererModule = {
   PanelPageRenderer?: (props: {
     sessionId: string;
+    projectName: string;
+    workspaceRootPath: string;
     panel: {
       id: string;
       type: 'preview' | 'explorer' | 'terminal' | 'bookmark';
@@ -30,6 +36,13 @@ type PanelPageRendererModule = {
       config: Record<string, unknown>;
       createdAt: string | null;
     };
+    requestedFile?: {
+      path: string;
+      name?: string;
+      line?: number | null;
+      nonce: number;
+    } | null;
+    isMobileLayout: boolean;
     onSavePanel?: (panelId: string, updates: { title?: string; config?: Record<string, unknown> }) => Promise<void>;
     onDeletePanel?: (panelId: string) => Promise<void>;
     onReturnToChat?: () => void;
@@ -76,7 +89,7 @@ describe('workspace panel creation surfaces', () => {
     }));
 
     expect(markup).toContain('Preview');
-    expect(markup).toContain('Explorer');
+    expect(markup).toContain('Workspace');
     expect(markup).toContain('Terminal');
     expect(markup).toContain('Bookmark');
   });
@@ -114,19 +127,19 @@ describe('workspace panel creation surfaces', () => {
     expect(onCreatePanel).toHaveBeenCalledWith('preview');
   });
 
-  it('renders placeholder panel messaging for non-preview pages', async () => {
+  it('renders placeholder panel messaging for non-workspace utility pages', async () => {
     const mod = await loadPlaceholderPanelPageModule();
 
     expect(typeof mod.PlaceholderPanelPage).toBe('function');
     if (typeof mod.PlaceholderPanelPage !== 'function') return;
 
     const markup = renderToStaticMarkup(React.createElement(mod.PlaceholderPanelPage, {
-      title: 'Explorer',
-      description: '파일 트리와 문서 탐색이 여기에 들어옵니다.',
+      title: 'Terminal',
+      description: '세션 셸과 명령 실행 화면이 여기에 들어옵니다.',
     }));
 
-    expect(markup).toContain('Explorer');
-    expect(markup).toContain('파일 트리와 문서 탐색이 여기에 들어옵니다.');
+    expect(markup).toContain('Terminal');
+    expect(markup).toContain('세션 셸과 명령 실행 화면이 여기에 들어옵니다.');
     expect(markup).toContain('준비 중');
   });
 
@@ -138,8 +151,8 @@ describe('workspace panel creation surfaces', () => {
 
     const onReturnToChat = vi.fn();
     const tree = mod.PlaceholderPanelPage({
-      title: 'Explorer',
-      description: '파일 트리와 문서 탐색이 여기에 들어옵니다.',
+      title: 'Bookmark',
+      description: '스크립트와 문서 바로가기가 여기에 들어옵니다.',
       onReturnToChat,
     });
     const backButton = flattenElements(tree).find((element) => {
@@ -160,6 +173,8 @@ describe('workspace panel creation surfaces', () => {
 
     const markup = renderToStaticMarkup(React.createElement(mod.PanelPageRenderer, {
       sessionId: 'session-1',
+      projectName: '/workspace',
+      workspaceRootPath: '/workspace',
       panel: {
         id: 'panel-preview-1',
         type: 'preview',
@@ -167,6 +182,7 @@ describe('workspace panel creation surfaces', () => {
         config: { port: 3305, path: '/' },
         createdAt: '2026-04-16T00:00:00.000Z',
       },
+      isMobileLayout: false,
       onSavePanel: vi.fn(async () => {}),
       onDeletePanel: vi.fn(async () => {}),
       onReturnToChat: vi.fn(),
@@ -175,6 +191,35 @@ describe('workspace panel creation surfaces', () => {
     expect(markup).toContain('로컬 개발서버');
     expect(markup).toContain('포트');
     expect(markup).toContain('채팅으로 돌아가기');
+    expect(markup).not.toContain('준비 중');
+  });
+
+  it('renders a workspace tools panel for explorer pages', async () => {
+    const mod = await loadPanelPageRendererModule();
+
+    expect(typeof mod.PanelPageRenderer).toBe('function');
+    if (typeof mod.PanelPageRenderer !== 'function') return;
+
+    const markup = renderToStaticMarkup(React.createElement(mod.PanelPageRenderer, {
+      sessionId: 'session-1',
+      projectName: '/workspace',
+      workspaceRootPath: '/workspace',
+      panel: {
+        id: 'panel-workspace-1',
+        type: 'explorer',
+        title: 'Workspace',
+        config: {},
+        createdAt: '2026-04-16T00:00:00.000Z',
+      },
+      requestedFile: {
+        path: '/workspace/src/app.tsx',
+        nonce: 7,
+      },
+      isMobileLayout: false,
+      onReturnToChat: vi.fn(),
+    }));
+
+    expect(markup).toContain('Workspace Tools Mock');
     expect(markup).not.toContain('준비 중');
   });
 });

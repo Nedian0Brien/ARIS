@@ -16,9 +16,9 @@ const PANEL_CHOICES: Array<{
   },
   {
     type: 'explorer',
-    label: 'Explorer',
-    description: '파일 트리와 문서 탐색이 들어올 자리입니다.',
-    badge: 'Soon',
+    label: 'Workspace',
+    description: 'Customization, 파일, Git 도구를 한 화면에 엽니다.',
+    badge: 'Ready',
   },
   {
     type: 'terminal',
@@ -49,7 +49,7 @@ export function CreatePanelPage({ onCreatePanel, onReturnToChat }: CreatePanelPa
           </button>
         ) : null}
         <h3 className={styles.title}>새 패널 만들기</h3>
-        <p className={styles.description}>오른쪽 작업 화면에 추가할 패널 타입을 고르세요.</p>
+        <p className={styles.description}>워크스페이스 화면에 추가할 패널 타입을 고르세요.</p>
       </div>
       <div className={styles.grid}>
         {PANEL_CHOICES.map((choice) => (
