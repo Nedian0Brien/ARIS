@@ -3,6 +3,8 @@ import type { UiEvent } from '@/lib/happy/types';
 import {
   MAX_LOADED_EVENT_PAGES,
   appendIncomingCountToPageSizes,
+  shouldClearDetachedTailAfterLatestAppend,
+  shouldMarkDetachedTailAfterTrim,
   trimEventsPageWindow,
 } from '@/lib/hooks/useSessionEvents';
 
@@ -56,5 +58,39 @@ describe('session event page window helpers', () => {
       pageSizes: [10, 40, 40],
       trimmedCount: 40,
     });
+  });
+
+  it('marks the latest tail as detached only when older-side paging trims newest pages', () => {
+    expect(shouldMarkDetachedTailAfterTrim({
+      trimFrom: 'end',
+      trimmedCount: 40,
+    })).toBe(true);
+
+    expect(shouldMarkDetachedTailAfterTrim({
+      trimFrom: 'start',
+      trimmedCount: 40,
+    })).toBe(false);
+
+    expect(shouldMarkDetachedTailAfterTrim({
+      trimFrom: 'end',
+      trimmedCount: 0,
+    })).toBe(false);
+  });
+
+  it('clears detached-tail state once an after-cursor refresh fully catches up to the live tail', () => {
+    expect(shouldClearDetachedTailAfterLatestAppend({
+      hasDetachedTail: true,
+      hasMoreAfter: false,
+    })).toBe(true);
+
+    expect(shouldClearDetachedTailAfterLatestAppend({
+      hasDetachedTail: true,
+      hasMoreAfter: true,
+    })).toBe(false);
+
+    expect(shouldClearDetachedTailAfterLatestAppend({
+      hasDetachedTail: false,
+      hasMoreAfter: false,
+    })).toBe(false);
   });
 });

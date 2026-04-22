@@ -63,6 +63,7 @@ import {
   hasResumePhaseSettled,
   hasTailRestoreRenderHydrated,
   isNearBottom,
+  resolvePrependedAnchorScrollTop,
   resolveTailRestoreLayoutReady,
   resolveMobileBottomLockState,
   type ComposerDockMetrics,
@@ -70,6 +71,7 @@ import {
   shouldAutoScrollToBottom,
   shouldAllowSystemScrollWrite,
   shouldBlockLoadOlder,
+  shouldRecoverDetachedTailOnScroll,
   shouldUseManualScrollRestoration,
   shouldResetScrollForChatChange,
 } from './chatScroll';
@@ -127,6 +129,12 @@ import type {
   TimelineRenderItem,
   WorkspaceFileOpenDetail,
 } from './chat-screen/types';
+
+type OlderLoadAnchorSnapshot = {
+  chatId: string | null;
+  element: HTMLElement;
+  topOffset: number;
+};
 
 // --- 1. 런타임 초기화 안전 장치 (TDZ 에러 방지를 위해 파일 상단에 유지) ---
 // styles 객체 및 복잡한 객체 참조를 함수 호출 시점으로 지연시킴
@@ -405,6 +413,7 @@ export function ChatInterface({
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const geminiModeDropdownRef = useRef<HTMLDivElement>(null);
   const commandMenuRef = useRef<HTMLDivElement>(null);
+  const pendingOlderLoadAnchorRef = useRef<OlderLoadAnchorSnapshot | null>(null);
   const previousActiveChatIdRef = useRef<string | null>(activeChatIdResolved);
   const previousTailLayoutSettlingRef = useRef(false);
   const genericAutoScrollCooldownUntilRef = useRef(0);
@@ -459,6 +468,7 @@ export function ChatInterface({
     syncError,
     loadOlder,
     hasMoreBefore,
+    hasDetachedTail,
     isLoadingOlder,
     hasLoadedCurrentChat,
     resetToLatestWindow,
@@ -670,6 +680,7 @@ export function ChatInterface({
     activeChatIdResolved,
     eventsForChatId,
     hasLoadedCurrentChat,
+    hasDetachedTail,
     isTailRestoreHydrated,
     isNewChatPlaceholder,
     isWorkspaceHome,
@@ -1354,6 +1365,73 @@ export function ChatInterface({
     }));
   }, [setExpandedActionRunIds]);
 
+  const captureVisibleHistoryAnchor = useCallback((): OlderLoadAnchorSnapshot | null => {
+    const stream = scrollRef.current;
+    if (!stream) {
+      return null;
+    }
+
+    const streamTop = stream.getBoundingClientRect().top;
+    const messageRows = Array.from(stream.querySelectorAll<HTMLElement>(`.${styles.messageRow}`));
+    for (const row of messageRows) {
+      const rect = row.getBoundingClientRect();
+      if (rect.bottom <= streamTop + 1) {
+        continue;
+      }
+      return {
+        chatId: activeChatIdResolved,
+        element: row,
+        topOffset: rect.top - streamTop,
+      };
+    }
+
+    return null;
+  }, [activeChatIdResolved]);
+
+  useLayoutEffect(() => {
+    const pendingAnchor = pendingOlderLoadAnchorRef.current;
+    if (!pendingAnchor) {
+      return;
+    }
+    if (pendingAnchor.chatId !== activeChatIdResolved) {
+      pendingOlderLoadAnchorRef.current = null;
+      return;
+    }
+    if (isLoadingOlder) {
+      return;
+    }
+
+    pendingOlderLoadAnchorRef.current = null;
+    const stream = scrollRef.current;
+    if (!stream || !pendingAnchor.element.isConnected || !stream.contains(pendingAnchor.element)) {
+      return;
+    }
+
+    const streamTop = stream.getBoundingClientRect().top;
+    const nextAnchorOffset = pendingAnchor.element.getBoundingClientRect().top - streamTop;
+    const nextScrollTop = resolvePrependedAnchorScrollTop({
+      currentScrollTop: stream.scrollTop,
+      previousAnchorOffset: pendingAnchor.topOffset,
+      nextAnchorOffset,
+    });
+
+    if (Math.abs(nextScrollTop - stream.scrollTop) <= 0.5) {
+      return;
+    }
+
+    recordScrollDebugEvent({
+      kind: 'write',
+      source: 'history:restoreAnchorAfterOlderLoad',
+      top: nextScrollTop,
+      streamElement: stream,
+      detail: {
+        previousAnchorOffset: pendingAnchor.topOffset,
+        nextAnchorOffset,
+      },
+    });
+    stream.scrollTop = nextScrollTop;
+  }, [activeChatIdResolved, events, isLoadingOlder]);
+
   const loadOlderHistory = useCallback(async () => {
     if (shouldBlockLoadOlder({
       isTailLayoutSettling,
@@ -1364,6 +1442,7 @@ export function ChatInterface({
       return;
     }
 
+    pendingOlderLoadAnchorRef.current = captureVisibleHistoryAnchor();
     dispatchSessionScrollPhaseEvent('older-load-start');
 
     const completeOlderLoad = () => {
@@ -1380,11 +1459,16 @@ export function ChatInterface({
         sessionScrollPhase,
       },
     });
-    await loadOlder().catch(() => {
+    const olderLoadResult = await loadOlder().catch(() => {
+      pendingOlderLoadAnchorRef.current = null;
+      return null;
     });
+    if (!olderLoadResult || olderLoadResult.loadedCount <= 0) {
+      pendingOlderLoadAnchorRef.current = null;
+    }
 
     requestAnimationFrame(completeOlderLoad);
-  }, [hasMoreBefore, isLoadingOlder, isTailLayoutSettling, loadOlder, sessionScrollPhase]);
+  }, [captureVisibleHistoryAnchor, hasMoreBefore, isLoadingOlder, isTailLayoutSettling, loadOlder, sessionScrollPhase]);
 
   const handleLoadOlderButtonClick = useCallback(() => {
     void loadOlderHistory();
@@ -1643,6 +1727,7 @@ export function ChatInterface({
 
       const nextState = resolveMobileBottomLockState({
         isNearBottom: isNearBottom(stream),
+        hasDetachedTail,
         isTailRestorePending: isChatEntryTailRestorePending,
       });
       recordScrollDebugEvent({
@@ -1661,9 +1746,10 @@ export function ChatInterface({
     }
 
     const nearBottom = isNearBottom(stream);
-    shouldStickToBottomRef.current = nearBottom;
-    setShowScrollToBottom(!nearBottom);
+    shouldStickToBottomRef.current = nearBottom && !hasDetachedTail;
+    setShowScrollToBottom(hasDetachedTail || !nearBottom);
   }, [
+    hasDetachedTail,
     isChatEntryTailRestorePending,
     isMobileLayout,
     setShowScrollToBottom,
@@ -1903,8 +1989,7 @@ export function ChatInterface({
 
   useEffect(() => {
     if (!isMobileLayout) {
-      shouldStickToBottomRef.current = true;
-      syncScrollToBottomButton();
+      syncConversationScrollState();
       return;
     }
 
@@ -1926,7 +2011,6 @@ export function ChatInterface({
     sessionScrollPhase,
     shouldStickToBottomRef,
     syncConversationScrollState,
-    syncScrollToBottomButton,
   ]);
 
   useEffect(() => {
@@ -2479,6 +2563,18 @@ export function ChatInterface({
   function handleStreamScroll() {
     syncConversationScrollState();
     syncLastUserMessageJumpTarget();
+    const stream = scrollRef.current;
+    if (!stream) {
+      return;
+    }
+    if (shouldRecoverDetachedTailOnScroll({
+      hasDetachedTail,
+      isNearBottom: isNearBottom(stream),
+      isLoadingOlder,
+      isTailRestorePending: isChatEntryTailRestorePending,
+    })) {
+      handleJumpToBottom();
+    }
   }
 
   const handleMoveWorkspacePage = useCallback((direction: 'previous' | 'next') => {
