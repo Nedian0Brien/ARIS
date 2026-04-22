@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import React, { type ReactNode } from 'react';
 import { File, FileCode, FileText, Folder } from 'lucide-react';
 import { readLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
 import {

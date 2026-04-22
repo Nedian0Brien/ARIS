@@ -4041,15 +4041,6 @@
   background: #a5b4fc;
 }
 
-/* ── Bottom hint ── */
-.composerHint {
-  padding: 0 0.72rem 0.38rem;
-  font-size: 0.64rem;
-  color: var(--chat-text-muted);
-  text-align: right;
-  user-select: none;
-}
-
 .healthRow {
   display: inline-flex;
   align-items: center;

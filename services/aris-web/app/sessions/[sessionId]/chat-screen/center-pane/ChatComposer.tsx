@@ -415,9 +415,6 @@ export function ChatComposer({
             )}
           </div>
 
-          <div className={styles.composerHint}>
-            Ctrl + Enter로 전송
-          </div>
         </div>
       </form>
     </footer>

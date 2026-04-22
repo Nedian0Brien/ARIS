@@ -6,7 +6,7 @@ import { ChatComposer } from '@/app/sessions/[sessionId]/chat-screen/center-pane
 import { FileBrowserModal } from '@/app/sessions/[sessionId]/chat-screen/center-pane/FileBrowserModal';
 
 describe('chat composer view', () => {
-  it('renders the composer hint and text context editor', () => {
+  it('renders the text context editor', () => {
     const markup = renderToStaticMarkup(
       React.createElement(ChatComposer, {
         showPendingReveal: false,
@@ -66,7 +66,6 @@ describe('chat composer view', () => {
       }),
     );
 
-    expect(markup).toContain('Ctrl + Enter로 전송');
     expect(markup).toContain('텍스트 입력');
     expect(markup).toContain('참고 문맥');
   });
