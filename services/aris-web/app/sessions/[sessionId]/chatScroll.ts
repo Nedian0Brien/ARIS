@@ -1,13 +1,3 @@
-type ScrollToBottomTargetInput = {
-  isMobileLayout: boolean;
-  keyboardOpen: boolean;
-};
-
-type MobileWindowScrollTopInput = {
-  scrollHeight: number;
-  viewportHeight: number;
-};
-
 type TailScrollAnchorIdInput = {
   latestVisibleEventId: string | null;
 };
@@ -115,18 +105,6 @@ type ShouldAllowSystemScrollWriteInput = {
   writer: SystemScrollWriter;
   scrollPhase?: SessionScrollPhase;
 };
-
-export function resolveScrollToBottomTarget(input: ScrollToBottomTargetInput): 'window' | 'stream' {
-  if (input.isMobileLayout) {
-    return 'window';
-  }
-  return 'stream';
-}
-
-export function resolveMobileWindowScrollTop(input: MobileWindowScrollTopInput): number {
-  return Math.max(0, input.scrollHeight - input.viewportHeight);
-}
-
 export function resolveTailScrollAnchorId(input: TailScrollAnchorIdInput): string | null {
   if (!input.latestVisibleEventId) {
     return null;
@@ -341,10 +319,6 @@ export function shouldBlockLoadOlder(input: ShouldBlockLoadOlderInput): boolean 
 }
 
 export function shouldUseWindowScrollFallback(input: WindowScrollFallbackInput): boolean {
-  if (input.isMobileLayout) {
-    return true;
-  }
-
   const tolerancePx = input.tolerancePx ?? 1;
   const documentScrollable = input.documentScrollHeight - input.viewportHeight > tolerancePx;
   if (!documentScrollable) {
