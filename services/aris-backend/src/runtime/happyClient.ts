@@ -1818,6 +1818,75 @@ function terminateCodexAppServerProcess(
   child.kill(signal);
 }
 
+function rejectCodexAppServerPendingRequests(
+  pendingRequests: Map<string, {
+    method: string;
+    reject: (error: Error) => void;
+  }>,
+  reason: string,
+): void {
+  for (const [key, pending] of pendingRequests.entries()) {
+    pending.reject(new Error(reason));
+    pendingRequests.delete(key);
+  }
+}
+
+function createCodexAppServerAbortPromise(input: {
+  signal?: AbortSignal;
+  pendingRequests: Map<string, {
+    method: string;
+    reject: (error: Error) => void;
+  }>;
+  onAbort: () => void;
+}): {
+  interrupted: Promise<{ status: 'interrupted' }> | null;
+  dispose: () => void;
+} {
+  if (!input.signal) {
+    return {
+      interrupted: null,
+      dispose: () => {},
+    };
+  }
+
+  let disposed = false;
+  let handleAbort: (() => void) | null = null;
+  const finalizeAbort = (resolve: (value: { status: 'interrupted' }) => void) => {
+    if (disposed) {
+      return;
+    }
+    disposed = true;
+    rejectCodexAppServerPendingRequests(input.pendingRequests, 'The operation was aborted');
+    input.onAbort();
+    resolve({ status: 'interrupted' });
+  };
+
+  const interrupted = new Promise<{ status: 'interrupted' }>((resolve) => {
+    if (input.signal?.aborted) {
+      finalizeAbort(resolve);
+      return;
+    }
+
+    const abortListener = () => {
+      input.signal?.removeEventListener('abort', abortListener);
+      finalizeAbort(resolve);
+    };
+    handleAbort = abortListener;
+
+    input.signal?.addEventListener('abort', abortListener, { once: true });
+  });
+
+  return {
+    interrupted,
+    dispose: () => {
+      disposed = true;
+      if (handleAbort) {
+        input.signal?.removeEventListener('abort', handleAbort);
+      }
+    },
+  };
+}
+
 export const happyClientTestHooks = {
   parseAgentStreamLine,
   parseAgentStreamOutput,
@@ -1834,6 +1903,8 @@ export const happyClientTestHooks = {
   buildCodexAppServerSpawnOptions,
   classifyCodexAppServerFailure,
   terminateCodexAppServerProcess,
+  rejectCodexAppServerPendingRequests,
+  createCodexAppServerAbortPromise,
   waitForStableActivity,
   resolveClaudeLaunchMode,
   resolveAgentCommandTimeoutMs,
@@ -3338,6 +3409,22 @@ export class HappyRuntimeStore {
       socket.addEventListener('close', handleClose);
     });
 
+    const abortController = createCodexAppServerAbortPromise({
+      signal,
+      pendingRequests,
+      onAbort: () => {
+        if (turnCompleted) {
+          return;
+        }
+        resolveTurnCompletion?.({ status: 'interrupted' });
+        try {
+          socket.close(1000, 'turn-abort');
+        } catch {
+          // ignore websocket close failures while aborting
+        }
+      },
+    });
+
     const enqueueAppend = (
       text: string,
       meta: Record<string, unknown>,
@@ -3857,10 +3944,7 @@ export class HappyRuntimeStore {
       handleIncomingPayloadText(normalizeCodexAppServerMessageData(event.data));
     });
     socket.addEventListener('close', () => {
-      for (const [key, pending] of pendingRequests.entries()) {
-        pending.reject(new Error(`JSON-RPC request cancelled: ${pending.method}`));
-        pendingRequests.delete(key);
-      }
+      rejectCodexAppServerPendingRequests(pendingRequests, 'codex app-server websocket closed before turn completion');
     });
 
     const closeChild = async () => {
@@ -3989,6 +4073,7 @@ export class HappyRuntimeStore {
       let turnTimeout: NodeJS.Timeout | undefined;
       const completion = await Promise.race([
         turnCompletion,
+        ...(abortController.interrupted ? [abortController.interrupted] : []),
         transportClosed,
         new Promise<{ status: string; errorMessage?: string }>((_resolve, reject) => {
           turnTimeout = setTimeout(() => {
@@ -4042,10 +4127,8 @@ export class HappyRuntimeStore {
       runFailureKind = failure.kind;
       throw error;
     } finally {
-      for (const [key, pending] of pendingRequests.entries()) {
-        pending.reject(new Error(`JSON-RPC request cancelled: ${pending.method}`));
-        pendingRequests.delete(key);
-      }
+      abortController.dispose();
+      rejectCodexAppServerPendingRequests(pendingRequests, 'The operation was aborted');
 
       await permissionChain.catch(() => undefined);
       await appendChain.catch(() => undefined);

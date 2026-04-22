@@ -462,6 +462,59 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     });
   });
 
+  it('resolves app-server abort completion and rejects pending JSON-RPC requests', async () => {
+    const abortController = new AbortController();
+    const pendingReject = vi.fn();
+    const pendingRequests = new Map([
+      ['aris-rpc-1', {
+        method: 'turn/start',
+        reject: pendingReject,
+      }],
+    ]);
+    const onAbort = vi.fn();
+
+    const abortState = happyClientTestHooks.createCodexAppServerAbortPromise({
+      signal: abortController.signal,
+      pendingRequests,
+      onAbort,
+    });
+
+    abortController.abort();
+
+    expect(abortState.interrupted).not.toBeNull();
+    await expect(abortState.interrupted!).resolves.toEqual({ status: 'interrupted' });
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(pendingReject).toHaveBeenCalledTimes(1);
+    expect((pendingReject.mock.calls[0]?.[0] as Error).message).toBe('The operation was aborted');
+    expect(pendingRequests.size).toBe(0);
+  });
+
+  it('handles already-aborted app-server signals without waiting for turn completion', async () => {
+    const abortController = new AbortController();
+    abortController.abort();
+
+    const pendingReject = vi.fn();
+    const pendingRequests = new Map([
+      ['aris-rpc-2', {
+        method: 'initialize',
+        reject: pendingReject,
+      }],
+    ]);
+    const onAbort = vi.fn();
+
+    const abortState = happyClientTestHooks.createCodexAppServerAbortPromise({
+      signal: abortController.signal,
+      pendingRequests,
+      onAbort,
+    });
+
+    expect(abortState.interrupted).not.toBeNull();
+    await expect(abortState.interrupted!).resolves.toEqual({ status: 'interrupted' });
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(pendingReject).toHaveBeenCalledTimes(1);
+    expect(pendingRequests.size).toBe(0);
+  });
+
   it('waits for a quiet window after the latest app-server activity', async () => {
     vi.useFakeTimers();
 
