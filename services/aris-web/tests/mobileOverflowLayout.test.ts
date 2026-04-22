@@ -36,6 +36,14 @@ describe('mobile home/workspace layout overflow guards', () => {
     expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.serverResourceGridHorizontal\s*\{[^}]*flex-direction:\s*column;/s);
   });
 
+  it('pins the server donut labels to the visual center of the chart', () => {
+    expect(dashboardCss).toMatch(/\.serverDonutCenter\s*\{[^}]*inset:\s*0;/s);
+    expect(dashboardCss).toMatch(/\.serverDonutCenter\s*\{[^}]*display:\s*flex;/s);
+    expect(dashboardCss).toMatch(/\.serverDonutCenter\s*\{[^}]*align-items:\s*center;/s);
+    expect(dashboardCss).toMatch(/\.serverDonutCenter\s*\{[^}]*justify-content:\s*center;/s);
+    expect(dashboardCss).toMatch(/\.serverDonutCenter\s*\{[^}]*pointer-events:\s*none;/s);
+  });
+
   it('uses minmax(0, 1fr) for mobile dashboard grid tracks', () => {
     expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*999px\)\s*\{[\s\S]*?\.sessionDashboardLayout\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
     expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*999px\)\s*\{[\s\S]*?\.sessionDashboardSidebar\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
