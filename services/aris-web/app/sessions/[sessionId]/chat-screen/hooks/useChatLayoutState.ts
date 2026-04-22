@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useState, type RefObject } from 'react';
 import { VIEWPORT_LAYOUT_CHANGE_EVENT } from '@/components/layout/ViewportHeightSync';
 import { recordScrollDebugEvent } from '../../scrollDebug';
-import { MOBILE_LAYOUT_MAX_WIDTH_PX } from '../constants';
 import { resolveChatLayoutState, resolveInitialChatLayoutState } from './chatLayoutState';
 
 const VIEWPORT_LAYOUT_READY_IDLE_MS = 160;
@@ -97,8 +96,6 @@ export function useChatLayoutState({
   }, [centerHeaderRef]);
 
   useLayoutEffect(() => {
-    const mobileQuery = window.matchMedia(`(max-width: ${MOBILE_LAYOUT_MAX_WIDTH_PX}px)`);
-
     const syncLayout = () => {
       const nextLayoutState = resolveChatLayoutState({
         viewportWidth: window.innerWidth,
@@ -117,7 +114,6 @@ export function useChatLayoutState({
           nextViewportWidth: nextLayoutState.viewportWidth,
           nextUsesCustomizationOverlay: nextLayoutState.isCustomizationOverlayLayout,
           nextUsesLeftSidebarOverlay: !nextLayoutState.isChatSidebarOpen,
-          mediaQueryMatches: mobileQuery.matches,
           isCustomizationPinned,
         },
       });
@@ -135,18 +131,12 @@ export function useChatLayoutState({
         hydrated: true,
       },
     });
-    if (typeof mobileQuery.addEventListener === 'function') {
-      mobileQuery.addEventListener('change', syncLayout);
-    } else {
-      mobileQuery.addListener(syncLayout);
-    }
+    window.addEventListener('resize', syncLayout, { passive: true });
+    window.visualViewport?.addEventListener('resize', syncLayout);
 
     return () => {
-      if (typeof mobileQuery.removeEventListener === 'function') {
-        mobileQuery.removeEventListener('change', syncLayout);
-      } else {
-        mobileQuery.removeListener(syncLayout);
-      }
+      window.removeEventListener('resize', syncLayout);
+      window.visualViewport?.removeEventListener('resize', syncLayout);
     };
   }, [isCustomizationPinned]);
 
