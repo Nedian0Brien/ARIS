@@ -1145,6 +1145,112 @@ function isMissingCodexThreadError(error: unknown): boolean {
   );
 }
 
+type CodexAppServerFailureKind =
+  | 'aborted'
+  | 'missing_thread'
+  | 'context_window'
+  | 'timeout'
+  | 'websocket_connect'
+  | 'websocket_closed'
+  | 'turn_failed'
+  | 'other';
+
+type CodexAppServerFailureInfo = {
+  kind: CodexAppServerFailureKind;
+  detail: string;
+  clearCachedThread: boolean;
+  retryWithFreshThread: boolean;
+  logTransportClose: boolean;
+};
+
+function classifyCodexAppServerFailure(error: unknown): CodexAppServerFailureInfo {
+  const detail = error instanceof Error ? error.message : String(error);
+  const message = detail.toLowerCase();
+
+  if (isAbortFailure(error)) {
+    return {
+      kind: 'aborted',
+      detail,
+      clearCachedThread: false,
+      retryWithFreshThread: false,
+      logTransportClose: false,
+    };
+  }
+
+  if (isMissingCodexThreadError(error)) {
+    return {
+      kind: 'missing_thread',
+      detail,
+      clearCachedThread: true,
+      retryWithFreshThread: true,
+      logTransportClose: false,
+    };
+  }
+
+  if (message.includes('context window') || message.includes('ran out of room')) {
+    return {
+      kind: 'context_window',
+      detail,
+      clearCachedThread: true,
+      retryWithFreshThread: true,
+      logTransportClose: false,
+    };
+  }
+
+  if (message.includes('turn timed out')) {
+    return {
+      kind: 'timeout',
+      detail,
+      clearCachedThread: false,
+      retryWithFreshThread: false,
+      logTransportClose: false,
+    };
+  }
+
+  if (
+    message.includes('timed out waiting for codex app-server websocket')
+    || message.includes('failed to connect to codex app-server websocket')
+    || message.includes('websocket connection failed')
+    || message.includes('websocket closed before opening')
+  ) {
+    return {
+      kind: 'websocket_connect',
+      detail,
+      clearCachedThread: false,
+      retryWithFreshThread: false,
+      logTransportClose: false,
+    };
+  }
+
+  if (message.includes('websocket closed before turn completion')) {
+    return {
+      kind: 'websocket_closed',
+      detail,
+      clearCachedThread: false,
+      retryWithFreshThread: false,
+      logTransportClose: true,
+    };
+  }
+
+  if (message.includes('turn failed')) {
+    return {
+      kind: 'turn_failed',
+      detail,
+      clearCachedThread: false,
+      retryWithFreshThread: false,
+      logTransportClose: false,
+    };
+  }
+
+  return {
+    kind: 'other',
+    detail,
+    clearCachedThread: false,
+    retryWithFreshThread: false,
+    logTransportClose: false,
+  };
+}
+
 function unwrapShellCommand(command: string): string {
   let current = command.trim();
   if (current.startsWith('$ ')) {
@@ -1726,6 +1832,7 @@ export const happyClientTestHooks = {
   buildAgentCommand,
   buildCodexAppServerListenUrl,
   buildCodexAppServerSpawnOptions,
+  classifyCodexAppServerFailure,
   terminateCodexAppServerProcess,
   waitForStableActivity,
   resolveClaudeLaunchMode,
@@ -3086,15 +3193,55 @@ export class HappyRuntimeStore {
     try {
       return await this.runCodexAppServerWithEvents(session, prompt, signal, threadId, chatId, model, modelReasoningEffort);
     } catch (error) {
-      if (isMissingCodexThreadError(error)) {
+      const failure = classifyCodexAppServerFailure(error);
+      if (failure.kind === 'missing_thread') {
         throw error;
       }
       if (CODEX_RUNTIME_MODE === 'app-server-strict') {
         throw error;
       }
 
-      const detail = error instanceof Error ? error.message : String(error);
-      console.error(`codex app-server mode failed; falling back to exec mode: ${detail}`);
+      const threadCacheKey = buildCodexThreadCacheKey(session.id, chatId);
+      const hadThreadId = typeof threadId === 'string' && threadId.trim().length > 0;
+      if (failure.clearCachedThread) {
+        this.codexThreads.delete(threadCacheKey);
+      }
+      if (failure.retryWithFreshThread && hadThreadId) {
+        this.happyEventLogger.logParsed({
+          sessionId: session.id,
+          agent: 'codex',
+          ...(chatId ? { chatId } : {}),
+          model,
+          turnStatus: 'retrying',
+          channel: 'app_server',
+          stage: 'run_status',
+          payload: {
+            mode: 'app-server',
+            retryMode: 'fresh_thread',
+            failureKind: failure.kind,
+            errorMessage: failure.detail,
+          },
+        });
+        return this.runCodexAppServerWithEvents(session, prompt, signal, undefined, chatId, model, modelReasoningEffort);
+      }
+
+      this.happyEventLogger.logParsed({
+        sessionId: session.id,
+        agent: 'codex',
+        ...(chatId ? { chatId } : {}),
+        model,
+        turnStatus: 'fallback_to_exec',
+        channel: 'app_server',
+        stage: 'run_status',
+        payload: {
+          mode: 'app-server',
+          fallbackMode: 'exec',
+          failureKind: failure.kind,
+          errorMessage: failure.detail,
+          hadThreadId,
+        },
+      });
+      console.error(`codex app-server mode failed; falling back to exec mode [${failure.kind}]: ${failure.detail}`);
       return this.runCodexExecCliWithEvents(session, prompt, signal, threadId, chatId, model, modelReasoningEffort);
     }
   }
@@ -3167,6 +3314,7 @@ export class HappyRuntimeStore {
     let turnCompleted = false;
     let runStatus: 'running' | 'completed' | 'failed' | 'aborted' | 'timed_out' = 'running';
     let runErrorMessage: string | undefined;
+    let runFailureKind: CodexAppServerFailureKind | undefined;
     const runtimePermissionIds = new Set<string>();
     const persistedAgentMessageKeys = new Set<string>();
 
@@ -3886,10 +4034,12 @@ export class HappyRuntimeStore {
         threadId: resolvedThreadId || undefined,
       };
     } catch (error) {
+      const failure = classifyCodexAppServerFailure(error);
       if (runStatus === 'running') {
         runStatus = signal?.aborted ? 'aborted' : 'failed';
-        runErrorMessage = error instanceof Error ? error.message : String(error);
+        runErrorMessage = failure.detail;
       }
+      runFailureKind = failure.kind;
       throw error;
     } finally {
       for (const [key, pending] of pendingRequests.entries()) {
@@ -3908,6 +4058,7 @@ export class HappyRuntimeStore {
         if (runStatus === 'running') {
           runStatus = 'failed';
           runErrorMessage = 'turn did not complete before process close';
+          runFailureKind = 'websocket_closed';
         }
         this.happyEventLogger.logParsed({
           sessionId: session.id,
@@ -3922,9 +4073,13 @@ export class HappyRuntimeStore {
             turnId: activeTurnId || undefined,
             listenUrl,
             appServerPid,
+            ...(runFailureKind ? { failureKind: runFailureKind } : {}),
+            ...(runErrorMessage ? { errorMessage: runErrorMessage } : {}),
           },
         });
-        console.error(`codex app-server transport closed early; pid=${appServerPid} listenUrl=${listenUrl}`);
+        if (runFailureKind === 'websocket_closed' || (!runFailureKind && runStatus === 'failed')) {
+          console.error(`codex app-server transport closed early; pid=${appServerPid} listenUrl=${listenUrl}`);
+        }
       }
       this.happyEventLogger.logParsed({
         sessionId: session.id,
@@ -3938,6 +4093,7 @@ export class HappyRuntimeStore {
           threadId: resolvedThreadId || undefined,
           turnId: activeTurnId || undefined,
           turnCompleted,
+          ...(runFailureKind ? { failureKind: runFailureKind } : {}),
           ...(runErrorMessage ? { errorMessage: runErrorMessage } : {}),
         },
       });

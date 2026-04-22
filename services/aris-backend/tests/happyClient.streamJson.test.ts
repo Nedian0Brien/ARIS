@@ -429,6 +429,39 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     expect(happyClientTestHooks.buildCodexAppServerListenUrl(38991)).toBe('ws://127.0.0.1:38991');
   });
 
+  it('classifies context-window app-server failures as fresh-thread retry candidates', () => {
+    expect(
+      happyClientTestHooks.classifyCodexAppServerFailure(
+        new Error("Codex ran out of room in the model's context window"),
+      ),
+    ).toMatchObject({
+      kind: 'context_window',
+      clearCachedThread: true,
+      retryWithFreshThread: true,
+      logTransportClose: false,
+    });
+  });
+
+  it('classifies websocket turn closures separately from startup connection failures', () => {
+    expect(
+      happyClientTestHooks.classifyCodexAppServerFailure(
+        new Error('codex app-server websocket closed before turn completion'),
+      ),
+    ).toMatchObject({
+      kind: 'websocket_closed',
+      logTransportClose: true,
+    });
+
+    expect(
+      happyClientTestHooks.classifyCodexAppServerFailure(
+        new Error('codex app-server websocket connection failed'),
+      ),
+    ).toMatchObject({
+      kind: 'websocket_connect',
+      logTransportClose: false,
+    });
+  });
+
   it('waits for a quiet window after the latest app-server activity', async () => {
     vi.useFakeTimers();
 
