@@ -39,8 +39,10 @@ type CreatePermissionInput = {
   risk: PermissionRisk;
 };
 
-const SESSION_MESSAGE_WRITE_MAX_RETRIES = 8;
-const SESSION_MESSAGE_WRITE_BASE_DELAY_MS = 50;
+const RUNTIME_WRITE_MAX_RETRIES = 8;
+const RUNTIME_WRITE_BASE_DELAY_MS = 50;
+const RUNTIME_WRITE_TRANSACTION_MAX_WAIT_MS = 10_000;
+const RUNTIME_WRITE_TRANSACTION_TIMEOUT_MS = 15_000;
 
 function toRuntimeSession(row: {
   id: string;
@@ -204,9 +206,9 @@ function getErrorMessage(error: unknown): string {
   return error.message.trim();
 }
 
-function isRetryableSessionMessageWriteError(error: unknown): boolean {
+function isRetryableRuntimeWriteError(error: unknown): boolean {
   const code = getPrismaErrorCode(error);
-  if (code === 'P2002' || code === 'P2034') {
+  if (code === 'P2002' || code === 'P2034' || code === 'P2028') {
     return true;
   }
 
@@ -216,12 +218,16 @@ function isRetryableSessionMessageWriteError(error: unknown): boolean {
     || message.includes('could not serialize access')
     || message.includes('serialization failure')
     || message.includes('deadlock detected')
+    || message.includes('Unable to start a transaction in the given time')
+    || message.includes('A commit cannot be executed on an expired transaction')
+    || message.includes('Transaction already closed')
+    || message.includes('Transaction API error')
   );
 }
 
 function retryDelay(attempt: number): Promise<void> {
   // Exponential backoff with jitter: base * 2^(attempt-1) + random jitter
-  const base = SESSION_MESSAGE_WRITE_BASE_DELAY_MS * (2 ** (attempt - 1));
+  const base = RUNTIME_WRITE_BASE_DELAY_MS * (2 ** (attempt - 1));
   const jitter = Math.random() * base * 0.5;
   return new Promise((resolve) => setTimeout(resolve, base + jitter));
 }
@@ -244,24 +250,28 @@ export class PrismaRuntimeStore {
     await this.db.$disconnect();
   }
 
-  private async runSessionMessageMutationWithRetry<T>(
+  private async runRuntimeWriteMutationWithRetry<T>(
     operation: (tx: Prisma.TransactionClient) => Promise<T>,
   ): Promise<T> {
-    for (let attempt = 1; attempt <= SESSION_MESSAGE_WRITE_MAX_RETRIES; attempt += 1) {
+    for (let attempt = 1; attempt <= RUNTIME_WRITE_MAX_RETRIES; attempt += 1) {
       try {
         return await this.db.$transaction(
           async (tx) => operation(tx),
-          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            maxWait: RUNTIME_WRITE_TRANSACTION_MAX_WAIT_MS,
+            timeout: RUNTIME_WRITE_TRANSACTION_TIMEOUT_MS,
+          },
         );
       } catch (error) {
-        if (!isRetryableSessionMessageWriteError(error) || attempt === SESSION_MESSAGE_WRITE_MAX_RETRIES) {
+        if (!isRetryableRuntimeWriteError(error) || attempt === RUNTIME_WRITE_MAX_RETRIES) {
           throw error;
         }
         await retryDelay(attempt);
       }
     }
 
-    throw new Error('SESSION_MESSAGE_WRITE_RETRY_EXHAUSTED');
+    throw new Error('RUNTIME_WRITE_RETRY_EXHAUSTED');
   }
 
   async listSessions(): Promise<RuntimeSession[]> {
@@ -429,7 +439,7 @@ export class PrismaRuntimeStore {
       throw new Error('CHAT_NOT_FOUND');
     }
 
-    const row = await db.$transaction(async (tx: any) => {
+    const row = await this.runRuntimeWriteMutationWithRetry(async (tx) => {
       const role = typeof input.meta?.role === 'string' ? input.meta.role.trim() : '';
       let resolvedRunId = input.runId;
       if (!resolvedRunId && role === 'user') {
@@ -477,7 +487,7 @@ export class PrismaRuntimeStore {
           type: input.type,
           title: input.title ?? input.type,
           text: input.text,
-          meta: (input.meta ?? {}) as Record<string, unknown>,
+          meta: (input.meta ?? {}) as Parameters<typeof tx.sessionChatEvent.create>[0]['data']['meta'],
           seq: nextSeq,
         },
       });
@@ -520,7 +530,7 @@ export class PrismaRuntimeStore {
 
     const newStatus: SessionStatus = isUserPrompt ? 'running' : isAgentMessage ? 'idle' : (session.status as SessionStatus);
 
-    const row = await this.runSessionMessageMutationWithRetry(async (tx) => {
+    const row = await this.runRuntimeWriteMutationWithRetry(async (tx) => {
       const agg = await tx.sessionMessage.aggregate({
         where: { sessionId },
         _max: { seq: true },
@@ -581,7 +591,7 @@ export class PrismaRuntimeStore {
       updates.riskScore = Math.max(10, session.riskScore - 15);
     }
 
-    await this.runSessionMessageMutationWithRetry(async (tx) => {
+    await this.runRuntimeWriteMutationWithRetry(async (tx) => {
       const nextSeq = await tx.sessionMessage
         .aggregate({ where: { sessionId }, _max: { seq: true } })
         .then((a) => (a._max.seq ?? 0) + 1);

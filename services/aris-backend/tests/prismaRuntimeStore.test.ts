@@ -160,6 +160,148 @@ describe('PrismaRuntimeStore.appendMessage', () => {
 });
 
 describe('PrismaRuntimeStore chat-scoped events', () => {
+  it('retries when the next chat-local seq collides with an existing event in the same chat', async () => {
+    const sessionChat = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'chat-1',
+        sessionId: 'session-1',
+        latestPreview: '',
+      }),
+      update: vi.fn().mockResolvedValue({ id: 'chat-1' }),
+    };
+    const sessionRun = {
+      create: vi.fn(),
+      findFirst: vi.fn().mockResolvedValue(null),
+      update: vi.fn(),
+    };
+    const aggregate = vi.fn()
+      .mockResolvedValueOnce({ _max: { seq: 2 } })
+      .mockResolvedValueOnce({ _max: { seq: 3 } });
+    const create = vi.fn()
+      .mockRejectedValueOnce(Object.assign(new Error('duplicate chat seq'), { code: 'P2002' }))
+      .mockImplementationOnce(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: 'event-4',
+        sessionId: data.sessionId,
+        chatId: data.chatId,
+        runId: data.runId,
+        type: data.type,
+        title: data.title,
+        text: data.text,
+        meta: data.meta,
+        seq: data.seq,
+        createdAt: new Date('2026-04-13T00:00:00.000Z'),
+      }));
+    const sessionChatEvent = {
+      aggregate,
+      create,
+    };
+    const db = {
+      sessionChat,
+      sessionRun,
+      sessionChatEvent,
+      $transaction: vi.fn(async (input: unknown) => {
+        if (typeof input === 'function') {
+          return input({ sessionChat, sessionRun, sessionChatEvent });
+        }
+        return Promise.all(input as Promise<unknown>[]);
+      }),
+    };
+    const store = buildStoreWithMockDb(db) as PrismaRuntimeStore & {
+      appendChatEvent: (
+        chatId: string,
+        input: { sessionId: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
+      ) => Promise<{ meta?: Record<string, unknown> }>;
+    };
+
+    const event = await store.appendChatEvent('chat-1', {
+      sessionId: 'session-1',
+      type: 'message',
+      title: 'Text Reply',
+      text: '완료',
+      meta: { role: 'agent' },
+    });
+
+    expect(event.meta?.seq).toBe(4);
+    expect(aggregate).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(sessionChat.update).toHaveBeenCalledTimes(1);
+    expect(db.$transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        isolationLevel: expect.anything(),
+        maxWait: 10000,
+        timeout: 15000,
+      }),
+    );
+  });
+
+  it('retries chat event writes when Prisma surfaces a transaction API timeout', async () => {
+    const sessionChat = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'chat-1',
+        sessionId: 'session-1',
+        latestPreview: '',
+      }),
+      update: vi.fn().mockResolvedValue({ id: 'chat-1' }),
+    };
+    const sessionRun = {
+      create: vi.fn(),
+      findFirst: vi.fn().mockResolvedValue(null),
+      update: vi.fn(),
+    };
+    const aggregate = vi.fn()
+      .mockResolvedValueOnce({ _max: { seq: 0 } })
+      .mockResolvedValueOnce({ _max: { seq: 0 } });
+    const create = vi.fn()
+      .mockRejectedValueOnce(new Error('Transaction API error: Unable to start a transaction in the given time.'))
+      .mockImplementationOnce(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: 'event-1',
+        sessionId: data.sessionId,
+        chatId: data.chatId,
+        runId: data.runId,
+        type: data.type,
+        title: data.title,
+        text: data.text,
+        meta: data.meta,
+        seq: data.seq,
+        createdAt: new Date('2026-04-13T00:00:00.000Z'),
+      }));
+    const sessionChatEvent = {
+      aggregate,
+      create,
+    };
+    const db = {
+      sessionChat,
+      sessionRun,
+      sessionChatEvent,
+      $transaction: vi.fn(async (input: unknown) => {
+        if (typeof input === 'function') {
+          return input({ sessionChat, sessionRun, sessionChatEvent });
+        }
+        return Promise.all(input as Promise<unknown>[]);
+      }),
+    };
+    const store = buildStoreWithMockDb(db) as PrismaRuntimeStore & {
+      appendChatEvent: (
+        chatId: string,
+        input: { sessionId: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
+      ) => Promise<{ meta?: Record<string, unknown> }>;
+    };
+
+    const event = await store.appendChatEvent('chat-1', {
+      sessionId: 'session-1',
+      type: 'message',
+      title: 'Text Reply',
+      text: '완료',
+      meta: { role: 'agent' },
+    });
+
+    expect(event.meta?.seq).toBe(1);
+    expect(aggregate).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(sessionChat.update).toHaveBeenCalledTimes(1);
+  });
+
   it('appends chat events with chat-local seq and updates the chat snapshot', async () => {
     const sessionChat = {
       findFirst: vi.fn().mockResolvedValue({
