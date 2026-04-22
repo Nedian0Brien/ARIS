@@ -29,6 +29,7 @@ export type UseChatTailRestoreInput = {
    */
   eventsForChatId: string | null;
   hasLoadedCurrentChat: boolean;
+  hasDetachedTail: boolean;
   isTailRestoreHydrated: boolean;
   isNewChatPlaceholder: boolean;
   isWorkspaceHome: boolean;
@@ -146,6 +147,7 @@ export function useChatTailRestore({
   activeChatIdResolved,
   eventsForChatId,
   hasLoadedCurrentChat,
+  hasDetachedTail,
   isTailRestoreHydrated,
   isNewChatPlaceholder,
   isWorkspaceHome,
@@ -264,7 +266,7 @@ export function useChatTailRestore({
       setShowScrollToBottom(false);
       return;
     }
-    const nextShowScrollToBottom = !isNearBottom(stream);
+    const nextShowScrollToBottom = hasDetachedTail || !isNearBottom(stream);
     recordScrollDebugEvent({
       kind: 'trigger',
       source: 'tail:syncScrollToBottomButton:stream',
@@ -274,7 +276,7 @@ export function useChatTailRestore({
       },
     });
     setShowScrollToBottom(nextShowScrollToBottom);
-  }, [scrollRef]);
+  }, [hasDetachedTail, scrollRef]);
 
   const handleJumpToBottom = useCallback(() => {
     if (isJumpingToLatestRef.current) {

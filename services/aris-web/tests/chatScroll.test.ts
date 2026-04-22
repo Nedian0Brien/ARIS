@@ -13,7 +13,9 @@ import {
   shouldResetScrollForChatChange,
   shouldAllowSystemScrollWrite,
   shouldBlockLoadOlder,
+  shouldRecoverDetachedTailOnScroll,
   resolveMobileBottomLockState,
+  resolvePrependedAnchorScrollTop,
   shouldUseManualScrollRestoration,
   shouldUseWindowScrollFallback,
 } from '@/app/sessions/[sessionId]/chatScroll';
@@ -262,6 +264,54 @@ describe('chatScroll', () => {
       shouldStickToBottom: false,
       showScrollToBottom: true,
     });
+  });
+
+  it('keeps the latest-page affordance visible while the loaded window is detached from the live tail', () => {
+    expect(resolveMobileBottomLockState({
+      isNearBottom: true,
+      hasDetachedTail: true,
+      isTailRestorePending: false,
+    })).toEqual({
+      shouldStickToBottom: false,
+      showScrollToBottom: true,
+    });
+  });
+
+  it('recovers the detached latest tail only when the user reaches the bottom of the loaded window', () => {
+    expect(shouldRecoverDetachedTailOnScroll({
+      hasDetachedTail: true,
+      isNearBottom: true,
+      isLoadingOlder: false,
+      isTailRestorePending: false,
+    })).toBe(true);
+
+    expect(shouldRecoverDetachedTailOnScroll({
+      hasDetachedTail: true,
+      isNearBottom: false,
+      isLoadingOlder: false,
+      isTailRestorePending: false,
+    })).toBe(false);
+
+    expect(shouldRecoverDetachedTailOnScroll({
+      hasDetachedTail: true,
+      isNearBottom: true,
+      isLoadingOlder: true,
+      isTailRestorePending: false,
+    })).toBe(false);
+  });
+
+  it('preserves the visible anchor position after prepending older history rows', () => {
+    expect(resolvePrependedAnchorScrollTop({
+      currentScrollTop: 480,
+      previousAnchorOffset: 72,
+      nextAnchorOffset: 236,
+    })).toBe(644);
+
+    expect(resolvePrependedAnchorScrollTop({
+      currentScrollTop: 480,
+      previousAnchorOffset: 72,
+      nextAnchorOffset: 72,
+    })).toBe(480);
   });
 
   it('skips the mobile tail completion scroll when the anchor is already aligned to the viewport bottom', () => {

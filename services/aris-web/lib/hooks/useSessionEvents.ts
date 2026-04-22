@@ -194,6 +194,20 @@ export function trimEventsPageWindow(input: {
   };
 }
 
+export function shouldMarkDetachedTailAfterTrim(input: {
+  trimFrom: 'start' | 'end';
+  trimmedCount: number;
+}): boolean {
+  return input.trimFrom === 'end' && input.trimmedCount > 0;
+}
+
+export function shouldClearDetachedTailAfterLatestAppend(input: {
+  hasDetachedTail: boolean;
+  hasMoreAfter: boolean | undefined;
+}): boolean {
+  return input.hasDetachedTail && input.hasMoreAfter === false;
+}
+
 function areEventsEqual(prev: UiEvent[], next: UiEvent[]): boolean {
   if (prev.length !== next.length) {
     return false;
@@ -283,6 +297,7 @@ export function useSessionEvents(
     initialEventsMatchChat ? chatId : null,
   );
   const [hasMoreBefore, setHasMoreBefore] = useState<boolean>(hydratedInitialHasMoreBefore);
+  const [hasDetachedTail, setHasDetachedTail] = useState(false);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [isResettingToLatest, setIsResettingToLatest] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -294,6 +309,7 @@ export function useSessionEvents(
   );
   const eventsRef = useRef<UiEvent[]>(hydratedInitialEvents);
   const hasMoreBeforeRef = useRef<boolean>(hydratedInitialHasMoreBefore);
+  const hasDetachedTailRef = useRef(false);
   const loadingOlderRef = useRef<boolean>(false);
   const terminalStatusRef = useRef<number | null>(null);
   const pageSizesRef = useRef<number[]>(hydratedInitialEvents.length > 0 ? [hydratedInitialEvents.length] : []);
@@ -318,6 +334,8 @@ export function useSessionEvents(
     eventsRef.current = hydratedInitialEvents;
     setHasMoreBefore(hydratedInitialHasMoreBefore);
     hasMoreBeforeRef.current = hydratedInitialHasMoreBefore;
+    setHasDetachedTail(false);
+    hasDetachedTailRef.current = false;
     pageSizesRef.current = hydratedInitialEvents.length > 0 ? [hydratedInitialEvents.length] : [];
     loadingOlderRef.current = false;
     terminalStatusRef.current = null;
@@ -350,11 +368,16 @@ export function useSessionEvents(
     hasMoreBeforeRef.current = hasMoreBefore;
   }, [hasMoreBefore]);
 
+  useEffect(() => {
+    hasDetachedTailRef.current = hasDetachedTail;
+  }, [hasDetachedTail]);
+
   const scopedEvents = useMemo(
     () => getScopedSessionEvents(events, eventsForChatId, chatId),
     [chatId, events, eventsForChatId],
   );
   const scopedHasMoreBefore = eventsForChatId === chatId ? hasMoreBefore : false;
+  const scopedHasDetachedTail = eventsForChatId === chatId ? hasDetachedTail : false;
   const scopedIsLoadingOlder = eventsForChatId === chatId ? isLoadingOlder : false;
 
   const appendIncomingEvents = useCallback((incomingEvents: UiEvent[]) => {
@@ -451,8 +474,15 @@ export function useSessionEvents(
       const { appendedCount, trimmedCount } = appendIncomingEvents(nextEvents);
       if (!latestId && typeof body.page?.hasMoreBefore === 'boolean') {
         setHasMoreBefore(body.page.hasMoreBefore);
+        setHasDetachedTail(false);
       } else if (trimmedCount > 0) {
         setHasMoreBefore(true);
+      }
+      if (shouldClearDetachedTailAfterLatestAppend({
+        hasDetachedTail: hasDetachedTailRef.current,
+        hasMoreAfter: body.page?.hasMoreAfter,
+      })) {
+        setHasDetachedTail(false);
       }
       pollBackoffMsRef.current = FALLBACK_POLL_INTERVAL_MS;
       rateLimitUntilMsRef.current = null;
@@ -537,6 +567,12 @@ export function useSessionEvents(
       setEventsForChatId(chatId);
       setEvents((prev) => (areEventsEqual(prev, trimmed.events) ? prev : trimmed.events));
       setHasMoreBefore(nextHasMoreBefore);
+      if (shouldMarkDetachedTailAfterTrim({
+        trimFrom: 'end',
+        trimmedCount: trimmed.trimmedCount,
+      })) {
+        setHasDetachedTail(true);
+      }
       pollBackoffMsRef.current = FALLBACK_POLL_INTERVAL_MS;
       rateLimitUntilMsRef.current = null;
       setSyncError(null);
@@ -608,6 +644,7 @@ export function useSessionEvents(
         setEventsForChatId(chatId);
         setEvents((prev) => (areEventsEqual(prev, nextEvents) ? prev : nextEvents));
         setHasMoreBefore(typeof body.page?.hasMoreBefore === 'boolean' ? body.page.hasMoreBefore : false);
+        setHasDetachedTail(false);
         setSyncError(null);
         if (!hasCompletedInitialClientSyncRef.current) {
           hasCompletedInitialClientSyncRef.current = true;
@@ -955,6 +992,7 @@ export function useSessionEvents(
     syncError,
     loadOlder,
     hasMoreBefore: scopedHasMoreBefore,
+    hasDetachedTail: scopedHasDetachedTail,
     isLoadingOlder: scopedIsLoadingOlder,
     hasLoadedCurrentChat,
     resetToLatestWindow,

@@ -43,7 +43,21 @@ type AutoScrollToBottomInput = {
 
 type MobileBottomLockStateInput = {
   isNearBottom: boolean;
+  hasDetachedTail?: boolean;
   isTailRestorePending?: boolean;
+};
+
+type DetachedTailRecoveryInput = {
+  hasDetachedTail: boolean;
+  isNearBottom: boolean;
+  isLoadingOlder?: boolean;
+  isTailRestorePending?: boolean;
+};
+
+type PrependedAnchorScrollTopInput = {
+  currentScrollTop: number;
+  previousAnchorOffset: number;
+  nextAnchorOffset: number;
 };
 
 type TailSettleCompletionScrollInput = {
@@ -218,9 +232,23 @@ export function resolveMobileBottomLockState(input: MobileBottomLockStateInput):
   }
 
   return {
-    shouldStickToBottom: input.isNearBottom,
-    showScrollToBottom: !input.isNearBottom,
+    shouldStickToBottom: input.isNearBottom && input.hasDetachedTail !== true,
+    showScrollToBottom: input.hasDetachedTail === true || !input.isNearBottom,
   };
+}
+
+export function shouldRecoverDetachedTailOnScroll(input: DetachedTailRecoveryInput): boolean {
+  if (!input.hasDetachedTail || !input.isNearBottom) {
+    return false;
+  }
+  if (input.isLoadingOlder || input.isTailRestorePending) {
+    return false;
+  }
+  return true;
+}
+
+export function resolvePrependedAnchorScrollTop(input: PrependedAnchorScrollTopInput): number {
+  return Math.max(0, input.currentScrollTop + (input.nextAnchorOffset - input.previousAnchorOffset));
 }
 
 export function shouldSkipTailSettleCompletionScroll(input: TailSettleCompletionScrollInput): boolean {
