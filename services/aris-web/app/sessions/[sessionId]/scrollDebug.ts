@@ -12,19 +12,21 @@ export type ScrollDebugEvent = {
 };
 
 export type ScrollDebugSnapshot = {
-  windowScrollTop: number;
-  documentScrollHeight: number;
-  documentClientHeight: number;
-  windowInnerHeight: number;
-  windowInnerWidth: number;
-  visualViewportHeight: number | null;
-  visualViewportOffsetTop: number | null;
-  visualViewportPageTop: number | null;
+  scrollOwner: 'stream';
   keyboardOpen: boolean;
   streamScrollTop: number | null;
   streamScrollHeight: number | null;
   streamClientHeight: number | null;
+  streamBottomGap: number | null;
+  streamViewportTop: number | null;
+  streamViewportBottom: number | null;
+  streamScrollable: boolean | null;
+  viewportHeight: number | null;
+  viewportOffsetTop: number | null;
 };
+
+type ScrollDebugStreamElement = Pick<HTMLElement, 'scrollTop' | 'scrollHeight' | 'clientHeight'>
+  & Partial<Pick<HTMLElement, 'getBoundingClientRect'>>;
 
 type ScrollDebugStore = {
   enabled: boolean;
@@ -82,32 +84,40 @@ function getScrollDebugStore(): ScrollDebugStore | null {
 }
 
 export function createScrollDebugSnapshot(
-  streamElement?: Pick<HTMLElement, 'scrollTop' | 'scrollHeight' | 'clientHeight'> | null,
+  streamElement?: ScrollDebugStreamElement | null,
 ): ScrollDebugSnapshot | null {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return null;
   }
 
+  const streamRect = typeof streamElement?.getBoundingClientRect === 'function'
+    ? streamElement.getBoundingClientRect()
+    : null;
+  const streamBottomGap = streamElement
+    ? Math.max(0, streamElement.scrollHeight - streamElement.scrollTop - streamElement.clientHeight)
+    : null;
+
   return {
-    windowScrollTop: Math.max(window.scrollY || 0, document.documentElement.scrollTop || 0, document.body.scrollTop || 0),
-    documentScrollHeight: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
-    documentClientHeight: document.documentElement.clientHeight,
-    windowInnerHeight: window.innerHeight || 0,
-    windowInnerWidth: window.innerWidth || 0,
-    visualViewportHeight: window.visualViewport?.height ?? null,
-    visualViewportOffsetTop: window.visualViewport?.offsetTop ?? null,
-    visualViewportPageTop: window.visualViewport?.pageTop ?? null,
+    scrollOwner: 'stream',
     keyboardOpen: document.documentElement.dataset.keyboardOpen === 'true',
     streamScrollTop: streamElement?.scrollTop ?? null,
     streamScrollHeight: streamElement?.scrollHeight ?? null,
     streamClientHeight: streamElement?.clientHeight ?? null,
+    streamBottomGap,
+    streamViewportTop: streamRect?.top ?? null,
+    streamViewportBottom: streamRect?.bottom ?? null,
+    streamScrollable: streamElement
+      ? (streamElement.scrollHeight - streamElement.clientHeight > 1)
+      : null,
+    viewportHeight: window.visualViewport?.height ?? window.innerHeight ?? null,
+    viewportOffsetTop: window.visualViewport?.offsetTop ?? null,
   };
 }
 
 export function recordScrollDebugEvent(
   event: Omit<ScrollDebugEvent, 'at' | 'snapshot'> & {
     snapshot?: ScrollDebugSnapshot | null;
-    streamElement?: Pick<HTMLElement, 'scrollTop' | 'scrollHeight' | 'clientHeight'> | null;
+    streamElement?: ScrollDebugStreamElement | null;
   },
 ) {
   const store = getScrollDebugStore();
