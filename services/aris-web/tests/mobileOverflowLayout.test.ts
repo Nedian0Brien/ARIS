@@ -10,6 +10,7 @@ const uiCssPath = resolve(__dirname, '../app/styles/ui.css');
 const fabCssPath = resolve(__dirname, '../app/styles/fab.css');
 const workspaceHomeCssPath = resolve(__dirname, '../app/sessions/[sessionId]/WorkspaceHome.module.css');
 const chatInterfaceCssPath = resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.module.css');
+const customizationSidebarCssPath = resolve(__dirname, '../app/sessions/[sessionId]/CustomizationSidebar.module.css');
 
 const dashboardCss = readFileSync(dashboardCssPath, 'utf8');
 const dashboardTsx = readFileSync(dashboardTsxPath, 'utf8');
@@ -17,6 +18,7 @@ const uiCss = readFileSync(uiCssPath, 'utf8');
 const fabCss = readFileSync(fabCssPath, 'utf8');
 const workspaceHomeCss = readFileSync(workspaceHomeCssPath, 'utf8');
 const chatInterfaceCss = readFileSync(chatInterfaceCssPath, 'utf8');
+const customizationSidebarCss = readFileSync(customizationSidebarCssPath, 'utf8');
 
 describe('mobile home/workspace layout overflow guards', () => {
   it('stacks the home dashboard title row and primary action on phones', () => {
@@ -101,5 +103,11 @@ describe('mobile home/workspace layout overflow guards', () => {
     expect(chatInterfaceCss).toMatch(/\.lastUserJumpPreview\s*\{[^}]*overflow:\s*hidden;/s);
     expect(chatInterfaceCss).toMatch(/\.lastUserJumpPreview\s*\{[^}]*text-overflow:\s*ellipsis;/s);
     expect(chatInterfaceCss).toMatch(/@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?\.lastUserJumpButton\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
+  });
+
+  it('keeps the workspace tools panel controls compact on mobile', () => {
+    expect(customizationSidebarCss).toMatch(/\.workspacePath\s*\{[^}]*min-width:\s*0;/s);
+    expect(customizationSidebarCss).toMatch(/@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?\.surfaceTabs\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/s);
+    expect(customizationSidebarCss).toMatch(/@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?\.filesActionRow\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/s);
   });
 });

@@ -270,25 +270,14 @@
     --composer-dock-width: max(240px, calc(100vw - 1.5rem));
   }
 
-  .chatShellLeftOverlay {
-    --composer-dock-left: 0.75rem;
-    --composer-dock-width: calc(100vw - 1.75rem);
+.chatShellLeftOverlay {
+  --composer-dock-left: 0.75rem;
+  --composer-dock-width: calc(100vw - 1.75rem);
   }
-}
-
-.chatShellRightPinned {
-  grid-template-columns: 280px minmax(720px, 1fr) 320px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
 }
 
 .chatShellLeftOverlay {
   grid-template-columns: 0 minmax(720px, 1fr);
-}
-
-.chatShellRightPinned.chatShellLeftOverlay {
-  grid-template-columns: 0 minmax(720px, 1fr) 320px;
 }
 
 .chatShell.chatShellMobileScroll {
@@ -370,38 +359,6 @@
   backdrop-filter: blur(6px) saturate(120%);
   -webkit-backdrop-filter: blur(6px) saturate(120%);
   z-index: 1085;
-}
-
-.customizationBackdrop {
-  position: fixed;
-  inset: 0;
-  border: 0;
-  background: var(--chat-overlay-bg);
-  z-index: 1086;
-}
-
-.customizationDrawer {
-  position: fixed;
-  top: calc(var(--global-header-offset-effective) + 0.45rem);
-  right: 0;
-  bottom: calc(0.45rem + var(--safe-area-bottom-effective));
-  width: min(92vw, 420px);
-  padding-left: 0.7rem;
-  z-index: 1095;
-  transition: transform 0.22s ease, opacity 0.22s ease;
-  will-change: transform;
-}
-
-.customizationDrawerOpen {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateX(0);
-}
-
-.customizationDrawerClosed {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(106%);
 }
 
 .chatSidebarHeader {
@@ -1252,19 +1209,6 @@
   border-color: rgba(250, 204, 21, 0.4);
   background: rgba(120, 53, 15, 0.45);
   color: #fde68a;
-}
-
-.sidePanel {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.leftPanel,
-.rightPanel {
-  min-height: 0;
 }
 
 .panelCard {
@@ -4148,22 +4092,6 @@
   .chatShellSidebarClosed {
     grid-template-columns: minmax(0, 1fr);
   }
-
-  .rightPanel {
-    display: none;
-  }
-
-  .chatShellRightPinned {
-    grid-template-columns: 280px minmax(720px, 1fr) 320px;
-  }
-
-  .chatShellRightPinned > .rightPanel {
-    display: block;
-  }
-
-  .chatShellRightPinned.chatShellLeftOverlay {
-    grid-template-columns: 0 minmax(720px, 1fr) 320px;
-  }
 }
 
 @media (max-width: 960px) {
@@ -4173,10 +4101,6 @@
     height: 100%;
     min-height: 0;
     gap: 0;
-  }
-
-  .rightPanel {
-    display: none;
   }
 
   .chatSidebar.chatSidebarClosed,
@@ -4239,10 +4163,6 @@
 
   .centerChatLabel {
     font-size: 0.64rem;
-  }
-
-  .customizationDrawer {
-    width: min(94vw, 420px);
   }
 
   .stream {
@@ -4354,16 +4274,14 @@
   }
 
   .lastUserJumpButton {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.5rem;
   }
 
-  .customizationDrawer {
-    top: var(--global-header-offset-effective);
-    bottom: 0;
-    width: min(100vw, 420px);
-    padding-left: 0;
+  .lastUserJumpAction {
+    justify-self: start;
   }
+
 }
 
 @supports (-webkit-touch-callout: none) {

@@ -8,16 +8,20 @@ const chatInterfaceCssPath = resolve(__dirname, '../app/sessions/[sessionId]/Cha
 
 const chatInterfaceCss = readFileSync(chatInterfaceCssPath, 'utf8');
 
-describe('chat right sidebar desktop layout guards', () => {
-  it('allocates a dedicated third grid column for the pinned desktop customization pane', () => {
-    expect(chatInterfaceCss).toMatch(/\.chatShellRightPinned\s*\{[^}]*grid-template-columns:\s*280px minmax\(720px,\s*1fr\) 320px;/s);
+describe('chat workspace panel layout guards', () => {
+  it('keeps the desktop shell on the left-sidebar plus center-panel grid only', () => {
+    expect(chatInterfaceCss).toMatch(/\.chatShellSidebarOpen\s*\{[^}]*grid-template-columns:\s*280px minmax\(0,\s*1fr\);/s);
+    expect(chatInterfaceCss).toMatch(/\.chatShellSidebarClosed\s*\{[^}]*grid-template-columns:\s*0 minmax\(0,\s*1fr\);/s);
   });
 
-  it('keeps the right pane in-row even when the left sidebar switches to overlay mode', () => {
-    expect(chatInterfaceCss).toMatch(/\.chatShellRightPinned\.chatShellLeftOverlay\s*\{[^}]*grid-template-columns:\s*0 minmax\(720px,\s*1fr\) 320px;/s);
+  it('keeps the left overlay fallback as a two-column layout without reviving a right lane', () => {
+    expect(chatInterfaceCss).toMatch(/\.chatShellLeftOverlay\s*\{[^}]*grid-template-columns:\s*0 minmax\(720px,\s*1fr\);/s);
   });
 
-  it('only hides the right pane below 1280px when the pinned desktop layout is inactive', () => {
-    expect(chatInterfaceCss).toMatch(/@media\s*\(max-width:\s*1280px\)\s*\{[\s\S]*?\.rightPanel\s*\{[^}]*display:\s*none;[\s\S]*?\.chatShellRightPinned\s*>\s*\.rightPanel\s*\{[^}]*display:\s*block;/s);
+  it('removes the old dedicated right-lane grid and drawer rules entirely', () => {
+    expect(chatInterfaceCss).not.toContain('.chatShellRightPinned');
+    expect(chatInterfaceCss).not.toContain('.customizationDrawer');
+    expect(chatInterfaceCss).not.toContain('.customizationBackdrop');
+    expect(chatInterfaceCss).not.toContain('.rightPanel');
   });
 });

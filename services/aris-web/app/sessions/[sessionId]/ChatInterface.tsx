@@ -56,7 +56,6 @@ import { useWorkspaceBrowserState } from './chat-screen/hooks/useWorkspaceBrowse
 import { ChatSidebarPane } from './chat-screen/left-sidebar/ChatSidebarPane';
 import { useChatSidebarSectionViews } from './chat-screen/left-sidebar/useChatSidebarSectionViews';
 import { WorkspacePanelsPane } from './chat-screen/right-pane/WorkspacePanelsPane';
-import { RightPaneLayout } from './chat-screen/right-pane/RightPaneLayout';
 import styles from './ChatInterface.module.css';
 import { shouldShowChatTransitionLoading } from './chatSelection';
 import {
@@ -90,9 +89,7 @@ import {
   CHAT_RUN_PHASE_LABELS,
   COMPOSER_MAX_HEIGHT_PX,
   COMPOSER_MIN_HEIGHT_PX,
-  CUSTOMIZATION_OVERLAY_MAX_WIDTH_PX,
   READ_CURSOR_SYNC_DEBOUNCE_MS,
-  RIGHT_PIN_PREFERS_LEFT_OVERLAY_MIN_WIDTH_PX,
   RUNTIME_DISCONNECT_GRACE_MS,
   WORKSPACE_FILE_OPEN_EVENT,
 } from './chat-screen/constants';
@@ -314,14 +311,10 @@ export function ChatInterface({
     chatIdCopyState,
     expandedActionRunIds,
     expandedResultIds,
-    handleToggleCustomizationPinned,
     highlightedEventId,
     idBundleCopyState,
     isChatSidebarOpen,
     isContextMenuOpen,
-    isCustomizationOverlayLayout,
-    isCustomizationPinned,
-    isCustomizationSidebarOpen,
     isDebugMode,
     isMobileLayout,
     isMobileLayoutHydrated,
@@ -334,11 +327,9 @@ export function ChatInterface({
     setIdBundleCopyState,
     setIsChatSidebarOpen,
     setIsContextMenuOpen,
-    setIsCustomizationSidebarOpen,
     setShowPermissionQueue,
     showPermissionQueue,
     toggleDebugMode,
-    viewportWidth,
   } = useChatLayoutState({
     centerHeaderRef,
   });
@@ -396,6 +387,10 @@ export function ChatInterface({
     () => buildWorkspacePagerItems(workspacePanelLayout),
     [workspacePanelLayout],
   );
+  const explorerWorkspacePanel = useMemo(
+    () => workspacePanelLayout.panels.find((panel) => panel.type === 'explorer') ?? null,
+    [workspacePanelLayout.panels],
+  );
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const chatShellRef = useRef<HTMLDivElement>(null);
   const chatSidebarRef = useRef<HTMLDivElement>(null);
@@ -450,9 +445,7 @@ export function ChatInterface({
     setPrompt(value);
     setTimeout(() => composerInputRef.current?.focus(), 0);
   }, [setPrompt]);
-  const isRightSidebarPinnedLayout = !isMobileLayout && (viewportWidth > CUSTOMIZATION_OVERLAY_MAX_WIDTH_PX || isCustomizationPinned);
-  const isLeftSidebarOverlayLayout = isMobileLayout
-    || (isRightSidebarPinnedLayout && viewportWidth < RIGHT_PIN_PREFERS_LEFT_OVERLAY_MIN_WIDTH_PX);
+  const isLeftSidebarOverlayLayout = isMobileLayout;
   useEffect(() => {
     contextItemsRef.current = contextItems;
   }, [contextItems]);
@@ -546,7 +539,6 @@ export function ChatInterface({
     activeChat,
     activeChatIdResolved,
     approvalPolicy,
-    isCustomizationOverlayLayout,
     isMobileLayout,
     lastSelectedCodexModelId,
     legacyCustomModels,
@@ -555,7 +547,6 @@ export function ChatInterface({
     sessionId,
     setChats,
     setIsChatSidebarOpen,
-    setIsCustomizationSidebarOpen,
     setIsGeminiModeDropdownOpen,
     setIsModelDropdownOpen,
     setIsNewChatPlaceholder,
@@ -1031,6 +1022,14 @@ export function ChatInterface({
         nonce: sidebarFileRequestNonceRef.current,
       });
 
+      if (explorerWorkspacePanel) {
+        setActiveWorkspacePageId(explorerWorkspacePanel.id);
+      } else {
+        void createWorkspacePanel('explorer').catch(() => {
+          // The shared workspace panel error banner surfaces the failure.
+        });
+      }
+
       if (isLeftSidebarOverlayLayout) {
         setIsChatSidebarOpen(false);
       }
@@ -1041,10 +1040,12 @@ export function ChatInterface({
       window.removeEventListener(WORKSPACE_FILE_OPEN_EVENT, handleWorkspaceFileOpen as EventListener);
     };
   }, [
-    isCustomizationOverlayLayout,
+    createWorkspacePanel,
+    explorerWorkspacePanel,
     isLeftSidebarOverlayLayout,
     normalizedWorkspaceRootPath,
     projectName,
+    setActiveWorkspacePageId,
     setIsChatSidebarOpen,
     setSidebarFileRequest,
   ]);
@@ -1329,44 +1330,6 @@ export function ChatInterface({
       window.removeEventListener('focus', syncWhenVisible);
     };
   }, [isSessionSyncLeader, markSessionAsRead]);
-
-  const restorePinnedCenterPanelView = useCallback(() => {
-    const shell = chatShellRef.current;
-    const centerPanel = centerPanelRef.current;
-    if (!shell || !centerPanel) {
-      return;
-    }
-
-    shell.scrollLeft = 0;
-    recordScrollDebugEvent({
-      kind: 'write',
-      source: 'chat:centerPanel:scrollIntoView',
-      detail: {
-        isCustomizationPinned,
-        isRightSidebarPinnedLayout,
-      },
-    });
-    centerPanel.scrollIntoView({ block: 'nearest', inline: 'start' });
-  }, [isCustomizationPinned, isRightSidebarPinnedLayout]);
-
-  useEffect(() => {
-    if (!isCustomizationPinned || !isRightSidebarPinnedLayout) {
-      return;
-    }
-
-    restorePinnedCenterPanelView();
-    let secondFrameId = 0;
-    const frameId = window.requestAnimationFrame(() => {
-      restorePinnedCenterPanelView();
-      secondFrameId = window.requestAnimationFrame(restorePinnedCenterPanelView);
-    });
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      if (secondFrameId) {
-        window.cancelAnimationFrame(secondFrameId);
-      }
-    };
-  }, [isCustomizationPinned, isRightSidebarPinnedLayout, isLeftSidebarOverlayLayout, restorePinnedCenterPanelView]);
 
   const toggleResult = useCallback((eventId: string) => {
     setExpandedResultIds((prev) => ({
@@ -1683,7 +1646,6 @@ export function ChatInterface({
     disconnectNoticeAwaitingRef,
     firstPendingPermissionId,
     isAgentRunning,
-    isCustomizationOverlayLayout,
     isOperator,
     lastSubmittedPayload,
     sessionId,
@@ -1692,7 +1654,6 @@ export function ChatInterface({
     setIdBundleCopyState,
     setIsChatSidebarOpen,
     setIsContextMenuOpen,
-    setIsCustomizationSidebarOpen,
     setIsPolicyChanging,
     setShowPermissionQueue,
     updateChatRuntimeUi,
@@ -1815,23 +1776,6 @@ export function ChatInterface({
   }, []);
 
   useEffect(() => {
-    if (!isCustomizationOverlayLayout || !isCustomizationSidebarOpen) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsCustomizationSidebarOpen(false);
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isCustomizationOverlayLayout, isCustomizationSidebarOpen, setIsCustomizationSidebarOpen]);
-
-  useEffect(() => {
     if (!isContextMenuOpen) {
       return;
     }
@@ -1905,7 +1849,6 @@ export function ChatInterface({
     isChatSidebarOpen,
     isLeftSidebarOverlayLayout,
     isNewChatPlaceholder,
-    isRightSidebarPinnedLayout,
     isWorkspaceHome,
     syncComposerDockMetrics,
   ]);
@@ -2639,8 +2582,8 @@ export function ChatInterface({
       className={`${styles.chatShell} ${
         isChatSidebarOpen ? styles.chatShellSidebarOpen : styles.chatShellSidebarClosed
       } ${isMobileLayout ? styles.chatShellMobileScroll : ''} ${
-        isRightSidebarPinnedLayout ? styles.chatShellRightPinned : ''
-      } ${isLeftSidebarOverlayLayout ? styles.chatShellLeftOverlay : ''}`}
+        isLeftSidebarOverlayLayout ? styles.chatShellLeftOverlay : ''
+      }`}
       ref={chatShellRef}
     >
       <ChatSidebarPane
@@ -2884,10 +2827,13 @@ export function ChatInterface({
           <WorkspacePanelsPane
             mode="create"
             sessionId={sessionId}
+            projectName={projectName}
+            workspaceRootPath={normalizedWorkspaceRootPath}
             isMobileLayout={isMobileLayout}
             workspacePanelsError={workspacePanelsError}
             workspacePanelsLoading={workspacePanelsLoading}
             workspacePanelLayout={workspacePanelLayout}
+            requestedFile={sidebarFileRequest}
             onCreatePanel={handleCreateWorkspacePanel}
             onReturnToChat={() => setActiveWorkspacePageId('chat')}
           />
@@ -2896,29 +2842,19 @@ export function ChatInterface({
           <WorkspacePanelsPane
             mode="panel"
             sessionId={sessionId}
+            projectName={projectName}
+            workspaceRootPath={normalizedWorkspaceRootPath}
             isMobileLayout={isMobileLayout}
             workspacePanelsError={workspacePanelsError}
             workspacePanelsLoading={workspacePanelsLoading}
             workspacePanelLayout={workspacePanelLayout}
+            requestedFile={sidebarFileRequest}
             panelId={item.panelId}
             onSavePanel={saveWorkspacePanel}
             onDeletePanel={deleteWorkspacePanel}
             onReturnToChat={() => setActiveWorkspacePageId('chat')}
           />
         )}
-      />
-
-      <RightPaneLayout
-        sessionId={sessionId}
-        projectName={projectName}
-        normalizedWorkspaceRootPath={normalizedWorkspaceRootPath}
-        isMobileLayout={isMobileLayout}
-        isCustomizationOverlayLayout={isCustomizationOverlayLayout}
-        isCustomizationSidebarOpen={isCustomizationSidebarOpen}
-        isCustomizationPinned={isCustomizationPinned}
-        sidebarFileRequest={sidebarFileRequest}
-        onToggleCustomizationPinned={handleToggleCustomizationPinned}
-        onCloseCustomizationSidebar={() => setIsCustomizationSidebarOpen(false)}
       />
     </div>
 

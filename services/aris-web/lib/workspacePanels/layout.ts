@@ -22,8 +22,8 @@ function normalizeActivePage(value: unknown, panels: WorkspacePanelRecord[]): Wo
 }
 
 export function resolveWorkspaceEntryPageId(layout: unknown): string {
-  void layout;
-  return 'chat';
+  const normalized = normalizeWorkspacePanelLayout(layout);
+  return normalized.activePage.kind === 'panel' ? normalized.activePage.panelId : 'chat';
 }
 
 function normalizePanel(value: unknown): WorkspacePanelRecord | null {

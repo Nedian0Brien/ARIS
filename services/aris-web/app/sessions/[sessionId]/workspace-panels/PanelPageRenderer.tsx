@@ -2,10 +2,16 @@ import React from 'react';
 import type { WorkspacePanelRecord } from '@/lib/workspacePanels/types';
 import { PlaceholderPanelPage } from './PlaceholderPanelPage';
 import { PreviewPanelPage } from './PreviewPanelPage';
+import { WorkspaceToolsPanelPage } from './WorkspaceToolsPanelPage';
+import type { RequestedFilePayload } from '../customization-sidebar/types';
 
 type PanelPageRendererProps = {
   sessionId: string;
   panel: WorkspacePanelRecord;
+  projectName: string;
+  workspaceRootPath: string;
+  requestedFile?: RequestedFilePayload | null;
+  isMobileLayout: boolean;
   onSavePanel?: (panelId: string, updates: { title?: string; config?: Record<string, unknown> }) => Promise<unknown>;
   onDeletePanel?: (panelId: string) => Promise<unknown>;
   onReturnToChat?: () => void;
@@ -21,6 +27,10 @@ const PLACEHOLDER_DESCRIPTIONS: Record<WorkspacePanelRecord['type'], string> = {
 export function PanelPageRenderer({
   sessionId,
   panel,
+  projectName,
+  workspaceRootPath,
+  requestedFile = null,
+  isMobileLayout,
   onSavePanel,
   onDeletePanel,
   onReturnToChat,
@@ -32,6 +42,20 @@ export function PanelPageRenderer({
         panel={panel}
         onSavePanel={onSavePanel}
         onDeletePanel={onDeletePanel}
+        onReturnToChat={onReturnToChat}
+      />
+    );
+  }
+
+  if (panel.type === 'explorer') {
+    return (
+      <WorkspaceToolsPanelPage
+        sessionId={sessionId}
+        panel={panel}
+        projectName={projectName}
+        workspaceRootPath={workspaceRootPath}
+        requestedFile={requestedFile}
+        isMobileLayout={isMobileLayout}
         onReturnToChat={onReturnToChat}
       />
     );

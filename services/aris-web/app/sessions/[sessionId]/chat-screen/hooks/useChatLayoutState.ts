@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useState, type RefObject } from 'react';
 import { VIEWPORT_LAYOUT_CHANGE_EVENT } from '@/components/layout/ViewportHeightSync';
 import { recordScrollDebugEvent } from '../../scrollDebug';
-import { MOBILE_LAYOUT_MAX_WIDTH_PX } from '../constants';
 import { resolveChatLayoutState, resolveInitialChatLayoutState } from './chatLayoutState';
 
 const VIEWPORT_LAYOUT_READY_IDLE_MS = 160;
@@ -15,7 +14,6 @@ export function useChatLayoutState({
 }: UseChatLayoutStateParams) {
   const initialLayoutState = resolveInitialChatLayoutState({
     viewportWidth: typeof window === 'undefined' ? null : window.innerWidth,
-    isCustomizationPinned: false,
   });
   const [isMobileLayout, setIsMobileLayout] = useState(initialLayoutState.isMobileLayout);
   const [isMobileLayoutHydrated, setIsMobileLayoutHydrated] = useState(initialLayoutState.isMobileLayoutHydrated);
@@ -28,10 +26,6 @@ export function useChatLayoutState({
   const [showPermissionQueue, setShowPermissionQueue] = useState(true);
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(initialLayoutState.isChatSidebarOpen);
-  const [viewportWidth, setViewportWidth] = useState(initialLayoutState.viewportWidth);
-  const [isCustomizationOverlayLayout, setIsCustomizationOverlayLayout] = useState(initialLayoutState.isCustomizationOverlayLayout);
-  const [isCustomizationSidebarOpen, setIsCustomizationSidebarOpen] = useState(false);
-  const [isCustomizationPinned, setIsCustomizationPinned] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [isDebugMode, setIsDebugMode] = useState(false);
   const [centerHeaderWidth, setCenterHeaderWidth] = useState(0);
@@ -97,17 +91,12 @@ export function useChatLayoutState({
   }, [centerHeaderRef]);
 
   useLayoutEffect(() => {
-    const mobileQuery = window.matchMedia(`(max-width: ${MOBILE_LAYOUT_MAX_WIDTH_PX}px)`);
-
     const syncLayout = () => {
       const nextLayoutState = resolveChatLayoutState({
         viewportWidth: window.innerWidth,
-        isCustomizationPinned,
       });
 
-      setViewportWidth(nextLayoutState.viewportWidth);
       setIsMobileLayout(nextLayoutState.isMobileLayout);
-      setIsCustomizationOverlayLayout(nextLayoutState.isCustomizationOverlayLayout);
       setIsChatSidebarOpen(nextLayoutState.isChatSidebarOpen);
       recordScrollDebugEvent({
         kind: 'trigger',
@@ -115,15 +104,9 @@ export function useChatLayoutState({
         detail: {
           nextIsMobile: nextLayoutState.isMobileLayout,
           nextViewportWidth: nextLayoutState.viewportWidth,
-          nextUsesCustomizationOverlay: nextLayoutState.isCustomizationOverlayLayout,
           nextUsesLeftSidebarOverlay: !nextLayoutState.isChatSidebarOpen,
-          mediaQueryMatches: mobileQuery.matches,
-          isCustomizationPinned,
         },
       });
-      if (!nextLayoutState.isCustomizationOverlayLayout) {
-        setIsCustomizationSidebarOpen(false);
-      }
     };
 
     syncLayout();
@@ -135,20 +118,14 @@ export function useChatLayoutState({
         hydrated: true,
       },
     });
-    if (typeof mobileQuery.addEventListener === 'function') {
-      mobileQuery.addEventListener('change', syncLayout);
-    } else {
-      mobileQuery.addListener(syncLayout);
-    }
+    window.addEventListener('resize', syncLayout, { passive: true });
+    window.visualViewport?.addEventListener('resize', syncLayout);
 
     return () => {
-      if (typeof mobileQuery.removeEventListener === 'function') {
-        mobileQuery.removeEventListener('change', syncLayout);
-      } else {
-        mobileQuery.removeListener(syncLayout);
-      }
+      window.removeEventListener('resize', syncLayout);
+      window.visualViewport?.removeEventListener('resize', syncLayout);
     };
-  }, [isCustomizationPinned]);
+  }, []);
 
   useEffect(() => {
     if (!highlightedEventId) {
@@ -173,26 +150,15 @@ export function useChatLayoutState({
     setIsDebugMode((prev) => !prev);
   };
 
-  const handleToggleCustomizationPinned = () => {
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
-    setIsCustomizationPinned((prev) => !prev);
-  };
-
   return {
     centerHeaderWidth,
     chatIdCopyState,
     expandedActionRunIds,
     expandedResultIds,
-    handleToggleCustomizationPinned,
     highlightedEventId,
     idBundleCopyState,
     isChatSidebarOpen,
     isContextMenuOpen,
-    isCustomizationOverlayLayout,
-    isCustomizationPinned,
-    isCustomizationSidebarOpen,
     isDebugMode,
     isMobileLayout,
     isMobileLayoutHydrated,
@@ -205,11 +171,8 @@ export function useChatLayoutState({
     setIdBundleCopyState,
     setIsChatSidebarOpen,
     setIsContextMenuOpen,
-    setIsCustomizationSidebarOpen,
     setShowPermissionQueue,
-    setViewportWidth,
     showPermissionQueue,
     toggleDebugMode,
-    viewportWidth,
   };
 }

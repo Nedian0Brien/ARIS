@@ -76,7 +76,7 @@ describe('workspace panel layout normalization', () => {
     });
   });
 
-  it('enters the workspace on chat even when a panel was previously active', async () => {
+  it('restores the last active panel when a valid activePage is stored', async () => {
     const mod = await loadLayoutModule();
 
     expect(typeof mod.resolveWorkspaceEntryPageId).toBe('function');
@@ -94,6 +94,6 @@ describe('workspace panel layout normalization', () => {
           createdAt: '2026-04-16T00:00:00.000Z',
         },
       ],
-    })).toBe('chat');
+    })).toBe('panel-preview-1');
   });
 });

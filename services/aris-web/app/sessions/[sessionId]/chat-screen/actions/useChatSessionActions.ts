@@ -20,7 +20,6 @@ type Params = {
   activeChat: SessionChat | null;
   activeChatIdResolved: string | null;
   approvalPolicy?: ApprovalPolicy;
-  isCustomizationOverlayLayout: boolean;
   isMobileLayout: boolean;
   lastSelectedCodexModelId?: string | null;
   legacyCustomModels?: LegacyCustomModels | null;
@@ -29,7 +28,6 @@ type Params = {
   sessionId: string;
   setChats: Dispatch<SetStateAction<SessionChat[]>>;
   setIsChatSidebarOpen: (value: boolean) => void;
-  setIsCustomizationSidebarOpen: (value: boolean) => void;
   setIsGeminiModeDropdownOpen: (value: boolean) => void;
   setIsModelDropdownOpen: (value: boolean) => void;
   setIsNewChatPlaceholder: (value: boolean) => void;
@@ -45,7 +43,6 @@ export function useChatSessionActions({
   activeChat,
   activeChatIdResolved,
   approvalPolicy,
-  isCustomizationOverlayLayout,
   isMobileLayout,
   lastSelectedCodexModelId,
   legacyCustomModels,
@@ -54,7 +51,6 @@ export function useChatSessionActions({
   sessionId,
   setChats,
   setIsChatSidebarOpen,
-  setIsCustomizationSidebarOpen,
   setIsGeminiModeDropdownOpen,
   setIsModelDropdownOpen,
   setIsNewChatPlaceholder,
@@ -97,16 +93,11 @@ export function useChatSessionActions({
     if (isMobileLayout) {
       setIsChatSidebarOpen(false);
     }
-    if (isCustomizationOverlayLayout) {
-      setIsCustomizationSidebarOpen(false);
-    }
   }, [
     buildChatUrlForChat,
-    isCustomizationOverlayLayout,
     isMobileLayout,
     resetChatUiState,
     setIsChatSidebarOpen,
-    setIsCustomizationSidebarOpen,
     setIsNewChatPlaceholder,
     setSelectedChatId,
   ]);
