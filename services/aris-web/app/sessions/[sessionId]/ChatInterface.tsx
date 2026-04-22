@@ -9,8 +9,9 @@ import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
 import { useSessionSyncLeader } from '@/lib/hooks/useSessionSyncLeader';
 import {
   getLatestAgentEventTimestampSince,
+  getLatestCompletionSignalTimestampSince,
   getLatestRunStatusSince,
-  hasAgentCompletionSignal,
+  isCompletionSignalStillTerminal,
   isRunLifecycleEvent,
   resolveChatRunPhase as resolveRunPhaseState,
 } from '@/lib/happy/chatRuntime';
@@ -580,6 +581,21 @@ export function ChatInterface({
     () => getLatestRunStatusSince(events, awaitingReplySince),
     [awaitingReplySince, events],
   );
+  const latestAgentEventSinceAwaiting = useMemo(
+    () => getLatestAgentEventTimestampSince(events, awaitingReplySince),
+    [awaitingReplySince, events],
+  );
+  const latestCompletionSignalSinceAwaiting = useMemo(
+    () => getLatestCompletionSignalTimestampSince(events, awaitingReplySince),
+    [awaitingReplySince, events],
+  );
+  const completionSignalIsFresh = useMemo(
+    () => isCompletionSignalStillTerminal({
+      latestCompletionSignalAt: latestCompletionSignalSinceAwaiting,
+      latestAgentEventAt: latestAgentEventSinceAwaiting,
+    }),
+    [latestAgentEventSinceAwaiting, latestCompletionSignalSinceAwaiting],
+  );
 
   const nonLifecycleEvents = useMemo(
     () => events.filter((event) => !isRunLifecycleEvent(event)),
@@ -900,6 +916,7 @@ export function ChatInterface({
     isAborting,
     isSubmitting,
     hasCompletionSignal,
+    completionSignalIsFresh,
     runtimeRunning,
     isAwaitingReply,
     runStatus: latestRunStatus,
@@ -2262,23 +2279,6 @@ export function ChatInterface({
     });
   }, [events]);
 
-  const hasAgentCompletionSignalSince = useCallback((since: string | null): boolean => {
-    if (!since) {
-      return false;
-    }
-    const sinceEpoch = Date.parse(since);
-    return events.some((event) => {
-      if (!hasAgentCompletionSignal(event)) {
-        return false;
-      }
-      const eventEpoch = Date.parse(event.timestamp);
-      if (!Number.isFinite(sinceEpoch) || !Number.isFinite(eventEpoch)) {
-        return true;
-      }
-      return eventEpoch >= sinceEpoch;
-    });
-  }, [events]);
-
   useEffect(() => {
     if (!isAwaitingReply) {
       return;
@@ -2292,12 +2292,16 @@ export function ChatInterface({
     if (!awaitingReplySince) {
       return;
     }
-    if (!hasAgentCompletionSignalSince(awaitingReplySince)) {
+    if (!latestCompletionSignalSinceAwaiting) {
+      return;
+    }
+
+    updateActiveChatRuntimeUi({ hasCompletionSignal: true });
+    if (runtimeRunning || !completionSignalIsFresh) {
       return;
     }
 
     updateActiveChatRuntimeUi({
-      hasCompletionSignal: true,
       isAwaitingReply: false,
       awaitingReplySince: null,
       submitError: null,
@@ -2305,13 +2309,19 @@ export function ChatInterface({
     });
     disconnectNoticeAwaitingRef.current = null;
     runtimeStartedSinceAwaitingRef.current = false;
-  }, [awaitingReplySince, hasAgentCompletionSignalSince, updateActiveChatRuntimeUi]);
+  }, [
+    awaitingReplySince,
+    completionSignalIsFresh,
+    latestCompletionSignalSinceAwaiting,
+    runtimeRunning,
+    updateActiveChatRuntimeUi,
+  ]);
 
   useEffect(() => {
     if (!isAwaitingReply || !awaitingReplySince || isRunActive) {
       return;
     }
-    const latestAgentEventAt = getLatestAgentEventTimestampSince(events, awaitingReplySince);
+    const latestAgentEventAt = latestAgentEventSinceAwaiting;
     if (!latestAgentEventAt) {
       return;
     }
@@ -2322,7 +2332,7 @@ export function ChatInterface({
     const remaining = Math.max(0, settleDeadline - Date.now());
 
     const finalizeAwaitingReply = () => {
-      if (runtimeRunning || hasAgentCompletionSignalSince(awaitingReplySince)) {
+      if (runtimeRunning || (latestCompletionSignalSinceAwaiting && completionSignalIsFresh)) {
         return;
       }
       const freshestAgentEventAt = getLatestAgentEventTimestampSince(events, awaitingReplySince);
@@ -2351,10 +2361,12 @@ export function ChatInterface({
     };
   }, [
     awaitingReplySince,
+    completionSignalIsFresh,
     events,
-    hasAgentCompletionSignalSince,
     isAwaitingReply,
     isRunActive,
+    latestAgentEventSinceAwaiting,
+    latestCompletionSignalSinceAwaiting,
     runtimeRunning,
     setAwaitingReplySince,
     setIsAwaitingReply,

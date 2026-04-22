@@ -1,20 +1,61 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 
 const RUNTIME_POLL_INTERVAL_MS = 3000;
 const runtimeStateCache = new Map<string, boolean>();
 const isDocumentVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
 
+type RuntimePollResolutionInput =
+  | { previousIsRunning: boolean; nextIsRunning: boolean }
+  | { previousIsRunning: boolean; notFound: true }
+  | { previousIsRunning: boolean; errorMessage: string };
+
+type RuntimePollResolution = {
+  nextIsRunning: boolean;
+  runtimeError: string | null;
+  shouldCache: boolean;
+  shouldStop: boolean;
+};
+
+export function resolveRuntimePollResolution(input: RuntimePollResolutionInput): RuntimePollResolution {
+  if ('nextIsRunning' in input) {
+    return {
+      nextIsRunning: input.nextIsRunning,
+      runtimeError: null,
+      shouldCache: true,
+      shouldStop: false,
+    };
+  }
+
+  if ('notFound' in input) {
+    return {
+      nextIsRunning: false,
+      runtimeError: '워크스페이스가 종료되었거나 삭제되었습니다.',
+      shouldCache: true,
+      shouldStop: true,
+    };
+  }
+
+  return {
+    nextIsRunning: input.previousIsRunning,
+    runtimeError: input.errorMessage,
+    shouldCache: false,
+    shouldStop: false,
+  };
+}
+
 export function useSessionRuntime(sessionId: string, chatId?: string | null, enabled = true) {
   const cacheKey = `${sessionId}:${chatId?.trim() || '__default__'}`;
   const [isRunning, setIsRunning] = useState(() => runtimeStateCache.get(cacheKey) ?? false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const lastKnownRunningRef = useRef(runtimeStateCache.get(cacheKey) ?? false);
 
   useEffect(() => {
     let disposed = false;
     let inFlight = false;
     let stopped = false;
-    setIsRunning(runtimeStateCache.get(cacheKey) ?? false);
+    lastKnownRunningRef.current = runtimeStateCache.get(cacheKey) ?? false;
+    setIsRunning(lastKnownRunningRef.current);
     setRuntimeError(null);
 
     if (!enabled) {
@@ -42,9 +83,14 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null, ena
         }
         if (response.status === 404) {
           if (!disposed) {
-            runtimeStateCache.set(cacheKey, false);
-            setIsRunning(false);
-            setRuntimeError('워크스페이스가 종료되었거나 삭제되었습니다.');
+            const resolution = resolveRuntimePollResolution({
+              previousIsRunning: lastKnownRunningRef.current,
+              notFound: true,
+            });
+            lastKnownRunningRef.current = resolution.nextIsRunning;
+            runtimeStateCache.set(cacheKey, resolution.nextIsRunning);
+            setIsRunning(resolution.nextIsRunning);
+            setRuntimeError(resolution.runtimeError);
           }
           stopped = true;
           return;
@@ -54,17 +100,28 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null, ena
         }
         const body = (await response.json()) as { isRunning?: boolean };
         if (!disposed) {
-          const nextIsRunning = Boolean(body.isRunning);
-          runtimeStateCache.set(cacheKey, nextIsRunning);
-          setIsRunning(nextIsRunning);
-          setRuntimeError(null);
+          const resolution = resolveRuntimePollResolution({
+            previousIsRunning: lastKnownRunningRef.current,
+            nextIsRunning: Boolean(body.isRunning),
+          });
+          lastKnownRunningRef.current = resolution.nextIsRunning;
+          runtimeStateCache.set(cacheKey, resolution.nextIsRunning);
+          setIsRunning(resolution.nextIsRunning);
+          setRuntimeError(resolution.runtimeError);
         }
       } catch (error) {
         if (!disposed) {
           const message = error instanceof Error ? error.message : 'Failed to sync runtime status';
-          runtimeStateCache.set(cacheKey, false);
-          setIsRunning(false);
-          setRuntimeError(message);
+          const resolution = resolveRuntimePollResolution({
+            previousIsRunning: lastKnownRunningRef.current,
+            errorMessage: message,
+          });
+          if (resolution.shouldCache) {
+            runtimeStateCache.set(cacheKey, resolution.nextIsRunning);
+          }
+          setIsRunning(resolution.nextIsRunning);
+          setRuntimeError(resolution.runtimeError);
+          stopped = resolution.shouldStop;
         }
       } finally {
         inFlight = false;

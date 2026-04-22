@@ -19,6 +19,7 @@ type ResolveChatRunPhaseInput = {
   isAwaitingReply: boolean;
   isAborting: boolean;
   hasCompletionSignal: boolean;
+  completionSignalIsFresh?: boolean;
   runtimeRunning: boolean;
   runStatus?: string | null;
   hasPendingPermission?: boolean;
@@ -179,6 +180,42 @@ export function getLatestAgentEventTimestampSince(events: UiEvent[], since: stri
   return latestTimestamp;
 }
 
+export function getLatestCompletionSignalTimestampSince(events: UiEvent[], since: string | null): string | null {
+  if (!since) {
+    return null;
+  }
+
+  let latestTimestamp: string | null = null;
+  for (const event of events) {
+    if (!hasAgentCompletionSignal(event) || !isOnOrAfter(event.timestamp, since)) {
+      continue;
+    }
+    latestTimestamp = event.timestamp;
+  }
+
+  return latestTimestamp;
+}
+
+export function isCompletionSignalStillTerminal(input: {
+  latestCompletionSignalAt: string | null;
+  latestAgentEventAt: string | null;
+}): boolean {
+  const { latestCompletionSignalAt, latestAgentEventAt } = input;
+  if (!latestCompletionSignalAt) {
+    return false;
+  }
+  if (!latestAgentEventAt) {
+    return true;
+  }
+
+  const completionEpoch = Date.parse(latestCompletionSignalAt);
+  const latestEventEpoch = Date.parse(latestAgentEventAt);
+  if (!Number.isFinite(completionEpoch) || !Number.isFinite(latestEventEpoch)) {
+    return latestCompletionSignalAt >= latestAgentEventAt;
+  }
+  return completionEpoch >= latestEventEpoch;
+}
+
 export function getLatestRunStatusSince(events: UiEvent[], since: string | null): string {
   if (!since) {
     return '';
@@ -197,13 +234,14 @@ export function getLatestRunStatusSince(events: UiEvent[], since: string | null)
 
 export function resolveChatRunPhase(input: ResolveChatRunPhaseInput): ResolvedChatRunPhase {
   const runStatus = (input.runStatus ?? '').trim().toLowerCase();
+  const hasTerminalCompletionSignal = input.hasCompletionSignal && (input.completionSignalIsFresh ?? true);
   if (input.isAborting) {
     return 'aborting';
   }
   if (input.isSubmitting) {
     return 'submitting';
   }
-  if (input.hasCompletionSignal && !input.runtimeRunning) {
+  if (hasTerminalCompletionSignal && !input.runtimeRunning) {
     return 'idle';
   }
   if (runStatus === 'waiting_for_approval') {
@@ -215,7 +253,7 @@ export function resolveChatRunPhase(input: ResolveChatRunPhaseInput): ResolvedCh
   if (input.runtimeRunning) {
     return 'running';
   }
-  if (input.hasCompletionSignal || isTerminalRunStatus(runStatus)) {
+  if (hasTerminalCompletionSignal || isTerminalRunStatus(runStatus)) {
     return 'idle';
   }
   if (input.isAwaitingReply) {

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   getLatestAgentEventTimestampSince,
+  getLatestCompletionSignalTimestampSince,
   getLatestRunStatusSince,
   hasAgentCompletionSignal,
   hasFinalAgentReplySince,
+  isCompletionSignalStillTerminal,
   isRunLifecycleEvent,
   isFinalAgentReplyEvent,
   readUiEventStreamEvent,
@@ -146,6 +148,41 @@ describe('chatRuntime helpers', () => {
     expect(getLatestAgentEventTimestampSince(events, '2026-03-10T02:00:00.000Z')).toBeNull();
   });
 
+  it('tracks the latest completion signal after the await timestamp', () => {
+    const events = [
+      buildEvent({
+        id: 'status-1',
+        timestamp: '2026-03-10T02:00:01.000Z',
+        meta: {
+          streamEvent: 'runtime_restarted',
+          role: 'agent',
+        },
+      }),
+      buildEvent({
+        id: 'status-2',
+        timestamp: '2026-03-10T02:00:05.000Z',
+        meta: {
+          sessionTurnStatus: 'completed',
+          role: 'agent',
+        },
+      }),
+    ];
+
+    expect(getLatestCompletionSignalTimestampSince(events, '2026-03-10T02:00:00.000Z')).toBe('2026-03-10T02:00:05.000Z');
+  });
+
+  it('treats a completion signal as stale when newer agent activity follows it', () => {
+    expect(isCompletionSignalStillTerminal({
+      latestCompletionSignalAt: '2026-03-10T02:00:05.000Z',
+      latestAgentEventAt: '2026-03-10T02:00:09.000Z',
+    })).toBe(false);
+
+    expect(isCompletionSignalStillTerminal({
+      latestCompletionSignalAt: '2026-03-10T02:00:05.000Z',
+      latestAgentEventAt: '2026-03-10T02:00:05.000Z',
+    })).toBe(true);
+  });
+
   it('recognizes hidden run lifecycle events', () => {
     const event = buildEvent({
       meta: {
@@ -245,6 +282,18 @@ describe('chatRuntime helpers', () => {
       runtimeRunning: false,
       runStatus: 'run_started',
     })).toBe('idle');
+  });
+
+  it('keeps the run phase active when a stale completion signal is followed by newer agent activity', () => {
+    expect(resolveChatRunPhase({
+      isSubmitting: false,
+      isAwaitingReply: true,
+      isAborting: false,
+      hasCompletionSignal: true,
+      completionSignalIsFresh: false,
+      runtimeRunning: false,
+      runStatus: 'run_started',
+    })).toBe('running');
   });
 
   it('surfaces approval phase while waiting for a permission decision', () => {
