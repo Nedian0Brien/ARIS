@@ -190,13 +190,142 @@ export function CustomizationSidebar({
   const handledRequestedFileNonceRef = useRef<number | null>(null);
   const activeInstructionModal = activeModalKind === 'instruction' ? selectedInstruction : null;
   const activeSkillModal = activeModalKind === 'skill' ? selectedSkill : null;
-  const activeFileModal = activeModalKind === 'file' && selectedFilePath
-    ? { path: selectedFilePath, name: selectedFileName ?? selectedFilePath.split('/').pop() ?? selectedFilePath }
-    : null;
+  const activeFileModal = useMemo(() => (
+    activeModalKind === 'file' && selectedFilePath
+      ? { path: selectedFilePath, name: selectedFileName ?? selectedFilePath.split('/').pop() ?? selectedFilePath }
+      : null
+  ), [activeModalKind, selectedFileName, selectedFilePath]);
   const headerWorkspacePath = overview?.workspacePath ?? gitOverview?.workspacePath ?? projectName;
   const activeSurfaceItem = SURFACE_ITEMS.find((item) => item.id === activeSurface) ?? SURFACE_ITEMS[0];
   const headerCopy = SURFACE_COPY[activeSurface];
   const isMobileMode = mode === 'mobile';
+  const filesCountLabel = filesSearchResults ? `검색 ${visibleFiles.length}개` : `${visibleFiles.length}개`;
+  const workspaceDisplayName = useMemo(() => {
+    const candidate = [projectName, normalizedWorkspaceRootPath, headerWorkspacePath]
+      .map((value) => value.trim())
+      .find(Boolean) ?? '/';
+    const lastSegment = candidate.split('/').filter(Boolean).pop();
+    return lastSegment ?? candidate;
+  }, [headerWorkspacePath, normalizedWorkspaceRootPath, projectName]);
+  const desktopSurfaceSummary = useMemo(() => {
+    if (activeSurface === 'customization') {
+      if (overviewLoading && !overview) {
+        return '지침 문서, Skills, MCP 상태를 동기화하는 중입니다.';
+      }
+      return overview
+        ? `지침 ${overview.instructionDocs.filter((doc) => doc.exists).length} · Skills ${overview.skills.length} · MCP ${overview.mcpServers.length}`
+        : '지침 문서, Skills, MCP 상태를 한 번에 점검합니다.';
+    }
+
+    if (activeSurface === 'files') {
+      if (filesSearchLoading) {
+        return '파일 검색 결과를 불러오는 중입니다.';
+      }
+      if (filesSearchQuery.trim()) {
+        return `"${filesSearchQuery.trim()}" · ${visibleFiles.length}개 결과`;
+      }
+      return `${filesCountLabel} · ${filesPath === normalizedWorkspaceRootPath ? '워크스페이스 루트' : '하위 경로 탐색 중'}`;
+    }
+
+    if (activeSurface === 'git') {
+      if (gitLoading && !gitOverview) {
+        return '브랜치와 변경 파일을 불러오는 중입니다.';
+      }
+      return gitOverview
+        ? `${workingGitFiles.length} changes · ${stagedGitFiles.length} staged · ${gitOverview.branch ?? 'detached HEAD'}`
+        : '브랜치, diff, commit 흐름을 한 화면에서 정리합니다.';
+    }
+
+    return '다음 단계에서 연결될 도구 패널입니다.';
+  }, [
+    activeSurface,
+    filesCountLabel,
+    filesPath,
+    filesSearchLoading,
+    filesSearchQuery,
+    gitLoading,
+    gitOverview,
+    normalizedWorkspaceRootPath,
+    overview,
+    overviewLoading,
+    stagedGitFiles.length,
+    visibleFiles.length,
+    workingGitFiles.length,
+  ]);
+  const desktopFocusSummary = useMemo(() => {
+    if (activeSurface === 'customization') {
+      if (activeSection === 'instructions') {
+        return {
+          label: 'AGENTS.md',
+          hint: overview
+            ? `${overview.instructionDocs.filter((doc) => doc.exists).length}개 문서를 바로 열 수 있습니다.`
+            : '워크스페이스 지침 문서를 점검합니다.',
+        };
+      }
+
+      if (activeSection === 'skills') {
+        return {
+          label: 'Skills',
+          hint: overview ? `${overview.skills.length}개 Skill을 확인할 수 있습니다.` : '연결된 Skill 목록을 불러옵니다.',
+        };
+      }
+
+      return {
+        label: 'MCP',
+        hint: overview ? `${overview.mcpServers.length}개 서버 상태를 확인할 수 있습니다.` : 'MCP 연결 상태를 불러옵니다.',
+      };
+    }
+
+    if (activeSurface === 'files') {
+      if (activeFileModal) {
+        return {
+          label: activeFileModal.name,
+          hint: activeFileModal.path,
+        };
+      }
+
+      if (filesSearchQuery.trim()) {
+        return {
+          label: '검색 결과',
+          hint: `"${filesSearchQuery.trim()}" · ${visibleFiles.length}개 항목`,
+        };
+      }
+
+      return {
+        label: filesPath.split('/').filter(Boolean).pop() ?? 'workspace',
+        hint: filesPath,
+      };
+    }
+
+    if (activeSurface === 'git') {
+      if (selectedGitFile) {
+        return {
+          label: getGitFileName(selectedGitFile.path),
+          hint: selectedGitFile.path,
+        };
+      }
+
+      return {
+        label: gitOverview?.branch ?? 'Git overview',
+        hint: gitOverview?.upstreamBranch ?? 'upstream 브랜치가 없습니다.',
+      };
+    }
+
+    return {
+      label: '준비 중',
+      hint: '이 패널은 다음 단계에서 연결됩니다.',
+    };
+  }, [
+    activeFileModal,
+    activeSection,
+    activeSurface,
+    filesPath,
+    filesSearchQuery,
+    gitOverview,
+    overview,
+    selectedGitFile,
+    visibleFiles.length,
+  ]);
 
   const openInstructionModal = useCallback((instructionId: string) => {
     setSelectedInstructionId(instructionId);
@@ -253,8 +382,6 @@ export function CustomizationSidebar({
     setFilesSearchQuery,
     setFilesSearchResults,
   ]);
-  const filesCountLabel = filesSearchResults ? `검색 ${visibleFiles.length}개` : `${visibleFiles.length}개`;
-
   useEffect(() => {
     if (activeSurface !== 'files' || filesSearchQuery.trim()) {
       return;
@@ -662,10 +789,10 @@ export function CustomizationSidebar({
   }, [fileNavHistoryRef, fileNavIndexRef, openFileModal, setFileNavState]);
 
   return (
-    <section className={`${styles.sidebarRoot} ${isMobileMode ? styles.sidebarRootMobile : ''}`}>
+    <section className={`${styles.sidebarRoot} ${isMobileMode ? styles.sidebarRootMobile : styles.sidebarRootDesktop}`}>
       <div className={styles.header}>
         <div className={styles.headerTop}>
-          <div>
+          <div className={styles.headerCopy}>
             <div className={styles.eyebrow}>
               <activeSurfaceItem.Icon size={13} />
               {activeSurfaceItem.label}
@@ -744,29 +871,58 @@ export function CustomizationSidebar({
           </div>
         </div>
 
-        <span className={styles.workspacePath}>{headerWorkspacePath}</span>
+        {!isMobileMode ? (
+          <div className={styles.headerSummaryGrid}>
+            <article className={styles.headerSummaryCard}>
+              <span className={styles.headerSummaryLabel}>현재 도구</span>
+              <span className={styles.headerSummaryValue}>{activeSurfaceItem.label}</span>
+              <span className={styles.headerSummaryHint}>{desktopSurfaceSummary}</span>
+            </article>
+            <article className={styles.headerSummaryCard}>
+              <span className={styles.headerSummaryLabel}>워크스페이스</span>
+              <span className={styles.headerSummaryValue}>{workspaceDisplayName}</span>
+              <span className={styles.headerSummaryHint}>{normalizedWorkspaceRootPath}</span>
+            </article>
+            <article className={styles.headerSummaryCard}>
+              <span className={styles.headerSummaryLabel}>포커스</span>
+              <span className={styles.headerSummaryValue}>{desktopFocusSummary.label}</span>
+              <span className={styles.headerSummaryHint}>{desktopFocusSummary.hint}</span>
+            </article>
+          </div>
+        ) : null}
 
-        <div className={styles.surfaceTabs}>
-          {SURFACE_ITEMS.map(({ id, label, hint, Icon, disabled }) => {
-            const isActive = activeSurface === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                className={`${styles.surfaceTab} ${isActive ? styles.surfaceTabActive : ''} ${disabled ? styles.surfaceTabDisabled : ''}`}
-                onClick={() => {
-                  if (!disabled) {
-                    setActiveSurface(id);
-                  }
-                }}
-                disabled={disabled}
-              >
-                <Icon size={14} />
-                <span className={styles.surfaceTabLabel}>{label}</span>
-                <span className={styles.surfaceTabHint}>{hint}</span>
-              </button>
-            );
-          })}
+        <div className={styles.headerBottom}>
+          <div className={styles.workspaceMetaCard}>
+            <span className={styles.workspaceMetaLabel}>현재 경로</span>
+            <span className={styles.workspacePath}>{headerWorkspacePath}</span>
+          </div>
+
+          <div className={styles.surfaceTabs}>
+            {SURFACE_ITEMS.map(({ id, label, hint, Icon, disabled }) => {
+              const isActive = activeSurface === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className={`${styles.surfaceTab} ${isActive ? styles.surfaceTabActive : ''} ${disabled ? styles.surfaceTabDisabled : ''}`}
+                  onClick={() => {
+                    if (!disabled) {
+                      setActiveSurface(id);
+                    }
+                  }}
+                  disabled={disabled}
+                >
+                  <span className={styles.surfaceTabIcon}>
+                    <Icon size={14} />
+                  </span>
+                  <span className={styles.surfaceTabCopy}>
+                    <span className={styles.surfaceTabLabel}>{label}</span>
+                    <span className={styles.surfaceTabHint}>{hint}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 

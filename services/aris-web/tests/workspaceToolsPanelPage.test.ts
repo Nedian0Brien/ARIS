@@ -51,4 +51,33 @@ describe('WorkspaceToolsPanelPage', () => {
       undefined,
     );
   });
+
+  it('uses desktop mode for workspace tools panels on non-mobile layouts', () => {
+    mockedCustomizationSidebar.mockClear();
+
+    renderToStaticMarkup(React.createElement(WorkspaceToolsPanelPage, {
+      sessionId: 'session-1',
+      panel: {
+        id: 'panel-workspace-1',
+        type: 'explorer',
+        title: 'Workspace',
+        config: {},
+        createdAt: '2026-04-16T00:00:00.000Z',
+      },
+      projectName: '/workspace',
+      workspaceRootPath: '/workspace',
+      requestedFile: null,
+      isMobileLayout: false,
+      onReturnToChat: vi.fn(),
+    }));
+
+    expect(mockedCustomizationSidebar).toHaveBeenCalledTimes(1);
+    expect(mockedCustomizationSidebar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'desktop',
+        onRequestClose: expect.any(Function),
+      }),
+      undefined,
+    );
+  });
 });

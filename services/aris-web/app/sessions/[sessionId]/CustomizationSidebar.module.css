@@ -11,15 +11,24 @@
   --sidebar-danger-border: color-mix(in srgb, var(--accent-red) 28%, transparent);
   --sidebar-shadow-soft: 0 16px 32px color-mix(in srgb, black 16%, transparent);
   --sidebar-shadow-strong: 0 24px 60px color-mix(in srgb, black 24%, transparent);
-  min-height: 0;
-  height: 100%;
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  height: auto;
   border-radius: 18px;
   border: 1px solid var(--chat-panel-border);
   background: var(--chat-panel-bg);
   box-shadow: var(--chat-panel-shadow);
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: visible;
+}
+
+.sidebarRootDesktop {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .sidebarRootMobile {
@@ -33,6 +42,10 @@
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
+}
+
+.headerCopy {
+  min-width: 0;
 }
 
 .headerTop {
@@ -71,6 +84,49 @@
   font-size: 0.72rem;
   line-height: 1.45;
   color: var(--chat-text-muted);
+}
+
+.headerSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.52rem;
+}
+
+.headerSummaryCard {
+  min-width: 0;
+  padding: 0.78rem 0.82rem;
+  border: 1px solid var(--sidebar-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--sidebar-surface-soft) 78%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+}
+
+.headerSummaryLabel {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--chat-text-muted);
+}
+
+.headerSummaryValue {
+  min-width: 0;
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--chat-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headerSummaryHint {
+  min-width: 0;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: var(--chat-text-muted);
+  overflow-wrap: anywhere;
 }
 
 .refreshButton {
@@ -121,6 +177,7 @@
 
 .workspacePath {
   display: block;
+  min-width: 0;
   padding: 0.56rem 0.65rem;
   border-radius: 12px;
   border: 1px solid var(--sidebar-border);
@@ -129,6 +186,31 @@
   line-height: 1.45;
   color: var(--chat-text-primary);
   word-break: break-all;
+}
+
+.headerBottom {
+  display: flex;
+  flex-direction: column;
+  gap: 0.72rem;
+}
+
+.workspaceMetaCard {
+  min-width: 0;
+  padding: 0.78rem 0.82rem;
+  border: 1px solid var(--sidebar-border);
+  border-radius: 16px;
+  background: var(--sidebar-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 0.24rem;
+}
+
+.workspaceMetaLabel {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--chat-text-muted);
 }
 
 .surfaceTabs {
@@ -142,13 +224,18 @@
   border-radius: 12px;
   background: var(--sidebar-surface);
   color: var(--chat-text-primary);
-  padding: 0.52rem 0.4rem;
+  min-width: 0;
+  padding: 0.62rem 0.64rem;
   display: flex;
-  flex-direction: column;
-  gap: 0.18rem;
+  gap: 0.52rem;
   align-items: flex-start;
   text-align: left;
   cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
 }
 
 .surfaceTabActive {
@@ -157,18 +244,44 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--chat-accent) 12%, transparent);
 }
 
+.surfaceTab:hover:not(:disabled) {
+  border-color: var(--sidebar-border-strong);
+  transform: translateY(-1px);
+}
+
 .surfaceTabDisabled {
   opacity: 0.62;
   cursor: default;
 }
 
+.surfaceTabIcon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 88%, transparent);
+  background: color-mix(in srgb, var(--sidebar-surface-soft) 76%, transparent);
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.surfaceTabCopy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.16rem;
+}
+
 .surfaceTabLabel {
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 800;
 }
 
 .surfaceTabHint {
-  font-size: 0.58rem;
+  font-size: 0.62rem;
+  line-height: 1.45;
   color: var(--chat-text-muted);
 }
 
@@ -196,12 +309,22 @@
   font-size: 0.68rem;
   font-weight: 800;
   cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease,
+    transform 0.16s ease;
 }
 
 .sectionTabActive {
   color: var(--chat-accent);
   border-color: var(--sidebar-accent-border);
   background: var(--sidebar-accent-bg);
+}
+
+.sectionTab:hover {
+  border-color: var(--sidebar-border-strong);
+  transform: translateY(-1px);
 }
 
 .content {
@@ -222,22 +345,22 @@
 
 .statCard {
   border: 1px solid var(--sidebar-border);
-  border-radius: 12px;
-  padding: 0.58rem 0.65rem;
-  background: var(--sidebar-surface-soft);
+  border-radius: 16px;
+  padding: 0.78rem 0.82rem;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--sidebar-surface-soft) 88%, transparent) 0%, color-mix(in srgb, var(--sidebar-surface) 82%, transparent) 100%);
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
 }
 
 .statValue {
-  font-size: 1rem;
+  font-size: 1.08rem;
   font-weight: 800;
   color: var(--chat-text-primary);
 }
 
 .statLabel {
-  font-size: 0.64rem;
+  font-size: 0.66rem;
   color: var(--chat-text-muted);
 }
 
@@ -253,8 +376,9 @@
 .detailCard {
   min-height: 0;
   border: 1px solid var(--sidebar-border);
-  border-radius: 14px;
-  background: var(--sidebar-surface);
+  border-radius: 18px;
+  background: var(--sidebar-surface-strong);
+  box-shadow: var(--sidebar-shadow-soft);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -309,6 +433,11 @@
   flex-direction: column;
   gap: 0.2rem;
   cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
 }
 
 .documentTile {
@@ -320,6 +449,12 @@
 .itemButtonActive {
   border-color: var(--sidebar-accent-border);
   background: linear-gradient(155deg, color-mix(in srgb, var(--sidebar-accent-bg) 92%, var(--surface) 8%) 0%, color-mix(in srgb, var(--sidebar-accent-bg) 72%, var(--surface) 28%) 100%);
+}
+
+.itemButton:hover {
+  border-color: var(--sidebar-border-strong);
+  box-shadow: 0 8px 18px color-mix(in srgb, black 12%, transparent);
+  transform: translateY(-1px);
 }
 
 .itemTitleRow {
@@ -584,6 +719,16 @@
   align-items: center;
   gap: 0.28rem;
   cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    transform 0.16s ease;
+}
+
+.pathButton:hover:not(:disabled) {
+  border-color: var(--sidebar-border-strong);
+  background: var(--sidebar-surface-hover);
+  transform: translateY(-1px);
 }
 
 .pathValue {
@@ -633,11 +778,16 @@
   min-height: 42px;
   border-radius: 12px;
   padding: 0.28rem 0.34rem;
+  transition: background 0.16s ease, box-shadow 0.16s ease;
 }
 
 .fileTreeRowActive {
   background: var(--sidebar-accent-bg);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chat-accent) 14%, transparent);
+}
+
+.fileTreeRow:hover {
+  background: color-mix(in srgb, var(--sidebar-surface-soft) 86%, transparent);
 }
 
 .fileTreeActionButton {
@@ -1714,6 +1864,137 @@
 
   .fileModalCard {
     width: min(1020px, 100%);
+  }
+}
+
+@media (min-width: 960px) {
+  .sidebarRootDesktop .header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 1.15rem 1.2rem;
+    border: 1px solid var(--sidebar-border);
+    border-radius: 24px;
+    border-bottom: 1px solid var(--sidebar-border);
+    background: linear-gradient(155deg, color-mix(in srgb, var(--chat-panel-bg) 92%, transparent) 0%, color-mix(in srgb, var(--sidebar-surface-soft) 74%, transparent) 100%);
+    box-shadow: var(--sidebar-shadow-soft);
+    backdrop-filter: blur(14px);
+  }
+
+  .sidebarRootDesktop .sectionTabs {
+    padding: 1rem 0 0;
+    grid-template-columns: repeat(3, minmax(112px, max-content));
+    justify-content: start;
+  }
+
+  .sidebarRootDesktop .content {
+    padding: 1rem 0 0;
+    gap: 0.92rem;
+  }
+
+  .headerTop {
+    align-items: center;
+  }
+
+  .title {
+    font-size: 1.1rem;
+  }
+
+  .subtle {
+    max-width: 58ch;
+    font-size: 0.74rem;
+  }
+
+  .headerBottom {
+    display: grid;
+    grid-template-columns: minmax(260px, 0.86fr) minmax(0, 1.14fr);
+    gap: 0.75rem;
+    align-items: stretch;
+  }
+
+  .workspacePath {
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    font-size: 0.72rem;
+  }
+
+  .surfaceTabs {
+    gap: 0.48rem;
+  }
+
+  .filesToolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) auto;
+    grid-template-areas:
+      "search search"
+      "actions path";
+    gap: 0.68rem 0.78rem;
+    align-items: start;
+  }
+
+  .filesToolbar .searchField {
+    grid-area: search;
+  }
+
+  .filesToolbar .filesActionRow {
+    grid-area: actions;
+  }
+
+  .filesToolbar .pathRow {
+    grid-area: path;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  .statsRow {
+    gap: 0.68rem;
+  }
+
+  .documentGrid {
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: 0.54rem;
+  }
+
+  .mcpList {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 0.72rem;
+  }
+
+  .gitWorkbench {
+    display: grid;
+    grid-template-columns: minmax(0, 0.96fr) minmax(0, 1.22fr);
+    gap: 0.82rem;
+    align-items: start;
+  }
+
+  .gitWorkbench > :first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 1280px) {
+  .headerSummaryGrid {
+    gap: 0.72rem;
+  }
+
+  .headerSummaryCard {
+    padding: 0.88rem 0.92rem;
+  }
+
+  .surfaceTab {
+    min-height: 78px;
+    padding: 0.78rem 0.82rem;
+  }
+
+  .gitWorkbench {
+    grid-template-columns: minmax(280px, 0.9fr) minmax(260px, 0.88fr) minmax(0, 1.22fr);
+  }
+
+  .gitWorkbench > :first-child {
+    grid-column: auto;
   }
 }
 

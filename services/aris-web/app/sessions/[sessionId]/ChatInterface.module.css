@@ -4274,8 +4274,12 @@
   }
 
   .lastUserJumpButton {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.5rem;
+  }
+
+  .lastUserJumpAction {
+    justify-self: start;
   }
 
 }
