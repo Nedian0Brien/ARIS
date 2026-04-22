@@ -67,15 +67,17 @@ export function useCustomizationFileEditorState({
     }
   }, []);
 
-  const openFileModal = useCallback((
+  const openFile = useCallback((
     filePath: string,
     fileName?: string,
-    opts?: { pushHistory?: boolean; line?: number | null },
+    opts?: { pushHistory?: boolean; line?: number | null; activateModal?: boolean },
   ) => {
     void loadFile(filePath, fileName);
-    setActiveModal({ kind: 'file', id: filePath });
     setSelectedFileLine(opts?.line ?? null);
     setSelectedFileNavigationKey((current) => current + 1);
+    if (opts?.activateModal) {
+      setActiveModal({ kind: 'file', id: filePath });
+    }
     if (opts?.pushHistory) {
       const history = fileNavHistoryRef.current;
       const index = fileNavIndexRef.current;
@@ -89,6 +91,27 @@ export function useCustomizationFileEditorState({
       });
     }
   }, [loadFile, setActiveModal]);
+
+  const openFileModal = useCallback((
+    filePath: string,
+    fileName?: string,
+    opts?: { pushHistory?: boolean; line?: number | null },
+  ) => {
+    openFile(filePath, fileName, {
+      ...opts,
+      activateModal: true,
+    });
+  }, [openFile]);
+
+  const closeFile = useCallback(() => {
+    setSelectedFilePath(null);
+    setSelectedFileName(null);
+    setSelectedFileLine(null);
+    setFileContent('');
+    setFileDirty(false);
+    setFileStatus(null);
+    setFilePreviewBlock(null);
+  }, []);
 
   const handleSaveFile = useCallback(async () => {
     if (!selectedFilePath) {
@@ -130,8 +153,10 @@ export function useCustomizationFileEditorState({
     filePreviewBlock,
     fileSaving,
     fileStatus,
+    closeFile,
     handleSaveFile,
     loadFile,
+    openFile,
     openFileModal,
     selectedFileLine,
     selectedFileName,

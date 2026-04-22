@@ -2,8 +2,8 @@
 
 import React from 'react';
 import type { WorkspacePanelRecord } from '@/lib/workspacePanels/types';
-import { CustomizationSidebar } from '../CustomizationSidebar';
 import type { RequestedFilePayload } from '../customization-sidebar/types';
+import { WorkspaceShell } from './WorkspaceShell';
 
 type WorkspaceToolsPanelPageProps = {
   sessionId: string;
@@ -24,7 +24,7 @@ export function WorkspaceToolsPanelPage({
   onReturnToChat,
 }: WorkspaceToolsPanelPageProps) {
   return (
-    <CustomizationSidebar
+    <WorkspaceShell
       sessionId={sessionId}
       projectName={projectName}
       workspaceRootPath={workspaceRootPath}

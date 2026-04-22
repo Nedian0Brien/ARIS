@@ -18,7 +18,7 @@ import {
 type Params = {
   filesPath: string;
   normalizedWorkspaceRootPath: string;
-  openFileModal: (filePath: string, fileName?: string, opts?: { pushHistory?: boolean; line?: number | null }) => void;
+  openFile: (filePath: string, fileName?: string, opts?: { pushHistory?: boolean; line?: number | null }) => void;
   refreshFocusedFiles: (extraPaths?: string[]) => Promise<void>;
   selectedFilePath: string | null;
   setActiveModal: Dispatch<SetStateAction<CustomizationModal>>;
@@ -32,7 +32,7 @@ type Params = {
 export function useCustomizationFileActionState({
   filesPath,
   normalizedWorkspaceRootPath,
-  openFileModal,
+  openFile,
   refreshFocusedFiles,
   selectedFilePath,
   setActiveModal,
@@ -102,7 +102,7 @@ export function useCustomizationFileActionState({
           throw new Error(typeof data?.error === 'string' ? data.error : '파일을 생성하지 못했습니다.');
         }
         await refreshFocusedFiles([fileActionDialog.targetPath]);
-        openFileModal(nextPath, trimValue);
+        openFile(nextPath, trimValue);
       } else if (fileActionDialog.kind === 'create-folder') {
         const nextPath = joinWorkspacePath(fileActionDialog.targetPath, trimValue);
         const response = await fetch('/api/fs/mkdir', {
@@ -167,7 +167,7 @@ export function useCustomizationFileActionState({
     fileActionDialog,
     filesPath,
     normalizedWorkspaceRootPath,
-    openFileModal,
+    openFile,
     refreshFocusedFiles,
     selectedFilePath,
     setActiveModal,

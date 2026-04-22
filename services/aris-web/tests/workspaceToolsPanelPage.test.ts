@@ -2,17 +2,17 @@ import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { WorkspaceToolsPanelPage } from '@/app/sessions/[sessionId]/workspace-panels/WorkspaceToolsPanelPage';
-import { CustomizationSidebar } from '@/app/sessions/[sessionId]/CustomizationSidebar';
+import { WorkspaceShell } from '@/app/sessions/[sessionId]/workspace-panels/WorkspaceShell';
 
-vi.mock('@/app/sessions/[sessionId]/CustomizationSidebar', () => ({
-  CustomizationSidebar: vi.fn(() => React.createElement('div', { 'data-testid': 'workspace-tools-sidebar' })),
+vi.mock('@/app/sessions/[sessionId]/workspace-panels/WorkspaceShell', () => ({
+  WorkspaceShell: vi.fn(() => React.createElement('div', { 'data-testid': 'workspace-shell' })),
 }));
 
-const mockedCustomizationSidebar = vi.mocked(CustomizationSidebar);
+const mockedWorkspaceShell = vi.mocked(WorkspaceShell);
 
 describe('WorkspaceToolsPanelPage', () => {
-  it('forwards workspace-tool props into the shared CustomizationSidebar surface', () => {
-    mockedCustomizationSidebar.mockClear();
+  it('forwards workspace-tool props into the Workspace shell surface', () => {
+    mockedWorkspaceShell.mockClear();
 
     renderToStaticMarkup(React.createElement(WorkspaceToolsPanelPage, {
       sessionId: 'session-1',
@@ -34,8 +34,8 @@ describe('WorkspaceToolsPanelPage', () => {
       onReturnToChat: vi.fn(),
     }));
 
-    expect(mockedCustomizationSidebar).toHaveBeenCalledTimes(1);
-    expect(mockedCustomizationSidebar).toHaveBeenCalledWith(
+    expect(mockedWorkspaceShell).toHaveBeenCalledTimes(1);
+    expect(mockedWorkspaceShell).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session-1',
         projectName: '/workspace',
@@ -53,7 +53,7 @@ describe('WorkspaceToolsPanelPage', () => {
   });
 
   it('uses desktop mode for workspace tools panels on non-mobile layouts', () => {
-    mockedCustomizationSidebar.mockClear();
+    mockedWorkspaceShell.mockClear();
 
     renderToStaticMarkup(React.createElement(WorkspaceToolsPanelPage, {
       sessionId: 'session-1',
@@ -71,8 +71,8 @@ describe('WorkspaceToolsPanelPage', () => {
       onReturnToChat: vi.fn(),
     }));
 
-    expect(mockedCustomizationSidebar).toHaveBeenCalledTimes(1);
-    expect(mockedCustomizationSidebar).toHaveBeenCalledWith(
+    expect(mockedWorkspaceShell).toHaveBeenCalledTimes(1);
+    expect(mockedWorkspaceShell).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: 'desktop',
         onRequestClose: expect.any(Function),

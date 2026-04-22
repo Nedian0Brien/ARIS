@@ -1,0 +1,634 @@
+.shellRoot {
+  --workspace-surface: color-mix(in srgb, var(--chat-panel-bg) 92%, transparent);
+  --workspace-surface-strong: color-mix(in srgb, var(--surface) 94%, var(--surface-subtle) 6%);
+  --workspace-surface-soft: color-mix(in srgb, var(--surface-subtle) 74%, var(--surface) 26%);
+  --workspace-border: color-mix(in srgb, var(--chat-panel-border) 82%, transparent);
+  --workspace-border-strong: color-mix(in srgb, var(--chat-item-hover-border) 62%, transparent);
+  --workspace-shadow: 0 20px 48px color-mix(in srgb, black 16%, transparent);
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.shellHeader {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--workspace-border);
+  border-radius: 24px;
+  background: linear-gradient(155deg, color-mix(in srgb, var(--chat-panel-bg) 94%, transparent) 0%, color-mix(in srgb, var(--workspace-surface-soft) 78%, transparent) 100%);
+  box-shadow: var(--workspace-shadow);
+  backdrop-filter: blur(14px);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.shellHeaderTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.shellHeaderCopy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+}
+
+.shellEyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.36rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--chat-accent);
+}
+
+.shellTitle {
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: 800;
+  color: var(--chat-text-primary);
+}
+
+.shellSubtitle {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--chat-text-muted);
+}
+
+.shellHeaderActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.shellIconButton {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--chat-control-border);
+  border-radius: 12px;
+  background: var(--chat-control-bg);
+  color: var(--chat-control-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.shellIconButton:hover:not(:disabled) {
+  border-color: var(--workspace-border-strong);
+  background: var(--workspace-surface-strong);
+}
+
+.shellIconButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.shellMetaGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.68rem;
+}
+
+.shellMetaCard {
+  min-width: 0;
+  padding: 0.8rem 0.85rem;
+  border: 1px solid var(--workspace-border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--workspace-surface-soft) 82%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.shellMetaLabel {
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--chat-text-muted);
+}
+
+.shellMetaValue {
+  min-width: 0;
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--chat-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shellMetaHint {
+  min-width: 0;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: var(--chat-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.shellBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.modeRail {
+  position: sticky;
+  top: 8.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.modeRailButton {
+  border: 1px solid var(--workspace-border);
+  border-radius: 18px;
+  background: var(--workspace-surface);
+  color: var(--chat-text-primary);
+  padding: 0.72rem 0.4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.34rem;
+  cursor: pointer;
+  box-shadow: var(--workspace-shadow);
+}
+
+.modeRailButton:hover {
+  border-color: var(--workspace-border-strong);
+  transform: translateY(-1px);
+}
+
+.modeRailButtonActive {
+  border-color: color-mix(in srgb, var(--chat-accent) 34%, transparent);
+  background: linear-gradient(155deg, color-mix(in srgb, var(--accent-sky-bg) 84%, var(--surface) 16%) 0%, color-mix(in srgb, var(--accent-sky-bg) 68%, var(--surface) 32%) 100%);
+  color: var(--chat-accent);
+}
+
+.modeRailLabel {
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.modePanel {
+  min-width: 0;
+  min-height: 0;
+}
+
+.modePaneSurface {
+  min-width: 0;
+  min-height: 0;
+}
+
+.modePaneSplit {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(300px, 0.92fr) minmax(0, 1.48fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.modePaneMobileOnly {
+  min-width: 0;
+}
+
+.modePaneNavColumn {
+  min-width: 0;
+  min-height: 0;
+}
+
+.modePaneDetailCard {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--workspace-border);
+  border-radius: 24px;
+  background: var(--workspace-surface);
+  box-shadow: var(--workspace-shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modePaneDetailHeader {
+  padding: 1rem 1.05rem 0.9rem;
+  border-bottom: 1px solid var(--workspace-border);
+}
+
+.modePaneDetailEyebrow {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--chat-accent);
+}
+
+.modePaneDetailTitle {
+  margin: 0.2rem 0 0;
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: var(--chat-text-primary);
+}
+
+.modePaneDetailPath {
+  margin: 0.16rem 0 0;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--chat-text-muted);
+  word-break: break-all;
+}
+
+.modePaneDetailBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0.95rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.workspaceEmptyState {
+  min-height: 260px;
+  border: 1px dashed var(--workspace-border);
+  border-radius: 18px;
+  background: var(--workspace-surface-soft);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.46rem;
+  padding: 1.2rem;
+  text-align: center;
+}
+
+.workspaceEmptyState p {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--chat-text-muted);
+}
+
+.rotate {
+  animation: workspace-rotate 0.9s linear infinite;
+}
+
+.fileTreeMainActive {
+  border-color: color-mix(in srgb, var(--chat-accent) 34%, transparent);
+  background: color-mix(in srgb, var(--accent-sky-bg) 76%, var(--surface) 24%);
+}
+
+.fileDetailStatus {
+  border: 1px solid var(--workspace-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--workspace-surface-soft) 82%, transparent);
+  color: var(--chat-text-primary);
+  padding: 0.72rem 0.78rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.fileDetailBlockedCard {
+  border: 1px dashed color-mix(in srgb, var(--accent-amber) 26%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--accent-amber-bg) 82%, var(--surface) 18%);
+  padding: 1rem;
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+}
+
+.fileDetailBlockedCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.24rem;
+}
+
+.fileDetailBlockedCopy strong {
+  font-size: 0.78rem;
+  color: var(--chat-text-primary);
+}
+
+.fileDetailBlockedCopy span {
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--chat-text-muted);
+}
+
+.inlineFileEditor {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.contextSectionTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+}
+
+.contextSectionTab {
+  border: 1px solid var(--workspace-border);
+  border-radius: 12px;
+  background: var(--workspace-surface);
+  color: var(--chat-text-primary);
+  padding: 0.56rem 0.65rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.contextSectionTabActive {
+  border-color: color-mix(in srgb, var(--chat-accent) 34%, transparent);
+  background: color-mix(in srgb, var(--accent-sky-bg) 76%, var(--surface) 24%);
+  color: var(--chat-accent);
+}
+
+.contextList {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.contextListItem {
+  width: 100%;
+  border: 1px solid var(--workspace-border);
+  border-radius: 16px;
+  background: var(--workspace-surface);
+  color: var(--chat-text-primary);
+  padding: 0.8rem 0.85rem;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  cursor: pointer;
+  box-shadow: var(--workspace-shadow);
+}
+
+.contextListItem:hover {
+  border-color: var(--workspace-border-strong);
+}
+
+.contextListItemActive {
+  border-color: color-mix(in srgb, var(--chat-accent) 34%, transparent);
+  background: color-mix(in srgb, var(--accent-sky-bg) 76%, var(--surface) 24%);
+}
+
+.contextListItemTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.contextListItemTitle {
+  min-width: 0;
+  font-size: 0.74rem;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contextListItemMeta {
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--chat-text-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.contextDetailStack {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.contextDetailMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.24rem;
+}
+
+.contextDetailEyebrow {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--chat-accent);
+}
+
+.contextDetailTitle {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: var(--chat-text-primary);
+}
+
+.contextDetailPath {
+  margin: 0;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--chat-text-muted);
+  word-break: break-word;
+}
+
+.contextEditor {
+  min-height: 360px;
+  width: 100%;
+  border: 1px solid var(--workspace-border);
+  border-radius: 16px;
+  background: var(--workspace-surface-strong);
+  color: var(--chat-text-primary);
+  padding: 0.9rem 0.95rem;
+  font-size: 0.72rem;
+  line-height: 1.58;
+  font-family: var(--font-mono);
+  resize: vertical;
+}
+
+.contextPreview {
+  margin: 0;
+  min-height: 320px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 16px;
+  background: var(--workspace-surface-strong);
+  padding: 0.9rem 0.95rem;
+  font-size: 0.72rem;
+  line-height: 1.58;
+  color: var(--chat-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+}
+
+.contextDetailActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.contextDetailStatus {
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--chat-text-muted);
+}
+
+.contextPrimaryButton {
+  border: 1px solid color-mix(in srgb, var(--chat-accent) 34%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent-sky-bg) 76%, var(--surface) 24%);
+  color: var(--chat-accent);
+  padding: 0.56rem 0.8rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+  cursor: pointer;
+}
+
+.contextPrimaryButton:disabled {
+  opacity: 0.56;
+  cursor: default;
+}
+
+.contextMcpCard {
+  border: 1px solid var(--workspace-border);
+  border-radius: 18px;
+  background: var(--workspace-surface-strong);
+  padding: 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.contextMcpHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.contextStatusBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.16rem 0.46rem;
+  border-radius: 999px;
+  border: 1px solid var(--workspace-border);
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.toneGood {
+  color: var(--accent-emerald);
+  background: color-mix(in srgb, var(--accent-emerald-bg) 84%, var(--surface) 16%);
+  border-color: color-mix(in srgb, var(--accent-emerald) 30%, transparent);
+}
+
+.toneWarn {
+  color: var(--accent-amber);
+  background: color-mix(in srgb, var(--accent-amber-bg) 84%, var(--surface) 16%);
+  border-color: color-mix(in srgb, var(--accent-amber) 30%, transparent);
+}
+
+.toneDanger {
+  color: var(--accent-red);
+  background: color-mix(in srgb, var(--accent-red-bg) 84%, var(--surface) 16%);
+  border-color: color-mix(in srgb, var(--accent-red) 30%, transparent);
+}
+
+.toneMuted {
+  color: var(--chat-text-muted);
+  background: color-mix(in srgb, var(--accent-slate-bg) 84%, var(--surface) 16%);
+}
+
+.contextMcpUpdatedAt,
+.contextMcpDetail {
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--chat-text-muted);
+}
+
+@media (min-width: 961px) and (max-width: 1279px) {
+  .modePaneSplit {
+    grid-template-columns: minmax(280px, 0.96fr) minmax(0, 1.42fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .modePaneSplit {
+    grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.5fr);
+  }
+}
+
+@media (max-width: 960px) {
+  .shellHeader {
+    position: static;
+    border-radius: 22px;
+  }
+
+  .shellMetaGrid,
+  .shellBody {
+    grid-template-columns: 1fr;
+  }
+
+  .modeRail {
+    position: static;
+    top: auto;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .modeRailButton {
+    padding: 0.65rem 0.5rem;
+  }
+
+  .modePaneSplit {
+    grid-template-columns: 1fr;
+  }
+
+  .modePaneDetailCard {
+    min-height: 0;
+  }
+
+  .contextDetailActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .contextPrimaryButton {
+    justify-content: center;
+  }
+}
+
+@keyframes workspace-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
