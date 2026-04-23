@@ -1,5 +1,6 @@
 'use client';
 
+import React, { type ReactNode } from 'react';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import type { RequestedFilePayload } from '../../customization-sidebar/types';
 import type { WorkspacePanelLayout, WorkspacePanelType } from '@/lib/workspacePanels/types';
@@ -15,6 +16,7 @@ type WorkspacePanelsPaneBaseProps = {
   workspacePanelsError: string | null;
   workspacePanelsLoading: boolean;
   workspacePanelLayout: WorkspacePanelLayout;
+  header?: ReactNode;
   requestedFile?: RequestedFilePayload | null;
 };
 
@@ -40,6 +42,7 @@ export function WorkspacePanelsPane(props: WorkspacePanelsPaneProps) {
 
   return (
     <section className={frameClassName}>
+      {props.header}
       <div className={streamClassName}>
         {props.workspacePanelsError ? (
           <div className={styles.noticeWrap}>
