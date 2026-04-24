@@ -5,8 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "${ROOT_DIR}/deploy/lib/env.sh"
 
 ENV_FILE="$(require_deploy_env_file "deploy:web-zd")"
-STATE_DIR="${DEPLOY_STATE_DIR:-${ROOT_DIR}/deploy/.state}"
-LOG_DIR="${DEPLOY_LOG_DIR:-${ROOT_DIR}/deploy/.logs}"
+SHARED_REPO_ROOT="${ARIS_SHARED_REPO_ROOT:-$(resolve_shared_repo_root "$ROOT_DIR")}"
+STATE_DIR="$(resolve_deploy_state_dir "$SHARED_REPO_ROOT")"
+LOG_DIR="$(resolve_deploy_log_dir "$SHARED_REPO_ROOT")"
 ACTIVE_SLOT_FILE="${STATE_DIR}/aris-web.active-slot"
 FINGERPRINT_FILE="${STATE_DIR}/aris-web.build-fingerprint"
 

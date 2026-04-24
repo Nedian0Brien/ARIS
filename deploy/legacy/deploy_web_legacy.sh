@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "${ROOT_DIR}/deploy/lib/env.sh"
 ENV_FILE="$(require_deploy_env_file "deploy:web-legacy")"
+SHARED_REPO_ROOT="${ARIS_SHARED_REPO_ROOT:-$(resolve_shared_repo_root "$ROOT_DIR")}"
 SERVICE="${SERVICE_NAME:-aris-web}"
 PRUNE_MODE="${PRUNE_MODE:-light}"            # off | light | aggressive
 CACHE_UNTIL="${CACHE_UNTIL:-168h}"           # e.g. 24h, 168h
@@ -11,8 +12,8 @@ CACHE_KEEP_STORAGE="${CACHE_KEEP_STORAGE:-8gb}"
 PULL_BASE="${PULL_BASE:-0}"                  # 1 to refresh base image
 SKIP_BUILD_IF_UNCHANGED="${SKIP_BUILD_IF_UNCHANGED:-1}"  # 1 to skip compose build when context is unchanged
 PRUNE_ASYNC="${PRUNE_ASYNC:-1}"              # 1 to run prune in background
-STATE_DIR="${DEPLOY_STATE_DIR:-${ROOT_DIR}/deploy/.state}"
-LOG_DIR="${DEPLOY_LOG_DIR:-${ROOT_DIR}/deploy/.logs}"
+STATE_DIR="$(resolve_deploy_state_dir "$SHARED_REPO_ROOT")"
+LOG_DIR="$(resolve_deploy_log_dir "$SHARED_REPO_ROOT")"
 
 require_env_keys "deploy:web-legacy" "$ENV_FILE" \
   APP_BASE_URL \
