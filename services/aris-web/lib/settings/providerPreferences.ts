@@ -8,10 +8,12 @@ import {
   normalizeGeminiModeSelectionId,
   normalizeModelSelectionList,
   normalizeProviderModelSelections,
+  resolveCodexSelectionFromCatalog,
   type ModelSettingsResponse,
   type ProviderId,
   type ProviderModelSelections,
 } from '@/lib/settings/providerModels';
+import { loadOpenAiCatalogItems } from '@/lib/settings/openAiCatalog';
 
 type CustomModelMap = Record<ProviderId, string>;
 type UiPreferenceSecretRecord = {
@@ -75,6 +77,19 @@ export async function getUserModelSettings(userId: string): Promise<ModelSetting
 
   const legacyCustomModels = parseLegacyCustomModels(preference?.customAiModels);
   const providers = sanitizeProviderModelSelections(preference?.providerModelSelections);
+
+  if (preference?.openAiApiKeyEncrypted) {
+    try {
+      const codexCatalogItems = await loadOpenAiCatalogItems(preference.openAiApiKeyEncrypted);
+      providers.codex = resolveCodexSelectionFromCatalog({
+        catalogModelIds: codexCatalogItems.map((item) => item.id),
+        storedSelectedModelIds: providers.codex.selectedModelIds,
+        storedDefaultModelId: providers.codex.defaultModelId,
+      });
+    } catch (error) {
+      console.error('Failed to load live OpenAI catalog for user model settings:', error);
+    }
+  }
 
   return {
     providers,

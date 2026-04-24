@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { ChatInterface } from './ChatInterface';
 import { shouldStartChatEntryLoading } from './chatSelection';
 import { resolveWorkspaceClientPath } from '@/lib/customization/catalog';
+import { getUserModelSettings } from '@/lib/settings/providerPreferences';
 import { deriveWorkspaceTitle } from './workspaceHome';
 
 const INITIAL_EVENTS_PAGE_LIMIT = 40;
@@ -76,6 +77,7 @@ export default async function SessionPage({
     // ?chat= 파라미터가 없으면 워크스페이스 홈 화면을 보여주기 위해
     // 기본 채팅을 자동 생성하지 않고 채팅 목록만 가져온다.
     const isHomeView = requestedChatId === null;
+    const initialModelSettings = await getUserModelSettings(user.id);
 
     const chats = await listSessionChats({
       sessionId,
@@ -108,10 +110,11 @@ export default async function SessionPage({
               workspaceRootPath={workspaceRootPath}
               agentFlavor={detail.session.agent}
               sessionModel={detail.session.model}
-              approvalPolicy={detail.session.approvalPolicy}
-              initialChats={chats}
-              activeChatId={null}
-              initialShowWorkspaceHome
+            approvalPolicy={detail.session.approvalPolicy}
+            initialModelSettings={initialModelSettings}
+            initialChats={chats}
+            activeChatId={null}
+            initialShowWorkspaceHome
             />
           </main>
         </div>
@@ -151,6 +154,7 @@ export default async function SessionPage({
             agentFlavor={detail.session.agent}
             sessionModel={detail.session.model}
             approvalPolicy={detail.session.approvalPolicy}
+            initialModelSettings={initialModelSettings}
             initialChats={chats}
             activeChatId={activeChat?.id ?? null}
             initialShowChatEntryLoading={shouldStartChatEntryLoading({

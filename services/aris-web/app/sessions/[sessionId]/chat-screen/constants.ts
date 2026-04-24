@@ -57,13 +57,7 @@ export const AGENT_QUICK_STARTS: Partial<Record<AgentFlavor, string[]>> = {
 };
 
 export const COMPOSER_MODELS_BY_AGENT: Record<'codex' | 'claude' | 'gemini', ComposerModelOption[]> = {
-  codex: [
-    { id: 'gpt-5.4', shortLabel: 'GPT-5.4', badge: '권장' },
-    { id: 'gpt-5.3-codex', shortLabel: 'GPT-5.3 Codex', badge: '유지' },
-    { id: 'gpt-5.3-codex-spark', shortLabel: 'GPT-5.3 Codex Spark', badge: '신규' },
-    { id: 'gpt-5', shortLabel: 'GPT-5', badge: '고성능' },
-    { id: 'gpt-5-mini', shortLabel: 'GPT-5 mini', badge: '빠름' },
-  ],
+  codex: [],
   claude: [
     { id: 'claude-sonnet-4-6', shortLabel: 'Sonnet 4.6', badge: '권장' },
     { id: 'claude-opus-4-6', shortLabel: 'Opus 4.6', badge: '최고 성능' },

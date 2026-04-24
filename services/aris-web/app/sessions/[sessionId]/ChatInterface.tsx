@@ -7,6 +7,7 @@ import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
 import { useSessionSyncLeader } from '@/lib/hooks/useSessionSyncLeader';
+import type { ModelSettingsResponse } from '@/lib/settings/providerModels';
 import {
   getLatestAgentEventTimestampSince,
   getLatestCompletionSignalTimestampSince,
@@ -193,6 +194,7 @@ export function ChatInterface({
   agentFlavor,
   sessionModel,
   approvalPolicy: initialApprovalPolicy,
+  initialModelSettings = null,
   initialShowWorkspaceHome = false,
   initialShowChatEntryLoading = false,
 }: {
@@ -208,6 +210,7 @@ export function ChatInterface({
   agentFlavor: string;
   sessionModel?: string | null;
   approvalPolicy?: ApprovalPolicy;
+  initialModelSettings?: ModelSettingsResponse | null;
   initialShowWorkspaceHome?: boolean;
   initialShowChatEntryLoading?: boolean;
 }) {
@@ -234,6 +237,7 @@ export function ChatInterface({
     initialApprovalPolicy,
     initialChats,
     activeChatId,
+    initialModelSettings,
     initialShowWorkspaceHome,
   });
   const { isLeader: isSessionSyncLeader } = useSessionSyncLeader(sessionId);

@@ -7,7 +7,6 @@ import { CodexModelCatalogCard } from '@/components/settings/CodexModelCatalogCa
 import {
   DEFAULT_GEMINI_MODE_ID,
   DEFAULT_CLAUDE_MODEL_SELECTIONS,
-  DEFAULT_CODEX_MODEL_SELECTIONS,
   DEFAULT_GEMINI_MODEL_SELECTIONS,
   GEMINI_MODE_SELECTION_OPTIONS,
   type ClaudeCatalogItem,
@@ -59,8 +58,8 @@ export function SettingsTab() {
 
   // Codex 상태
   const [codexCatalogItems, setCodexCatalogItems] = useState<OpenAiCatalogItem[]>([]);
-  const [selectedCodexModelIds, setSelectedCodexModelIds] = useState<string[]>([...DEFAULT_CODEX_MODEL_SELECTIONS]);
-  const [selectedCodexDefaultModelId, setSelectedCodexDefaultModelId] = useState<string>(DEFAULT_CODEX_MODEL_SELECTIONS[0]);
+  const [selectedCodexModelIds, setSelectedCodexModelIds] = useState<string[]>([]);
+  const [selectedCodexDefaultModelId, setSelectedCodexDefaultModelId] = useState<string>('');
   const [codexModelSaving, setCodexModelSaving] = useState(false);
   const [codexModelFeedback, setCodexModelFeedback] = useState<Feedback>(null);
   const [codexCatalogLoading, setCodexCatalogLoading] = useState(false);
@@ -95,9 +94,9 @@ export function SettingsTab() {
 
   const syncCodexSelection = useCallback((settings: ModelSettingsResponse) => {
     const persisted = settings.providers.codex.selectedModelIds;
-    const nextSelected = persisted.length > 0 ? persisted : [...DEFAULT_CODEX_MODEL_SELECTIONS];
+    const nextSelected = persisted.length > 0 ? persisted : [];
     setSelectedCodexModelIds(nextSelected);
-    setSelectedCodexDefaultModelId(settings.providers.codex.defaultModelId ?? nextSelected[0] ?? DEFAULT_CODEX_MODEL_SELECTIONS[0]);
+    setSelectedCodexDefaultModelId(settings.providers.codex.defaultModelId ?? nextSelected[0] ?? '');
   }, []);
 
   const syncClaudeSelection = useCallback((settings: ModelSettingsResponse) => {
@@ -429,28 +428,25 @@ export function SettingsTab() {
     setSelectedCodexModelIds((prev) => {
       if (prev.includes(modelId)) {
         const next = prev.filter((item) => item !== modelId);
-        setSelectedCodexDefaultModelId((current) => (current === modelId ? (next[0] ?? DEFAULT_CODEX_MODEL_SELECTIONS[0]) : current));
+        setSelectedCodexDefaultModelId((current) => (current === modelId ? (next[0] ?? '') : current));
         return next;
       }
       const next = [...prev, modelId];
       const order = new Map(codexCatalogItems.map((item, index) => [item.id, index]));
       next.sort((left, right) => (order.get(left) ?? Number.MAX_SAFE_INTEGER) - (order.get(right) ?? Number.MAX_SAFE_INTEGER));
-      setSelectedCodexDefaultModelId((current) => current || next[0] || DEFAULT_CODEX_MODEL_SELECTIONS[0]);
+      setSelectedCodexDefaultModelId((current) => current || next[0] || '');
       return next;
     });
   }, [codexCatalogItems]);
 
   const handleApplyRecommendedCodexModels = useCallback(() => {
     if (codexCatalogItems.length === 0) {
-      setSelectedCodexModelIds([...DEFAULT_CODEX_MODEL_SELECTIONS]);
-      setSelectedCodexDefaultModelId(DEFAULT_CODEX_MODEL_SELECTIONS[0]);
+      setCodexModelFeedback({ ok: false, msg: '먼저 OpenAI 모델 카탈로그를 불러와 주세요.' });
       return;
     }
-    const available = new Set(codexCatalogItems.map((item) => item.id));
-    const recommended = DEFAULT_CODEX_MODEL_SELECTIONS.filter((modelId) => available.has(modelId));
-    const nextSelected = recommended.length > 0 ? [...recommended] : [...DEFAULT_CODEX_MODEL_SELECTIONS];
+    const nextSelected = codexCatalogItems.map((item) => item.id);
     setSelectedCodexModelIds(nextSelected);
-    setSelectedCodexDefaultModelId(nextSelected[0] ?? DEFAULT_CODEX_MODEL_SELECTIONS[0]);
+    setSelectedCodexDefaultModelId(nextSelected[0] ?? '');
   }, [codexCatalogItems]);
 
   const handleCodexModelSave = useCallback(async () => {

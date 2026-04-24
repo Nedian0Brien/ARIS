@@ -9,6 +9,7 @@ type UseChatScreenStateParams = {
   initialApprovalPolicy?: ApprovalPolicy;
   initialChats: SessionChat[];
   activeChatId: string | null;
+  initialModelSettings?: ModelSettingsResponse | null;
   initialShowWorkspaceHome?: boolean;
 };
 
@@ -17,11 +18,12 @@ export function useChatScreenState({
   initialApprovalPolicy,
   initialChats,
   activeChatId,
+  initialModelSettings = null,
   initialShowWorkspaceHome = false,
 }: UseChatScreenStateParams) {
   const [approvalPolicy, setApprovalPolicy] = useState<ApprovalPolicy | undefined>(initialApprovalPolicy);
   const [isPolicyChanging, setIsPolicyChanging] = useState(false);
-  const [modelSettings, setModelSettings] = useState<ModelSettingsResponse | null>(null);
+  const [modelSettings, setModelSettings] = useState<ModelSettingsResponse | null>(initialModelSettings);
   const [isWorkspaceHome, setIsWorkspaceHome] = useState(initialShowWorkspaceHome);
   const [chats, setChats] = useState<SessionChat[]>(() => sortSessionChats(initialChats));
   const [selectedChatId, setSelectedChatId] = useState<string | null>(activeChatId);
@@ -37,6 +39,10 @@ export function useChatScreenState({
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    setModelSettings(initialModelSettings);
+  }, [initialModelSettings]);
 
   useEffect(() => {
     setChats(sortSessionChats(initialChats));

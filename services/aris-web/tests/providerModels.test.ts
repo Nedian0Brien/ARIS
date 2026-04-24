@@ -6,6 +6,7 @@ import {
   isOpenAiTextGenerationModelId,
   normalizeProviderModelSelections,
   normalizePartialProviderModelSelections,
+  resolveCodexSelectionFromCatalog,
 } from '@/lib/settings/providerModels';
 
 describe('providerModels', () => {
@@ -34,6 +35,42 @@ describe('providerModels', () => {
       codex: { selectedModelIds: ['gpt-5.4', 'gpt-5.3-codex'], defaultModelId: 'gpt-5.3-codex' },
     })).toEqual({
       codex: { selectedModelIds: ['gpt-5.4', 'gpt-5.3-codex'], defaultModelId: 'gpt-5.3-codex', defaultModeId: null },
+    });
+  });
+
+  it('uses the full live OpenAI catalog when no Codex selection has been saved yet', () => {
+    expect(resolveCodexSelectionFromCatalog({
+      catalogModelIds: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'],
+      storedSelectedModelIds: [],
+      storedDefaultModelId: null,
+    })).toEqual({
+      selectedModelIds: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'],
+      defaultModelId: 'gpt-5.5',
+      defaultModeId: null,
+    });
+  });
+
+  it('upgrades the legacy hardcoded Codex defaults to the live OpenAI catalog', () => {
+    expect(resolveCodexSelectionFromCatalog({
+      catalogModelIds: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'],
+      storedSelectedModelIds: ['gpt-5.4', 'gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5', 'gpt-5-mini'],
+      storedDefaultModelId: 'gpt-5.4',
+    })).toEqual({
+      selectedModelIds: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'],
+      defaultModelId: 'gpt-5.4',
+      defaultModeId: null,
+    });
+  });
+
+  it('preserves a custom Codex subset while dropping models missing from the live catalog', () => {
+    expect(resolveCodexSelectionFromCatalog({
+      catalogModelIds: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'],
+      storedSelectedModelIds: ['gpt-5.5', 'gpt-5-mini'],
+      storedDefaultModelId: 'gpt-5-mini',
+    })).toEqual({
+      selectedModelIds: ['gpt-5.5'],
+      defaultModelId: 'gpt-5.5',
+      defaultModeId: null,
     });
   });
 

@@ -4,7 +4,6 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Bot, CheckCircle2, LoaderCircle, RefreshCw, Search, Sparkles, Stars } from 'lucide-react';
 import {
   DEFAULT_CLAUDE_MODEL_SELECTIONS,
-  DEFAULT_CODEX_MODEL_SELECTIONS,
   DEFAULT_GEMINI_MODEL_SELECTIONS,
   type ClaudeCatalogItem,
   type GeminiCatalogItem,
@@ -202,10 +201,11 @@ export function CodexModelCatalogCard({
       : styles.themeCodex;
 
   const defaultSelectionsCount = isCodex
-    ? DEFAULT_CODEX_MODEL_SELECTIONS.length
+    ? items.length
     : isClaude
       ? DEFAULT_CLAUDE_MODEL_SELECTIONS.length
       : DEFAULT_GEMINI_MODEL_SELECTIONS.length;
+  const applyPresetLabel = isCodex ? '카탈로그 전체' : '권장 세트';
 
   const noApiKeyMessage = isCodex
     ? '키가 등록되면 `/v1/models` 기준으로 Codex용 텍스트 모델 카탈로그를 불러와 버전 그룹 기반 선택 UI로 표시합니다.'
@@ -276,7 +276,7 @@ export function CodexModelCatalogCard({
                   disabled={!hasApiKey}
                 >
                   <Stars size={16} />
-                  권장 세트
+                  {applyPresetLabel}
                 </button>
                 <button
                   type="button"

@@ -45,7 +45,7 @@ export type ModelSettingsResponse = {
   };
 };
 
-export const DEFAULT_CODEX_MODEL_SELECTIONS = [
+const LEGACY_DEFAULT_CODEX_MODEL_SELECTIONS = [
   'gpt-5.4',
   'gpt-5.3-codex',
   'gpt-5.3-codex-spark',
@@ -252,6 +252,43 @@ export function normalizeProviderModelSelectionList(provider: ProviderId, input:
     return [...DEFAULT_GEMINI_MODEL_SELECTIONS];
   }
   return filtered;
+}
+
+export function resolveCodexSelectionFromCatalog(input: {
+  catalogModelIds: unknown;
+  storedSelectedModelIds: unknown;
+  storedDefaultModelId?: unknown;
+}): ProviderModelSelection {
+  const catalogModelIds = normalizeModelSelectionList(input.catalogModelIds);
+  const storedSelectedModelIds = normalizeModelSelectionList(input.storedSelectedModelIds);
+  const storedDefaultModelId = normalizeModelSelectionList([input.storedDefaultModelId])[0] ?? null;
+
+  if (catalogModelIds.length === 0) {
+    return {
+      selectedModelIds: storedSelectedModelIds,
+      defaultModelId: storedDefaultModelId && storedSelectedModelIds.includes(storedDefaultModelId)
+        ? storedDefaultModelId
+        : (storedSelectedModelIds[0] ?? null),
+      defaultModeId: null,
+    };
+  }
+
+  const catalogModelIdSet = new Set(catalogModelIds);
+  const filteredStoredSelectedModelIds = storedSelectedModelIds.filter((modelId) => catalogModelIdSet.has(modelId));
+  const isLegacyDefaultSelection = storedSelectedModelIds.length === LEGACY_DEFAULT_CODEX_MODEL_SELECTIONS.length
+    && LEGACY_DEFAULT_CODEX_MODEL_SELECTIONS.every((modelId, index) => storedSelectedModelIds[index] === modelId);
+  const selectedModelIds = filteredStoredSelectedModelIds.length === 0 || isLegacyDefaultSelection
+    ? [...catalogModelIds]
+    : filteredStoredSelectedModelIds;
+  const defaultModelId = storedDefaultModelId && selectedModelIds.includes(storedDefaultModelId)
+    ? storedDefaultModelId
+    : (selectedModelIds[0] ?? null);
+
+  return {
+    selectedModelIds,
+    defaultModelId,
+    defaultModeId: null,
+  };
 }
 
 export function isOpenAiTextGenerationModelId(modelId: string): boolean {
