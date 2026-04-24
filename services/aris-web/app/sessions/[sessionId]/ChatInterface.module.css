@@ -387,7 +387,7 @@
   font-size: 0.83rem;
   font-weight: 700;
   color: var(--chat-text-primary);
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .chatSidebarSubTitle {
@@ -779,7 +779,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
 }
 
 .chatListPreviewRow {
@@ -1470,7 +1470,7 @@
 .chatTransitionMessage {
   font-size: 1rem;
   font-weight: 800;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: var(--chat-text-primary);
   text-align: center;
 }
@@ -3380,6 +3380,9 @@
 ═══════════════════════════════════════════ */
 
 .composerCard {
+  --composer-accent: var(--b-600);
+  --composer-accent-soft: var(--b-50);
+  --composer-accent-border: rgba(37, 99, 235, 0.22);
   background: var(--chat-popover-bg);
   border: 1px solid var(--chat-panel-border);
   border-radius: 18px;
@@ -3389,14 +3392,92 @@
   max-width: 100%;
 }
 
+.composerModeAgent {
+  --composer-accent: var(--b-600);
+  --composer-accent-soft: var(--b-50);
+  --composer-accent-border: rgba(37, 99, 235, 0.22);
+}
+
+.composerModePlan {
+  --composer-accent: var(--accent-violet);
+  --composer-accent-soft: color-mix(in srgb, var(--accent-violet) 10%, var(--surface));
+  --composer-accent-border: color-mix(in srgb, var(--accent-violet) 25%, transparent);
+}
+
+.composerModeTerminal {
+  --composer-accent: var(--accent-emerald);
+  --composer-accent-soft: color-mix(in srgb, var(--accent-emerald) 10%, var(--surface));
+  --composer-accent-border: color-mix(in srgb, var(--accent-emerald) 25%, transparent);
+}
+
 /* ── Toolbar ── */
 .composerToolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.5rem;
   padding: 0.42rem 0.6rem 0;
   border-bottom: 1px solid var(--chat-panel-border);
-  min-height: 34px;
+  min-height: 42px;
+}
+
+.composerModeToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  padding: 0.16rem;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.composerModeToggle::-webkit-scrollbar {
+  display: none;
+}
+
+.composerModePill {
+  appearance: none;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 0 0.48rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.composerModePill:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--surface-elevated) 76%, transparent);
+}
+
+.composerModePillActive {
+  color: var(--composer-accent);
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.composerModePillActive.composerModePillPlan {
+  color: var(--accent-violet);
+}
+
+.composerModePillActive.composerModePillTerminal {
+  color: var(--accent-emerald);
 }
 
 .modelSelectorWrap {
@@ -3849,6 +3930,10 @@
   color: var(--chat-text-primary);
 }
 
+.composerInput::placeholder {
+  color: var(--text-tertiary);
+}
+
 .composerInput:focus {
   border: none;
   box-shadow: none;
@@ -3856,22 +3941,25 @@
 
 /* ── Send button ── */
 .composerSendBtn {
-  width: 34px;
+  width: auto;
+  min-width: 72px;
   height: 34px;
+  padding: 0 0.62rem;
   border-radius: 10px;
   border: none;
-  background: #2563eb;
+  background: var(--composer-accent);
   color: #fff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0.28rem;
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.15s, transform 0.15s;
 }
 
 .composerSendBtn:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: color-mix(in srgb, var(--composer-accent) 86%, #020617);
   transform: scale(1.05);
 }
 
@@ -3884,6 +3972,14 @@
   opacity: 0.38;
   cursor: not-allowed;
   transform: none;
+}
+
+.composerSendLabel {
+  min-width: 0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 /* ── Running button (replaces stop button) ── */
@@ -4190,10 +4286,14 @@
     font-size: 16px;
   }
 
-  .composerSendBtn,
   .composerRunningBtn,
   .composerPlusBtn {
     width: 38px;
+    height: 38px;
+  }
+
+  .composerSendBtn {
+    min-width: 72px;
     height: 38px;
   }
 
@@ -4540,7 +4640,7 @@
 .agentSelectorTitle {
   font-size: 1.5rem;
   font-weight: 800;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   color: var(--chat-text-primary);
   text-align: center;
 }

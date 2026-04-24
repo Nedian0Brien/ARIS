@@ -5,13 +5,15 @@ import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const cssPath = resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.module.css');
-const tsxPath = resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.tsx');
+const timelinePath = resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/ChatTimeline.tsx');
+const carouselPath = resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/renderers/LinkPreviewCarousel.tsx');
 const css = readFileSync(cssPath, 'utf8');
-const tsx = readFileSync(tsxPath, 'utf8');
+const timeline = readFileSync(timelinePath, 'utf8');
+const carousel = readFileSync(carouselPath, 'utf8');
 
 describe('link preview carousel mobile layout', () => {
   it('keeps the carousel wrapper constrained to the agent bubble stack width', () => {
-    expect(tsx).toMatch(/className=\{styles\.agentMessageStack\}/);
+    expect(timeline).toMatch(/className=\{styles\.agentMessageStack\}/);
     expect(css).toMatch(/\.agentMessageStack\s*\{[^}]*width:\s*fit-content;/s);
     expect(css).toMatch(/\.agentMessageStack\s*\{[^}]*max-width:\s*min\(100%,\s*48rem\);/s);
     expect(css).toMatch(/\.linkPreviewWrap\s*\{[^}]*width:\s*100%;/s);
@@ -27,8 +29,8 @@ describe('link preview carousel mobile layout', () => {
   });
 
   it('scrolls by the rendered card width instead of a hard-coded desktop value', () => {
-    expect(tsx).not.toContain('const cardWidth = 296;');
-    expect(tsx).toMatch(/firstElementChild as HTMLElement \| null/);
+    expect(carousel).not.toContain('const cardWidth = 296;');
+    expect(carousel).toMatch(/firstElementChild as HTMLElement \| null/);
   });
 
   it('lets the agent bubble define the stack width instead of the full message body', () => {

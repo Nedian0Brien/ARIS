@@ -57,7 +57,7 @@
   font-weight: 700;
   color: var(--text);
   margin: 0;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .modal-subtitle {

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui';
-import { Sparkles, LogOut, LayoutDashboard, Terminal, FolderTree, Settings, Sun, Moon, Monitor } from 'lucide-react';
+import { Sparkles, LogOut, FolderTree, Home, MessageSquareText, Moon, Monitor, PanelsTopLeft, Sun } from 'lucide-react';
 import type { TabType } from './BottomNav';
 import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
 import { primeAutoHideScrollState, reduceAutoHideScrollState } from './mobileScrollAutoHide';
@@ -32,10 +32,10 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
   const { isActive: isSessionScrollActive, phase: sessionScrollPhase } = useSessionScrollOrchestrator();
   const navItems = [
-    { id: 'sessions', label: '워크스페이스', icon: LayoutDashboard },
-    { id: 'console', label: '콘솔', icon: Terminal },
-    { id: 'files', label: '파일', icon: FolderTree },
-    { id: 'settings', label: '설정', icon: Settings },
+    { id: 'home', label: 'Home', icon: Home },
+    { id: 'ask', label: 'Ask ARIS', icon: MessageSquareText },
+    { id: 'project', label: 'Project', icon: PanelsTopLeft },
+    { id: 'files', label: 'Files', icon: FolderTree },
   ];
 
   const handleNavClick = (id: TabType) => {
@@ -224,7 +224,7 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
   return (
     <header className={`header${autoHideOnScroll ? ' header-autohide' : ''}${hiddenOnScroll ? ' header-hidden-on-scroll' : ''}`}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-        <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.03em', background: 'var(--gradient-primary)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+        <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '0.95rem', letterSpacing: 'var(--ls-snug)', color: 'var(--text-primary)' }}>
           <Sparkles size={20} color="var(--primary)" />
           ARIS
         </Link>
@@ -244,13 +244,13 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
                   alignItems: 'center',
                   gap: '0.5rem',
                   padding: '0.5rem 0.75rem',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: '0.875rem',
+                  borderRadius: 'var(--r-sm)',
+                  fontSize: 'var(--text-sm)',
                   whiteSpace: 'nowrap',
-                  fontWeight: 600,
-                  color: isActive ? 'var(--primary)' : 'var(--text-muted)',
-                  background: isActive ? 'var(--accent-sky-bg)' : 'transparent',
-                  transition: 'all 0.2s ease',
+                  fontWeight: 500,
+                  color: isActive ? 'var(--b-700)' : 'var(--text-secondary)',
+                  background: isActive ? 'var(--b-50)' : 'transparent',
+                  transition: 'background-color var(--dur-fast) var(--ease-smooth), color var(--dur-fast) var(--ease-smooth)',
                   cursor: 'pointer',
                   flexShrink: 0,
                 }}
@@ -270,9 +270,9 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
             display: 'inline-flex',
             alignItems: 'center',
             gap: '0.2rem',
-            border: '1px solid var(--line)',
+            border: '1px solid var(--border-default)',
             borderRadius: '999px',
-            background: 'var(--surface-subtle)',
+            background: 'var(--surface-sunken)',
             padding: '0.18rem',
           }}
           aria-label="테마 선택"
@@ -299,7 +299,7 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  background: active ? 'var(--primary)' : 'transparent',
+                  background: active ? 'var(--b-600)' : 'transparent',
                   color: active ? 'var(--text-on-accent)' : 'var(--text-muted)',
                   cursor: 'pointer',
                 }}

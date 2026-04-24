@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { LayoutDashboard, Terminal, FolderTree, Settings } from 'lucide-react';
+import { FolderTree, Home, MessageSquareText, PanelsTopLeft } from 'lucide-react';
 import { primeAutoHideScrollState, reduceAutoHideScrollState } from './mobileScrollAutoHide';
 import { useSessionScrollOrchestrator } from '@/app/sessions/[sessionId]/useSessionScrollOrchestrator';
 
-export type TabType = 'sessions' | 'console' | 'files' | 'settings';
+export type TabType = 'home' | 'ask' | 'project' | 'files';
 
 interface BottomNavProps {
   activeTab: TabType;
@@ -154,10 +154,10 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   }, [syncIndicator]);
 
   const tabs = [
-    { id: 'sessions', label: '워크스페이스', icon: LayoutDashboard },
-    { id: 'console', label: '콘솔', icon: Terminal },
-    { id: 'files', label: '파일', icon: FolderTree },
-    { id: 'settings', label: '설정', icon: Settings },
+    { id: 'home', label: 'Home', icon: Home },
+    { id: 'ask', label: 'Ask', icon: MessageSquareText },
+    { id: 'project', label: 'Project', icon: PanelsTopLeft },
+    { id: 'files', label: 'Files', icon: FolderTree },
   ];
 
   return (

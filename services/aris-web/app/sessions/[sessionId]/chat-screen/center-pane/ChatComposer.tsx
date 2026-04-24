@@ -34,6 +34,8 @@ type ChatCommandOption = {
   description: string;
 };
 
+type ComposerMode = 'agent' | 'plan' | 'terminal';
+
 export function ChatComposer({
   showPendingReveal,
   agentFlavor,
@@ -145,6 +147,26 @@ export function ChatComposer({
   onPromptKeyDown: KeyboardEventHandler<HTMLTextAreaElement>;
   onAbortRun: MouseEventHandler<HTMLButtonElement>;
 }) {
+  const [composerMode, setComposerMode] = React.useState<ComposerMode>('agent');
+  const composerModeClass =
+    composerMode === 'plan'
+      ? styles.composerModePlan
+      : composerMode === 'terminal'
+        ? styles.composerModeTerminal
+        : styles.composerModeAgent;
+  const submitLabel =
+    composerMode === 'plan' ? 'Plan' : composerMode === 'terminal' ? 'Execute' : 'Send';
+  const placeholder =
+    !activeChatIdResolved
+      ? '사용할 채팅을 선택하세요.'
+      : !isOperator
+        ? 'Viewer 권한입니다.'
+        : composerMode === 'plan'
+          ? '계획으로 전환할 목표와 제약을 설명하세요...'
+          : composerMode === 'terminal'
+            ? '$ 실행할 터미널 명령을 입력하세요...'
+            : '에이전트에게 작업을 지시하세요...';
+
   return (
     <footer
       className={`${styles.composerDock} ${showPendingReveal ? styles.chatEntryPendingReveal : ''}`}
@@ -152,8 +174,40 @@ export function ChatComposer({
       aria-hidden={showPendingReveal}
     >
       <form onSubmit={onSubmit} className={styles.composerForm}>
-        <div className={styles.composerCard}>
+        <div className={`${styles.composerCard} ${composerModeClass}`} data-composer-mode={composerMode}>
           <div className={styles.composerToolbar}>
+            <div className={styles.composerModeToggle} role="tablist" aria-label="Composer mode">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={composerMode === 'agent'}
+                className={`${styles.composerModePill} ${styles.composerModePillAgent} ${composerMode === 'agent' ? styles.composerModePillActive : ''}`}
+                onClick={() => setComposerMode('agent')}
+              >
+                <AgentIcon size={13} />
+                <span>Agent</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={composerMode === 'plan'}
+                className={`${styles.composerModePill} ${styles.composerModePillPlan} ${composerMode === 'plan' ? styles.composerModePillActive : ''}`}
+                onClick={() => setComposerMode('plan')}
+              >
+                <AlignLeft size={13} />
+                <span>Plan</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={composerMode === 'terminal'}
+                className={`${styles.composerModePill} ${styles.composerModePillTerminal} ${composerMode === 'terminal' ? styles.composerModePillActive : ''}`}
+                onClick={() => setComposerMode('terminal')}
+              >
+                <TerminalSquare size={13} />
+                <span>Terminal</span>
+              </button>
+            </div>
             {availableChatCommands.length > 0 && (
               <div className={styles.modelSelectorWrap} ref={commandMenuRef}>
                 <button
@@ -377,13 +431,7 @@ export function ChatComposer({
               onFocus={onPromptFocus}
               rows={1}
               onKeyDown={onPromptKeyDown}
-              placeholder={
-                !activeChatIdResolved
-                  ? '사용할 채팅을 선택하세요.'
-                  : isOperator
-                    ? '메시지를 입력하세요...'
-                    : 'Viewer 권한입니다.'
-              }
+              placeholder={placeholder}
               disabled={!activeChatIdResolved || !isOperator}
               className={styles.composerInput}
             />
@@ -407,9 +455,10 @@ export function ChatComposer({
                 type="submit"
                 disabled={!activeChatIdResolved || !prompt.trim() || !isOperator || imageUploadsInFlight > 0}
                 className={styles.composerSendBtn}
-                aria-label="메시지 전송"
-                title="메시지 전송 (Ctrl/Cmd + Enter)"
+                aria-label={submitLabel}
+                title={`${submitLabel} (Ctrl/Cmd + Enter)`}
               >
+                <span className={styles.composerSendLabel}>{submitLabel}</span>
                 <ArrowUp size={17} />
               </button>
             )}
