@@ -4,9 +4,11 @@ import {
   isAllowedGeminiSelectionModelId,
   normalizeGeminiModeSelectionId,
   isOpenAiTextGenerationModelId,
+  normalizeModelSelectionList,
   normalizeProviderModelSelections,
   normalizePartialProviderModelSelections,
   resolveCodexSelectionFromCatalog,
+  sanitizeManualModelId,
 } from '@/lib/settings/providerModels';
 
 describe('providerModels', () => {
@@ -62,16 +64,46 @@ describe('providerModels', () => {
     });
   });
 
-  it('preserves a custom Codex subset while dropping models missing from the live catalog', () => {
+  it('preserves a custom Codex subset including non-catalog models saved by the user', () => {
     expect(resolveCodexSelectionFromCatalog({
       catalogModelIds: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'],
       storedSelectedModelIds: ['gpt-5.5', 'gpt-5-mini'],
       storedDefaultModelId: 'gpt-5-mini',
     })).toEqual({
-      selectedModelIds: ['gpt-5.5'],
+      selectedModelIds: ['gpt-5.5', 'gpt-5-mini'],
+      defaultModelId: 'gpt-5-mini',
+      defaultModeId: null,
+    });
+  });
+
+  it('preserves manually added Codex models that are not yet in the live catalog', () => {
+    expect(resolveCodexSelectionFromCatalog({
+      catalogModelIds: ['gpt-5.4', 'gpt-5.4-mini'],
+      storedSelectedModelIds: ['gpt-5.4', 'gpt-5.5'],
+      storedDefaultModelId: 'gpt-5.5',
+    })).toEqual({
+      selectedModelIds: ['gpt-5.4', 'gpt-5.5'],
       defaultModelId: 'gpt-5.5',
       defaultModeId: null,
     });
+  });
+
+  it('keeps manual Codex additions alongside the live catalog after legacy upgrade', () => {
+    expect(resolveCodexSelectionFromCatalog({
+      catalogModelIds: ['gpt-5.4', 'gpt-5.4-mini'],
+      storedSelectedModelIds: ['gpt-5.4', 'gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5', 'gpt-5-mini', 'gpt-5.5'],
+      storedDefaultModelId: 'gpt-5.5',
+    })).toEqual({
+      selectedModelIds: ['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.5'],
+      defaultModelId: 'gpt-5.5',
+      defaultModeId: null,
+    });
+  });
+
+  it('normalizes legacy aliases and validates manual model ids', () => {
+    expect(normalizeModelSelectionList([' gpt-5-codex ', 'gpt-5-codex', 'gpt-5.5'])).toEqual(['gpt-5.3-codex', 'gpt-5.5']);
+    expect(sanitizeManualModelId('gpt-5.5')).toBe('gpt-5.5');
+    expect(sanitizeManualModelId('model with spaces')).toBeNull();
   });
 
   it('filters Gemini selections down to runtime-safe models only', () => {

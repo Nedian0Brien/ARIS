@@ -9,6 +9,7 @@ import {
   normalizeModelSelectionList,
   normalizeProviderModelSelections,
   resolveCodexSelectionFromCatalog,
+  sanitizeManualModelId,
   type ModelSettingsResponse,
   type ProviderId,
   type ProviderModelSelections,
@@ -59,7 +60,7 @@ export function sanitizeProviderModelSelections(raw: unknown): ProviderModelSele
 
 function sanitizeModelSelectionList(value: unknown): string[] {
   return normalizeModelSelectionList(value)
-    .map((item) => sanitizeCustomModel(item))
+    .map((item) => sanitizeManualModelId(item))
     .filter((item): item is string => Boolean(item));
 }
 

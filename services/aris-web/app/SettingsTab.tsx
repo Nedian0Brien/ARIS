@@ -9,6 +9,7 @@ import {
   DEFAULT_CLAUDE_MODEL_SELECTIONS,
   DEFAULT_GEMINI_MODEL_SELECTIONS,
   GEMINI_MODE_SELECTION_OPTIONS,
+  sanitizeManualModelId,
   type ClaudeCatalogItem,
   type GeminiCatalogItem,
   type ModelSettingsResponse,
@@ -444,10 +445,54 @@ export function SettingsTab() {
       setCodexModelFeedback({ ok: false, msg: '먼저 OpenAI 모델 카탈로그를 불러와 주세요.' });
       return;
     }
-    const nextSelected = codexCatalogItems.map((item) => item.id);
+    const catalogModelIds = codexCatalogItems.map((item) => item.id);
+    const catalogModelIdSet = new Set(catalogModelIds);
+    const manualModelIds = selectedCodexModelIds.filter((modelId) => !catalogModelIdSet.has(modelId));
+    const nextSelected = [...catalogModelIds, ...manualModelIds];
     setSelectedCodexModelIds(nextSelected);
-    setSelectedCodexDefaultModelId(nextSelected[0] ?? '');
-  }, [codexCatalogItems]);
+    setSelectedCodexDefaultModelId((current) => (current && nextSelected.includes(current) ? current : (nextSelected[0] ?? '')));
+  }, [codexCatalogItems, selectedCodexModelIds]);
+
+  const handleAddCodexManualModel = useCallback((rawModelId: string) => {
+    const normalizedModelId = sanitizeManualModelId(rawModelId);
+    if (!normalizedModelId) {
+      setCodexModelFeedback({
+        ok: false,
+        msg: '모델명은 영문자/숫자로 시작하고 점(.), 밑줄(_), 하이픈(-), 콜론(:)만 포함할 수 있습니다.',
+      });
+      return false;
+    }
+
+    let duplicate = false;
+    setSelectedCodexModelIds((prev) => {
+      if (prev.includes(normalizedModelId)) {
+        duplicate = true;
+        return prev;
+      }
+      setSelectedCodexDefaultModelId((current) => current || normalizedModelId);
+      return [...prev, normalizedModelId];
+    });
+
+    if (duplicate) {
+      setCodexModelFeedback({ ok: false, msg: '이미 선택 목록에 있는 모델입니다.' });
+      return false;
+    }
+
+    setCodexModelFeedback({ ok: true, msg: `${normalizedModelId} 모델을 추가했습니다. 저장을 누르면 반영됩니다.` });
+    return true;
+  }, []);
+
+  const handleRemoveCodexManualModel = useCallback((modelId: string) => {
+    setSelectedCodexModelIds((prev) => {
+      if (!prev.includes(modelId)) {
+        return prev;
+      }
+      const next = prev.filter((item) => item !== modelId);
+      setSelectedCodexDefaultModelId((current) => (current === modelId ? (next[0] ?? '') : current));
+      return next;
+    });
+    setCodexModelFeedback({ ok: true, msg: `${modelId} 모델을 목록에서 제거했습니다. 저장을 누르면 반영됩니다.` });
+  }, []);
 
   const handleCodexModelSave = useCallback(async () => {
     if (selectedCodexModelIds.length === 0) {
@@ -621,6 +666,8 @@ export function SettingsTab() {
 
   const activeCatalogItems = isCodex ? codexCatalogItems : isClaude ? claudeCatalogItems : geminiCatalogItems;
   const activeSelectedModelIds = isCodex ? selectedCodexModelIds : isClaude ? selectedClaudeModelIds : selectedGeminiModelIds;
+  const codexCatalogModelIdSet = new Set(codexCatalogItems.map((item) => item.id));
+  const manualCodexModelIds = selectedCodexModelIds.filter((modelId) => !codexCatalogModelIdSet.has(modelId));
   const activeCatalogLoading = isCodex ? codexCatalogLoading : isClaude ? claudeCatalogLoading : geminiCatalogLoading;
   const activeModelSaving = isCodex ? codexModelSaving : isClaude ? claudeModelSaving : geminiModelSaving;
   const activeCatalogError = isCodex ? codexCatalogError : isClaude ? claudeCatalogError : geminiCatalogError;
@@ -670,11 +717,14 @@ export function SettingsTab() {
           hasApiKey={activeHasApiKey}
           items={activeCatalogItems}
           selectedModelIds={activeSelectedModelIds}
+          manualModelIds={isCodex ? manualCodexModelIds : []}
           loading={activeCatalogLoading}
           saving={activeModelSaving}
           error={activeCatalogError}
           feedback={activeModelFeedback}
           onToggle={handleActiveToggle}
+          onAddManualModel={isCodex ? handleAddCodexManualModel : undefined}
+          onRemoveManualModel={isCodex ? handleRemoveCodexManualModel : undefined}
           onRefresh={handleActiveRefresh}
           onSave={handleActiveModelSave}
           onApplyRecommended={handleActiveApplyRecommended}
