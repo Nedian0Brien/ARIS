@@ -7,6 +7,7 @@ import {
   type SetStateAction,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react';
@@ -57,12 +58,14 @@ export function resolveTailRestoreLoopTransition(input: {
   settleAction: 'skip' | 'start' | 'continue';
 }): {
   shouldCancelExistingSettle: boolean;
+  shouldReenablePendingReveal: boolean;
   shouldRestartSettle: boolean;
   shouldResetTailRestoreState: boolean;
 } {
   if (input.settleAction === 'skip') {
     return {
       shouldCancelExistingSettle: input.wasMidSettle,
+      shouldReenablePendingReveal: false,
       shouldRestartSettle: false,
       shouldResetTailRestoreState: input.wasMidSettle,
     };
@@ -70,6 +73,7 @@ export function resolveTailRestoreLoopTransition(input: {
 
   return {
     shouldCancelExistingSettle: input.wasMidSettle,
+    shouldReenablePendingReveal: input.settleAction === 'start',
     shouldRestartSettle: true,
     shouldResetTailRestoreState: false,
   };
@@ -328,7 +332,7 @@ export function useChatTailRestore({
   }, [activeChatIdResolved, isNewChatPlaceholder, isWorkspaceHome, scrollRef]);
 
   // Tail-restore settle loop
-  useEffect(() => {
+  useLayoutEffect(() => {
     const wasMidSettle = tailRestoreCancelRef.current !== null;
     const settleAction = resolveTailRestoreSettleAction({
       activeChatIdResolved,
@@ -349,6 +353,10 @@ export function useChatTailRestore({
     if (loopTransition.shouldCancelExistingSettle) {
       tailRestoreCancelRef.current?.();
       tailRestoreCancelRef.current = null;
+    }
+
+    if (loopTransition.shouldReenablePendingReveal) {
+      setIsInitialChatEntryPendingReveal(true);
     }
 
     if (!loopTransition.shouldRestartSettle) {
