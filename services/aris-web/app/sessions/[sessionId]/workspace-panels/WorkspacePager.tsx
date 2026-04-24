@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useEffect, useRef, type PointerEvent, type ReactNode } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, type PointerEvent, type ReactNode } from 'react';
 import styles from './WorkspacePager.module.css';
 import type { WorkspacePagerItem } from './pagerModel';
 import { resolveWorkspacePagerSwipeTarget } from './swipeGesture';
 import { transitionWorkspacePageScrollMemory, type WorkspacePageScrollMemory } from './workspacePageScrollMemory';
+import { resolveWorkspacePagerSyncPlan } from './workspacePagerSyncPlan';
 import { recordScrollDebugEvent } from '../scrollDebug';
 
 const SWIPE_THRESHOLD_PX = 56;
@@ -31,6 +32,7 @@ export function WorkspacePager({
   const syncRef = useRef(false);
   const scrollMemoryRef = useRef<WorkspacePageScrollMemory>({});
   const previousActivePageIdRef = useRef(activePageId);
+  const hasCompletedInitialSyncRef = useRef(false);
   const gestureRef = useRef({
     tracking: false,
     pointerId: -1,
@@ -77,27 +79,35 @@ export function WorkspacePager({
     }
   }, [activePageId, items]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const pager = pagerRef.current;
     if (!pager) {
       return;
     }
 
-    const nextIndex = items.findIndex((item) => item.id === activePageId);
-    if (nextIndex < 0) {
-      return;
-    }
-
-    const nextLeft = nextIndex * pager.clientWidth;
-    if (Math.abs(pager.scrollLeft - nextLeft) < 2) {
+    const plan = resolveWorkspacePagerSyncPlan({
+      items,
+      activePageId,
+      pagerClientWidth: pager.clientWidth,
+      pagerScrollLeft: pager.scrollLeft,
+      hasCompletedInitialSync: hasCompletedInitialSyncRef.current,
+    });
+    if (!plan) {
+      hasCompletedInitialSyncRef.current = true;
       return;
     }
 
     syncRef.current = true;
     pager.scrollTo({
-      left: nextLeft,
-      behavior: 'smooth',
+      left: plan.nextLeft,
+      behavior: plan.behavior,
     });
+    hasCompletedInitialSyncRef.current = true;
+
+    if (plan.behavior === 'auto') {
+      syncRef.current = false;
+      return;
+    }
 
     const timeout = window.setTimeout(() => {
       syncRef.current = false;
