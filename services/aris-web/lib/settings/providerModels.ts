@@ -45,7 +45,13 @@ export type ModelSettingsResponse = {
   };
 };
 
-export const DEFAULT_CODEX_MODEL_SELECTIONS = [
+const MODEL_ID_MAX_LEN = 120;
+const DEFAULT_MODEL_ID_ALIASES: Record<string, string> = {
+  'gpt-5-codex': 'gpt-5.3-codex',
+};
+const MANUAL_MODEL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
+
+const LEGACY_DEFAULT_CODEX_MODEL_SELECTIONS = [
   'gpt-5.4',
   'gpt-5.3-codex',
   'gpt-5.3-codex-spark',
@@ -117,20 +123,37 @@ export function normalizeModelSelectionList(input: unknown): string[] {
   const seen = new Set<string>();
   const normalized: string[] = [];
   for (const value of input) {
-    if (typeof value !== 'string') {
+    const modelId = normalizeModelSelectionId(value);
+    if (!modelId || seen.has(modelId)) {
       continue;
     }
-    const trimmed = value.trim();
-    if (!trimmed || seen.has(trimmed)) {
-      continue;
-    }
-    seen.add(trimmed);
-    normalized.push(trimmed.slice(0, 120));
+    seen.add(modelId);
+    normalized.push(modelId);
     if (normalized.length >= 40) {
       break;
     }
   }
   return normalized;
+}
+
+export function normalizeModelSelectionId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const canonical = DEFAULT_MODEL_ID_ALIASES[trimmed] ?? trimmed;
+  return canonical.slice(0, MODEL_ID_MAX_LEN);
+}
+
+export function sanitizeManualModelId(value: unknown): string | null {
+  const normalized = normalizeModelSelectionId(value);
+  if (!normalized) {
+    return null;
+  }
+  return MANUAL_MODEL_ID_PATTERN.test(normalized) ? normalized : null;
 }
 
 export function normalizeProviderModelSelections(input: unknown): ProviderModelSelections {
@@ -252,6 +275,53 @@ export function normalizeProviderModelSelectionList(provider: ProviderId, input:
     return [...DEFAULT_GEMINI_MODEL_SELECTIONS];
   }
   return filtered;
+}
+
+export function resolveCodexSelectionFromCatalog(input: {
+  catalogModelIds: unknown;
+  storedSelectedModelIds: unknown;
+  storedDefaultModelId?: unknown;
+}): ProviderModelSelection {
+  const catalogModelIds = normalizeModelSelectionList(input.catalogModelIds);
+  const storedSelectedModelIds = normalizeModelSelectionList(input.storedSelectedModelIds);
+  const storedDefaultModelId = normalizeModelSelectionList([input.storedDefaultModelId])[0] ?? null;
+
+  if (catalogModelIds.length === 0) {
+    return {
+      selectedModelIds: storedSelectedModelIds,
+      defaultModelId: storedDefaultModelId && storedSelectedModelIds.includes(storedDefaultModelId)
+        ? storedDefaultModelId
+        : (storedSelectedModelIds[0] ?? null),
+      defaultModeId: null,
+    };
+  }
+
+  const catalogModelIdSet = new Set(catalogModelIds);
+  const filteredStoredSelectedModelIds = storedSelectedModelIds.filter((modelId) => catalogModelIdSet.has(modelId));
+  const hasLegacyDefaultPrefix = storedSelectedModelIds.length >= LEGACY_DEFAULT_CODEX_MODEL_SELECTIONS.length
+    && LEGACY_DEFAULT_CODEX_MODEL_SELECTIONS.every((modelId, index) => storedSelectedModelIds[index] === modelId);
+  const manualStoredSelectedModelIds = storedSelectedModelIds.filter((modelId, index) => {
+    if (catalogModelIdSet.has(modelId)) {
+      return false;
+    }
+    if (hasLegacyDefaultPrefix && index < LEGACY_DEFAULT_CODEX_MODEL_SELECTIONS.length) {
+      return false;
+    }
+    return true;
+  });
+  const catalogSelectedModelIds = filteredStoredSelectedModelIds.length === 0 || hasLegacyDefaultPrefix
+    ? [...catalogModelIds]
+    : filteredStoredSelectedModelIds;
+  const selectedModelIds = [...catalogSelectedModelIds, ...manualStoredSelectedModelIds];
+  const defaultModelId = storedDefaultModelId && selectedModelIds.includes(storedDefaultModelId)
+    ? storedDefaultModelId
+    : (selectedModelIds[0] ?? null);
+
+  return {
+    selectedModelIds,
+    defaultModelId,
+    defaultModeId: null,
+  };
 }
 
 export function isOpenAiTextGenerationModelId(modelId: string): boolean {

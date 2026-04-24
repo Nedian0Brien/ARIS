@@ -1,10 +1,9 @@
 'use client';
 
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { Bot, CheckCircle2, LoaderCircle, RefreshCw, Search, Sparkles, Stars } from 'lucide-react';
+import { Bot, CheckCircle2, LoaderCircle, Plus, RefreshCw, Search, Sparkles, Stars, X } from 'lucide-react';
 import {
   DEFAULT_CLAUDE_MODEL_SELECTIONS,
-  DEFAULT_CODEX_MODEL_SELECTIONS,
   DEFAULT_GEMINI_MODEL_SELECTIONS,
   type ClaudeCatalogItem,
   type GeminiCatalogItem,
@@ -126,11 +125,14 @@ export function CodexModelCatalogCard({
   hasApiKey,
   items,
   selectedModelIds,
+  manualModelIds = [],
   loading,
   saving,
   error,
   feedback,
   onToggle,
+  onAddManualModel,
+  onRemoveManualModel,
   onRefresh,
   onSave,
   onApplyRecommended,
@@ -141,22 +143,27 @@ export function CodexModelCatalogCard({
   hasApiKey: boolean;
   items: CatalogItem[];
   selectedModelIds: string[];
+  manualModelIds?: string[];
   loading: boolean;
   saving: boolean;
   error: string | null;
   feedback: Feedback;
   onToggle: (modelId: string) => void;
+  onAddManualModel?: (modelId: string) => boolean;
+  onRemoveManualModel?: (modelId: string) => void;
   onRefresh: () => Promise<void>;
   onSave: () => Promise<void>;
   onApplyRecommended: () => void;
 }) {
   const [query, setQuery] = useState('');
   const [selectedGroupKey, setSelectedGroupKey] = useState<string>('');
+  const [manualModelId, setManualModelId] = useState('');
   const deferredQuery = useDeferredValue(query);
 
   useEffect(() => {
     setQuery('');
     setSelectedGroupKey('');
+    setManualModelId('');
   }, [activeProvider]);
 
   const filteredItems = useMemo(() => {
@@ -190,6 +197,7 @@ export function CodexModelCatalogCard({
   );
 
   const selectedCount = selectedModelIds.length;
+  const manualSelectedCount = manualModelIds.length;
   const isCodex = activeProvider === 'codex';
   const isClaude = activeProvider === 'claude';
   const isGemini = activeProvider === 'gemini';
@@ -202,16 +210,27 @@ export function CodexModelCatalogCard({
       : styles.themeCodex;
 
   const defaultSelectionsCount = isCodex
-    ? DEFAULT_CODEX_MODEL_SELECTIONS.length
+    ? items.length
     : isClaude
       ? DEFAULT_CLAUDE_MODEL_SELECTIONS.length
       : DEFAULT_GEMINI_MODEL_SELECTIONS.length;
+  const applyPresetLabel = isCodex ? '카탈로그 전체' : '권장 세트';
 
   const noApiKeyMessage = isCodex
     ? '키가 등록되면 `/v1/models` 기준으로 Codex용 텍스트 모델 카탈로그를 불러와 버전 그룹 기반 선택 UI로 표시합니다.'
     : isClaude
       ? '키가 등록되면 Anthropic `/v1/models` 기준으로 Claude 모델 카탈로그를 불러와 표시합니다.'
       : '키가 등록되면 Google AI `/v1beta/models` 기준으로 Gemini 모델 카탈로그를 불러와 표시합니다.';
+
+  const handleManualAdd = () => {
+    const trimmed = manualModelId.trim();
+    if (!trimmed || !onAddManualModel) {
+      return;
+    }
+    if (onAddManualModel(trimmed)) {
+      setManualModelId('');
+    }
+  };
 
   return (
     <section className={`${styles.card} ${themeClass}`}>
@@ -276,7 +295,7 @@ export function CodexModelCatalogCard({
                   disabled={!hasApiKey}
                 >
                   <Stars size={16} />
-                  권장 세트
+                  {applyPresetLabel}
                 </button>
                 <button
                   type="button"
@@ -299,6 +318,12 @@ export function CodexModelCatalogCard({
                 <CheckCircle2 size={14} />
                 사용 {selectedCount}개
               </span>
+              {isCodex && manualSelectedCount > 0 ? (
+                <span className={styles.statPill}>
+                  <Plus size={14} />
+                  수동 추가 {manualSelectedCount}개
+                </span>
+              ) : null}
               <span className={styles.statPill}>
                 <Stars size={14} />
                 기본 권장 {defaultSelectionsCount}개
@@ -309,6 +334,64 @@ export function CodexModelCatalogCard({
                 </span>
               ) : null}
             </div>
+
+            {isCodex ? (
+              <div className={styles.manualSection}>
+                <div className={styles.manualHeader}>
+                  <div>
+                    <div className={styles.manualTitle}>수동 추가 모델</div>
+                    <p className={styles.manualDescription}>
+                      OpenAI 카탈로그에 아직 보이지 않는 모델도 직접 추가해 선택 목록과 기본 모델에 포함할 수 있습니다.
+                    </p>
+                  </div>
+                </div>
+                <div className={styles.manualInputRow}>
+                  <input
+                    className={styles.manualInput}
+                    type="text"
+                    value={manualModelId}
+                    onChange={(event) => setManualModelId(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        handleManualAdd();
+                      }
+                    }}
+                    placeholder="예: gpt-5.5"
+                    aria-label="수동 추가 모델명"
+                    disabled={!hasApiKey}
+                  />
+                  <button
+                    type="button"
+                    className={styles.subtleButton}
+                    onClick={handleManualAdd}
+                    disabled={!hasApiKey || !manualModelId.trim()}
+                  >
+                    <Plus size={16} />
+                    모델 추가
+                  </button>
+                </div>
+                {manualModelIds.length > 0 ? (
+                  <div className={styles.manualChipRow}>
+                    {manualModelIds.map((modelId) => (
+                      <button
+                        key={modelId}
+                        type="button"
+                        className={styles.manualChip}
+                        onClick={() => onRemoveManualModel?.(modelId)}
+                      >
+                        <span className={styles.manualChipLabel}>{modelId}</span>
+                        <X size={14} />
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={styles.manualEmpty}>
+                    아직 수동으로 추가한 모델이 없습니다.
+                  </p>
+                )}
+              </div>
+            ) : null}
           </>
         ) : null}
       </div>

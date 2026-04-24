@@ -128,4 +128,43 @@ describe('session events route', () => {
       }),
     }));
   });
+
+  it('passes manually added Codex models into runtime normalization', async () => {
+    mocks.getUserModelSettings.mockResolvedValueOnce({
+      providers: {
+        codex: { selectedModelIds: ['gpt-5.4', 'gpt-5.5'] },
+        claude: { selectedModelIds: [] },
+        gemini: { selectedModelIds: [] },
+      },
+      legacyCustomModels: {
+        codex: null,
+        claude: null,
+        gemini: null,
+      },
+    });
+
+    await POST(
+      new NextRequest('http://localhost/api/runtime/sessions/session-1/events', {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'message',
+          title: 'User Instruction',
+          text: 'gpt-5.5로 실행',
+          meta: {
+            role: 'user',
+            chatId: 'chat-1',
+            agent: 'codex',
+            model: 'gpt-5.5',
+          },
+        }),
+      }),
+      { params: Promise.resolve({ sessionId: 'session-1' }) },
+    );
+
+    expect(mocks.resolveRuntimeMessageModel).toHaveBeenCalledWith(expect.objectContaining({
+      agent: 'codex',
+      requestedModel: 'gpt-5.5',
+      customModels: ['gpt-5.4', 'gpt-5.5'],
+    }));
+  });
 });

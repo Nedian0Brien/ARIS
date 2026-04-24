@@ -61,6 +61,8 @@ export function useComposerState({
       agent: initialAgent,
       requestedModel: initialChat?.model,
       sessionModelFallback,
+      providerSelections,
+      legacyCustomModels: legacyCustomModels ?? undefined,
     });
   });
   const [selectedModelReasoningEffort, setSelectedModelReasoningEffort] = useState<ModelReasoningEffort>(() => {
@@ -83,7 +85,7 @@ export function useComposerState({
     return resolveAvailableGeminiModeId({
       requestedMode: initialChat?.geminiMode,
       approvalPolicy,
-      configuredModeId: DEFAULT_GEMINI_MODE_ID,
+      configuredModeId: providerSelections?.gemini?.defaultModeId ?? DEFAULT_GEMINI_MODE_ID,
     });
   });
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
