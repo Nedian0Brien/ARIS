@@ -45,7 +45,7 @@ async function login(page: Page) {
 
       if (payload.ok && body?.status === 'success') {
         await page.goto('/', { waitUntil: 'networkidle' });
-        await page.locator('[class*="sessionDashboardLayout"]').first().waitFor({ state: 'visible', timeout: 20_000 });
+        await page.locator('.aris-ia-shell').first().waitFor({ state: 'visible', timeout: 20_000 });
         return;
       }
 
@@ -65,12 +65,12 @@ async function login(page: Page) {
 }
 
 async function resolveFirstSessionPath(page: Page) {
-  const firstSessionLink = page.locator('.sessionGrid a[href^="/sessions/"]').first();
-  if ((await firstSessionLink.count()) === 0) {
+  const firstSessionCard = page.locator('[data-session-href^="/sessions/"]').first();
+  if ((await firstSessionCard.count()) === 0) {
     return null;
   }
 
-  const href = await firstSessionLink.getAttribute('href');
+  const href = await firstSessionCard.getAttribute('data-session-href');
   return typeof href === 'string' && href.trim() ? href : null;
 }
 
@@ -82,7 +82,7 @@ async function collectOverflow(page: Page, path: string) {
   });
 
   if (path === '/') {
-    await page.locator('[class*="sessionDashboardLayout"]').first().waitFor({ state: 'visible', timeout: 20_000 });
+    await page.locator('.aris-ia-shell').first().waitFor({ state: 'visible', timeout: 20_000 });
   } else if (isSessionPath) {
     await page.locator('[class*="ChatInterface_chatShell"]').first().waitFor({ state: 'visible', timeout: 30_000 });
   } else {
@@ -144,7 +144,7 @@ async function collectOverflow(page: Page, path: string) {
       rootOverflow: Number((root.scrollWidth - viewportWidth).toFixed(2)),
       visualViewportScale: window.visualViewport?.scale ?? 1,
       dashboardTitleRow: (() => {
-        const element = document.querySelector('[class*="dashboardTitleRow"]') as HTMLElement | null;
+        const element = document.querySelector('.m-top') as HTMLElement | null;
         if (!element) return null;
         return {
           clientWidth: element.clientWidth,
@@ -153,7 +153,7 @@ async function collectOverflow(page: Page, path: string) {
         };
       })(),
       dashboardLayout: (() => {
-        const element = document.querySelector('[class*="sessionDashboardLayout"]') as HTMLElement | null;
+        const element = document.querySelector('.aris-ia-shell') as HTMLElement | null;
         if (!element) return null;
         const rect = element.getBoundingClientRect();
         return {
@@ -165,9 +165,11 @@ async function collectOverflow(page: Page, path: string) {
         };
       })(),
       appShell: queryMetrics('.app-shell'),
+      iaShell: queryMetrics('.aris-ia-shell'),
+      homeBody: queryMetrics('.m-body--home'),
       workspaceHomeRoot: queryMetrics('[class*="WorkspaceHome_homeRoot"]'),
       chatShell: queryMetrics('[class*="ChatInterface_chatShell"]'),
-      dashboardSidebarCard: queryMetrics('[class*="SessionDashboard_sessionSidebarCard"]'),
+      dashboardSidebarCard: queryMetrics('.m-body--home'),
       workspaceHomeOffenders: offenders.filter((offender) => String(offender?.className ?? '').includes('WorkspaceHome_')),
       offenders,
     };
@@ -177,7 +179,7 @@ async function collectOverflow(page: Page, path: string) {
 test('home and workspace pages stay within the mobile viewport width', async ({ page }) => {
   await login(page);
 
-  const paths = ['/', '/?tab=console', '/?tab=files', '/?tab=settings'];
+  const paths = ['/', '/?tab=ask', '/?tab=files', '/?tab=project'];
   const sessionPath = await resolveFirstSessionPath(page);
   if (sessionPath) {
     paths.push(sessionPath);

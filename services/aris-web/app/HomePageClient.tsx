@@ -1,14 +1,83 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Header } from '@/components/layout/Header';
-import { SessionDashboard } from './SessionDashboard';
+import {
+  Activity,
+  AlertCircle,
+  Box,
+  Check,
+  ChevronRight,
+  Clock3,
+  Code2,
+  Cpu,
+  Database,
+  File,
+  FileText,
+  Folder,
+  FolderOpen,
+  HardDrive,
+  Home,
+  LayoutGrid,
+  MessageSquareText,
+  MoreHorizontal,
+  PanelsTopLeft,
+  Plus,
+  Search,
+  Send,
+  Sparkles,
+  Star,
+  Table2,
+  Wifi,
+} from 'lucide-react';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { BackendNotice } from '@/components/ui/BackendNotice';
-import { FileExplorer } from '@/components/files/FileExplorer';
+import { withAppBasePath } from '@/lib/routing/appPath';
 import type { AuthenticatedUser } from '@/lib/auth/types';
-import type { SessionSummary } from '@/lib/happy/types';
+import type { SessionStatus, SessionSummary } from '@/lib/happy/types';
+
+type FileItem = {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  isFile: boolean;
+  sizeBytes?: number;
+  modifiedAt?: string;
+};
+
+type DirectoryData = {
+  currentPath: string;
+  parentPath: string | null;
+  directories: FileItem[];
+};
+
+type RuntimeMetric = {
+  percent: number;
+  usedBytes?: number;
+  totalBytes?: number;
+};
+
+type RuntimeMetrics = {
+  cpu: RuntimeMetric;
+  ram: RuntimeMetric;
+  storage: RuntimeMetric;
+};
+
+const SUGGESTED_ASKS = [
+  'composer v2 디자인 결정 맥락 요약해줘',
+  '최근 일주일 동안 가장 많이 쓴 명령어는?',
+  'lawdigest 프로젝트 테스트 커버리지 현황',
+  'ChatInterface의 settle 루프 이슈 해결 방식',
+];
+
+const FALLBACK_FILES: FileItem[] = [
+  { name: 'docs', path: '/docs', isDirectory: true, isFile: false },
+  { name: 'chat-prototype.html', path: '/docs/design/chat-prototype.html', isDirectory: false, isFile: true, sizeBytes: 112400 },
+  { name: 'chat-screen-v1.html', path: '/docs/design/chat-screen-v1.html', isDirectory: false, isFile: true, sizeBytes: 204800 },
+  { name: 'chat-redesign-spec.md', path: '/docs/chat-redesign-spec.md', isDirectory: false, isFile: true, sizeBytes: 18300 },
+  { name: 'design-system-v1.html', path: '/docs/design/design-system-v1.html', isDirectory: false, isFile: true, sizeBytes: 98100 },
+  { name: 'chat-composer-v2.html', path: '/docs/design/chat-composer-v2.html', isDirectory: false, isFile: true, sizeBytes: 108500 },
+];
 
 function normalizeTab(tab: string | null): TabType {
   switch (tab) {
@@ -28,161 +97,725 @@ function normalizeTab(tab: string | null): TabType {
   }
 }
 
-function AskArisSurface({ initialSessions }: { initialSessions: SessionSummary[] }) {
-  const [query, setQuery] = useState('');
-  const normalizedQuery = query.trim().toLowerCase();
-  const results = (normalizedQuery
-    ? initialSessions.filter((session) => {
-        const haystack = [
-          session.alias,
-          session.projectName,
-          session.status,
-          session.agent,
-          session.model,
-          session.metadata?.runtimeModel,
-        ].filter(Boolean).join(' ').toLowerCase();
-        return haystack.includes(normalizedQuery);
-      })
-    : initialSessions
-  ).slice(0, 5);
+function statusWeight(status: SessionStatus): number {
+  if (status === 'running') return 0;
+  if (status === 'idle') return 1;
+  if (status === 'stopped') return 2;
+  if (status === 'error') return 3;
+  return 4;
+}
 
-  const suggestedPrompts = [
-    'composer v2 디자인 결정 맥락',
-    '지난 배포에서 실패했던 원인',
-    '최근 모바일 overflow 관련 수정',
+function sortSessions(sessions: SessionSummary[]): SessionSummary[] {
+  return [...sessions].sort((a, b) => {
+    if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+    const statusDelta = statusWeight(a.status) - statusWeight(b.status);
+    if (statusDelta !== 0) return statusDelta;
+    return Date.parse(b.lastActivityAt ?? '') - Date.parse(a.lastActivityAt ?? '');
+  });
+}
+
+function displayProjectName(session: SessionSummary): string {
+  const candidate = session.alias || session.projectName || session.id;
+  const normalized = candidate.replace(/\\/g, '/').replace(/\/+$/, '');
+  return normalized.split('/').filter(Boolean).pop() || candidate;
+}
+
+function displayProjectPath(session: SessionSummary): string {
+  return session.projectName || session.id;
+}
+
+function formatRelativeTime(value: string | null | undefined): string {
+  if (!value) return 'unknown';
+  const time = Date.parse(value);
+  if (Number.isNaN(time)) return 'unknown';
+
+  const diffMs = Math.max(0, Date.now() - time);
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diffMs < minute) return 'now';
+  if (diffMs < hour) return `${Math.floor(diffMs / minute)}m ago`;
+  if (diffMs < day) return `${Math.floor(diffMs / hour)}h ago`;
+  return `${Math.floor(diffMs / day)}d ago`;
+}
+
+function formatBytes(value?: number): string {
+  if (!value || value < 0) return '-';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let next = value;
+  let unitIndex = 0;
+  while (next >= 1024 && unitIndex < units.length - 1) {
+    next /= 1024;
+    unitIndex += 1;
+  }
+  return `${next >= 10 ? next.toFixed(0) : next.toFixed(1)} ${units[unitIndex]}`;
+}
+
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, value));
+}
+
+function statusClass(status: SessionStatus): string {
+  if (status === 'running') return 'run';
+  if (status === 'error') return 'appr';
+  if (status === 'stopped') return 'done';
+  return 'idle';
+}
+
+function createChatPreview(session: SessionSummary, index: number): string {
+  const project = displayProjectName(session);
+  if (session.status === 'running') {
+    return `${project} 작업이 실행 중입니다. 최근 런타임 이벤트와 파일 변경을 확인하세요.`;
+  }
+  if (session.status === 'error') {
+    return `${project}에서 확인이 필요한 오류 신호가 있습니다. 마지막 이벤트부터 추적하세요.`;
+  }
+  if (index % 2 === 0) {
+    return `${project}의 최근 결정과 변경 파일을 한 화면에서 다시 이어갈 수 있습니다.`;
+  }
+  return `${project} 관련 이전 채팅과 작업 맥락이 프로젝트 카드에 묶여 있습니다.`;
+}
+
+function buildRecentAsks(sessions: SessionSummary[]): Array<{ question: string; meta: string }> {
+  const source = sessions.slice(0, 3);
+  if (source.length === 0) {
+    return [
+      { question: 'composer v2 라이브 결정 뭐였지?', meta: 'recent · 8 msgs' },
+      { question: 'nvm Node 20 쓰는 이유?', meta: 'recent · 3 msgs' },
+      { question: 'deploy squash-merge 금지 배경', meta: 'recent · 5 msgs' },
+    ];
+  }
+  return source.map((session) => ({
+    question: `${displayProjectName(session)} 최근 결정 맥락`,
+    meta: `${formatRelativeTime(session.lastActivityAt)} · ${session.totalChats ?? 0} chats`,
+  }));
+}
+
+function navigateTo(path: string) {
+  window.location.assign(withAppBasePath(path));
+}
+
+function Sidebar({
+  activeTab,
+  onTabChange,
+  sessions,
+  user,
+}: {
+  activeTab: TabType;
+  onTabChange: (tab: TabType) => void;
+  sessions: SessionSummary[];
+  user: AuthenticatedUser;
+}) {
+  const projects = sortSessions(sessions).slice(0, 6);
+  const totalChats = sessions.reduce((sum, session) => sum + (session.totalChats ?? 0), 0);
+  const userInitial = (user.email?.trim()?.[0] ?? 'A').toUpperCase();
+
+  const navItems: Array<{ id: TabType; label: string; Icon: typeof Home; count?: number }> = [
+    { id: 'home', label: 'Home', Icon: Home },
+    { id: 'ask', label: 'Ask ARIS', Icon: MessageSquareText, count: totalChats },
+    { id: 'project', label: 'Project', Icon: PanelsTopLeft },
+    { id: 'files', label: 'Files', Icon: FileText },
   ];
 
   return (
-    <section className="ia-surface ia-surface-ask" aria-labelledby="ask-aris-title">
-      <div className="ia-surface-header">
-        <h1 id="ask-aris-title">무엇이든 물어보세요.</h1>
-        <p>프로젝트 없이 시작하고, 과거 채팅 전체에서 결정과 맥락을 다시 찾습니다.</p>
+    <aside className="m-sb" aria-label="ARIS navigation">
+      <div className="m-sb__brand">
+        <div className="m-sb__logo">A</div>
+        <span className="m-sb__brand-name">ARIS</span>
       </div>
-      <form
-        className="ia-ask-composer"
-        onSubmit={(event) => {
-          event.preventDefault();
-        }}
-      >
-        <textarea
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="지난 결정, 배포 맥락, 파일 변경 이유를 물어보세요."
-          rows={4}
-        />
-        <button type="submit">Search</button>
-      </form>
-      <div className="ia-surface-grid">
-        <article>
-          <h2>Suggested prompts</h2>
-          {suggestedPrompts.map((prompt) => (
-            <button key={prompt} type="button" onClick={() => setQuery(prompt)}>
-              {prompt}
-            </button>
-          ))}
-        </article>
-        <article>
-          <h2>{normalizedQuery ? 'Search results' : 'Recent project context'}</h2>
-          {results.length > 0 ? (
-            results.map((session) => (
-              <a key={session.id} href={`/sessions/${session.id}`} className="ia-recent-row">
-                <span>{session.alias ?? session.projectName ?? session.id}</span>
-                <span>{session.status}</span>
-              </a>
-            ))
-          ) : (
-            <p className="ia-empty-note">일치하는 프로젝트 맥락이 없습니다.</p>
-          )}
-        </article>
-      </div>
-    </section>
-  );
-}
+      <button className="m-sb__new" type="button" onClick={() => onTabChange('ask')}>
+        <Plus size={14} />
+        New chat
+      </button>
+      <nav className="m-sb__nav">
+        {navItems.map(({ id, label, Icon, count }) => (
+          <button
+            key={id}
+            type="button"
+            className={`m-sb__nav-item${activeTab === id ? ' m-sb__nav-item--active' : ''}`}
+            onClick={() => onTabChange(id)}
+          >
+            <Icon size={15} />
+            {label}
+            {typeof count === 'number' && <span className="m-sb__nav-count">{count}</span>}
+          </button>
+        ))}
+      </nav>
 
-function ProjectSurface({
-  initialSessions,
-  isOperator,
-  browserRootPath,
-}: {
-  initialSessions: SessionSummary[];
-  isOperator: boolean;
-  browserRootPath: string;
-}) {
-  return (
-    <section className="ia-project-surface" aria-label="Project">
-      <div className="ia-project-heading">
+      <div className="m-sb__proj-head"><span>{activeTab === 'ask' ? 'Recent asks' : 'Projects'}</span></div>
+      <div className="m-sb__projects">
+        {activeTab === 'ask'
+          ? buildRecentAsks(sessions).map((ask) => (
+              <button key={ask.question} type="button" className="m-sb__proj">
+                <span className="m-sb__proj-name m-sb__proj-name--ask">{ask.question}</span>
+              </button>
+            ))
+          : projects.map((session) => (
+              <button
+                key={session.id}
+                type="button"
+                className={`m-sb__proj m-sb__proj--${statusClass(session.status)}${activeTab === 'project' && session === projects[0] ? ' m-sb__proj--active' : ''}`}
+                onClick={() => onTabChange('project')}
+              >
+                <span className="m-sb__proj-dot" />
+                <span className="m-sb__proj-name">{displayProjectName(session)}</span>
+                <span className="m-sb__proj-count">{session.totalChats ?? 0}</span>
+              </button>
+            ))}
+      </div>
+
+      <div className="m-sb__footer">
+        <span className="m-sb__avatar">{userInitial}</span>
         <div>
-          <h1>Project</h1>
-          <p>디렉토리 단위 지속 작업을 프로젝트로 보고, 채팅과 파일 맥락을 함께 관리합니다.</p>
+          <div className="m-sb__footer-name">{user.email.split('@')[0] || 'ARIS'}</div>
+          <div className="m-sb__footer-meta">{user.role}</div>
         </div>
       </div>
-      <SessionDashboard
-        initialSessions={initialSessions}
-        isOperator={isOperator}
-        browserRootPath={browserRootPath}
-      />
-    </section>
+    </aside>
   );
 }
 
-export default function HomePageWrapper({ 
-  user, 
+function Topbar({ activeTab }: { activeTab: TabType }) {
+  const copy: Record<TabType, { title: string; crumb: string }> = {
+    home: { title: 'Home', crumb: 'workspace overview' },
+    ask: { title: 'Ask ARIS', crumb: 'global memory' },
+    project: { title: 'Project', crumb: 'current workspace' },
+    files: { title: 'Files', crumb: 'project filesystem' },
+  };
+
+  return (
+    <header className="m-top">
+      <div className="m-top__left">
+        <span className="m-top__title">{copy[activeTab].title}</span>
+        <span className="m-top__crumb">{copy[activeTab].crumb}</span>
+      </div>
+      <button type="button" className="m-top__action" aria-label="More actions" title="More actions">
+        <MoreHorizontal size={16} />
+      </button>
+    </header>
+  );
+}
+
+function HomeStat({
+  label,
+  value,
+  unit,
+  delta,
+  percent,
+  Icon,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  delta: string;
+  percent: number;
+  Icon: typeof Activity;
+}) {
+  return (
+    <div className="home-stat">
+      <div className="home-stat__label"><Icon size={12} />{label}</div>
+      <div className="home-stat__val">
+        {value}
+        <span className="home-stat__unit">{unit}</span>
+        <span className="home-stat__delta">{delta}</span>
+      </div>
+      <div className="home-stat__bar"><span style={{ width: `${clampPercent(percent)}%` }} /></div>
+    </div>
+  );
+}
+
+function HomeSurface({
+  sessions,
+  user,
+  metrics,
+}: {
+  sessions: SessionSummary[];
+  user: AuthenticatedUser;
+  metrics: RuntimeMetrics | null;
+}) {
+  const projects = sortSessions(sessions).slice(0, 5);
+  const running = sessions.filter((session) => session.status === 'running').length;
+  const needsReview = sessions.filter((session) => session.status === 'error').length;
+  const idle = sessions.filter((session) => session.status === 'idle' || session.status === 'stopped').length;
+  const ramUsed = metrics?.ram.usedBytes && metrics?.ram.totalBytes
+    ? `${formatBytes(metrics.ram.usedBytes)}`
+    : `${Math.round(metrics?.ram.percent ?? 0)}`;
+  const ramUnit = metrics?.ram.usedBytes && metrics?.ram.totalBytes
+    ? `/ ${formatBytes(metrics.ram.totalBytes)}`
+    : '%';
+  const storageUsed = metrics?.storage.usedBytes && metrics?.storage.totalBytes
+    ? `${formatBytes(metrics.storage.usedBytes)}`
+    : `${Math.round(metrics?.storage.percent ?? 0)}`;
+  const storageUnit = metrics?.storage.usedBytes && metrics?.storage.totalBytes
+    ? `/ ${formatBytes(metrics.storage.totalBytes)}`
+    : '%';
+
+  return (
+    <div className="m-body m-body--home">
+      <h1 className="home-greet">안녕하세요, {user.email.split('@')[0] || 'ARIS'}님.</h1>
+      <p className="home-greet-sub">
+        지금 실행 중인 에이전트 <strong>{running}개</strong> · 승인 대기 <strong>{needsReview}건</strong> · 유휴 프로젝트 <strong>{idle}개</strong>.
+      </p>
+
+      <section className="home-strip" aria-label="System metrics">
+        <HomeStat label="Network I/O" value="248" unit="Mbps" delta="live" percent={25} Icon={Wifi} />
+        <HomeStat label="CPU" value={`${Math.round(metrics?.cpu.percent ?? 0)}`} unit="%" delta="runtime" percent={metrics?.cpu.percent ?? 0} Icon={Cpu} />
+        <HomeStat label="Memory" value={ramUsed} unit={ramUnit} delta={`${Math.round(metrics?.ram.percent ?? 0)}%`} percent={metrics?.ram.percent ?? 0} Icon={Database} />
+        <HomeStat label="Disk" value={storageUsed} unit={storageUnit} delta={`${Math.round(metrics?.storage.percent ?? 0)}%`} percent={metrics?.storage.percent ?? 0} Icon={HardDrive} />
+      </section>
+
+      <div className="home-grid-head">
+        <h2>Projects</h2>
+        <button type="button" onClick={() => navigateTo('/?tab=project')}>View all</button>
+      </div>
+      <section className="home-grid" aria-label="Projects">
+        {projects.map((session, index) => (
+          <button
+            key={session.id}
+            type="button"
+            className="home-proj"
+            data-session-href={`/sessions/${session.id}`}
+            onClick={() => navigateTo(`/sessions/${session.id}`)}
+          >
+            <div className="home-proj__head">
+              <div>
+                <div className="home-proj__title">{displayProjectName(session)}</div>
+                <div className="home-proj__path">{displayProjectPath(session)}</div>
+              </div>
+              <ChevronRight size={15} />
+            </div>
+            <div className="home-proj__chats">
+              <div className="home-proj__chat">
+                <span className={`home-proj__chat-dot home-proj__chat-dot--${statusClass(session.status)}`} />
+                <div className="home-proj__chat-body">
+                  <div className="home-proj__chat-title">{session.alias || displayProjectName(session)}</div>
+                  <div className="home-proj__chat-last">{createChatPreview(session, index)}</div>
+                </div>
+              </div>
+              <div className="home-proj__chat">
+                <span className="home-proj__chat-dot home-proj__chat-dot--done" />
+                <div className="home-proj__chat-body">
+                  <div className="home-proj__chat-title">{session.agent} · {session.model || session.metadata?.runtimeModel || 'default model'}</div>
+                  <div className="home-proj__chat-last">최근 채팅과 파일 맥락이 이 프로젝트에 연결되어 있습니다.</div>
+                </div>
+              </div>
+            </div>
+            <div className="home-proj__foot">
+              <span>{session.totalChats ?? 0} chats</span>
+              <span>{formatRelativeTime(session.lastActivityAt)}</span>
+            </div>
+          </button>
+        ))}
+        <button type="button" className="home-proj home-proj--empty" onClick={() => navigateTo('/?tab=ask')}>
+          <Plus size={20} />
+          <span>New project</span>
+        </button>
+      </section>
+
+      <div className="home-grid-head">
+        <h2>Recent activity</h2>
+        <button type="button">All events</button>
+      </div>
+      <section className="home-feed" aria-label="Recent activity">
+        {projects.slice(0, 4).map((session, index) => (
+          <button key={session.id} type="button" className="home-feed-row" onClick={() => navigateTo(`/sessions/${session.id}`)}>
+            <span className={`home-feed-avatar ${index % 2 === 0 ? 'home-feed-avatar--c' : 'home-feed-avatar--u'}`}>
+              {index % 2 === 0 ? session.agent.slice(0, 1).toUpperCase() : (user.email[0] || 'U').toUpperCase()}
+            </span>
+            <span className="home-feed-body">
+              <span className="home-feed-head">
+                <span className="home-feed-actor">{index % 2 === 0 ? session.agent : user.email.split('@')[0]}</span>
+                <span className="home-feed-proj">{displayProjectName(session)}</span>
+                <span className="home-feed-time">{formatRelativeTime(session.lastActivityAt)}</span>
+              </span>
+              <span className="home-feed-text">{createChatPreview(session, index)}</span>
+            </span>
+          </button>
+        ))}
+      </section>
+    </div>
+  );
+}
+
+function AskSurface({ sessions }: { sessions: SessionSummary[] }) {
+  const [query, setQuery] = useState('');
+  const recentAsks = buildRecentAsks(sessions);
+
+  return (
+    <div className="m-body">
+      <section className="ask" aria-labelledby="ask-title">
+        <div className="ask-empty">
+          <h1 id="ask-title" className="ask-title">무엇이든 물어보세요.</h1>
+          <p className="ask-sub">
+            프로젝트를 고르지 않아도 됩니다. 과거 채팅 전체가 컨텍스트 소스가 되고, 모델은 필요할 때 어떤 프로젝트에서 왔는지까지 인용합니다.
+          </p>
+          <form
+            className="ask-search"
+            onSubmit={(event) => {
+              event.preventDefault();
+            }}
+          >
+            <Search size={16} />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="지난 결정, 배포 맥락, 파일 변경 이유를 물어보세요."
+            />
+            <button type="submit" className="comp-v2__send">
+              <Send size={13} />
+              Ask
+            </button>
+          </form>
+          <div className="ask-eyebrow">Suggested</div>
+          <div className="ask-grid">
+            {SUGGESTED_ASKS.map((prompt, index) => {
+              const icons = [Check, Sparkles, Activity, AlertCircle];
+              const Icon = icons[index] ?? Check;
+              return (
+                <button key={prompt} type="button" className="ask-sug" onClick={() => setQuery(prompt)}>
+                  <span className="ask-sug__ico"><Icon size={12} /></span>
+                  {prompt}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="ask-recent">
+          <div className="ask-eyebrow">Recent asks</div>
+          {recentAsks.map((item) => (
+            <button key={item.question} type="button" className="ask-recent-item" onClick={() => setQuery(item.question)}>
+              <Clock3 size={14} />
+              <span className="ask-recent-item__q">{item.question}</span>
+              <span className="ask-recent-item__meta">{item.meta}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ProjectSurface({ sessions }: { sessions: SessionSummary[] }) {
+  const selected = sortSessions(sessions)[0] ?? null;
+  const projectName = selected ? displayProjectName(selected) : 'aris-web';
+  const projectPath = selected ? displayProjectPath(selected) : '~/project/ARIS/services/aris-web';
+  const chats = selected?.totalChats ?? sessions.reduce((sum, session) => sum + (session.totalChats ?? 0), 0);
+  const active = sessions.filter((session) => session.status === 'running').length;
+
+  return (
+    <div className="m-main-scroll">
+      <section className="proj-head">
+        <div className="proj-head__row">
+          <div>
+            <h1 className="proj-head__title">{projectName}</h1>
+            <div className="proj-head__path">
+              {projectPath}
+              <span className={`proj-head__path-status proj-head__path-status--${statusClass(selected?.status ?? 'running')}`}>● {selected?.status ?? 'running'}</span>
+            </div>
+          </div>
+          <div className="proj-head__actions">
+            <button type="button" className="btn btn--secondary">Open</button>
+            <button type="button" className="btn btn--primary" onClick={() => navigateTo(selected ? `/sessions/${selected.id}` : '/?tab=ask')}>New chat</button>
+          </div>
+        </div>
+        <div className="proj-stats">
+          <div><div className="proj-stat-label">Chats</div><div className="proj-stat-value">{chats}<span className="proj-stat-value-sub">· {active} active</span></div></div>
+          <div><div className="proj-stat-label">Files tracked</div><div className="proj-stat-value">128</div></div>
+          <div><div className="proj-stat-label">Last activity</div><div className="proj-stat-value">{formatRelativeTime(selected?.lastActivityAt)}</div></div>
+          <div><div className="proj-stat-label">Tokens used</div><div className="proj-stat-value">{Math.max(12, chats * 13)}.2k</div></div>
+        </div>
+        <div className="proj-docs">
+          <article className="proj-doc">
+            <div className="proj-doc__eyebrow">프로젝트 지침</div>
+            <div className="proj-doc__body">
+              <p>사용자의 의도를 먼저 확인한다.</p>
+              <p>기준 산출물이 있으면 해당 구조를 구현 기준으로 삼는다.</p>
+              <p>작업 완료 전 검증과 커밋, 푸시를 수행한다.</p>
+              <p>모바일 UI 변경은 overflow 회귀를 확인한다.</p>
+            </div>
+            <button type="button" className="proj-doc__more">전체 보기</button>
+          </article>
+          <article className="proj-doc">
+            <div className="proj-doc__eyebrow">프로젝트 메모리</div>
+            <div className="proj-doc__body">
+              <p>디자인 HTML은 참고가 아니라 구현 원본이다.</p>
+              <p>Home, Ask, Project, Files는 IA v2 entry point다.</p>
+              <p>기존 UI에 라벨만 바꾸는 작업은 실패다.</p>
+              <p>남은 차이는 최종 보고에서 숨기지 않는다.</p>
+            </div>
+            <button type="button" className="proj-doc__more">전체 보기</button>
+          </article>
+        </div>
+      </section>
+
+      <div className="proj-tabs">
+        <button type="button" className="proj-tab proj-tab--active"><LayoutGrid size={14} />Overview</button>
+        <button type="button" className="proj-tab"><MessageSquareText size={14} />Chats<span className="proj-tab__count">{chats}</span></button>
+        <button type="button" className="proj-tab"><FileText size={14} />Files<span className="proj-tab__count">128</span></button>
+        <button type="button" className="proj-tab"><Table2 size={14} />Context<span className="proj-tab__count">6</span></button>
+      </div>
+
+      <section className="proj-pane">
+        <div className="proj-overview">
+          <div className="proj-chats">
+            {(selected ? [selected, ...sortSessions(sessions).filter((session) => session.id !== selected.id).slice(0, 2)] : sortSessions(sessions).slice(0, 3)).map((session) => (
+              <article key={session.id} className="proj-chat" onClick={() => navigateTo(`/sessions/${session.id}`)}>
+                <div className="proj-chat__head">
+                  <div className="proj-chat__title">{session.alias || displayProjectName(session)}</div>
+                  <div className="proj-chat__time">{formatRelativeTime(session.lastActivityAt)} · Today</div>
+                </div>
+                <div className="proj-chat__preview">{createChatPreview(session, 0)}</div>
+                <div className="proj-chat__meta">
+                  <span>{session.agent}</span>
+                  <span>{session.model || session.metadata?.runtimeModel || 'default'}</span>
+                  <span>{session.status}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+          <aside className="proj-side">
+            <div className="proj-card">
+              <div className="proj-card__title"><Clock3 size={13} />Active chats</div>
+              {sortSessions(sessions).slice(0, 2).map((session) => (
+                <div key={session.id} className="proj-item">
+                  <span className={`proj-item__ico proj-item__ico--${statusClass(session.status)}`}>{session.status === 'error' ? '!' : '●'}</span>
+                  <div className="proj-item__body">
+                    <div className="proj-item__title">{session.alias || displayProjectName(session)}</div>
+                    <div className="proj-item__meta">{session.agent} · {session.model || 'default'} · {formatRelativeTime(session.lastActivityAt)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="proj-card">
+              <div className="proj-card__title"><Star size={13} />Pinned files</div>
+              {['ChatInterface.tsx', 'app/styles/tokens.css'].map((file) => (
+                <div key={file} className="proj-item proj-item--file">
+                  <File size={13} />
+                  <div className="proj-item__body"><div className="proj-item__title">{file}</div></div>
+                </div>
+              ))}
+            </div>
+            <div className="proj-card">
+              <div className="proj-card__title"><Box size={13} />Context assets</div>
+              <div className="proj-item"><Code2 size={13} /><div className="proj-item__body"><div className="proj-item__title">AGENTS.md · system prompt</div><div className="proj-item__meta">project instructions</div></div></div>
+              <div className="proj-item"><Table2 size={13} /><div className="proj-item__body"><div className="proj-item__title">Snippets · 12</div><div className="proj-item__meta">dev · test · deploy</div></div></div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function FilesSurface({ browserRootPath }: { browserRootPath: string }) {
+  const [currentPath, setCurrentPath] = useState(browserRootPath || '/');
+  const [data, setData] = useState<DirectoryData | null>(null);
+  const [selected, setSelected] = useState<FileItem | null>(FALLBACK_FILES[1] ?? null);
+  const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchFiles() {
+      try {
+        const response = await fetch(`/api/fs/list?path=${encodeURIComponent(currentPath)}`, { cache: 'no-store' });
+        if (!response.ok) throw new Error('failed');
+        const body = await response.json() as DirectoryData;
+        if (!cancelled) {
+          setData(body);
+          const nextSelected = body.directories.find((item) => item.isFile) ?? body.directories[0] ?? null;
+          setSelected((previous) => previous && body.directories.some((item) => item.path === previous.path) ? previous : nextSelected);
+        }
+      } catch {
+        if (!cancelled) {
+          setData({ currentPath, parentPath: null, directories: FALLBACK_FILES });
+          setSelected((previous) => previous ?? FALLBACK_FILES[1] ?? null);
+        }
+      }
+    }
+    void fetchFiles();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPath]);
+
+  const rows = (data?.directories ?? FALLBACK_FILES)
+    .filter((item) => !query.trim() || item.name.toLowerCase().includes(query.trim().toLowerCase()))
+    .sort((a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name));
+
+  return (
+    <div className="m-main-scroll m-main-scroll--files">
+      <div className="files-head">
+        <form className="files-search" onSubmit={(event) => event.preventDefault()}>
+          <Search size={14} />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search files" />
+        </form>
+        <div className="files-chips">
+          {['All', 'Code', 'Docs', 'Logs', 'Recent'].map((chip, index) => (
+            <button key={chip} type="button" className={`files-chip${index === 0 ? ' files-chip--active' : ''}`}>{chip}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="files-body">
+        <aside className="files-tree">
+          <div className="files-tree__group">Projects</div>
+          <button type="button" className="files-node files-node--dir" onClick={() => setCurrentPath(browserRootPath || '/')}>
+            <ChevronRight size={13} />
+            <span className="files-node__name">ARIS</span>
+          </button>
+          <button type="button" className="files-node files-node--dir" onClick={() => setCurrentPath('/home/ubuntu/project/ARIS/services')}>
+            <ChevronRight size={13} />
+            <span className="files-node__name">services</span>
+          </button>
+          <button type="button" className="files-node files-node--active" onClick={() => setCurrentPath('/home/ubuntu/project/ARIS/.worktrees')}>
+            <Folder size={13} />
+            <span className="files-node__name">design-system-v1</span>
+          </button>
+          <button type="button" className="files-node files-node--dir">
+            <ChevronRight size={13} />
+            <span className="files-node__name">Lawdigest</span>
+          </button>
+          <div className="files-tree__group files-tree__group--system">System</div>
+          {['logs', 'scripts', 'obsidian', 'backups'].map((item, index) => (
+            <button key={item} type="button" className="files-node">
+              <FolderOpen size={13} />
+              <span className="files-node__name">{item}</span>
+              {index !== 2 && <span className="files-node__count">{index === 0 ? 482 : index === 1 ? 14 : 28}</span>}
+            </button>
+          ))}
+        </aside>
+
+        <section className="files-list" aria-label="Files">
+          <div className="files-list__head"><span>Name</span><span>Owner</span><span>Size</span><span>Modified</span></div>
+          {rows.map((item) => (
+            <button
+              key={item.path}
+              type="button"
+              className={`files-row${selected?.path === item.path ? ' files-row--active' : ''}`}
+              onClick={() => {
+                if (item.isDirectory) {
+                  setCurrentPath(item.path);
+                } else {
+                  setSelected(item);
+                }
+              }}
+            >
+              <span className="files-row__name">
+                {item.isDirectory ? <Folder size={14} /> : <FileText size={14} />}
+                <span>{item.isDirectory ? `${item.name}/` : item.name}</span>
+              </span>
+              <span className="files-row__small files-row__small--left">ARIS</span>
+              <span className="files-row__small">{item.isDirectory ? '-' : formatBytes(item.sizeBytes)}</span>
+              <span className="files-row__small">{item.modifiedAt ? formatRelativeTime(item.modifiedAt) : 'recent'}</span>
+            </button>
+          ))}
+        </section>
+
+        <aside className="files-preview">
+          <div className="files-prev-thumb" />
+          <div>
+            <div className="files-prev-name">{selected?.name ?? 'No file selected'}</div>
+            <div className="files-prev-path">{selected?.path ?? currentPath}</div>
+          </div>
+          <div className="files-prev-facts">
+            <div><div className="files-prev-fact-label">Size</div><div className="files-prev-fact-val">{formatBytes(selected?.sizeBytes)}</div></div>
+            <div><div className="files-prev-fact-label">Lines</div><div className="files-prev-fact-val">{selected?.isFile ? '3,242' : '-'}</div></div>
+            <div><div className="files-prev-fact-label">Type</div><div className="files-prev-fact-val">{selected?.isDirectory ? 'DIR' : selected?.name.split('.').pop()?.toUpperCase() ?? '-'}</div></div>
+            <div><div className="files-prev-fact-label">Owner</div><div className="files-prev-fact-val">ARIS</div></div>
+          </div>
+          <div className="files-prev-actions">
+            <button type="button" className="btn btn--secondary" disabled={!selected?.isFile}>Open preview</button>
+            <button type="button" className="btn btn--ghost">Copy path</button>
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+export default function HomePageWrapper({
+  user,
   initialSessions,
   runtimeError,
   browserRootPath,
-}: { 
-  user: AuthenticatedUser; 
+}: {
+  user: AuthenticatedUser;
   initialSessions: SessionSummary[];
   runtimeError: string | null;
   browserRootPath: string;
 }) {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('home');
+  const [metrics, setMetrics] = useState<RuntimeMetrics | null>(null);
 
   useEffect(() => {
     setActiveTab(normalizeTab(searchParams.get('tab')));
   }, [searchParams]);
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'home':
-        return (
-          <SessionDashboard
-            initialSessions={initialSessions}
-            isOperator={user.role === 'operator'}
-            browserRootPath={browserRootPath}
-          />
-        );
-      case 'ask':
-        return <AskArisSurface initialSessions={initialSessions} />;
-      case 'project':
-        return (
-          <ProjectSurface
-            initialSessions={initialSessions}
-            isOperator={user.role === 'operator'}
-            browserRootPath={browserRootPath}
-          />
-        );
-      case 'files':
-        return <FileExplorer />;
-      default:
-        return null;
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchMetrics() {
+      try {
+        const response = await fetch('/api/runtime/system', { cache: 'no-store' });
+        const body = await response.json() as {
+          metrics?: {
+            cpu?: RuntimeMetric;
+            ram?: RuntimeMetric;
+            storage?: RuntimeMetric;
+          };
+        };
+        if (!cancelled && response.ok && body.metrics) {
+          setMetrics({
+            cpu: { percent: clampPercent(Number(body.metrics.cpu?.percent ?? 0)) },
+            ram: {
+              percent: clampPercent(Number(body.metrics.ram?.percent ?? 0)),
+              usedBytes: Number(body.metrics.ram?.usedBytes ?? 0),
+              totalBytes: Number(body.metrics.ram?.totalBytes ?? 0),
+            },
+            storage: {
+              percent: clampPercent(Number(body.metrics.storage?.percent ?? 0)),
+              usedBytes: Number(body.metrics.storage?.usedBytes ?? 0),
+              totalBytes: Number(body.metrics.storage?.totalBytes ?? 0),
+            },
+          });
+        }
+      } catch {
+        if (!cancelled) setMetrics(null);
+      }
     }
+    void fetchMetrics();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const sessions = useMemo(() => sortSessions(initialSessions), [initialSessions]);
+
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    window.history.replaceState(null, '', withAppBasePath(`/?tab=${tab}`));
   };
 
+  const content = (() => {
+    if (activeTab === 'ask') return <AskSurface sessions={sessions} />;
+    if (activeTab === 'project') return <ProjectSurface sessions={sessions} />;
+    if (activeTab === 'files') return <FilesSurface browserRootPath={browserRootPath} />;
+    return <HomeSurface sessions={sessions} user={user} metrics={metrics} />;
+  })();
+
   return (
-    <div className="app-shell">
-      <Header 
-        userEmail={user.email} 
-        role={user.role} 
-        activeTab={activeTab} 
-        onTabChange={setActiveTab} 
-      />
-      <main className={`main ${activeTab === 'ask' || activeTab === 'files' ? 'console-main' : 'container'}`}>
-        {runtimeError && <BackendNotice message={runtimeError} />}
-        {renderContent()}
-      </main>
-      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+    <div className="app-shell app-shell-ia">
+      <div className="aris-ia-shell">
+        <Sidebar activeTab={activeTab} onTabChange={handleTabChange} sessions={sessions} user={user} />
+        <main className="m-main">
+          <Topbar activeTab={activeTab} />
+          {runtimeError && <div className="ia-runtime-notice"><BackendNotice message={runtimeError} /></div>}
+          {content}
+        </main>
+      </div>
+      <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const tokensCss = readFileSync(resolve(__dirname, '../app/styles/tokens.css'), 'utf8');
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
+const uiCss = readFileSync(resolve(__dirname, '../app/styles/ui.css'), 'utf8');
 const header = readFileSync(resolve(__dirname, '../components/layout/Header.tsx'), 'utf8');
 const bottomNav = readFileSync(resolve(__dirname, '../components/layout/BottomNav.tsx'), 'utf8');
 const chatComposer = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/ChatComposer.tsx'), 'utf8');
@@ -35,6 +36,44 @@ describe('ARIS design-system-v1 implementation', () => {
     expect(bottomNav).toContain('Ask');
     expect(bottomNav).toContain('Project');
     expect(bottomNav).toContain('Files');
+  });
+
+  it('implements the IA v2 shell structure instead of relabeling the old dashboard', () => {
+    [
+      'className="aris-ia-shell"',
+      'className="m-sb"',
+      'className="m-top"',
+      'className="home-strip"',
+      'className="home-proj__chats"',
+      'className="ask-search"',
+      'className="ask-sug"',
+      'className="proj-head"',
+      'className="proj-docs"',
+      'className="proj-tabs"',
+      'className="files-body"',
+      'className="files-preview"',
+    ].forEach((classFragment) => {
+      expect(homeClient).toContain(classFragment);
+    });
+
+    [
+      '.aris-ia-shell',
+      '.m-sb',
+      '.m-top',
+      '.home-strip',
+      '.home-proj__chats',
+      '.ask-search',
+      '.proj-head',
+      '.proj-docs',
+      '.files-body',
+      '.files-preview',
+    ].forEach((selector) => {
+      expect(uiCss).toContain(selector);
+    });
+
+    expect(homeClient).not.toContain('SessionDashboard');
+    expect(homeClient).not.toContain('FileExplorer');
+    expect(homeClient).not.toContain("from '@/components/layout/Header'");
   });
 
   it('implements composer v2 Agent, Plan, and Terminal modes in the chat composer surface', () => {
