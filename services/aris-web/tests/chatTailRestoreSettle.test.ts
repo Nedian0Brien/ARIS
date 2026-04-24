@@ -62,8 +62,31 @@ describe('chat tail restore settle action', () => {
       settleAction: 'skip',
     })).toEqual({
       shouldCancelExistingSettle: true,
+      shouldReenablePendingReveal: false,
       shouldRestartSettle: false,
       shouldResetTailRestoreState: true,
+    });
+  });
+
+  it('re-enables the pending reveal only for a fresh re-entry settle start', () => {
+    expect(resolveTailRestoreLoopTransition({
+      wasMidSettle: false,
+      settleAction: 'start',
+    })).toEqual({
+      shouldCancelExistingSettle: false,
+      shouldReenablePendingReveal: true,
+      shouldRestartSettle: true,
+      shouldResetTailRestoreState: false,
+    });
+
+    expect(resolveTailRestoreLoopTransition({
+      wasMidSettle: true,
+      settleAction: 'continue',
+    })).toEqual({
+      shouldCancelExistingSettle: true,
+      shouldReenablePendingReveal: false,
+      shouldRestartSettle: true,
+      shouldResetTailRestoreState: false,
     });
   });
 
@@ -73,6 +96,7 @@ describe('chat tail restore settle action', () => {
       settleAction: 'continue',
     })).toEqual({
       shouldCancelExistingSettle: true,
+      shouldReenablePendingReveal: false,
       shouldRestartSettle: true,
       shouldResetTailRestoreState: false,
     });
@@ -82,6 +106,7 @@ describe('chat tail restore settle action', () => {
       settleAction: 'start',
     })).toEqual({
       shouldCancelExistingSettle: true,
+      shouldReenablePendingReveal: true,
       shouldRestartSettle: true,
       shouldResetTailRestoreState: false,
     });
