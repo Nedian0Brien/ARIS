@@ -20,19 +20,22 @@ import {
   Home,
   LayoutGrid,
   MessageSquareText,
-  MoreHorizontal,
+  Monitor,
+  Moon,
   PanelsTopLeft,
   Plus,
   Search,
   Send,
   Sparkles,
   Star,
+  Sun,
   Table2,
   Wifi,
 } from 'lucide-react';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import { withAppBasePath } from '@/lib/routing/appPath';
+import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
 import type { AuthenticatedUser } from '@/lib/auth/types';
 import type { SessionStatus, SessionSummary } from '@/lib/happy/types';
 
@@ -68,6 +71,12 @@ const SUGGESTED_ASKS = [
   '최근 일주일 동안 가장 많이 쓴 명령어는?',
   'lawdigest 프로젝트 테스트 커버리지 현황',
   'ChatInterface의 settle 루프 이슈 해결 방식',
+];
+
+const THEME_OPTIONS = [
+  { mode: 'system' as const, label: '시스템', Icon: Monitor },
+  { mode: 'light' as const, label: '라이트', Icon: Sun },
+  { mode: 'dark' as const, label: '다크', Icon: Moon },
 ];
 
 const FALLBACK_FILES: FileItem[] = [
@@ -278,11 +287,45 @@ function Sidebar({
 }
 
 function Topbar({ activeTab }: { activeTab: TabType }) {
+  const [themeMode, setThemeMode] = useState<ThemeMode>('system');
   const copy: Record<TabType, { title: string; crumb: string }> = {
     home: { title: 'Home', crumb: 'workspace overview' },
     ask: { title: 'Ask ARIS', crumb: 'global memory' },
     project: { title: 'Project', crumb: 'current workspace' },
     files: { title: 'Files', crumb: 'project filesystem' },
+  };
+
+  useEffect(() => {
+    const mode = readThemeMode();
+    setThemeMode(mode);
+    applyTheme(mode);
+  }, []);
+
+  useEffect(() => {
+    if (themeMode !== 'system') {
+      return;
+    }
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const sync = () => {
+      applyTheme('system');
+    };
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', sync);
+    } else {
+      media.addListener(sync);
+    }
+    return () => {
+      if (typeof media.removeEventListener === 'function') {
+        media.removeEventListener('change', sync);
+      } else {
+        media.removeListener(sync);
+      }
+    };
+  }, [themeMode]);
+
+  const changeThemeMode = (next: ThemeMode) => {
+    setThemeMode(next);
+    applyTheme(next);
   };
 
   return (
@@ -291,9 +334,27 @@ function Topbar({ activeTab }: { activeTab: TabType }) {
         <span className="m-top__title">{copy[activeTab].title}</span>
         <span className="m-top__crumb">{copy[activeTab].crumb}</span>
       </div>
-      <button type="button" className="m-top__action" aria-label="More actions" title="More actions">
-        <MoreHorizontal size={16} />
-      </button>
+      <div className="m-top__right">
+        <div className="m-theme-toggle" role="group" aria-label="테마 선택">
+          {THEME_OPTIONS.map(({ mode, label, Icon }) => {
+            const active = themeMode === mode;
+            return (
+              <button
+                key={mode}
+                type="button"
+                className={`m-theme-toggle__item${active ? ' m-theme-toggle__item--active' : ''}`}
+                aria-pressed={active}
+                aria-label={`${label} 테마`}
+                title={`${label} 테마`}
+                onClick={() => changeThemeMode(mode)}
+              >
+                <Icon size={13} />
+                <span className="m-theme-toggle__label">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </header>
   );
 }

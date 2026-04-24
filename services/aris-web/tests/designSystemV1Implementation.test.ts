@@ -43,6 +43,8 @@ describe('ARIS design-system-v1 implementation', () => {
       'className="aris-ia-shell"',
       'className="m-sb"',
       'className="m-top"',
+      'className="m-top__right"',
+      'className="m-theme-toggle"',
       'className="home-strip"',
       'className="home-proj__chats"',
       'className="ask-search"',
@@ -60,6 +62,8 @@ describe('ARIS design-system-v1 implementation', () => {
       '.aris-ia-shell',
       '.m-sb',
       '.m-top',
+      '.m-theme-toggle',
+      '.m-theme-toggle__item--active',
       '.home-strip',
       '.home-proj__chats',
       '.ask-search',
@@ -74,6 +78,19 @@ describe('ARIS design-system-v1 implementation', () => {
     expect(homeClient).not.toContain('SessionDashboard');
     expect(homeClient).not.toContain('FileExplorer');
     expect(homeClient).not.toContain("from '@/components/layout/Header'");
+  });
+
+  it('keeps the IA v2 topbar theme control wired to system, light, and dark modes', () => {
+    expect(homeClient).toContain('readThemeMode');
+    expect(homeClient).toContain('applyTheme');
+    expect(homeClient).toContain("'system' as const");
+    expect(homeClient).toContain("'light' as const");
+    expect(homeClient).toContain("'dark' as const");
+    expect(homeClient).toContain('시스템');
+    expect(homeClient).toContain('라이트');
+    expect(homeClient).toContain('다크');
+    expect(homeClient).toContain("aria-label=\"테마 선택\"");
+    expect(homeClient).not.toContain('More actions');
   });
 
   it('implements composer v2 Agent, Plan, and Terminal modes in the chat composer surface', () => {
