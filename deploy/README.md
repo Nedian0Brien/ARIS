@@ -84,6 +84,11 @@ When the backend release contains Prisma schema changes:
 DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_web.sh
 ```
 
+When the command is executed from a git worktree, the default `deploy/.state`
+and `deploy/.logs` targets now resolve against the shared repo root, not the
+worktree-local copy. You can still override them explicitly with
+`DEPLOY_STATE_DIR` and `DEPLOY_LOG_DIR` if a different location is required.
+
 Default behavior:
 - Builds the inactive slot image unless the web fingerprint is unchanged
 - Starts the inactive slot (`aris-web-blue` or `aris-web-green`)

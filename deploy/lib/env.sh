@@ -71,3 +71,26 @@ require_env_keys() {
 
   return "$missing"
 }
+
+resolve_shared_repo_root() {
+  local repo_root="$1"
+  local common_git_dir=""
+
+  common_git_dir="$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  if [[ -z "$common_git_dir" ]]; then
+    printf '%s\n' "$repo_root"
+    return 0
+  fi
+
+  cd "${common_git_dir}/.." && pwd
+}
+
+resolve_deploy_state_dir() {
+  local shared_repo_root="$1"
+  printf '%s\n' "${DEPLOY_STATE_DIR:-${shared_repo_root}/deploy/.state}"
+}
+
+resolve_deploy_log_dir() {
+  local shared_repo_root="$1"
+  printf '%s\n' "${DEPLOY_LOG_DIR:-${shared_repo_root}/deploy/.logs}"
+}
