@@ -7,10 +7,12 @@ const VIEWPORT_LAYOUT_READY_IDLE_MS = 160;
 
 type UseChatLayoutStateParams = {
   centerHeaderRef: RefObject<HTMLElement | null>;
+  headerObservationKey?: string;
 };
 
 export function useChatLayoutState({
   centerHeaderRef,
+  headerObservationKey,
 }: UseChatLayoutStateParams) {
   const initialLayoutState = resolveInitialChatLayoutState({
     viewportWidth: typeof window === 'undefined' ? null : window.innerWidth,
@@ -88,7 +90,7 @@ export function useChatLayoutState({
     return () => {
       observer.disconnect();
     };
-  }, [centerHeaderRef]);
+  }, [centerHeaderRef, headerObservationKey]);
 
   useLayoutEffect(() => {
     const syncLayout = () => {

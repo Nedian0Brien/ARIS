@@ -311,6 +311,16 @@ export function ChatInterface({
     legacyCustomModels,
   });
   const {
+    layout: workspacePanelLayout,
+    activePageId: activeWorkspacePageId,
+    setActivePageId: setActiveWorkspacePageId,
+    loading: workspacePanelsLoading,
+    error: workspacePanelsError,
+    createPanel: createWorkspacePanel,
+    savePanel: saveWorkspacePanel,
+    deletePanel: deleteWorkspacePanel,
+  } = useWorkspacePanels(sessionId);
+  const {
     centerHeaderWidth,
     chatIdCopyState,
     expandedActionRunIds,
@@ -336,6 +346,7 @@ export function ChatInterface({
     toggleDebugMode,
   } = useChatLayoutState({
     centerHeaderRef,
+    headerObservationKey: activeWorkspacePageId,
   });
   const chatActionMenuRef = useRef<HTMLDivElement>(null);
   const [pendingUserEventsByChat, setPendingUserEventsByChat] = useState<Record<string, UiEvent[]>>({});
@@ -377,16 +388,6 @@ export function ChatInterface({
   } = useWorkspaceBrowserState({
     workspaceRootPath,
   });
-  const {
-    layout: workspacePanelLayout,
-    activePageId: activeWorkspacePageId,
-    setActivePageId: setActiveWorkspacePageId,
-    loading: workspacePanelsLoading,
-    error: workspacePanelsError,
-    createPanel: createWorkspacePanel,
-    savePanel: saveWorkspacePanel,
-    deletePanel: deleteWorkspacePanel,
-  } = useWorkspacePanels(sessionId);
   const workspacePagerItems = useMemo(
     () => buildWorkspacePagerItems(workspacePanelLayout),
     [workspacePanelLayout],
@@ -1743,13 +1744,11 @@ export function ChatInterface({
     isWorkspaceHome,
     isNewChatPlaceholder,
     showChatTransitionLoading,
-    showScrollToBottom,
   }), [
     isNewChatPlaceholder,
     isWorkspaceHome,
     lastUserMessageJumpTarget?.eventId,
     showChatTransitionLoading,
-    showScrollToBottom,
   ]);
 
   const handleLastUserMessageJump = useCallback(() => {
@@ -2579,6 +2578,45 @@ export function ChatInterface({
 
   const activeModel = activeComposerModels.find((m) => m.id === activeModelId)
     ?? { id: activeModelId, shortLabel: activeModelId, badge: '커스텀' };
+  const renderChatHeader = () => (
+    <ChatHeader
+      activeChatIdResolved={activeChatIdResolved}
+      activeWorkspacePageId={activeWorkspacePageId}
+      agentMeta={agentMeta}
+      agentAvatarToneClass={getAgentAvatarToneClass(agentMeta.tone)}
+      approvalPolicy={approvalPolicy}
+      chatIdCopyState={chatIdCopyState}
+      centerHeaderRef={centerHeaderRef}
+      connectionLabel={connectionLabel}
+      connectionState={connectionState}
+      contextMenuRef={contextMenuRef}
+      currentChatTitle={currentChatTitle}
+      displayName={displayName}
+      effectivePendingPermissionCount={effectivePendingPermissions.length}
+      handleAbortRun={handleAbortRun}
+      handleCopyChatId={handleCopyChatId}
+      handleCopyChatThreadIdsJson={handleCopyChatThreadIdsJson}
+      handleMoveWorkspacePage={handleMoveWorkspacePage}
+      idBundleCopyState={idBundleCopyState}
+      isAborting={isAborting}
+      isAgentRunning={isAgentRunning}
+      isChatSidebarOpen={isChatSidebarOpen}
+      isContextMenuOpen={isContextMenuOpen}
+      isDebugMode={isDebugMode}
+      isMobileLayout={isMobileLayout}
+      isOperator={isOperator}
+      isPolicyChanging={isPolicyChanging}
+      jumpToPendingPermission={jumpToPendingPermission}
+      onToggleChatSidebar={handleToggleChatSidebar}
+      onToggleContextMenu={handleToggleContextMenu}
+      onToggleDebugMode={toggleDebugMode}
+      onTogglePermissionQueue={handleTogglePermissionQueue}
+      onUpdateApprovalPolicy={handleUpdateApprovalPolicy}
+      sessionTitle={sessionTitle}
+      showDebugToggleInHeader={showDebugToggleInHeader}
+      showPermissionQueue={showPermissionQueue}
+    />
+  );
 
   return (
     <>
@@ -2628,45 +2666,7 @@ export function ChatInterface({
             showChatTransitionLoading={showChatTransitionLoading}
             showScrollToBottom={showScrollToBottom}
             onJumpToBottom={handleJumpToBottom}
-            header={(
-              <ChatHeader
-                activeChatIdResolved={activeChatIdResolved}
-                activeWorkspacePageId={activeWorkspacePageId}
-                agentMeta={agentMeta}
-                agentAvatarToneClass={getAgentAvatarToneClass(agentMeta.tone)}
-                approvalPolicy={approvalPolicy}
-                chatIdCopyState={chatIdCopyState}
-                centerHeaderRef={centerHeaderRef}
-                connectionLabel={connectionLabel}
-                connectionState={connectionState}
-                contextMenuRef={contextMenuRef}
-                currentChatTitle={currentChatTitle}
-                displayName={displayName}
-                effectivePendingPermissionCount={effectivePendingPermissions.length}
-                handleAbortRun={handleAbortRun}
-                handleCopyChatId={handleCopyChatId}
-                handleCopyChatThreadIdsJson={handleCopyChatThreadIdsJson}
-                handleMoveWorkspacePage={handleMoveWorkspacePage}
-                idBundleCopyState={idBundleCopyState}
-                isAborting={isAborting}
-                isAgentRunning={isAgentRunning}
-                isChatSidebarOpen={isChatSidebarOpen}
-                isContextMenuOpen={isContextMenuOpen}
-                isDebugMode={isDebugMode}
-                isMobileLayout={isMobileLayout}
-                isOperator={isOperator}
-                isPolicyChanging={isPolicyChanging}
-                jumpToPendingPermission={jumpToPendingPermission}
-                onToggleChatSidebar={handleToggleChatSidebar}
-                onToggleContextMenu={handleToggleContextMenu}
-                onToggleDebugMode={toggleDebugMode}
-                onTogglePermissionQueue={handleTogglePermissionQueue}
-                onUpdateApprovalPolicy={handleUpdateApprovalPolicy}
-                sessionTitle={sessionTitle}
-                showDebugToggleInHeader={showDebugToggleInHeader}
-                showPermissionQueue={showPermissionQueue}
-              />
-            )}
+            header={activeWorkspacePageId === 'chat' ? renderChatHeader() : null}
             statusNotices={(
               <ChatStatusNotices
                 runtimeNotice={runtimeNotice}
@@ -2837,6 +2837,7 @@ export function ChatInterface({
             workspacePanelsError={workspacePanelsError}
             workspacePanelsLoading={workspacePanelsLoading}
             workspacePanelLayout={workspacePanelLayout}
+            header={activeWorkspacePageId === 'create-panel' ? renderChatHeader() : null}
             requestedFile={sidebarFileRequest}
             onCreatePanel={handleCreateWorkspacePanel}
             onReturnToChat={() => setActiveWorkspacePageId('chat')}
@@ -2852,6 +2853,7 @@ export function ChatInterface({
             workspacePanelsError={workspacePanelsError}
             workspacePanelsLoading={workspacePanelsLoading}
             workspacePanelLayout={workspacePanelLayout}
+            header={item.id === activeWorkspacePageId ? renderChatHeader() : null}
             requestedFile={sidebarFileRequest}
             panelId={item.panelId}
             onSavePanel={saveWorkspacePanel}
