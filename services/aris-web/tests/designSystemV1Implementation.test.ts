@@ -102,6 +102,7 @@ describe('ARIS design-system-v1 implementation', () => {
     expect(homeClient).toContain('new THREE.BufferGeometry');
     expect(homeClient).toContain('requestAnimationFrame');
     expect(homeClient).toContain('prefers-reduced-motion: reduce');
+    expect(homeClient).toContain('const orbRadiusRatio = 0.42');
     expect(uiCss).toContain('right: -80px;');
     expect(uiCss).toContain('width: 420px;');
     expect(uiCss).toContain('mix-blend-mode: screen;');

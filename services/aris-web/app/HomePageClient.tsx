@@ -385,8 +385,10 @@ function HomeOrb() {
       });
       renderer.setClearAlpha(0);
 
+      const cameraSpan = 2.2;
+      const orbRadiusRatio = 0.42;
       const pointCount = 420;
-      const sphereRadius = 1.42;
+      const sphereRadius = cameraSpan * 2 * orbRadiusRatio;
       const phi = Math.PI * (Math.sqrt(5) - 1);
       const positions = new Float32Array(pointCount * 3);
 
@@ -408,15 +410,17 @@ function HomeOrb() {
         uniforms: {
           uColor: { value: new THREE.Color('#2563eb') },
           uPixelRatio: { value: 1 },
+          uSphereRadius: { value: sphereRadius },
         },
         vertexShader: `
           uniform float uPixelRatio;
+          uniform float uSphereRadius;
           varying float vDepth;
 
           void main() {
             vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-            vDepth = clamp((worldPosition.z + 1.42) / 2.84, 0.0, 1.0);
-            gl_PointSize = (0.9 + vDepth * 2.8) * uPixelRatio;
+            vDepth = clamp((worldPosition.z + uSphereRadius) / (uSphereRadius * 2.0), 0.0, 1.0);
+            gl_PointSize = (0.5 + vDepth * 1.7) * uPixelRatio;
             gl_Position = projectionMatrix * viewMatrix * worldPosition;
           }
         `,
@@ -457,7 +461,7 @@ function HomeOrb() {
         const width = Math.max(1, rect.width);
         const height = Math.max(1, rect.height);
         const aspect = width / height;
-        const span = 2.2;
+        const span = cameraSpan;
         if (aspect >= 1) {
           camera.left = -span * aspect;
           camera.right = span * aspect;
