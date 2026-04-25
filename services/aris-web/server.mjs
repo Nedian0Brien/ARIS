@@ -9,6 +9,11 @@ import { join } from 'node:path';
 import next from 'next';
 import { WebSocket, WebSocketServer } from 'ws';
 import { jwtVerify } from 'jose';
+import {
+  applyDevProxyAssetPrefix,
+  isNextDevHmrPath,
+  withNextDevHmrAssetPrefix,
+} from './lib/routing/devProxyAssetPrefix.mjs';
 
 const require = createRequire(import.meta.url);
 const pty = require('node-pty');
@@ -19,6 +24,11 @@ const prisma = new PrismaClient();
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOST || '0.0.0.0';
 const port = parseInt(process.env.PORT || '3000', 10);
+const devProxyAssetPrefix = applyDevProxyAssetPrefix(process.env, { dev, port });
+
+if (dev && devProxyAssetPrefix.changed) {
+  console.log(`[web-dev] using asset prefix ${devProxyAssetPrefix.serverPrefix} for port ${port}`);
+}
 
 const JWT_SECRET = process.env.AUTH_JWT_SECRET || 'dev-only-jwt-secret-dev-only-jwt-secret';
 const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'aris_session';
@@ -441,6 +451,8 @@ const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
+  const nextUpgradeHandler = app.getUpgradeHandler();
+
   const server = createServer(async (req, res) => {
     const { pathname } = parse(req.url, true);
 
@@ -489,6 +501,17 @@ app.prepare().then(() => {
       localPreviewWss.handleUpgrade(req, socket, head, (ws) => {
         localPreviewWss.emit('connection', ws, req, { userId: payload.sub });
       });
+      return;
+    }
+
+    if (dev && isNextDevHmrPath(pathname, process.env.ARIS_WEB_ASSET_PREFIX)) {
+      const originalUrl = req.url;
+      req.url = withNextDevHmrAssetPrefix(req.url, process.env.ARIS_WEB_ASSET_PREFIX);
+      try {
+        await nextUpgradeHandler(req, socket, head);
+      } finally {
+        req.url = originalUrl;
+      }
       return;
     }
 
