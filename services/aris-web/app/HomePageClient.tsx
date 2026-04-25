@@ -10,7 +10,6 @@ import {
   Clock3,
   Cpu,
   Database,
-  File,
   FileText,
   Folder,
   FolderOpen,
@@ -62,11 +61,49 @@ type RuntimeMetrics = {
   storage: RuntimeMetric;
 };
 
+type CmdConsoleOutputKind = 'out' | 'ok' | 'info' | 'warn';
+
+type CmdConsoleOutput = {
+  kind?: CmdConsoleOutputKind;
+  text: string;
+};
+
+type CmdConsoleLine = {
+  id: string;
+  prompt: boolean;
+  text: string;
+  kind: CmdConsoleOutputKind;
+  caret: boolean;
+};
+
 const SUGGESTED_ASKS = [
   'composer v2 디자인 결정 맥락 요약해줘',
   '최근 일주일 동안 가장 많이 쓴 명령어는?',
   'lawdigest 프로젝트 테스트 커버리지 현황',
   'ChatInterface의 settle 루프 이슈 해결 방식',
+];
+
+const CMD_CONSOLE_MAX_LINES = 16;
+
+const CMD_CONSOLE_SCRIPT: Array<[string, CmdConsoleOutput[]]> = [
+  ['aris context hydrate --scope workspace', [
+    { kind: 'info', text: 'loaded 42 project memories' },
+    { kind: 'ok', text: 'context graph ready' },
+  ]],
+  ['git status --short', [
+    { kind: 'out', text: 'M  services/aris-web/app/HomePageClient.tsx' },
+    { kind: 'out', text: 'M  services/aris-web/app/styles/ui.css' },
+  ]],
+  ['npm test -- designSystemV3Implementation', [
+    { kind: 'ok', text: '5 contracts verified' },
+  ]],
+  ['codex plan apply --mode precise', [
+    { kind: 'info', text: 'preserving v2 IA tokens' },
+    { kind: 'ok', text: 'v3 policy layer mounted' },
+  ]],
+  ['aris memory write --type project "ia-v3"', [
+    { kind: 'out', text: 'signature: ghost-button + console + spotlight' },
+  ]],
 ];
 
 const THEME_OPTIONS = [
@@ -221,6 +258,42 @@ function deriveProjectTokenLabel(session: SessionSummary, index: number): string
 
 function navigateTo(path: string) {
   window.location.assign(withAppBasePath(path));
+}
+
+function randomBetween(min: number, max: number): number {
+  return Math.round(min + Math.random() * (max - min));
+}
+
+function trimConsoleLines(lines: CmdConsoleLine[]): CmdConsoleLine[] {
+  return lines.slice(-CMD_CONSOLE_MAX_LINES);
+}
+
+function usePrefersReducedMotion(): boolean {
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const sync = () => {
+      setReducedMotion(media.matches);
+    };
+
+    sync();
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', sync);
+    } else {
+      media.addListener(sync);
+    }
+
+    return () => {
+      if (typeof media.removeEventListener === 'function') {
+        media.removeEventListener('change', sync);
+      } else {
+        media.removeListener(sync);
+      }
+    };
+  }, []);
+
+  return reducedMotion;
 }
 
 function Sidebar({
@@ -572,6 +645,129 @@ function HomeOrb() {
   return <canvas ref={canvasRef} className="home-orb" aria-hidden="true" data-orb-scene="dot-globe" />;
 }
 
+function CommandConsole() {
+  const reducedMotion = usePrefersReducedMotion();
+  const [lines, setLines] = useState<CmdConsoleLine[]>([]);
+  const timeoutsRef = useRef<number[]>([]);
+  const lineIdRef = useRef(0);
+  const scriptIndexRef = useRef(0);
+
+  useEffect(() => {
+    const clearScheduledTimeouts = () => {
+      timeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+      timeoutsRef.current = [];
+    };
+
+    if (reducedMotion) {
+      clearScheduledTimeouts();
+      setLines([]);
+      return clearScheduledTimeouts;
+    }
+
+    let disposed = false;
+
+    const schedule = (callback: () => void, delay: number) => {
+      const timeoutId = window.setTimeout(() => {
+        timeoutsRef.current = timeoutsRef.current.filter((id) => id !== timeoutId);
+        callback();
+      }, delay);
+      timeoutsRef.current.push(timeoutId);
+    };
+
+    const appendOutputs = (outputs: CmdConsoleOutput[], index: number, runNext: () => void) => {
+      if (disposed) return;
+      if (index >= outputs.length) {
+        schedule(runNext, randomBetween(900, 1600));
+        return;
+      }
+
+      const output = outputs[index];
+      const outputId = `cmd-console-${lineIdRef.current}`;
+      lineIdRef.current += 1;
+      setLines((previous) => trimConsoleLines([
+        ...previous,
+        {
+          id: outputId,
+          prompt: false,
+          text: output.text,
+          kind: output.kind ?? 'out',
+          caret: false,
+        },
+      ]));
+      schedule(() => appendOutputs(outputs, index + 1, runNext), randomBetween(140, 300));
+    };
+
+    const typeCommand = (promptId: string, command: string, index: number, outputs: CmdConsoleOutput[], runNext: () => void) => {
+      if (disposed) return;
+      if (index > command.length) {
+        schedule(() => {
+          setLines((previous) => previous.map((line) => line.id === promptId ? { ...line, caret: false } : line));
+          appendOutputs(outputs, 0, runNext);
+        }, 180);
+        return;
+      }
+
+      setLines((previous) => previous.map((line) => line.id === promptId ? { ...line, text: command.slice(0, index) } : line));
+      schedule(() => typeCommand(promptId, command, index + 1, outputs, runNext), randomBetween(30, 58));
+    };
+
+    const runNextSequence = () => {
+      if (disposed) return;
+      const [command, outputs] = CMD_CONSOLE_SCRIPT[scriptIndexRef.current % CMD_CONSOLE_SCRIPT.length];
+      scriptIndexRef.current += 1;
+      const promptId = `cmd-console-${lineIdRef.current}`;
+      lineIdRef.current += 1;
+
+      setLines((previous) => trimConsoleLines([
+        ...previous.map((line) => ({ ...line, caret: false })),
+        {
+          id: promptId,
+          prompt: true,
+          text: '',
+          kind: 'out',
+          caret: true,
+        },
+      ]));
+      schedule(() => typeCommand(promptId, command, 1, outputs, runNextSequence), randomBetween(220, 500));
+    };
+
+    schedule(runNextSequence, randomBetween(500, 900));
+
+    return () => {
+      disposed = true;
+      clearScheduledTimeouts();
+    };
+  }, [reducedMotion]);
+
+  if (reducedMotion) {
+    return null;
+  }
+
+  return (
+    <div className="cmd-console" aria-hidden="true">
+      <div className="cmd-console__viewport">
+        {lines.map((line) => {
+          const kindClass = line.kind === 'ok'
+            ? ' cmd-console__line--out--ok'
+            : line.kind === 'info'
+              ? ' cmd-console__line--out--info'
+              : line.kind === 'warn'
+                ? ' cmd-console__line--out--warn'
+                : '';
+          const className = `cmd-console__line${line.prompt ? ' cmd-console__line--prompt' : ` cmd-console__line--out${kindClass}`}`;
+          return (
+            <div key={line.id} className={className}>
+              {line.prompt && <span className="cmd-console__line__prompt">$</span>}
+              <span className="cmd-console__line__text">{line.text}</span>
+              {line.caret && <span className="cmd-console__line__caret" />}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function HomeStat({
   label,
   value,
@@ -625,10 +821,36 @@ function HomeSurface({
   const storageUnit = metrics?.storage.usedBytes && metrics?.storage.totalBytes
     ? `/ ${formatBytes(metrics.storage.totalBytes)}`
     : '%';
+  const mBodyRef = useRef<HTMLDivElement | null>(null);
+  const reducedMotion = usePrefersReducedMotion();
+
+  useEffect(() => {
+    if (reducedMotion) return;
+    const element = mBodyRef.current;
+    if (!element) return;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const rect = element.getBoundingClientRect();
+      element.style.setProperty('--mx', `${event.clientX - rect.left}px`);
+      element.style.setProperty('--my', `${event.clientY - rect.top}px`);
+    };
+
+    element.addEventListener('mousemove', handleMouseMove, { passive: true });
+    return () => {
+      element.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, [reducedMotion]);
 
   return (
-    <div className="m-body m-body--home">
+    <div ref={mBodyRef} className="m-body m-body--home">
+      <CommandConsole />
       <HomeOrb />
+      <div className="home-acronym" aria-label="Agentic Runtime Integration System">
+        <div className="home-acronym__line"><span className="home-acronym__lead">A</span><span className="home-acronym__rest">gentic</span></div>
+        <div className="home-acronym__line"><span className="home-acronym__lead">R</span><span className="home-acronym__rest">untime</span></div>
+        <div className="home-acronym__line"><span className="home-acronym__lead">I</span><span className="home-acronym__rest">ntegration</span></div>
+        <div className="home-acronym__line"><span className="home-acronym__lead">S</span><span className="home-acronym__rest">ystem</span></div>
+      </div>
       <h1 className="home-greet">안녕하세요, {user.email.split('@')[0] || 'ARIS'}님.</h1>
       <p className="home-greet-sub">
         지금 실행 중인 에이전트 <strong>{running}개</strong> · 승인 대기 <strong>{needsReview}건</strong> · 유휴 프로젝트 <strong>{idle}개</strong>.
