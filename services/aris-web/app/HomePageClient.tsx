@@ -388,6 +388,8 @@ function HomeOrb() {
       const cameraSpan = 2.2;
       const orbRadiusRatio = 0.42;
       const pointCount = 420;
+      const dotRadiusBase = 0.5;
+      const dotRadiusDepth = 1.7;
       const sphereRadius = cameraSpan * 2 * orbRadiusRatio;
       const phi = Math.PI * (Math.sqrt(5) - 1);
       const positions = new Float32Array(pointCount * 3);
@@ -411,16 +413,20 @@ function HomeOrb() {
           uColor: { value: new THREE.Color('#2563eb') },
           uPixelRatio: { value: 1 },
           uSphereRadius: { value: sphereRadius },
+          uDotRadiusBase: { value: dotRadiusBase },
+          uDotRadiusDepth: { value: dotRadiusDepth },
         },
         vertexShader: `
           uniform float uPixelRatio;
           uniform float uSphereRadius;
+          uniform float uDotRadiusBase;
+          uniform float uDotRadiusDepth;
           varying float vDepth;
 
           void main() {
             vec4 worldPosition = modelMatrix * vec4(position, 1.0);
             vDepth = clamp((worldPosition.z + uSphereRadius) / (uSphereRadius * 2.0), 0.0, 1.0);
-            gl_PointSize = (0.5 + vDepth * 1.7) * uPixelRatio;
+            gl_PointSize = (uDotRadiusBase + vDepth * uDotRadiusDepth) * 2.0 * uPixelRatio;
             gl_Position = projectionMatrix * viewMatrix * worldPosition;
           }
         `,
