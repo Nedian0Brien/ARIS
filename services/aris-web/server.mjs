@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import next from 'next';
 import { WebSocket, WebSocketServer } from 'ws';
 import { jwtVerify } from 'jose';
+import { applyDevProxyAssetPrefix } from './lib/routing/devProxyAssetPrefix.mjs';
 
 const require = createRequire(import.meta.url);
 const pty = require('node-pty');
@@ -19,6 +20,11 @@ const prisma = new PrismaClient();
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOST || '0.0.0.0';
 const port = parseInt(process.env.PORT || '3000', 10);
+const devProxyAssetPrefix = applyDevProxyAssetPrefix(process.env, { dev, port });
+
+if (dev && devProxyAssetPrefix.changed) {
+  console.log(`[web-dev] using asset prefix ${devProxyAssetPrefix.serverPrefix} for port ${port}`);
+}
 
 const JWT_SECRET = process.env.AUTH_JWT_SECRET || 'dev-only-jwt-secret-dev-only-jwt-secret';
 const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'aris_session';
