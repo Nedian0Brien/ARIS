@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { resolveDevProxyAssetPrefix } from '@/lib/routing/devProxyAssetPrefix.mjs';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  isNextDevHmrPath,
+  resolveDevProxyAssetPrefix,
+  withNextDevHmrAssetPrefix,
+} from '@/lib/routing/devProxyAssetPrefix.mjs';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe('dev proxy asset prefix resolution', () => {
   it('defaults a raw dev server to the current code-server proxy port', () => {
@@ -53,5 +62,32 @@ describe('dev proxy asset prefix resolution', () => {
     expect(resolved.serverPrefix).toBe('');
     expect(resolved.clientPrefix).toBe('');
     expect(resolved.changed).toBe(false);
+  });
+
+  it('recognizes HMR websocket upgrade paths with or without the proxy prefix', () => {
+    expect(isNextDevHmrPath('/_next/webpack-hmr', '/proxy/3317')).toBe(true);
+    expect(isNextDevHmrPath('/proxy/3317/_next/webpack-hmr', '/proxy/3317')).toBe(true);
+    expect(isNextDevHmrPath('/ws/terminal/session-id', '/proxy/3317')).toBe(false);
+  });
+
+  it('restores the asset prefix when code-server strips it before forwarding HMR upgrades', () => {
+    expect(withNextDevHmrAssetPrefix('/_next/webpack-hmr', '/proxy/3317')).toBe('/proxy/3317/_next/webpack-hmr');
+    expect(withNextDevHmrAssetPrefix('/_next/webpack-hmr?transport=websocket', '/proxy/3317')).toBe(
+      '/proxy/3317/_next/webpack-hmr?transport=websocket',
+    );
+    expect(withNextDevHmrAssetPrefix('/proxy/3317/_next/webpack-hmr', '/proxy/3317')).toBe(
+      '/proxy/3317/_next/webpack-hmr',
+    );
+  });
+
+  it('delegates Next HMR upgrades before custom terminal websocket fallback', () => {
+    const server = readFileSync(resolve(__dirname, '../server.mjs'), 'utf8');
+    const hmrCheckIndex = server.indexOf('if (dev && isNextDevHmrPath');
+    const terminalFallbackIndex = server.indexOf("pathname.startsWith('/ws/terminal')");
+
+    expect(hmrCheckIndex).toBeGreaterThan(-1);
+    expect(terminalFallbackIndex).toBeGreaterThan(-1);
+    expect(hmrCheckIndex).toBeLessThan(terminalFallbackIndex);
+    expect(server).toContain('nextUpgradeHandler(req, socket, head)');
   });
 });

@@ -9,7 +9,11 @@ import { join } from 'node:path';
 import next from 'next';
 import { WebSocket, WebSocketServer } from 'ws';
 import { jwtVerify } from 'jose';
-import { applyDevProxyAssetPrefix } from './lib/routing/devProxyAssetPrefix.mjs';
+import {
+  applyDevProxyAssetPrefix,
+  isNextDevHmrPath,
+  withNextDevHmrAssetPrefix,
+} from './lib/routing/devProxyAssetPrefix.mjs';
 
 const require = createRequire(import.meta.url);
 const pty = require('node-pty');
@@ -447,6 +451,8 @@ const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
+  const nextUpgradeHandler = app.getUpgradeHandler();
+
   const server = createServer(async (req, res) => {
     const { pathname } = parse(req.url, true);
 
@@ -495,6 +501,17 @@ app.prepare().then(() => {
       localPreviewWss.handleUpgrade(req, socket, head, (ws) => {
         localPreviewWss.emit('connection', ws, req, { userId: payload.sub });
       });
+      return;
+    }
+
+    if (dev && isNextDevHmrPath(pathname, process.env.ARIS_WEB_ASSET_PREFIX)) {
+      const originalUrl = req.url;
+      req.url = withNextDevHmrAssetPrefix(req.url, process.env.ARIS_WEB_ASSET_PREFIX);
+      try {
+        await nextUpgradeHandler(req, socket, head);
+      } finally {
+        req.url = originalUrl;
+      }
       return;
     }
 

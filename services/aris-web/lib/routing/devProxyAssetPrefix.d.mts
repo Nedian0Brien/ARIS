@@ -18,3 +18,5 @@ export function applyDevProxyAssetPrefix(
   env: NodeJS.ProcessEnv,
   options: Pick<DevProxyAssetPrefixOptions, 'dev' | 'port'>,
 ): DevProxyAssetPrefixResult;
+export function isNextDevHmrPath(pathname: string | undefined | null, assetPrefix: string | undefined | null): boolean;
+export function withNextDevHmrAssetPrefix(reqUrl: string | undefined, assetPrefix: string | undefined | null): string | undefined;

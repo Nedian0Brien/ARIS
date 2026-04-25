@@ -67,3 +67,25 @@ export function applyDevProxyAssetPrefix(env, { dev, port }) {
 
   return resolved;
 }
+
+export function isNextDevHmrPath(pathname, assetPrefix) {
+  const normalizedAssetPrefix = normalizeDevAssetPrefix(assetPrefix);
+  const hmrPath = '/_next/webpack-hmr';
+
+  return pathname === hmrPath || Boolean(normalizedAssetPrefix && pathname === `${normalizedAssetPrefix}${hmrPath}`);
+}
+
+export function withNextDevHmrAssetPrefix(reqUrl, assetPrefix) {
+  const normalizedAssetPrefix = normalizeDevAssetPrefix(assetPrefix);
+  const hmrPath = '/_next/webpack-hmr';
+
+  if (!normalizedAssetPrefix || typeof reqUrl !== 'string') {
+    return reqUrl;
+  }
+
+  if (reqUrl === hmrPath || reqUrl.startsWith(`${hmrPath}?`)) {
+    return `${normalizedAssetPrefix}${reqUrl}`;
+  }
+
+  return reqUrl;
+}
