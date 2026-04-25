@@ -45,6 +45,7 @@ describe('ARIS design-system-v1 implementation', () => {
       'className="m-top"',
       'className="m-top__right"',
       'className="m-theme-toggle"',
+      'className="home-orb"',
       'className="home-strip"',
       'className="home-proj__chats"',
       'className="ask-search"',
@@ -64,6 +65,7 @@ describe('ARIS design-system-v1 implementation', () => {
       '.m-top',
       '.m-theme-toggle',
       '.m-theme-toggle__item--active',
+      '.home-orb',
       '.home-strip',
       '.home-proj__chats',
       '.ask-search',
@@ -91,6 +93,18 @@ describe('ARIS design-system-v1 implementation', () => {
     expect(homeClient).toContain('다크');
     expect(homeClient).toContain("aria-label=\"테마 선택\"");
     expect(homeClient).not.toContain('More actions');
+  });
+
+  it('restores the IA v2 animated home orb as a Three.js dot-globe background', () => {
+    expect(homeClient).toContain('data-orb-scene="dot-globe"');
+    expect(homeClient).toContain("import('three')");
+    expect(homeClient).toContain('new THREE.Points');
+    expect(homeClient).toContain('new THREE.BufferGeometry');
+    expect(homeClient).toContain('requestAnimationFrame');
+    expect(homeClient).toContain('prefers-reduced-motion: reduce');
+    expect(uiCss).toContain('right: -80px;');
+    expect(uiCss).toContain('width: 420px;');
+    expect(uiCss).toContain('mix-blend-mode: screen;');
   });
 
   it('implements composer v2 Agent, Plan, and Terminal modes in the chat composer surface', () => {

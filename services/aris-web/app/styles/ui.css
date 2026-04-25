@@ -607,9 +607,32 @@ html[data-theme='dark'] .m-theme-toggle__item--active {
   position: relative;
 }
 
-.m-body--home > * {
+.home-orb {
+  position: absolute;
+  top: -32px;
+  right: -80px;
+  width: 420px;
+  height: 420px;
+  display: block;
+  pointer-events: none;
+  opacity: 0.45;
+  z-index: 0;
+}
+
+html[data-theme='dark'] .home-orb {
+  opacity: 0.6;
+  mix-blend-mode: screen;
+}
+
+.m-body--home > *:not(.home-orb) {
   position: relative;
   z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-orb {
+    opacity: 0.25;
+  }
 }
 
 .ia-runtime-notice {

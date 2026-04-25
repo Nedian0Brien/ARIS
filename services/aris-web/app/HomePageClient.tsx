@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Activity,
@@ -359,6 +359,184 @@ function Topbar({ activeTab }: { activeTab: TabType }) {
   );
 }
 
+function HomeOrb() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    let disposed = false;
+    let teardown: (() => void) | null = null;
+
+    void import('three').then((THREE) => {
+      const canvas = canvasRef.current;
+      if (disposed || !canvas) {
+        return;
+      }
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.OrthographicCamera(-2.2, 2.2, 2.2, -2.2, 0.1, 10);
+      camera.position.z = 4;
+
+      const renderer = new THREE.WebGLRenderer({
+        canvas,
+        alpha: true,
+        antialias: true,
+        preserveDrawingBuffer: true,
+        powerPreference: 'low-power',
+      });
+      renderer.setClearAlpha(0);
+
+      const pointCount = 420;
+      const sphereRadius = 1.42;
+      const phi = Math.PI * (Math.sqrt(5) - 1);
+      const positions = new Float32Array(pointCount * 3);
+
+      for (let index = 0; index < pointCount; index += 1) {
+        const y = 1 - (index / (pointCount - 1)) * 2;
+        const radius = Math.sqrt(1 - y * y);
+        const theta = phi * index;
+        positions[index * 3] = Math.cos(theta) * radius * sphereRadius;
+        positions[index * 3 + 1] = y * sphereRadius;
+        positions[index * 3 + 2] = Math.sin(theta) * radius * sphereRadius;
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+      const material = new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        uniforms: {
+          uColor: { value: new THREE.Color('#2563eb') },
+          uPixelRatio: { value: 1 },
+        },
+        vertexShader: `
+          uniform float uPixelRatio;
+          varying float vDepth;
+
+          void main() {
+            vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+            vDepth = clamp((worldPosition.z + 1.42) / 2.84, 0.0, 1.0);
+            gl_PointSize = (0.9 + vDepth * 2.8) * uPixelRatio;
+            gl_Position = projectionMatrix * viewMatrix * worldPosition;
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 uColor;
+          varying float vDepth;
+
+          void main() {
+            float distanceFromCenter = length(gl_PointCoord - vec2(0.5));
+            float circle = 1.0 - smoothstep(0.42, 0.5, distanceFromCenter);
+            if (circle <= 0.01) {
+              discard;
+            }
+            float alpha = (0.08 + vDepth * 0.55) * circle;
+            gl_FragColor = vec4(uColor, alpha);
+          }
+        `,
+      });
+
+      const points = new THREE.Points(geometry, material);
+      scene.add(points);
+
+      let pointerX = 0;
+      let pointerY = 0;
+      let tiltX = 0;
+      let tiltY = 0;
+      let angleY = 0;
+      let frameId = 0;
+      let reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      const applyOrbTheme = () => {
+        const dark = document.documentElement.dataset.theme === 'dark';
+        material.uniforms.uColor.value.set(dark ? '#c8dcff' : '#2563eb');
+      };
+
+      const resize = () => {
+        const rect = canvas.getBoundingClientRect();
+        const width = Math.max(1, rect.width);
+        const height = Math.max(1, rect.height);
+        const aspect = width / height;
+        const span = 2.2;
+        if (aspect >= 1) {
+          camera.left = -span * aspect;
+          camera.right = span * aspect;
+          camera.top = span;
+          camera.bottom = -span;
+        } else {
+          camera.left = -span;
+          camera.right = span;
+          camera.top = span / aspect;
+          camera.bottom = -span / aspect;
+        }
+        camera.updateProjectionMatrix();
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setSize(width, height, false);
+        material.uniforms.uPixelRatio.value = renderer.getPixelRatio();
+      };
+
+      const handlePointer = (event: MouseEvent) => {
+        const rect = canvas.getBoundingClientRect();
+        pointerX = ((event.clientX - rect.left - rect.width / 2) / rect.width) * 0.6;
+        pointerY = ((event.clientY - rect.top - rect.height / 2) / rect.height) * 0.6;
+      };
+
+      const handleMotionPreference = (event: MediaQueryListEvent) => {
+        reducedMotion = event.matches;
+      };
+
+      const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+      const observer = new MutationObserver(applyOrbTheme);
+
+      const render = () => {
+        tiltX += (pointerY - tiltX) * 0.05;
+        tiltY += (pointerX - tiltY) * 0.05;
+        if (!reducedMotion) {
+          angleY += 0.003;
+        }
+        points.rotation.y = angleY + tiltY * 0.8;
+        points.rotation.x = tiltX * 0.6;
+        renderer.render(scene, camera);
+        frameId = window.requestAnimationFrame(render);
+      };
+
+      resize();
+      applyOrbTheme();
+      window.addEventListener('resize', resize);
+      window.addEventListener('mousemove', handlePointer);
+      if (typeof media.addEventListener === 'function') {
+        media.addEventListener('change', handleMotionPreference);
+      } else {
+        media.addListener(handleMotionPreference);
+      }
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+      render();
+
+      teardown = () => {
+        window.cancelAnimationFrame(frameId);
+        window.removeEventListener('resize', resize);
+        window.removeEventListener('mousemove', handlePointer);
+        if (typeof media.removeEventListener === 'function') {
+          media.removeEventListener('change', handleMotionPreference);
+        } else {
+          media.removeListener(handleMotionPreference);
+        }
+        observer.disconnect();
+        geometry.dispose();
+        material.dispose();
+        renderer.dispose();
+      };
+    });
+
+    return () => {
+      disposed = true;
+      teardown?.();
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="home-orb" aria-hidden="true" data-orb-scene="dot-globe" />;
+}
+
 function HomeStat({
   label,
   value,
@@ -415,6 +593,7 @@ function HomeSurface({
 
   return (
     <div className="m-body m-body--home">
+      <HomeOrb />
       <h1 className="home-greet">안녕하세요, {user.email.split('@')[0] || 'ARIS'}님.</h1>
       <p className="home-greet-sub">
         지금 실행 중인 에이전트 <strong>{running}개</strong> · 승인 대기 <strong>{needsReview}건</strong> · 유휴 프로젝트 <strong>{idle}개</strong>.
