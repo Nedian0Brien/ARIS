@@ -33,6 +33,7 @@ COPY --link --from=builder /app/.next ./.next
 COPY --link --from=builder /app/public ./public
 COPY --link --from=builder /app/node_modules ./node_modules
 COPY --link --from=builder /app/prisma ./prisma
+COPY --link --from=builder /app/lib ./lib
 COPY --link --from=builder /app/scripts ./scripts
 COPY --link --from=builder /app/package.json ./package.json
 COPY --link --from=builder /app/next.config.ts ./next.config.ts

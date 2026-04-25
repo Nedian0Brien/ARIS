@@ -90,4 +90,12 @@ describe('dev proxy asset prefix resolution', () => {
     expect(hmrCheckIndex).toBeLessThan(terminalFallbackIndex);
     expect(server).toContain('nextUpgradeHandler(req, socket, head)');
   });
+
+  it('packages the proxy asset-prefix helper required by the production server image', () => {
+    const server = readFileSync(resolve(__dirname, '../server.mjs'), 'utf8');
+    const dockerfile = readFileSync(resolve(__dirname, '../Dockerfile'), 'utf8');
+
+    expect(server).toContain('./lib/routing/devProxyAssetPrefix.mjs');
+    expect(dockerfile).toContain('COPY --link --from=builder /app/lib ./lib');
+  });
 });
