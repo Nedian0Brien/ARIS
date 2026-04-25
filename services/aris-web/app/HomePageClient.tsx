@@ -1141,7 +1141,7 @@ function ProjectDetailSurface({
                 <span className="proj-item__ico proj-item__ico--done">✓</span>
                 <div className="proj-item__body">
                   <div className="proj-item__title">최근 작업 범위를 프로젝트 단위로 고정</div>
-                  <div className="proj-item__meta">Project context · route scope</div>
+                  <div className="proj-item__meta">Project context · workspace scope</div>
                 </div>
               </div>
               <div className="proj-item">
