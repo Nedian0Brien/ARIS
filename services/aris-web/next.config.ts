@@ -1,8 +1,14 @@
 import type { NextConfig } from 'next';
 
 const dockerFastBuild = process.env.DOCKER_FAST_BUILD === '1';
+const arisWebAssetPrefix = process.env.ARIS_WEB_ASSET_PREFIX || undefined;
+const arisWebClientAssetPrefix = process.env.NEXT_PUBLIC_ARIS_WEB_ASSET_PREFIX || arisWebAssetPrefix || '';
 
 const nextConfig: NextConfig = {
+  assetPrefix: arisWebAssetPrefix,
+  env: {
+    NEXT_PUBLIC_ARIS_WEB_ASSET_PREFIX: arisWebClientAssetPrefix,
+  },
   eslint: {
     ignoreDuringBuilds: dockerFastBuild,
   },

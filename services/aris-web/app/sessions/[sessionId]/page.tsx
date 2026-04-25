@@ -5,11 +5,11 @@ import { getSessionEvents, listPermissionRequests, listSessions } from '@/lib/ha
 import { Header } from '@/components/layout/Header';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import { Card } from '@/components/ui';
-import Link from 'next/link';
 import { ChatInterface } from './ChatInterface';
 import { shouldStartChatEntryLoading } from './chatSelection';
 import { resolveWorkspaceClientPath } from '@/lib/customization/catalog';
 import { getUserModelSettings } from '@/lib/settings/providerPreferences';
+import { withAppBasePath } from '@/lib/routing/appPath';
 import { deriveWorkspaceTitle } from './workspaceHome';
 
 const INITIAL_EVENTS_PAGE_LIMIT = 40;
@@ -176,9 +176,9 @@ export default async function SessionPage({
           <BackendNotice message={`백엔드 연결 문제: ${message}`} />
           <Card style={{ padding: '4rem 1.5rem', textAlign: 'center' }}>
             <p className="text-muted">현재 워크스페이스를 표시할 수 없습니다. 백엔드 연결을 확인하고 다시 시도해 주세요.</p>
-            <Link href="/" style={{ marginTop: '1rem', display: 'inline-block', color: 'var(--primary)', fontWeight: 700 }}>
+            <a href={withAppBasePath('/')} style={{ marginTop: '1rem', display: 'inline-block', color: 'var(--primary)', fontWeight: 700 }}>
               홈으로 돌아가기
-            </Link>
+            </a>
           </Card>
         </main>
       </div>

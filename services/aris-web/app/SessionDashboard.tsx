@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Play, Terminal, FolderOpen, Search, PlusCircle, X, Plus,
@@ -15,6 +14,7 @@ import type { GlobalChatStats, SessionSummary } from '@/lib/happy/types';
 import { extractLastDirectoryName } from '@/lib/happy/utils';
 import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
 import { readLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
+import { hasAppBasePath, withAppBasePath } from '@/lib/routing/appPath';
 import { PieChart, Pie, Cell } from 'recharts';
 import { reconcileDeletedSessions } from './sessionDashboardState';
 import styles from './SessionDashboard.module.css';
@@ -191,6 +191,16 @@ export function SessionDashboard({
     [browserRootPath],
   );
   const router = useRouter();
+
+  function navigateToAppPath(path: string) {
+    const destination = withAppBasePath(path);
+    if (hasAppBasePath()) {
+      window.location.assign(destination);
+      return;
+    }
+    router.push(destination);
+  }
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newPath, setNewPath] = useState('');
   const [newBranch, setNewBranch] = useState('');
@@ -544,7 +554,7 @@ export function SessionDashboard({
       if (!sessionId) throw new Error('워크스페이스 생성 응답이 올바르지 않습니다.');
 
       recordHistory(path, sessionId);
-      router.push(`/sessions/${sessionId}`);
+      navigateToAppPath(`/sessions/${sessionId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.');
     } finally {
@@ -586,7 +596,7 @@ export function SessionDashboard({
     if (!isOperator || isCreating) return;
     if (entry.sessionId && sessionsList.some((s) => s.id === entry.sessionId)) {
       recordHistory(entry.path, entry.sessionId);
-      router.push(`/sessions/${entry.sessionId}`);
+      navigateToAppPath(`/sessions/${entry.sessionId}`);
       return;
     }
     await createSession(entry.path, '');
@@ -1269,7 +1279,7 @@ export function SessionDashboard({
                               <div
                                 key={chat.id}
                                 className={`${styles.sessionMiniItem} ${styles.sessionMiniItemClickable}`}
-                                onClick={() => router.push(`/sessions/${chat.sessionId}?chat=${chat.id}`)}
+                                onClick={() => navigateToAppPath(`/sessions/${chat.sessionId}?chat=${chat.id}`)}
                                 title={`${chat.title} — ${chat.sessionName}`}
                               >
                                 <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: 'var(--chart-status-completed)' }} />
@@ -1442,7 +1452,7 @@ export function SessionDashboard({
                             toggleSessionSelection(session.id, e as React.MouseEvent);
                             return;
                           }
-                          router.push(`/sessions/${session.id}`);
+                          navigateToAppPath(`/sessions/${session.id}`);
                         }}
                       >
                         {isSelectionMode && (
@@ -1475,13 +1485,13 @@ export function SessionDashboard({
                             </button>
                             {isMenuOpen && (
                               <div className={styles.dropdownMenu}>
-                                <Link 
-                                  href={`/sessions/${session.id}`} 
+                                <a
+                                  href={withAppBasePath(`/sessions/${session.id}`)}
                                   className={styles.dropdownItem} 
                                   onClick={() => setOpenMenuId(null)}
                                 >
                                   <ArrowUpRight size={16} /> 워크스페이스 열기
-                                </Link>
+                                </a>
                                 <button type="button" className={styles.dropdownItem} onClick={(e) => openRenameModal(session, e)}>
                                   <Edit2 size={16} /> 이름 변경
                                 </button>
@@ -1571,9 +1581,9 @@ export function SessionDashboard({
                           <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                             <Clock3 size={14} /> {formatHistoryDate(session.lastActivityAt || '')}
                           </span>
-                          <Link href={`/sessions/${session.id}`} className="btn-ghost" style={{ padding: '0.25rem 0.5rem', minHeight: 'unset', fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)' }}>
+                          <a href={withAppBasePath(`/sessions/${session.id}`)} className="btn-ghost" style={{ padding: '0.25rem 0.5rem', minHeight: 'unset', fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)' }}>
                             열기
-                          </Link>
+                          </a>
                         </div>
                       </div>
                     );

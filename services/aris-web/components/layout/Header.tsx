@@ -1,12 +1,12 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui';
 import { Sparkles, LogOut, LayoutDashboard, Terminal, FolderTree, Settings, Sun, Moon, Monitor } from 'lucide-react';
 import type { TabType } from './BottomNav';
 import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
+import { hasAppBasePath, withAppBasePath } from '@/lib/routing/appPath';
 import { primeAutoHideScrollState, reduceAutoHideScrollState } from './mobileScrollAutoHide';
 import { useSessionScrollOrchestrator } from '@/app/sessions/[sessionId]/useSessionScrollOrchestrator';
 
@@ -42,7 +42,12 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
     if (onTabChange) {
       onTabChange(id);
     } else {
-      router.push(`/?tab=${id}`);
+      const destination = withAppBasePath(`/?tab=${id}`);
+      if (hasAppBasePath()) {
+        window.location.assign(destination);
+        return;
+      }
+      router.push(destination);
     }
   };
 
@@ -224,10 +229,10 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
   return (
     <header className={`header${autoHideOnScroll ? ' header-autohide' : ''}${hiddenOnScroll ? ' header-hidden-on-scroll' : ''}`}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-        <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.03em', background: 'var(--gradient-primary)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+        <a href={withAppBasePath('/')} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.03em', background: 'var(--gradient-primary)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
           <Sparkles size={20} color="var(--primary)" />
           ARIS
-        </Link>
+        </a>
 
         {/* Desktop Navigation */}
         <nav className="flex-desktop header-nav" style={{ display: 'none', alignItems: 'center', gap: '0.5rem', flexWrap: 'nowrap' }}>
@@ -313,7 +318,7 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
           <div className="text-sm" style={{ fontWeight: 600 }}>{userEmail}</div>
           <div className="text-sm text-muted" style={{ fontSize: '0.75rem', textTransform: 'uppercase' }}>{role}</div>
         </div>
-        <form action="/api/auth/logout" method="POST">
+        <form action={withAppBasePath('/api/auth/logout')} method="POST">
           <Button variant="ghost" style={{ padding: '0.5rem', minHeight: 'auto', color: 'var(--text-muted)' }} title="Logout">
             <LogOut size={20} />
           </Button>

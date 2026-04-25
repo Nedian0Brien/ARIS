@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Input, Card } from '@/components/ui';
 import { readLocalStorage, removeLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
+import { withAppBasePath } from '@/lib/routing/appPath';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -16,6 +17,16 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  function navigateAfterAuth(path: string) {
+    const destination = withAppBasePath(path);
+    if (destination !== path) {
+      window.location.assign(destination);
+      return;
+    }
+    router.push(destination);
+    router.refresh();
+  }
 
   // Load remembered email
   useEffect(() => {
@@ -39,7 +50,7 @@ export default function LoginPage() {
     }
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(withAppBasePath('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, rememberMe: autoLogin }),
@@ -59,8 +70,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push('/');
-      router.refresh();
+      navigateAfterAuth('/');
     } catch {
       setError('서버 통신 중 오류가 발생했습니다.');
     } finally {
@@ -76,7 +86,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/auth/verify-2fa', {
+      const response = await fetch(withAppBasePath('/api/auth/verify-2fa'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -95,8 +105,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push('/');
-      router.refresh();
+      navigateAfterAuth('/');
     } catch {
       setError('인증 중 오류가 발생했습니다.');
     } finally {
