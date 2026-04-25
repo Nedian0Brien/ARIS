@@ -40,6 +40,8 @@ done < "${ENV_FILE}"
 export NODE_ENV=development
 export HOST="${WEB_DEV_HOST}"
 export PORT="${WEB_DEV_PORT}"
+export ARIS_WEB_ASSET_PREFIX="${ARIS_WEB_ASSET_PREFIX:-/proxy/${WEB_DEV_PORT}}"
+export NEXT_PUBLIC_ARIS_WEB_ASSET_PREFIX="${NEXT_PUBLIC_ARIS_WEB_ASSET_PREFIX:-${ARIS_WEB_ASSET_PREFIX}}"
 
 if [[ -n "${DEV_APP_BASE_URL:-}" ]]; then
   export APP_BASE_URL="${DEV_APP_BASE_URL}"
