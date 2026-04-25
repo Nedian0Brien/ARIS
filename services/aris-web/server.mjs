@@ -19,8 +19,6 @@ const require = createRequire(import.meta.url);
 const pty = require('node-pty');
 const { PrismaClient } = require('@prisma/client');
 
-const prisma = new PrismaClient();
-
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOST || '0.0.0.0';
 const port = parseInt(process.env.PORT || '3000', 10);
@@ -29,6 +27,23 @@ const devProxyAssetPrefix = applyDevProxyAssetPrefix(process.env, { dev, port })
 if (dev && devProxyAssetPrefix.changed) {
   console.log(`[web-dev] using asset prefix ${devProxyAssetPrefix.serverPrefix} for port ${port}`);
 }
+
+if (!process.env.DATABASE_URL?.trim()) {
+  if (dev) {
+    console.error(
+      [
+        '[web-dev] DATABASE_URL is not set; login and authenticated API routes cannot run.',
+        '[web-dev] Start the dev server through deploy/dev/run_web_dev_hot_reload.sh so deploy env is loaded.',
+        `[web-dev] Example: DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env SKIP_DB_PREPARE=1 WEB_DEV_PORT=${port} ./deploy/dev/run_web_dev_hot_reload.sh`,
+      ].join('\n'),
+    );
+  } else {
+    console.error('[web] DATABASE_URL is not set; refusing to start.');
+  }
+  process.exit(1);
+}
+
+const prisma = new PrismaClient();
 
 const JWT_SECRET = process.env.AUTH_JWT_SECRET || 'dev-only-jwt-secret-dev-only-jwt-secret';
 const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'aris_session';
