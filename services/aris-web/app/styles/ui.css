@@ -1190,7 +1190,7 @@ html[data-theme='dark'] .home-orb {
 .proj-list-toolbar {
   display: flex;
   align-items: center;
-  gap: var(--sp-6);
+  gap: var(--sp-3);
   padding: var(--sp-8) var(--sp-10);
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface);
@@ -1234,7 +1234,8 @@ html[data-theme='dark'] .home-orb {
 .proj-list-chips {
   display: flex;
   gap: var(--sp-2);
-  margin-left: auto;
+  flex: 0 1 auto;
+  margin-left: 0;
   overflow-x: auto;
   min-width: 0;
 }

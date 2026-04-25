@@ -7,6 +7,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
 const uiCss = readFileSync(resolve(__dirname, '../app/styles/ui.css'), 'utf8');
 
+function cssBlock(selector: string) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`${escaped}\\s*\\{([^}]*)\\}`).exec(uiCss)?.[1] ?? '';
+}
+
 describe('project list surface', () => {
   it('opens the Project entry point as the project list screen from the IA v2 mockup', () => {
     expect(homeClient).toContain("project: { title: 'Projects'");
@@ -37,5 +42,14 @@ describe('project list surface', () => {
     ].forEach((selector) => {
       expect(uiCss).toContain(selector);
     });
+  });
+
+  it('keeps the project filter chips attached to the search field instead of the screen edge', () => {
+    const toolbar = cssBlock('.proj-list-toolbar');
+    const chips = cssBlock('.proj-list-chips');
+
+    expect(toolbar).toContain('gap: var(--sp-3);');
+    expect(chips).toContain('margin-left: 0;');
+    expect(chips).not.toContain('margin-left: auto;');
   });
 });
