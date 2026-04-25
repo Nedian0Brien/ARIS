@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { BackendNotice } from '@/components/ui/BackendNotice';
+import { selectRecentProjects } from './homeProjects';
 import { withAppBasePath } from '@/lib/routing/appPath';
 import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
 import type { AuthenticatedUser } from '@/lib/auth/types';
@@ -584,7 +585,7 @@ function HomeSurface({
   user: AuthenticatedUser;
   metrics: RuntimeMetrics | null;
 }) {
-  const projects = sortSessions(sessions).slice(0, 5);
+  const projects = selectRecentProjects(sessions);
   const running = sessions.filter((session) => session.status === 'running').length;
   const needsReview = sessions.filter((session) => session.status === 'error').length;
   const idle = sessions.filter((session) => session.status === 'idle' || session.status === 'stopped').length;
@@ -617,10 +618,10 @@ function HomeSurface({
       </section>
 
       <div className="home-grid-head">
-        <h2>Projects</h2>
+        <h2>Recent Project</h2>
         <button type="button" onClick={() => navigateTo('/?tab=project')}>View all</button>
       </div>
-      <section className="home-grid" aria-label="Projects">
+      <section className="home-grid" aria-label="Recent Project">
         {projects.map((session, index) => (
           <button
             key={session.id}
@@ -658,10 +659,6 @@ function HomeSurface({
             </div>
           </button>
         ))}
-        <button type="button" className="home-proj home-proj--empty" onClick={() => navigateTo('/?tab=ask')}>
-          <Plus size={20} />
-          <span>New project</span>
-        </button>
       </section>
 
       <div className="home-grid-head">
