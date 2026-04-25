@@ -5,11 +5,9 @@ import { useSearchParams } from 'next/navigation';
 import {
   Activity,
   AlertCircle,
-  Box,
   Check,
   ChevronRight,
   Clock3,
-  Code2,
   Cpu,
   Database,
   File,
@@ -18,7 +16,6 @@ import {
   FolderOpen,
   HardDrive,
   Home,
-  LayoutGrid,
   MessageSquareText,
   Monitor,
   Moon,
@@ -27,13 +24,12 @@ import {
   Search,
   Send,
   Sparkles,
-  Star,
   Sun,
-  Table2,
   Wifi,
 } from 'lucide-react';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { BackendNotice } from '@/components/ui/BackendNotice';
+import { selectRecentProjects } from './homeProjects';
 import { withAppBasePath } from '@/lib/routing/appPath';
 import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
 import type { AuthenticatedUser } from '@/lib/auth/types';
@@ -202,6 +198,27 @@ function buildRecentAsks(sessions: SessionSummary[]): Array<{ question: string; 
   }));
 }
 
+function projectStatusLabel(status: SessionStatus): string {
+  if (status === 'running') return 'running';
+  if (status === 'error') return 'approval';
+  return 'idle';
+}
+
+function projectStatusBadgeClass(status: SessionStatus): string {
+  if (status === 'running') return 'badge--info';
+  if (status === 'error') return 'badge--warning';
+  return 'badge--neutral';
+}
+
+function deriveProjectFileCount(session: SessionSummary, index: number): number {
+  return Math.max(18, (session.totalChats ?? 0) * 7 + index * 11 + 24);
+}
+
+function deriveProjectTokenLabel(session: SessionSummary, index: number): string {
+  const total = Math.max(9.1, (session.totalChats ?? 0) * 11.8 + index * 7.4);
+  return `${total.toFixed(1)}k`;
+}
+
 function navigateTo(path: string) {
   window.location.assign(withAppBasePath(path));
 }
@@ -265,7 +282,7 @@ function Sidebar({
               <button
                 key={session.id}
                 type="button"
-                className={`m-sb__proj m-sb__proj--${statusClass(session.status)}${activeTab === 'project' && session === projects[0] ? ' m-sb__proj--active' : ''}`}
+                className={`m-sb__proj m-sb__proj--${statusClass(session.status)}`}
                 onClick={() => onTabChange('project')}
               >
                 <span className="m-sb__proj-dot" />
@@ -286,12 +303,14 @@ function Sidebar({
   );
 }
 
-function Topbar({ activeTab }: { activeTab: TabType }) {
+function Topbar({ activeTab, sessions }: { activeTab: TabType; sessions: SessionSummary[] }) {
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
+  const activeProjects = sessions.filter((session) => session.status === 'running' || session.status === 'error').length;
+  const totalChats = sessions.reduce((sum, session) => sum + (session.totalChats ?? 0), 0);
   const copy: Record<TabType, { title: string; crumb: string }> = {
     home: { title: 'Home', crumb: 'workspace overview' },
     ask: { title: 'Ask ARIS', crumb: 'global memory' },
-    project: { title: 'Project', crumb: 'current workspace' },
+    project: { title: 'Projects', crumb: `${activeProjects} active · ${totalChats} chats total` },
     files: { title: 'Files', crumb: 'project filesystem' },
   };
 
@@ -335,6 +354,12 @@ function Topbar({ activeTab }: { activeTab: TabType }) {
         <span className="m-top__crumb">{copy[activeTab].crumb}</span>
       </div>
       <div className="m-top__right">
+        {activeTab === 'project' && (
+          <button type="button" className="btn btn--primary btn--sm">
+            <Plus size={14} />
+            New project
+          </button>
+        )}
         <div className="m-theme-toggle" role="group" aria-label="테마 선택">
           {THEME_OPTIONS.map(({ mode, label, Icon }) => {
             const active = themeMode === mode;
@@ -584,7 +609,7 @@ function HomeSurface({
   user: AuthenticatedUser;
   metrics: RuntimeMetrics | null;
 }) {
-  const projects = sortSessions(sessions).slice(0, 5);
+  const projects = selectRecentProjects(sessions);
   const running = sessions.filter((session) => session.status === 'running').length;
   const needsReview = sessions.filter((session) => session.status === 'error').length;
   const idle = sessions.filter((session) => session.status === 'idle' || session.status === 'stopped').length;
@@ -617,10 +642,10 @@ function HomeSurface({
       </section>
 
       <div className="home-grid-head">
-        <h2>Projects</h2>
+        <h2>Recent Project</h2>
         <button type="button" onClick={() => navigateTo('/?tab=project')}>View all</button>
       </div>
-      <section className="home-grid" aria-label="Projects">
+      <section className="home-grid" aria-label="Recent Project">
         {projects.map((session, index) => (
           <button
             key={session.id}
@@ -658,10 +683,6 @@ function HomeSurface({
             </div>
           </button>
         ))}
-        <button type="button" className="home-proj home-proj--empty" onClick={() => navigateTo('/?tab=ask')}>
-          <Plus size={20} />
-          <span>New project</span>
-        </button>
       </section>
 
       <div className="home-grid-head">
@@ -748,113 +769,145 @@ function AskSurface({ sessions }: { sessions: SessionSummary[] }) {
 }
 
 function ProjectSurface({ sessions }: { sessions: SessionSummary[] }) {
-  const selected = sortSessions(sessions)[0] ?? null;
-  const projectName = selected ? displayProjectName(selected) : 'aris-web';
-  const projectPath = selected ? displayProjectPath(selected) : '~/project/ARIS/services/aris-web';
-  const chats = selected?.totalChats ?? sessions.reduce((sum, session) => sum + (session.totalChats ?? 0), 0);
-  const active = sessions.filter((session) => session.status === 'running').length;
+  const [query, setQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState('All');
+  const projects = sortSessions(sessions);
+  const activeCount = projects.filter((session) => session.status === 'running' || session.status === 'error').length;
+  const totalChats = projects.reduce((sum, session) => sum + (session.totalChats ?? 0), 0);
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredProjects = projects.filter((session) => {
+    const matchesQuery = !normalizedQuery
+      || displayProjectName(session).toLowerCase().includes(normalizedQuery)
+      || displayProjectPath(session).toLowerCase().includes(normalizedQuery);
+    if (!matchesQuery) return false;
+    if (activeFilter === 'Active') return session.status === 'running' || session.status === 'error';
+    if (activeFilter === 'Archived') return session.status === 'stopped';
+    return true;
+  });
+  const chips = ['All', 'Active', 'Recent', 'Archived'];
 
   return (
-    <div className="m-main-scroll">
-      <section className="proj-head">
-        <div className="proj-head__row">
-          <div>
-            <h1 className="proj-head__title">{projectName}</h1>
-            <div className="proj-head__path">
-              {projectPath}
-              <span className={`proj-head__path-status proj-head__path-status--${statusClass(selected?.status ?? 'running')}`}>● {selected?.status ?? 'running'}</span>
-            </div>
-          </div>
-          <div className="proj-head__actions">
-            <button type="button" className="btn btn--secondary">Open</button>
-            <button type="button" className="btn btn--primary" onClick={() => navigateTo(selected ? `/sessions/${selected.id}` : '/?tab=ask')}>New chat</button>
-          </div>
+    <div className="proj-list-wrap">
+      <div className="proj-list-toolbar">
+        <label className="proj-list-search">
+          <Search size={13} />
+          <input
+            type="text"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search projects..."
+          />
+        </label>
+        <div className="proj-list-chips" aria-label="프로젝트 필터">
+          {chips.map((chip) => {
+            const count = chip === 'All'
+              ? projects.length
+              : chip === 'Active'
+                ? activeCount
+                : null;
+            return (
+              <button
+                key={chip}
+                type="button"
+                className={`proj-list-chip${activeFilter === chip ? ' proj-list-chip--active' : ''}`}
+                onClick={() => setActiveFilter(chip)}
+              >
+                {chip}
+                {count !== null && <span className="proj-list-chip__count">{count}</span>}
+              </button>
+            );
+          })}
         </div>
-        <div className="proj-stats">
-          <div><div className="proj-stat-label">Chats</div><div className="proj-stat-value">{chats}<span className="proj-stat-value-sub">· {active} active</span></div></div>
-          <div><div className="proj-stat-label">Files tracked</div><div className="proj-stat-value">128</div></div>
-          <div><div className="proj-stat-label">Last activity</div><div className="proj-stat-value">{formatRelativeTime(selected?.lastActivityAt)}</div></div>
-          <div><div className="proj-stat-label">Tokens used</div><div className="proj-stat-value">{Math.max(12, chats * 13)}.2k</div></div>
-        </div>
-        <div className="proj-docs">
-          <article className="proj-doc">
-            <div className="proj-doc__eyebrow">프로젝트 지침</div>
-            <div className="proj-doc__body">
-              <p>사용자의 의도를 먼저 확인한다.</p>
-              <p>기준 산출물이 있으면 해당 구조를 구현 기준으로 삼는다.</p>
-              <p>작업 완료 전 검증과 커밋, 푸시를 수행한다.</p>
-              <p>모바일 UI 변경은 overflow 회귀를 확인한다.</p>
-            </div>
-            <button type="button" className="proj-doc__more">전체 보기</button>
-          </article>
-          <article className="proj-doc">
-            <div className="proj-doc__eyebrow">프로젝트 메모리</div>
-            <div className="proj-doc__body">
-              <p>디자인 HTML은 참고가 아니라 구현 원본이다.</p>
-              <p>Home, Ask, Project, Files는 IA v2 entry point다.</p>
-              <p>기존 UI에 라벨만 바꾸는 작업은 실패다.</p>
-              <p>남은 차이는 최종 보고에서 숨기지 않는다.</p>
-            </div>
-            <button type="button" className="proj-doc__more">전체 보기</button>
-          </article>
-        </div>
-      </section>
-
-      <div className="proj-tabs">
-        <button type="button" className="proj-tab proj-tab--active"><LayoutGrid size={14} />Overview</button>
-        <button type="button" className="proj-tab"><MessageSquareText size={14} />Chats<span className="proj-tab__count">{chats}</span></button>
-        <button type="button" className="proj-tab"><FileText size={14} />Files<span className="proj-tab__count">128</span></button>
-        <button type="button" className="proj-tab"><Table2 size={14} />Context<span className="proj-tab__count">6</span></button>
       </div>
 
-      <section className="proj-pane">
-        <div className="proj-overview">
-          <div className="proj-chats">
-            {(selected ? [selected, ...sortSessions(sessions).filter((session) => session.id !== selected.id).slice(0, 2)] : sortSessions(sessions).slice(0, 3)).map((session) => (
-              <article key={session.id} className="proj-chat" onClick={() => navigateTo(`/sessions/${session.id}`)}>
-                <div className="proj-chat__head">
-                  <div className="proj-chat__title">{session.alias || displayProjectName(session)}</div>
-                  <div className="proj-chat__time">{formatRelativeTime(session.lastActivityAt)} · Today</div>
+      <div className="proj-list-body">
+        <div className="proj-list-grid">
+          {filteredProjects.map((session, index) => (
+            <article
+              key={session.id}
+              className="proj-list-card"
+              role="button"
+              tabIndex={0}
+              aria-label={`${displayProjectName(session)} 프로젝트 열기`}
+              onClick={() => navigateTo(`/sessions/${session.id}`)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  navigateTo(`/sessions/${session.id}`);
+                }
+              }}
+            >
+              <div className="proj-list-card__head">
+                <div className="proj-list-card__info">
+                  <div className="proj-list-card__name">{displayProjectName(session)}</div>
+                  <div className="proj-list-card__path">{displayProjectPath(session)}</div>
                 </div>
-                <div className="proj-chat__preview">{createChatPreview(session, 0)}</div>
-                <div className="proj-chat__meta">
-                  <span>{session.agent}</span>
-                  <span>{session.model || session.metadata?.runtimeModel || 'default'}</span>
-                  <span>{session.status}</span>
-                </div>
-              </article>
-            ))}
-          </div>
-          <aside className="proj-side">
-            <div className="proj-card">
-              <div className="proj-card__title"><Clock3 size={13} />Active chats</div>
-              {sortSessions(sessions).slice(0, 2).map((session) => (
-                <div key={session.id} className="proj-item">
-                  <span className={`proj-item__ico proj-item__ico--${statusClass(session.status)}`}>{session.status === 'error' ? '!' : '●'}</span>
-                  <div className="proj-item__body">
-                    <div className="proj-item__title">{session.alias || displayProjectName(session)}</div>
-                    <div className="proj-item__meta">{session.agent} · {session.model || 'default'} · {formatRelativeTime(session.lastActivityAt)}</div>
+                <span className={`badge badge--dot ${projectStatusBadgeClass(session.status)}`}>
+                  {projectStatusLabel(session.status)}
+                </span>
+              </div>
+              <div className="proj-list-stats">
+                <div className="proj-list-stat">
+                  <div className="proj-list-stat__label">Chats</div>
+                  <div className="proj-list-stat__val">
+                    {session.totalChats ?? 0}
+                    {(session.status === 'running' || session.status === 'error') && (
+                      <span className="proj-list-stat__sub">· 1 active</span>
+                    )}
                   </div>
                 </div>
-              ))}
-            </div>
-            <div className="proj-card">
-              <div className="proj-card__title"><Star size={13} />Pinned files</div>
-              {['ChatInterface.tsx', 'app/styles/tokens.css'].map((file) => (
-                <div key={file} className="proj-item proj-item--file">
-                  <File size={13} />
-                  <div className="proj-item__body"><div className="proj-item__title">{file}</div></div>
+                <div className="proj-list-stat">
+                  <div className="proj-list-stat__label">Files</div>
+                  <div className="proj-list-stat__val">{deriveProjectFileCount(session, index)}</div>
                 </div>
-              ))}
-            </div>
-            <div className="proj-card">
-              <div className="proj-card__title"><Box size={13} />Context assets</div>
-              <div className="proj-item"><Code2 size={13} /><div className="proj-item__body"><div className="proj-item__title">AGENTS.md · system prompt</div><div className="proj-item__meta">project instructions</div></div></div>
-              <div className="proj-item"><Table2 size={13} /><div className="proj-item__body"><div className="proj-item__title">Snippets · 12</div><div className="proj-item__meta">dev · test · deploy</div></div></div>
-            </div>
-          </aside>
+                <div className="proj-list-stat">
+                  <div className="proj-list-stat__label">Tokens</div>
+                  <div className="proj-list-stat__val">{deriveProjectTokenLabel(session, index)}</div>
+                </div>
+              </div>
+              <div className="home-proj__chats home-proj__chats--project-list">
+                <div className="home-proj__chat">
+                  <span className={`home-proj__chat-dot home-proj__chat-dot--${statusClass(session.status)}`} />
+                  <div className="home-proj__chat-body">
+                    <div className="home-proj__chat-title">{session.alias || displayProjectName(session)}</div>
+                    <div className="home-proj__chat-last">{createChatPreview(session, index)}</div>
+                  </div>
+                </div>
+                <div className="home-proj__chat">
+                  <span className="home-proj__chat-dot home-proj__chat-dot--done" />
+                  <div className="home-proj__chat-body">
+                    <div className="home-proj__chat-title">{session.agent} · {session.model || session.metadata?.runtimeModel || 'default model'}</div>
+                    <div className="home-proj__chat-last">프로젝트 채팅과 최근 파일 맥락이 이 카드에 묶여 있습니다.</div>
+                  </div>
+                </div>
+              </div>
+              <div className="proj-list-card__foot">
+                <span className="proj-list-card__foot-meta">last {formatRelativeTime(session.lastActivityAt)}</span>
+                <button
+                  type="button"
+                  className="proj-list-new-btn"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    navigateTo(`/sessions/${session.id}`);
+                  }}
+                >
+                  <Plus size={11} />
+                  New chat
+                </button>
+              </div>
+            </article>
+          ))}
+
+          <button type="button" className="proj-list-card proj-list-card--new">
+            <Plus size={20} />
+            <span className="proj-list-card__new-title">New project</span>
+            <span className="proj-list-card__new-meta">로컬 디렉토리 선택 → 프로젝트 생성</span>
+          </button>
         </div>
-      </section>
+        <div className="proj-list-summary" aria-live="polite">
+          {filteredProjects.length} projects · {activeCount} active · {totalChats} chats total
+        </div>
+      </div>
     </div>
   );
 }
@@ -1060,7 +1113,7 @@ export default function HomePageWrapper({
       <div className="aris-ia-shell">
         <Sidebar activeTab={activeTab} onTabChange={handleTabChange} sessions={sessions} user={user} />
         <main className="m-main">
-          <Topbar activeTab={activeTab} />
+          <Topbar activeTab={activeTab} sessions={sessions} />
           {runtimeError && <div className="ia-runtime-notice"><BackendNotice message={runtimeError} /></div>}
           {content}
         </main>
