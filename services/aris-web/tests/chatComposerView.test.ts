@@ -6,6 +6,73 @@ import { ChatComposer } from '@/app/sessions/[sessionId]/chat-screen/center-pane
 import { FileBrowserModal } from '@/app/sessions/[sessionId]/chat-screen/center-pane/FileBrowserModal';
 
 describe('chat composer view', () => {
+  it('renders composer v2 mode controls and send label', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(ChatComposer, {
+        showPendingReveal: false,
+        agentFlavor: 'codex',
+        AgentIcon: MessageSquarePlus,
+        activeModelShortLabel: 'GPT-5.4',
+        activeChatIdResolved: 'chat-1',
+        isOperator: true,
+        isAgentRunning: false,
+        isAborting: false,
+        prompt: '초안 작성',
+        contextItems: [],
+        imageUploadsInFlight: 0,
+        imageUploadError: null,
+        availableChatCommands: [],
+        isCommandMenuOpen: false,
+        isModelDropdownOpen: false,
+        isGeminiModeDropdownOpen: false,
+        activeComposerModels: [],
+        activeModelId: 'gpt-5.4',
+        activeGeminiMode: { shortLabel: 'Auto' },
+        activeGeminiModeId: 'auto',
+        activeGeminiModeOptions: [],
+        approvalPolicy: 'on-request',
+        selectedModelReasoningEffort: 'medium',
+        plusMenuMode: 'closed',
+        textContextInput: '',
+        commandMenuRef: { current: null },
+        modelDropdownRef: { current: null },
+        geminiModeDropdownRef: { current: null },
+        plusMenuRef: { current: null },
+        composerDockRef: { current: null },
+        composerInputRef: { current: null },
+        composerImageInputRef: { current: null },
+        onSubmit: vi.fn(),
+        onToggleCommandMenu: vi.fn(),
+        onRunChatCommand: vi.fn(),
+        onToggleModelDropdown: vi.fn(),
+        onSelectModel: vi.fn(),
+        onToggleGeminiModeDropdown: vi.fn(),
+        onSelectGeminiMode: vi.fn(),
+        onSelectModelReasoningEffort: vi.fn(),
+        onRemoveContextItem: vi.fn(),
+        onImageSelection: vi.fn(),
+        onTogglePlusMenu: vi.fn(),
+        onImageUploadOpen: vi.fn(),
+        onFileBrowserOpen: vi.fn(),
+        onOpenTextContextEditor: vi.fn(),
+        onTextContextInputChange: vi.fn(),
+        onCancelTextContext: vi.fn(),
+        onAddTextContext: vi.fn(),
+        onPromptChange: vi.fn(),
+        onPromptInput: vi.fn(),
+        onPromptFocus: vi.fn(),
+        onPromptKeyDown: vi.fn(),
+        onAbortRun: vi.fn(),
+      }),
+    );
+
+    expect(markup).toContain('Composer mode');
+    expect(markup).toContain('Agent');
+    expect(markup).toContain('Plan');
+    expect(markup).toContain('Terminal');
+    expect(markup).toContain('Send');
+  });
+
   it('renders the text context editor', () => {
     const markup = renderToStaticMarkup(
       React.createElement(ChatComposer, {

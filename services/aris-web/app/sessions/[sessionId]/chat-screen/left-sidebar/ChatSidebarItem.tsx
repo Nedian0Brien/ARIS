@@ -72,6 +72,8 @@ export function ChatSidebarItem({
   RelativeTimeComponent: ComponentType<{ timestamp: string; className?: string }>;
   ElapsedTimerComponent: ComponentType<{ since: string; className?: string }>;
 }) {
+  const statusLabel = item.runPhaseLabel ?? (item.hasPendingApproval ? 'Needs approval' : 'Idle');
+
   return (
     <div
       className={`${styles.chatListItem} ${item.isActive ? styles.chatListItemActive : ''} ${item.sidebarStateClassName}`}
@@ -145,6 +147,18 @@ export function ChatSidebarItem({
             />
           </div>
         )}
+      </div>
+      <div className={styles.chatListTooltip} role="tooltip" aria-hidden="true">
+        <div className={styles.chatListTooltipTitle}>{item.title}</div>
+        <div className={styles.chatListTooltipMeta}>
+          <span className={`${styles.chatListTooltipStatus} ${item.runPhaseBadgeClassName}`}>
+            <span className={styles.chatListTooltipDot} aria-hidden />
+            {statusLabel}
+          </span>
+          <RelativeTimeComponent timestamp={item.timestamp} className={styles.chatListTooltipTime} />
+        </div>
+        <div className={styles.chatListTooltipLastLabel}>Last user message</div>
+        <div className={styles.chatListTooltipLastText}>{item.previewText || '—'}</div>
       </div>
       <div className={`${styles.chatListApprovalWrap} ${item.showApprovalPanel ? styles.chatListApprovalWrapOpen : ''}`}>
         <div className={styles.chatListApprovalInner}>

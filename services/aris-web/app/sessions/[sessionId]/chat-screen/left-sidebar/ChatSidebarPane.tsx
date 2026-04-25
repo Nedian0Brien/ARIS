@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import type { ComponentType, RefObject } from 'react';
-import { Layers, MessageSquarePlus } from 'lucide-react';
+import { Layers, MessageSquarePlus, Search, Settings } from 'lucide-react';
 import type { ChatSidebarSectionKey } from '../types';
 import styles from '../../ChatInterface.module.css';
 import { ChatSidebarItem, type ChatSidebarItemViewModel } from './ChatSidebarItem';
@@ -58,6 +58,30 @@ export function ChatSidebarPane({
   RelativeTimeComponent: ComponentType<{ timestamp: string; className?: string }>;
   ElapsedTimerComponent: ComponentType<{ since: string; className?: string }>;
 }) {
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredSections = useMemo(() => {
+    if (!normalizedQuery) {
+      return sections;
+    }
+
+    return sections
+      .map((section) => {
+        const items = section.items.filter((item) => (
+          item.title.toLowerCase().includes(normalizedQuery)
+          || item.previewText.toLowerCase().includes(normalizedQuery)
+          || (item.runPhaseLabel ?? '').toLowerCase().includes(normalizedQuery)
+        ));
+
+        return {
+          ...section,
+          totalCount: items.length,
+          items,
+        };
+      })
+      .filter((section) => section.items.length > 0);
+  }, [normalizedQuery, sections]);
+
   return (
     <>
       {isLeftSidebarOverlayLayout && isChatSidebarOpen && (
@@ -76,6 +100,29 @@ export function ChatSidebarPane({
           isLeftSidebarOverlayLayout ? styles.chatSidebarOverlay : ''
         }`}
       >
+        <div className={styles.chatSidebarBrand}>
+          <button
+            type="button"
+            className={styles.chatSidebarBrandButton}
+            onClick={onGoHome}
+            aria-label="워크스페이스 홈"
+          >
+            <span className={styles.chatSidebarBrandLogo} aria-hidden>AR</span>
+            <span className={styles.chatSidebarBrandText}>
+              <span className={styles.chatSidebarBrandName}>ARIS</span>
+              <span className={styles.chatSidebarBrandMeta}>{sessionTitle}</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            className={styles.chatSidebarSettingsButton}
+            aria-label="설정"
+            title="설정"
+          >
+            <Settings size={15} />
+          </button>
+        </div>
+
         <div className={styles.chatSidebarHeader}>
           <button
             type="button"
@@ -100,6 +147,17 @@ export function ChatSidebarPane({
           </div>
         </div>
 
+        <label className={styles.chatSidebarSearch}>
+          <Search size={14} />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search chats"
+            aria-label="채팅 검색"
+          />
+          <span className={styles.chatSidebarSearchKbd}>⌘K</span>
+        </label>
+
         {chatMutationError && <div className={styles.chatSidebarError}>{chatMutationError}</div>}
 
         <div className={styles.chatSidebarListWrap}>
@@ -107,7 +165,7 @@ export function ChatSidebarPane({
             <span className={styles.chatSidebarListLabel}>채팅 {chatCount}개</span>
           </div>
           <div ref={chatListRef} className={styles.chatList}>
-            {sections.map((section, sectionIndex) => (
+            {filteredSections.map((section, sectionIndex) => (
               <ChatSidebarSection
                 key={section.key}
                 section={section}

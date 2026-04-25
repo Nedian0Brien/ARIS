@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import type {
   ChangeEventHandler,
   ComponentType,
@@ -26,6 +26,8 @@ import type { ChatCommandId } from '../../chatCommands';
 import { MODEL_REASONING_EFFORT_OPTIONS } from '../constants';
 import type { ComposerModelOption, ContextItem, GeminiModeOption, ModelReasoningEffort } from '../types';
 import styles from '../../ChatInterface.module.css';
+
+type ComposerMode = 'agent' | 'plan' | 'terminal';
 
 type ChatCommandOption = {
   id: ChatCommandId;
@@ -145,6 +147,36 @@ export function ChatComposer({
   onPromptKeyDown: KeyboardEventHandler<HTMLTextAreaElement>;
   onAbortRun: MouseEventHandler<HTMLButtonElement>;
 }) {
+  const [composerMode, setComposerMode] = useState<ComposerMode>('agent');
+  const composerModeClassName = composerMode === 'plan'
+    ? styles.composerCardPlan
+    : composerMode === 'terminal'
+      ? styles.composerCardTerminal
+      : styles.composerCardAgent;
+  const promptPlaceholder = !activeChatIdResolved
+    ? '사용할 채팅을 선택하세요.'
+    : !isOperator
+      ? 'Viewer 권한입니다.'
+      : composerMode === 'plan'
+        ? '계획을 세울 목표와 제약을 설명하세요...'
+        : composerMode === 'terminal'
+          ? '$ 커맨드 또는 진단할 작업을 입력하세요'
+          : '에이전트에게 작업을 지시하세요...';
+  const submitLabel = composerMode === 'plan' ? 'Plan' : composerMode === 'terminal' ? 'Execute' : 'Send';
+
+  const renderModeButton = (mode: ComposerMode, label: string) => (
+    <button
+      key={mode}
+      type="button"
+      className={`${styles.modeTogglePill} ${composerMode === mode ? styles.modeTogglePillActive : ''}`}
+      aria-pressed={composerMode === mode}
+      onClick={() => setComposerMode(mode)}
+    >
+      <span className={styles.modeToggleDot} aria-hidden />
+      {label}
+    </button>
+  );
+
   return (
     <footer
       className={`${styles.composerDock} ${showPendingReveal ? styles.chatEntryPendingReveal : ''}`}
@@ -152,127 +184,135 @@ export function ChatComposer({
       aria-hidden={showPendingReveal}
     >
       <form onSubmit={onSubmit} className={styles.composerForm}>
-        <div className={styles.composerCard}>
-          <div className={styles.composerToolbar}>
-            {availableChatCommands.length > 0 && (
-              <div className={styles.modelSelectorWrap} ref={commandMenuRef}>
+        <div className={`${styles.composerCard} ${styles.composerCardV2} ${composerModeClassName}`}>
+          <div className={styles.composerTopRow}>
+            <div className={styles.modeToggle} role="group" aria-label="Composer mode">
+              {renderModeButton('agent', 'Agent')}
+              {renderModeButton('plan', 'Plan')}
+              {renderModeButton('terminal', 'Terminal')}
+            </div>
+
+            <div className={styles.composerContextCluster}>
+              {availableChatCommands.length > 0 && (
+                <div className={styles.modelSelectorWrap} ref={commandMenuRef}>
+                  <button
+                    type="button"
+                    className={styles.modelSelectorBtn}
+                    onClick={onToggleCommandMenu}
+                    aria-haspopup="listbox"
+                    aria-expanded={isCommandMenuOpen}
+                  >
+                    <TerminalSquare size={13} />
+                    <span>Command</span>
+                    <ChevronDown size={11} />
+                  </button>
+                  {isCommandMenuOpen && (
+                    <div className={styles.modelDropdown} role="listbox">
+                      {availableChatCommands.map((command) => (
+                        <button
+                          key={command.id}
+                          type="button"
+                          role="option"
+                          aria-selected={false}
+                          className={styles.commandOption}
+                          onClick={() => onRunChatCommand(command.id)}
+                        >
+                          <span className={styles.commandOptionLabel}>{command.label}</span>
+                          <span className={styles.commandOptionMeta}>{command.slashCommand}</span>
+                          <span className={styles.commandOptionDescription}>{command.description}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className={styles.modelSelectorWrap} ref={modelDropdownRef}>
                 <button
                   type="button"
                   className={styles.modelSelectorBtn}
-                  onClick={onToggleCommandMenu}
+                  onClick={onToggleModelDropdown}
                   aria-haspopup="listbox"
-                  aria-expanded={isCommandMenuOpen}
+                  aria-expanded={isModelDropdownOpen}
                 >
-                  <TerminalSquare size={13} />
-                  <span>Command</span>
+                  <AgentIcon size={13} />
+                  <span>{activeModelShortLabel}</span>
                   <ChevronDown size={11} />
                 </button>
-                {isCommandMenuOpen && (
+                {isModelDropdownOpen && (
                   <div className={styles.modelDropdown} role="listbox">
-                    {availableChatCommands.map((command) => (
+                    {activeComposerModels.map((model) => (
                       <button
-                        key={command.id}
+                        key={model.id}
                         type="button"
                         role="option"
-                        aria-selected={false}
-                        className={styles.commandOption}
-                        onClick={() => onRunChatCommand(command.id)}
+                        aria-selected={activeModelId === model.id}
+                        className={`${styles.modelOption} ${activeModelId === model.id ? styles.modelOptionActive : ''}`}
+                        onClick={() => onSelectModel(model.id)}
                       >
-                        <span className={styles.commandOptionLabel}>{command.label}</span>
-                        <span className={styles.commandOptionMeta}>{command.slashCommand}</span>
-                        <span className={styles.commandOptionDescription}>{command.description}</span>
+                        <span>{model.shortLabel}</span>
+                        <span className={styles.modelOptionBadge}>{model.badge}</span>
                       </button>
                     ))}
                   </div>
                 )}
               </div>
-            )}
-            <div className={styles.modelSelectorWrap} ref={modelDropdownRef}>
-              <button
-                type="button"
-                className={styles.modelSelectorBtn}
-                onClick={onToggleModelDropdown}
-                aria-haspopup="listbox"
-                aria-expanded={isModelDropdownOpen}
-              >
-                <AgentIcon size={13} />
-                <span>{activeModelShortLabel}</span>
-                <ChevronDown size={11} />
-              </button>
-              {isModelDropdownOpen && (
-                <div className={styles.modelDropdown} role="listbox">
-                  {activeComposerModels.map((model) => (
-                    <button
-                      key={model.id}
-                      type="button"
-                      role="option"
-                      aria-selected={activeModelId === model.id}
-                      className={`${styles.modelOption} ${activeModelId === model.id ? styles.modelOptionActive : ''}`}
-                      onClick={() => onSelectModel(model.id)}
-                    >
-                      <span>{model.shortLabel}</span>
-                      <span className={styles.modelOptionBadge}>{model.badge}</span>
-                    </button>
-                  ))}
+              {agentFlavor === 'gemini' && (
+                <div className={styles.modelSelectorWrap} ref={geminiModeDropdownRef}>
+                  <button
+                    type="button"
+                    className={styles.modelSelectorBtn}
+                    onClick={onToggleGeminiModeDropdown}
+                    aria-haspopup="listbox"
+                    aria-expanded={isGeminiModeDropdownOpen}
+                  >
+                    <span>Mode</span>
+                    <span>{activeGeminiMode.shortLabel}</span>
+                    <ChevronDown size={11} />
+                  </button>
+                  {isGeminiModeDropdownOpen && (
+                    <div className={styles.modelDropdown} role="listbox">
+                      {activeGeminiModeOptions.map((mode) => {
+                        const disabled = mode.id === 'yolo' && approvalPolicy !== 'yolo';
+                        return (
+                          <button
+                            key={mode.id}
+                            type="button"
+                            role="option"
+                            aria-selected={activeGeminiModeId === mode.id}
+                            className={`${styles.modelOption} ${activeGeminiModeId === mode.id ? styles.modelOptionActive : ''}`}
+                            onClick={() => onSelectGeminiMode(mode.id)}
+                            disabled={disabled}
+                            title={disabled ? '세션 승인 정책이 yolo일 때만 사용할 수 있습니다.' : undefined}
+                          >
+                            <span>{mode.shortLabel}</span>
+                            <span className={styles.modelOptionBadge}>
+                              {disabled ? '잠김' : mode.badge}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
+              {agentFlavor === 'codex' && (
+                <label className={styles.modelEffortWrap}>
+                  <span className={styles.modelEffortLabel}>Effort</span>
+                  <select
+                    className={styles.modelEffortSelect}
+                    value={selectedModelReasoningEffort}
+                    onChange={(event) => onSelectModelReasoningEffort(event.target.value)}
+                    aria-label="모델 추론 강도"
+                  >
+                    {MODEL_REASONING_EFFORT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
-            {agentFlavor === 'gemini' && (
-              <div className={styles.modelSelectorWrap} ref={geminiModeDropdownRef}>
-                <button
-                  type="button"
-                  className={styles.modelSelectorBtn}
-                  onClick={onToggleGeminiModeDropdown}
-                  aria-haspopup="listbox"
-                  aria-expanded={isGeminiModeDropdownOpen}
-                >
-                  <span>Mode</span>
-                  <span>{activeGeminiMode.shortLabel}</span>
-                  <ChevronDown size={11} />
-                </button>
-                {isGeminiModeDropdownOpen && (
-                  <div className={styles.modelDropdown} role="listbox">
-                    {activeGeminiModeOptions.map((mode) => {
-                      const disabled = mode.id === 'yolo' && approvalPolicy !== 'yolo';
-                      return (
-                        <button
-                          key={mode.id}
-                          type="button"
-                          role="option"
-                          aria-selected={activeGeminiModeId === mode.id}
-                          className={`${styles.modelOption} ${activeGeminiModeId === mode.id ? styles.modelOptionActive : ''}`}
-                          onClick={() => onSelectGeminiMode(mode.id)}
-                          disabled={disabled}
-                          title={disabled ? '세션 승인 정책이 yolo일 때만 사용할 수 있습니다.' : undefined}
-                        >
-                          <span>{mode.shortLabel}</span>
-                          <span className={styles.modelOptionBadge}>
-                            {disabled ? '잠김' : mode.badge}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-            {agentFlavor === 'codex' && (
-              <label className={styles.modelEffortWrap}>
-                <span className={styles.modelEffortLabel}>Effort</span>
-                <select
-                  className={styles.modelEffortSelect}
-                  value={selectedModelReasoningEffort}
-                  onChange={(event) => onSelectModelReasoningEffort(event.target.value)}
-                  aria-label="모델 추론 강도"
-                >
-                  {MODEL_REASONING_EFFORT_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
           </div>
 
           {contextItems.length > 0 && (
@@ -313,6 +353,21 @@ export function ChatComposer({
           {imageUploadError && (
             <div className={styles.composerAttachmentError} role="alert">{imageUploadError}</div>
           )}
+
+          <div className={styles.composerTextAreaRow}>
+            <textarea
+              ref={composerInputRef}
+              value={prompt}
+              onChange={(event) => onPromptChange(event.target.value)}
+              onInput={onPromptInput}
+              onFocus={onPromptFocus}
+              rows={1}
+              onKeyDown={onPromptKeyDown}
+              placeholder={promptPlaceholder}
+              disabled={!activeChatIdResolved || !isOperator}
+              className={styles.composerInput}
+            />
+          </div>
 
           <div className={styles.composerInputRow}>
             <input
@@ -368,25 +423,31 @@ export function ChatComposer({
                 </div>
               )}
             </div>
-
-            <textarea
-              ref={composerInputRef}
-              value={prompt}
-              onChange={(event) => onPromptChange(event.target.value)}
-              onInput={onPromptInput}
-              onFocus={onPromptFocus}
-              rows={1}
-              onKeyDown={onPromptKeyDown}
-              placeholder={
-                !activeChatIdResolved
-                  ? '사용할 채팅을 선택하세요.'
-                  : isOperator
-                    ? '메시지를 입력하세요...'
-                    : 'Viewer 권한입니다.'
-              }
-              disabled={!activeChatIdResolved || !isOperator}
-              className={styles.composerInput}
-            />
+            <button
+              type="button"
+              className={styles.composerToolButton}
+              onClick={onFileBrowserOpen}
+              disabled={!isOperator}
+              aria-label="파일 첨부"
+              title="파일 첨부"
+            >
+              <Paperclip size={15} />
+            </button>
+            <button
+              type="button"
+              className={styles.composerToolButton}
+              onClick={onOpenTextContextEditor}
+              disabled={!isOperator}
+              aria-label="텍스트 컨텍스트 추가"
+              title="텍스트 컨텍스트 추가"
+            >
+              <AlignLeft size={15} />
+            </button>
+            <span className={styles.composerShortcutHint} aria-hidden>
+              <span className={styles.composerKbd}>⌘</span>
+              <span className={styles.composerKbd}>↵</span>
+              send
+            </span>
 
             {isAgentRunning ? (
               <div className={styles.composerRunningBtnWrap}>
@@ -400,6 +461,7 @@ export function ChatComposer({
                   title="클릭하여 실행 중단"
                 >
                   <Loader2 size={18} className={styles.composerRunningIcon} />
+                  <span>Stop</span>
                 </button>
               </div>
             ) : (
@@ -410,7 +472,8 @@ export function ChatComposer({
                 aria-label="메시지 전송"
                 title="메시지 전송 (Ctrl/Cmd + Enter)"
               >
-                <ArrowUp size={17} />
+                <span>{submitLabel}</span>
+                <ArrowUp size={15} />
               </button>
             )}
           </div>

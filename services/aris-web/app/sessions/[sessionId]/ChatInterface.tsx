@@ -2626,6 +2626,7 @@ export function ChatInterface({
       } ${isMobileLayout ? styles.chatShellMobileScroll : ''} ${
         isLeftSidebarOverlayLayout ? styles.chatShellLeftOverlay : ''
       }`}
+      data-workspace-open={activeWorkspacePageId === 'chat' ? 'false' : 'true'}
       ref={chatShellRef}
     >
       <ChatSidebarPane
@@ -2666,7 +2667,7 @@ export function ChatInterface({
             showChatTransitionLoading={showChatTransitionLoading}
             showScrollToBottom={showScrollToBottom}
             onJumpToBottom={handleJumpToBottom}
-            header={activeWorkspacePageId === 'chat' ? renderChatHeader() : null}
+            header={renderChatHeader()}
             statusNotices={(
               <ChatStatusNotices
                 runtimeNotice={runtimeNotice}
@@ -2837,7 +2838,7 @@ export function ChatInterface({
             workspacePanelsError={workspacePanelsError}
             workspacePanelsLoading={workspacePanelsLoading}
             workspacePanelLayout={workspacePanelLayout}
-            header={activeWorkspacePageId === 'create-panel' ? renderChatHeader() : null}
+            header={isMobileLayout && activeWorkspacePageId === 'create-panel' ? renderChatHeader() : null}
             requestedFile={sidebarFileRequest}
             onCreatePanel={handleCreateWorkspacePanel}
             onReturnToChat={() => setActiveWorkspacePageId('chat')}
@@ -2853,7 +2854,7 @@ export function ChatInterface({
             workspacePanelsError={workspacePanelsError}
             workspacePanelsLoading={workspacePanelsLoading}
             workspacePanelLayout={workspacePanelLayout}
-            header={item.id === activeWorkspacePageId ? renderChatHeader() : null}
+            header={isMobileLayout && item.id === activeWorkspacePageId ? renderChatHeader() : null}
             requestedFile={sidebarFileRequest}
             panelId={item.panelId}
             onSavePanel={saveWorkspacePanel}
