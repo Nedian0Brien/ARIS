@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { ReactGrabDevBoot } from '@/components/dev/ReactGrabDevBoot';
 import { ViewportHeightSync } from '@/components/layout/ViewportHeightSync';
 import { normalizeAppBasePath, withAppBasePath } from '@/lib/routing/appPath';
 
@@ -115,6 +116,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: proxyAwareClientRoutingScript }} />
       </head>
       <body>
+        {process.env.NODE_ENV === 'development' ? <ReactGrabDevBoot /> : null}
         <ViewportHeightSync />
         {children}
       </body>
