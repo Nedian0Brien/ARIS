@@ -111,6 +111,14 @@ describe('ARIS design-system-v1 implementation', () => {
     expect(uiCss).toContain('mix-blend-mode: screen;');
   });
 
+  it('keeps the IA v2 desktop sidebar and main panel on separate scroll owners', () => {
+    expect(uiCss).toMatch(/@media\s*\(min-width:\s*768px\)\s*\{[\s\S]*?\.app-shell-ia\s*\{[^}]*height:\s*var\(--app-vh,\s*100dvh\);[^}]*overflow:\s*hidden;/s);
+    expect(uiCss).toMatch(/@media\s*\(min-width:\s*768px\)\s*\{[\s\S]*?\.aris-ia-shell\s*\{[^}]*height:\s*100%;[^}]*min-height:\s*0;[^}]*overflow:\s*hidden;/s);
+    expect(uiCss).toMatch(/@media\s*\(min-width:\s*768px\)\s*\{[\s\S]*?\.m-main\s*\{[^}]*height:\s*100%;[^}]*min-height:\s*0;[^}]*overflow:\s*hidden;/s);
+    expect(uiCss).toMatch(/\.m-sb\s*\{[^}]*height:\s*var\(--app-vh,\s*100dvh\);[^}]*overflow-y:\s*auto;/s);
+    expect(uiCss).toMatch(/\.m-body,\s*[\r\n]+\.m-main-scroll\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;/s);
+  });
+
   it('implements composer v2 Agent, Plan, and Terminal modes in the chat composer surface', () => {
     expect(chatComposer).toContain('Agent');
     expect(chatComposer).toContain('Plan');

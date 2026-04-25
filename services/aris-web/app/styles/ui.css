@@ -506,6 +506,25 @@ html[data-theme='dark'] .m-sb__proj--active {
   background: var(--surface);
 }
 
+@media (min-width: 768px) {
+  .app-shell-ia {
+    height: var(--app-vh, 100dvh);
+    overflow: hidden;
+  }
+
+  .aris-ia-shell {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .m-main {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
 .m-top {
   display: flex;
   align-items: center;
