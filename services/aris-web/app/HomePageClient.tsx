@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import {
   Activity,
   AlertCircle,
+  ChevronLeft,
   Check,
   ChevronRight,
   Clock3,
@@ -256,6 +257,10 @@ function deriveProjectTokenLabel(session: SessionSummary, index: number): string
   return `${total.toFixed(1)}k`;
 }
 
+function buildProjectDetailPath(sessionId: string): string {
+  return `/?tab=project&project=${encodeURIComponent(sessionId)}`;
+}
+
 function navigateTo(path: string) {
   window.location.assign(withAppBasePath(path));
 }
@@ -298,12 +303,16 @@ function usePrefersReducedMotion(): boolean {
 
 function Sidebar({
   activeTab,
+  activeProjectId,
   onTabChange,
+  onProjectOpen,
   sessions,
   user,
 }: {
   activeTab: TabType;
+  activeProjectId: string | null;
   onTabChange: (tab: TabType) => void;
+  onProjectOpen: (sessionId: string) => void;
   sessions: SessionSummary[];
   user: AuthenticatedUser;
 }) {
@@ -355,8 +364,8 @@ function Sidebar({
               <button
                 key={session.id}
                 type="button"
-                className={`m-sb__proj m-sb__proj--${statusClass(session.status)}`}
-                onClick={() => onTabChange('project')}
+                className={`m-sb__proj m-sb__proj--${statusClass(session.status)}${activeProjectId === session.id ? ' m-sb__proj--active' : ''}`}
+                onClick={() => onProjectOpen(session.id)}
               >
                 <span className="m-sb__proj-dot" />
                 <span className="m-sb__proj-name">{displayProjectName(session)}</span>
@@ -797,13 +806,15 @@ function HomeStat({
 }
 
 function HomeSurface({
+  metrics,
+  onProjectOpen,
   sessions,
   user,
-  metrics,
 }: {
+  metrics: RuntimeMetrics | null;
+  onProjectOpen: (sessionId: string) => void;
   sessions: SessionSummary[];
   user: AuthenticatedUser;
-  metrics: RuntimeMetrics | null;
 }) {
   const projects = selectRecentProjects(sessions);
   const running = sessions.filter((session) => session.status === 'running').length;
@@ -873,8 +884,8 @@ function HomeSurface({
             key={session.id}
             type="button"
             className="home-proj"
-            data-session-href={`/sessions/${session.id}`}
-            onClick={() => navigateTo(`/sessions/${session.id}`)}
+            data-project-href={buildProjectDetailPath(session.id)}
+            onClick={() => onProjectOpen(session.id)}
           >
             <div className="home-proj__head">
               <div>
@@ -990,10 +1001,241 @@ function AskSurface({ sessions }: { sessions: SessionSummary[] }) {
   );
 }
 
-function ProjectSurface({ sessions }: { sessions: SessionSummary[] }) {
+function ProjectDetailSurface({
+  index,
+  onBackToProjects,
+  session,
+}: {
+  index: number;
+  onBackToProjects: () => void;
+  session: SessionSummary;
+}) {
+  const projectName = displayProjectName(session);
+  const projectPath = displayProjectPath(session);
+  const status = statusClass(session.status);
+  const totalChats = session.totalChats ?? 0;
+  const activeChats = session.status === 'running' || session.status === 'error' ? 1 : 0;
+  const fileCount = deriveProjectFileCount(session, index);
+  const tokenLabel = deriveProjectTokenLabel(session, index);
+  const modelLabel = session.model || session.metadata?.runtimeModel || 'default model';
+  const recentPreview = createChatPreview(session, index);
+
+  return (
+    <div className="m-main-scroll m-main-scroll--project-detail">
+      <section className="proj-head" aria-label={`${projectName} project overview`}>
+        <div className="proj-head__row">
+          <div>
+            <button type="button" className="btn btn--ghost btn--sm" onClick={onBackToProjects}>
+              <ChevronLeft size={14} />
+              Projects
+            </button>
+            <h1 className="proj-head__title">{projectName}</h1>
+            <div className="proj-head__path">
+              {projectPath}
+              <span className={`proj-head__path-status--${status}`}>● {projectStatusLabel(session.status)}</span>
+            </div>
+          </div>
+          <div className="proj-head__actions">
+            <button type="button" className="btn btn--secondary btn--sm">
+              <Monitor size={14} />
+              Open in IDE
+            </button>
+            <button type="button" className="btn btn--secondary btn--sm">
+              <PanelsTopLeft size={14} />
+              Settings
+            </button>
+            <button type="button" className="btn btn--primary btn--sm" onClick={() => navigateTo(`/sessions/${session.id}`)}>
+              <Plus size={14} />
+              New chat
+            </button>
+          </div>
+        </div>
+        <div className="proj-stats">
+          <div>
+            <div className="proj-stat-label">Chats</div>
+            <div className="proj-stat-value">
+              {totalChats}
+              {activeChats > 0 && <span className="proj-stat-value-sub">· {activeChats} active</span>}
+            </div>
+          </div>
+          <div>
+            <div className="proj-stat-label">Files tracked</div>
+            <div className="proj-stat-value">{fileCount}</div>
+          </div>
+          <div>
+            <div className="proj-stat-label">Last activity</div>
+            <div className="proj-stat-value">{formatRelativeTime(session.lastActivityAt)}</div>
+          </div>
+          <div>
+            <div className="proj-stat-label">Tokens used</div>
+            <div className="proj-stat-value">{tokenLabel}</div>
+          </div>
+        </div>
+        <div className="proj-docs">
+          <article className="proj-doc">
+            <div className="proj-doc__eyebrow">Project instructions</div>
+            <div className="proj-doc__body">
+              <p>작업 시작 전 프로젝트 지침과 최근 결정 맥락을 먼저 확인합니다.</p>
+              <p>모든 변경은 전용 브랜치와 git worktree에서 분리해 진행합니다.</p>
+              <p>모바일 UI 변경은 overflow 회귀를 기본 검증에 포함합니다.</p>
+              <p>배포는 공식 스크립트와 런타임 헬스 체크로 확인합니다.</p>
+            </div>
+            <button type="button" className="proj-doc__more">전체 보기 →</button>
+          </article>
+          <article className="proj-doc">
+            <div className="proj-doc__eyebrow">Project memory</div>
+            <div className="proj-doc__body">
+              <p>{projectName}의 최근 채팅과 실행 이력이 이 홈에 묶입니다.</p>
+              <p>활성 작업, 결정 사항, 파일 힌트를 프로젝트 단위로 재진입합니다.</p>
+              <p>모델과 에이전트 선택, 최근 실행 결과를 함께 유지합니다.</p>
+              <p>다음 작업 시작 시 같은 프로젝트 맥락을 이어받습니다.</p>
+            </div>
+            <button type="button" className="proj-doc__more">전체 보기 →</button>
+          </article>
+        </div>
+      </section>
+
+      <nav className="proj-tabs" aria-label={`${projectName} project sections`}>
+        <button type="button" className="proj-tab proj-tab--active">
+          <PanelsTopLeft size={14} />
+          Overview
+        </button>
+        <button type="button" className="proj-tab">
+          <MessageSquareText size={14} />
+          Chats
+          <span className="proj-tab__count">{totalChats}</span>
+        </button>
+        <button type="button" className="proj-tab">
+          <FileText size={14} />
+          Files
+          <span className="proj-tab__count">{fileCount}</span>
+        </button>
+        <button type="button" className="proj-tab">
+          <Database size={14} />
+          Context
+          <span className="proj-tab__count">6</span>
+        </button>
+      </nav>
+
+      <section className="proj-pane">
+        <div className="proj-overview">
+          <div className="proj-chats">
+            <button type="button" className="proj-chat" onClick={() => navigateTo(`/sessions/${session.id}`)}>
+              <div className="proj-chat__head">
+                <div className="proj-chat__title">{session.alias || projectName}</div>
+                <div className="proj-chat__time">{formatRelativeTime(session.lastActivityAt)}</div>
+              </div>
+              <div className="proj-chat__preview">{recentPreview}</div>
+              <div className="proj-chat__meta">
+                <span className={`badge badge--dot ${projectStatusBadgeClass(session.status)}`}>{projectStatusLabel(session.status)}</span>
+                <span>{session.agent} · {modelLabel}</span>
+                <span>{tokenLabel} · project scope</span>
+              </div>
+            </button>
+            <article className="proj-card">
+              <div className="proj-card__title">
+                <Clock3 size={14} />
+                Recent decisions
+              </div>
+              <div className="proj-item">
+                <span className="proj-item__ico proj-item__ico--done">✓</span>
+                <div className="proj-item__body">
+                  <div className="proj-item__title">최근 작업 범위를 프로젝트 단위로 고정</div>
+                  <div className="proj-item__meta">Project context · route scope</div>
+                </div>
+              </div>
+              <div className="proj-item">
+                <span className="proj-item__ico proj-item__ico--done">✓</span>
+                <div className="proj-item__body">
+                  <div className="proj-item__title">배포 전 런타임 헬스 체크 유지</div>
+                  <div className="proj-item__meta">deploy · health · runtime token</div>
+                </div>
+              </div>
+              <div className="proj-item">
+                <span className="proj-item__ico proj-item__ico--idle">·</span>
+                <div className="proj-item__body">
+                  <div className="proj-item__title">{projectPath}</div>
+                  <div className="proj-item__meta">workspace path</div>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <aside className="proj-side">
+            <article className="proj-card">
+              <div className="proj-card__title">
+                <Sparkles size={14} />
+                Active signal
+              </div>
+              <div className="proj-item">
+                <span className={`proj-item__ico proj-item__ico--${status}`}>{status === 'appr' ? '!' : '●'}</span>
+                <div className="proj-item__body">
+                  <div className="proj-item__title">{projectStatusLabel(session.status)}</div>
+                  <div className="proj-item__meta">{recentPreview}</div>
+                </div>
+              </div>
+            </article>
+            <article className="proj-card">
+              <div className="proj-card__title">
+                <FolderOpen size={14} />
+                Pinned files
+              </div>
+              <div className="proj-item proj-item--file">
+                <FileText size={13} />
+                <div className="proj-item__body">
+                  <div className="proj-item__title">AGENTS.md</div>
+                </div>
+              </div>
+              <div className="proj-item proj-item--file">
+                <FileText size={13} />
+                <div className="proj-item__body">
+                  <div className="proj-item__title">docs/design/aris-ia-v3.html</div>
+                </div>
+              </div>
+            </article>
+            <article className="proj-card">
+              <div className="proj-card__title">
+                <Activity size={14} />
+                Context assets
+              </div>
+              <div className="proj-item">
+                <span className="proj-item__ico proj-item__ico--done">#</span>
+                <div className="proj-item__body">
+                  <div className="proj-item__title">Runtime memory</div>
+                  <div className="proj-item__meta">{Math.max(1, totalChats)} linked chats</div>
+                </div>
+              </div>
+              <div className="proj-item">
+                <span className="proj-item__ico proj-item__ico--idle">~</span>
+                <div className="proj-item__body">
+                  <div className="proj-item__title">Workspace snippets</div>
+                  <div className="proj-item__meta">commands · deploy · tests</div>
+                </div>
+              </div>
+            </article>
+          </aside>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ProjectSurface({
+  onBackToProjects,
+  onProjectOpen,
+  selectedProjectId,
+  sessions,
+}: {
+  onBackToProjects: () => void;
+  onProjectOpen: (sessionId: string) => void;
+  selectedProjectId: string | null;
+  sessions: SessionSummary[];
+}) {
   const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
   const projects = sortSessions(sessions);
+  const selectedIndex = selectedProjectId ? projects.findIndex((session) => session.id === selectedProjectId) : -1;
+  const selectedProject = selectedIndex >= 0 ? projects[selectedIndex] : null;
   const activeCount = projects.filter((session) => session.status === 'running' || session.status === 'error').length;
   const totalChats = projects.reduce((sum, session) => sum + (session.totalChats ?? 0), 0);
   const normalizedQuery = query.trim().toLowerCase();
@@ -1007,6 +1249,10 @@ function ProjectSurface({ sessions }: { sessions: SessionSummary[] }) {
     return true;
   });
   const chips = ['All', 'Active', 'Recent', 'Archived'];
+
+  if (selectedProject) {
+    return <ProjectDetailSurface session={selectedProject} index={selectedIndex} onBackToProjects={onBackToProjects} />;
+  }
 
   return (
     <div className="proj-list-wrap">
@@ -1051,11 +1297,11 @@ function ProjectSurface({ sessions }: { sessions: SessionSummary[] }) {
               role="button"
               tabIndex={0}
               aria-label={`${displayProjectName(session)} 프로젝트 열기`}
-              onClick={() => navigateTo(`/sessions/${session.id}`)}
+              onClick={() => onProjectOpen(session.id)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
-                  navigateTo(`/sessions/${session.id}`);
+                  onProjectOpen(session.id);
                 }
               }}
             >
@@ -1273,11 +1519,28 @@ export default function HomePageWrapper({
 }) {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('home');
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<RuntimeMetrics | null>(null);
 
   useEffect(() => {
-    setActiveTab(normalizeTab(searchParams.get('tab')));
+    const nextTab = normalizeTab(searchParams.get('tab'));
+    setActiveTab(nextTab);
+    setSelectedProjectId(nextTab === 'project' ? (searchParams.get('project') ?? null) : null);
   }, [searchParams]);
+
+  useEffect(() => {
+    const syncRouteFromLocation = () => {
+      const url = new URL(window.location.href);
+      const nextTab = normalizeTab(url.searchParams.get('tab'));
+      setActiveTab(nextTab);
+      setSelectedProjectId(nextTab === 'project' ? (url.searchParams.get('project') ?? null) : null);
+    };
+
+    window.addEventListener('popstate', syncRouteFromLocation);
+    return () => {
+      window.removeEventListener('popstate', syncRouteFromLocation);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1320,20 +1583,49 @@ export default function HomePageWrapper({
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
+    setSelectedProjectId(null);
     window.history.replaceState(null, '', withAppBasePath(`/?tab=${tab}`));
+  };
+
+  const handleProjectOpen = (sessionId: string) => {
+    setActiveTab('project');
+    setSelectedProjectId(sessionId);
+    window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(sessionId)));
+  };
+
+  const handleBackToProjects = () => {
+    setActiveTab('project');
+    setSelectedProjectId(null);
+    window.history.pushState(null, '', withAppBasePath('/?tab=project'));
   };
 
   const content = (() => {
     if (activeTab === 'ask') return <AskSurface sessions={sessions} />;
-    if (activeTab === 'project') return <ProjectSurface sessions={sessions} />;
+    if (activeTab === 'project') {
+      return (
+        <ProjectSurface
+          onBackToProjects={handleBackToProjects}
+          onProjectOpen={handleProjectOpen}
+          selectedProjectId={selectedProjectId}
+          sessions={sessions}
+        />
+      );
+    }
     if (activeTab === 'files') return <FilesSurface browserRootPath={browserRootPath} />;
-    return <HomeSurface sessions={sessions} user={user} metrics={metrics} />;
+    return <HomeSurface metrics={metrics} onProjectOpen={handleProjectOpen} sessions={sessions} user={user} />;
   })();
 
   return (
     <div className="app-shell app-shell-ia">
       <div className="aris-ia-shell">
-        <Sidebar activeTab={activeTab} onTabChange={handleTabChange} sessions={sessions} user={user} />
+        <Sidebar
+          activeProjectId={selectedProjectId}
+          activeTab={activeTab}
+          onProjectOpen={handleProjectOpen}
+          onTabChange={handleTabChange}
+          sessions={sessions}
+          user={user}
+        />
         <main className="m-main">
           <Topbar activeTab={activeTab} sessions={sessions} />
           {runtimeError && <div className="ia-runtime-notice"><BackendNotice message={runtimeError} /></div>}

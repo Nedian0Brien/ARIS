@@ -15,7 +15,7 @@ function cssBlock(selector: string) {
 describe('project list surface', () => {
   it('opens the Project entry point as the project list screen from the IA v2 mockup', () => {
     expect(homeClient).toContain("project: { title: 'Projects'");
-    expect(homeClient).toContain('function ProjectSurface({ sessions }');
+    expect(homeClient).toContain('function ProjectSurface({');
     expect(homeClient).toContain('className="proj-list-wrap"');
     expect(homeClient).toContain('className="proj-list-toolbar"');
     expect(homeClient).toContain('placeholder="Search projects..."');
@@ -25,6 +25,27 @@ describe('project list surface', () => {
     expect(homeClient).toContain('className="proj-list-card proj-list-card--new"');
     expect(homeClient).toContain('className="proj-list-new-btn"');
     expect(homeClient).not.toContain('const selected = sortSessions(sessions)[0] ?? null;');
+  });
+
+  it('routes project card clicks to the IA project detail instead of the legacy session screen', () => {
+    expect(homeClient).toContain('function buildProjectDetailPath(sessionId: string)');
+    expect(homeClient).toContain("`/?tab=project&project=${encodeURIComponent(sessionId)}`");
+    expect(homeClient).toContain('data-project-href={buildProjectDetailPath(session.id)}');
+    expect(homeClient).toContain('onClick={() => onProjectOpen(session.id)}');
+    expect(homeClient).toContain('onProjectOpen(session.id);');
+    expect(homeClient).toContain('window.history.pushState(null, \'\', withAppBasePath(buildProjectDetailPath(sessionId)))');
+    expect(homeClient).toContain('selectedProjectId={selectedProjectId}');
+    expect(homeClient).not.toContain('aria-label={`${displayProjectName(session)} 프로젝트 열기`}\\n              onClick={() => navigateTo(`/sessions/${session.id}`)}');
+  });
+
+  it('renders the IA project detail surface from the selected project query param', () => {
+    expect(homeClient).toContain('function ProjectDetailSurface({');
+    expect(homeClient).toContain('className="m-main-scroll m-main-scroll--project-detail"');
+    expect(homeClient).toContain('className="proj-head"');
+    expect(homeClient).toContain('className="proj-tabs"');
+    expect(homeClient).toContain('className="proj-pane"');
+    expect(homeClient).toContain("setSelectedProjectId(nextTab === 'project' ? (searchParams.get('project') ?? null) : null);");
+    expect(homeClient).toContain('if (selectedProject) {');
   });
 
   it('ships the project list CSS copied into the app stylesheet', () => {
