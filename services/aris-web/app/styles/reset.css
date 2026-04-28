@@ -1,8 +1,17 @@
 /* Reset & Base Styles */
-* {
+*, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+html {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 html, body {
@@ -11,11 +20,9 @@ html, body {
   min-height: -webkit-fill-available;
   background-color: var(--bg);
   color: var(--text);
-  font-family: var(--font-sans);
-  font-size: 16px;
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  font-size: var(--text-body, 14px);
+  line-height: 1.5;
+  letter-spacing: var(--ls-normal, normal);
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   overflow-x: hidden;
@@ -35,4 +42,12 @@ button, input, textarea, select {
   color: inherit;
   background: none;
   border: none;
+}
+
+button {
+  cursor: pointer;
+}
+
+code, kbd, samp, pre {
+  font-family: var(--font-mono);
 }
