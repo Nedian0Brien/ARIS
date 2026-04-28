@@ -1,11 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { normalizeWorkspacePanelLayout, resolveWorkspaceEntryPageId } from '@/lib/workspacePanels/layout';
+import { normalizeWorkspacePanelLayout } from '@/lib/workspacePanels/layout';
 import type { WorkspacePanelLayout, WorkspacePanelType } from '@/lib/workspacePanels/types';
 
 function resolveActivePageId(layout: WorkspacePanelLayout): string {
-  return layout.activePage.kind === 'panel' ? layout.activePage.panelId : 'chat';
+  return layout.activePage.kind === 'chat' ? 'chat' : 'workspace';
 }
 
 export function useWorkspacePanels(sessionId: string) {
@@ -33,7 +33,7 @@ export function useWorkspacePanels(sessionId: string) {
         const nextLayout = normalizeWorkspacePanelLayout(body.layout);
         if (cancelled) return;
         setLayout(nextLayout);
-        setActivePageId(resolveWorkspaceEntryPageId(nextLayout));
+        setActivePageId(resolveActivePageId(nextLayout));
       } catch {
         if (cancelled) return;
         setError('패널 레이아웃을 불러오지 못했습니다.');
