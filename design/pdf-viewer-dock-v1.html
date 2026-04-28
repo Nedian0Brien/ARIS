@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ARES — PDF Viewer Dock Design v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<style>
+/* ============================================================
+   ARIS Design Tokens
+   ============================================================ */
+:root {
+  --n-50:  #F7F8FA;
+  --n-100: #EEF0F4;
+  --n-150: #E4E7ED;
+  --n-200: #D7DCE3;
+  --n-300: #BCC2CB;
+  --n-400: #8E95A1;
+  --n-500: #666C77;
+  --n-600: #4A4F58;
+  --n-700: #323640;
+  --n-800: #1D2028;
+  --n-900: #0F1117;
+
+  --b-50:  #EDF3FF;
+  --b-100: #DBE5FF;
+  --b-200: #B8CAFF;
+  --b-300: #8DA7FF;
+  --b-400: #5E82FD;
+  --b-500: #2F6BFF;
+  --b-600: #1E50DB;
+  --b-700: #173FAE;
+
+  --canvas:           #DCDFE4;
+  --surface:          #FFFFFF;
+  --surface-hover:    var(--n-100);
+  --surface-active:   var(--n-150);
+
+  --text-primary:     var(--n-900);
+  --text-secondary:   var(--n-600);
+  --text-tertiary:    var(--n-500);
+  --text-disabled:    var(--n-300);
+  --text-accent:      var(--b-600);
+
+  --border-subtle:  rgba(15, 17, 23, 0.06);
+  --border-default: rgba(15, 17, 23, 0.09);
+  --border-strong:  rgba(15, 17, 23, 0.14);
+
+  --shadow-sm:  0 1px 2px rgba(15,17,23,.06), 0 0 0 1px rgba(15,17,23,.05);
+  --shadow-md:  0 4px 12px -2px rgba(15,17,23,.09), 0 0 0 1px rgba(15,17,23,.06);
+  --shadow-lg:  0 12px 32px -4px rgba(15,17,23,.13), 0 2px 6px -1px rgba(15,17,23,.06), 0 0 0 1px rgba(15,17,23,.06);
+  --shadow-dock: 0 8px 28px -4px rgba(15,17,23,.18), 0 2px 8px -1px rgba(15,17,23,.10), 0 0 0 1px rgba(15,17,23,.08);
+
+  --font-sans: "Pretendard Variable", "Inter", -apple-system, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --r-sm: 6px; --r-md: 8px; --r-lg: 10px; --r-xl: 12px; --r-full: 9999px;
+
+  --dur-fast:   120ms;
+  --dur-normal: 200ms;
+  --dur-slow:   300ms;
+  --ease-snap:  cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.25, 1.1, 0.5, 1.1);
+}
+
+html[data-theme='dark'] {
+  --canvas:         #111317;
+  --surface:        #1C1E25;
+  --surface-hover:  rgba(255,255,255,.06);
+  --surface-active: rgba(255,255,255,.10);
+
+  --text-primary:   #F0F1F4;
+  --text-secondary: #AFB4BE;
+  --text-tertiary:  #7D828E;
+  --text-disabled:  #4B4F58;
+  --text-accent:    #7EA0FF;
+
+  --border-subtle:  rgba(255,255,255,.06);
+  --border-default: rgba(255,255,255,.09);
+  --border-strong:  rgba(255,255,255,.14);
+
+  --shadow-dock: 0 8px 28px -4px rgba(0,0,0,.55), 0 2px 8px -1px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.08);
+  --shadow-md:   0 4px 12px -2px rgba(0,0,0,.40), 0 0 0 1px rgba(255,255,255,.06);
+  --shadow-lg:   0 12px 32px -4px rgba(0,0,0,.55), 0 2px 6px -1px rgba(0,0,0,.30), 0 0 0 1px rgba(255,255,255,.07);
+}
+
+/* ============================================================
+   Reset
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font-sans);
+  background: var(--canvas);
+  color: var(--text-primary);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================================
+   PDF Viewer Layout
+   ============================================================ */
+.pdf-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: relative;
+}
+
+/* ---- Top bar ---- */
+.pdf-topbar {
+  height: 48px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-default);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 10px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.topbar-back {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.topbar-back:hover { background: var(--surface-hover); color: var(--text-primary); }
+
+.topbar-sep { width: 1px; height: 16px; background: var(--border-default); flex-shrink: 0; }
+
+.topbar-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: -0.012em;
+}
+
+.topbar-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  background: var(--n-100);
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+html[data-theme='dark'] .topbar-badge { background: var(--surface-hover); }
+
+/* ---- PDF scroll area ---- */
+.pdf-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 24px 128px;
+  gap: 14px;
+  position: relative;
+  scroll-behavior: smooth;
+}
+
+/* ---- PDF Page ---- */
+.pdf-page {
+  background: #FFFFFF;
+  box-shadow: 0 2px 10px rgba(0,0,0,.12), 0 0 0 1px rgba(0,0,0,.04);
+  border-radius: 2px;
+  width: 740px;
+  max-width: 100%;
+  padding: 60px 72px;
+  position: relative;
+  line-height: 1.65;
+  transition: transform var(--dur-slow) var(--ease-snap);
+  transform-origin: top center;
+  flex-shrink: 0;
+}
+html[data-theme='dark'] .pdf-page { background: #F4F4F2; box-shadow: 0 2px 10px rgba(0,0,0,.4), 0 0 0 1px rgba(0,0,0,.15); }
+
+.paper-page-num {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: #888;
+  font-family: "Times New Roman", Times, serif;
+}
+
+/* Paper typography */
+.paper-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0D0D0D;
+  line-height: 1.38;
+  margin-bottom: 12px;
+  font-family: "Times New Roman", Times, serif;
+  text-align: center;
+}
+.paper-authors {
+  font-size: 12.5px;
+  color: #333;
+  margin-bottom: 6px;
+  font-family: "Times New Roman", Times, serif;
+  text-align: center;
+}
+.paper-affil {
+  font-size: 11.5px;
+  color: #666;
+  margin-bottom: 22px;
+  font-family: "Times New Roman", Times, serif;
+  text-align: center;
+  font-style: italic;
+}
+.paper-divider {
+  border: none;
+  border-top: 0.5px solid #C0C0C0;
+  margin: 16px auto;
+  width: 60%;
+}
+.paper-section {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #0D0D0D;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 22px 0 8px;
+  font-family: "Times New Roman", Times, serif;
+}
+.paper-body {
+  font-size: 12.5px;
+  color: #1A1A1A;
+  text-align: justify;
+  font-family: "Times New Roman", Times, serif;
+  line-height: 1.68;
+}
+.paper-body p { margin-bottom: 9px; }
+
+/* Text selection highlight */
+.sel-target {
+  cursor: text;
+  border-radius: 2px;
+  transition: background 160ms ease;
+}
+.sel-target.sel-active {
+  background: rgba(47, 107, 255, 0.16);
+}
+.sel-target.sel-highlighted {
+  background: rgba(245, 197, 66, 0.40);
+}
+
+/* ============================================================
+   Dock System
+   ============================================================ */
+.dock-layer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-bottom: 22px;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* ---- Selected text chip (appears above dock on selection) ---- */
+.sel-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 440px;
+  background: var(--surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-full);
+  padding: 5px 8px 5px 12px;
+  box-shadow: var(--shadow-md);
+  pointer-events: auto;
+  cursor: default;
+
+  opacity: 0;
+  transform: translateY(6px) scale(0.97);
+  transition:
+    opacity var(--dur-normal) var(--ease-snap),
+    transform var(--dur-slow) var(--ease-spring);
+}
+.sel-chip.visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.sel-chip-icon {
+  flex-shrink: 0;
+  color: var(--b-500);
+  display: flex;
+  align-items: center;
+}
+
+.sel-chip-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  font-style: italic;
+  letter-spacing: -0.01em;
+  min-width: 0;
+}
+
+.sel-chip-dismiss {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-full);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.sel-chip-dismiss:hover { background: var(--surface-active); color: var(--text-primary); }
+
+/* ---- Main dock pill ---- */
+.pdf-dock {
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-full);
+  padding: 5px 6px;
+  gap: 1px;
+  box-shadow: var(--shadow-dock);
+  pointer-events: auto;
+}
+
+/* Dock button */
+.dock-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0 9px;
+  border-radius: var(--r-full);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+  letter-spacing: -0.012em;
+  transition:
+    background var(--dur-fast) ease,
+    color var(--dur-fast) ease,
+    transform var(--dur-fast) ease;
+}
+.dock-btn:hover  { background: var(--surface-hover); color: var(--text-primary); }
+.dock-btn:active { background: var(--surface-active); transform: scale(0.95); }
+.dock-btn.on     { background: var(--b-50); color: var(--b-600); }
+.dock-btn.on:hover { background: var(--b-100); }
+html[data-theme='dark'] .dock-btn.on { background: rgba(47,107,255,.16); color: var(--b-300); }
+
+/* Zoom label */
+.zoom-val {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  min-width: 38px;
+  text-align: center;
+  font-family: var(--font-mono);
+  user-select: none;
+  letter-spacing: 0;
+}
+
+/* Divider */
+.dock-div {
+  width: 1px;
+  height: 18px;
+  background: var(--border-default);
+  margin: 0 3px;
+  flex-shrink: 0;
+}
+
+/* ---- Selection action group (always visible, icons only by default) ---- */
+.dock-sel-group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+/* Button label: grid 0fr→1fr for pixel-perfect smooth expansion */
+.lbl-wrap {
+  display: grid;
+  grid-template-columns: 0fr;
+  overflow: hidden;
+  transition: grid-template-columns 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lbl {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+.has-selection .lbl-wrap {
+  grid-template-columns: 1fr;
+}
+.has-selection .lbl {
+  opacity: 1;
+  transition: opacity 180ms ease 110ms;
+}
+
+/* Stagger: 버튼별 순차 딜레이 */
+.dock-sel-group button:nth-of-type(1) .lbl-wrap { transition-delay: 0ms; }
+.dock-sel-group button:nth-of-type(2) .lbl-wrap { transition-delay: 40ms; }
+.dock-sel-group button:nth-of-type(3) .lbl-wrap { transition-delay: 80ms; }
+
+/* Action button color variants */
+.dock-btn-highlight { color: #8C6400; }
+.dock-btn-highlight:hover { background: #FFF7E0 !important; color: #6B4C00 !important; }
+html[data-theme='dark'] .dock-btn-highlight { color: #D4A81A; }
+html[data-theme='dark'] .dock-btn-highlight:hover { background: rgba(212,168,26,.12) !important; }
+
+.dock-btn-note { color: var(--b-600); }
+.dock-btn-note:hover { background: var(--b-50) !important; color: var(--b-700) !important; }
+html[data-theme='dark'] .dock-btn-note { color: var(--b-300); }
+html[data-theme='dark'] .dock-btn-note:hover { background: rgba(47,107,255,.14) !important; }
+
+/* ============================================================
+   공통 패널 기반
+   ============================================================ */
+.popup-panel {
+  position: fixed;
+  bottom: 76px;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px) scale(0.97);
+  background: var(--surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--dur-normal) var(--ease-snap),
+    transform var(--dur-slow) var(--ease-spring);
+  z-index: 99;
+}
+.popup-panel.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) scale(1);
+  pointer-events: auto;
+}
+.popup-header {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-disabled);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 4px;
+}
+
+/* ============================================================
+   TOC 패널
+   ============================================================ */
+.toc-panel { padding: 0 0 6px; width: 264px; }
+
+.toc-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: background var(--dur-fast) ease;
+  margin: 0 6px;
+}
+.toc-item:hover { background: var(--surface-hover); }
+.toc-item.cur   { background: var(--b-50); }
+html[data-theme='dark'] .toc-item.cur { background: rgba(47,107,255,.12); }
+
+.toc-num {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-disabled);
+  min-width: 18px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+}
+.toc-title {
+  font-size: 12.5px;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+.toc-item.cur .toc-title { color: var(--b-600); font-weight: 500; }
+html[data-theme='dark'] .toc-item.cur .toc-title { color: var(--b-300); }
+
+/* ============================================================
+   페이지 미리보기 그리드 패널
+   ============================================================ */
+.page-grid-panel { padding: 0 0 10px; width: 340px; }
+
+.page-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 0 10px;
+}
+
+.page-grid-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 4px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: background var(--dur-fast) ease;
+}
+.page-grid-item:hover { background: var(--surface-hover); }
+.page-grid-item.cur   { background: var(--b-50); }
+html[data-theme='dark'] .page-grid-item.cur { background: rgba(47,107,255,.12); }
+.page-grid-item.empty { cursor: default; opacity: 0.45; }
+.page-grid-item.empty:hover { background: transparent; }
+
+.page-grid-thumb {
+  width: 58px;
+  height: 78px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-default);
+  border-radius: 3px;
+  padding: 7px 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(15,17,23,.06);
+  flex-shrink: 0;
+}
+html[data-theme='dark'] .page-grid-thumb { background: #2C2F3A; }
+.page-grid-item.cur .page-grid-thumb {
+  border-color: var(--b-400);
+  box-shadow: 0 0 0 2px var(--b-100), 0 1px 3px rgba(15,17,23,.06);
+}
+html[data-theme='dark'] .page-grid-item.cur .page-grid-thumb {
+  box-shadow: 0 0 0 2px rgba(47,107,255,.3);
+}
+
+.pgl { height: 2.5px; border-radius: 1px; background: var(--n-200); }
+html[data-theme='dark'] .pgl { background: #3E4252; }
+.page-grid-item.cur .pgl { background: var(--b-200); }
+
+.page-grid-num {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+.page-grid-item.cur .page-grid-num { color: var(--b-600); font-weight: 600; }
+html[data-theme='dark'] .page-grid-item.cur .page-grid-num { color: var(--b-300); }
+
+/* ============================================================
+   Demo Controls Panel
+   ============================================================ */
+.demo-panel {
+  position: fixed;
+  top: 60px;
+  right: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-xl);
+  padding: 12px;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 200;
+  width: 210px;
+}
+
+.demo-panel-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-disabled);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0 2px 4px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 2px;
+}
+
+.demo-btn {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 7px 12px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-default);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--dur-fast) ease;
+  text-align: left;
+  width: 100%;
+  letter-spacing: -0.01em;
+}
+.demo-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
+.demo-btn.active { background: var(--b-500); color: #fff; border-color: var(--b-500); }
+
+.demo-sep { height: 1px; background: var(--border-subtle); margin: 2px 0; }
+
+/* State label */
+.demo-state {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  padding: 2px 2px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.demo-state-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--n-300);
+  flex-shrink: 0;
+  transition: background var(--dur-normal) ease;
+}
+.demo-state-dot.active { background: var(--b-500); }
+
+/* ============================================================
+   Toast
+   ============================================================ */
+.toast {
+  position: fixed;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%) translateY(6px);
+  background: var(--n-800);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  padding: 8px 16px;
+  border-radius: var(--r-full);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-normal) ease, transform var(--dur-normal) var(--ease-spring);
+  white-space: nowrap;
+  z-index: 999;
+  letter-spacing: -0.01em;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+html[data-theme='dark'] .toast { background: var(--n-600); }
+</style>
+</head>
+<body>
+
+<!-- ==========================================
+     PDF Viewer
+     ========================================== -->
+<div class="pdf-viewer">
+
+  <!-- Top bar -->
+  <div class="pdf-topbar">
+    <a class="topbar-back" href="#">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+        <path d="M10 13L5 8l5-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Reading
+    </a>
+    <div class="topbar-sep"></div>
+    <div class="topbar-title">When Foundation Model Meets Federated Learning: Motivations, Challenges, and Future Directions</div>
+    <div class="topbar-badge">arXiv 2306.15546</div>
+  </div>
+
+  <!-- PDF content area -->
+  <div class="pdf-scroll-area" id="scrollArea">
+
+    <!-- Page 1 -->
+    <div class="pdf-page" id="page1">
+      <div class="paper-title">When Foundation Model Meets Federated Learning:<br>Motivations, Challenges, and Future Directions</div>
+      <div class="paper-authors">Jianbing Ni · Zhipeng Cai · Kuan-Ching Li · Laurence T. Yang</div>
+      <div class="paper-affil">IEEE Senior Members</div>
+      <hr class="paper-divider">
+
+      <div class="paper-section">Abstract</div>
+      <div class="paper-body">
+        <p>Foundation models (FMs) are general-purpose AI models that can be adapted to a wide range of downstream tasks. On the other hand, federated learning (FL) is a distributed machine learning paradigm that aims to train models collaboratively while preserving data privacy. The integration of foundation models and federated learning presents both exciting opportunities and significant challenges.</p>
+        <p>In this paper, we first discuss the motivations for combining <span class="sel-target" id="selTarget">foundation models with federated learning, exploring how FL can leverage the powerful representations learned by FMs while simultaneously enabling privacy-preserving distributed training across heterogeneous data silos</span>. We then systematically analyze the key challenges, including communication efficiency, heterogeneity handling, and privacy concerns. Finally, we outline promising future research directions in this emerging intersection.</p>
+      </div>
+
+      <div class="paper-section">1. Introduction</div>
+      <div class="paper-body">
+        <p>The rapid advancement of large-scale foundation models, such as GPT-4, LLaMA, and CLIP, has revolutionized artificial intelligence. These models, trained on massive curated datasets, have demonstrated remarkable zero-shot and few-shot generalization across diverse tasks. However, their training requires vast amounts of data that are often distributed across multiple organizations or devices, each subject to strict privacy regulations.</p>
+        <p>Federated learning (FL) has emerged as a principled solution to this challenge by enabling collaborative model training without centralizing raw data. In conventional FL, participants train local models on their private data and share only model updates—gradients or weights—with a central aggregator. This paradigm has been successfully applied in healthcare, finance, and on-device intelligence.</p>
+        <p>The convergence of foundation models and federated learning represents a natural and compelling frontier. FMs can serve as powerful backbones that are fine-tuned in a federated manner, allowing diverse participants to collaboratively improve models without compromising data privacy. Conversely, FL methods can be enhanced by the rich semantic representations provided by FMs.</p>
+      </div>
+
+      <div class="paper-section">2. Motivations</div>
+      <div class="paper-body">
+        <p>Several compelling motivations drive the study of this intersection. First, <strong>data privacy and regulatory compliance</strong>: Many real-world datasets are governed by regulations such as GDPR and HIPAA, prohibiting centralized aggregation. FL provides a principled framework for training FMs on distributed private data.</p>
+        <p>Second, <strong>data heterogeneity</strong>: Data across federated clients exhibits significant statistical heterogeneity—varying distributions, label spaces, and feature modalities. The rich representational capacity of FMs may help mitigate the negative impact of such heterogeneity in federated settings.</p>
+      </div>
+      <div class="paper-page-num">1</div>
+    </div>
+
+    <!-- Page 2 -->
+    <div class="pdf-page" id="page2">
+      <div class="paper-section">3. Key Challenges</div>
+      <div class="paper-body">
+        <p>Despite the opportunities, integrating FMs with FL introduces several critical challenges that must be addressed to realize practical systems.</p>
+        <p><strong>Communication Efficiency.</strong> Foundation models typically have billions of parameters, making communication of full model updates prohibitively expensive. Parameter-efficient fine-tuning (PEFT) methods—LoRA, adapter layers, prefix tuning—become essential in this context to reduce the bandwidth footprint.</p>
+        <p><strong>System Heterogeneity.</strong> Federated participants operate under vastly different computational constraints. Running LLM inference and fine-tuning on edge devices requires model compression, quantization, and adaptive scheduling strategies that are largely unexplored in the FM-FL setting.</p>
+        <p><strong>Privacy and Security.</strong> While FL inherently limits raw data exposure, model updates can still leak sensitive information through gradient inversion attacks. Composing FL with formal differential privacy guarantees is critical yet challenging, as large model gradients have high sensitivity.</p>
+        <p><strong>Catastrophic Forgetting.</strong> When FMs are continually fine-tuned across federated rounds, they risk forgetting previously acquired knowledge. Federated continual learning strategies are needed to maintain both general and task-specific capabilities.</p>
+      </div>
+
+      <div class="paper-section">4. Future Directions</div>
+      <div class="paper-body">
+        <p>We identify several high-priority research directions. <strong>Federated PEFT</strong> remains an open problem: existing PEFT methods were not designed under federated constraints, and developing new methods that minimize communication while preserving model quality is urgent.</p>
+        <p><strong>Personalized FM fine-tuning</strong> is another promising direction, where each client learns a personalized adapter on top of a shared FM backbone, balancing global knowledge with local specialization.</p>
+        <p>Finally, <strong>federated foundation models for multimodal tasks</strong>—spanning vision, language, and sensor data—present both new challenges and opportunities. Cross-modal federated alignment methods will be central to this effort.</p>
+      </div>
+
+      <div class="paper-section">5. Conclusion</div>
+      <div class="paper-body">
+        <p>In this paper, we have systematically examined the intersection of foundation models and federated learning. We discussed motivations rooted in data privacy and heterogeneity, analyzed key challenges across communication, system constraints, and privacy, and outlined future research directions. We hope this work serves as a useful reference for researchers and practitioners working at this exciting frontier.</p>
+      </div>
+      <div class="paper-page-num">2</div>
+    </div>
+
+  </div><!-- /pdf-scroll-area -->
+</div><!-- /pdf-viewer -->
+
+
+<!-- ==========================================
+     Dock Layer
+     ========================================== -->
+<div class="dock-layer">
+
+  <!-- Selected text chip -->
+  <div class="sel-chip" id="selChip">
+    <span class="sel-chip-icon">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+        <path d="M2.5 4h11M2.5 8h8M2.5 12h5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </span>
+    <span class="sel-chip-text" id="selChipText">"foundation models with federated learning, exploring how FL can leverage..."</span>
+    <button class="sel-chip-dismiss" id="chipDismiss" title="선택 해제">
+      <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+        <path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Main dock pill -->
+  <div class="pdf-dock">
+
+    <!-- 목차 -->
+    <button class="dock-btn" id="tocBtn" title="목차">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path d="M2.5 4h11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        <path d="M2.5 8h7.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        <path d="M4.5 11.5h7.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        <path d="M4.5 14h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+      </svg>
+    </button>
+
+    <div class="dock-div"></div>
+
+    <!-- Zoom out -->
+    <button class="dock-btn" id="zoomOutBtn" title="축소 (−)">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+        <path d="M3.5 8h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      </svg>
+    </button>
+
+    <!-- Zoom level -->
+    <span class="zoom-val" id="zoomVal">100%</span>
+
+    <!-- Zoom in -->
+    <button class="dock-btn" id="zoomInBtn" title="확대 (+)">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+        <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      </svg>
+    </button>
+
+    <div class="dock-div"></div>
+
+    <!-- Fit to screen -->
+    <button class="dock-btn" id="fitBtn" title="화면에 맞추기">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path d="M2 5.5V3a1 1 0 011-1h2.5M11.5 2H13a1 1 0 011 1v2.5M14 10.5V13a1 1 0 01-1 1h-2.5M4.5 14H3a1 1 0 01-1-1v-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+
+    <div class="dock-div"></div>
+
+    <!-- 페이지 미리보기 -->
+    <button class="dock-btn" id="pageGridBtn" title="페이지 미리보기">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <rect x="1.5" y="1.5" width="4" height="5.5" rx="0.75" stroke="currentColor" stroke-width="1.2"/>
+        <rect x="6.5" y="1.5" width="4" height="5.5" rx="0.75" stroke="currentColor" stroke-width="1.2"/>
+        <rect x="11.5" y="1.5" width="3" height="5.5" rx="0.75" stroke="currentColor" stroke-width="1.2"/>
+        <rect x="1.5" y="9" width="4" height="5.5" rx="0.75" stroke="currentColor" stroke-width="1.2"/>
+        <rect x="6.5" y="9" width="4" height="5.5" rx="0.75" stroke="currentColor" stroke-width="1.2"/>
+        <rect x="11.5" y="9" width="3" height="5.5" rx="0.75" stroke="currentColor" stroke-width="1.2"/>
+      </svg>
+    </button>
+
+    <!-- Selection action group (hidden until selection) -->
+    <div class="dock-sel-group" id="selGroup">
+      <div class="dock-div"></div>
+
+      <!-- Highlight -->
+      <button class="dock-btn dock-btn-highlight" id="btnHighlight" title="하이라이트">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+          <path d="M10.5 2.5L13.5 5.5L7 12H4V9L10.5 2.5Z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" fill="none"/>
+          <path d="M2 14.5h12" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
+          <path d="M8 4.5L11 7.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+        </svg>
+        <span class="lbl-wrap"><span class="lbl">하이라이트</span></span>
+      </button>
+
+      <!-- Add note -->
+      <button class="dock-btn dock-btn-note" id="btnNote" title="메모 추가">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+          <path d="M12 2H4a1.5 1.5 0 00-1.5 1.5v9A1.5 1.5 0 004 14h5l4-4V3.5A1.5 1.5 0 0012 2z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/>
+          <path d="M5.5 6.5h5M5.5 9h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          <path d="M9 14v-4h4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="lbl-wrap"><span class="lbl">메모 추가</span></span>
+      </button>
+
+      <!-- Link note -->
+      <button class="dock-btn" id="btnLink" title="노트 링크">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+          <path d="M6.5 9.5a3 3 0 004.24 0l2-2a3 3 0 00-4.24-4.24L7 4.76" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          <path d="M9.5 6.5a3 3 0 00-4.24 0l-2 2A3 3 0 007.5 12.74L9 11.24" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+        <span class="lbl-wrap"><span class="lbl">노트 링크</span></span>
+      </button>
+    </div><!-- /selGroup -->
+
+  </div><!-- /pdf-dock -->
+</div><!-- /dock-layer -->
+
+
+<!-- ==========================================
+     TOC Panel
+     ========================================== -->
+<div class="popup-panel toc-panel" id="tocPanel">
+  <div class="popup-header">목차</div>
+  <div class="toc-item cur" data-target="page1">
+    <span class="toc-num">—</span>
+    <span class="toc-title">Abstract</span>
+  </div>
+  <div class="toc-item" data-target="page1">
+    <span class="toc-num">1</span>
+    <span class="toc-title">Introduction</span>
+  </div>
+  <div class="toc-item" data-target="page1">
+    <span class="toc-num">2</span>
+    <span class="toc-title">Motivations</span>
+  </div>
+  <div class="toc-item" data-target="page2">
+    <span class="toc-num">3</span>
+    <span class="toc-title">Key Challenges</span>
+  </div>
+  <div class="toc-item" data-target="page2">
+    <span class="toc-num">4</span>
+    <span class="toc-title">Future Directions</span>
+  </div>
+  <div class="toc-item" data-target="page2">
+    <span class="toc-num">5</span>
+    <span class="toc-title">Conclusion</span>
+  </div>
+</div>
+
+<!-- ==========================================
+     Page Grid Panel
+     ========================================== -->
+<div class="popup-panel page-grid-panel" id="pageGridPanel">
+  <div class="popup-header">페이지 미리보기</div>
+  <div class="page-grid">
+
+    <!-- p1 -->
+    <div class="page-grid-item cur" data-page="1">
+      <div class="page-grid-thumb">
+        <div class="pgl" style="width:90%"></div><div class="pgl" style="width:70%"></div>
+        <div class="pgl" style="width:100%"></div><div class="pgl" style="width:60%"></div>
+        <div class="pgl" style="width:85%"></div><div class="pgl" style="width:100%"></div>
+        <div class="pgl" style="width:75%"></div><div class="pgl" style="width:90%"></div>
+        <div class="pgl" style="width:55%"></div><div class="pgl" style="width:80%"></div>
+      </div>
+      <span class="page-grid-num">1</span>
+    </div>
+
+    <!-- p2 -->
+    <div class="page-grid-item" data-page="2">
+      <div class="page-grid-thumb">
+        <div class="pgl" style="width:100%"></div><div class="pgl" style="width:80%"></div>
+        <div class="pgl" style="width:65%"></div><div class="pgl" style="width:100%"></div>
+        <div class="pgl" style="width:90%"></div><div class="pgl" style="width:70%"></div>
+        <div class="pgl" style="width:100%"></div><div class="pgl" style="width:60%"></div>
+        <div class="pgl" style="width:75%"></div><div class="pgl" style="width:85%"></div>
+      </div>
+      <span class="page-grid-num">2</span>
+    </div>
+
+    <!-- p3–6: 빈 플레이스홀더 -->
+    <div class="page-grid-item empty">
+      <div class="page-grid-thumb">
+        <div class="pgl" style="width:80%"></div><div class="pgl" style="width:100%"></div>
+        <div class="pgl" style="width:60%"></div><div class="pgl" style="width:90%"></div>
+        <div class="pgl" style="width:75%"></div><div class="pgl" style="width:100%"></div>
+      </div>
+      <span class="page-grid-num">3</span>
+    </div>
+    <div class="page-grid-item empty">
+      <div class="page-grid-thumb">
+        <div class="pgl" style="width:100%"></div><div class="pgl" style="width:70%"></div>
+        <div class="pgl" style="width:85%"></div><div class="pgl" style="width:60%"></div>
+        <div class="pgl" style="width:100%"></div><div class="pgl" style="width:80%"></div>
+      </div>
+      <span class="page-grid-num">4</span>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ==========================================
+     Demo Controls
+     ========================================== -->
+<div class="demo-panel">
+  <div class="demo-panel-label">디자인 시안 데모</div>
+
+  <button class="demo-btn" id="demoBtnSel">
+    ✦ 텍스트 드래그 시뮬레이션
+  </button>
+
+  <div class="demo-sep"></div>
+
+  <button class="demo-btn" onclick="toggleDark()">◑ 다크 모드 토글</button>
+
+  <div class="demo-state">
+    <div class="demo-state-dot" id="stateDot"></div>
+    <span id="stateLabel">기본 상태</span>
+  </div>
+</div>
+
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+
+<script>
+/* ==========================================
+   State
+   ========================================== */
+let hasSelection = false;
+let zoomLevel   = 100;
+let openPanel   = null; // 'toc' | 'pageGrid' | null
+
+const $  = id => document.getElementById(id);
+const selChip    = $('selChip');
+const selGroup   = $('selGroup');
+const selTarget  = $('selTarget');
+const tocPanel   = $('tocPanel');
+const tocBtn     = $('tocBtn');
+const pageGridPanel = $('pageGridPanel');
+const pageGridBtn   = $('pageGridBtn');
+const stateDot   = $('stateDot');
+const stateLabel = $('stateLabel');
+const demoBtnSel = $('demoBtnSel');
+
+/* ==========================================
+   Zoom
+   ========================================== */
+const pages = [document.getElementById('page1'), document.getElementById('page2')];
+
+$('zoomInBtn').addEventListener('click', () => {
+  zoomLevel = Math.min(200, zoomLevel + 10);
+  applyZoom();
+});
+$('zoomOutBtn').addEventListener('click', () => {
+  zoomLevel = Math.max(50, zoomLevel - 10);
+  applyZoom();
+});
+$('fitBtn').addEventListener('click', () => {
+  zoomLevel = 100;
+  applyZoom();
+  const btn = $('fitBtn');
+  btn.classList.add('on');
+  setTimeout(() => btn.classList.remove('on'), 500);
+});
+
+function applyZoom() {
+  $('zoomVal').textContent = zoomLevel + '%';
+  const scale = zoomLevel / 100;
+  pages.forEach(p => {
+    p.style.transform = `scale(${scale})`;
+    // Compensate margin so pages don't overlap when shrunk
+    const shrink = (1 - scale) * p.offsetHeight / 2;
+    p.style.marginTop  = shrink < 0 ? shrink + 'px' : '0';
+    p.style.marginBottom = shrink < 0 ? shrink + 'px' : '0';
+  });
+}
+
+/* ==========================================
+   Panel Toggle (TOC / 페이지 그리드)
+   ========================================== */
+function togglePanel(name) {
+  const isOpen = openPanel === name;
+  closeAllPanels();
+  if (!isOpen) openPanel = name;
+  tocPanel.classList.toggle('visible', openPanel === 'toc');
+  tocBtn.classList.toggle('on', openPanel === 'toc');
+  pageGridPanel.classList.toggle('visible', openPanel === 'pageGrid');
+  pageGridBtn.classList.toggle('on', openPanel === 'pageGrid');
+}
+
+function closeAllPanels() {
+  openPanel = null;
+  tocPanel.classList.remove('visible');
+  tocBtn.classList.remove('on');
+  pageGridPanel.classList.remove('visible');
+  pageGridBtn.classList.remove('on');
+}
+
+tocBtn.addEventListener('click', e => { e.stopPropagation(); togglePanel('toc'); });
+pageGridBtn.addEventListener('click', e => { e.stopPropagation(); togglePanel('pageGrid'); });
+
+document.addEventListener('click', e => {
+  if (!openPanel) return;
+  const inToc  = tocBtn.contains(e.target)      || tocPanel.contains(e.target);
+  const inGrid = pageGridBtn.contains(e.target)  || pageGridPanel.contains(e.target);
+  if (!inToc && !inGrid) closeAllPanels();
+});
+
+/* TOC 항목 클릭 */
+document.querySelectorAll('.toc-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.getElementById(item.dataset.target)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.querySelectorAll('.toc-item').forEach(el => el.classList.toggle('cur', el === item));
+    closeAllPanels();
+  });
+});
+
+/* 페이지 그리드 항목 클릭 */
+document.querySelectorAll('.page-grid-item:not(.empty)').forEach(item => {
+  item.addEventListener('click', () => {
+    document.getElementById('page' + item.dataset.page)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.querySelectorAll('.page-grid-item').forEach(el => el.classList.toggle('cur', el === item));
+    closeAllPanels();
+  });
+});
+
+/* ==========================================
+   Text Selection State
+   ========================================== */
+demoBtnSel.addEventListener('click', () => {
+  hasSelection = !hasSelection;
+  setSelectionState(hasSelection);
+});
+
+$('chipDismiss').addEventListener('click', () => {
+  hasSelection = false;
+  setSelectionState(false);
+  window.getSelection()?.removeAllRanges();
+});
+
+function setSelectionState(active) {
+  selChip.classList.toggle('visible', active);
+  document.body.classList.toggle('has-selection', active);
+  selTarget.classList.toggle('sel-active', active);
+  demoBtnSel.classList.toggle('active', active);
+  demoBtnSel.textContent = active ? '✦ 선택 해제 시뮬레이션' : '✦ 텍스트 드래그 시뮬레이션';
+  stateDot.classList.toggle('active', active);
+  stateLabel.textContent = active ? '텍스트 선택됨' : '기본 상태';
+}
+
+/* ==========================================
+   Action Buttons
+   ========================================== */
+$('btnHighlight').addEventListener('click', () => {
+  selTarget.classList.remove('sel-active');
+  selTarget.classList.add('sel-highlighted');
+  hasSelection = false;
+  setSelectionState(false);
+  showToast('하이라이트가 추가되었습니다');
+});
+
+$('btnNote').addEventListener('click', () => {
+  showToast('메모 추가 패널 오픈');
+});
+
+$('btnLink').addEventListener('click', () => {
+  showToast('노트 링크 선택기 오픈');
+});
+
+/* ==========================================
+   Native selection → dock trigger
+   ========================================== */
+$('scrollArea').addEventListener('mouseup', () => {
+  const sel = window.getSelection();
+  const txt = sel?.toString().trim() ?? '';
+  if (txt.length > 5) {
+    hasSelection = true;
+    const preview = txt.length > 64 ? txt.slice(0, 61) + '...' : txt;
+    $('selChipText').textContent = '“' + preview + '”';
+    setSelectionState(true);
+  }
+});
+
+/* 독 바깥 클릭 시 강제 해제 (dock 버튼 클릭은 제외) */
+document.addEventListener('mousedown', e => {
+  if (hasSelection && !e.target.closest('#scrollArea') && !e.target.closest('.dock-layer')) {
+    hasSelection = false;
+    setSelectionState(false);
+    window.getSelection()?.removeAllRanges();
+  }
+});
+
+/* native 드래그 해제 감지 — selectionchange로 빈 선택 탐지 */
+let selClearTimer;
+document.addEventListener('selectionchange', () => {
+  if (!hasSelection) return;
+  clearTimeout(selClearTimer);
+  selClearTimer = setTimeout(() => {
+    const txt = window.getSelection()?.toString().trim() ?? '';
+    if (txt.length <= 2) {
+      hasSelection = false;
+      setSelectionState(false);
+    }
+  }, 120);
+});
+
+/* Escape 키로도 해제 */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && hasSelection) {
+    hasSelection = false;
+    setSelectionState(false);
+    window.getSelection()?.removeAllRanges();
+  }
+});
+
+/* ==========================================
+   Dark Mode
+   ========================================== */
+function toggleDark() {
+  const html = document.documentElement;
+  html.setAttribute('data-theme', html.dataset.theme === 'dark' ? 'light' : 'dark');
+}
+
+/* ==========================================
+   Toast
+   ========================================== */
+let toastTimer = null;
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+</script>
+</body>
+</html>

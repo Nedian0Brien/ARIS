@@ -875,6 +875,80 @@ html[data-theme='dark'] .files-row--active { background: var(--info-bg); }
 .anatomy__list li { font-size: 13.5px; line-height: 1.55; color: var(--text-secondary); }
 .anatomy__list strong { color: var(--text-primary); font-weight: 600; }
 
+/* -------- PROJECT LIST (/projects) -------- */
+.proj-list-wrap { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.proj-list-toolbar {
+  display: flex; align-items: center; gap: var(--sp-6);
+  padding: var(--sp-8) var(--sp-10);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+.proj-list-search {
+  display: flex; align-items: center; gap: var(--sp-3);
+  flex: 1; max-width: 320px;
+  padding: var(--sp-3) var(--sp-6);
+  background: var(--surface-sunken); border: 1px solid var(--border-subtle);
+  border-radius: var(--r-sm);
+}
+.proj-list-search svg { width: 13px; height: 13px; color: var(--text-tertiary); flex-shrink: 0; }
+.proj-list-search input { border: none; outline: none; background: transparent; font-size: var(--text-sm); color: var(--text-primary); width: 100%; }
+.proj-list-search input::placeholder { color: var(--text-tertiary); }
+.proj-list-chips { display: flex; gap: var(--sp-2); margin-left: auto; }
+.proj-list-chip {
+  padding: 4px 12px; border-radius: var(--r-full);
+  border: 1px solid var(--border-default);
+  font-size: var(--text-xs); font-weight: 500;
+  color: var(--text-secondary); background: var(--surface);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-smooth);
+}
+.proj-list-chip:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.proj-list-chip--active { background: var(--b-50); border-color: var(--b-200); color: var(--b-700); }
+html[data-theme='dark'] .proj-list-chip--active { background: var(--info-bg); border-color: var(--info-border); color: var(--info-fg); }
+.proj-list-body { flex: 1; overflow-y: auto; padding: var(--sp-12) var(--sp-10); }
+.proj-list-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-6);
+}
+.proj-list-card {
+  padding: var(--sp-10); background: var(--surface);
+  border: 1px solid var(--border-subtle); border-radius: var(--r-md);
+  display: flex; flex-direction: column; gap: var(--sp-8);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-smooth),
+              box-shadow var(--dur-fast) var(--ease-smooth);
+}
+.proj-list-card:hover { border-color: var(--border-default); box-shadow: var(--shadow-sm); }
+.proj-list-card--new {
+  border-style: dashed; align-items: center; justify-content: center;
+  min-height: 148px; color: var(--text-tertiary); gap: var(--sp-3);
+}
+.proj-list-card--new:hover { border-color: var(--b-300); color: var(--b-600); background: var(--b-50); }
+html[data-theme='dark'] .proj-list-card--new:hover { background: var(--info-bg); }
+.proj-list-card--new svg { width: 20px; height: 20px; }
+.proj-list-card__head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--sp-4); }
+.proj-list-card__info { min-width: 0; }
+.proj-list-card__name { font-size: var(--text-h4); font-weight: 600; letter-spacing: var(--ls-snug); color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.proj-list-card__path { font-size: var(--text-2xs); color: var(--text-tertiary); font-family: var(--font-mono); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.proj-list-stats { display: flex; gap: var(--sp-10); }
+.proj-list-stat { display: flex; flex-direction: column; gap: 2px; }
+.proj-list-stat__label { font-size: var(--text-2xs); font-weight: 600; letter-spacing: var(--ls-wide); text-transform: uppercase; color: var(--text-tertiary); }
+.proj-list-stat__val { font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); font-family: var(--font-mono); }
+.proj-list-card__foot {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: var(--sp-6); border-top: 1px solid var(--border-subtle);
+}
+.proj-list-card__foot-meta { font-size: var(--text-2xs); color: var(--text-tertiary); font-family: var(--font-mono); }
+.proj-list-new-btn {
+  display: inline-flex; align-items: center; gap: var(--sp-3);
+  height: 26px; padding: 0 10px;
+  border-radius: var(--r-sm); border: 1px solid var(--border-default);
+  font-size: var(--text-xs); font-weight: 500; color: var(--text-secondary);
+  background: var(--surface); white-space: nowrap;
+  transition: all var(--dur-fast) var(--ease-smooth);
+}
+.proj-list-new-btn:hover { border-color: var(--b-300); color: var(--b-600); background: var(--b-50); }
+.proj-list-new-btn svg { width: 11px; height: 11px; }
+
 </style>
 </head>
 <body>
@@ -1586,6 +1660,258 @@ html[data-theme='dark'] .files-row--active { background: var(--info-bg); }
           <strong>Overview / Chats / Files / Context</strong> 탭을 가진 상세 뷰로 들어갑니다.
           기존의 "Workspace → 채팅 리스트" 구조를 여기로 흡수하면서, 파일 · 컨텍스트 · 자산을 함께 볼 수 있게 확장했습니다.
         </p>
+      </div>
+
+      <figure class="figure">
+        <div class="figure__label">Figure 5.5 · Project list — /projects (no project selected)</div>
+        <div class="mockup mockup--wide">
+          <aside class="m-sb">
+            <div class="m-sb__brand"><div class="m-sb__logo">A</div><span class="m-sb__brand-name">ARIS</span></div>
+            <button class="m-sb__new"><svg class="ico ico--sm" viewBox="0 0 24 24" style="stroke-width:2.4"><path d="M12 5v14M5 12h14"/></svg>New chat</button>
+            <div class="m-sb__nav">
+              <a class="m-sb__nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Home</a>
+              <a class="m-sb__nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Ask ARIS<span class="m-sb__nav-count">12</span></a>
+              <a class="m-sb__nav-item m-sb__nav-item--active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>Project</a>
+              <a class="m-sb__nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Files</a>
+            </div>
+            <div class="m-sb__proj-head"><span>Projects</span></div>
+            <div>
+              <button class="m-sb__proj m-sb__proj--run"><span class="m-sb__proj-dot"></span><span class="m-sb__proj-name">aris-web</span><span class="m-sb__proj-count">14</span></button>
+              <button class="m-sb__proj m-sb__proj--appr"><span class="m-sb__proj-dot"></span><span class="m-sb__proj-name">lawdigest</span><span class="m-sb__proj-count">8</span></button>
+              <button class="m-sb__proj m-sb__proj--done"><span class="m-sb__proj-dot"></span><span class="m-sb__proj-name">design-system-v1</span><span class="m-sb__proj-count">6</span></button>
+              <button class="m-sb__proj"><span class="m-sb__proj-dot"></span><span class="m-sb__proj-name">runtime-ops</span><span class="m-sb__proj-count">3</span></button>
+              <button class="m-sb__proj"><span class="m-sb__proj-dot"></span><span class="m-sb__proj-name">obsidian-notes</span><span class="m-sb__proj-count">2</span></button>
+            </div>
+            <div class="m-sb__footer"><span class="m-sb__avatar">박</span><div><div class="m-sb__footer-name">박민재</div><div class="m-sb__footer-meta">Pro</div></div></div>
+          </aside>
+          <div class="m-main">
+            <div class="m-top">
+              <div class="m-top__left">
+                <span class="m-top__title">Projects</span>
+                <span class="m-top__crumb">5 active · 33 chats total</span>
+              </div>
+              <button class="btn btn--primary btn--sm"><svg class="ico ico--sm" viewBox="0 0 24 24" style="stroke-width:2.4"><path d="M12 5v14M5 12h14"/></svg>New project</button>
+            </div>
+
+            <div class="proj-list-toolbar">
+              <div class="proj-list-search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                <input type="text" placeholder="Search projects..." />
+              </div>
+              <div class="proj-list-chips">
+                <button class="proj-list-chip proj-list-chip--active">All <span style="color:var(--text-tertiary);font-family:var(--font-mono);margin-left:4px">5</span></button>
+                <button class="proj-list-chip">Active <span style="color:var(--text-tertiary);font-family:var(--font-mono);margin-left:4px">2</span></button>
+                <button class="proj-list-chip">Recent</button>
+                <button class="proj-list-chip">Archived</button>
+              </div>
+            </div>
+
+            <div class="proj-list-body">
+              <div class="proj-list-grid">
+
+                <div class="proj-list-card">
+                  <div class="proj-list-card__head">
+                    <div class="proj-list-card__info">
+                      <div class="proj-list-card__name">aris-web</div>
+                      <div class="proj-list-card__path">~/project/ARIS/services/aris-web</div>
+                    </div>
+                    <span class="badge badge--info badge--dot">running</span>
+                  </div>
+                  <div class="proj-list-stats">
+                    <div class="proj-list-stat"><div class="proj-list-stat__label">Chats</div><div class="proj-list-stat__val">14<span style="font-size:var(--text-2xs);color:var(--text-tertiary);font-weight:500;margin-left:4px">· 2 active</span></div></div>
+                    <div class="proj-list-stat"><div class="proj-list-stat__label">Files</div><div class="proj-list-stat__val">128</div></div>
+                    <div class="proj-list-stat"><div class="proj-list-stat__label">Tokens</div><div class="proj-list-stat__val">184.2k</div></div>
+                  </div>
+                  <div class="home-proj__chats" style="margin-bottom:0">
+                    <div class="home-proj__chat">
+                      <span class="home-proj__chat-dot home-proj__chat-dot--running"></span>
+                      <div class="home-proj__chat-body">
+                        <div class="home-proj__chat-title">chat-screen-regressions</div>
+                        <div class="home-proj__chat-last">mobileOverflowLayout 버그 재현되는데, settle 루프에 가드 좀 추가해줘.</div>
+                      </div>
+                    </div>
+                    <div class="home-proj__chat">
+                      <span class="home-proj__chat-dot home-proj__chat-dot--done"></span>
+                      <div class="home-proj__chat-body">
+                        <div class="home-proj__chat-title">tokens.css 마이그레이션 diff</div>
+                        <div class="home-proj__chat-last">기존 tokens.css를 design-system-v1 스펙으로 마이그레이트하자.</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="proj-list-card__foot">
+                    <span class="proj-list-card__foot-meta">last 2m ago</span>
+                    <button class="proj-list-new-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New chat</button>
+                  </div>
+                </div>
+
+                <div class="proj-list-card">
+                  <div class="proj-list-card__head">
+                    <div class="proj-list-card__info">
+                      <div class="proj-list-card__name">lawdigest</div>
+                      <div class="proj-list-card__path">~/project/Lawdigest</div>
+                    </div>
+                    <span class="badge badge--warning badge--dot">approval</span>
+                  </div>
+                  <div class="proj-list-stats">
+                    <div class="proj-list-stat"><div class="proj-list-stat__label">Chats</div><div class="proj-list-stat__val">8<span style="font-size:var(--text-2xs);color:var(--text-tertiary);font-weight:500;margin-left:4px">· 1 active</span></div></div>
+                    <div class="proj-list-stat"><div class="proj-list-stat__label">Files</div><div class="proj-list-stat__val">94</div></div>
+                    <div class="proj-list-stat"><div class="proj-list-stat__label">Tokens</div><div class="proj-list-stat__val">96.7k</div></div>
+                  </div>
+                  <div class="home-proj__chats" style="margin-bottom:0">
+                    <div class="home-proj__chat">
+                      <span class="home-proj__chat-dot home-proj__chat-dot--appr"></span>
+                      <div class="home-proj__chat-body">
+                        <div class="home-proj__chat-title">deploy_web.sh blue/green</div>
+                        <div class="home-proj__chat-last">prod blue 환경 health check 통과 후 traffic 전환 승인 필요.</div>
+                      </div>
+                    </div>
+                    <div class="home-proj__chat">
+                      <span class="home-proj__chat-dot home-proj__chat-dot--done"></span>
+                      <div class="home-proj__chat-body">
+                        <div class="home-proj__chat-title">로그 파서 리팩터</div>
+                        <div class="home-proj__chat-last">NDJSON 로그에서 tail_restore 이벤트만 뽑아서 집계해봐.</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="proj-list-card__foot">
+                    <span class="proj-list-card__foot-meta">last 18m ago</span>
+                    <button class="proj-list-new-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New chat</button>
+                  </div>
+                </div>
+
+                <div class="proj-list-card">
+                  <div class="proj-list-card__head">
+                    <div class="proj-list-card__info">
+                      <div class="proj-list-card__name">design-system-v1</div>
+                      <div class="proj-list-card__path">~/.worktrees/design-system-v1</div>
+                    </div>
+                    <span class="badge badge--neutral badge--dot">idle</span>
+                  </div>
+                  <div class="proj-list-stats">
+                    <div class="proj-list-stat"><div class="proj-list-stat__label">Chats</div><div class="proj-list-stat__val">6</div></div>
+                    <div class="proj-list-stat"><div class="proj-list-stat__label">Files</div><div class="proj-list-stat__val">42</div></div>
+                    <div class="proj-list-stat"><div class="proj-list-stat__label">Tokens</div><div class="proj-list-stat__val">62.3k</div></div>
+                  </div>
+                  <div class="home-proj__chats" style="margin-bottom:0">
+                    <div class="home-proj__chat">
+                      <span class="home-proj__chat-dot home-proj__chat-dot--done"></span>
+                      <div class="home-proj__chat-body">
+                        <div class="home-proj__chat-title">composer v2 디자인 검토</div>
+                        <div class="home-proj__chat-last">Agent/Plan/Terminal 세 모드 있는 composer 디자인 만들어봐.</div>
+                      </div>
+                    </div>
+                    <div class="home-proj__chat">
+                      <span class="home-proj__chat-dot home-proj__chat-dot--done"></span>
+                      <div class="home-proj__chat-body">
+                        <div class="home-proj__chat-title">Linear 기준 토큰 재정의</div>
+                        <div class="home-proj__chat-last">Linear 수준 리디자인 해줘. HTML 디자인 시스템부터 구축하자.</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="proj-list-card__foot">
+                    <span class="proj-list-card__foot-meta">last 1h ago</span>
+                    <button class="proj-list-new-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New chat</button>
+                  </div>
+                </div>
+
+                <div class="proj-list-card">
+                  <div class="proj-list-card__head">
+                    <div class="proj-list-card__info">
+                      <div class="proj-list-card__name">runtime-ops</div>
+                      <div class="proj-list-card__path">~/project/runtime-ops</div>
+                    </div>
+                    <span class="badge badge--neutral badge--dot">idle</span>
+                  </div>
+                  <div class="proj-list-stats">
+                    <div class="proj-list-stat"><div class="proj-list-stat__label">Chats</div><div class="proj-list-stat__val">3</div></div>
+                    <div class="proj-list-stat"><div class="proj-list-stat__label">Files</div><div class="proj-list-stat__val">18</div></div>
+                    <div class="proj-list-stat"><div class="proj-list-stat__label">Tokens</div><div class="proj-list-stat__val">22.4k</div></div>
+                  </div>
+                  <div class="home-proj__chats" style="margin-bottom:0">
+                    <div class="home-proj__chat">
+                      <span class="home-proj__chat-dot home-proj__chat-dot--idle"></span>
+                      <div class="home-proj__chat-body">
+                        <div class="home-proj__chat-title">deploy flow 단순화</div>
+                        <div class="home-proj__chat-last">deploy_web.sh blue/green 분기 로직 정리해. 중복 함수들 통합하고.</div>
+                      </div>
+                    </div>
+                    <div class="home-proj__chat">
+                      <span class="home-proj__chat-dot home-proj__chat-dot--done"></span>
+                      <div class="home-proj__chat-body">
+                        <div class="home-proj__chat-title">health check 스크립트</div>
+                        <div class="home-proj__chat-last">배포 전 health check 스크립트 통합해서 하나로 관리하게 하자.</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="proj-list-card__foot">
+                    <span class="proj-list-card__foot-meta">last 4h ago</span>
+                    <button class="proj-list-new-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New chat</button>
+                  </div>
+                </div>
+
+                <div class="proj-list-card">
+                  <div class="proj-list-card__head">
+                    <div class="proj-list-card__info">
+                      <div class="proj-list-card__name">obsidian-notes</div>
+                      <div class="proj-list-card__path">~/obsidian</div>
+                    </div>
+                    <span class="badge badge--neutral badge--dot">idle</span>
+                  </div>
+                  <div class="proj-list-stats">
+                    <div class="proj-list-stat"><div class="proj-list-stat__label">Chats</div><div class="proj-list-stat__val">2</div></div>
+                    <div class="proj-list-stat"><div class="proj-list-stat__label">Files</div><div class="proj-list-stat__val">312</div></div>
+                    <div class="proj-list-stat"><div class="proj-list-stat__label">Tokens</div><div class="proj-list-stat__val">9.1k</div></div>
+                  </div>
+                  <div class="home-proj__chats" style="margin-bottom:0">
+                    <div class="home-proj__chat">
+                      <span class="home-proj__chat-dot home-proj__chat-dot--idle"></span>
+                      <div class="home-proj__chat-body">
+                        <div class="home-proj__chat-title">Daily 노트 템플릿</div>
+                        <div class="home-proj__chat-last">Daily 노트 템플릿 자동화 스크립트 만들어봐. 날짜별 변수 치환까지.</div>
+                      </div>
+                    </div>
+                    <div class="home-proj__chat">
+                      <span class="home-proj__chat-dot home-proj__chat-dot--done"></span>
+                      <div class="home-proj__chat-body">
+                        <div class="home-proj__chat-title">링크 자동 매핑</div>
+                        <div class="home-proj__chat-last">Obsidian 노트 링크 자동으로 걸어주는 규칙 만들어줘.</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="proj-list-card__foot">
+                    <span class="proj-list-card__foot-meta">last 1d ago</span>
+                    <button class="proj-list-new-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New chat</button>
+                  </div>
+                </div>
+
+                <div class="proj-list-card proj-list-card--new">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+                  <div style="font-size:var(--text-sm);font-weight:500">New project</div>
+                  <div style="font-size:var(--text-2xs);color:var(--text-tertiary);font-family:var(--font-mono)">로컬 디렉토리 선택 → 프로젝트 생성</div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="figure__caption">
+          <strong>Project = 디렉토리 1:1 단위 + 채팅 컨테이너.</strong>
+          상단 툴바에 검색 + 필터 칩(All / Active / Recent / Archived). 카드는 이름 · 경로 · 상태 배지 · 미니 스탯 3개(Chats · Files · Tokens) · 최근 채팅 2건 · "New chat" 액션. 카드 클릭 시 Project 상세(아래 Figure 6)로 진입.
+        </div>
+      </figure>
+
+      <div class="subsection">
+        <h3 class="subsection__title">목록 화면 결정 사항</h3>
+        <div class="prose">
+          <ul>
+            <li><strong>최근 채팅 2건은 Home 카드와 동일 컴포넌트 재사용</strong>. 별도 데이터 생성 없이 <code class="code-inline">chats ORDER BY updated_at DESC LIMIT 2</code>만 더 뽑음. Home과 일관성 유지.</li>
+            <li><strong>스탯 3개로 압축</strong>(Chats · Files · Tokens). 상세에서 보여주는 Last activity는 카드 푸터에 인라인으로 표시.</li>
+            <li><strong>"New chat" 버튼은 카드 푸터에 노출</strong>. 프로젝트 진입을 거치지 않고 바로 채팅 시작 가능 — 빈도 높은 액션이라 한 단계 줄임.</li>
+            <li><strong>"New project" 카드는 그리드 마지막 슬롯</strong>. 가산점이 아니라 이 화면의 부가 액션이므로 점선 카드로만.</li>
+            <li><strong>필터 칩 4종</strong>: All(기본) · Active(running/approval만) · Recent(7일 내 활동) · Archived. 상태 아이콘은 카드 우상단 배지로 일관.</li>
+            <li><strong>20개 넘으면 Active 그룹 자동 분리</strong>(open question에 명시된 정렬/필터 규칙의 첫 단계).</li>
+          </ul>
+        </div>
       </div>
 
       <figure class="figure">
