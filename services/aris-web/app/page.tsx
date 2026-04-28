@@ -1,36 +1,11 @@
 import { Suspense } from 'react';
-import { redirect } from 'next/navigation';
 import { requirePageUser } from '@/lib/auth/guard';
-import { prisma } from '@/lib/db/prisma';
 import { getRuntimeHealth, listSessions } from '@/lib/happy/client';
 import { env } from '@/lib/config';
 import HomePageWrapper from './HomePageClient';
 
-type HomePageProps = {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-};
-
-export default async function HomePage({ searchParams }: HomePageProps) {
+export default async function HomePage() {
   const user = await requirePageUser();
-  const params = await searchParams;
-  const hasExplicitTab = typeof params?.tab === 'string' && params.tab.trim().length > 0;
-  const hasStayOnHome = params?.home === '1';
-
-  if (!hasExplicitTab && !hasStayOnHome) {
-    const latestChat = await prisma.sessionChat.findFirst({
-      where: {
-        userId: user.id,
-        latestEventId: { not: null },
-      },
-      orderBy: { lastActivityAt: 'desc' },
-      select: { id: true, sessionId: true },
-    });
-
-    if (latestChat) {
-      redirect(`/sessions/${encodeURIComponent(latestChat.sessionId)}?chat=${encodeURIComponent(latestChat.id)}`);
-    }
-  }
-
   const health = await getRuntimeHealth();
   let runtimeError: string | null = null;
   let sessions: Awaited<ReturnType<typeof listSessions>> = [];
