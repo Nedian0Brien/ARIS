@@ -26,12 +26,30 @@
   padding-bottom: 0;
 }
 
+.app-shell-chat-screen {
+  height: 100vh;
+  height: 100dvh;
+  height: var(--app-vh, 100dvh);
+  min-height: 100vh;
+  min-height: 100dvh;
+  min-height: var(--app-vh, 100dvh);
+  overflow: hidden;
+  padding-bottom: 0;
+  background: var(--canvas);
+}
+
 @media (max-width: 960px) {
   .app-shell-immersive {
     height: auto;
     min-height: var(--app-vh, 100dvh);
     overflow: visible;
     overflow-x: clip;
+  }
+
+  .app-shell-chat-screen {
+    height: var(--app-vh, 100dvh);
+    min-height: var(--app-vh, 100dvh);
+    overflow: hidden;
   }
 }
 

@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { requirePageUser } from '@/lib/auth/guard';
 import { listSessionChats } from '@/lib/happy/chats';
 import { getSessionEvents, listPermissionRequests, listSessions } from '@/lib/happy/client';
-import { Header } from '@/components/layout/Header';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import { Card } from '@/components/ui';
 import { ChatInterface } from './ChatInterface';
@@ -97,9 +96,8 @@ export default async function SessionPage({
       const workspaceRootPath = await resolveWorkspaceClientPath(detail.session.projectName).catch(() => '/');
 
       return (
-        <div className="app-shell app-shell-immersive">
-          <Header userEmail={user.email} role={user.role} autoHideOnScroll />
-          <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, paddingTop: '64px' }}>
+        <div className="app-shell app-shell-chat-screen">
+          <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <ChatInterface
               sessionId={sessionId}
               initialEvents={[]}
@@ -110,11 +108,11 @@ export default async function SessionPage({
               workspaceRootPath={workspaceRootPath}
               agentFlavor={detail.session.agent}
               sessionModel={detail.session.model}
-            approvalPolicy={detail.session.approvalPolicy}
-            initialModelSettings={initialModelSettings}
-            initialChats={chats}
-            activeChatId={null}
-            initialShowWorkspaceHome
+              approvalPolicy={detail.session.approvalPolicy}
+              initialModelSettings={initialModelSettings}
+              initialChats={chats}
+              activeChatId={null}
+              initialShowWorkspaceHome
             />
           </main>
         </div>
@@ -140,9 +138,8 @@ export default async function SessionPage({
     const workspaceRootPath = await resolveWorkspaceClientPath(detail.session.projectName).catch(() => '/');
 
     return (
-      <div className="app-shell app-shell-immersive">
-        <Header userEmail={user.email} role={user.role} autoHideOnScroll />
-        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, paddingTop: '64px' }}>
+      <div className="app-shell app-shell-chat-screen">
+        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <ChatInterface
             sessionId={sessionId}
             initialEvents={detail.events}
@@ -170,9 +167,8 @@ export default async function SessionPage({
     const message = error instanceof Error ? error.message : '워크스페이스 정보를 불러올 수 없습니다.';
 
     return (
-      <div className="app-shell app-shell-immersive">
-        <Header userEmail={user.email} role={user.role} autoHideOnScroll />
-        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'auto', padding: '1.5rem', paddingTop: 'calc(64px + 1.5rem)', gap: '1rem' }}>
+      <div className="app-shell app-shell-chat-screen">
+        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'auto', padding: '1.5rem', gap: '1rem' }}>
           <BackendNotice message={`백엔드 연결 문제: ${message}`} />
           <Card style={{ padding: '4rem 1.5rem', textAlign: 'center' }}>
             <p className="text-muted">현재 워크스페이스를 표시할 수 없습니다. 백엔드 연결을 확인하고 다시 시도해 주세요.</p>

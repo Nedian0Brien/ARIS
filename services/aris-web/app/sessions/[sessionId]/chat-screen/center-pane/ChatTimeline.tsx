@@ -110,11 +110,12 @@ export function ChatTimeline({
   return (
     <>
       <div
-        className={`${styles.stream} ${isMobileLayout ? styles.streamMobileScroll : ''} ${chatEntryPendingRevealClassName}`}
+        className={`${styles.stream} ${styles.csTimeline} ${isMobileLayout ? styles.streamMobileScroll : ''} ${chatEntryPendingRevealClassName}`}
         ref={scrollRef}
         onScroll={onStreamScroll}
         aria-hidden={showChatTransitionLoading}
       >
+        <div className={styles.csTimelineInner}>
         {hasMoreBefore && (
           <div className={styles.historyLoadMoreRow}>
             <button
@@ -210,7 +211,7 @@ export function ChatTimeline({
             return (
               <React.Fragment key={`overflow-${item.id}`}>
                 {dayDivider}
-                <article className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                <article className={`${styles.messageRow} ${styles.messageRowAgent} ${styles.csMsg} ${styles.csMsgAgent}`}>
                   <button
                     type="button"
                     className={`${styles.messageBubble} ${styles.messageBubbleAction} ${styles.actionOverflowBubble} ${styles.actionOverflowToggle}`}
@@ -258,7 +259,7 @@ export function ChatTimeline({
             return (
               <React.Fragment key={event.id}>
               {dayDivider}
-              <article id={`event-${event.id}`} className={`${styles.messageRow} ${styles.messageRowUser}`}>
+              <article id={`event-${event.id}`} className={`${styles.messageRow} ${styles.messageRowUser} ${styles.csMsg} ${styles.csMsgUser}`}>
                 <div className={`${styles.msgHeader} ${styles.msgHeaderUser}`}>
                   <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
                   <span className={`${styles.msgSender} ${styles.msgSenderUser}`}>YOU</span>
@@ -321,7 +322,7 @@ export function ChatTimeline({
             return (
               <React.Fragment key={event.id}>
               {dayDivider}
-              <article id={`event-${event.id}`} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+              <article id={`event-${event.id}`} className={`${styles.messageRow} ${styles.messageRowAgent} ${styles.csMsg} ${styles.csMsgAgent}`}>
                 <div className={`${styles.messageBubble} ${styles.messageBubbleAction}`}>
                   {renderEventPayload(event, false, expanded, () => onToggleResult(event.id), isDebugMode)}
                 </div>
@@ -335,7 +336,7 @@ export function ChatTimeline({
           return (
             <React.Fragment key={event.id}>
             {dayDivider}
-            <article id={`event-${event.id}`} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+            <article id={`event-${event.id}`} className={`${styles.messageRow} ${styles.messageRowAgent} ${styles.csMsg} ${styles.csMsgAgent}`}>
               <div className={styles.messageWithAvatar}>
                 <div className={`${styles.msgAvatar} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
                   <AgentIcon size={14} />
@@ -375,7 +376,7 @@ export function ChatTimeline({
         })}
 
         {isAgentRunning && (
-          <article className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+          <article className={`${styles.messageRow} ${styles.messageRowAgent} ${styles.csMsg} ${styles.csMsgAgent}`}>
             <div className={styles.messageWithAvatar}>
               <div className={`${styles.msgAvatar} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
                 <AgentIcon size={14} />
@@ -395,6 +396,7 @@ export function ChatTimeline({
             </div>
           </article>
         )}
+        </div>
       </div>
 
     </>

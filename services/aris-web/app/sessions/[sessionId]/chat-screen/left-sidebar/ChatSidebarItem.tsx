@@ -80,7 +80,7 @@ export function ChatSidebarItem({
 
   return (
     <div
-      className={`${styles.chatListItem} ${item.isActive ? styles.chatListItemActive : ''} ${item.sidebarStateClassName}`}
+      className={`${styles.chatListItem} ${styles.csSession} ${item.isActive ? `${styles.chatListItemActive} ${styles.csSessionActive}` : ''} ${item.sidebarStateClassName}`}
     >
       <div className={styles.chatListItemTopRow}>
         <button
@@ -90,10 +90,10 @@ export function ChatSidebarItem({
           title={item.title}
           aria-describedby={`chat-tooltip-${item.id}`}
         >
-          <span className={`${styles.chatListStatusDot} ${item.sidebarStateClassName}`} aria-hidden="true" />
+          <span className={`${styles.chatListStatusDot} ${styles.csSessionDot} ${item.sidebarStateClassName}`} aria-hidden="true" />
           <span className={styles.chatListMainContent}>
             <span className={styles.chatListTitleWrap}>
-              <span className={`${styles.chatListAgentAvatar} ${item.agentAvatarToneClassName}`}>
+              <span className={`${styles.chatListAgentAvatar} ${styles.csSessionAvatar} ${item.agentAvatarToneClassName}`}>
                 <item.AgentIcon size={13} />
               </span>
               {item.isPinned && <Pin size={12} className={styles.chatListPinIcon} />}
@@ -108,7 +108,7 @@ export function ChatSidebarItem({
                   autoFocus
                 />
               ) : (
-                <span className={styles.chatListTitle}>{item.title}</span>
+                <span className={`${styles.chatListTitle} ${styles.csSessionTitle}`}>{item.title}</span>
               )}
             </span>
             {!item.isRenaming && (
@@ -126,7 +126,9 @@ export function ChatSidebarItem({
               </span>
             )}
           </span>
-          <RelativeTimeComponent timestamp={item.timestamp} className={styles.chatListTime} />
+          <span className={styles.csSessionMeta}>
+            <RelativeTimeComponent timestamp={item.timestamp} className={styles.chatListTime} />
+          </span>
         </button>
         {!item.isRenaming && (
           <div className={styles.chatListMenuWrap}>

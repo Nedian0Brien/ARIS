@@ -87,43 +87,46 @@ export function ChatSidebarPane({
       )}
       <aside
         ref={sidebarRef}
-        className={`${styles.chatSidebar} ${
+        className={`${styles.chatSidebar} ${styles.csSidebar} ${
           isChatSidebarOpen ? styles.chatSidebarOpen : styles.chatSidebarClosed
         } ${isMobileLayout ? styles.chatSidebarMobile : ''} ${
           isLeftSidebarOverlayLayout ? styles.chatSidebarOverlay : ''
         }`}
       >
-        <div className={styles.chatSidebarHeader}>
+        <div className={`${styles.chatSidebarHeader} ${styles.csSidebarTop}`}>
           <button
             type="button"
             className={`${styles.chatSidebarBrand} ${isWorkspaceHome ? styles.chatSidebarBrandActive : ''}`}
             onClick={onGoHome}
             title="워크스페이스 홈"
           >
-            <span className={styles.chatSidebarBrandMark}>A</span>
-            <span className={styles.chatSidebarBrandText}>
-              <span className={styles.chatSidebarWordmark}>ARIS</span>
-              <span className={styles.chatSidebarProjectName}>{sessionTitle}</span>
+            <span className={`${styles.chatSidebarBrandMark} ${styles.csSidebarLogo}`}>A</span>
+            <span className={`${styles.chatSidebarBrandText} ${styles.csSidebarBrand}`}>
+              <span className={`${styles.chatSidebarWordmark} ${styles.csSidebarBrandName}`}>ARIS</span>
+              <span className={`${styles.chatSidebarProjectName} ${styles.csSidebarBrandSub}`}>v1.0.0</span>
             </span>
           </button>
-          <div className={styles.createChatMenuWrap}>
-            <button
-              type="button"
-              className={styles.chatSidebarNewButton}
-              onClick={onCreateChat}
-              disabled={isCreatingChat}
-              title="새 채팅"
-            >
+        </div>
+
+        <div className={styles.createChatMenuWrap}>
+          <button
+            type="button"
+            className={`${styles.chatSidebarNewButton} ${styles.csSidebarNewchat}`}
+            onClick={onCreateChat}
+            disabled={isCreatingChat}
+            title="새 채팅"
+          >
+            <span className={styles.csSidebarNewchatLeft}>
               <MessageSquarePlus size={15} />
-              새 채팅
-            </button>
-          </div>
+              New chat
+            </span>
+          </button>
         </div>
 
         {chatMutationError && <div className={styles.chatSidebarError}>{chatMutationError}</div>}
 
         <div className={styles.chatSidebarListWrap}>
-          <label className={styles.chatSidebarSearch}>
+          <label className={`${styles.chatSidebarSearch} ${styles.csSidebarSearch}`}>
             <Search size={14} />
             <input
               className={styles.chatSidebarSearchInput}
@@ -147,7 +150,7 @@ export function ChatSidebarPane({
           <div className={styles.chatSidebarListHead}>
             <span className={styles.chatSidebarListLabel}>채팅 {chatCount}개</span>
           </div>
-          <div ref={chatListRef} className={styles.chatList}>
+          <div ref={chatListRef} className={`${styles.chatList} ${styles.csSidebarList}`}>
             {filteredSections.map((section, sectionIndex) => (
               <ChatSidebarSection
                 key={section.key}
@@ -168,6 +171,15 @@ export function ChatSidebarPane({
                 ))}
               </ChatSidebarSection>
             ))}
+          </div>
+        </div>
+        <div className={styles.csSidebarBottom}>
+          <div className={styles.csSidebarUser}>
+            <span className={`${styles.chatSidebarBrandMark} ${styles.csSidebarLogo}`}>A</span>
+            <span className={styles.csSidebarUserInfo}>
+              <span className={styles.csSidebarUserName}>{sessionTitle}</span>
+              <span className={styles.csSidebarUserPlan}>Pro · 200k ctx</span>
+            </span>
           </div>
         </div>
       </aside>

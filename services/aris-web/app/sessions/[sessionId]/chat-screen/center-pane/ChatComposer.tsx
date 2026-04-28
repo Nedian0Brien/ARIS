@@ -177,16 +177,19 @@ export function ChatComposer({
       aria-hidden={showPendingReveal}
     >
       <form onSubmit={onSubmit} className={styles.composerForm}>
-        <div className={`${styles.composerCard} ${composerModeClass}`} data-mode={composerMode} data-composer-mode={composerMode}>
-          <div className={styles.composerToolbar}>
-            <div className={styles.composerModeToggle} role="tablist" aria-label="Composer mode">
+        <div className={`${styles.composerCard} ${styles.compV2} ${composerModeClass} ${
+          composerMode === 'plan' ? styles.compV2Plan : composerMode === 'terminal' ? styles.compV2Terminal : ''
+        }`} data-mode={composerMode} data-composer-mode={composerMode}>
+          <div className={`${styles.composerToolbar} ${styles.compV2Top}`}>
+            <div className={`${styles.composerModeToggle} ${styles.modeToggle}`} role="tablist" aria-label="Composer mode">
               <button
                 type="button"
                 role="tab"
                 aria-selected={composerMode === 'agent'}
-                className={`${styles.composerModePill} ${styles.composerModePillAgent} ${composerMode === 'agent' ? styles.composerModePillActive : ''}`}
+                className={`${styles.composerModePill} ${styles.modeTogglePill} ${styles.composerModePillAgent} ${composerMode === 'agent' ? `${styles.composerModePillActive} ${styles.modeTogglePillActiveAgent}` : ''}`}
                 onClick={() => onComposerModeChange('agent')}
               >
+                <span className={styles.modeTogglePillDot} />
                 <AgentIcon size={13} />
                 <span>Agent</span>
               </button>
@@ -194,9 +197,10 @@ export function ChatComposer({
                 type="button"
                 role="tab"
                 aria-selected={composerMode === 'plan'}
-                className={`${styles.composerModePill} ${styles.composerModePillPlan} ${composerMode === 'plan' ? styles.composerModePillActive : ''}`}
+                className={`${styles.composerModePill} ${styles.modeTogglePill} ${styles.composerModePillPlan} ${composerMode === 'plan' ? `${styles.composerModePillActive} ${styles.modeTogglePillActivePlan}` : ''}`}
                 onClick={() => onComposerModeChange('plan')}
               >
+                <span className={styles.modeTogglePillDot} />
                 <AlignLeft size={13} />
                 <span>Plan</span>
               </button>
@@ -204,9 +208,10 @@ export function ChatComposer({
                 type="button"
                 role="tab"
                 aria-selected={composerMode === 'terminal'}
-                className={`${styles.composerModePill} ${styles.composerModePillTerminal} ${composerMode === 'terminal' ? styles.composerModePillActive : ''}`}
+                className={`${styles.composerModePill} ${styles.modeTogglePill} ${styles.composerModePillTerminal} ${composerMode === 'terminal' ? `${styles.composerModePillActive} ${styles.modeTogglePillActiveTerminal}` : ''}`}
                 onClick={() => onComposerModeChange('terminal')}
               >
+                <span className={styles.modeTogglePillDot} />
                 <TerminalSquare size={13} />
                 <span>Terminal</span>
               </button>
@@ -215,11 +220,12 @@ export function ChatComposer({
               <div className={styles.modelSelectorWrap} ref={commandMenuRef}>
                 <button
                   type="button"
-                  className={styles.modelSelectorBtn}
+                  className={`${styles.modelSelectorBtn} ${styles.compV2Context}`}
                   onClick={onToggleCommandMenu}
                   aria-haspopup="listbox"
                   aria-expanded={isCommandMenuOpen}
                 >
+                  <span className={styles.compV2ContextDot} />
                   <TerminalSquare size={13} />
                   <span>Command</span>
                   <ChevronDown size={11} />
@@ -247,11 +253,12 @@ export function ChatComposer({
             <div className={styles.modelSelectorWrap} ref={modelDropdownRef}>
               <button
                 type="button"
-                className={styles.modelSelectorBtn}
+                className={`${styles.modelSelectorBtn} ${styles.compV2Context}`}
                 onClick={onToggleModelDropdown}
                 aria-haspopup="listbox"
                 aria-expanded={isModelDropdownOpen}
               >
+                <span className={styles.compV2ContextDot} />
                 <AgentIcon size={13} />
                 <span>{activeModelShortLabel}</span>
                 <ChevronDown size={11} />
@@ -278,11 +285,12 @@ export function ChatComposer({
               <div className={styles.modelSelectorWrap} ref={geminiModeDropdownRef}>
                 <button
                   type="button"
-                  className={styles.modelSelectorBtn}
+                  className={`${styles.modelSelectorBtn} ${styles.compV2Context}`}
                   onClick={onToggleGeminiModeDropdown}
                   aria-haspopup="listbox"
                   aria-expanded={isGeminiModeDropdownOpen}
                 >
+                  <span className={styles.compV2ContextDot} />
                   <span>Mode</span>
                   <span>{activeGeminiMode.shortLabel}</span>
                   <ChevronDown size={11} />
@@ -335,7 +343,7 @@ export function ChatComposer({
           <div className={styles.composerModeHint}>{modeLabel}</div>
 
           {contextItems.length > 0 && (
-            <div className={styles.composerChips}>
+            <div className={`${styles.composerChips} ${styles.compV2Chips}`}>
               {contextItems.map((item) => (
                 <span key={item.id} className={styles.contextChip}>
                   {item.type === 'file' ? (
@@ -373,7 +381,7 @@ export function ChatComposer({
             <div className={styles.composerAttachmentError} role="alert">{imageUploadError}</div>
           )}
 
-          <div className={styles.composerInputRow}>
+          <div className={`${styles.composerInputRow} ${styles.compV2Area}`}>
             <input
               ref={composerImageInputRef}
               type="file"
@@ -381,53 +389,6 @@ export function ChatComposer({
               hidden
               onChange={onImageSelection}
             />
-            <div className={styles.plusMenuWrap} ref={plusMenuRef}>
-              <button
-                type="button"
-                className={`${styles.composerPlusBtn} ${plusMenuMode !== 'closed' ? styles.composerPlusBtnActive : ''}`}
-                onClick={onTogglePlusMenu}
-                aria-label="컨텍스트 추가"
-                title="컨텍스트 추가"
-                disabled={!isOperator}
-              >
-                <Plus size={16} />
-              </button>
-              {plusMenuMode !== 'closed' && (
-                <div className={styles.plusMenu}>
-                  {plusMenuMode === 'menu' && (
-                    <>
-                      <button type="button" className={styles.plusMenuItem} onClick={onImageUploadOpen}>
-                        <ImageIcon size={14} /> 사진 업로드
-                      </button>
-                      <button type="button" className={styles.plusMenuItem} onClick={onFileBrowserOpen}>
-                        <Paperclip size={14} /> 파일 첨부
-                      </button>
-                      <button type="button" className={styles.plusMenuItem} onClick={onOpenTextContextEditor}>
-                        <AlignLeft size={14} /> 텍스트 추가
-                      </button>
-                    </>
-                  )}
-                  {plusMenuMode === 'text' && (
-                    <div className={styles.plusMenuInputArea}>
-                      <div className={styles.plusMenuInputLabel}>텍스트 입력</div>
-                      <textarea
-                        className={styles.plusMenuTextInput}
-                        value={textContextInput}
-                        onChange={(event) => onTextContextInputChange(event.target.value)}
-                        placeholder="에이전트에게 전달할 추가 맥락 정보..."
-                        rows={4}
-                        autoFocus
-                      />
-                      <div className={styles.plusMenuActions}>
-                        <button type="button" className={styles.plusMenuCancelBtn} onClick={onCancelTextContext}>취소</button>
-                        <button type="button" className={styles.plusMenuConfirmBtn} onClick={onAddTextContext} disabled={!textContextInput.trim()}>추가</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
             <textarea
               ref={composerInputRef}
               value={prompt}
@@ -438,15 +399,75 @@ export function ChatComposer({
               onKeyDown={onPromptKeyDown}
               placeholder={placeholder}
               disabled={!activeChatIdResolved || !isOperator}
-              className={styles.composerInput}
+              className={`${styles.composerInput} ${styles.compV2Input}`}
             />
+          </div>
 
+          <div className={styles.compV2Bar}>
+            <div className={styles.compV2Tools}>
+              <div className={styles.plusMenuWrap} ref={plusMenuRef}>
+                <button
+                  type="button"
+                  className={`${styles.composerPlusBtn} ${styles.compV2Tool} ${plusMenuMode !== 'closed' ? styles.composerPlusBtnActive : ''}`}
+                  onClick={onTogglePlusMenu}
+                  aria-label="컨텍스트 추가"
+                  title="컨텍스트 추가"
+                  disabled={!isOperator}
+                >
+                  <Plus size={16} />
+                </button>
+                {plusMenuMode !== 'closed' && (
+                  <div className={styles.plusMenu}>
+                    {plusMenuMode === 'menu' && (
+                      <>
+                        <button type="button" className={styles.plusMenuItem} onClick={onImageUploadOpen}>
+                          <ImageIcon size={14} /> 사진 업로드
+                        </button>
+                        <button type="button" className={styles.plusMenuItem} onClick={onFileBrowserOpen}>
+                          <Paperclip size={14} /> 파일 첨부
+                        </button>
+                        <button type="button" className={styles.plusMenuItem} onClick={onOpenTextContextEditor}>
+                          <AlignLeft size={14} /> 텍스트 추가
+                        </button>
+                      </>
+                    )}
+                    {plusMenuMode === 'text' && (
+                      <div className={styles.plusMenuInputArea}>
+                        <div className={styles.plusMenuInputLabel}>텍스트 입력</div>
+                        <textarea
+                          className={styles.plusMenuTextInput}
+                          value={textContextInput}
+                          onChange={(event) => onTextContextInputChange(event.target.value)}
+                          placeholder="에이전트에게 전달할 추가 맥락 정보..."
+                          rows={4}
+                          autoFocus
+                        />
+                        <div className={styles.plusMenuActions}>
+                          <button type="button" className={styles.plusMenuCancelBtn} onClick={onCancelTextContext}>취소</button>
+                          <button type="button" className={styles.plusMenuConfirmBtn} onClick={onAddTextContext} disabled={!textContextInput.trim()}>추가</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button type="button" className={styles.compV2Tool} onClick={onFileBrowserOpen} disabled={!isOperator} aria-label="파일 첨부">
+                <Paperclip size={16} />
+              </button>
+              <button type="button" className={styles.compV2Tool} onClick={onOpenTextContextEditor} disabled={!isOperator} aria-label="텍스트 추가">
+                <AlignLeft size={16} />
+              </button>
+            </div>
+            <div className={styles.compV2Right}>
+              <span className={`${styles.compV2Hint} ${isAgentRunning ? styles.compV2HintDanger : ''}`}>
+                {isAgentRunning ? '실행 중 · Esc 중단' : '⌘ ↵ send'}
+              </span>
             {isAgentRunning ? (
               <div className={styles.composerRunningBtnWrap}>
                 <span className={styles.composerRunningBtnPulse} aria-hidden />
                 <button
                   type="button"
-                  className={styles.composerRunningBtn}
+                  className={`${styles.composerRunningBtn} ${styles.compV2Send} ${styles.compV2SendStop}`}
                   onClick={onAbortRun}
                   disabled={isAborting}
                   aria-label="실행 중단"
@@ -459,7 +480,9 @@ export function ChatComposer({
               <button
                 type="submit"
                 disabled={!activeChatIdResolved || !prompt.trim() || !isOperator || imageUploadsInFlight > 0}
-                className={styles.composerSendBtn}
+                className={`${styles.composerSendBtn} ${styles.compV2Send} ${
+                  !activeChatIdResolved || !prompt.trim() || !isOperator || imageUploadsInFlight > 0 ? styles.compV2SendDisabled : ''
+                }`}
                 aria-label={submitLabel}
                 title={`${submitLabel} (Ctrl/Cmd + Enter)`}
               >
@@ -467,6 +490,7 @@ export function ChatComposer({
                 <ArrowUp size={17} />
               </button>
             )}
+            </div>
           </div>
 
         </div>

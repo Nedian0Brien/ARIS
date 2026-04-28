@@ -50,10 +50,10 @@ export function WorkspacePagerShell({
 
     return (
       <main className={styles.centerPanel} ref={centerPanelRef}>
-        <div className={styles.centerPanelChat}>
+        <div className={`${styles.centerPanelChat} ${styles.csMain}`}>
           {renderChatPage()}
         </div>
-        <aside className={styles.centerPanelWorkspace} aria-label="Workspace">
+        <aside className={`${styles.centerPanelWorkspace} ${styles.wsPane}`} aria-label="Workspace">
           {renderWorkspaceSidecar()}
         </aside>
       </main>

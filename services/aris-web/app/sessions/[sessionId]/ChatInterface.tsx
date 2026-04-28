@@ -2667,7 +2667,7 @@ export function ChatInterface({
   return (
     <>
     <div
-      className={`${styles.chatShell} ${
+      className={`${styles.chatShell} ${styles.chatShellPrototype} ${
         isChatSidebarOpen ? styles.chatShellSidebarOpen : styles.chatShellSidebarClosed
       } ${isMobileLayout ? styles.chatShellMobileScroll : ''} ${
         isLeftSidebarOverlayLayout ? styles.chatShellLeftOverlay : ''

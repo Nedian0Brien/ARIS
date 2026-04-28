@@ -94,8 +94,8 @@ function renderWorkspaceEmpty(message: string) {
 }
 
 export function WorkspacePanelsPane(props: WorkspacePanelsPaneProps) {
-  const frameClassName = `${styles.centerFrame} ${props.isMobileLayout ? styles.centerFrameMobileScroll : ''}`;
-  const streamClassName = `${styles.stream} ${props.isMobileLayout ? styles.streamMobileScroll : ''}`;
+  const frameClassName = `${styles.centerFrame} ${styles.wsPane} ${props.isMobileLayout ? styles.centerFrameMobileScroll : ''}`;
+  const streamClassName = `${styles.stream} ${styles.wsBody} ${props.isMobileLayout ? styles.streamMobileScroll : ''}`;
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('run');
   const events = props.events ?? EMPTY_EVENTS;
   const chats = props.chats ?? EMPTY_CHATS;
@@ -114,11 +114,11 @@ export function WorkspacePanelsPane(props: WorkspacePanelsPaneProps) {
 
   const workspaceBody = (
     <div className={styles.workspaceV2}>
-      <div className={styles.workspaceV2Header}>
+      <div className={`${styles.workspaceV2Header} ${styles.wsPaneHeader}`}>
         <div className={styles.workspaceV2TitleBlock}>
           {props.isMobileLayout ? <span className={styles.workspaceV2Handle} aria-hidden="true" /> : null}
           <span className={styles.workspaceV2Eyebrow}>Single Workspace</span>
-          <h2 className={styles.workspaceV2Title}>Workspace</h2>
+          <h2 className={`${styles.workspaceV2Title} ${styles.wsPaneTitle}`}>Workspace</h2>
         </div>
         <div className={styles.workspaceV2Actions}>
           <button type="button" className={styles.workspaceV2IconButton} aria-label="워크스페이스 확장">
@@ -137,14 +137,14 @@ export function WorkspacePanelsPane(props: WorkspacePanelsPaneProps) {
         <span>{events.length} events</span>
       </div>
 
-      <div className={styles.workspaceV2Tabs} role="tablist" aria-label="워크스페이스 탭">
+      <div className={`${styles.workspaceV2Tabs} ${styles.wsTabs}`} role="tablist" aria-label="워크스페이스 탭">
         {WORKSPACE_TABS.map(({ id, label, Icon }) => (
           <button
             key={id}
             type="button"
             role="tab"
             aria-selected={activeTab === id}
-            className={`${styles.workspaceV2Tab} ${activeTab === id ? styles.workspaceV2TabActive : ''}`}
+            className={`${styles.workspaceV2Tab} ${styles.wsTab} ${activeTab === id ? `${styles.workspaceV2TabActive} ${styles.wsTabActive}` : ''}`}
             onClick={() => setActiveTab(id)}
           >
             <Icon size={14} />
@@ -153,10 +153,10 @@ export function WorkspacePanelsPane(props: WorkspacePanelsPaneProps) {
         ))}
       </div>
 
-      <div className={styles.workspaceV2Body}>
+      <div className={`${styles.workspaceV2Body} ${styles.wsBody}`}>
         {activeTab === 'run' && (
           <div className={styles.workspaceV2RunGrid}>
-            <section className={styles.workspaceV2Card}>
+            <section className={`${styles.workspaceV2Card} ${styles.wsCard}`}>
               <div className={styles.workspaceV2CardHeader}>
                 <span>Step timeline</span>
                 <small>{recentEvents.length} recent</small>
@@ -167,7 +167,7 @@ export function WorkspacePanelsPane(props: WorkspacePanelsPaneProps) {
                     <button
                       key={event.id}
                       type="button"
-                      className={styles.workspaceV2Step}
+                      className={`${styles.workspaceV2Step} ${styles.wsRunStep}`}
                       onClick={() => props.onJumpToMessage?.(event.id)}
                     >
                       <span className={styles.workspaceV2StepIndex}>{String(recentEvents.length - index).padStart(2, '0')}</span>
@@ -182,7 +182,7 @@ export function WorkspacePanelsPane(props: WorkspacePanelsPaneProps) {
               )}
             </section>
 
-            <section className={styles.workspaceV2Card}>
+            <section className={`${styles.workspaceV2Card} ${styles.wsCard}`}>
               <div className={styles.workspaceV2CardHeader}>
                 <span>Chat history</span>
                 <History size={14} />
@@ -242,7 +242,7 @@ export function WorkspacePanelsPane(props: WorkspacePanelsPaneProps) {
                 ))}
               </div>
             </section>
-            <section className={styles.workspaceV2Card}>
+            <section className={`${styles.workspaceV2Card} ${styles.wsCard}`}>
               <div className={styles.workspaceV2CardHeader}>
                 <span>Snippets</span>
                 <small>insert</small>
@@ -276,7 +276,7 @@ export function WorkspacePanelsPane(props: WorkspacePanelsPaneProps) {
                 <span>Context usage</span>
               </div>
             </section>
-            <section className={styles.workspaceV2Card}>
+            <section className={`${styles.workspaceV2Card} ${styles.wsCard}`}>
               <div className={styles.workspaceV2Breakdown}>
                 <span><strong>{tokenEstimate.toLocaleString()}</strong> prompt estimate</span>
                 <span><strong>{events.length}</strong> timeline events</span>

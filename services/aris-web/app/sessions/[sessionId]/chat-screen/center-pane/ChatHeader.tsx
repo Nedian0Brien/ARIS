@@ -100,7 +100,7 @@ export function ChatHeader({
   showPermissionQueue,
 }: ChatHeaderProps) {
   return (
-    <header className={styles.centerHeader} ref={centerHeaderRef}>
+    <header className={`${styles.centerHeader} ${styles.csHeader}`} ref={centerHeaderRef}>
       <button
         type="button"
         className={styles.sidebarToggleButton}
@@ -110,21 +110,30 @@ export function ChatHeader({
       >
         {isChatSidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
       </button>
-      <span className={`${styles.agentAvatarHero} ${agentAvatarToneClass}`}>
+      <span className={`${styles.agentAvatarHero} ${styles.csSessionAvatar} ${agentAvatarToneClass}`}>
         <agentMeta.Icon size={20} />
       </span>
-      <div className={styles.centerHeaderInfo}>
-        <h2 className={styles.centerTitle}>{isMobileLayout ? sessionTitle : displayName}</h2>
+      <div className={`${styles.centerHeaderInfo} ${styles.csHeaderLeft}`}>
+        <div className={styles.csHeaderTitleWrap}>
+          <h2 className={`${styles.centerTitle} ${styles.csHeaderTitle}`}>{isMobileLayout ? sessionTitle : displayName}</h2>
         {isMobileLayout ? (
-          <div className={styles.centerMetaRow}>
+          <div className={`${styles.centerMetaRow} ${styles.csHeaderMeta}`}>
             <span className={styles.centerAgentLabel}>{agentMeta.label}</span>
+            <span className={styles.csHeaderMetaSep}>·</span>
             <span className={styles.centerChatLabel}>{currentChatTitle}</span>
           </div>
         ) : (
-          <span className={styles.centerAgentLabel}>{agentMeta.label} · tokens live · elapsed now</span>
+          <span className={`${styles.centerAgentLabel} ${styles.csHeaderMeta}`}>
+            {agentMeta.label}
+            <span className={styles.csHeaderMetaSep}>·</span>
+            tokens live
+            <span className={styles.csHeaderMetaSep}>·</span>
+            elapsed now
+          </span>
         )}
+        </div>
       </div>
-      <div className={styles.centerHeaderActions}>
+      <div className={`${styles.centerHeaderActions} ${styles.csHeaderRight}`}>
         <button
           type="button"
           className={styles.headerTextAction}
