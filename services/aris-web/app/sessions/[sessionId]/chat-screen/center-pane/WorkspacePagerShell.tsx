@@ -14,6 +14,7 @@ type WorkspacePagerShellProps = {
   setActiveWorkspacePageId: (pageId: string) => void;
   renderChatPage: () => ReactNode;
   renderCreatePage: () => ReactNode;
+  renderWorkspacePage?: (item: Extract<WorkspacePagerItem, { kind: 'workspace' }>) => ReactNode;
   renderPanelPage: (item: Extract<WorkspacePagerItem, { kind: 'panel' }>) => ReactNode;
 };
 
@@ -25,6 +26,7 @@ export function WorkspacePagerShell({
   setActiveWorkspacePageId,
   renderChatPage,
   renderCreatePage,
+  renderWorkspacePage,
   renderPanelPage,
 }: WorkspacePagerShellProps) {
   return (
@@ -35,6 +37,7 @@ export function WorkspacePagerShell({
         onActivePageChange={setActiveWorkspacePageId}
         renderChatPage={renderChatPage}
         renderCreatePage={renderCreatePage}
+        renderWorkspacePage={renderWorkspacePage}
         renderPanelPage={renderPanelPage}
       />
     </main>

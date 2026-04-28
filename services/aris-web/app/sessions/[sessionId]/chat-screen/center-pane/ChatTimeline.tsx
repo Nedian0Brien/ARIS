@@ -2,7 +2,7 @@
 
 import React from 'react';
 import type { CSSProperties, RefObject } from 'react';
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronUp, Copy, Loader2, MessageSquarePlus } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronUp, Copy, Eye, Loader2, MessageSquarePlus } from 'lucide-react';
 import { readChatImageAttachments } from '@/lib/chatImageAttachments';
 import type { AgentFlavor, PermissionDecision, SessionChat, UiEvent } from '@/lib/happy/types';
 import { PermissionRequestMessage } from '../../PermissionRequestMessage';
@@ -64,6 +64,7 @@ export function ChatTimeline({
   onStreamScroll,
   onToggleActionRun,
   onToggleResult,
+  onOpenPreview,
 }: {
   activeAgentFlavor: AgentFlavor;
   activeChat: SessionChat | null;
@@ -92,9 +93,19 @@ export function ChatTimeline({
   onStreamScroll: () => void;
   onToggleActionRun: (runId: string) => void;
   onToggleResult: (eventId: string) => void;
+  onOpenPreview?: (target?: { title?: string; url?: string | null }) => void;
 }) {
   const AgentIcon = agentMeta.Icon;
   const quickStarts = AGENT_QUICK_STARTS[activeAgentFlavor] || AGENT_QUICK_STARTS.codex || [];
+  const getTimelineDate = (item: TimelineRenderItem) => {
+    if (item.type === 'permission') {
+      return new Date(item.permission.requestedAt);
+    }
+    if (item.item.type === 'action_overflow') {
+      return new Date(item.item.timestamp);
+    }
+    return new Date(item.item.event.timestamp);
+  };
 
   return (
     <>
@@ -158,22 +169,34 @@ export function ChatTimeline({
             </div>
           </div>
         )}
-        {timelineItems.map((timelineItem) => {
+        {timelineItems.map((timelineItem, index) => {
+          const itemDate = getTimelineDate(timelineItem);
+          const prevItem = timelineItems[index - 1];
+          const prevDate = prevItem ? getTimelineDate(prevItem) : null;
+          const shouldRenderDay = !prevDate || itemDate.toDateString() !== prevDate.toDateString();
+          const dayDivider = shouldRenderDay ? (
+            <div key={`day-${timelineItem.order}-${itemDate.toDateString()}`} className={styles.timelineDayDivider}>
+              <span>{Number.isNaN(itemDate.getTime()) ? 'Today' : itemDate.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' })}</span>
+            </div>
+          ) : null;
+
           if (timelineItem.type === 'permission') {
             const permission = timelineItem.permission;
             return (
-              <PermissionRequestMessage
-                key={permission.id}
-                anchorId={`permission-${permission.id}`}
-                permission={permission}
-                disabled={!isOperator}
-                loading={loadingPermissionId === permission.id}
-                interactive={permission.availability === 'live'}
-                pendingHint={permission.availability === 'live'
-                  ? null
-                  : '실시간 승인 세션을 찾을 수 없습니다. 같은 요청을 다시 실행해 주세요.'}
-                onDecide={onDecidePermission}
-              />
+              <React.Fragment key={permission.id}>
+                {dayDivider}
+                <PermissionRequestMessage
+                  anchorId={`permission-${permission.id}`}
+                  permission={permission}
+                  disabled={!isOperator}
+                  loading={loadingPermissionId === permission.id}
+                  interactive={permission.availability === 'live'}
+                  pendingHint={permission.availability === 'live'
+                    ? null
+                    : '실시간 승인 세션을 찾을 수 없습니다. 같은 요청을 다시 실행해 주세요.'}
+                  onDecide={onDecidePermission}
+                />
+              </React.Fragment>
             );
           }
 
@@ -185,41 +208,44 @@ export function ChatTimeline({
               ? '반복 행동 접기'
               : `중간 행동 ${item.hiddenCount}개 펼치기`;
             return (
-              <article key={`overflow-${item.id}`} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
-                <button
-                  type="button"
-                  className={`${styles.messageBubble} ${styles.messageBubbleAction} ${styles.actionOverflowBubble} ${styles.actionOverflowToggle}`}
-                  onClick={() => onToggleActionRun(item.runId)}
-                  title={title}
-                  aria-label={title}
-                  aria-expanded={item.expanded}
-                >
-                  <div className={styles.actionOverflowContent}>
-                    {item.expanded ? (
-                      <span className={styles.actionOverflowLabel}>
-                        접기
-                        <ChevronUp size={14} />
-                      </span>
-                    ) : (
-                      <>
-                        <div className={styles.actionOverflowLeft}>
-                          <span className={`${styles.kindChip} ${getToneClass(overflowKindMeta.tone)}`}>
-                            <OverflowKindIcon size={12} />
-                            {overflowKindMeta.label}
-                          </span>
-                        </div>
+              <React.Fragment key={`overflow-${item.id}`}>
+                {dayDivider}
+                <article className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+                  <button
+                    type="button"
+                    className={`${styles.messageBubble} ${styles.messageBubbleAction} ${styles.actionOverflowBubble} ${styles.actionOverflowToggle}`}
+                    onClick={() => onToggleActionRun(item.runId)}
+                    title={title}
+                    aria-label={title}
+                    aria-expanded={item.expanded}
+                  >
+                    <div className={styles.actionOverflowContent}>
+                      {item.expanded ? (
                         <span className={styles.actionOverflowLabel}>
-                          {item.hiddenCount}개의 행동 더 보기
-                          <ChevronDown size={14} />
+                          접기
+                          <ChevronUp size={14} />
                         </span>
-                        <div className={styles.actionOverflowRight}>
-                          <span className={styles.actionOverflowCount}>+{item.hiddenCount}</span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </button>
-              </article>
+                      ) : (
+                        <>
+                          <div className={styles.actionOverflowLeft}>
+                            <span className={`${styles.kindChip} ${getToneClass(overflowKindMeta.tone)}`}>
+                              <OverflowKindIcon size={12} />
+                              {overflowKindMeta.label}
+                            </span>
+                          </div>
+                          <span className={styles.actionOverflowLabel}>
+                            {item.hiddenCount}개의 행동 더 보기
+                            <ChevronDown size={14} />
+                          </span>
+                          <div className={styles.actionOverflowRight}>
+                            <span className={styles.actionOverflowCount}>+{item.hiddenCount}</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </button>
+                </article>
+              </React.Fragment>
             );
           }
 
@@ -230,7 +256,9 @@ export function ChatTimeline({
           if (userEvent) {
             const userAttachments = readChatImageAttachments(event.meta);
             return (
-              <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowUser}`}>
+              <React.Fragment key={event.id}>
+              {dayDivider}
+              <article id={`event-${event.id}`} className={`${styles.messageRow} ${styles.messageRowUser}`}>
                 <div className={`${styles.msgHeader} ${styles.msgHeaderUser}`}>
                   <span className={styles.msgTime}>{formatClock(event.timestamp)}</span>
                   <span className={`${styles.msgSender} ${styles.msgSenderUser}`}>YOU</span>
@@ -284,22 +312,30 @@ export function ChatTimeline({
                   </button>
                 </div>
               </article>
+              </React.Fragment>
             );
           }
 
           if (actionEvent) {
             const expanded = expandedResultIds[event.id] ?? false;
             return (
-              <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+              <React.Fragment key={event.id}>
+              {dayDivider}
+              <article id={`event-${event.id}`} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
                 <div className={`${styles.messageBubble} ${styles.messageBubbleAction}`}>
                   {renderEventPayload(event, false, expanded, () => onToggleResult(event.id), isDebugMode)}
                 </div>
               </article>
+              </React.Fragment>
             );
           }
 
+          const urlMatch = /\bhttps?:\/\/[^\s)]+/.exec(event.body || event.title || '');
+
           return (
-            <article id={`event-${event.id}`} key={event.id} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
+            <React.Fragment key={event.id}>
+            {dayDivider}
+            <article id={`event-${event.id}`} className={`${styles.messageRow} ${styles.messageRowAgent}`}>
               <div className={styles.messageWithAvatar}>
                 <div className={`${styles.msgAvatar} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
                   <AgentIcon size={14} />
@@ -316,10 +352,25 @@ export function ChatTimeline({
                     {!isDebugMode && !isActionKind(event.kind) && (event.body || event.title) && (
                       <LinkPreviewCarousel body={event.body || event.title} />
                     )}
+                    {!isDebugMode && (urlMatch || event.parsed?.files?.length) && (
+                      <button
+                        type="button"
+                        className={styles.inlineArtifactChip}
+                        onClick={() => onOpenPreview?.({
+                          title: event.parsed?.files?.[0] ?? 'Agent artifact',
+                          url: urlMatch?.[0] ?? null,
+                        })}
+                      >
+                        <Eye size={13} />
+                        <span>{event.parsed?.files?.[0] ?? 'Preview artifact'}</span>
+                        <strong>Preview</strong>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
             </article>
+            </React.Fragment>
           );
         })}
 

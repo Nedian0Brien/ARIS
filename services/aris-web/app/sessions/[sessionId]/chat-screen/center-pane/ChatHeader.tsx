@@ -51,6 +51,8 @@ type ChatHeaderProps = {
   onToggleContextMenu: () => void;
   onToggleDebugMode: () => void;
   onTogglePermissionQueue: () => void;
+  onToggleWorkspace: () => void;
+  onOpenPreview: () => void;
   onUpdateApprovalPolicy: (next: ApprovalPolicy) => void;
   sessionTitle: string;
   showDebugToggleInHeader: boolean;
@@ -90,6 +92,8 @@ export function ChatHeader({
   onToggleContextMenu,
   onToggleDebugMode,
   onTogglePermissionQueue,
+  onToggleWorkspace,
+  onOpenPreview,
   onUpdateApprovalPolicy,
   sessionTitle,
   showDebugToggleInHeader,
@@ -117,10 +121,27 @@ export function ChatHeader({
             <span className={styles.centerChatLabel}>{currentChatTitle}</span>
           </div>
         ) : (
-          <span className={styles.centerAgentLabel}>{agentMeta.label} Agent · {sessionTitle}</span>
+          <span className={styles.centerAgentLabel}>{agentMeta.label} · tokens live · elapsed now</span>
         )}
       </div>
       <div className={styles.centerHeaderActions}>
+        <button
+          type="button"
+          className={styles.headerTextAction}
+          onClick={onOpenPreview}
+          aria-label="프리뷰 열기"
+        >
+          Preview
+        </button>
+        <button
+          type="button"
+          className={styles.headerTextAction}
+          onClick={onToggleWorkspace}
+          aria-pressed={activeWorkspacePageId !== 'chat'}
+          aria-label={activeWorkspacePageId !== 'chat' ? '워크스페이스 닫기' : '워크스페이스 열기'}
+        >
+          Workspace
+        </button>
         <button
           type="button"
           className={styles.sidebarToggleButton}

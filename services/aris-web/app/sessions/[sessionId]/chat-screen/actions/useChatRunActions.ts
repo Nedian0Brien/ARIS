@@ -17,6 +17,7 @@ import {
 } from '../helpers';
 import type {
   ChatRuntimeUiState,
+  ComposerMode,
   ContextItem,
   LegacyCustomModels,
   ModelReasoningEffort,
@@ -29,6 +30,7 @@ type Params = {
   addEvent: (event: UiEvent) => void;
   approvalPolicy?: ApprovalPolicy;
   codexReasoningEffort: ModelReasoningEffort;
+  composerMode: ComposerMode;
   contextItems: ContextItem[];
   disconnectNoticeAwaitingRef: MutableRefObject<string | null>;
   events: UiEvent[];
@@ -81,6 +83,7 @@ export function useChatRunActions({
   addEvent,
   approvalPolicy,
   codexReasoningEffort,
+  composerMode,
   contextItems,
   disconnectNoticeAwaitingRef,
   events,
@@ -140,11 +143,19 @@ export function useChatRunActions({
       }
       return acc;
     }, []);
-    const finalText = buildComposerSubmitText({
+    const baseText = buildComposerSubmitText({
       promptText,
       imageAttachments,
       contextBlocks,
     });
+    const finalText = composerMode === 'plan'
+      ? [
+          '[PLAN MODE]',
+          'Respond with a concrete implementation plan only. Do not execute tools, shell commands, file writes, deploys, or destructive actions.',
+          '',
+          baseText,
+        ].join('\n')
+      : baseText;
     const submitModelId = normalizeModelId(selectedModelId)
       ?? resolveDefaultModelId(activeAgentFlavor, providerSelections, legacyCustomModels ?? undefined, lastSelectedCodexModelId);
     const submitGeminiModeId = activeAgentFlavor === 'gemini'
@@ -157,6 +168,67 @@ export function useChatRunActions({
     const submitModelReasoningEffort = codexReasoningEffort;
 
     const awaitingSince = new Date().toISOString();
+
+    if (composerMode === 'terminal') {
+      updateChatRuntimeUi(scopedChatId, {
+        isSubmitting: true,
+        isAwaitingReply: false,
+        hasCompletionSignal: false,
+        awaitingReplySince: null,
+        submitError: null,
+        showDisconnectRetry: false,
+        lastSubmittedPayload: {
+          text: promptText,
+          chatId: scopedChatId,
+          agent: activeChat?.agent === 'claude' || activeChat?.agent === 'codex' || activeChat?.agent === 'gemini'
+            ? activeChat.agent
+            : 'codex',
+          model: submitModelId,
+          composerMode,
+          ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
+          ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
+        },
+      });
+      try {
+        const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatId: scopedChatId,
+            command: promptText,
+            agent: activeChat?.agent ?? 'codex',
+            model: submitModelId,
+            modelReasoningEffort: submitModelReasoningEffort,
+          }),
+        });
+        const body = (await response.json().catch(() => ({ error: '터미널 응답을 읽을 수 없습니다.' }))) as {
+          events?: UiEvent[];
+          error?: string;
+        };
+        if (!response.ok) {
+          throw new Error(body.error ?? '터미널 명령 실행에 실패했습니다.');
+        }
+        for (const event of body.events ?? []) {
+          addEvent(event);
+        }
+        const touchedAt = new Date().toISOString();
+        setChats((prev) => sortSessionChats(prev.map((chat) => (
+          chat.id === scopedChatId
+            ? { ...chat, lastActivityAt: touchedAt, latestPreview: `$ ${promptText}`, latestEventAt: touchedAt }
+            : chat
+        ))));
+        setPrompt('');
+        setContextItems([]);
+      } catch (error) {
+        updateChatRuntimeUi(scopedChatId, {
+          submitError: error instanceof Error ? error.message : '터미널 명령 실행에 실패했습니다.',
+        });
+      } finally {
+        updateChatRuntimeUi(scopedChatId, { isSubmitting: false });
+      }
+      return;
+    }
+
     const optimisticUserEvent = buildOptimisticUserEvent({
       chatId: scopedChatId,
       agent: activeChat?.agent === 'claude' || activeChat?.agent === 'codex' || activeChat?.agent === 'gemini'
@@ -168,6 +240,7 @@ export function useChatRunActions({
       ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
       text: finalText,
       submittedAt: awaitingSince,
+      mode: composerMode,
     });
     const wasStickyAtSubmit = shouldStickToBottomRef.current;
 
@@ -189,6 +262,7 @@ export function useChatRunActions({
         ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
         ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
         ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
+        composerMode,
       },
     });
     runtimeStartedSinceAwaitingRef.current = false;
@@ -226,6 +300,7 @@ export function useChatRunActions({
             ...(submitModelReasoningEffort ? { modelReasoningEffort: submitModelReasoningEffort } : {}),
             ...(activeChat?.threadId ? { threadId: activeChat.threadId } : {}),
             ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
+            composerMode,
           }),
         }),
       });
@@ -310,6 +385,7 @@ export function useChatRunActions({
     addEvent,
     approvalPolicy,
     codexReasoningEffort,
+    composerMode,
     contextItems,
     disconnectNoticeAwaitingRef,
     events,

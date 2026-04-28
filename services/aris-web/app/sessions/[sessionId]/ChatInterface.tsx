@@ -37,6 +37,8 @@ import { ChatStatusNotices } from './chat-screen/center-pane/ChatStatusNotices';
 import { ChatTimeline } from './chat-screen/center-pane/ChatTimeline';
 import { FileBrowserModal } from './chat-screen/center-pane/FileBrowserModal';
 import { NewChatPlaceholderPane } from './chat-screen/center-pane/NewChatPlaceholderPane';
+import { PreviewDock } from './chat-screen/preview/PreviewDock';
+import { PreviewOverlay } from './chat-screen/preview/PreviewOverlay';
 import { WorkspaceHomePane } from './chat-screen/center-pane/WorkspaceHomePane';
 import { WorkspacePagerShell } from './chat-screen/center-pane/WorkspacePagerShell';
 import {
@@ -124,6 +126,7 @@ import {
 import type {
   AgentMeta,
   ChatRunPhase,
+  ComposerMode,
   ContextItem,
   TimelineRenderItem,
   WorkspaceFileOpenDetail,
@@ -425,6 +428,46 @@ export function ChatInterface({
   const userMessageBubbleNodesRef = useRef(new Map<string, HTMLDivElement>());
   const [isComposerDockLayoutReady, setIsComposerDockLayoutReady] = useState(false);
   const [lastUserMessageJumpTarget, setLastUserMessageJumpTarget] = useState<LastUserMessageJumpTarget | null>(null);
+  const [composerMode, setComposerMode] = useState<ComposerMode>('agent');
+  const [previewState, setPreviewState] = useState<'closed' | 'dock' | 'open'>('closed');
+  const [previewTarget, setPreviewTarget] = useState<{ title: string; url?: string | null } | null>(null);
+
+  useEffect(() => {
+    document.body.dataset.mode = composerMode;
+    return () => {
+      delete document.body.dataset.mode;
+    };
+  }, [composerMode]);
+
+  const handleOpenPreview = useCallback((target?: { title?: string; url?: string | null }) => {
+    setPreviewTarget({
+      title: target?.title || 'Workspace Preview',
+      url: target?.url ?? null,
+    });
+    setPreviewState('open');
+  }, []);
+
+  const handleDockPreview = useCallback(() => {
+    setPreviewState('dock');
+  }, []);
+
+  const handleClosePreview = useCallback(() => {
+    setPreviewState('closed');
+  }, []);
+
+  useEffect(() => {
+    const handlePreviewShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'p') {
+        event.preventDefault();
+        setPreviewTarget((current) => current ?? { title: 'Workspace Preview', url: null });
+        setPreviewState((current) => (current === 'open' ? 'dock' : 'open'));
+      }
+    };
+
+    window.addEventListener('keydown', handlePreviewShortcut);
+    return () => window.removeEventListener('keydown', handlePreviewShortcut);
+  }, []);
+
   const handleDeleteEmptyAutoChat = useCallback(() => {
     if (!activeChat) {
       return;
@@ -1570,6 +1613,7 @@ export function ChatInterface({
     addEvent,
     approvalPolicy,
     codexReasoningEffort: codexReasoningEffort ?? 'medium',
+    composerMode,
     contextItems,
     disconnectNoticeAwaitingRef,
     events,
@@ -2612,6 +2656,8 @@ export function ChatInterface({
       onToggleDebugMode={toggleDebugMode}
       onTogglePermissionQueue={handleTogglePermissionQueue}
       onUpdateApprovalPolicy={handleUpdateApprovalPolicy}
+      onOpenPreview={() => handleOpenPreview()}
+      onToggleWorkspace={() => setActiveWorkspacePageId((current) => (current === 'chat' ? 'workspace' : 'chat'))}
       sessionTitle={sessionTitle}
       showDebugToggleInHeader={showDebugToggleInHeader}
       showPermissionQueue={showPermissionQueue}
@@ -2748,6 +2794,7 @@ export function ChatInterface({
                 onStreamScroll={handleStreamScroll}
                 onToggleActionRun={toggleActionRun}
                 onToggleResult={toggleResult}
+                onOpenPreview={handleOpenPreview}
               />
             )}
             composer={!isWorkspaceHome ? (
@@ -2785,6 +2832,8 @@ export function ChatInterface({
                 composerInputRef={composerInputRef}
                 composerImageInputRef={composerImageInputRef}
                 onSubmit={handleSubmit}
+                composerMode={composerMode}
+                onComposerModeChange={setComposerMode}
                 onToggleCommandMenu={handleToggleCommandMenu}
                 onRunChatCommand={handleRunChatCommand}
                 onToggleModelDropdown={handleToggleModelDropdown}
@@ -2841,6 +2890,38 @@ export function ChatInterface({
             requestedFile={sidebarFileRequest}
             onCreatePanel={handleCreateWorkspacePanel}
             onReturnToChat={() => setActiveWorkspacePageId('chat')}
+          />
+        )}
+        renderWorkspacePage={() => (
+          <WorkspacePanelsPane
+            mode="create"
+            sessionId={sessionId}
+            projectName={projectName}
+            workspaceRootPath={normalizedWorkspaceRootPath}
+            isMobileLayout={isMobileLayout}
+            workspacePanelsError={workspacePanelsError}
+            workspacePanelsLoading={workspacePanelsLoading}
+            workspacePanelLayout={workspacePanelLayout}
+            header={activeWorkspacePageId === 'workspace' ? renderChatHeader() : null}
+            requestedFile={sidebarFileRequest}
+            chats={chats}
+            events={events}
+            isAgentRunning={isAgentRunning}
+            activeAgentLabel={agentMeta.label}
+            onCreatePanel={handleCreateWorkspacePanel}
+            onReturnToChat={() => setActiveWorkspacePageId('chat')}
+            onJumpToMessage={(eventId) => {
+              setActiveWorkspacePageId('chat');
+              setHighlightedEventId(eventId);
+              window.setTimeout(() => {
+                document.getElementById(`event-${eventId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }, 120);
+            }}
+            onInsertSnippet={(snippet) => {
+              setPrompt((current) => (current.trim() ? `${current}\n${snippet}` : snippet));
+              setActiveWorkspacePageId('chat');
+              window.setTimeout(() => composerInputRef.current?.focus(), 80);
+            }}
           />
         )}
         renderPanelPage={(item) => (
@@ -2911,6 +2992,20 @@ export function ChatInterface({
         onClose={() => setUsageProbeProvider(null)}
       />,
       document.body,
+    )}
+    {isMounted && previewState === 'dock' && (
+      <PreviewDock
+        target={previewTarget ?? { title: 'Workspace Preview', url: null }}
+        onOpen={() => setPreviewState('open')}
+        onClose={handleClosePreview}
+      />
+    )}
+    {isMounted && previewState === 'open' && (
+      <PreviewOverlay
+        target={previewTarget ?? { title: 'Workspace Preview', url: null }}
+        onDock={handleDockPreview}
+        onClose={handleClosePreview}
+      />
     )}
     </>
   );

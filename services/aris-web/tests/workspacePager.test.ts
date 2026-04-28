@@ -5,6 +5,7 @@ import type { WorkspacePanelLayout } from '@/lib/workspacePanels/types';
 
 type PagerItem =
   | { id: 'chat'; kind: 'chat' }
+  | { id: 'workspace'; kind: 'workspace' }
   | { id: 'create-panel'; kind: 'create-panel' }
   | { id: string; kind: 'panel'; panelId: string };
 
@@ -19,6 +20,7 @@ type PagerComponentModule = {
     activePageId: string;
     renderChatPage: () => React.ReactNode;
     renderCreatePage: () => React.ReactNode;
+    renderWorkspacePage?: (item: Extract<PagerItem, { kind: 'workspace' }>) => React.ReactNode;
     renderPanelPage: (item: Extract<PagerItem, { kind: 'panel' }>) => React.ReactNode;
   }) => React.ReactNode;
 };
@@ -45,7 +47,7 @@ async function loadPagerGestureModule(): Promise<PagerGestureModule> {
 }
 
 describe('workspace pager model', () => {
-  it('derives chat first and create-panel last when no panels exist', async () => {
+  it('derives chat first and the single workspace page second', async () => {
     const mod = await loadPagerModelModule();
 
     expect(typeof mod.buildWorkspacePagerItems).toBe('function');
@@ -57,11 +59,11 @@ describe('workspace pager model', () => {
       panels: [],
     })).toEqual([
       { id: 'chat', kind: 'chat' },
-      { id: 'create-panel', kind: 'create-panel' },
+      { id: 'workspace', kind: 'workspace' },
     ]);
   });
 
-  it('navigates between chat, existing panels, and the create-panel page', async () => {
+  it('navigates between chat and the single workspace page', async () => {
     const mod = await loadPagerModelModule();
 
     expect(typeof mod.buildWorkspacePagerItems).toBe('function');
@@ -84,15 +86,14 @@ describe('workspace pager model', () => {
 
     expect(items).toEqual([
       { id: 'chat', kind: 'chat' },
-      { id: 'panel-preview-1', kind: 'panel', panelId: 'panel-preview-1' },
-      { id: 'create-panel', kind: 'create-panel' },
+      { id: 'workspace', kind: 'workspace' },
     ]);
-    expect(mod.moveWorkspacePager(items, 'chat', 'next')).toBe('panel-preview-1');
-    expect(mod.moveWorkspacePager(items, 'panel-preview-1', 'previous')).toBe('chat');
-    expect(mod.moveWorkspacePager(items, 'panel-preview-1', 'next')).toBe('create-panel');
+    expect(mod.moveWorkspacePager(items, 'chat', 'next')).toBe('workspace');
+    expect(mod.moveWorkspacePager(items, 'workspace', 'previous')).toBe('chat');
+    expect(mod.moveWorkspacePager(items, 'workspace', 'next')).toBe('workspace');
   });
 
-  it('renders chat, panel, and create-panel pages in order', async () => {
+  it('renders chat and workspace pages in order', async () => {
     const mod = await loadPagerComponentModule();
 
     expect(typeof mod.WorkspacePager).toBe('function');
@@ -101,20 +102,18 @@ describe('workspace pager model', () => {
     const markup = renderToStaticMarkup(createElement(mod.WorkspacePager, {
       items: [
         { id: 'chat', kind: 'chat' },
-        { id: 'panel-preview-1', kind: 'panel', panelId: 'panel-preview-1' },
-        { id: 'create-panel', kind: 'create-panel' },
+        { id: 'workspace', kind: 'workspace' },
       ],
       activePageId: 'chat',
       renderChatPage: () => createElement('div', null, 'Chat Page'),
       renderCreatePage: () => createElement('div', null, 'Create Panel'),
+      renderWorkspacePage: () => createElement('div', null, 'Workspace Page'),
       renderPanelPage: () => createElement('div', null, 'Preview Page'),
     }));
 
     expect(markup).toContain('Chat Page');
-    expect(markup).toContain('Preview Page');
-    expect(markup).toContain('Create Panel');
-    expect(markup.indexOf('Chat Page')).toBeLessThan(markup.indexOf('Preview Page'));
-    expect(markup.indexOf('Preview Page')).toBeLessThan(markup.indexOf('Create Panel'));
+    expect(markup).toContain('Workspace Page');
+    expect(markup.indexOf('Chat Page')).toBeLessThan(markup.indexOf('Workspace Page'));
   });
 
   it('changes page only when the swipe crosses the threshold', async () => {
@@ -125,13 +124,12 @@ describe('workspace pager model', () => {
 
     const items: PagerItem[] = [
       { id: 'chat', kind: 'chat' },
-      { id: 'panel-preview-1', kind: 'panel', panelId: 'panel-preview-1' },
-      { id: 'create-panel', kind: 'create-panel' },
+      { id: 'workspace', kind: 'workspace' },
     ];
 
-    expect(mod.resolveWorkspacePagerSwipeTarget(items, 'chat', -80, 60)).toBe('panel-preview-1');
-    expect(mod.resolveWorkspacePagerSwipeTarget(items, 'panel-preview-1', 80, 60)).toBe('chat');
-    expect(mod.resolveWorkspacePagerSwipeTarget(items, 'panel-preview-1', -59, 60)).toBe('panel-preview-1');
-    expect(mod.resolveWorkspacePagerSwipeTarget(items, 'create-panel', -120, 60)).toBe('create-panel');
+    expect(mod.resolveWorkspacePagerSwipeTarget(items, 'chat', -80, 60)).toBe('workspace');
+    expect(mod.resolveWorkspacePagerSwipeTarget(items, 'workspace', 80, 60)).toBe('chat');
+    expect(mod.resolveWorkspacePagerSwipeTarget(items, 'workspace', -59, 60)).toBe('workspace');
+    expect(mod.resolveWorkspacePagerSwipeTarget(items, 'workspace', -120, 60)).toBe('workspace');
   });
 });

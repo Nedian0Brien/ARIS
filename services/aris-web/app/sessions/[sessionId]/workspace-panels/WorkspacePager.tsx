@@ -17,6 +17,7 @@ type WorkspacePagerProps = {
   onActivePageChange?: (pageId: string) => void;
   renderChatPage: () => ReactNode;
   renderCreatePage: () => ReactNode;
+  renderWorkspacePage?: (item: Extract<WorkspacePagerItem, { kind: 'workspace' }>) => ReactNode;
   renderPanelPage: (item: Extract<WorkspacePagerItem, { kind: 'panel' }>) => ReactNode;
 };
 
@@ -26,6 +27,7 @@ export function WorkspacePager({
   onActivePageChange,
   renderChatPage,
   renderCreatePage,
+  renderWorkspacePage,
   renderPanelPage,
 }: WorkspacePagerProps) {
   const pagerRef = useRef<HTMLDivElement | null>(null);
@@ -252,6 +254,8 @@ export function WorkspacePager({
           >
             {item.kind === 'chat'
               ? renderChatPage()
+              : item.kind === 'workspace'
+                ? renderWorkspacePage?.(item) ?? renderCreatePage()
               : item.kind === 'create-panel'
                 ? renderCreatePage()
                 : renderPanelPage(item)}
