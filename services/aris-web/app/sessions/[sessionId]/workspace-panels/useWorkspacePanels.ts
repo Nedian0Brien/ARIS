@@ -33,7 +33,7 @@ export function useWorkspacePanels(sessionId: string) {
         const nextLayout = normalizeWorkspacePanelLayout(body.layout);
         if (cancelled) return;
         setLayout(nextLayout);
-        setActivePageId(resolveActivePageId(nextLayout));
+        setActivePageId('chat');
       } catch {
         if (cancelled) return;
         setError('패널 레이아웃을 불러오지 못했습니다.');
