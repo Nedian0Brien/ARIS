@@ -6986,9 +6986,15 @@
   padding: var(--sp-2) var(--sp-4) var(--sp-8);
 }
 
-.csSidebarList .sidebarSectionLabelRow,
-.csSidebarList .chatSidebarListHead {
-  display: block;
+.csSidebar .chatSidebarListHead {
+  display: none;
+}
+
+.csSidebarList .sidebarSectionLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--sp-3);
 }
 
 .csSidebarList .sidebarSectionLabel {
@@ -6998,6 +7004,12 @@
   text-transform: uppercase;
   color: var(--text-tertiary);
   padding: var(--sp-6) var(--sp-3) var(--sp-2);
+}
+
+.csSidebarList .sidebarSectionCount {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 10px;
 }
 
 .csSession {
@@ -7413,6 +7425,10 @@
   background: var(--surface);
 }
 
+.compV2 .composerModeHint {
+  display: none;
+}
+
 .modeToggle {
   display: inline-flex;
   gap: 2px;
@@ -7500,6 +7516,16 @@
   height: 5px;
   border-radius: 50%;
   background: var(--agent-claude);
+}
+
+.compV2CommandWrap,
+.compV2EffortWrap,
+.compV2GeminiWrap {
+  display: none;
+}
+
+.compV2ModelWrap {
+  margin-left: auto;
 }
 
 .compV2Chips {

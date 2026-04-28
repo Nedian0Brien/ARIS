@@ -217,7 +217,7 @@ export function ChatComposer({
               </button>
             </div>
             {availableChatCommands.length > 0 && (
-              <div className={styles.modelSelectorWrap} ref={commandMenuRef}>
+              <div className={`${styles.modelSelectorWrap} ${styles.compV2CommandWrap}`} ref={commandMenuRef}>
                 <button
                   type="button"
                   className={`${styles.modelSelectorBtn} ${styles.compV2Context}`}
@@ -250,7 +250,7 @@ export function ChatComposer({
                 )}
               </div>
             )}
-            <div className={styles.modelSelectorWrap} ref={modelDropdownRef}>
+            <div className={`${styles.modelSelectorWrap} ${styles.compV2ModelWrap}`} ref={modelDropdownRef}>
               <button
                 type="button"
                 className={`${styles.modelSelectorBtn} ${styles.compV2Context}`}
@@ -282,7 +282,7 @@ export function ChatComposer({
               )}
             </div>
             {agentFlavor === 'gemini' && (
-              <div className={styles.modelSelectorWrap} ref={geminiModeDropdownRef}>
+              <div className={`${styles.modelSelectorWrap} ${styles.compV2GeminiWrap}`} ref={geminiModeDropdownRef}>
                 <button
                   type="button"
                   className={`${styles.modelSelectorBtn} ${styles.compV2Context}`}
@@ -322,7 +322,7 @@ export function ChatComposer({
               </div>
             )}
             {agentFlavor === 'codex' && (
-              <div className={styles.modelEffortWrap} aria-label="모델 추론 강도">
+              <div className={`${styles.modelEffortWrap} ${styles.compV2EffortWrap}`} aria-label="모델 추론 강도">
                 <span className={styles.modelEffortLabel}>Effort</span>
                 <div className={styles.modelEffortChips}>
                   {MODEL_REASONING_EFFORT_OPTIONS.map((option) => (
