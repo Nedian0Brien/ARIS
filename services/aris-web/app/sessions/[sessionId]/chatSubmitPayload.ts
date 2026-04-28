@@ -2,6 +2,7 @@ import { buildImageAttachmentPromptPrefix, readChatImageAttachments } from '@/li
 import type { AgentFlavor, ChatImageAttachment, UiEvent } from '@/lib/happy/types';
 
 type ModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
+type ComposerMode = 'agent' | 'plan' | 'terminal';
 
 export type ComposerContextBlock =
   | { type: 'file'; path: string; content: string }
@@ -27,6 +28,7 @@ export function buildUserMessageMeta(input: {
   chatId: string;
   agent: AgentFlavor;
   model: string;
+  composerMode?: ComposerMode;
   geminiMode?: string;
   modelReasoningEffort?: ModelReasoningEffort;
   threadId?: string;
@@ -37,6 +39,7 @@ export function buildUserMessageMeta(input: {
     chatId: input.chatId,
     agent: input.agent,
     model: input.model,
+    ...(input.composerMode ? { composerMode: input.composerMode } : {}),
     ...(input.geminiMode ? { geminiMode: input.geminiMode } : {}),
     ...(input.modelReasoningEffort
       ? {

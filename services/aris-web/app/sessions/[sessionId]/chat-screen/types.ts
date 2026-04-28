@@ -8,6 +8,7 @@ export const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as con
 export type ComposerModelOption = { id: string; shortLabel: string; badge: string };
 export type GeminiModeOption = { id: string; shortLabel: string; badge: string };
 export type ModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
+export type ComposerMode = 'agent' | 'plan' | 'terminal';
 
 export type AgentMeta = {
   label: string;
@@ -66,6 +67,7 @@ export type ChatSubmittedPayload = {
   chatId: string;
   agent: AgentFlavor;
   model: string;
+  composerMode?: ComposerMode;
   geminiMode?: string;
   modelReasoningEffort?: ModelReasoningEffort;
   threadId?: string;

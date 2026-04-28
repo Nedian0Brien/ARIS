@@ -24,7 +24,7 @@ import {
 import type { AgentFlavor, ApprovalPolicy } from '@/lib/happy/types';
 import type { ChatCommandId } from '../../chatCommands';
 import { MODEL_REASONING_EFFORT_OPTIONS } from '../constants';
-import type { ComposerModelOption, ContextItem, GeminiModeOption, ModelReasoningEffort } from '../types';
+import type { ComposerMode, ComposerModelOption, ContextItem, GeminiModeOption, ModelReasoningEffort } from '../types';
 import styles from '../../ChatInterface.module.css';
 
 type ChatCommandOption = {
@@ -89,6 +89,8 @@ export function ChatComposer({
   onPromptFocus,
   onPromptKeyDown,
   onAbortRun,
+  composerMode = 'agent',
+  onComposerModeChange = () => {},
 }: {
   showPendingReveal: boolean;
   agentFlavor: AgentFlavor;
@@ -144,7 +146,10 @@ export function ChatComposer({
   onPromptFocus: FocusEventHandler<HTMLTextAreaElement>;
   onPromptKeyDown: KeyboardEventHandler<HTMLTextAreaElement>;
   onAbortRun: MouseEventHandler<HTMLButtonElement>;
+  composerMode?: ComposerMode;
+  onComposerModeChange?: (mode: ComposerMode) => void;
 }) {
+  const modeLabel = composerMode === 'plan' ? '계획을 먼저 작성합니다.' : composerMode === 'terminal' ? '입력한 내용을 셸 명령으로 실행합니다.' : '에이전트에게 작업을 요청합니다.';
   return (
     <footer
       className={`${styles.composerDock} ${showPendingReveal ? styles.chatEntryPendingReveal : ''}`}
@@ -152,8 +157,23 @@ export function ChatComposer({
       aria-hidden={showPendingReveal}
     >
       <form onSubmit={onSubmit} className={styles.composerForm}>
-        <div className={styles.composerCard}>
+        <div className={styles.composerCard} data-mode={composerMode}>
           <div className={styles.composerToolbar}>
+            <div className={styles.composerModeToggle} role="group" aria-label="Composer mode">
+              {(['agent', 'plan', 'terminal'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={`${styles.composerModeButton} ${composerMode === mode ? styles.composerModeButtonActive : ''}`}
+                  onClick={() => onComposerModeChange(mode)}
+                  aria-pressed={composerMode === mode}
+                  data-mode={mode}
+                >
+                  <span className={styles.composerModeDot} />
+                  {mode === 'agent' ? 'Agent' : mode === 'plan' ? 'Plan' : 'Terminal'}
+                </button>
+              ))}
+            </div>
             {availableChatCommands.length > 0 && (
               <div className={styles.modelSelectorWrap} ref={commandMenuRef}>
                 <button
@@ -257,23 +277,25 @@ export function ChatComposer({
               </div>
             )}
             {agentFlavor === 'codex' && (
-              <label className={styles.modelEffortWrap}>
+              <div className={styles.modelEffortWrap} aria-label="모델 추론 강도">
                 <span className={styles.modelEffortLabel}>Effort</span>
-                <select
-                  className={styles.modelEffortSelect}
-                  value={selectedModelReasoningEffort}
-                  onChange={(event) => onSelectModelReasoningEffort(event.target.value)}
-                  aria-label="모델 추론 강도"
-                >
+                <div className={styles.modelEffortChips}>
                   {MODEL_REASONING_EFFORT_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`${styles.modelEffortChip} ${selectedModelReasoningEffort === option.value ? styles.modelEffortChipActive : ''}`}
+                      onClick={() => onSelectModelReasoningEffort(option.value)}
+                      aria-pressed={selectedModelReasoningEffort === option.value}
+                    >
                       {option.label}
-                    </option>
+                    </button>
                   ))}
-                </select>
-              </label>
+                </div>
+              </div>
             )}
           </div>
+          <div className={styles.composerModeHint}>{modeLabel}</div>
 
           {contextItems.length > 0 && (
             <div className={styles.composerChips}>
@@ -381,7 +403,11 @@ export function ChatComposer({
                 !activeChatIdResolved
                   ? '사용할 채팅을 선택하세요.'
                   : isOperator
-                    ? '메시지를 입력하세요...'
+                    ? composerMode === 'terminal'
+                      ? '예: npm test -- mobileOverflowLayout.test.ts'
+                      : composerMode === 'plan'
+                        ? '계획이 필요한 작업을 입력하세요...'
+                        : '메시지를 입력하세요...'
                     : 'Viewer 권한입니다.'
               }
               disabled={!activeChatIdResolved || !isOperator}

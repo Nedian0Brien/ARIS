@@ -9,6 +9,7 @@ type BuildOptimisticUserEventInput = {
   geminiMode?: string | null;
   modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh' | null;
   attachments?: ChatImageAttachment[];
+  mode?: 'agent' | 'plan' | 'terminal';
 };
 
 export function buildOptimisticUserEvent(input: BuildOptimisticUserEventInput): UiEvent {
@@ -26,6 +27,7 @@ export function buildOptimisticUserEvent(input: BuildOptimisticUserEventInput): 
       ...(input.geminiMode ? { geminiMode: input.geminiMode } : {}),
       ...(input.modelReasoningEffort ? { modelReasoningEffort: input.modelReasoningEffort } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+      ...(input.mode ? { composerMode: input.mode } : {}),
     },
   };
 }

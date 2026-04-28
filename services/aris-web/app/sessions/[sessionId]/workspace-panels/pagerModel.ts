@@ -2,18 +2,15 @@ import type { WorkspacePanelLayout } from '@/lib/workspacePanels/types';
 
 export type WorkspacePagerItem =
   | { id: 'chat'; kind: 'chat' }
+  | { id: 'workspace'; kind: 'workspace' }
   | { id: 'create-panel'; kind: 'create-panel' }
   | { id: string; kind: 'panel'; panelId: string };
 
 export function buildWorkspacePagerItems(layout: WorkspacePanelLayout): WorkspacePagerItem[] {
+  void layout;
   return [
     { id: 'chat', kind: 'chat' },
-    ...layout.panels.map((panel) => ({
-      id: panel.id,
-      kind: 'panel' as const,
-      panelId: panel.id,
-    })),
-    { id: 'create-panel', kind: 'create-panel' },
+    { id: 'workspace', kind: 'workspace' },
   ];
 }
 
