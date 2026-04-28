@@ -158,16 +158,17 @@ export function ChatComposer({
   const submitLabel =
     composerMode === 'plan' ? 'Plan' : composerMode === 'terminal' ? 'Execute' : 'Send';
   const modeLabel = composerMode === 'plan' ? '계획을 먼저 작성합니다.' : composerMode === 'terminal' ? '입력한 내용을 셸 명령으로 실행합니다.' : '에이전트에게 작업을 요청합니다.';
+  const shortcutHint = 'Shift ↵ 줄바꿈 · ⌘ ↵ 전송';
   const placeholder =
     !activeChatIdResolved
       ? '사용할 채팅을 선택하세요.'
       : !isOperator
         ? 'Viewer 권한입니다.'
         : composerMode === 'plan'
-          ? '계획으로 전환할 목표와 제약을 설명하세요...'
+          ? `계획으로 전환할 목표와 제약을 설명하세요. ${shortcutHint}`
           : composerMode === 'terminal'
-            ? '$ 실행할 터미널 명령을 입력하세요...'
-            : '에이전트에게 작업을 지시하세요...';
+            ? `$ 실행할 터미널 명령을 입력하세요. ${shortcutHint}`
+            : `에이전트에게 작업을 지시하세요. ${shortcutHint}`;
 
   return (
     <footer

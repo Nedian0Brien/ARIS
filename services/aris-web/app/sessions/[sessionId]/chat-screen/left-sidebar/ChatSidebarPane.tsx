@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import type { ComponentType, RefObject } from 'react';
-import { Layers, MessageSquarePlus } from 'lucide-react';
+import { MessageSquarePlus, Search, X } from 'lucide-react';
 import type { ChatSidebarSectionKey } from '../types';
 import styles from '../../ChatInterface.module.css';
 import { ChatSidebarItem, type ChatSidebarItemViewModel } from './ChatSidebarItem';
@@ -58,6 +58,23 @@ export function ChatSidebarPane({
   RelativeTimeComponent: ComponentType<{ timestamp: string; className?: string }>;
   ElapsedTimerComponent: ComponentType<{ since: string; className?: string }>;
 }) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredSections = useMemo(() => {
+    if (!normalizedSearchQuery) {
+      return sections;
+    }
+
+    return sections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) => {
+          return `${item.title} ${item.previewText} ${item.runPhaseLabel ?? ''}`.toLowerCase().includes(normalizedSearchQuery);
+        }),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [normalizedSearchQuery, sections]);
+
   return (
     <>
       {isLeftSidebarOverlayLayout && isChatSidebarOpen && (
@@ -79,12 +96,15 @@ export function ChatSidebarPane({
         <div className={styles.chatSidebarHeader}>
           <button
             type="button"
-            className={`${styles.chatSidebarHomeButton} ${isWorkspaceHome ? styles.chatSidebarHomeButtonActive : ''}`}
+            className={`${styles.chatSidebarBrand} ${isWorkspaceHome ? styles.chatSidebarBrandActive : ''}`}
             onClick={onGoHome}
             title="워크스페이스 홈"
           >
-            <Layers size={14} />
-            <span className={styles.chatSidebarHomeLabel}>{sessionTitle}</span>
+            <span className={styles.chatSidebarBrandMark}>A</span>
+            <span className={styles.chatSidebarBrandText}>
+              <span className={styles.chatSidebarWordmark}>ARIS</span>
+              <span className={styles.chatSidebarProjectName}>{sessionTitle}</span>
+            </span>
           </button>
           <div className={styles.createChatMenuWrap}>
             <button
@@ -103,16 +123,37 @@ export function ChatSidebarPane({
         {chatMutationError && <div className={styles.chatSidebarError}>{chatMutationError}</div>}
 
         <div className={styles.chatSidebarListWrap}>
+          <label className={styles.chatSidebarSearch}>
+            <Search size={14} />
+            <input
+              className={styles.chatSidebarSearchInput}
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search chats"
+              aria-label="채팅 검색"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className={styles.chatSidebarSearchClear}
+                onClick={() => setSearchQuery('')}
+                aria-label="검색어 지우기"
+              >
+                <X size={12} />
+              </button>
+            )}
+            <kbd>⌘K</kbd>
+          </label>
           <div className={styles.chatSidebarListHead}>
             <span className={styles.chatSidebarListLabel}>채팅 {chatCount}개</span>
           </div>
           <div ref={chatListRef} className={styles.chatList}>
-            {sections.map((section, sectionIndex) => (
+            {filteredSections.map((section, sectionIndex) => (
               <ChatSidebarSection
                 key={section.key}
                 section={section}
                 sectionIndex={sectionIndex}
-                showInfiniteSentinel={section.key === 'history' && hasMoreChats}
+                showInfiniteSentinel={!normalizedSearchQuery && section.key === 'history' && hasMoreChats}
                 sentinelRef={section.key === 'history' ? chatListSentinelRef : undefined}
               >
                 {section.items.map((item) => (

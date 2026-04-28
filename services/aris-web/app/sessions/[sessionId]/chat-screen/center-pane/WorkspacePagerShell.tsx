@@ -29,6 +29,37 @@ export function WorkspacePagerShell({
   renderWorkspacePage,
   renderPanelPage,
 }: WorkspacePagerShellProps) {
+  if (!isMobileLayout) {
+    const activeItem = workspacePagerItems.find((item) => item.id === activeWorkspacePageId);
+    const workspaceItem = workspacePagerItems.find(
+      (item): item is Extract<WorkspacePagerItem, { kind: 'workspace' }> => item.kind === 'workspace',
+    );
+
+    const renderWorkspaceSidecar = () => {
+      if (activeItem?.kind === 'panel') {
+        return renderPanelPage(activeItem);
+      }
+      if (activeItem?.kind === 'create-panel') {
+        return renderCreatePage();
+      }
+      if (workspaceItem && renderWorkspacePage) {
+        return renderWorkspacePage(workspaceItem);
+      }
+      return renderCreatePage();
+    };
+
+    return (
+      <main className={styles.centerPanel} ref={centerPanelRef}>
+        <div className={styles.centerPanelChat}>
+          {renderChatPage()}
+        </div>
+        <aside className={styles.centerPanelWorkspace} aria-label="Workspace">
+          {renderWorkspaceSidecar()}
+        </aside>
+      </main>
+    );
+  }
+
   return (
     <main className={`${styles.centerPanel} ${isMobileLayout ? styles.centerPanelMobileScroll : ''}`} ref={centerPanelRef}>
       <WorkspacePager

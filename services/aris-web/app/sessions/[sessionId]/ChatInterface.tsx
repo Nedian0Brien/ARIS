@@ -2712,7 +2712,7 @@ export function ChatInterface({
             showChatTransitionLoading={showChatTransitionLoading}
             showScrollToBottom={showScrollToBottom}
             onJumpToBottom={handleJumpToBottom}
-            header={activeWorkspacePageId === 'chat' ? renderChatHeader() : null}
+            header={!isMobileLayout || activeWorkspacePageId === 'chat' ? renderChatHeader() : null}
             statusNotices={(
               <ChatStatusNotices
                 runtimeNotice={runtimeNotice}

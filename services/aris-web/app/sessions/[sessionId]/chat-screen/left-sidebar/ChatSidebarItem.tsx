@@ -72,6 +72,12 @@ export function ChatSidebarItem({
   RelativeTimeComponent: ComponentType<{ timestamp: string; className?: string }>;
   ElapsedTimerComponent: ComponentType<{ since: string; className?: string }>;
 }) {
+  const statusLabel = item.hasPendingApproval
+    ? 'needs approval'
+    : item.runPhaseLabel
+      ? item.runPhaseLabel
+      : 'idle';
+
   return (
     <div
       className={`${styles.chatListItem} ${item.isActive ? styles.chatListItemActive : ''} ${item.sidebarStateClassName}`}
@@ -82,7 +88,9 @@ export function ChatSidebarItem({
           className={styles.chatListMainButton}
           onClick={item.onSelect}
           title={item.title}
+          aria-describedby={`chat-tooltip-${item.id}`}
         >
+          <span className={`${styles.chatListStatusDot} ${item.sidebarStateClassName}`} aria-hidden="true" />
           <span className={styles.chatListMainContent}>
             <span className={styles.chatListTitleWrap}>
               <span className={`${styles.chatListAgentAvatar} ${item.agentAvatarToneClassName}`}>
@@ -145,6 +153,11 @@ export function ChatSidebarItem({
             />
           </div>
         )}
+      </div>
+      <div id={`chat-tooltip-${item.id}`} className={styles.chatListTooltip} role="tooltip" aria-hidden="true">
+        <span className={styles.chatListTooltipTitle}>{item.title}</span>
+        <span className={styles.chatListTooltipMeta}>{statusLabel}</span>
+        <span className={styles.chatListTooltipPreview}>{item.previewText}</span>
       </div>
       <div className={`${styles.chatListApprovalWrap} ${item.showApprovalPanel ? styles.chatListApprovalWrapOpen : ''}`}>
         <div className={styles.chatListApprovalInner}>
