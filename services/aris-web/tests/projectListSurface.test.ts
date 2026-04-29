@@ -28,14 +28,16 @@ describe('project list surface', () => {
   });
 
   it('routes project card clicks to the IA project detail instead of the legacy session screen', () => {
-    expect(homeClient).toContain("type ProjectView = 'overview' | 'chat' | 'files' | 'context';");
-    expect(homeClient).toContain("function buildProjectDetailPath(sessionId: string, view: ProjectView = 'overview')");
+    expect(homeClient).toContain("type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';");
+    expect(homeClient).toContain("function buildProjectDetailPath(sessionId: string, view: ProjectView = 'overview', chatId?: string | null)");
     expect(homeClient).toContain("params.set('tab', 'project');");
     expect(homeClient).toContain("params.set('project', sessionId);");
+    expect(homeClient).toContain("if (view === 'chat' && chatId) {");
+    expect(homeClient).toContain("params.set('chat', chatId);");
     expect(homeClient).toContain('data-project-href={buildProjectDetailPath(session.id)}');
     expect(homeClient).toContain('onClick={() => onProjectOpen(session.id)}');
     expect(homeClient).toContain('onProjectOpen(session.id);');
-    expect(homeClient).toContain('window.history.pushState(null, \'\', withAppBasePath(buildProjectDetailPath(sessionId, view)))');
+    expect(homeClient).toContain("window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(sessionId, view, chatId)))");
     expect(homeClient).toContain('selectedProjectId={selectedProjectId}');
     expect(homeClient).not.toContain('navigateTo(`/sessions/${session.id}`)');
   });
@@ -47,19 +49,35 @@ describe('project list surface', () => {
     expect(homeClient).toContain('className="proj-tabs"');
     expect(homeClient).toContain('className="proj-pane"');
     expect(homeClient).toContain("setSelectedProjectId(nextTab === 'project' ? (searchParams.get('project') ?? null) : null);");
-    expect(homeClient).toContain("setSelectedProjectView(nextTab === 'project' ? normalizeProjectView(searchParams.get('view')) : 'overview');");
+    expect(homeClient).toContain("const nextProjectView = nextTab === 'project' ? normalizeProjectView(searchParams.get('view')) : 'overview';");
+    expect(homeClient).toContain('setSelectedProjectView(nextProjectView);');
     expect(homeClient).toContain('if (selectedProject) {');
   });
 
   it('keeps project chat inside the IA project route instead of opening the legacy session route', () => {
     expect(homeClient).toContain('function ProjectChatSurface({');
+    expect(homeClient).toContain('data-project-chat-list');
     expect(homeClient).toContain('data-project-chat-screen');
-    expect(homeClient).toContain("onClick={() => onProjectOpen(session.id, 'chat')}");
-    expect(homeClient).toContain("onClick={() => onProjectViewChange('chat')}");
+    expect(homeClient).toContain('m-main-scroll--project-chat-detail');
+    expect(homeClient).toContain("onClick={() => onProjectOpen(session.id, 'chats')}");
+    expect(homeClient).toContain("onClick={() => onProjectViewChange('chats')}");
+    expect(homeClient).toContain("onClick={() => onChatOpen(chat.id)}");
+    expect(homeClient).toContain("onProjectChatOpen(session.id, chat.id)");
+    expect(homeClient).toContain("setSelectedProjectView('chat');");
+    expect(homeClient).toContain("buildProjectDetailPath(sessionId, 'chat', chatId)");
     expect(homeClient).toContain("params.set('view', view);");
     expect(homeClient).toContain('/api/runtime/sessions/${encodeURIComponent(session.id)}/chats');
     expect(homeClient).toContain('/api/runtime/sessions/${encodeURIComponent(session.id)}/events');
     expect(homeClient).not.toContain('/sessions/${session.id}');
+  });
+
+  it('keeps project chats nested under the selected project in the redesigned sidebar', () => {
+    expect(homeClient).toContain('activeProjectChatId: string | null;');
+    expect(homeClient).toContain('className={`m-sb__project-node${isActiveProject ?');
+    expect(homeClient).toContain('className="m-sb__chat-children"');
+    expect(homeClient).toContain("className={`m-sb__chat-child${activeProjectChatId === chat.id ? ' m-sb__chat-child--active' : ''}`}");
+    expect(homeClient).toContain("onClick={() => onProjectChatOpen(session.id, chat.id)}");
+    expect(homeClient).toContain("setSelectedProjectChatId(nextTab === 'project' && nextProjectView === 'chat' ? (searchParams.get('chat') ?? null) : null);");
   });
 
   it('ships the project list CSS copied into the app stylesheet', () => {
@@ -74,13 +92,31 @@ describe('project list surface', () => {
       '.proj-list-card--new',
       '.proj-list-stats',
       '.proj-list-new-btn',
+      '.pc-chat-directory',
+      '.pc-chat-row',
+      '.pc-proto .shell',
+      '.pc-proto .ch',
+      '.pc-proto .tl',
+      '.pc-proto .msg',
+      '.pc-proto .tool',
+      '.pc-proto .code',
+      '.pc-proto .artifact',
+      '.pc-proto .cmp',
+      '.pc-proto .ws',
+      '.m-sb__chat-children',
+      '.m-sb__chat-child',
+    ].forEach((selector) => {
+      expect(uiCss).toContain(selector);
+    });
+
+    [
       '.proj-chat-screen',
       '.proj-chat-list',
       '.proj-chat-main',
       '.proj-chat-timeline',
       '.proj-chat-composer',
     ].forEach((selector) => {
-      expect(uiCss).toContain(selector);
+      expect(uiCss).not.toContain(selector);
     });
   });
 

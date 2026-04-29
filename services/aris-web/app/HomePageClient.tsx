@@ -17,6 +17,7 @@ import {
   HardDrive,
   Home,
   MessageSquareText,
+  Mic,
   Monitor,
   Moon,
   PanelsTopLeft,
@@ -24,6 +25,7 @@ import {
   Search,
   Send,
   Sparkles,
+  Square,
   Sun,
   Wifi,
 } from 'lucide-react';
@@ -35,7 +37,7 @@ import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientThe
 import type { AuthenticatedUser } from '@/lib/auth/types';
 import type { SessionChat, SessionStatus, SessionSummary, UiEvent } from '@/lib/happy/types';
 
-type ProjectView = 'overview' | 'chat' | 'files' | 'context';
+type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';
 
 type FileItem = {
   name: string;
@@ -144,6 +146,7 @@ function normalizeTab(tab: string | null): TabType {
 
 function normalizeProjectView(view: string | null): ProjectView {
   switch (view) {
+    case 'chats':
     case 'chat':
     case 'files':
     case 'context':
@@ -270,12 +273,15 @@ function deriveProjectTokenLabel(session: SessionSummary, index: number): string
   return `${total.toFixed(1)}k`;
 }
 
-function buildProjectDetailPath(sessionId: string, view: ProjectView = 'overview'): string {
+function buildProjectDetailPath(sessionId: string, view: ProjectView = 'overview', chatId?: string | null): string {
   const params = new URLSearchParams();
   params.set('tab', 'project');
   params.set('project', sessionId);
   if (view !== 'overview') {
     params.set('view', view);
+  }
+  if (view === 'chat' && chatId) {
+    params.set('chat', chatId);
   }
   return `/?${params.toString()}`;
 }
@@ -323,6 +329,8 @@ function usePrefersReducedMotion(): boolean {
 function Sidebar({
   activeTab,
   activeProjectId,
+  activeProjectChatId,
+  onProjectChatOpen,
   onTabChange,
   onProjectOpen,
   sessions,
@@ -330,6 +338,8 @@ function Sidebar({
 }: {
   activeTab: TabType;
   activeProjectId: string | null;
+  activeProjectChatId: string | null;
+  onProjectChatOpen: (sessionId: string, chatId: string) => void;
   onTabChange: (tab: TabType) => void;
   onProjectOpen: (sessionId: string, view?: ProjectView) => void;
   sessions: SessionSummary[];
@@ -338,6 +348,8 @@ function Sidebar({
   const projects = sortSessions(sessions).slice(0, 6);
   const totalChats = sessions.reduce((sum, session) => sum + (session.totalChats ?? 0), 0);
   const userInitial = (user.email?.trim()?.[0] ?? 'A').toUpperCase();
+  const [activeProjectChats, setActiveProjectChats] = useState<SessionChat[]>([]);
+  const [isLoadingProjectChats, setIsLoadingProjectChats] = useState(false);
 
   const navItems: Array<{ id: TabType; label: string; Icon: typeof Home; count?: number }> = [
     { id: 'home', label: 'Home', Icon: Home },
@@ -345,6 +357,40 @@ function Sidebar({
     { id: 'project', label: 'Project', Icon: PanelsTopLeft },
     { id: 'files', label: 'Files', Icon: FileText },
   ];
+
+  useEffect(() => {
+    if (activeTab !== 'project' || !activeProjectId) {
+      setActiveProjectChats([]);
+      setIsLoadingProjectChats(false);
+      return;
+    }
+
+    const projectId = activeProjectId;
+    let cancelled = false;
+    async function loadActiveProjectChats() {
+      setIsLoadingProjectChats(true);
+      try {
+        const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(projectId)}/chats`, { cache: 'no-store' });
+        const body = (await response.json().catch(() => ({}))) as { chats?: SessionChat[] };
+        if (!cancelled && response.ok) {
+          setActiveProjectChats(body.chats ?? []);
+        }
+      } catch {
+        if (!cancelled) {
+          setActiveProjectChats([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingProjectChats(false);
+        }
+      }
+    }
+
+    void loadActiveProjectChats();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProjectId, activeTab]);
 
   return (
     <aside className="m-sb" aria-label="ARIS navigation">
@@ -379,18 +425,46 @@ function Sidebar({
                 <span className="m-sb__proj-name m-sb__proj-name--ask">{ask.question}</span>
               </button>
             ))
-          : projects.map((session) => (
-              <button
-                key={session.id}
-                type="button"
-                className={`m-sb__proj m-sb__proj--${statusClass(session.status)}${activeProjectId === session.id ? ' m-sb__proj--active' : ''}`}
-                onClick={() => onProjectOpen(session.id)}
-              >
-                <span className="m-sb__proj-dot" />
-                <span className="m-sb__proj-name">{displayProjectName(session)}</span>
-                <span className="m-sb__proj-count">{session.totalChats ?? 0}</span>
-              </button>
-            ))}
+          : projects.map((session) => {
+              const isActiveProject = activeProjectId === session.id;
+              const childChats = isActiveProject ? activeProjectChats : [];
+              return (
+                <div key={session.id} className={`m-sb__project-node${isActiveProject ? ' m-sb__project-node--open' : ''}`}>
+                  <button
+                    type="button"
+                    className={`m-sb__proj m-sb__proj--${statusClass(session.status)}${isActiveProject ? ' m-sb__proj--active' : ''}`}
+                    onClick={() => onProjectOpen(session.id)}
+                  >
+                    <span className="m-sb__proj-dot" />
+                    <span className="m-sb__proj-name">{displayProjectName(session)}</span>
+                    <span className="m-sb__proj-count">{session.totalChats ?? 0}</span>
+                  </button>
+                  {isActiveProject && (
+                    <div className="m-sb__chat-children" aria-label={`${displayProjectName(session)} chats`}>
+                      {isLoadingProjectChats && <div className="m-sb__chat-loading">Loading chats</div>}
+                      {!isLoadingProjectChats && childChats.slice(0, 8).map((chat) => (
+                        <button
+                          key={chat.id}
+                          type="button"
+                          className={`m-sb__chat-child${activeProjectChatId === chat.id ? ' m-sb__chat-child--active' : ''}`}
+                          onClick={() => onProjectChatOpen(session.id, chat.id)}
+                        >
+                          <span className="m-sb__chat-branch" />
+                          <span className="m-sb__chat-title">{chat.title}</span>
+                          <span className="m-sb__chat-time">{formatRelativeTime(chat.lastActivityAt)}</span>
+                        </button>
+                      ))}
+                      {!isLoadingProjectChats && childChats.length === 0 && (
+                        <button type="button" className="m-sb__chat-child m-sb__chat-child--empty" onClick={() => onProjectOpen(session.id, 'chats')}>
+                          <span className="m-sb__chat-branch" />
+                          <span className="m-sb__chat-title">No chats yet</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
       </div>
 
       <div className="m-sb__footer">
@@ -943,7 +1017,7 @@ function HomeSurface({
       </div>
       <section className="home-feed" aria-label="Recent activity">
         {projects.slice(0, 4).map((session, index) => (
-          <button key={session.id} type="button" className="home-feed-row" onClick={() => onProjectOpen(session.id, 'chat')}>
+          <button key={session.id} type="button" className="home-feed-row" onClick={() => onProjectOpen(session.id, 'chats')}>
             <span className={`home-feed-avatar ${index % 2 === 0 ? 'home-feed-avatar--c' : 'home-feed-avatar--u'}`}>
               {index % 2 === 0 ? session.agent.slice(0, 1).toUpperCase() : (user.email[0] || 'U').toUpperCase()}
             </span>
@@ -1023,14 +1097,18 @@ function AskSurface({ sessions }: { sessions: SessionSummary[] }) {
 function ProjectDetailSurface({
   index,
   onBackToProjects,
+  onProjectChatOpen,
   onProjectViewChange,
   projectView,
+  selectedChatId,
   session,
 }: {
   index: number;
   onBackToProjects: () => void;
+  onProjectChatOpen: (chatId: string) => void;
   onProjectViewChange: (view: ProjectView) => void;
   projectView: ProjectView;
+  selectedChatId: string | null;
   session: SessionSummary;
 }) {
   const projectName = displayProjectName(session);
@@ -1042,6 +1120,26 @@ function ProjectDetailSurface({
   const tokenLabel = deriveProjectTokenLabel(session, index);
   const modelLabel = session.model || session.metadata?.runtimeModel || 'default model';
   const recentPreview = createChatPreview(session, index);
+
+  if (projectView === 'chat') {
+    return (
+      <div className="m-main-scroll m-main-scroll--project-chat-detail">
+        <ProjectChatSurface
+          fileCount={fileCount}
+          index={index}
+          modelLabel={modelLabel}
+          onBackToChatList={() => onProjectViewChange('chats')}
+          onChatOpen={onProjectChatOpen}
+          projectName={projectName}
+          projectPath={projectPath}
+          recentPreview={recentPreview}
+          selectedChatId={selectedChatId}
+          session={session}
+          tokenLabel={tokenLabel}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="m-main-scroll m-main-scroll--project-detail">
@@ -1067,7 +1165,7 @@ function ProjectDetailSurface({
               <PanelsTopLeft size={14} />
               Settings
             </button>
-            <button type="button" className="btn btn--primary btn--sm" onClick={() => onProjectViewChange('chat')}>
+            <button type="button" className="btn btn--primary btn--sm" onClick={() => onProjectViewChange('chats')}>
               <Plus size={14} />
               New chat
             </button>
@@ -1129,8 +1227,8 @@ function ProjectDetailSurface({
         </button>
         <button
           type="button"
-          className={`proj-tab${projectView === 'chat' ? ' proj-tab--active' : ''}`}
-          onClick={() => onProjectViewChange('chat')}
+          className={`proj-tab${projectView === 'chats' ? ' proj-tab--active' : ''}`}
+          onClick={() => onProjectViewChange('chats')}
         >
           <MessageSquareText size={14} />
           Chats
@@ -1157,14 +1255,17 @@ function ProjectDetailSurface({
       </nav>
 
       <section className="proj-pane">
-        {projectView === 'chat' ? (
+        {projectView === 'chats' ? (
           <ProjectChatSurface
             fileCount={fileCount}
             index={index}
             modelLabel={modelLabel}
+            onBackToChatList={() => onProjectViewChange('chats')}
+            onChatOpen={onProjectChatOpen}
             projectName={projectName}
             projectPath={projectPath}
             recentPreview={recentPreview}
+            selectedChatId={selectedChatId}
             session={session}
             tokenLabel={tokenLabel}
           />
@@ -1185,7 +1286,7 @@ function ProjectDetailSurface({
         ) : (
         <div className="proj-overview">
           <div className="proj-chats">
-            <button type="button" className="proj-chat" onClick={() => onProjectViewChange('chat')}>
+            <button type="button" className="proj-chat" onClick={() => onProjectViewChange('chats')}>
               <div className="proj-chat__head">
                 <div className="proj-chat__title">{session.alias || projectName}</div>
                 <div className="proj-chat__time">{formatRelativeTime(session.lastActivityAt)}</div>
@@ -1294,6 +1395,40 @@ function getEventText(event: UiEvent): string {
   return event.result?.preview || event.body || event.title;
 }
 
+function agentLabel(agent: SessionSummary['agent'], model?: string | null): string {
+  const provider = agent === 'claude' ? 'Claude' : agent === 'gemini' ? 'Gemini' : agent === 'codex' ? 'Codex' : 'Agent';
+  return model ? `${provider} · ${model}` : provider;
+}
+
+function agentAvatarClass(agent: SessionSummary['agent'] | SessionChat['agent']): string {
+  if (agent === 'claude') return 'msg__avatar--claude';
+  if (agent === 'gemini') return 'msg__avatar--gemini';
+  if (agent === 'codex') return 'msg__avatar--codex';
+  return 'msg__avatar--sys';
+}
+
+function agentInitial(agent: SessionSummary['agent'] | SessionChat['agent']): string {
+  if (agent === 'claude') return 'C';
+  if (agent === 'gemini') return 'G';
+  if (agent === 'codex') return 'GPT';
+  return 'A';
+}
+
+function isToolLikeEvent(event: UiEvent): boolean {
+  return event.kind !== 'text_reply'
+    && event.kind !== 'unknown'
+    || Boolean(event.action?.command || event.action?.path || event.parsed?.commands?.length);
+}
+
+function eventCommand(event: UiEvent): string {
+  return event.action?.command
+    || event.parsed?.commands?.[0]
+    || event.action?.path
+    || event.result?.preview
+    || event.body
+    || event.title;
+}
+
 function ProjectPlaceholderPanel({
   Icon,
   body,
@@ -1321,31 +1456,40 @@ function ProjectChatSurface({
   fileCount,
   index,
   modelLabel,
+  onBackToChatList,
+  onChatOpen,
   projectName,
   projectPath,
   recentPreview,
+  selectedChatId,
   session,
   tokenLabel,
 }: {
   fileCount: number;
   index: number;
   modelLabel: string;
+  onBackToChatList: () => void;
+  onChatOpen: (chatId: string) => void;
   projectName: string;
   projectPath: string;
   recentPreview: string;
+  selectedChatId: string | null;
   session: SessionSummary;
   tokenLabel: string;
 }) {
   const [chats, setChats] = useState<SessionChat[]>([]);
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [events, setEvents] = useState<UiEvent[]>([]);
   const [prompt, setPrompt] = useState('');
   const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const activeChat = chats.find((chat) => chat.id === activeChatId) ?? chats[0] ?? null;
+  const activeChat = selectedChatId ? chats.find((chat) => chat.id === selectedChatId) ?? null : null;
   const visibleEvents = events.slice(-40);
+  const activeModelLabel = activeChat?.model ?? modelLabel;
+  const activeAgent = activeChat?.agent ?? session.agent;
+  const userTurns = visibleEvents.filter((item) => readEventRole(item) === 'user');
+  const representativeAgentEvent = visibleEvents.find((item) => readEventRole(item) !== 'user');
 
   useEffect(() => {
     let cancelled = false;
@@ -1361,16 +1505,10 @@ function ProjectChatSurface({
         if (cancelled) return;
         const nextChats = body.chats ?? [];
         setChats(nextChats);
-        setActiveChatId((previous) => (
-          previous && nextChats.some((chat) => chat.id === previous)
-            ? previous
-            : nextChats[0]?.id ?? null
-        ));
       } catch (loadError) {
         if (!cancelled) {
           setError(loadError instanceof Error ? loadError.message : '채팅 목록을 불러오지 못했습니다.');
           setChats([]);
-          setActiveChatId(null);
         }
       } finally {
         if (!cancelled) setIsLoadingChats(false);
@@ -1383,7 +1521,7 @@ function ProjectChatSurface({
   }, [session.id]);
 
   useEffect(() => {
-    if (!activeChatId) {
+    if (!selectedChatId) {
       setEvents([]);
       return;
     }
@@ -1396,7 +1534,7 @@ function ProjectChatSurface({
       try {
         const params = new URLSearchParams();
         params.set('limit', '40');
-        params.set('chatId', activeChatId);
+        params.set('chatId', selectedChatId);
         if (activeChat?.isDefault) {
           params.set('includeUnassigned', 'true');
         }
@@ -1428,7 +1566,7 @@ function ProjectChatSurface({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeChat?.isDefault, activeChatId, session.id]);
+  }, [activeChat?.isDefault, selectedChatId, session.id]);
 
   const createChat = async (): Promise<SessionChat | null> => {
     setError(null);
@@ -1447,8 +1585,8 @@ function ProjectChatSurface({
     }
     const createdChat = body.chat;
     setChats((previous) => [createdChat, ...previous.filter((chat) => chat.id !== createdChat.id)]);
-    setActiveChatId(createdChat.id);
     setEvents([]);
+    onChatOpen(createdChat.id);
     return createdChat;
   };
 
@@ -1517,124 +1655,384 @@ function ProjectChatSurface({
     }
   };
 
-  return (
-    <div className="proj-chat-screen">
-      <aside className="proj-chat-list" aria-label={`${projectName} chats`}>
-        <div className="proj-chat-list__head">
+  if (!selectedChatId) {
+    return (
+      <div className="pc-chat-directory" data-project-chat-list>
+        <div className="pc-chat-directory__head">
           <div>
-            <div className="proj-chat-list__eyebrow">Project chats</div>
-            <h2>{projectName}</h2>
+            <div className="pc-chat-directory__eyebrow">Chats</div>
+            <h2>{projectName} conversations</h2>
+            <p>{projectPath}</p>
           </div>
-          <button type="button" className="proj-chat-icon-btn" onClick={handleNewChat} aria-label="새 프로젝트 채팅">
+          <button type="button" className="btn btn--primary btn--sm" onClick={handleNewChat}>
             <Plus size={14} />
+            New chat
           </button>
         </div>
-        <div className="proj-chat-list__items">
-          {isLoadingChats && <div className="proj-chat-loading">Loading chats...</div>}
-          {!isLoadingChats && chats.map((chat) => (
-            <button
-              key={chat.id}
-              type="button"
-              className={`proj-chat-thread${chat.id === activeChat?.id ? ' proj-chat-thread--active' : ''}`}
-              onClick={() => setActiveChatId(chat.id)}
-            >
-              <span className={`home-proj__chat-dot home-proj__chat-dot--${statusClass(session.status)}`} />
-              <span className="proj-chat-thread__body">
-                <span className="proj-chat-thread__title">{chat.title}</span>
-                <span className="proj-chat-thread__preview">{chat.latestPreview || recentPreview}</span>
-              </span>
-              <span className="proj-chat-thread__time">{formatRelativeTime(chat.lastActivityAt)}</span>
-            </button>
-          ))}
-          {!isLoadingChats && chats.length === 0 && (
-            <button type="button" className="proj-chat-thread proj-chat-thread--empty" onClick={handleNewChat}>
-              <span className="proj-chat-thread__body">
-                <span className="proj-chat-thread__title">Start a project chat</span>
-                <span className="proj-chat-thread__preview">이 프로젝트 화면 안에서 새 채팅을 시작합니다.</span>
-              </span>
-            </button>
-          )}
-        </div>
-        <div className="proj-chat-list__meta">
-          <span>{session.agent}</span>
-          <span>{modelLabel}</span>
-          <span>{tokenLabel}</span>
-        </div>
-      </aside>
 
-      <section className="proj-chat-main" aria-label={`${projectName} active chat`}>
-        <div className="proj-chat-main__bar">
-          <div>
-            <div className="proj-chat-main__eyebrow">{projectPath}</div>
-            <h2>{activeChat?.title ?? 'Project chat'}</h2>
-          </div>
-          <div className="proj-chat-main__facts">
-            <span>{fileCount} files</span>
-            <span>{Math.max(1, session.totalChats ?? chats.length)} chats</span>
-            <span>#{index + 1}</span>
-          </div>
-        </div>
+        <div className="pc-chat-directory__grid">
+          <section className="pc-chat-directory__list" aria-label={`${projectName} chat list`}>
+            {isLoadingChats && <div className="pc-chat-loading">Loading chats...</div>}
+            {!isLoadingChats && chats.map((chat) => (
+              <button
+                key={chat.id}
+                type="button"
+                className="pc-chat-row"
+                onClick={() => onChatOpen(chat.id)}
+              >
+                <span className={`pc-chat-row__dot pc-chat-row__dot--${statusClass(session.status)}`} />
+                <span className="pc-chat-row__body">
+                  <span className="pc-chat-row__title">{chat.title}</span>
+                  <span className="pc-chat-row__preview">{chat.latestPreview || recentPreview}</span>
+                  <span className="pc-chat-row__meta">
+                    {agentLabel(chat.agent, chat.model ?? modelLabel)} · {formatRelativeTime(chat.lastActivityAt)}
+                  </span>
+                </span>
+                <ChevronRight size={14} />
+              </button>
+            ))}
+            {!isLoadingChats && chats.length === 0 && (
+              <button type="button" className="pc-chat-row pc-chat-row--empty" onClick={handleNewChat}>
+                <span className="pc-chat-row__body">
+                  <span className="pc-chat-row__title">Start the first chat</span>
+                  <span className="pc-chat-row__preview">프로젝트 하위에 새 채팅을 만들고 프로토타입 화면으로 진입합니다.</span>
+                </span>
+                <Plus size={14} />
+              </button>
+            )}
+          </section>
 
-        <div className="proj-chat-timeline" data-project-chat-screen>
-          {isLoadingEvents && <div className="proj-chat-loading">Loading messages...</div>}
-          {!isLoadingEvents && visibleEvents.length === 0 && (
-            <div className="proj-chat-empty">
-              <Sparkles size={18} />
-              <h3>프로젝트 맥락에서 바로 이어서 대화합니다.</h3>
-              <p>{recentPreview}</p>
+          <aside className="pc-chat-directory__side">
+            <article className="pc-chat-side-card">
+              <div className="pc-chat-side-card__title">
+                <MessageSquareText size={14} />
+                Project conversation map
+              </div>
+              <div className="pc-chat-side-stat"><span>Total chats</span><strong>{chats.length || session.totalChats || 0}</strong></div>
+              <div className="pc-chat-side-stat"><span>Active signal</span><strong>{projectStatusLabel(session.status)}</strong></div>
+              <div className="pc-chat-side-stat"><span>Context</span><strong>{tokenLabel}</strong></div>
+            </article>
+            <article className="pc-chat-side-card">
+              <div className="pc-chat-side-card__title">
+                <FolderOpen size={14} />
+                Attached context
+              </div>
+              <div className="ctx-item"><FileText size={13} /><span className="ctx-item__name">design/chat-prototype.html</span><span className="ctx-item__tokens">source</span></div>
+              <div className="ctx-item"><FileText size={13} /><span className="ctx-item__name">Project IA shell</span><span className="ctx-item__tokens">active</span></div>
+            </article>
+          </aside>
+        </div>
+        {error && <div className="pc-chat-error" role="alert">{error}</div>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="pc-proto" data-project-chat-screen data-mode="agent" data-workspace="open">
+      <div className="shell">
+        <main className="shell__main">
+          <header className="ch">
+            <button type="button" className="ch__menu ch__menu--visible" onClick={onBackToChatList} aria-label="Back to chats">
+              <ChevronLeft size={18} />
+            </button>
+            <div className="ch__title-wrap">
+              <span className="ch__title">{activeChat?.title ?? 'Project chat'}</span>
+              <span className="ch__status"><span className="ch__status-dot" />{projectStatusLabel(session.status)}</span>
+              <span className="ch__meta">{agentLabel(activeAgent, activeModelLabel)} · {tokenLabel} · {fileCount} files</span>
             </div>
-          )}
-          {visibleEvents.map((item) => {
-            const role = readEventRole(item);
-            return (
-              <article key={item.id} className={`proj-chat-bubble proj-chat-bubble--${role}`}>
-                <div className="proj-chat-bubble__meta">
-                  <span>{role === 'user' ? 'You' : session.agent}</span>
-                  <span>{formatRelativeTime(item.timestamp)}</span>
+            <div className="ch__actions">
+              <button type="button" className="ch__action" aria-label="Back to chat list" onClick={onBackToChatList}>
+                <MessageSquareText size={14} />
+              </button>
+              <button type="button" className="ch__action ch__action--ws" aria-pressed="true" aria-label="Workspace">
+                <PanelsTopLeft size={14} />
+              </button>
+            </div>
+          </header>
+
+          <div className="tl">
+            <div className="tl__container">
+              <div className="tl__day">
+                <span className="tl__day-line" />
+                <span className="tl__day-label">Project chat · {formatRelativeTime(activeChat?.lastActivityAt)}</span>
+                <span className="tl__day-line" />
+              </div>
+
+              {isLoadingEvents && <div className="pc-chat-loading">Loading messages...</div>}
+              {!isLoadingEvents && visibleEvents.length === 0 && (
+                <div className="msg">
+                  <span className={`msg__avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent)}</span>
+                  <div className="msg__body">
+                    <div className="msg__header"><span className="msg__name">{agentLabel(activeAgent, activeModelLabel)}</span><span className="msg__time">now</span></div>
+                    <div className="msg__text">이 채팅은 프로젝트 하위 흐름에서 열렸습니다. 왼쪽 사이드바의 프로젝트 아래 채팅 목록과 이 화면이 같은 계층으로 연결됩니다.</div>
+                    <div className="thinking">
+                      <span className="thinking__dots"><span className="thinking__dot" /><span className="thinking__dot" /><span className="thinking__dot" /></span>
+                      <span>프로젝트 맥락 대기 중</span>
+                      <span className="thinking__time">{tokenLabel}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="proj-chat-bubble__title">{item.title}</div>
-                <p>{getEventText(item)}</p>
-              </article>
-            );
-          })}
-        </div>
+              )}
 
-        <form className="proj-chat-composer" onSubmit={handleSubmit}>
-          <textarea
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            placeholder={`${projectName} 작업 맥락으로 메시지 보내기`}
-            rows={3}
-          />
-          <div className="proj-chat-composer__foot">
-            <div className="proj-chat-composer__hints">
-              <span>{activeChat?.agent ?? session.agent}</span>
-              <span>{activeChat?.model ?? modelLabel}</span>
+              {visibleEvents.map((item) => {
+                const role = readEventRole(item);
+                const isUser = role === 'user';
+                const snippet = item.parsed?.snippets?.[0];
+                const toolLike = !isUser && isToolLikeEvent(item);
+                return (
+                  <div key={item.id} className="msg">
+                    <span className={`msg__avatar ${isUser ? 'msg__avatar--user' : agentAvatarClass(activeAgent)}`}>{isUser ? 'U' : agentInitial(activeAgent)}</span>
+                    <div className="msg__body">
+                      <div className="msg__header">
+                        <span className="msg__name">{isUser ? 'You' : agentLabel(activeAgent, activeModelLabel)}</span>
+                        <span className="msg__time">{formatRelativeTime(item.timestamp)}</span>
+                      </div>
+                      {isUser ? (
+                        <>
+                          <div className="msg__bubble">{getEventText(item)}</div>
+                          {item.parsed?.files?.length ? (
+                            <div className="msg__attachments">
+                              {item.parsed.files.slice(0, 3).map((file) => (
+                                <span key={file} className="msg__attach">
+                                  <span className="msg__attach-icon"><FileText size={12} /></span>
+                                  <span className="msg__attach-name">{file}</span>
+                                  <span className="msg__attach-size">ref</span>
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                        </>
+                      ) : (
+                        <>
+                          <div className="msg__text"><p>{getEventText(item)}</p></div>
+                          {toolLike && (
+                            <div className="tool">
+                              <span className="tool__icon tool__icon--success"><Check size={12} /></span>
+                              <div className="tool__body">
+                                <span className="tool__title">{item.title || item.kind}</span>
+                                <span className="tool__cmd">{eventCommand(item)}</span>
+                              </div>
+                              <span className="tool__meta">{item.kind}</span>
+                              <ChevronRight size={12} className="tool__caret" />
+                            </div>
+                          )}
+                          {snippet && (
+                            <div className="code">
+                              <div className="code__head">
+                                <div className="code__head-left">
+                                  <span className="code__lang">{snippet.language || 'txt'}</span>
+                                  <span>generated snippet</span>
+                                </div>
+                                <button type="button" className="code__copy">Copy</button>
+                              </div>
+                              <pre className="code__body">{snippet.code}</pre>
+                            </div>
+                          )}
+                          {item.parsed?.files?.[0] && (
+                            <div className="artifact">
+                              <div className="artifact__thumb" />
+                              <div className="artifact__meta">
+                                <span className="artifact__name">{item.parsed.files[0]}</span>
+                                <span className="artifact__sub">project file · referenced</span>
+                              </div>
+                              <button type="button" className="artifact__btn">Preview</button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <button type="submit" className="comp-v2__send" disabled={!prompt.trim() || isSubmitting}>
-              <Send size={13} />
-              {isSubmitting ? 'Sending' : 'Send'}
-            </button>
+
+            <div className="jb-wrap">
+              <div className="jb">
+                <span className="jb__dot" />
+                <span>Project scope active</span>
+                <button type="button" className="jb__btn" aria-label="Jump">
+                  <ChevronRight size={12} />
+                </button>
+              </div>
+            </div>
           </div>
-        </form>
-        {error && <div className="proj-chat-error" role="alert">{error}</div>}
-      </section>
+
+          <footer className="cmp-wrap">
+            <form className="cmp" onSubmit={handleSubmit}>
+              <div className="cmp__top">
+                <div className="cmp-mode" role="tablist" aria-label="Mode">
+                  <button type="button" className="cmp-mode__pill" data-mode="agent" aria-pressed="true"><span className="cmp-mode__pill-dot" />Agent</button>
+                  <button type="button" className="cmp-mode__pill" data-mode="plan" aria-pressed="false"><span className="cmp-mode__pill-dot" />Plan</button>
+                  <button type="button" className="cmp-mode__pill" data-mode="terminal" aria-pressed="false"><span className="cmp-mode__pill-dot" />Terminal</button>
+                </div>
+                <button type="button" className="cmp-ctx" aria-label="Current model">
+                  <span className="cmp-ctx__logo">{agentInitial(activeAgent).slice(0, 1)}</span>
+                  <span className="cmp-ctx__name">{activeModelLabel}</span>
+                  <span className="cmp-ctx__effort">High</span>
+                  <ChevronRight size={12} />
+                </button>
+              </div>
+              <div className="cmp__chips">
+                <span className="cmp-attach">
+                  <span className="cmp-attach__icon"><FileText size={12} /></span>
+                  <span className="cmp-attach__name">{displayProjectName(session)}</span>
+                </span>
+              </div>
+              <textarea
+                className="cmp__input"
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                placeholder="에이전트에게 무엇이든 요청하세요... Shift Enter 줄바꿈 · Cmd Enter 전송"
+                rows={2}
+              />
+              <div className="cmp__toolbar">
+                <div className="cmp__tools">
+                  <button type="button" className="cmp__tool" aria-label="Add"><Plus size={15} /></button>
+                  <button type="button" className="cmp__tool" aria-label="Attach file"><FileText size={15} /></button>
+                  <button type="button" className="cmp__tool" aria-label="Mention"><Database size={15} /></button>
+                  <button type="button" className="cmp__tool" aria-label="Voice"><Mic size={15} /></button>
+                </div>
+                <div className="cmp__right">
+                  <span className="cmp__hint"><span className="kbd">⌘</span><span className="kbd">↵</span><span>send</span></span>
+                  <button type="submit" className="cmp__send" disabled={!prompt.trim() || isSubmitting}>
+                    {isSubmitting ? 'Sending' : 'Send'}
+                    <Send size={13} />
+                  </button>
+                </div>
+              </div>
+            </form>
+            {error && <div className="pc-chat-error" role="alert">{error}</div>}
+          </footer>
+        </main>
+
+        <aside className="shell__workspace ws" aria-label={`${projectName} workspace`}>
+          <div className="ws__head">
+            <div className="ws__title"><PanelsTopLeft size={14} />Workspace</div>
+            <div className="ws__actions">
+              <button type="button" className="ws__action" aria-label="Open files"><FileText size={13} /></button>
+            </div>
+          </div>
+          <div className="ws__tabs" role="tablist">
+            <button type="button" className="ws__tab" data-tab="run" aria-pressed="true"><Clock3 size={12} />Run</button>
+            <button type="button" className="ws__tab" data-tab="files" aria-pressed="false"><FileText size={12} />Files <span className="ws__tab-badge">{fileCount}</span></button>
+            <button type="button" className="ws__tab" data-tab="terminal" aria-pressed="false"><Monitor size={12} />Term</button>
+            <button type="button" className="ws__tab" data-tab="context" aria-pressed="false"><Database size={12} />Ctx</button>
+          </div>
+          <div className="ws__status">
+            <div className="ws__status-left">
+              <span className="ws__model"><span className="ws__model-dot" />{activeModelLabel}</span>
+              <span className="ws__pill"><span className="ws__pill-dot" />{projectStatusLabel(session.status)}</span>
+            </div>
+            <div className="ws__status-right">
+              <span>{tokenLabel}</span>
+              <button type="button" className="ws__stop" aria-label="Stop"><Square size={10} /></button>
+            </div>
+          </div>
+          <div className="ws__body">
+            <div className="ws__pane ws__pane--active">
+              <div className="run-summary">
+                <div className="run-summary__cell"><span className="run-summary__label">Steps</span><span className="run-summary__value">{Math.max(1, visibleEvents.length)}</span></div>
+                <div className="run-summary__cell"><span className="run-summary__label">Tokens</span><span className="run-summary__value">{tokenLabel}</span></div>
+                <div className="run-summary__cell"><span className="run-summary__label">Rank</span><span className="run-summary__value">#{index + 1}</span></div>
+              </div>
+              <div className="run-steps">
+                {visibleEvents.slice(-4).map((item) => (
+                  <div key={item.id} className="run-step">
+                    <span className="run-step__dot run-step__dot--done" />
+                    <div className="run-step__body">
+                      <div className="run-step__title">{item.title || item.kind}</div>
+                      <div className="run-step__cmd">{eventCommand(item)}</div>
+                    </div>
+                    <span className="run-step__time">{formatRelativeTime(item.timestamp)}</span>
+                  </div>
+                ))}
+                {visibleEvents.length === 0 && (
+                  <div className="run-step run-step--active">
+                    <span className="run-step__dot run-step__dot--running" />
+                    <div className="run-step__body">
+                      <div className="run-step__title">Waiting for first turn</div>
+                      <div className="run-step__cmd">{projectPath}</div>
+                    </div>
+                    <span className="run-step__time">now</span>
+                  </div>
+                )}
+              </div>
+              <div className="chist">
+                <div className="chist__head">
+                  <span className="chist__title"><MessageSquareText size={12} />Chat history</span>
+                  <span className="chist__meta">{userTurns.length || 1} turns</span>
+                </div>
+                <div className="chist__list">
+                  {(userTurns.slice(-3).length
+                    ? userTurns.slice(-3)
+                    : [{
+                      id: 'empty-turn',
+                      timestamp: activeChat?.lastActivityAt ?? new Date().toISOString(),
+                      kind: 'text_reply',
+                      title: 'Project context',
+                      body: recentPreview,
+                      meta: { role: 'user' },
+                    } satisfies UiEvent]).map((item, turnIndex) => (
+                    <div key={item.id} className="chturn" data-open={turnIndex === 0 ? 'true' : 'false'}>
+                      <button type="button" className="chturn__preview">
+                        <span className="chturn__avatar">U</span>
+                        <span className="chturn__body">
+                          <span className="chturn__meta">
+                            <span className="chturn__name">You</span>
+                            <span className="chturn__time">{formatRelativeTime(item.timestamp)}</span>
+                            <span className={`chturn__pill ${turnIndex === 0 ? 'chturn__pill--run' : 'chturn__pill--ok'}`}>
+                              <span className="chturn__pill-dot" />{turnIndex === 0 ? 'running' : 'answered'}
+                            </span>
+                          </span>
+                          <span className="chturn__text">{getEventText(item)}</span>
+                        </span>
+                        <ChevronRight size={12} className="chturn__caret" />
+                      </button>
+                      <div className="chturn__expanded">
+                        <div className="chturn__agent-head">
+                          <span className={`chturn__agent-avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent).slice(0, 1)}</span>
+                          <span className="chturn__agent-label"><strong>{agentLabel(activeAgent, activeModelLabel)}</strong></span>
+                          <span className="chturn__agent-final">{turnIndex === 0 ? 'In progress' : 'Final'}</span>
+                        </div>
+                        <div className="chturn__agent-text">{representativeAgentEvent ? getEventText(representativeAgentEvent) : '프로젝트 맥락을 기준으로 응답을 준비합니다.'}</div>
+                        <div className="chturn__actions">
+                          <button type="button" className="chturn__btn"><ChevronRight size={11} />Jump</button>
+                          <button type="button" className="chturn__btn"><FileText size={11} />Preview</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="ws__footer">
+            <div className="ws__footer-row"><span className="ws__footer-label">Context usage</span><span className="ws__footer-value">{tokenLabel} / 200k</span></div>
+            <div className="ws__footer-bar"><div className="ws__footer-fill" style={{ width: '9.2%' }} /></div>
+            <div className="ws__footer-meta"><span>project scoped</span><span>{fileCount} files</span></div>
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }
 
 function ProjectSurface({
   onBackToProjects,
+  onProjectChatOpen,
   onProjectOpen,
   onProjectViewChange,
   projectView,
+  selectedChatId,
   selectedProjectId,
   sessions,
 }: {
   onBackToProjects: () => void;
+  onProjectChatOpen: (sessionId: string, chatId: string) => void;
   onProjectOpen: (sessionId: string, view?: ProjectView) => void;
   onProjectViewChange: (view: ProjectView) => void;
   projectView: ProjectView;
+  selectedChatId: string | null;
   selectedProjectId: string | null;
   sessions: SessionSummary[];
 }) {
@@ -1663,8 +2061,10 @@ function ProjectSurface({
         session={selectedProject}
         index={selectedIndex}
         onBackToProjects={onBackToProjects}
+        onProjectChatOpen={(chatId) => onProjectChatOpen(selectedProject.id, chatId)}
         onProjectViewChange={onProjectViewChange}
         projectView={projectView}
+        selectedChatId={selectedChatId}
       />
     );
   }
@@ -1771,7 +2171,7 @@ function ProjectSurface({
                   className="proj-list-new-btn"
                   onClick={(event) => {
                     event.stopPropagation();
-                    onProjectOpen(session.id, 'chat');
+                    onProjectOpen(session.id, 'chats');
                   }}
                 >
                   <Plus size={11} />
@@ -1936,22 +2336,27 @@ export default function HomePageWrapper({
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedProjectView, setSelectedProjectView] = useState<ProjectView>('overview');
+  const [selectedProjectChatId, setSelectedProjectChatId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<RuntimeMetrics | null>(null);
 
   useEffect(() => {
     const nextTab = normalizeTab(searchParams.get('tab'));
+    const nextProjectView = nextTab === 'project' ? normalizeProjectView(searchParams.get('view')) : 'overview';
     setActiveTab(nextTab);
     setSelectedProjectId(nextTab === 'project' ? (searchParams.get('project') ?? null) : null);
-    setSelectedProjectView(nextTab === 'project' ? normalizeProjectView(searchParams.get('view')) : 'overview');
+    setSelectedProjectView(nextProjectView);
+    setSelectedProjectChatId(nextTab === 'project' && nextProjectView === 'chat' ? (searchParams.get('chat') ?? null) : null);
   }, [searchParams]);
 
   useEffect(() => {
     const syncRouteFromLocation = () => {
       const url = new URL(window.location.href);
       const nextTab = normalizeTab(url.searchParams.get('tab'));
+      const nextProjectView = nextTab === 'project' ? normalizeProjectView(url.searchParams.get('view')) : 'overview';
       setActiveTab(nextTab);
       setSelectedProjectId(nextTab === 'project' ? (url.searchParams.get('project') ?? null) : null);
-      setSelectedProjectView(nextTab === 'project' ? normalizeProjectView(url.searchParams.get('view')) : 'overview');
+      setSelectedProjectView(nextProjectView);
+      setSelectedProjectChatId(nextTab === 'project' && nextProjectView === 'chat' ? (url.searchParams.get('chat') ?? null) : null);
     };
 
     window.addEventListener('popstate', syncRouteFromLocation);
@@ -2003,27 +2408,39 @@ export default function HomePageWrapper({
     setActiveTab(tab);
     setSelectedProjectId(null);
     setSelectedProjectView('overview');
+    setSelectedProjectChatId(null);
     window.history.replaceState(null, '', withAppBasePath(`/?tab=${tab}`));
   };
 
-  const handleProjectOpen = (sessionId: string, view: ProjectView = 'overview') => {
+  const handleProjectOpen = (sessionId: string, view: ProjectView = 'overview', chatId?: string | null) => {
     setActiveTab('project');
     setSelectedProjectId(sessionId);
     setSelectedProjectView(view);
-    window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(sessionId, view)));
+    setSelectedProjectChatId(view === 'chat' ? chatId ?? null : null);
+    window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(sessionId, view, chatId)));
   };
 
   const handleProjectViewChange = (view: ProjectView) => {
     if (!selectedProjectId) return;
     setActiveTab('project');
     setSelectedProjectView(view);
+    setSelectedProjectChatId(null);
     window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(selectedProjectId, view)));
+  };
+
+  const handleProjectChatOpen = (sessionId: string, chatId: string) => {
+    setActiveTab('project');
+    setSelectedProjectId(sessionId);
+    setSelectedProjectView('chat');
+    setSelectedProjectChatId(chatId);
+    window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(sessionId, 'chat', chatId)));
   };
 
   const handleBackToProjects = () => {
     setActiveTab('project');
     setSelectedProjectId(null);
     setSelectedProjectView('overview');
+    setSelectedProjectChatId(null);
     window.history.pushState(null, '', withAppBasePath('/?tab=project'));
   };
 
@@ -2033,9 +2450,11 @@ export default function HomePageWrapper({
       return (
         <ProjectSurface
           onBackToProjects={handleBackToProjects}
+          onProjectChatOpen={handleProjectChatOpen}
           onProjectOpen={handleProjectOpen}
           onProjectViewChange={handleProjectViewChange}
           projectView={selectedProjectView}
+          selectedChatId={selectedProjectChatId}
           selectedProjectId={selectedProjectId}
           sessions={sessions}
         />
@@ -2049,8 +2468,10 @@ export default function HomePageWrapper({
     <div className="app-shell app-shell-ia">
       <div className="aris-ia-shell">
         <Sidebar
+          activeProjectChatId={selectedProjectChatId}
           activeProjectId={selectedProjectId}
           activeTab={activeTab}
+          onProjectChatOpen={handleProjectChatOpen}
           onProjectOpen={handleProjectOpen}
           onTabChange={handleTabChange}
           sessions={sessions}
