@@ -68,12 +68,17 @@ describe('project list surface', () => {
     expect(homeClient).toContain("params.set('view', view);");
     expect(homeClient).toContain('/api/runtime/sessions/${encodeURIComponent(session.id)}/chats');
     expect(homeClient).toContain('/api/runtime/sessions/${encodeURIComponent(session.id)}/events');
+    expect(homeClient).toContain('selectedChatPreview');
+    expect(homeClient).toContain('Read · project context');
+    expect(homeClient).toContain('project-context.snapshot');
     expect(homeClient).not.toContain('/sessions/${session.id}');
   });
 
   it('keeps project chats nested under the selected project in the redesigned sidebar', () => {
     expect(homeClient).toContain('activeProjectChatId: string | null;');
     expect(homeClient).toContain('className={`m-sb__project-node${isActiveProject ?');
+    expect(homeClient).toContain('const visibleChatCount = isActiveProject && !isLoadingProjectChats');
+    expect(homeClient).toContain('<span className="m-sb__proj-count">{visibleChatCount}</span>');
     expect(homeClient).toContain('className="m-sb__chat-children"');
     expect(homeClient).toContain("className={`m-sb__chat-child${activeProjectChatId === chat.id ? ' m-sb__chat-child--active' : ''}`}");
     expect(homeClient).toContain("onClick={() => onProjectChatOpen(session.id, chat.id)}");
@@ -118,6 +123,12 @@ describe('project list surface', () => {
     ].forEach((selector) => {
       expect(uiCss).not.toContain(selector);
     });
+
+    expect(cssBlock('.m-main-scroll--project-chat-detail')).toContain('padding: 0;');
+    expect(uiCss).toContain('grid-template-columns: minmax(0, 1fr) 420px;');
+    expect(cssBlock('.pc-proto .tl')).toContain('padding: var(--sp-12) var(--sp-10) var(--sp-24);');
+    expect(cssBlock('.pc-proto .cmp')).toContain('border-radius: 14px;');
+    expect(homeClient).not.toContain('chats total`');
   });
 
   it('keeps the project filter chips attached to the search field instead of the screen edge', () => {

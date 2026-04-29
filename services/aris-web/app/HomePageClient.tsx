@@ -428,6 +428,9 @@ function Sidebar({
           : projects.map((session) => {
               const isActiveProject = activeProjectId === session.id;
               const childChats = isActiveProject ? activeProjectChats : [];
+              const visibleChatCount = isActiveProject && !isLoadingProjectChats
+                ? childChats.length
+                : session.totalChats ?? 0;
               return (
                 <div key={session.id} className={`m-sb__project-node${isActiveProject ? ' m-sb__project-node--open' : ''}`}>
                   <button
@@ -437,7 +440,7 @@ function Sidebar({
                   >
                     <span className="m-sb__proj-dot" />
                     <span className="m-sb__proj-name">{displayProjectName(session)}</span>
-                    <span className="m-sb__proj-count">{session.totalChats ?? 0}</span>
+                    <span className="m-sb__proj-count">{visibleChatCount}</span>
                   </button>
                   {isActiveProject && (
                     <div className="m-sb__chat-children" aria-label={`${displayProjectName(session)} chats`}>
@@ -481,11 +484,10 @@ function Sidebar({
 function Topbar({ activeTab, sessions }: { activeTab: TabType; sessions: SessionSummary[] }) {
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
   const activeProjects = sessions.filter((session) => session.status === 'running' || session.status === 'error').length;
-  const totalChats = sessions.reduce((sum, session) => sum + (session.totalChats ?? 0), 0);
   const copy: Record<TabType, { title: string; crumb: string }> = {
     home: { title: 'Home', crumb: 'workspace overview' },
     ask: { title: 'Ask ARIS', crumb: 'global memory' },
-    project: { title: 'Projects', crumb: `${activeProjects} active · ${totalChats} chats total` },
+    project: { title: 'Projects', crumb: `${activeProjects} active · project chats in sidebar` },
     files: { title: 'Files', crumb: 'project filesystem' },
   };
 
@@ -1126,7 +1128,6 @@ function ProjectDetailSurface({
       <div className="m-main-scroll m-main-scroll--project-chat-detail">
         <ProjectChatSurface
           fileCount={fileCount}
-          index={index}
           modelLabel={modelLabel}
           onBackToChatList={() => onProjectViewChange('chats')}
           onChatOpen={onProjectChatOpen}
@@ -1258,7 +1259,6 @@ function ProjectDetailSurface({
         {projectView === 'chats' ? (
           <ProjectChatSurface
             fileCount={fileCount}
-            index={index}
             modelLabel={modelLabel}
             onBackToChatList={() => onProjectViewChange('chats')}
             onChatOpen={onProjectChatOpen}
@@ -1454,7 +1454,6 @@ function ProjectPlaceholderPanel({
 
 function ProjectChatSurface({
   fileCount,
-  index,
   modelLabel,
   onBackToChatList,
   onChatOpen,
@@ -1466,7 +1465,6 @@ function ProjectChatSurface({
   tokenLabel,
 }: {
   fileCount: number;
-  index: number;
   modelLabel: string;
   onBackToChatList: () => void;
   onChatOpen: (chatId: string) => void;
@@ -1490,6 +1488,79 @@ function ProjectChatSurface({
   const activeAgent = activeChat?.agent ?? session.agent;
   const userTurns = visibleEvents.filter((item) => readEventRole(item) === 'user');
   const representativeAgentEvent = visibleEvents.find((item) => readEventRole(item) !== 'user');
+  const hasRuntimeEvents = visibleEvents.length > 0;
+  const selectedChatPreview = (activeChat?.latestPreview ?? recentPreview).trim()
+    || '프로젝트 맥락을 이어서 다루기 위한 채팅입니다.';
+  const selectedChatTimestamp = activeChat?.latestEventAt
+    ?? activeChat?.lastActivityAt
+    ?? session.lastActivityAt
+    ?? new Date().toISOString();
+  const projectChatRoute = `/?tab=project&project=${session.id}&view=chat${selectedChatId ? `&chat=${selectedChatId}` : ''}`;
+  const runStepItems = hasRuntimeEvents
+    ? visibleEvents.slice(-4).map((item) => ({
+      id: item.id,
+      title: item.title || item.kind,
+      cmd: eventCommand(item),
+      time: formatRelativeTime(item.timestamp),
+      state: 'done' as const,
+    }))
+    : [
+      {
+        id: 'seed-route',
+        title: 'Route · project chat',
+        cmd: projectChatRoute,
+        time: 'now',
+        state: 'done' as const,
+      },
+      {
+        id: 'seed-context',
+        title: 'Read · project context',
+        cmd: projectPath,
+        time: 'now',
+        state: 'done' as const,
+      },
+      {
+        id: 'seed-preview',
+        title: 'Load · chat preview',
+        cmd: selectedChatPreview,
+        time: formatRelativeTime(selectedChatTimestamp),
+        state: 'done' as const,
+      },
+      {
+        id: 'seed-ready',
+        title: 'Ready · next turn',
+        cmd: 'composer is scoped to this project chat',
+        time: 'now',
+        state: 'running' as const,
+      },
+    ];
+  const historyTurnItems = hasRuntimeEvents
+    ? userTurns.slice(-3).map((item, turnIndex) => ({
+      id: item.id,
+      timestamp: item.timestamp,
+      text: getEventText(item),
+      open: turnIndex === 0,
+      state: turnIndex === 0 ? 'running' : 'answered',
+      agentText: representativeAgentEvent ? getEventText(representativeAgentEvent) : '프로젝트 맥락을 기준으로 응답을 준비합니다.',
+    }))
+    : [
+      {
+        id: 'seed-history-primary',
+        timestamp: selectedChatTimestamp,
+        text: selectedChatPreview,
+        open: true,
+        state: 'running',
+        agentText: '프로젝트 컨텍스트를 기준으로 최근 대화와 작업 경로를 확인하고 있습니다.',
+      },
+      {
+        id: 'seed-history-context',
+        timestamp: selectedChatTimestamp,
+        text: `${projectName} · ${projectPath}`,
+        open: false,
+        state: 'answered',
+        agentText: '연결된 작업 경로와 채팅 기록을 불러왔습니다.',
+      },
+    ];
 
   useEffect(() => {
     let cancelled = false;
@@ -1759,19 +1830,85 @@ function ProjectChatSurface({
               </div>
 
               {isLoadingEvents && <div className="pc-chat-loading">Loading messages...</div>}
-              {!isLoadingEvents && visibleEvents.length === 0 && (
-                <div className="msg">
-                  <span className={`msg__avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent)}</span>
-                  <div className="msg__body">
-                    <div className="msg__header"><span className="msg__name">{agentLabel(activeAgent, activeModelLabel)}</span><span className="msg__time">now</span></div>
-                    <div className="msg__text">이 채팅은 프로젝트 하위 흐름에서 열렸습니다. 왼쪽 사이드바의 프로젝트 아래 채팅 목록과 이 화면이 같은 계층으로 연결됩니다.</div>
-                    <div className="thinking">
-                      <span className="thinking__dots"><span className="thinking__dot" /><span className="thinking__dot" /><span className="thinking__dot" /></span>
-                      <span>프로젝트 맥락 대기 중</span>
-                      <span className="thinking__time">{tokenLabel}</span>
+              {!isLoadingEvents && !hasRuntimeEvents && (
+                <>
+                  <div className="msg">
+                    <span className="msg__avatar msg__avatar--user">U</span>
+                    <div className="msg__body">
+                      <div className="msg__header"><span className="msg__name">You</span><span className="msg__time">{formatRelativeTime(selectedChatTimestamp)}</span></div>
+                      <div className="msg__bubble">{selectedChatPreview}</div>
+                      <div className="msg__attachments">
+                        <span className="msg__attach">
+                          <span className="msg__attach-icon"><FolderOpen size={12} /></span>
+                          <span className="msg__attach-name">{displayProjectName(session)}</span>
+                          <span className="msg__attach-size">project</span>
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
+
+                  <div className="msg">
+                    <span className={`msg__avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent)}</span>
+                    <div className="msg__body">
+                      <div className="msg__header"><span className="msg__name">{agentLabel(activeAgent, activeModelLabel)}</span><span className="msg__time">now</span></div>
+                      <div className="msg__text">
+                        <p>프로젝트 컨텍스트를 먼저 확인하겠습니다. 최근 채팅, 작업 경로, 연결된 파일을 기준으로 이어서 볼 수 있습니다.</p>
+                      </div>
+                      <div className="tool">
+                        <span className="tool__icon tool__icon--success"><Check size={12} /></span>
+                        <div className="tool__body">
+                          <span className="tool__title">Read · project context</span>
+                          <span className="tool__cmd">{projectPath}</span>
+                        </div>
+                        <span className="tool__meta">active</span>
+                        <ChevronRight size={12} className="tool__caret" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="msg">
+                    <span className={`msg__avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent)}</span>
+                    <div className="msg__body">
+                      <div className="msg__header"><span className="msg__name">{agentLabel(activeAgent, activeModelLabel)}</span><span className="msg__time">now</span></div>
+                      <div className="msg__text">
+                        <p>선택한 대화 흐름을 불러왔습니다. 필요한 파일과 로그를 열어 다음 작업을 진행할 준비가 되어 있습니다.</p>
+                      </div>
+                      <div className="code">
+                        <div className="code__head">
+                          <div className="code__head-left">
+                            <span className="code__lang">ctx</span>
+                            <span>project scope</span>
+                          </div>
+                          <button type="button" className="code__copy">Copy</button>
+                        </div>
+                        <pre className="code__body">{`project=${projectName}\nchat=${activeChat?.title ?? 'new chat'}\npath=${projectPath}\nentry=${projectChatRoute}`}</pre>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="msg">
+                    <span className={`msg__avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent)}</span>
+                    <div className="msg__body">
+                      <div className="msg__header"><span className="msg__name">{agentLabel(activeAgent, activeModelLabel)}</span><span className="msg__time">now</span></div>
+                      <div className="msg__text">
+                        <p>다음 요청을 보내면 이 대화에서 이어서 작업하겠습니다. 실행 상태, 파일 맥락, 이전 턴은 오른쪽 작업 패널에서 함께 추적됩니다.</p>
+                      </div>
+                      <div className="artifact">
+                        <div className="artifact__thumb" />
+                        <div className="artifact__meta">
+                          <span className="artifact__name">project-context.snapshot</span>
+                          <span className="artifact__sub">workspace context · ready</span>
+                        </div>
+                        <button type="button" className="artifact__btn">Preview</button>
+                      </div>
+                      <div className="thinking">
+                        <span className="thinking__dots"><span className="thinking__dot" /><span className="thinking__dot" /><span className="thinking__dot" /></span>
+                        <span>프로젝트 맥락 대기 중</span>
+                        <span className="thinking__time">{tokenLabel}</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
               )}
 
               {visibleEvents.map((item) => {
@@ -1931,60 +2068,41 @@ function ProjectChatSurface({
           <div className="ws__body">
             <div className="ws__pane ws__pane--active">
               <div className="run-summary">
-                <div className="run-summary__cell"><span className="run-summary__label">Steps</span><span className="run-summary__value">{Math.max(1, visibleEvents.length)}</span></div>
+                <div className="run-summary__cell"><span className="run-summary__label">Steps</span><span className="run-summary__value">{hasRuntimeEvents ? Math.max(1, visibleEvents.length) : '4 / 5'}</span></div>
                 <div className="run-summary__cell"><span className="run-summary__label">Tokens</span><span className="run-summary__value">{tokenLabel}</span></div>
-                <div className="run-summary__cell"><span className="run-summary__label">Rank</span><span className="run-summary__value">#{index + 1}</span></div>
+                <div className="run-summary__cell"><span className="run-summary__label">Activity</span><span className="run-summary__value">{formatRelativeTime(selectedChatTimestamp)}</span></div>
               </div>
               <div className="run-steps">
-                {visibleEvents.slice(-4).map((item) => (
-                  <div key={item.id} className="run-step">
-                    <span className="run-step__dot run-step__dot--done" />
+                {runStepItems.map((item) => (
+                  <div key={item.id} className={`run-step${item.state === 'running' ? ' run-step--active' : ''}`}>
+                    <span className={`run-step__dot ${item.state === 'running' ? 'run-step__dot--running' : 'run-step__dot--done'}`} />
                     <div className="run-step__body">
-                      <div className="run-step__title">{item.title || item.kind}</div>
-                      <div className="run-step__cmd">{eventCommand(item)}</div>
+                      <div className="run-step__title">{item.title}</div>
+                      <div className="run-step__cmd">{item.cmd}</div>
                     </div>
-                    <span className="run-step__time">{formatRelativeTime(item.timestamp)}</span>
+                    <span className="run-step__time">{item.time}</span>
                   </div>
                 ))}
-                {visibleEvents.length === 0 && (
-                  <div className="run-step run-step--active">
-                    <span className="run-step__dot run-step__dot--running" />
-                    <div className="run-step__body">
-                      <div className="run-step__title">Waiting for first turn</div>
-                      <div className="run-step__cmd">{projectPath}</div>
-                    </div>
-                    <span className="run-step__time">now</span>
-                  </div>
-                )}
               </div>
               <div className="chist">
                 <div className="chist__head">
                   <span className="chist__title"><MessageSquareText size={12} />Chat history</span>
-                  <span className="chist__meta">{userTurns.length || 1} turns</span>
+                  <span className="chist__meta">{historyTurnItems.length} turns</span>
                 </div>
                 <div className="chist__list">
-                  {(userTurns.slice(-3).length
-                    ? userTurns.slice(-3)
-                    : [{
-                      id: 'empty-turn',
-                      timestamp: activeChat?.lastActivityAt ?? new Date().toISOString(),
-                      kind: 'text_reply',
-                      title: 'Project context',
-                      body: recentPreview,
-                      meta: { role: 'user' },
-                    } satisfies UiEvent]).map((item, turnIndex) => (
-                    <div key={item.id} className="chturn" data-open={turnIndex === 0 ? 'true' : 'false'}>
+                  {historyTurnItems.map((item) => (
+                    <div key={item.id} className="chturn" data-open={item.open ? 'true' : 'false'}>
                       <button type="button" className="chturn__preview">
                         <span className="chturn__avatar">U</span>
                         <span className="chturn__body">
                           <span className="chturn__meta">
                             <span className="chturn__name">You</span>
                             <span className="chturn__time">{formatRelativeTime(item.timestamp)}</span>
-                            <span className={`chturn__pill ${turnIndex === 0 ? 'chturn__pill--run' : 'chturn__pill--ok'}`}>
-                              <span className="chturn__pill-dot" />{turnIndex === 0 ? 'running' : 'answered'}
+                            <span className={`chturn__pill ${item.state === 'running' ? 'chturn__pill--run' : 'chturn__pill--ok'}`}>
+                              <span className="chturn__pill-dot" />{item.state}
                             </span>
                           </span>
-                          <span className="chturn__text">{getEventText(item)}</span>
+                          <span className="chturn__text">{item.text}</span>
                         </span>
                         <ChevronRight size={12} className="chturn__caret" />
                       </button>
@@ -1992,9 +2110,9 @@ function ProjectChatSurface({
                         <div className="chturn__agent-head">
                           <span className={`chturn__agent-avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent).slice(0, 1)}</span>
                           <span className="chturn__agent-label"><strong>{agentLabel(activeAgent, activeModelLabel)}</strong></span>
-                          <span className="chturn__agent-final">{turnIndex === 0 ? 'In progress' : 'Final'}</span>
+                          <span className="chturn__agent-final">{item.state === 'running' ? 'In progress' : 'Final'}</span>
                         </div>
-                        <div className="chturn__agent-text">{representativeAgentEvent ? getEventText(representativeAgentEvent) : '프로젝트 맥락을 기준으로 응답을 준비합니다.'}</div>
+                        <div className="chturn__agent-text">{item.agentText}</div>
                         <div className="chturn__actions">
                           <button type="button" className="chturn__btn"><ChevronRight size={11} />Jump</button>
                           <button type="button" className="chturn__btn"><FileText size={11} />Preview</button>
