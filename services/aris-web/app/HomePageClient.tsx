@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Activity,
@@ -33,7 +33,9 @@ import { selectRecentProjects } from './homeProjects';
 import { withAppBasePath } from '@/lib/routing/appPath';
 import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
 import type { AuthenticatedUser } from '@/lib/auth/types';
-import type { SessionStatus, SessionSummary } from '@/lib/happy/types';
+import type { SessionChat, SessionStatus, SessionSummary, UiEvent } from '@/lib/happy/types';
+
+type ProjectView = 'overview' | 'chat' | 'files' | 'context';
 
 type FileItem = {
   name: string;
@@ -137,6 +139,17 @@ function normalizeTab(tab: string | null): TabType {
       return 'files';
     default:
       return 'home';
+  }
+}
+
+function normalizeProjectView(view: string | null): ProjectView {
+  switch (view) {
+    case 'chat':
+    case 'files':
+    case 'context':
+      return view;
+    default:
+      return 'overview';
   }
 }
 
@@ -257,8 +270,14 @@ function deriveProjectTokenLabel(session: SessionSummary, index: number): string
   return `${total.toFixed(1)}k`;
 }
 
-function buildProjectDetailPath(sessionId: string): string {
-  return `/?tab=project&project=${encodeURIComponent(sessionId)}`;
+function buildProjectDetailPath(sessionId: string, view: ProjectView = 'overview'): string {
+  const params = new URLSearchParams();
+  params.set('tab', 'project');
+  params.set('project', sessionId);
+  if (view !== 'overview') {
+    params.set('view', view);
+  }
+  return `/?${params.toString()}`;
 }
 
 function navigateTo(path: string) {
@@ -312,7 +331,7 @@ function Sidebar({
   activeTab: TabType;
   activeProjectId: string | null;
   onTabChange: (tab: TabType) => void;
-  onProjectOpen: (sessionId: string) => void;
+  onProjectOpen: (sessionId: string, view?: ProjectView) => void;
   sessions: SessionSummary[];
   user: AuthenticatedUser;
 }) {
@@ -812,7 +831,7 @@ function HomeSurface({
   user,
 }: {
   metrics: RuntimeMetrics | null;
-  onProjectOpen: (sessionId: string) => void;
+  onProjectOpen: (sessionId: string, view?: ProjectView) => void;
   sessions: SessionSummary[];
   user: AuthenticatedUser;
 }) {
@@ -924,7 +943,7 @@ function HomeSurface({
       </div>
       <section className="home-feed" aria-label="Recent activity">
         {projects.slice(0, 4).map((session, index) => (
-          <button key={session.id} type="button" className="home-feed-row" onClick={() => navigateTo(`/sessions/${session.id}`)}>
+          <button key={session.id} type="button" className="home-feed-row" onClick={() => onProjectOpen(session.id, 'chat')}>
             <span className={`home-feed-avatar ${index % 2 === 0 ? 'home-feed-avatar--c' : 'home-feed-avatar--u'}`}>
               {index % 2 === 0 ? session.agent.slice(0, 1).toUpperCase() : (user.email[0] || 'U').toUpperCase()}
             </span>
@@ -1004,10 +1023,14 @@ function AskSurface({ sessions }: { sessions: SessionSummary[] }) {
 function ProjectDetailSurface({
   index,
   onBackToProjects,
+  onProjectViewChange,
+  projectView,
   session,
 }: {
   index: number;
   onBackToProjects: () => void;
+  onProjectViewChange: (view: ProjectView) => void;
+  projectView: ProjectView;
   session: SessionSummary;
 }) {
   const projectName = displayProjectName(session);
@@ -1044,7 +1067,7 @@ function ProjectDetailSurface({
               <PanelsTopLeft size={14} />
               Settings
             </button>
-            <button type="button" className="btn btn--primary btn--sm" onClick={() => navigateTo(`/sessions/${session.id}`)}>
+            <button type="button" className="btn btn--primary btn--sm" onClick={() => onProjectViewChange('chat')}>
               <Plus size={14} />
               New chat
             </button>
@@ -1096,21 +1119,37 @@ function ProjectDetailSurface({
       </section>
 
       <nav className="proj-tabs" aria-label={`${projectName} project sections`}>
-        <button type="button" className="proj-tab proj-tab--active">
+        <button
+          type="button"
+          className={`proj-tab${projectView === 'overview' ? ' proj-tab--active' : ''}`}
+          onClick={() => onProjectViewChange('overview')}
+        >
           <PanelsTopLeft size={14} />
           Overview
         </button>
-        <button type="button" className="proj-tab">
+        <button
+          type="button"
+          className={`proj-tab${projectView === 'chat' ? ' proj-tab--active' : ''}`}
+          onClick={() => onProjectViewChange('chat')}
+        >
           <MessageSquareText size={14} />
           Chats
           <span className="proj-tab__count">{totalChats}</span>
         </button>
-        <button type="button" className="proj-tab">
+        <button
+          type="button"
+          className={`proj-tab${projectView === 'files' ? ' proj-tab--active' : ''}`}
+          onClick={() => onProjectViewChange('files')}
+        >
           <FileText size={14} />
           Files
           <span className="proj-tab__count">{fileCount}</span>
         </button>
-        <button type="button" className="proj-tab">
+        <button
+          type="button"
+          className={`proj-tab${projectView === 'context' ? ' proj-tab--active' : ''}`}
+          onClick={() => onProjectViewChange('context')}
+        >
           <Database size={14} />
           Context
           <span className="proj-tab__count">6</span>
@@ -1118,9 +1157,35 @@ function ProjectDetailSurface({
       </nav>
 
       <section className="proj-pane">
+        {projectView === 'chat' ? (
+          <ProjectChatSurface
+            fileCount={fileCount}
+            index={index}
+            modelLabel={modelLabel}
+            projectName={projectName}
+            projectPath={projectPath}
+            recentPreview={recentPreview}
+            session={session}
+            tokenLabel={tokenLabel}
+          />
+        ) : projectView === 'files' ? (
+          <ProjectPlaceholderPanel
+            Icon={FileText}
+            title="Files"
+            eyebrow={`${fileCount} tracked files`}
+            body={`${projectPath}의 작업 파일과 첨부 맥락을 프로젝트 화면 안에서 이어서 다룰 예정입니다.`}
+          />
+        ) : projectView === 'context' ? (
+          <ProjectPlaceholderPanel
+            Icon={Database}
+            title="Context"
+            eyebrow="6 linked assets"
+            body={`${projectName}의 런타임 메모리, 최근 결정, 작업 지침을 같은 프로젝트 범위로 묶습니다.`}
+          />
+        ) : (
         <div className="proj-overview">
           <div className="proj-chats">
-            <button type="button" className="proj-chat" onClick={() => navigateTo(`/sessions/${session.id}`)}>
+            <button type="button" className="proj-chat" onClick={() => onProjectViewChange('chat')}>
               <div className="proj-chat__head">
                 <div className="proj-chat__title">{session.alias || projectName}</div>
                 <div className="proj-chat__time">{formatRelativeTime(session.lastActivityAt)}</div>
@@ -1215,6 +1280,344 @@ function ProjectDetailSurface({
             </article>
           </aside>
         </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function readEventRole(event: UiEvent): 'user' | 'agent' {
+  return event.meta?.role === 'user' ? 'user' : 'agent';
+}
+
+function getEventText(event: UiEvent): string {
+  return event.result?.preview || event.body || event.title;
+}
+
+function ProjectPlaceholderPanel({
+  Icon,
+  body,
+  eyebrow,
+  title,
+}: {
+  Icon: typeof FileText;
+  body: string;
+  eyebrow: string;
+  title: string;
+}) {
+  return (
+    <article className="proj-empty-panel">
+      <span className="proj-empty-panel__icon"><Icon size={18} /></span>
+      <div>
+        <div className="proj-empty-panel__eyebrow">{eyebrow}</div>
+        <h2>{title}</h2>
+        <p>{body}</p>
+      </div>
+    </article>
+  );
+}
+
+function ProjectChatSurface({
+  fileCount,
+  index,
+  modelLabel,
+  projectName,
+  projectPath,
+  recentPreview,
+  session,
+  tokenLabel,
+}: {
+  fileCount: number;
+  index: number;
+  modelLabel: string;
+  projectName: string;
+  projectPath: string;
+  recentPreview: string;
+  session: SessionSummary;
+  tokenLabel: string;
+}) {
+  const [chats, setChats] = useState<SessionChat[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [events, setEvents] = useState<UiEvent[]>([]);
+  const [prompt, setPrompt] = useState('');
+  const [isLoadingChats, setIsLoadingChats] = useState(true);
+  const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const activeChat = chats.find((chat) => chat.id === activeChatId) ?? chats[0] ?? null;
+  const visibleEvents = events.slice(-40);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadChats() {
+      setIsLoadingChats(true);
+      setError(null);
+      try {
+        const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats`, { cache: 'no-store' });
+        const body = (await response.json().catch(() => ({}))) as { chats?: SessionChat[]; error?: string };
+        if (!response.ok) {
+          throw new Error(body.error ?? '채팅 목록을 불러오지 못했습니다.');
+        }
+        if (cancelled) return;
+        const nextChats = body.chats ?? [];
+        setChats(nextChats);
+        setActiveChatId((previous) => (
+          previous && nextChats.some((chat) => chat.id === previous)
+            ? previous
+            : nextChats[0]?.id ?? null
+        ));
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : '채팅 목록을 불러오지 못했습니다.');
+          setChats([]);
+          setActiveChatId(null);
+        }
+      } finally {
+        if (!cancelled) setIsLoadingChats(false);
+      }
+    }
+    void loadChats();
+    return () => {
+      cancelled = true;
+    };
+  }, [session.id]);
+
+  useEffect(() => {
+    if (!activeChatId) {
+      setEvents([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadEvents = async (showLoading: boolean) => {
+      if (showLoading) {
+        setIsLoadingEvents(true);
+      }
+      try {
+        const params = new URLSearchParams();
+        params.set('limit', '40');
+        params.set('chatId', activeChatId);
+        if (activeChat?.isDefault) {
+          params.set('includeUnassigned', 'true');
+        }
+        const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events?${params.toString()}`, { cache: 'no-store' });
+        const body = (await response.json().catch(() => ({}))) as { events?: UiEvent[]; error?: string };
+        if (!response.ok) {
+          throw new Error(body.error ?? '채팅 이벤트를 불러오지 못했습니다.');
+        }
+        if (!cancelled) {
+          setEvents(body.events ?? []);
+          setError(null);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : '채팅 이벤트를 불러오지 못했습니다.');
+        }
+      } finally {
+        if (!cancelled && showLoading) {
+          setIsLoadingEvents(false);
+        }
+      }
+    };
+
+    void loadEvents(true);
+    const intervalId = window.setInterval(() => {
+      void loadEvents(false);
+    }, 3500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeChat?.isDefault, activeChatId, session.id]);
+
+  const createChat = async (): Promise<SessionChat | null> => {
+    setError(null);
+    const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: `Chat ${Math.max(1, chats.length + 1)}`,
+        agent: session.agent === 'unknown' ? 'codex' : session.agent,
+        model: session.model ?? session.metadata?.runtimeModel ?? null,
+      }),
+    });
+    const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
+    if (!response.ok || !body.chat) {
+      throw new Error(body.error ?? '새 채팅을 만들지 못했습니다.');
+    }
+    const createdChat = body.chat;
+    setChats((previous) => [createdChat, ...previous.filter((chat) => chat.id !== createdChat.id)]);
+    setActiveChatId(createdChat.id);
+    setEvents([]);
+    return createdChat;
+  };
+
+  const handleNewChat = async () => {
+    try {
+      await createChat();
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : '새 채팅을 만들지 못했습니다.');
+    }
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const text = prompt.trim();
+    if (!text || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const chat = activeChat ?? await createChat();
+      if (!chat) {
+        throw new Error('활성 채팅을 찾지 못했습니다.');
+      }
+      const submittedAt = new Date().toISOString();
+      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'message',
+          title: 'User Instruction',
+          text,
+          meta: {
+            role: 'user',
+            chatId: chat.id,
+            agent: chat.agent,
+            model: chat.model ?? modelLabel,
+          },
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { event?: UiEvent; error?: string };
+      if (!response.ok || !body.event) {
+        throw new Error(body.error ?? '메시지 전송에 실패했습니다.');
+      }
+      setPrompt('');
+      setEvents((previous) => [...previous, body.event as UiEvent]);
+      setChats((previous) => previous.map((item) => (
+        item.id === chat.id
+          ? { ...item, latestPreview: text, latestEventAt: submittedAt, latestEventIsUser: true, lastActivityAt: submittedAt }
+          : item
+      )));
+      void fetch(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats/${encodeURIComponent(chat.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          touchActivity: true,
+          latestPreview: text,
+          latestEventId: body.event.id,
+          latestEventAt: submittedAt,
+          latestEventIsUser: true,
+        }),
+      });
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : '메시지 전송에 실패했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="proj-chat-screen">
+      <aside className="proj-chat-list" aria-label={`${projectName} chats`}>
+        <div className="proj-chat-list__head">
+          <div>
+            <div className="proj-chat-list__eyebrow">Project chats</div>
+            <h2>{projectName}</h2>
+          </div>
+          <button type="button" className="proj-chat-icon-btn" onClick={handleNewChat} aria-label="새 프로젝트 채팅">
+            <Plus size={14} />
+          </button>
+        </div>
+        <div className="proj-chat-list__items">
+          {isLoadingChats && <div className="proj-chat-loading">Loading chats...</div>}
+          {!isLoadingChats && chats.map((chat) => (
+            <button
+              key={chat.id}
+              type="button"
+              className={`proj-chat-thread${chat.id === activeChat?.id ? ' proj-chat-thread--active' : ''}`}
+              onClick={() => setActiveChatId(chat.id)}
+            >
+              <span className={`home-proj__chat-dot home-proj__chat-dot--${statusClass(session.status)}`} />
+              <span className="proj-chat-thread__body">
+                <span className="proj-chat-thread__title">{chat.title}</span>
+                <span className="proj-chat-thread__preview">{chat.latestPreview || recentPreview}</span>
+              </span>
+              <span className="proj-chat-thread__time">{formatRelativeTime(chat.lastActivityAt)}</span>
+            </button>
+          ))}
+          {!isLoadingChats && chats.length === 0 && (
+            <button type="button" className="proj-chat-thread proj-chat-thread--empty" onClick={handleNewChat}>
+              <span className="proj-chat-thread__body">
+                <span className="proj-chat-thread__title">Start a project chat</span>
+                <span className="proj-chat-thread__preview">이 프로젝트 화면 안에서 새 채팅을 시작합니다.</span>
+              </span>
+            </button>
+          )}
+        </div>
+        <div className="proj-chat-list__meta">
+          <span>{session.agent}</span>
+          <span>{modelLabel}</span>
+          <span>{tokenLabel}</span>
+        </div>
+      </aside>
+
+      <section className="proj-chat-main" aria-label={`${projectName} active chat`}>
+        <div className="proj-chat-main__bar">
+          <div>
+            <div className="proj-chat-main__eyebrow">{projectPath}</div>
+            <h2>{activeChat?.title ?? 'Project chat'}</h2>
+          </div>
+          <div className="proj-chat-main__facts">
+            <span>{fileCount} files</span>
+            <span>{Math.max(1, session.totalChats ?? chats.length)} chats</span>
+            <span>#{index + 1}</span>
+          </div>
+        </div>
+
+        <div className="proj-chat-timeline" data-project-chat-screen>
+          {isLoadingEvents && <div className="proj-chat-loading">Loading messages...</div>}
+          {!isLoadingEvents && visibleEvents.length === 0 && (
+            <div className="proj-chat-empty">
+              <Sparkles size={18} />
+              <h3>프로젝트 맥락에서 바로 이어서 대화합니다.</h3>
+              <p>{recentPreview}</p>
+            </div>
+          )}
+          {visibleEvents.map((item) => {
+            const role = readEventRole(item);
+            return (
+              <article key={item.id} className={`proj-chat-bubble proj-chat-bubble--${role}`}>
+                <div className="proj-chat-bubble__meta">
+                  <span>{role === 'user' ? 'You' : session.agent}</span>
+                  <span>{formatRelativeTime(item.timestamp)}</span>
+                </div>
+                <div className="proj-chat-bubble__title">{item.title}</div>
+                <p>{getEventText(item)}</p>
+              </article>
+            );
+          })}
+        </div>
+
+        <form className="proj-chat-composer" onSubmit={handleSubmit}>
+          <textarea
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            placeholder={`${projectName} 작업 맥락으로 메시지 보내기`}
+            rows={3}
+          />
+          <div className="proj-chat-composer__foot">
+            <div className="proj-chat-composer__hints">
+              <span>{activeChat?.agent ?? session.agent}</span>
+              <span>{activeChat?.model ?? modelLabel}</span>
+            </div>
+            <button type="submit" className="comp-v2__send" disabled={!prompt.trim() || isSubmitting}>
+              <Send size={13} />
+              {isSubmitting ? 'Sending' : 'Send'}
+            </button>
+          </div>
+        </form>
+        {error && <div className="proj-chat-error" role="alert">{error}</div>}
       </section>
     </div>
   );
@@ -1223,11 +1626,15 @@ function ProjectDetailSurface({
 function ProjectSurface({
   onBackToProjects,
   onProjectOpen,
+  onProjectViewChange,
+  projectView,
   selectedProjectId,
   sessions,
 }: {
   onBackToProjects: () => void;
-  onProjectOpen: (sessionId: string) => void;
+  onProjectOpen: (sessionId: string, view?: ProjectView) => void;
+  onProjectViewChange: (view: ProjectView) => void;
+  projectView: ProjectView;
   selectedProjectId: string | null;
   sessions: SessionSummary[];
 }) {
@@ -1251,7 +1658,15 @@ function ProjectSurface({
   const chips = ['All', 'Active', 'Recent', 'Archived'];
 
   if (selectedProject) {
-    return <ProjectDetailSurface session={selectedProject} index={selectedIndex} onBackToProjects={onBackToProjects} />;
+    return (
+      <ProjectDetailSurface
+        session={selectedProject}
+        index={selectedIndex}
+        onBackToProjects={onBackToProjects}
+        onProjectViewChange={onProjectViewChange}
+        projectView={projectView}
+      />
+    );
   }
 
   return (
@@ -1356,7 +1771,7 @@ function ProjectSurface({
                   className="proj-list-new-btn"
                   onClick={(event) => {
                     event.stopPropagation();
-                    navigateTo(`/sessions/${session.id}`);
+                    onProjectOpen(session.id, 'chat');
                   }}
                 >
                   <Plus size={11} />
@@ -1520,12 +1935,14 @@ export default function HomePageWrapper({
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectView, setSelectedProjectView] = useState<ProjectView>('overview');
   const [metrics, setMetrics] = useState<RuntimeMetrics | null>(null);
 
   useEffect(() => {
     const nextTab = normalizeTab(searchParams.get('tab'));
     setActiveTab(nextTab);
     setSelectedProjectId(nextTab === 'project' ? (searchParams.get('project') ?? null) : null);
+    setSelectedProjectView(nextTab === 'project' ? normalizeProjectView(searchParams.get('view')) : 'overview');
   }, [searchParams]);
 
   useEffect(() => {
@@ -1534,6 +1951,7 @@ export default function HomePageWrapper({
       const nextTab = normalizeTab(url.searchParams.get('tab'));
       setActiveTab(nextTab);
       setSelectedProjectId(nextTab === 'project' ? (url.searchParams.get('project') ?? null) : null);
+      setSelectedProjectView(nextTab === 'project' ? normalizeProjectView(url.searchParams.get('view')) : 'overview');
     };
 
     window.addEventListener('popstate', syncRouteFromLocation);
@@ -1584,18 +2002,28 @@ export default function HomePageWrapper({
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
     setSelectedProjectId(null);
+    setSelectedProjectView('overview');
     window.history.replaceState(null, '', withAppBasePath(`/?tab=${tab}`));
   };
 
-  const handleProjectOpen = (sessionId: string) => {
+  const handleProjectOpen = (sessionId: string, view: ProjectView = 'overview') => {
     setActiveTab('project');
     setSelectedProjectId(sessionId);
-    window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(sessionId)));
+    setSelectedProjectView(view);
+    window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(sessionId, view)));
+  };
+
+  const handleProjectViewChange = (view: ProjectView) => {
+    if (!selectedProjectId) return;
+    setActiveTab('project');
+    setSelectedProjectView(view);
+    window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(selectedProjectId, view)));
   };
 
   const handleBackToProjects = () => {
     setActiveTab('project');
     setSelectedProjectId(null);
+    setSelectedProjectView('overview');
     window.history.pushState(null, '', withAppBasePath('/?tab=project'));
   };
 
@@ -1606,6 +2034,8 @@ export default function HomePageWrapper({
         <ProjectSurface
           onBackToProjects={handleBackToProjects}
           onProjectOpen={handleProjectOpen}
+          onProjectViewChange={handleProjectViewChange}
+          projectView={selectedProjectView}
           selectedProjectId={selectedProjectId}
           sessions={sessions}
         />
