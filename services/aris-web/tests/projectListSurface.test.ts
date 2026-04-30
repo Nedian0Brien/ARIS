@@ -74,6 +74,44 @@ describe('project list surface', () => {
     expect(homeClient).not.toContain('/sessions/${session.id}');
   });
 
+  it('wires the prototype chat controls to real project-chat state', () => {
+    expect(homeClient).toContain("type ComposerMode = 'agent' | 'plan' | 'terminal';");
+    expect(homeClient).toContain("type WorkspaceTab = 'run' | 'files' | 'terminal' | 'context';");
+    expect(homeClient).toContain("type PreviewState = 'closed' | 'open' | 'dock';");
+    expect(homeClient).toContain('const [composerMode, setComposerMode] = useState<ComposerMode>');
+    expect(homeClient).toContain('const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>');
+    expect(homeClient).toContain('const [workspaceOpen, setWorkspaceOpen] = useState(true);');
+    expect(homeClient).toContain('const [previewState, setPreviewState] = useState<PreviewState>');
+    expect(homeClient).toContain('const [modelSelectorOpen, setModelSelectorOpen] = useState(false);');
+    expect(homeClient).toContain("type ExpandedTurnState = string | null | '__none__';");
+    expect(homeClient).toContain('const [expandedTurnId, setExpandedTurnId] = useState<ExpandedTurnState>');
+    expect(homeClient).toContain("expandedTurnId === '__none__'");
+    expect(homeClient).toContain("visibleExpandedTurnId === item.id ? '__none__' : item.id");
+    expect(homeClient).toContain('void copyToClipboard');
+    expect(homeClient).toContain("setComposerMode(mode)");
+    expect(homeClient).toContain("setWorkspaceTab(tab)");
+    expect(homeClient).toContain("setWorkspaceOpen((current) => !current)");
+    expect(homeClient).toContain("setPreviewState('open')");
+    expect(homeClient).toContain("setPreviewState('dock')");
+    expect(homeClient).toContain('data-preview-overlay');
+    expect(homeClient).toContain('className={`ms${modelSelectorOpen ?');
+    expect(homeClient).toContain("body: JSON.stringify({");
+    expect(homeClient).toContain("mode: composerMode");
+  });
+
+  it('renders functional workspace panes instead of one static Run panel', () => {
+    expect(homeClient).toContain("workspaceTab === 'run'");
+    expect(homeClient).toContain("workspaceTab === 'files'");
+    expect(homeClient).toContain("workspaceTab === 'terminal'");
+    expect(homeClient).toContain("workspaceTab === 'context'");
+    expect(homeClient).toContain('data-pane="run"');
+    expect(homeClient).toContain('data-pane="files"');
+    expect(homeClient).toContain('data-pane="terminal"');
+    expect(homeClient).toContain('data-pane="context"');
+    expect(homeClient).toContain('data-preview-dock');
+    expect(homeClient).toContain('data-copy-feedback');
+  });
+
   it('keeps project chats nested under the selected project in the redesigned sidebar', () => {
     expect(homeClient).toContain('activeProjectChatId: string | null;');
     expect(homeClient).toContain('className={`m-sb__project-node${isActiveProject ?');
@@ -128,6 +166,11 @@ describe('project list surface', () => {
     expect(uiCss).toContain('grid-template-columns: minmax(0, 1fr) 420px;');
     expect(cssBlock('.pc-proto .tl')).toContain('padding: var(--sp-12) var(--sp-10) var(--sp-24);');
     expect(cssBlock('.pc-proto .cmp')).toContain('border-radius: 14px;');
+    expect(cssBlock('.pc-proto .ws__pane')).toContain('display: none;');
+    expect(cssBlock('.pc-proto .ws__pane--active')).toContain('display: flex;');
+    expect(uiCss).toContain('.pc-proto[data-workspace="closed"] .shell');
+    expect(uiCss).toContain('.pc-proto[data-preview="open"] .overlay');
+    expect(uiCss).toContain('.pc-proto[data-preview="dock"] .preview-dock-wrap');
     expect(homeClient).not.toContain('chats total`');
   });
 

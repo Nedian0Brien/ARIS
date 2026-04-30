@@ -5,29 +5,39 @@ import { useSearchParams } from 'next/navigation';
 import {
   Activity,
   AlertCircle,
+  AtSign,
   ChevronLeft,
   Check,
   ChevronRight,
   Clock3,
+  Copy,
   Cpu,
   Database,
+  ExternalLink,
   FileText,
   Folder,
   FolderOpen,
   HardDrive,
   Home,
+  Maximize2,
   MessageSquareText,
   Mic,
   Monitor,
   Moon,
+  MoreHorizontal,
   PanelsTopLeft,
+  Paperclip,
   Plus,
+  RefreshCcw,
   Search,
   Send,
+  Share2,
   Sparkles,
   Square,
   Sun,
+  Terminal,
   Wifi,
+  X,
 } from 'lucide-react';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { BackendNotice } from '@/components/ui/BackendNotice';
@@ -38,6 +48,12 @@ import type { AuthenticatedUser } from '@/lib/auth/types';
 import type { SessionChat, SessionStatus, SessionSummary, UiEvent } from '@/lib/happy/types';
 
 type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';
+type ComposerMode = 'agent' | 'plan' | 'terminal';
+type WorkspaceTab = 'run' | 'files' | 'terminal' | 'context';
+type PreviewState = 'closed' | 'open' | 'dock';
+type ModelProvider = 'claude' | 'codex' | 'gemini';
+type ReasoningEffort = 'Low' | 'Medium' | 'High' | 'XHigh' | 'Max';
+type ExpandedTurnState = string | null | '__none__';
 
 type FileItem = {
   name: string;
@@ -125,6 +141,81 @@ const FALLBACK_FILES: FileItem[] = [
   { name: 'design-system-v1.html', path: '/docs/design/design-system-v1.html', isDirectory: false, isFile: true, sizeBytes: 98100 },
   { name: 'chat-composer-v2.html', path: '/docs/design/chat-composer-v2.html', isDirectory: false, isFile: true, sizeBytes: 108500 },
 ];
+
+const MODEL_OPTIONS: Record<ModelProvider, Array<{ name: string; meta: string }>> = {
+  claude: [
+    { name: 'Opus 4.7', meta: '200k · 1M context · reasoning' },
+    { name: 'Sonnet 4.6', meta: '200k context · balanced' },
+    { name: 'Haiku 4.5', meta: '200k context · fast' },
+  ],
+  codex: [
+    { name: 'GPT-5.5', meta: '200k context · reasoning' },
+    { name: 'GPT-5', meta: '128k context' },
+    { name: 'GPT-5 mini', meta: '128k context · fast' },
+  ],
+  gemini: [
+    { name: 'Gemini 3 Pro', meta: '2M context · reasoning' },
+    { name: 'Gemini 3 Flash', meta: '1M context · fast' },
+  ],
+};
+
+const PROVIDER_LABELS: Record<ModelProvider, string> = {
+  claude: 'Claude',
+  codex: 'Codex',
+  gemini: 'Gemini',
+};
+
+const PROVIDER_EFFORTS: Record<ModelProvider, ReasoningEffort[]> = {
+  claude: ['Low', 'Medium', 'High', 'XHigh', 'Max'],
+  codex: ['Low', 'Medium', 'High', 'XHigh'],
+  gemini: ['Low', 'Medium', 'High'],
+};
+
+const COMPOSER_MODE_COPY: Record<ComposerMode, string> = {
+  agent: 'Agent',
+  plan: 'Plan',
+  terminal: 'Terminal',
+};
+
+function providerFromAgent(agent: SessionSummary['agent'] | SessionChat['agent']): ModelProvider {
+  if (agent === 'claude' || agent === 'gemini' || agent === 'codex') return agent;
+  return 'codex';
+}
+
+function normalizeReasoningEffort(value: SessionChat['modelReasoningEffort'] | null | undefined): ReasoningEffort {
+  if (value === 'low') return 'Low';
+  if (value === 'medium') return 'Medium';
+  if (value === 'xhigh') return 'XHigh';
+  return 'High';
+}
+
+function serializeReasoningEffort(value: ReasoningEffort): SessionChat['modelReasoningEffort'] {
+  if (value === 'Low') return 'low';
+  if (value === 'Medium') return 'medium';
+  if (value === 'XHigh' || value === 'Max') return 'xhigh';
+  return 'high';
+}
+
+async function copyToClipboard(value: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', 'true');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return copied;
+  } catch {
+    return false;
+  }
+}
 
 function normalizeTab(tab: string | null): TabType {
   switch (tab) {
@@ -1483,9 +1574,26 @@ function ProjectChatSurface({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const activeChat = selectedChatId ? chats.find((chat) => chat.id === selectedChatId) ?? null : null;
+  const runtimeModelLabel = activeChat?.model ?? modelLabel;
+  const runtimeAgent = activeChat?.agent ?? session.agent;
+  const timelineRef = useRef<HTMLDivElement | null>(null);
+  const [composerMode, setComposerMode] = useState<ComposerMode>('agent');
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('run');
+  const [workspaceOpen, setWorkspaceOpen] = useState(true);
+  const [previewState, setPreviewState] = useState<PreviewState>('dock');
+  const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<ModelProvider>(() => providerFromAgent(runtimeAgent));
+  const [selectedModel, setSelectedModel] = useState(runtimeModelLabel);
+  const [selectedEffort, setSelectedEffort] = useState<ReasoningEffort>(() => normalizeReasoningEffort(activeChat?.modelReasoningEffort));
+  const [expandedTurnId, setExpandedTurnId] = useState<ExpandedTurnState>(null);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [selectedWorkspaceFile, setSelectedWorkspaceFile] = useState('HomePageClient.tsx');
+  const [draftTerminalCommand, setDraftTerminalCommand] = useState('npm test -- --run tests/projectListSurface.test.ts');
+  const [previewDevice, setPreviewDevice] = useState<'1200' | '768' | '390'>('1200');
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const visibleEvents = events.slice(-40);
-  const activeModelLabel = activeChat?.model ?? modelLabel;
-  const activeAgent = activeChat?.agent ?? session.agent;
+  const activeModelLabel = selectedModel || runtimeModelLabel;
+  const activeAgent: SessionSummary['agent'] = selectedProvider;
   const userTurns = visibleEvents.filter((item) => readEventRole(item) === 'user');
   const representativeAgentEvent = visibleEvents.find((item) => readEventRole(item) !== 'user');
   const hasRuntimeEvents = visibleEvents.length > 0;
@@ -1496,6 +1604,26 @@ function ProjectChatSurface({
     ?? session.lastActivityAt
     ?? new Date().toISOString();
   const projectChatRoute = `/?tab=project&project=${session.id}&view=chat${selectedChatId ? `&chat=${selectedChatId}` : ''}`;
+  const previewTarget = `aris.lawdigest.cloud${projectChatRoute}`;
+  const workspaceFiles = [
+    { id: 'root', name: projectPath, kind: 'dir', meta: 'project' },
+    { id: 'home-client', name: 'services/aris-web/app/HomePageClient.tsx', kind: 'file', meta: '+ UI' },
+    { id: 'ui-css', name: 'services/aris-web/app/styles/ui.css', kind: 'file', meta: '+ CSS' },
+    { id: 'surface-test', name: 'services/aris-web/tests/projectListSurface.test.ts', kind: 'file', meta: '+ tests' },
+    { id: 'prototype', name: 'design/chat-prototype.html', kind: 'file', meta: 'source' },
+  ];
+  const terminalSnippets = [
+    { id: 'test', name: 'test target', cmd: 'npm test -- --run tests/projectListSurface.test.ts', tag: 'test' },
+    { id: 'mobile', name: 'mobile guard', cmd: 'npm test -- --run tests/mobileOverflowLayout.test.ts', tag: 'mobile' },
+    { id: 'typecheck', name: 'typecheck', cmd: 'npx tsc --noEmit', tag: 'type' },
+    { id: 'build', name: 'build', cmd: 'npm run build', tag: 'build' },
+  ];
+  const contextItems = [
+    { id: 'ctx-project', name: displayProjectName(session), tokens: tokenLabel },
+    { id: 'ctx-route', name: projectChatRoute, tokens: 'route' },
+    { id: 'ctx-prototype', name: 'design/chat-prototype.html', tokens: 'source' },
+    { id: 'ctx-mode', name: `${COMPOSER_MODE_COPY[composerMode]} mode`, tokens: selectedEffort },
+  ];
   const runStepItems = hasRuntimeEvents
     ? visibleEvents.slice(-4).map((item) => ({
       id: item.id,
@@ -1534,6 +1662,41 @@ function ProjectChatSurface({
         state: 'running' as const,
       },
     ];
+  const showTransientFeedback = (message: string) => {
+    setCopyFeedback(message);
+    window.setTimeout(() => {
+      setCopyFeedback(null);
+    }, 1800);
+  };
+
+  const handleCopy = (value: string, label: string) => {
+    void copyToClipboard(value).then((copied) => {
+      showTransientFeedback(copied ? `${label} copied` : `${label} ready`);
+    });
+  };
+
+  const activateWorkspaceTab = (tab: WorkspaceTab) => {
+    setWorkspaceTab(tab);
+    setWorkspaceOpen(true);
+  };
+
+  const handleJumpToLatest = () => {
+    const targetId = visibleEvents.at(-1)?.id ?? 'seed-history-primary';
+    setHighlightedMessageId(targetId);
+    timelineRef.current?.scrollTo({ top: timelineRef.current.scrollHeight, behavior: 'smooth' });
+    window.setTimeout(() => {
+      setHighlightedMessageId(null);
+    }, 1800);
+  };
+
+  const handleJumpToTurn = (turnId: string) => {
+    setExpandedTurnId(turnId);
+    setHighlightedMessageId(turnId);
+    timelineRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    window.setTimeout(() => {
+      setHighlightedMessageId(null);
+    }, 1800);
+  };
   const historyTurnItems = hasRuntimeEvents
     ? userTurns.slice(-3).map((item, turnIndex) => ({
       id: item.id,
@@ -1561,6 +1724,25 @@ function ProjectChatSurface({
         agentText: '연결된 작업 경로와 채팅 기록을 불러왔습니다.',
       },
     ];
+  const defaultExpandedTurnId = historyTurnItems[0]?.id ?? null;
+  const visibleExpandedTurnId = expandedTurnId === '__none__'
+    ? null
+    : expandedTurnId ?? defaultExpandedTurnId;
+
+  useEffect(() => {
+    setComposerMode('agent');
+    setWorkspaceTab('run');
+    setWorkspaceOpen(true);
+    setPreviewState('dock');
+    setModelSelectorOpen(false);
+    setSelectedProvider(providerFromAgent(runtimeAgent));
+    setSelectedModel(runtimeModelLabel);
+    setSelectedEffort(normalizeReasoningEffort(activeChat?.modelReasoningEffort));
+    setExpandedTurnId(null);
+    setCopyFeedback(null);
+    setSelectedWorkspaceFile('HomePageClient.tsx');
+    setDraftTerminalCommand('npm test -- --run tests/projectListSurface.test.ts');
+  }, [activeChat?.modelReasoningEffort, runtimeAgent, runtimeModelLabel, selectedChatId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1646,8 +1828,9 @@ function ProjectChatSurface({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title: `Chat ${Math.max(1, chats.length + 1)}`,
-        agent: session.agent === 'unknown' ? 'codex' : session.agent,
-        model: session.model ?? session.metadata?.runtimeModel ?? null,
+        agent: selectedProvider,
+        model: activeModelLabel,
+        modelReasoningEffort: serializeReasoningEffort(selectedEffort),
       }),
     });
     const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
@@ -1692,8 +1875,11 @@ function ProjectChatSurface({
           meta: {
             role: 'user',
             chatId: chat.id,
-            agent: chat.agent,
-            model: chat.model ?? modelLabel,
+            agent: selectedProvider,
+            model: activeModelLabel,
+            mode: composerMode,
+            modelReasoningEffort: serializeReasoningEffort(selectedEffort),
+            workspaceTab,
           },
         }),
       });
@@ -1799,7 +1985,14 @@ function ProjectChatSurface({
   }
 
   return (
-    <div className="pc-proto" data-project-chat-screen data-mode="agent" data-workspace="open">
+    <div
+      className="pc-proto"
+      data-project-chat-screen
+      data-mode={composerMode}
+      data-workspace={workspaceOpen ? 'open' : 'closed'}
+      data-ws-tab={workspaceTab}
+      data-preview={previewState}
+    >
       <div className="shell">
         <main className="shell__main">
           <header className="ch">
@@ -1812,16 +2005,25 @@ function ProjectChatSurface({
               <span className="ch__meta">{agentLabel(activeAgent, activeModelLabel)} · {tokenLabel} · {fileCount} files</span>
             </div>
             <div className="ch__actions">
-              <button type="button" className="ch__action" aria-label="Back to chat list" onClick={onBackToChatList}>
-                <MessageSquareText size={14} />
+              <button type="button" className="ch__action" aria-label="Share chat route" onClick={() => handleCopy(projectChatRoute, 'Chat route')}>
+                <Share2 size={14} />
               </button>
-              <button type="button" className="ch__action ch__action--ws" aria-pressed="true" aria-label="Workspace">
+              <button
+                type="button"
+                className="ch__action ch__action--ws"
+                aria-pressed={workspaceOpen}
+                aria-label="Workspace"
+                onClick={() => setWorkspaceOpen((current) => !current)}
+              >
                 <PanelsTopLeft size={14} />
+              </button>
+              <button type="button" className="ch__action" aria-label="More chat actions" onClick={() => setModelSelectorOpen((current) => !current)}>
+                <MoreHorizontal size={15} />
               </button>
             </div>
           </header>
 
-          <div className="tl">
+          <div className="tl" ref={timelineRef}>
             <div className="tl__container">
               <div className="tl__day">
                 <span className="tl__day-line" />
@@ -1832,7 +2034,7 @@ function ProjectChatSurface({
               {isLoadingEvents && <div className="pc-chat-loading">Loading messages...</div>}
               {!isLoadingEvents && !hasRuntimeEvents && (
                 <>
-                  <div className="msg">
+                  <div className={`msg${highlightedMessageId === 'seed-history-primary' ? ' msg--highlight' : ''}`}>
                     <span className="msg__avatar msg__avatar--user">U</span>
                     <div className="msg__body">
                       <div className="msg__header"><span className="msg__name">You</span><span className="msg__time">{formatRelativeTime(selectedChatTimestamp)}</span></div>
@@ -1854,7 +2056,18 @@ function ProjectChatSurface({
                       <div className="msg__text">
                         <p>프로젝트 컨텍스트를 먼저 확인하겠습니다. 최근 채팅, 작업 경로, 연결된 파일을 기준으로 이어서 볼 수 있습니다.</p>
                       </div>
-                      <div className="tool">
+                      <div
+                        className="tool"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleCopy(projectPath, 'Tool command')}
+                        onKeyDown={(keyEvent) => {
+                          if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
+                            keyEvent.preventDefault();
+                            handleCopy(projectPath, 'Tool command');
+                          }
+                        }}
+                      >
                         <span className="tool__icon tool__icon--success"><Check size={12} /></span>
                         <div className="tool__body">
                           <span className="tool__title">Read · project context</span>
@@ -1879,7 +2092,7 @@ function ProjectChatSurface({
                             <span className="code__lang">ctx</span>
                             <span>project scope</span>
                           </div>
-                          <button type="button" className="code__copy">Copy</button>
+                          <button type="button" className="code__copy" onClick={() => handleCopy(`project=${projectName}\nchat=${activeChat?.title ?? 'new chat'}\npath=${projectPath}\nentry=${projectChatRoute}`, 'Project scope')}>Copy</button>
                         </div>
                         <pre className="code__body">{`project=${projectName}\nchat=${activeChat?.title ?? 'new chat'}\npath=${projectPath}\nentry=${projectChatRoute}`}</pre>
                       </div>
@@ -1899,7 +2112,7 @@ function ProjectChatSurface({
                           <span className="artifact__name">project-context.snapshot</span>
                           <span className="artifact__sub">workspace context · ready</span>
                         </div>
-                        <button type="button" className="artifact__btn">Preview</button>
+                        <button type="button" className="artifact__btn" data-preview-open onClick={() => setPreviewState('open')}>Preview</button>
                       </div>
                       <div className="thinking">
                         <span className="thinking__dots"><span className="thinking__dot" /><span className="thinking__dot" /><span className="thinking__dot" /></span>
@@ -1917,7 +2130,7 @@ function ProjectChatSurface({
                 const snippet = item.parsed?.snippets?.[0];
                 const toolLike = !isUser && isToolLikeEvent(item);
                 return (
-                  <div key={item.id} className="msg">
+                  <div key={item.id} className={`msg${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
                     <span className={`msg__avatar ${isUser ? 'msg__avatar--user' : agentAvatarClass(activeAgent)}`}>{isUser ? 'U' : agentInitial(activeAgent)}</span>
                     <div className="msg__body">
                       <div className="msg__header">
@@ -1943,7 +2156,18 @@ function ProjectChatSurface({
                         <>
                           <div className="msg__text"><p>{getEventText(item)}</p></div>
                           {toolLike && (
-                            <div className="tool">
+                            <div
+                              className="tool"
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => handleCopy(eventCommand(item), 'Tool command')}
+                              onKeyDown={(keyEvent) => {
+                                if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
+                                  keyEvent.preventDefault();
+                                  handleCopy(eventCommand(item), 'Tool command');
+                                }
+                              }}
+                            >
                               <span className="tool__icon tool__icon--success"><Check size={12} /></span>
                               <div className="tool__body">
                                 <span className="tool__title">{item.title || item.kind}</span>
@@ -1960,7 +2184,7 @@ function ProjectChatSurface({
                                   <span className="code__lang">{snippet.language || 'txt'}</span>
                                   <span>generated snippet</span>
                                 </div>
-                                <button type="button" className="code__copy">Copy</button>
+                                <button type="button" className="code__copy" onClick={() => handleCopy(snippet.code, 'Code block')}>Copy</button>
                               </div>
                               <pre className="code__body">{snippet.code}</pre>
                             </div>
@@ -1972,7 +2196,7 @@ function ProjectChatSurface({
                                 <span className="artifact__name">{item.parsed.files[0]}</span>
                                 <span className="artifact__sub">project file · referenced</span>
                               </div>
-                              <button type="button" className="artifact__btn">Preview</button>
+                              <button type="button" className="artifact__btn" data-preview-open onClick={() => setPreviewState('open')}>Preview</button>
                             </div>
                           )}
                         </>
@@ -1987,7 +2211,7 @@ function ProjectChatSurface({
               <div className="jb">
                 <span className="jb__dot" />
                 <span>Project scope active</span>
-                <button type="button" className="jb__btn" aria-label="Jump">
+                <button type="button" className="jb__btn" aria-label="Jump" onClick={handleJumpToLatest}>
                   <ChevronRight size={12} />
                 </button>
               </div>
@@ -1998,21 +2222,110 @@ function ProjectChatSurface({
             <form className="cmp" onSubmit={handleSubmit}>
               <div className="cmp__top">
                 <div className="cmp-mode" role="tablist" aria-label="Mode">
-                  <button type="button" className="cmp-mode__pill" data-mode="agent" aria-pressed="true"><span className="cmp-mode__pill-dot" />Agent</button>
-                  <button type="button" className="cmp-mode__pill" data-mode="plan" aria-pressed="false"><span className="cmp-mode__pill-dot" />Plan</button>
-                  <button type="button" className="cmp-mode__pill" data-mode="terminal" aria-pressed="false"><span className="cmp-mode__pill-dot" />Terminal</button>
+                  {(['agent', 'plan', 'terminal'] as ComposerMode[]).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className="cmp-mode__pill"
+                      data-mode={mode}
+                      aria-pressed={composerMode === mode}
+                      onClick={() => setComposerMode(mode)}
+                    >
+                      <span className="cmp-mode__pill-dot" />
+                      {COMPOSER_MODE_COPY[mode]}
+                    </button>
+                  ))}
                 </div>
-                <button type="button" className="cmp-ctx" aria-label="Current model">
-                  <span className="cmp-ctx__logo">{agentInitial(activeAgent).slice(0, 1)}</span>
+                <button type="button" className="cmp-ctx" aria-label="Current model" aria-expanded={modelSelectorOpen} onClick={() => setModelSelectorOpen((current) => !current)}>
+                  <span className={`cmp-ctx__logo cmp-ctx__logo--${selectedProvider}`}>{agentInitial(activeAgent).slice(0, 1)}</span>
                   <span className="cmp-ctx__name">{activeModelLabel}</span>
-                  <span className="cmp-ctx__effort">High</span>
+                  <span className="cmp-ctx__effort">{selectedEffort}</span>
                   <ChevronRight size={12} />
                 </button>
+              </div>
+              <div className={`ms${modelSelectorOpen ? ' ms--open' : ''}`} role="dialog" aria-label="Model selector">
+                <div className="ms__eyebrow-row">
+                  <span className="ms__eyebrow">Model</span>
+                  <button type="button" className="ms__close" aria-label="Close model selector" onClick={() => setModelSelectorOpen(false)}>
+                    <X size={12} />
+                  </button>
+                </div>
+                <div className="ms__providers" role="tablist">
+                  {(['claude', 'codex', 'gemini'] as ModelProvider[]).map((provider) => (
+                    <button
+                      key={provider}
+                      type="button"
+                      className="ms__provider"
+                      data-provider={provider}
+                      aria-pressed={selectedProvider === provider}
+                      onClick={() => {
+                        setSelectedProvider(provider);
+                        setSelectedModel(MODEL_OPTIONS[provider][0]?.name ?? activeModelLabel);
+                        const allowedEfforts = PROVIDER_EFFORTS[provider];
+                        if (!allowedEfforts.includes(selectedEffort)) {
+                          setSelectedEffort(allowedEfforts.at(-1) ?? 'High');
+                        }
+                      }}
+                    >
+                      <span>{agentInitial(provider).slice(0, 1)}</span>
+                      <span className="ms__provider-label">{PROVIDER_LABELS[provider]}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="ms__list-wrap">
+                  {(['claude', 'codex', 'gemini'] as ModelProvider[]).map((provider) => (
+                    <div key={provider} className="ms__group" data-provider={provider} data-active={selectedProvider === provider ? '' : undefined}>
+                      {MODEL_OPTIONS[provider].map((model) => (
+                        <button
+                          key={model.name}
+                          type="button"
+                          className="ms__item"
+                          aria-pressed={selectedProvider === provider && activeModelLabel === model.name}
+                          onClick={() => {
+                            setSelectedProvider(provider);
+                            setSelectedModel(model.name);
+                            setModelSelectorOpen(false);
+                            showTransientFeedback(`${model.name} selected`);
+                          }}
+                        >
+                          <span className="ms__item-check" />
+                          <span className="ms__item-body">
+                            <span className="ms__item-name">{model.name}</span>
+                            <span className="ms__item-meta">{model.meta}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                <div className="ms__footer">
+                  <span className="ms__eyebrow">Effort</span>
+                  <div className="ms__effort-chips" role="tablist" aria-label="Reasoning effort">
+                    {(['Low', 'Medium', 'High', 'XHigh', 'Max'] as ReasoningEffort[]).map((effort) => {
+                      const disabled = !PROVIDER_EFFORTS[selectedProvider].includes(effort);
+                      return (
+                        <button
+                          key={effort}
+                          type="button"
+                          className={`ms__effort-chip${disabled ? ' ms__effort-chip--disabled' : ''}`}
+                          aria-pressed={selectedEffort === effort}
+                          disabled={disabled}
+                          onClick={() => setSelectedEffort(effort)}
+                        >
+                          {effort}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
               <div className="cmp__chips">
                 <span className="cmp-attach">
                   <span className="cmp-attach__icon"><FileText size={12} /></span>
                   <span className="cmp-attach__name">{displayProjectName(session)}</span>
+                  <button type="button" className="cmp-attach__x" aria-label="Copy attached project path" onClick={() => handleCopy(projectPath, 'Project path')}>
+                    <Copy size={10} />
+                  </button>
                 </span>
               </div>
               <textarea
@@ -2024,10 +2337,29 @@ function ProjectChatSurface({
               />
               <div className="cmp__toolbar">
                 <div className="cmp__tools">
-                  <button type="button" className="cmp__tool" aria-label="Add"><Plus size={15} /></button>
-                  <button type="button" className="cmp__tool" aria-label="Attach file"><FileText size={15} /></button>
-                  <button type="button" className="cmp__tool" aria-label="Mention"><Database size={15} /></button>
-                  <button type="button" className="cmp__tool" aria-label="Voice"><Mic size={15} /></button>
+                  <button type="button" className="cmp__tool" aria-label="Add" onClick={() => showTransientFeedback('Context action ready')}><Plus size={15} /></button>
+                  <button
+                    type="button"
+                    className="cmp__tool"
+                    aria-label="Attach file"
+                    onClick={() => {
+                      activateWorkspaceTab('files');
+                      showTransientFeedback('Files panel opened');
+                    }}
+                  >
+                    <Paperclip size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className="cmp__tool"
+                    aria-label="Mention"
+                    onClick={() => setPrompt((value) => `${value}${value.endsWith(' ') || value.length === 0 ? '' : ' '}@${displayProjectName(session)} `)}
+                  >
+                    <AtSign size={15} />
+                  </button>
+                  <button type="button" className="cmp__tool" aria-label="Voice" onClick={() => showTransientFeedback('Voice input is not available in this workspace')}>
+                    <Mic size={15} />
+                  </button>
                 </div>
                 <div className="cmp__right">
                   <span className="cmp__hint"><span className="kbd">⌘</span><span className="kbd">↵</span><span>send</span></span>
@@ -2046,27 +2378,35 @@ function ProjectChatSurface({
           <div className="ws__head">
             <div className="ws__title"><PanelsTopLeft size={14} />Workspace</div>
             <div className="ws__actions">
-              <button type="button" className="ws__action" aria-label="Open files"><FileText size={13} /></button>
+              <button type="button" className="ws__action" aria-label="Open preview" onClick={() => setPreviewState('open')}>
+                <Maximize2 size={13} />
+              </button>
+              <button type="button" className="ws__action" aria-label="Open files" onClick={() => activateWorkspaceTab('files')}>
+                <FileText size={13} />
+              </button>
+              <button type="button" className="ws__action" aria-label="Close workspace" onClick={() => setWorkspaceOpen(false)}>
+                <X size={13} />
+              </button>
             </div>
           </div>
           <div className="ws__tabs" role="tablist">
-            <button type="button" className="ws__tab" data-tab="run" aria-pressed="true"><Clock3 size={12} />Run</button>
-            <button type="button" className="ws__tab" data-tab="files" aria-pressed="false"><FileText size={12} />Files <span className="ws__tab-badge">{fileCount}</span></button>
-            <button type="button" className="ws__tab" data-tab="terminal" aria-pressed="false"><Monitor size={12} />Term</button>
-            <button type="button" className="ws__tab" data-tab="context" aria-pressed="false"><Database size={12} />Ctx</button>
+            <button type="button" className="ws__tab" data-tab="run" aria-pressed={workspaceTab === 'run'} onClick={() => activateWorkspaceTab('run')}><Clock3 size={12} />Run</button>
+            <button type="button" className="ws__tab" data-tab="files" aria-pressed={workspaceTab === 'files'} onClick={() => activateWorkspaceTab('files')}><FileText size={12} />Files <span className="ws__tab-badge">{fileCount}</span></button>
+            <button type="button" className="ws__tab" data-tab="terminal" aria-pressed={workspaceTab === 'terminal'} onClick={() => activateWorkspaceTab('terminal')}><Terminal size={12} />Term</button>
+            <button type="button" className="ws__tab" data-tab="context" aria-pressed={workspaceTab === 'context'} onClick={() => activateWorkspaceTab('context')}><Database size={12} />Ctx</button>
           </div>
           <div className="ws__status">
             <div className="ws__status-left">
-              <span className="ws__model"><span className="ws__model-dot" />{activeModelLabel}</span>
+              <span className={`ws__model ws__model--${selectedProvider}`}><span className="ws__model-dot" />{activeModelLabel}</span>
               <span className="ws__pill"><span className="ws__pill-dot" />{projectStatusLabel(session.status)}</span>
             </div>
             <div className="ws__status-right">
               <span>{tokenLabel}</span>
-              <button type="button" className="ws__stop" aria-label="Stop"><Square size={10} /></button>
+              <button type="button" className="ws__stop" aria-label="Stop" onClick={() => showTransientFeedback('Stop request staged for this project chat')}><Square size={10} /></button>
             </div>
           </div>
           <div className="ws__body">
-            <div className="ws__pane ws__pane--active">
+            <div className={`ws__pane${workspaceTab === 'run' ? ' ws__pane--active' : ''}`} data-pane="run">
               <div className="run-summary">
                 <div className="run-summary__cell"><span className="run-summary__label">Steps</span><span className="run-summary__value">{hasRuntimeEvents ? Math.max(1, visibleEvents.length) : '4 / 5'}</span></div>
                 <div className="run-summary__cell"><span className="run-summary__label">Tokens</span><span className="run-summary__value">{tokenLabel}</span></div>
@@ -2074,14 +2414,14 @@ function ProjectChatSurface({
               </div>
               <div className="run-steps">
                 {runStepItems.map((item) => (
-                  <div key={item.id} className={`run-step${item.state === 'running' ? ' run-step--active' : ''}`}>
+                  <button key={item.id} type="button" className={`run-step${item.state === 'running' ? ' run-step--active' : ''}`} onClick={() => handleCopy(item.cmd, 'Run step')}>
                     <span className={`run-step__dot ${item.state === 'running' ? 'run-step__dot--running' : 'run-step__dot--done'}`} />
                     <div className="run-step__body">
                       <div className="run-step__title">{item.title}</div>
                       <div className="run-step__cmd">{item.cmd}</div>
                     </div>
                     <span className="run-step__time">{item.time}</span>
-                  </div>
+                  </button>
                 ))}
               </div>
               <div className="chist">
@@ -2091,8 +2431,13 @@ function ProjectChatSurface({
                 </div>
                 <div className="chist__list">
                   {historyTurnItems.map((item) => (
-                    <div key={item.id} className="chturn" data-open={item.open ? 'true' : 'false'}>
-                      <button type="button" className="chturn__preview">
+                    <div key={item.id} className="chturn" data-open={visibleExpandedTurnId === item.id ? 'true' : 'false'}>
+                      <button
+                        type="button"
+                        className="chturn__preview"
+                        data-turn-toggle
+                        onClick={() => setExpandedTurnId(visibleExpandedTurnId === item.id ? '__none__' : item.id)}
+                      >
                         <span className="chturn__avatar">U</span>
                         <span className="chturn__body">
                           <span className="chturn__meta">
@@ -2114,13 +2459,101 @@ function ProjectChatSurface({
                         </div>
                         <div className="chturn__agent-text">{item.agentText}</div>
                         <div className="chturn__actions">
-                          <button type="button" className="chturn__btn"><ChevronRight size={11} />Jump</button>
-                          <button type="button" className="chturn__btn"><FileText size={11} />Preview</button>
+                          <button type="button" className="chturn__btn" onClick={() => handleJumpToTurn(item.id)}><ChevronRight size={11} />Jump</button>
+                          <button type="button" className="chturn__btn" data-preview-open onClick={() => setPreviewState('open')}><FileText size={11} />Preview</button>
+                          <button type="button" className="chturn__btn" onClick={() => handleCopy(`${item.text}\n\n${item.agentText}`, 'Turn summary')}><Copy size={11} />Copy</button>
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+            <div className={`ws__pane${workspaceTab === 'files' ? ' ws__pane--active' : ''}`} data-pane="files">
+              <div className="file-tree">
+                {workspaceFiles.map((file) => (
+                  <button
+                    key={file.id}
+                    type="button"
+                    className={`file-row${selectedWorkspaceFile === file.name ? ' file-row--selected' : ''}`}
+                    onClick={() => {
+                      setSelectedWorkspaceFile(file.name);
+                      if (file.kind === 'file') setPreviewState('dock');
+                    }}
+                  >
+                    <span className={`file-row__icon${file.kind === 'dir' ? ' file-row__icon--dir' : ''}`}>
+                      {file.kind === 'dir' ? <FolderOpen size={13} /> : <FileText size={13} />}
+                    </span>
+                    <span className="file-row__name">{file.name}</span>
+                    <span className="file-row__meta">{file.meta}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className={`ws__pane${workspaceTab === 'terminal' ? ' ws__pane--active' : ''}`} data-pane="terminal">
+              <div className="term">
+                <div className="term__head">
+                  <div className="term__head-left">
+                    <span className="term__dots"><span className="term__dot term__dot--r" /><span className="term__dot term__dot--y" /><span className="term__dot term__dot--g" /></span>
+                    <span className="term__tag">bash · project chat</span>
+                  </div>
+                  <span className="term__dim">{composerMode}</span>
+                </div>
+                <div className="term__body">
+                  <div className="term__line"><span className="term__prompt">~/aris$</span><span>{draftTerminalCommand}</span></div>
+                  <div className="term__line"><span className="term__dim">selected · {selectedWorkspaceFile}</span></div>
+                  <div className="term__line"><span className="term__ok">✓</span><span>ready to run in this project context</span></div>
+                </div>
+              </div>
+              <div className="snip-group">
+                <div className="snip-group__head">
+                  <span className="snip-group__label"><Terminal size={12} />Snippets</span>
+                  <span className="snip-group__count">{terminalSnippets.length}</span>
+                </div>
+                {terminalSnippets.map((snippet) => (
+                  <button
+                    key={snippet.id}
+                    type="button"
+                    className="snip-row"
+                    onClick={() => {
+                      setDraftTerminalCommand(snippet.cmd);
+                      setPrompt((value) => value || snippet.cmd);
+                    }}
+                  >
+                    <span className="snip-row__name">{snippet.name}</span>
+                    <span className="snip-row__cmd">{snippet.cmd}</span>
+                    <span className="snip-row__tag">{snippet.tag}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className={`ws__pane${workspaceTab === 'context' ? ' ws__pane--active' : ''}`} data-pane="context">
+              <div className="ctx-summary">
+                <div className="ctx-ring" aria-label={`${tokenLabel} context usage`}>
+                  <svg viewBox="0 0 80 80" width="80" height="80" aria-hidden="true">
+                    <circle className="ctx-ring__track" cx="40" cy="40" r="34" strokeWidth="6" fill="none" />
+                    <circle className="ctx-ring__fill" cx="40" cy="40" r="34" strokeWidth="6" fill="none" strokeDasharray="214" strokeDashoffset="194" strokeLinecap="round" />
+                  </svg>
+                  <div className="ctx-ring__center">9.2%</div>
+                </div>
+                <div className="ctx-summary__body">
+                  <div className="ctx-summary__title">Context usage</div>
+                  <div className="ctx-summary__meta">{tokenLabel} / 200k tokens</div>
+                  <div className="ctx-summary__split">
+                    <div className="ctx-summary__split-cell"><div className="ctx-summary__split-label">Model</div><div className="ctx-summary__split-value">{activeModelLabel}</div></div>
+                    <div className="ctx-summary__split-cell"><div className="ctx-summary__split-label">Mode</div><div className="ctx-summary__split-value">{COMPOSER_MODE_COPY[composerMode]}</div></div>
+                  </div>
+                </div>
+              </div>
+              <div className="ctx-group">
+                <div className="ctx-group__head"><span className="ctx-group__title">Attached context</span><span className="ctx-group__count">{contextItems.length}</span></div>
+                {contextItems.map((item) => (
+                  <button key={item.id} type="button" className="ctx-item" onClick={() => handleCopy(item.name, 'Context item')}>
+                    <FileText size={13} className="ctx-item__icon" />
+                    <span className="ctx-item__name">{item.name}</span>
+                    <span className="ctx-item__tokens">{item.tokens}</span>
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -2131,6 +2564,76 @@ function ProjectChatSurface({
           </div>
         </aside>
       </div>
+      <div className="overlay" data-preview-overlay role="dialog" aria-modal="true" aria-label="Preview">
+        <div className="preview-frame">
+          <div className="preview-topbar">
+            <div className="preview-topbar__nav">
+              <button type="button" className="preview-topbar__btn" aria-label="Back"><ChevronLeft size={13} /></button>
+              <button type="button" className="preview-topbar__btn" aria-label="Refresh" onClick={() => showTransientFeedback('Preview refreshed')}><RefreshCcw size={13} /></button>
+            </div>
+            <div className="preview-url">
+              <span className="preview-url__protocol">https://</span>
+              <span className="preview-url__target">{previewTarget}</span>
+              <span className="preview-url__meta">project</span>
+            </div>
+            <div className="preview-device" role="tablist" aria-label="Preview size">
+              {(['1200', '768', '390'] as const).map((device) => (
+                <button key={device} type="button" aria-pressed={previewDevice === device} onClick={() => setPreviewDevice(device)}>{device}</button>
+              ))}
+            </div>
+            <button type="button" className="preview-topbar__btn" aria-label="Copy preview URL" onClick={() => handleCopy(`https://${previewTarget}`, 'Preview URL')}><ExternalLink size={13} /></button>
+            <button type="button" className="preview-topbar__btn" data-preview-dock aria-label="Dock preview" onClick={() => setPreviewState('dock')}><PanelsTopLeft size={13} /></button>
+            <button type="button" className="preview-topbar__btn" aria-label="Close preview" onClick={() => setPreviewState('closed')}><X size={13} /></button>
+          </div>
+          <div className="preview-canvas" data-preview-size={previewDevice}>
+            <div className="preview-page">
+              <aside className="preview-page__sb">
+                <div className="preview-page__sb-logo">ARIS</div>
+                <div className="preview-page__sb-item preview-page__sb-item--active">{displayProjectName(session)}</div>
+                <div className="preview-page__sb-item">{activeChat?.title ?? 'Project chat'}</div>
+                <div className="preview-page__sb-item">{selectedWorkspaceFile}</div>
+              </aside>
+              <main className="preview-page__main">
+                <h2 className="preview-page__h">{activeChat?.title ?? 'Project chat'}</h2>
+                <p className="preview-page__sub">{agentLabel(activeAgent, activeModelLabel)} · {COMPOSER_MODE_COPY[composerMode]} · {tokenLabel}</p>
+                <div className="preview-page__cards">
+                  <div className="preview-page__card">
+                    <div className="preview-page__card-t">Workspace</div>
+                    <div className="preview-page__card-m">{workspaceTab} · {selectedWorkspaceFile}</div>
+                    <div className="preview-page__bar"><div className="preview-page__bar-fill" style={{ width: '74%' }} /></div>
+                  </div>
+                  <div className="preview-page__card">
+                    <div className="preview-page__card-t">Context</div>
+                    <div className="preview-page__card-m">{projectPath}</div>
+                    <div className="preview-page__bar"><div className="preview-page__bar-fill" style={{ width: '42%' }} /></div>
+                  </div>
+                </div>
+              </main>
+            </div>
+            <div className="preview-controls">
+              <button type="button" aria-label="Zoom out" onClick={() => showTransientFeedback('Preview zoom 90%')}><ChevronLeft size={12} /></button>
+              <span className="preview-controls__zoom">100%</span>
+              <button type="button" aria-label="Zoom in" onClick={() => showTransientFeedback('Preview zoom 110%')}><ChevronRight size={12} /></button>
+              <span className="preview-controls__sep" />
+              <button type="button" aria-label="Screenshot" onClick={() => showTransientFeedback('Screenshot staged')}><Copy size={12} /></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="preview-dock-wrap" data-preview-dock>
+        <div className="preview-dock">
+          <span className="preview-dock__thumb" />
+          <span className="preview-dock__name">{selectedWorkspaceFile}</span>
+          <span className="preview-dock__meta">{previewDevice}</span>
+          <button type="button" className="preview-dock__btn preview-dock__btn--live" data-preview-open aria-label="Expand preview" onClick={() => setPreviewState('open')}>
+            <Maximize2 size={12} />
+          </button>
+          <button type="button" className="preview-dock__btn" aria-label="Close preview dock" onClick={() => setPreviewState('closed')}>
+            <X size={12} />
+          </button>
+        </div>
+      </div>
+      {copyFeedback && <div className="pc-toast" data-copy-feedback role="status">{copyFeedback}</div>}
     </div>
   );
 }
