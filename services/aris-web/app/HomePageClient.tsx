@@ -441,6 +441,25 @@ function Sidebar({
   const userInitial = (user.email?.trim()?.[0] ?? 'A').toUpperCase();
   const [activeProjectChats, setActiveProjectChats] = useState<SessionChat[]>([]);
   const [isLoadingProjectChats, setIsLoadingProjectChats] = useState(false);
+  const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
+  const [tipPosition, setTipPosition] = useState<{ top: number; left: number } | null>(null);
+
+  function handleProjectTipShow(session: SessionSummary, event: React.SyntheticEvent<HTMLButtonElement>) {
+    const target = event.currentTarget;
+    const rect = target.getBoundingClientRect();
+    const top = Math.max(8, Math.min(rect.top, window.innerHeight - 220));
+    const left = rect.right + 8;
+    setHoveredProjectId(session.id);
+    setTipPosition({ top, left });
+  }
+
+  function handleProjectTipHide() {
+    setHoveredProjectId(null);
+  }
+
+  const hoveredProject = hoveredProjectId
+    ? projects.find((p) => p.id === hoveredProjectId) ?? null
+    : null;
 
   const navItems: Array<{ id: TabType; label: string; Icon: typeof Home; count?: number }> = [
     { id: 'home', label: 'Home', Icon: Home },
@@ -528,6 +547,11 @@ function Sidebar({
                     type="button"
                     className={`m-sb__proj m-sb__proj--${statusClass(session.status)}${isActiveProject ? ' m-sb__proj--active' : ''}`}
                     onClick={() => onProjectOpen(session.id)}
+                    onMouseEnter={(event) => handleProjectTipShow(session, event)}
+                    onMouseLeave={handleProjectTipHide}
+                    onFocus={(event) => handleProjectTipShow(session, event)}
+                    onBlur={handleProjectTipHide}
+                    aria-describedby={hoveredProjectId === session.id ? 'sb-tip' : undefined}
                   >
                     <span className="m-sb__proj-dot" />
                     <span className="m-sb__proj-name">{displayProjectName(session)}</span>
@@ -568,6 +592,35 @@ function Sidebar({
           <div className="m-sb__footer-meta">{user.role}</div>
         </div>
       </div>
+      {hoveredProject && tipPosition ? (() => {
+        const statusKey = statusClass(hoveredProject.status);
+        const previewIndex = projects.indexOf(hoveredProject);
+        const lastUserText = createChatPreview(hoveredProject, previewIndex >= 0 ? previewIndex : 0);
+        return (
+          <div
+            id="sb-tip"
+            role="tooltip"
+            aria-hidden={false}
+            className={`sb-tip sb-tip--visible sb-tip--${statusKey}`}
+            style={{ top: tipPosition.top, left: tipPosition.left }}
+          >
+            <div className="sb-tip__title">{displayProjectName(hoveredProject)}</div>
+            <div className="sb-tip__meta">
+              <span className="sb-tip__meta-time">{formatRelativeTime(hoveredProject.lastActivityAt)}</span>
+              <span className="sb-tip__status">
+                <span className="sb-tip__status-dot" />
+                <span>{projectStatusLabel(hoveredProject.status)}</span>
+              </span>
+            </div>
+            <div className="sb-tip__last">
+              <div className="sb-tip__last-label">
+                <MessageSquareText size={10} /> Last user message
+              </div>
+              <div className="sb-tip__last-text">{lastUserText}</div>
+            </div>
+          </div>
+        );
+      })() : null}
     </aside>
   );
 }
@@ -2363,9 +2416,14 @@ function ProjectChatSurface({
                 </div>
                 <div className="cmp__right">
                   <span className="cmp__hint"><span className="kbd">⌘</span><span className="kbd">↵</span><span>send</span></span>
-                  <button type="submit" className="cmp__send" disabled={!prompt.trim() || isSubmitting}>
-                    {isSubmitting ? 'Sending' : 'Send'}
-                    <Send size={13} />
+                  <button
+                    type="submit"
+                    className={`cmp__send${isSubmitting ? ' cmp__send--running' : ''}`}
+                    disabled={isSubmitting ? false : !prompt.trim()}
+                    aria-label={isSubmitting ? 'Stop generation' : 'Send message'}
+                  >
+                    {isSubmitting ? 'Stop' : 'Send'}
+                    {isSubmitting ? <Square size={11} /> : <Send size={13} />}
                   </button>
                 </div>
               </div>
