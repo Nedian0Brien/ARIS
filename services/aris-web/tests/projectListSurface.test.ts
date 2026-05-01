@@ -90,7 +90,8 @@ describe('project list surface', () => {
     expect(homeClient).toContain('void copyToClipboard');
     expect(homeClient).toContain("setComposerMode(mode)");
     expect(homeClient).toContain("setWorkspaceTab(tab)");
-    expect(homeClient).toContain("setWorkspaceOpen((current) => !current)");
+    expect(homeClient).toContain('const openWorkspacePanel = () => {');
+    expect(homeClient).toContain('const closeWorkspacePanel = () => {');
     expect(homeClient).toContain("setPreviewState('open')");
     expect(homeClient).toContain("setPreviewState('dock')");
     expect(homeClient).toContain('data-preview-overlay');
@@ -116,7 +117,9 @@ describe('project list surface', () => {
     expect(workspaceAction).toContain('<PanelRight size={14} />');
     expect(workspaceAction).not.toContain('PanelsTopLeft');
     expect(homeClient).toContain('const toggleWorkspacePanel = () => {');
-    expect(homeClient).toContain('setWorkspaceOpen((current) => !current);');
+    expect(homeClient).toContain('if (workspaceOpen) {');
+    expect(homeClient).toContain('closeWorkspacePanel();');
+    expect(homeClient).toContain('openWorkspacePanel();');
     expect(homeClient).toContain('<div className="ws__title"><PanelRight size={14} />Workspace</div>');
   });
 
@@ -126,11 +129,18 @@ describe('project list surface', () => {
     expect(homeClient).toContain('const defaultWorkspaceOpen = () => !window.matchMedia');
     expect(homeClient).toContain('setWorkspaceLayoutReady(true);');
     expect(homeClient).not.toContain('setWorkspaceLayoutReady(false);');
+    expect(homeClient).toContain("const [workspaceDrawerPhase, setWorkspaceDrawerPhase] = useState<'idle' | 'closing'>('idle');");
+    expect(homeClient).toContain("data-workspace={workspaceDrawerPhase === 'closing' ? 'closing' : workspaceOpen ? 'open' : 'closed'}");
+    expect(homeClient).toContain('const closeWorkspacePanel = () => {');
+    expect(homeClient).toContain("setWorkspaceDrawerPhase('closing');");
     expect(uiCss).toContain('.pc-proto[data-workspace-ready="true"][data-workspace="open"] .shell__workspace');
+    expect(uiCss).toContain('.pc-proto[data-workspace-ready="true"][data-workspace="closing"] .shell__workspace');
     expect(uiCss).toContain('width: min(420px, calc(100vw - 32px));');
     expect(uiCss).toContain('box-shadow: -18px 0 44px rgba(15, 23, 42, 0.18);');
     expect(uiCss).toContain('animation: pc-workspace-drawer-in 180ms var(--ease-smooth) both;');
+    expect(uiCss).toContain('animation: pc-workspace-drawer-out 160ms var(--ease-smooth) both;');
     expect(uiCss).toContain('@keyframes pc-workspace-drawer-in');
+    expect(uiCss).toContain('@keyframes pc-workspace-drawer-out');
     expect(uiCss).toContain('@media (prefers-reduced-motion: reduce)');
     expect(uiCss).toContain('animation: none;');
   });

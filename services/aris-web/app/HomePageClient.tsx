@@ -1,6 +1,6 @@
 'use client';
 
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Activity,
@@ -106,6 +106,7 @@ const SUGGESTED_ASKS = [
 ];
 
 const CMD_CONSOLE_MAX_LINES = 16;
+const WORKSPACE_DRAWER_CLOSE_MS = 160;
 
 const CMD_CONSOLE_SCRIPT: Array<[string, CmdConsoleOutput[]]> = [
   ['aris context hydrate --scope workspace', [
@@ -1631,9 +1632,11 @@ function ProjectChatSurface({
   const runtimeModelLabel = activeChat?.model ?? modelLabel;
   const runtimeAgent = activeChat?.agent ?? session.agent;
   const timelineRef = useRef<HTMLDivElement | null>(null);
+  const workspaceCloseTimerRef = useRef<number | null>(null);
   const [composerMode, setComposerMode] = useState<ComposerMode>('agent');
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('run');
   const [workspaceOpen, setWorkspaceOpen] = useState(true);
+  const [workspaceDrawerPhase, setWorkspaceDrawerPhase] = useState<'idle' | 'closing'>('idle');
   const [workspaceLayoutReady, setWorkspaceLayoutReady] = useState(false);
   const [previewState, setPreviewState] = useState<PreviewState>('dock');
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
@@ -1730,15 +1733,51 @@ function ProjectChatSurface({
     });
   };
 
-  const activateWorkspaceTab = (tab: WorkspaceTab) => {
-    setWorkspaceTab(tab);
-    setWorkspaceOpen(true);
-  };
-
   const defaultWorkspaceOpen = () => !window.matchMedia('(max-width: 1100px)').matches;
 
+  const clearWorkspaceCloseTimer = useCallback(() => {
+    if (workspaceCloseTimerRef.current === null) return;
+    window.clearTimeout(workspaceCloseTimerRef.current);
+    workspaceCloseTimerRef.current = null;
+  }, []);
+
+  const setWorkspacePanelImmediate = useCallback((open: boolean) => {
+    clearWorkspaceCloseTimer();
+    setWorkspaceDrawerPhase('idle');
+    setWorkspaceOpen(open);
+  }, [clearWorkspaceCloseTimer]);
+
+  const openWorkspacePanel = () => {
+    setWorkspacePanelImmediate(true);
+  };
+
+  const closeWorkspacePanel = () => {
+    clearWorkspaceCloseTimer();
+    setWorkspaceOpen(false);
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setWorkspaceDrawerPhase('idle');
+      return;
+    }
+
+    setWorkspaceDrawerPhase('closing');
+    workspaceCloseTimerRef.current = window.setTimeout(() => {
+      setWorkspaceDrawerPhase('idle');
+      workspaceCloseTimerRef.current = null;
+    }, WORKSPACE_DRAWER_CLOSE_MS);
+  };
+
+  const activateWorkspaceTab = (tab: WorkspaceTab) => {
+    setWorkspaceTab(tab);
+    openWorkspacePanel();
+  };
+
   const toggleWorkspacePanel = () => {
-    setWorkspaceOpen((current) => !current);
+    if (workspaceOpen) {
+      closeWorkspacePanel();
+      return;
+    }
+    openWorkspacePanel();
   };
 
   const handleJumpToLatest = () => {
@@ -1790,10 +1829,16 @@ function ProjectChatSurface({
     ? null
     : expandedTurnId ?? defaultExpandedTurnId;
 
+  useEffect(() => () => {
+    if (workspaceCloseTimerRef.current !== null) {
+      window.clearTimeout(workspaceCloseTimerRef.current);
+    }
+  }, []);
+
   useEffect(() => {
     setComposerMode('agent');
     setWorkspaceTab('run');
-    setWorkspaceOpen(defaultWorkspaceOpen());
+    setWorkspacePanelImmediate(defaultWorkspaceOpen());
     setWorkspaceLayoutReady(true);
     setPreviewState('dock');
     setModelSelectorOpen(false);
@@ -1804,12 +1849,12 @@ function ProjectChatSurface({
     setCopyFeedback(null);
     setSelectedWorkspaceFile('HomePageClient.tsx');
     setDraftTerminalCommand('npm test -- --run tests/projectListSurface.test.ts');
-  }, [activeChat?.modelReasoningEffort, runtimeAgent, runtimeModelLabel, selectedChatId]);
+  }, [activeChat?.modelReasoningEffort, runtimeAgent, runtimeModelLabel, selectedChatId, setWorkspacePanelImmediate]);
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 1100px)');
     const syncWorkspacePanel = () => {
-      setWorkspaceOpen(defaultWorkspaceOpen());
+      setWorkspacePanelImmediate(defaultWorkspaceOpen());
       setWorkspaceLayoutReady(true);
     };
 
@@ -1827,7 +1872,7 @@ function ProjectChatSurface({
         media.removeListener(syncWorkspacePanel);
       }
     };
-  }, [selectedChatId]);
+  }, [selectedChatId, setWorkspacePanelImmediate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2074,7 +2119,7 @@ function ProjectChatSurface({
       className="pc-proto"
       data-project-chat-screen
       data-mode={composerMode}
-      data-workspace={workspaceOpen ? 'open' : 'closed'}
+      data-workspace={workspaceDrawerPhase === 'closing' ? 'closing' : workspaceOpen ? 'open' : 'closed'}
       data-workspace-ready={workspaceLayoutReady ? 'true' : 'false'}
       data-ws-tab={workspaceTab}
       data-preview={previewState}
@@ -2477,7 +2522,7 @@ function ProjectChatSurface({
               <button type="button" className="ws__action" aria-label="Open files" onClick={() => activateWorkspaceTab('files')}>
                 <FileText size={13} />
               </button>
-              <button type="button" className="ws__action" aria-label="Close workspace" onClick={() => setWorkspaceOpen(false)}>
+              <button type="button" className="ws__action" aria-label="Close workspace" onClick={closeWorkspacePanel}>
                 <X size={13} />
               </button>
             </div>
