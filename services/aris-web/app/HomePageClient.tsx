@@ -1634,6 +1634,7 @@ function ProjectChatSurface({
   const [composerMode, setComposerMode] = useState<ComposerMode>('agent');
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('run');
   const [workspaceOpen, setWorkspaceOpen] = useState(true);
+  const [workspaceLayoutReady, setWorkspaceLayoutReady] = useState(false);
   const [previewState, setPreviewState] = useState<PreviewState>('dock');
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<ModelProvider>(() => providerFromAgent(runtimeAgent));
@@ -1791,6 +1792,7 @@ function ProjectChatSurface({
     setComposerMode('agent');
     setWorkspaceTab('run');
     setWorkspaceOpen(true);
+    setWorkspaceLayoutReady(false);
     setPreviewState('dock');
     setModelSelectorOpen(false);
     setSelectedProvider(providerFromAgent(runtimeAgent));
@@ -1801,6 +1803,29 @@ function ProjectChatSurface({
     setSelectedWorkspaceFile('HomePageClient.tsx');
     setDraftTerminalCommand('npm test -- --run tests/projectListSurface.test.ts');
   }, [activeChat?.modelReasoningEffort, runtimeAgent, runtimeModelLabel, selectedChatId]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1100px)');
+    const syncWorkspacePanel = () => {
+      setWorkspaceOpen(!media.matches);
+      setWorkspaceLayoutReady(true);
+    };
+
+    syncWorkspacePanel();
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', syncWorkspacePanel);
+    } else {
+      media.addListener(syncWorkspacePanel);
+    }
+
+    return () => {
+      if (typeof media.removeEventListener === 'function') {
+        media.removeEventListener('change', syncWorkspacePanel);
+      } else {
+        media.removeListener(syncWorkspacePanel);
+      }
+    };
+  }, [selectedChatId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2048,6 +2073,7 @@ function ProjectChatSurface({
       data-project-chat-screen
       data-mode={composerMode}
       data-workspace={workspaceOpen ? 'open' : 'closed'}
+      data-workspace-ready={workspaceLayoutReady ? 'true' : 'false'}
       data-ws-tab={workspaceTab}
       data-preview={previewState}
     >

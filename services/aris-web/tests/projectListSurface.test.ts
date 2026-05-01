@@ -120,6 +120,14 @@ describe('project list surface', () => {
     expect(homeClient).toContain('<div className="ws__title"><PanelRight size={14} />Workspace</div>');
   });
 
+  it('shows the workspace panel from the header toggle on compact project chat layouts', () => {
+    expect(homeClient).toContain('data-workspace-ready={workspaceLayoutReady ? \'true\' : \'false\'}');
+    expect(homeClient).toContain("window.matchMedia('(max-width: 1100px)')");
+    expect(uiCss).toContain('.pc-proto[data-workspace-ready="true"][data-workspace="open"] .shell__workspace');
+    expect(uiCss).toContain('width: min(420px, calc(100vw - 32px));');
+    expect(uiCss).toContain('box-shadow: -18px 0 44px rgba(15, 23, 42, 0.18);');
+  });
+
   it('renders functional workspace panes instead of one static Run panel', () => {
     expect(homeClient).toContain("workspaceTab === 'run'");
     expect(homeClient).toContain("workspaceTab === 'files'");

@@ -5192,8 +5192,27 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .pc-proto .shell {
+    grid-template-areas: "main";
+  }
+
   .pc-proto .shell__workspace {
     display: none;
+  }
+
+  .pc-proto[data-workspace-ready="true"][data-workspace="open"] .shell__workspace {
+    display: flex;
+    position: absolute;
+    top: 52px;
+    right: 0;
+    bottom: 0;
+    width: min(420px, calc(100vw - 32px));
+    max-width: 100%;
+    z-index: 35;
+    flex-direction: column;
+    background: var(--n-50);
+    border-left: 1px solid var(--border-default);
+    box-shadow: -18px 0 44px rgba(15, 23, 42, 0.18);
   }
 
   .files-tree,
