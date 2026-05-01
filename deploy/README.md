@@ -94,6 +94,7 @@ Default behavior:
 - Starts the inactive slot (`aris-web-blue` or `aris-web-green`)
 - Waits for container health and HTTP readiness on `/login`
 - Switches nginx upstream to `WEB_BLUE_PORT` or `WEB_GREEN_PORT`
+- Reloads nginx through systemd, then falls back to `nginx -s reload` and finally a master-process `HUP` if systemd state is stale but nginx is still serving traffic
 - Drains for `WEB_DRAIN_SECONDS` seconds
 - Stops the previous slot
 - Stops legacy `aris-web` by default (`STOP_LEGACY_WEB=1`)

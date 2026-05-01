@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "${ROOT_DIR}/deploy/lib/env.sh"
+source "${ROOT_DIR}/deploy/lib/nginx.sh"
 
 ENV_FILE="$(require_deploy_env_file "deploy:web-zd")"
 SHARED_REPO_ROOT="${ARIS_SHARED_REPO_ROOT:-$(resolve_shared_repo_root "$ROOT_DIR")}"
@@ -246,11 +247,6 @@ run_cleanup() {
       prune_builder_cache 1
       ;;
   esac
-}
-
-reload_nginx() {
-  sudo nginx -t >/dev/null
-  sudo systemctl reload nginx
 }
 
 build_required=1
