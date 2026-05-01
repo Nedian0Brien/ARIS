@@ -9,11 +9,13 @@ import {
   ChevronLeft,
   Check,
   ChevronRight,
+  Clock,
   Clock3,
   Copy,
   Cpu,
   Database,
   ExternalLink,
+  File as FileIcon,
   FileText,
   Folder,
   FolderOpen,
@@ -2564,10 +2566,10 @@ function ProjectChatSurface({
             </div>
           </div>
           <div className="ws__tabs" role="tablist">
-            <button type="button" className="ws__tab" data-tab="run" aria-pressed={workspaceTab === 'run'} onClick={() => activateWorkspaceTab('run')}><Clock3 size={12} />Run</button>
-            <button type="button" className="ws__tab" data-tab="files" aria-pressed={workspaceTab === 'files'} onClick={() => activateWorkspaceTab('files')}><FileText size={12} />Files <span className="ws__tab-badge">{fileCount}</span></button>
-            <button type="button" className="ws__tab" data-tab="terminal" aria-pressed={workspaceTab === 'terminal'} onClick={() => activateWorkspaceTab('terminal')}><Terminal size={12} />Term</button>
-            <button type="button" className="ws__tab" data-tab="context" aria-pressed={workspaceTab === 'context'} onClick={() => activateWorkspaceTab('context')}><Database size={12} />Ctx</button>
+            <button type="button" className="ws__tab" data-tab="run" aria-pressed={workspaceTab === 'run'} onClick={() => activateWorkspaceTab('run')}><Clock size={12} />Run</button>
+            <button type="button" className="ws__tab" data-tab="files" aria-pressed={workspaceTab === 'files'} onClick={() => activateWorkspaceTab('files')}><FileIcon size={12} />Files</button>
+            <button type="button" className="ws__tab" data-tab="terminal" aria-pressed={workspaceTab === 'terminal'} onClick={() => activateWorkspaceTab('terminal')}><Terminal size={12} />Terminal</button>
+            <button type="button" className="ws__tab" data-tab="context" aria-pressed={workspaceTab === 'context'} onClick={() => activateWorkspaceTab('context')}><PanelsTopLeft size={12} />Context</button>
           </div>
           <div className="ws__status">
             <div className="ws__status-left">

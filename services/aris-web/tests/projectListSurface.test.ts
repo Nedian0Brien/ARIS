@@ -168,6 +168,25 @@ describe('project list surface', () => {
     expect(uiCss).toContain('letter-spacing: var(--ls-snug);');
   });
 
+  it('matches the workspace panel top navigation to the chat-screen-v1 prototype', () => {
+    expect(homeClient).toContain('File as FileIcon,');
+    expect(homeClient).toContain('Clock,');
+    expect(homeClient).toContain('<button type="button" className="ws__tab" data-tab="run" aria-pressed={workspaceTab === \'run\'} onClick={() => activateWorkspaceTab(\'run\')}><Clock size={12} />Run</button>');
+    expect(homeClient).toContain('<button type="button" className="ws__tab" data-tab="files" aria-pressed={workspaceTab === \'files\'} onClick={() => activateWorkspaceTab(\'files\')}><FileIcon size={12} />Files</button>');
+    expect(homeClient).not.toContain('<span className="ws__tab-badge">{fileCount}</span>');
+    expect(homeClient).toContain('<button type="button" className="ws__tab" data-tab="terminal" aria-pressed={workspaceTab === \'terminal\'} onClick={() => activateWorkspaceTab(\'terminal\')}><Terminal size={12} />Terminal</button>');
+    expect(homeClient).toContain('<button type="button" className="ws__tab" data-tab="context" aria-pressed={workspaceTab === \'context\'} onClick={() => activateWorkspaceTab(\'context\')}><PanelsTopLeft size={12} />Context</button>');
+    expect(homeClient).not.toContain('<Terminal size={12} />Term</button>');
+    expect(homeClient).not.toContain('<Database size={12} />Ctx</button>');
+    expect(uiCss).toContain('padding: 0 var(--sp-4);');
+    expect(uiCss).toContain('background: var(--surface);');
+    expect(uiCss).toContain('border-bottom: 2px solid transparent;');
+    expect(uiCss).toContain('margin-bottom: -1px;');
+    expect(uiCss).toContain('.pc-proto .ws__tab[aria-pressed="true"] {');
+    expect(uiCss).toContain('border-bottom-color: var(--b-500);');
+    expect(uiCss).not.toContain('border-radius: var(--r-md) var(--r-md) 0 0;');
+  });
+
   it('keeps the workspace metrics while restyling run details as chat-screen-v1 cards', () => {
     expect(homeClient).toContain('<div className="run-summary">');
     expect(homeClient).toContain('<span className="run-summary__label">Steps</span>');
