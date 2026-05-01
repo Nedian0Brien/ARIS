@@ -325,7 +325,7 @@
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
   min-height: var(--app-vh, 100dvh);
-  background: var(--surface);
+  background: var(--canvas);
   color: var(--text-primary);
 }
 
@@ -333,7 +333,7 @@
   min-width: 0;
   height: var(--app-vh, 100dvh);
   overflow-y: auto;
-  background: var(--surface-sunken);
+  background: var(--surface);
   border-right: 1px solid var(--border-subtle);
   padding: var(--sp-8) var(--sp-6);
   display: flex;
@@ -792,7 +792,7 @@ html[data-theme='dark'] .m-sb__chat-child--active {
   display: flex;
   flex-direction: column;
   min-height: var(--app-vh, 100dvh);
-  background: var(--surface);
+  background: var(--canvas);
 }
 
 @media (min-width: 768px) {
@@ -821,6 +821,7 @@ html[data-theme='dark'] .m-sb__chat-child--active {
   height: 48px;
   padding: 0 var(--sp-8);
   border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface);
   flex-shrink: 0;
 }
 
@@ -2584,7 +2585,7 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   position: relative;
   min-height: calc(100vh - 238px);
   border: 0;
-  background: var(--surface);
+  background: var(--canvas);
   overflow: hidden;
   --mc-ring: var(--mode-agent);
   --mc-ring-soft: rgba(47, 107, 255, 0.16);
@@ -2612,7 +2613,7 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   grid-template-areas: "main workspace";
   height: calc(100vh - 238px);
   min-height: 620px;
-  background: var(--surface);
+  background: var(--canvas);
 }
 
 .pc-proto .shell__main {
@@ -2621,13 +2622,14 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  background: var(--canvas);
 }
 
 .pc-proto .shell__workspace {
   grid-area: workspace;
   border-left: 1px solid var(--border-subtle);
   min-width: 0;
-  background: var(--n-50);
+  background: var(--surface);
 }
 
 .pc-proto[data-workspace="closed"] .shell {
@@ -2646,6 +2648,7 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   height: 52px;
   padding: 0 var(--sp-6);
   border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface);
   flex-shrink: 0;
 }
 
@@ -2739,7 +2742,7 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   flex: 1 1 auto;
   overflow-y: auto;
   padding: var(--sp-12) var(--sp-10) var(--sp-24);
-  background: var(--surface);
+  background: var(--canvas);
 }
 
 .pc-proto .tl__container {
@@ -3110,7 +3113,7 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
 .pc-proto .cmp-wrap {
   padding: 8px 20px 16px;
   border-top: 1px solid var(--border-subtle);
-  background: var(--surface);
+  background: var(--canvas);
   flex-shrink: 0;
 }
 
@@ -5282,7 +5285,7 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
     max-width: 100%;
     z-index: 35;
     flex-direction: column;
-    background: var(--n-50);
+    background: var(--surface);
     border-left: 1px solid var(--border-default);
     box-shadow: -18px 0 44px rgba(15, 23, 42, 0.18);
     will-change: transform, opacity;

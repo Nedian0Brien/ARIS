@@ -12,6 +12,11 @@ function cssBlock(selector: string) {
   return new RegExp(`${escaped}\\s*\\{([^}]*)\\}`).exec(uiCss)?.[1] ?? '';
 }
 
+function exactCssBlock(selector: string) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`).exec(uiCss)?.[1] ?? '';
+}
+
 describe('project list surface', () => {
   it('opens the Project entry point as the project list screen from the IA v2 mockup', () => {
     expect(homeClient).toContain("project: { title: 'Projects'");
@@ -294,6 +299,21 @@ describe('project list surface', () => {
     expect(uiCss).toContain('--pc-composer-height: 226px;');
     expect(dockWrap).toContain('bottom: calc(var(--pc-composer-height, 226px) + var(--sp-8));');
     expect(dockWrap).not.toContain('bottom: 92px;');
+  });
+
+  it('matches the chat-screen-v1 background hierarchy', () => {
+    expect(cssBlock('.m-sb')).toContain('background: var(--surface);');
+    expect(cssBlock('.m-main')).toContain('background: var(--canvas);');
+    expect(cssBlock('.m-top')).toContain('background: var(--surface);');
+
+    expect(exactCssBlock('.pc-proto')).toContain('background: var(--canvas);');
+    expect(exactCssBlock('.pc-proto .shell')).toContain('background: var(--canvas);');
+    expect(exactCssBlock('.pc-proto .shell__main')).toContain('background: var(--canvas);');
+    expect(exactCssBlock('.pc-proto .ch')).toContain('background: var(--surface);');
+    expect(exactCssBlock('.pc-proto .tl')).toContain('background: var(--canvas);');
+    expect(exactCssBlock('.pc-proto .cmp-wrap')).toContain('background: var(--canvas);');
+    expect(exactCssBlock('.pc-proto .shell__workspace')).toContain('background: var(--surface);');
+    expect(exactCssBlock('.pc-proto .ws')).toContain('background: var(--surface);');
   });
 
   it('keeps the project filter chips attached to the search field instead of the screen edge', () => {
