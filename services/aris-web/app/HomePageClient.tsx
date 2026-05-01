@@ -1,33 +1,46 @@
 'use client';
 
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Activity,
   AlertCircle,
+  AtSign,
   ChevronLeft,
   Check,
   ChevronRight,
+  Clock,
   Clock3,
+  Copy,
   Cpu,
   Database,
+  ExternalLink,
+  File as FileIcon,
   FileText,
   Folder,
   FolderOpen,
   HardDrive,
   Home,
+  Maximize2,
   MessageSquareText,
   Mic,
   Monitor,
   Moon,
+  MoreHorizontal,
+  PanelRight,
   PanelsTopLeft,
+  Paperclip,
   Plus,
+  RefreshCcw,
   Search,
   Send,
+  Share2,
   Sparkles,
   Square,
   Sun,
+  Terminal,
   Wifi,
+  X,
 } from 'lucide-react';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { BackendNotice } from '@/components/ui/BackendNotice';
@@ -38,6 +51,12 @@ import type { AuthenticatedUser } from '@/lib/auth/types';
 import type { SessionChat, SessionStatus, SessionSummary, UiEvent } from '@/lib/happy/types';
 
 type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';
+type ComposerMode = 'agent' | 'plan' | 'terminal';
+type WorkspaceTab = 'run' | 'files' | 'terminal' | 'context';
+type PreviewState = 'closed' | 'open' | 'dock';
+type ModelProvider = 'claude' | 'codex' | 'gemini';
+type ReasoningEffort = 'Low' | 'Medium' | 'High' | 'XHigh' | 'Max';
+type ExpandedTurnState = string | null | '__none__';
 
 type FileItem = {
   name: string;
@@ -89,6 +108,7 @@ const SUGGESTED_ASKS = [
 ];
 
 const CMD_CONSOLE_MAX_LINES = 16;
+const WORKSPACE_DRAWER_CLOSE_MS = 160;
 
 const CMD_CONSOLE_SCRIPT: Array<[string, CmdConsoleOutput[]]> = [
   ['aris context hydrate --scope workspace', [
@@ -125,6 +145,81 @@ const FALLBACK_FILES: FileItem[] = [
   { name: 'design-system-v1.html', path: '/docs/design/design-system-v1.html', isDirectory: false, isFile: true, sizeBytes: 98100 },
   { name: 'chat-composer-v2.html', path: '/docs/design/chat-composer-v2.html', isDirectory: false, isFile: true, sizeBytes: 108500 },
 ];
+
+const MODEL_OPTIONS: Record<ModelProvider, Array<{ name: string; meta: string }>> = {
+  claude: [
+    { name: 'Opus 4.7', meta: '200k · 1M context · reasoning' },
+    { name: 'Sonnet 4.6', meta: '200k context · balanced' },
+    { name: 'Haiku 4.5', meta: '200k context · fast' },
+  ],
+  codex: [
+    { name: 'GPT-5.5', meta: '200k context · reasoning' },
+    { name: 'GPT-5', meta: '128k context' },
+    { name: 'GPT-5 mini', meta: '128k context · fast' },
+  ],
+  gemini: [
+    { name: 'Gemini 3 Pro', meta: '2M context · reasoning' },
+    { name: 'Gemini 3 Flash', meta: '1M context · fast' },
+  ],
+};
+
+const PROVIDER_LABELS: Record<ModelProvider, string> = {
+  claude: 'Claude',
+  codex: 'Codex',
+  gemini: 'Gemini',
+};
+
+const PROVIDER_EFFORTS: Record<ModelProvider, ReasoningEffort[]> = {
+  claude: ['Low', 'Medium', 'High', 'XHigh', 'Max'],
+  codex: ['Low', 'Medium', 'High', 'XHigh'],
+  gemini: ['Low', 'Medium', 'High'],
+};
+
+const COMPOSER_MODE_COPY: Record<ComposerMode, string> = {
+  agent: 'Agent',
+  plan: 'Plan',
+  terminal: 'Terminal',
+};
+
+function providerFromAgent(agent: SessionSummary['agent'] | SessionChat['agent']): ModelProvider {
+  if (agent === 'claude' || agent === 'gemini' || agent === 'codex') return agent;
+  return 'codex';
+}
+
+function normalizeReasoningEffort(value: SessionChat['modelReasoningEffort'] | null | undefined): ReasoningEffort {
+  if (value === 'low') return 'Low';
+  if (value === 'medium') return 'Medium';
+  if (value === 'xhigh') return 'XHigh';
+  return 'High';
+}
+
+function serializeReasoningEffort(value: ReasoningEffort): SessionChat['modelReasoningEffort'] {
+  if (value === 'Low') return 'low';
+  if (value === 'Medium') return 'medium';
+  if (value === 'XHigh' || value === 'Max') return 'xhigh';
+  return 'high';
+}
+
+async function copyToClipboard(value: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', 'true');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return copied;
+  } catch {
+    return false;
+  }
+}
 
 function normalizeTab(tab: string | null): TabType {
   switch (tab) {
@@ -286,6 +381,28 @@ function buildProjectDetailPath(sessionId: string, view: ProjectView = 'overview
   return `/?${params.toString()}`;
 }
 
+async function createProjectSessionChat(
+  sessionId: string,
+  input: {
+    title?: string;
+    agent?: SessionSummary['agent'];
+    model?: string | null;
+    geminiMode?: string | null;
+    modelReasoningEffort?: SessionChat['modelReasoningEffort'];
+  },
+): Promise<SessionChat> {
+  const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
+  if (!response.ok || !body.chat) {
+    throw new Error(body.error ?? '새 채팅을 만들지 못했습니다.');
+  }
+  return body.chat;
+}
+
 function navigateTo(path: string) {
   window.location.assign(withAppBasePath(path));
 }
@@ -350,6 +467,25 @@ function Sidebar({
   const userInitial = (user.email?.trim()?.[0] ?? 'A').toUpperCase();
   const [activeProjectChats, setActiveProjectChats] = useState<SessionChat[]>([]);
   const [isLoadingProjectChats, setIsLoadingProjectChats] = useState(false);
+  const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
+  const [tipPosition, setTipPosition] = useState<{ top: number; left: number } | null>(null);
+
+  function handleProjectTipShow(session: SessionSummary, event: React.SyntheticEvent<HTMLButtonElement>) {
+    const target = event.currentTarget;
+    const rect = target.getBoundingClientRect();
+    const top = Math.max(8, Math.min(rect.top, window.innerHeight - 220));
+    const left = rect.right + 8;
+    setHoveredProjectId(session.id);
+    setTipPosition({ top, left });
+  }
+
+  function handleProjectTipHide() {
+    setHoveredProjectId(null);
+  }
+
+  const hoveredProject = hoveredProjectId
+    ? projects.find((p) => p.id === hoveredProjectId) ?? null
+    : null;
 
   const navItems: Array<{ id: TabType; label: string; Icon: typeof Home; count?: number }> = [
     { id: 'home', label: 'Home', Icon: Home },
@@ -428,16 +564,24 @@ function Sidebar({
           : projects.map((session) => {
               const isActiveProject = activeProjectId === session.id;
               const childChats = isActiveProject ? activeProjectChats : [];
+              const visibleChatCount = isActiveProject && !isLoadingProjectChats
+                ? childChats.length
+                : session.totalChats ?? 0;
               return (
                 <div key={session.id} className={`m-sb__project-node${isActiveProject ? ' m-sb__project-node--open' : ''}`}>
                   <button
                     type="button"
                     className={`m-sb__proj m-sb__proj--${statusClass(session.status)}${isActiveProject ? ' m-sb__proj--active' : ''}`}
                     onClick={() => onProjectOpen(session.id)}
+                    onMouseEnter={(event) => handleProjectTipShow(session, event)}
+                    onMouseLeave={handleProjectTipHide}
+                    onFocus={(event) => handleProjectTipShow(session, event)}
+                    onBlur={handleProjectTipHide}
+                    aria-describedby={hoveredProjectId === session.id ? 'sb-tip' : undefined}
                   >
                     <span className="m-sb__proj-dot" />
                     <span className="m-sb__proj-name">{displayProjectName(session)}</span>
-                    <span className="m-sb__proj-count">{session.totalChats ?? 0}</span>
+                    <span className="m-sb__proj-count">{visibleChatCount}</span>
                   </button>
                   {isActiveProject && (
                     <div className="m-sb__chat-children" aria-label={`${displayProjectName(session)} chats`}>
@@ -474,6 +618,35 @@ function Sidebar({
           <div className="m-sb__footer-meta">{user.role}</div>
         </div>
       </div>
+      {hoveredProject && tipPosition ? (() => {
+        const statusKey = statusClass(hoveredProject.status);
+        const previewIndex = projects.indexOf(hoveredProject);
+        const lastUserText = createChatPreview(hoveredProject, previewIndex >= 0 ? previewIndex : 0);
+        return (
+          <div
+            id="sb-tip"
+            role="tooltip"
+            aria-hidden={false}
+            className={`sb-tip sb-tip--visible sb-tip--${statusKey}`}
+            style={{ top: tipPosition.top, left: tipPosition.left }}
+          >
+            <div className="sb-tip__title">{displayProjectName(hoveredProject)}</div>
+            <div className="sb-tip__meta">
+              <span className="sb-tip__meta-time">{formatRelativeTime(hoveredProject.lastActivityAt)}</span>
+              <span className="sb-tip__status">
+                <span className="sb-tip__status-dot" />
+                <span>{projectStatusLabel(hoveredProject.status)}</span>
+              </span>
+            </div>
+            <div className="sb-tip__last">
+              <div className="sb-tip__last-label">
+                <MessageSquareText size={10} /> Last user message
+              </div>
+              <div className="sb-tip__last-text">{lastUserText}</div>
+            </div>
+          </div>
+        );
+      })() : null}
     </aside>
   );
 }
@@ -481,11 +654,10 @@ function Sidebar({
 function Topbar({ activeTab, sessions }: { activeTab: TabType; sessions: SessionSummary[] }) {
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
   const activeProjects = sessions.filter((session) => session.status === 'running' || session.status === 'error').length;
-  const totalChats = sessions.reduce((sum, session) => sum + (session.totalChats ?? 0), 0);
   const copy: Record<TabType, { title: string; crumb: string }> = {
     home: { title: 'Home', crumb: 'workspace overview' },
     ask: { title: 'Ask ARIS', crumb: 'global memory' },
-    project: { title: 'Projects', crumb: `${activeProjects} active · ${totalChats} chats total` },
+    project: { title: 'Projects', crumb: `${activeProjects} active · project chats in sidebar` },
     files: { title: 'Files', crumb: 'project filesystem' },
   };
 
@@ -1120,13 +1292,33 @@ function ProjectDetailSurface({
   const tokenLabel = deriveProjectTokenLabel(session, index);
   const modelLabel = session.model || session.metadata?.runtimeModel || 'default model';
   const recentPreview = createChatPreview(session, index);
+  const [isCreatingHeaderChat, setIsCreatingHeaderChat] = useState(false);
+  const [headerCreateError, setHeaderCreateError] = useState<string | null>(null);
+
+  const handleProjectHeaderNewChat = async () => {
+    if (isCreatingHeaderChat) return;
+    setIsCreatingHeaderChat(true);
+    setHeaderCreateError(null);
+    try {
+      const createdChat = await createProjectSessionChat(session.id, {
+        title: `Chat ${Math.max(1, totalChats + 1)}`,
+        agent: session.agent,
+        model: modelLabel,
+        modelReasoningEffort: serializeReasoningEffort('High'),
+      });
+      onProjectChatOpen(createdChat.id);
+    } catch (createError) {
+      setHeaderCreateError(createError instanceof Error ? createError.message : '새 채팅을 만들지 못했습니다.');
+    } finally {
+      setIsCreatingHeaderChat(false);
+    }
+  };
 
   if (projectView === 'chat') {
     return (
       <div className="m-main-scroll m-main-scroll--project-chat-detail">
         <ProjectChatSurface
           fileCount={fileCount}
-          index={index}
           modelLabel={modelLabel}
           onBackToChatList={() => onProjectViewChange('chats')}
           onChatOpen={onProjectChatOpen}
@@ -1165,12 +1357,19 @@ function ProjectDetailSurface({
               <PanelsTopLeft size={14} />
               Settings
             </button>
-            <button type="button" className="btn btn--primary btn--sm" onClick={() => onProjectViewChange('chats')}>
+            <button
+              type="button"
+              className="btn btn--primary btn--sm"
+              onClick={handleProjectHeaderNewChat}
+              disabled={isCreatingHeaderChat}
+              aria-busy={isCreatingHeaderChat}
+            >
               <Plus size={14} />
               New chat
             </button>
           </div>
         </div>
+        {headerCreateError && <div className="pc-chat-error" role="alert">{headerCreateError}</div>}
         <div className="proj-stats">
           <div>
             <div className="proj-stat-label">Chats</div>
@@ -1258,7 +1457,6 @@ function ProjectDetailSurface({
         {projectView === 'chats' ? (
           <ProjectChatSurface
             fileCount={fileCount}
-            index={index}
             modelLabel={modelLabel}
             onBackToChatList={() => onProjectViewChange('chats')}
             onChatOpen={onProjectChatOpen}
@@ -1454,7 +1652,6 @@ function ProjectPlaceholderPanel({
 
 function ProjectChatSurface({
   fileCount,
-  index,
   modelLabel,
   onBackToChatList,
   onChatOpen,
@@ -1466,7 +1663,6 @@ function ProjectChatSurface({
   tokenLabel,
 }: {
   fileCount: number;
-  index: number;
   modelLabel: string;
   onBackToChatList: () => void;
   onChatOpen: (chatId: string) => void;
@@ -1485,11 +1681,315 @@ function ProjectChatSurface({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const activeChat = selectedChatId ? chats.find((chat) => chat.id === selectedChatId) ?? null : null;
+  const runtimeModelLabel = activeChat?.model ?? modelLabel;
+  const runtimeAgent = activeChat?.agent ?? session.agent;
+  const timelineRef = useRef<HTMLDivElement | null>(null);
+  const workspaceRef = useRef<HTMLElement | null>(null);
+  const workspaceToggleRef = useRef<HTMLButtonElement | null>(null);
+  const workspaceCloseTimerRef = useRef<number | null>(null);
+  const [composerMode, setComposerMode] = useState<ComposerMode>('agent');
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('run');
+  const [workspaceOpen, setWorkspaceOpen] = useState(true);
+  const [workspaceDrawerPhase, setWorkspaceDrawerPhase] = useState<'idle' | 'closing'>('idle');
+  const [workspaceLayoutReady, setWorkspaceLayoutReady] = useState(false);
+  const [previewState, setPreviewState] = useState<PreviewState>('dock');
+  const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<ModelProvider>(() => providerFromAgent(runtimeAgent));
+  const [selectedModel, setSelectedModel] = useState(runtimeModelLabel);
+  const [selectedEffort, setSelectedEffort] = useState<ReasoningEffort>(() => normalizeReasoningEffort(activeChat?.modelReasoningEffort));
+  const [expandedTurnId, setExpandedTurnId] = useState<ExpandedTurnState>(null);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [selectedWorkspaceFile, setSelectedWorkspaceFile] = useState('HomePageClient.tsx');
+  const [draftTerminalCommand, setDraftTerminalCommand] = useState('npm test -- --run tests/projectListSurface.test.ts');
+  const [previewDevice, setPreviewDevice] = useState<'1200' | '768' | '390'>('1200');
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const visibleEvents = events.slice(-40);
-  const activeModelLabel = activeChat?.model ?? modelLabel;
-  const activeAgent = activeChat?.agent ?? session.agent;
+  const activeModelLabel = selectedModel || runtimeModelLabel;
+  const activeAgent: SessionSummary['agent'] = selectedProvider;
   const userTurns = visibleEvents.filter((item) => readEventRole(item) === 'user');
   const representativeAgentEvent = visibleEvents.find((item) => readEventRole(item) !== 'user');
+  const hasRuntimeEvents = visibleEvents.length > 0;
+  const selectedChatPreview = (activeChat?.latestPreview ?? recentPreview).trim()
+    || '프로젝트 맥락을 이어서 다루기 위한 채팅입니다.';
+  const selectedChatTimestamp = activeChat?.latestEventAt
+    ?? activeChat?.lastActivityAt
+    ?? session.lastActivityAt
+    ?? new Date().toISOString();
+  const projectChatRoute = `/?tab=project&project=${session.id}&view=chat${selectedChatId ? `&chat=${selectedChatId}` : ''}`;
+  const previewTarget = `aris.lawdigest.cloud${projectChatRoute}`;
+  const prototypeRef = useRef<HTMLDivElement | null>(null);
+  const composerWrapRef = useRef<HTMLElement | null>(null);
+  const workspaceFiles = [
+    { id: 'root', name: projectPath, kind: 'dir', meta: 'project' },
+    { id: 'home-client', name: 'services/aris-web/app/HomePageClient.tsx', kind: 'file', meta: '+ UI' },
+    { id: 'ui-css', name: 'services/aris-web/app/styles/ui.css', kind: 'file', meta: '+ CSS' },
+    { id: 'surface-test', name: 'services/aris-web/tests/projectListSurface.test.ts', kind: 'file', meta: '+ tests' },
+    { id: 'prototype', name: 'design/chat-prototype.html', kind: 'file', meta: 'source' },
+  ];
+  const terminalSnippets = [
+    { id: 'test', name: 'test target', cmd: 'npm test -- --run tests/projectListSurface.test.ts', tag: 'test' },
+    { id: 'mobile', name: 'mobile guard', cmd: 'npm test -- --run tests/mobileOverflowLayout.test.ts', tag: 'mobile' },
+    { id: 'typecheck', name: 'typecheck', cmd: 'npx tsc --noEmit', tag: 'type' },
+    { id: 'build', name: 'build', cmd: 'npm run build', tag: 'build' },
+  ];
+  const contextItems = [
+    { id: 'ctx-project', name: displayProjectName(session), tokens: tokenLabel },
+    { id: 'ctx-route', name: projectChatRoute, tokens: 'route' },
+    { id: 'ctx-prototype', name: 'design/chat-prototype.html', tokens: 'source' },
+    { id: 'ctx-mode', name: `${COMPOSER_MODE_COPY[composerMode]} mode`, tokens: selectedEffort },
+  ];
+  const runStepItems = hasRuntimeEvents
+    ? visibleEvents.slice(-4).map((item) => ({
+      id: item.id,
+      title: item.title || item.kind,
+      cmd: eventCommand(item),
+      time: formatRelativeTime(item.timestamp),
+      state: 'done' as const,
+    }))
+    : [
+      {
+        id: 'seed-route',
+        title: 'Route · project chat',
+        cmd: projectChatRoute,
+        time: 'now',
+        state: 'done' as const,
+      },
+      {
+        id: 'seed-context',
+        title: 'Read · project context',
+        cmd: projectPath,
+        time: 'now',
+        state: 'done' as const,
+      },
+      {
+        id: 'seed-preview',
+        title: 'Load · chat preview',
+        cmd: selectedChatPreview,
+        time: formatRelativeTime(selectedChatTimestamp),
+        state: 'done' as const,
+      },
+      {
+        id: 'seed-ready',
+        title: 'Ready · next turn',
+        cmd: 'composer is scoped to this project chat',
+        time: 'now',
+        state: 'running' as const,
+      },
+    ];
+  const showTransientFeedback = (message: string) => {
+    setCopyFeedback(message);
+    window.setTimeout(() => {
+      setCopyFeedback(null);
+    }, 1800);
+  };
+
+  const handleCopy = (value: string, label: string) => {
+    void copyToClipboard(value).then((copied) => {
+      showTransientFeedback(copied ? `${label} copied` : `${label} ready`);
+    });
+  };
+
+  const defaultWorkspaceOpen = () => !window.matchMedia('(max-width: 1100px)').matches;
+
+  const clearWorkspaceCloseTimer = useCallback(() => {
+    if (workspaceCloseTimerRef.current === null) return;
+    window.clearTimeout(workspaceCloseTimerRef.current);
+    workspaceCloseTimerRef.current = null;
+  }, []);
+
+  const setWorkspacePanelImmediate = useCallback((open: boolean) => {
+    clearWorkspaceCloseTimer();
+    setWorkspaceDrawerPhase('idle');
+    setWorkspaceOpen(open);
+  }, [clearWorkspaceCloseTimer]);
+
+  const openWorkspacePanel = useCallback(() => {
+    setWorkspacePanelImmediate(true);
+  }, [setWorkspacePanelImmediate]);
+
+  const closeWorkspacePanel = useCallback(() => {
+    clearWorkspaceCloseTimer();
+    setWorkspaceOpen(false);
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setWorkspaceDrawerPhase('idle');
+      return;
+    }
+
+    setWorkspaceDrawerPhase('closing');
+    workspaceCloseTimerRef.current = window.setTimeout(() => {
+      setWorkspaceDrawerPhase('idle');
+      workspaceCloseTimerRef.current = null;
+    }, WORKSPACE_DRAWER_CLOSE_MS);
+  }, [clearWorkspaceCloseTimer]);
+
+  const activateWorkspaceTab = (tab: WorkspaceTab) => {
+    setWorkspaceTab(tab);
+    openWorkspacePanel();
+  };
+
+  const toggleWorkspacePanel = () => {
+    if (workspaceOpen) {
+      closeWorkspacePanel();
+      return;
+    }
+    openWorkspacePanel();
+  };
+
+  const handleJumpToLatest = () => {
+    const targetId = visibleEvents.at(-1)?.id ?? 'seed-history-primary';
+    setHighlightedMessageId(targetId);
+    timelineRef.current?.scrollTo({ top: timelineRef.current.scrollHeight, behavior: 'smooth' });
+    window.setTimeout(() => {
+      setHighlightedMessageId(null);
+    }, 1800);
+  };
+
+  const handleJumpToTurn = (turnId: string) => {
+    setExpandedTurnId(turnId);
+    setHighlightedMessageId(turnId);
+    timelineRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    window.setTimeout(() => {
+      setHighlightedMessageId(null);
+    }, 1800);
+  };
+  const historyTurnItems = hasRuntimeEvents
+    ? userTurns.slice(-3).map((item, turnIndex) => ({
+      id: item.id,
+      timestamp: item.timestamp,
+      text: getEventText(item),
+      open: turnIndex === 0,
+      state: turnIndex === 0 ? 'running' : 'answered',
+      agentText: representativeAgentEvent ? getEventText(representativeAgentEvent) : '프로젝트 맥락을 기준으로 응답을 준비합니다.',
+    }))
+    : [
+      {
+        id: 'seed-history-primary',
+        timestamp: selectedChatTimestamp,
+        text: selectedChatPreview,
+        open: true,
+        state: 'running',
+        agentText: '프로젝트 컨텍스트를 기준으로 최근 대화와 작업 경로를 확인하고 있습니다.',
+      },
+      {
+        id: 'seed-history-context',
+        timestamp: selectedChatTimestamp,
+        text: `${projectName} · ${projectPath}`,
+        open: false,
+        state: 'answered',
+        agentText: '연결된 작업 경로와 채팅 기록을 불러왔습니다.',
+      },
+    ];
+  const defaultExpandedTurnId = historyTurnItems[0]?.id ?? null;
+  const visibleExpandedTurnId = expandedTurnId === '__none__'
+    ? null
+    : expandedTurnId ?? defaultExpandedTurnId;
+
+  useEffect(() => () => {
+    if (workspaceCloseTimerRef.current !== null) {
+      window.clearTimeout(workspaceCloseTimerRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!workspaceOpen || workspaceDrawerPhase === 'closing') return;
+
+    const handleWorkspaceOutsideClick = (event: PointerEvent) => {
+      if (!window.matchMedia('(max-width: 1100px)').matches) return;
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (workspaceRef.current?.contains(target)) return;
+      if (workspaceToggleRef.current?.contains(target)) return;
+      closeWorkspacePanel();
+    };
+
+    document.addEventListener('pointerdown', handleWorkspaceOutsideClick);
+    return () => {
+      document.removeEventListener('pointerdown', handleWorkspaceOutsideClick);
+    };
+  }, [closeWorkspacePanel, workspaceDrawerPhase, workspaceOpen]);
+
+  useEffect(() => {
+    if (!workspaceOpen || workspaceDrawerPhase === 'closing') return;
+
+    const handleWorkspaceEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (!window.matchMedia('(max-width: 1100px)').matches) return;
+      closeWorkspacePanel();
+    };
+
+    document.addEventListener('keydown', handleWorkspaceEscape);
+    return () => {
+      document.removeEventListener('keydown', handleWorkspaceEscape);
+    };
+  }, [closeWorkspacePanel, workspaceDrawerPhase, workspaceOpen]);
+
+  useEffect(() => {
+    setComposerMode('agent');
+    setWorkspaceTab('run');
+    setWorkspacePanelImmediate(defaultWorkspaceOpen());
+    setWorkspaceLayoutReady(true);
+    setPreviewState('dock');
+    setModelSelectorOpen(false);
+    setSelectedProvider(providerFromAgent(runtimeAgent));
+    setSelectedModel(runtimeModelLabel);
+    setSelectedEffort(normalizeReasoningEffort(activeChat?.modelReasoningEffort));
+    setExpandedTurnId(null);
+    setCopyFeedback(null);
+    setSelectedWorkspaceFile('HomePageClient.tsx');
+    setDraftTerminalCommand('npm test -- --run tests/projectListSurface.test.ts');
+  }, [activeChat?.modelReasoningEffort, runtimeAgent, runtimeModelLabel, selectedChatId, setWorkspacePanelImmediate]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1100px)');
+    const syncWorkspacePanel = () => {
+      setWorkspacePanelImmediate(defaultWorkspaceOpen());
+      setWorkspaceLayoutReady(true);
+    };
+
+    syncWorkspacePanel();
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', syncWorkspacePanel);
+    } else {
+      media.addListener(syncWorkspacePanel);
+    }
+
+    return () => {
+      if (typeof media.removeEventListener === 'function') {
+        media.removeEventListener('change', syncWorkspacePanel);
+      } else {
+        media.removeListener(syncWorkspacePanel);
+      }
+    };
+  }, [selectedChatId, setWorkspacePanelImmediate]);
+
+  useEffect(() => {
+    const prototypeNode = prototypeRef.current;
+    const composerNode = composerWrapRef.current;
+    if (!prototypeNode || !composerNode) return;
+
+    const syncComposerHeight = () => {
+      const height = Math.ceil(composerNode.getBoundingClientRect().height);
+      prototypeNode.style.setProperty('--pc-composer-height', `${height}px`);
+    };
+
+    syncComposerHeight();
+    window.addEventListener('resize', syncComposerHeight);
+
+    if (typeof ResizeObserver === 'undefined') {
+      return () => {
+        window.removeEventListener('resize', syncComposerHeight);
+      };
+    }
+
+    const composerObserver = new ResizeObserver(syncComposerHeight);
+    composerObserver.observe(composerNode);
+
+    return () => {
+      composerObserver.disconnect();
+      window.removeEventListener('resize', syncComposerHeight);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1570,20 +2070,12 @@ function ProjectChatSurface({
 
   const createChat = async (): Promise<SessionChat | null> => {
     setError(null);
-    const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: `Chat ${Math.max(1, chats.length + 1)}`,
-        agent: session.agent === 'unknown' ? 'codex' : session.agent,
-        model: session.model ?? session.metadata?.runtimeModel ?? null,
-      }),
+    const createdChat = await createProjectSessionChat(session.id, {
+      title: `Chat ${Math.max(1, chats.length + 1)}`,
+      agent: selectedProvider,
+      model: activeModelLabel,
+      modelReasoningEffort: serializeReasoningEffort(selectedEffort),
     });
-    const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
-    if (!response.ok || !body.chat) {
-      throw new Error(body.error ?? '새 채팅을 만들지 못했습니다.');
-    }
-    const createdChat = body.chat;
     setChats((previous) => [createdChat, ...previous.filter((chat) => chat.id !== createdChat.id)]);
     setEvents([]);
     onChatOpen(createdChat.id);
@@ -1621,8 +2113,11 @@ function ProjectChatSurface({
           meta: {
             role: 'user',
             chatId: chat.id,
-            agent: chat.agent,
-            model: chat.model ?? modelLabel,
+            agent: selectedProvider,
+            model: activeModelLabel,
+            mode: composerMode,
+            modelReasoningEffort: serializeReasoningEffort(selectedEffort),
+            workspaceTab,
           },
         }),
       });
@@ -1728,7 +2223,16 @@ function ProjectChatSurface({
   }
 
   return (
-    <div className="pc-proto" data-project-chat-screen data-mode="agent" data-workspace="open">
+    <div
+      ref={prototypeRef}
+      className="pc-proto"
+      data-project-chat-screen
+      data-mode={composerMode}
+      data-workspace={workspaceDrawerPhase === 'closing' ? 'closing' : workspaceOpen ? 'open' : 'closed'}
+      data-workspace-ready={workspaceLayoutReady ? 'true' : 'false'}
+      data-ws-tab={workspaceTab}
+      data-preview={previewState}
+    >
       <div className="shell">
         <main className="shell__main">
           <header className="ch">
@@ -1741,16 +2245,28 @@ function ProjectChatSurface({
               <span className="ch__meta">{agentLabel(activeAgent, activeModelLabel)} · {tokenLabel} · {fileCount} files</span>
             </div>
             <div className="ch__actions">
-              <button type="button" className="ch__action" aria-label="Back to chat list" onClick={onBackToChatList}>
-                <MessageSquareText size={14} />
+              <button type="button" className="ch__action" aria-label="Share chat route" onClick={() => handleCopy(projectChatRoute, 'Chat route')}>
+                <Share2 size={14} />
               </button>
-              <button type="button" className="ch__action ch__action--ws" aria-pressed="true" aria-label="Workspace">
-                <PanelsTopLeft size={14} />
+              <button
+                type="button"
+                id="wsToggle"
+                ref={workspaceToggleRef}
+                className="ch__action ch__action--ws"
+                aria-pressed={workspaceOpen}
+                aria-label="Toggle workspace"
+                title="Workspace"
+                onClick={toggleWorkspacePanel}
+              >
+                <PanelRight size={14} />
+              </button>
+              <button type="button" className="ch__action" aria-label="More chat actions" onClick={() => setModelSelectorOpen((current) => !current)}>
+                <MoreHorizontal size={15} />
               </button>
             </div>
           </header>
 
-          <div className="tl">
+          <div className="tl" ref={timelineRef}>
             <div className="tl__container">
               <div className="tl__day">
                 <span className="tl__day-line" />
@@ -1759,19 +2275,96 @@ function ProjectChatSurface({
               </div>
 
               {isLoadingEvents && <div className="pc-chat-loading">Loading messages...</div>}
-              {!isLoadingEvents && visibleEvents.length === 0 && (
-                <div className="msg">
-                  <span className={`msg__avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent)}</span>
-                  <div className="msg__body">
-                    <div className="msg__header"><span className="msg__name">{agentLabel(activeAgent, activeModelLabel)}</span><span className="msg__time">now</span></div>
-                    <div className="msg__text">이 채팅은 프로젝트 하위 흐름에서 열렸습니다. 왼쪽 사이드바의 프로젝트 아래 채팅 목록과 이 화면이 같은 계층으로 연결됩니다.</div>
-                    <div className="thinking">
-                      <span className="thinking__dots"><span className="thinking__dot" /><span className="thinking__dot" /><span className="thinking__dot" /></span>
-                      <span>프로젝트 맥락 대기 중</span>
-                      <span className="thinking__time">{tokenLabel}</span>
+              {!isLoadingEvents && !hasRuntimeEvents && (
+                <>
+                  <div className={`msg${highlightedMessageId === 'seed-history-primary' ? ' msg--highlight' : ''}`}>
+                    <span className="msg__avatar msg__avatar--user">U</span>
+                    <div className="msg__body">
+                      <div className="msg__header"><span className="msg__name">You</span><span className="msg__time">{formatRelativeTime(selectedChatTimestamp)}</span></div>
+                      <div className="msg__bubble">{selectedChatPreview}</div>
+                      <div className="msg__attachments">
+                        <span className="msg__attach">
+                          <span className="msg__attach-icon"><FolderOpen size={12} /></span>
+                          <span className="msg__attach-name">{displayProjectName(session)}</span>
+                          <span className="msg__attach-size">project</span>
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
+
+                  <div className="msg">
+                    <span className={`msg__avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent)}</span>
+                    <div className="msg__body">
+                      <div className="msg__header"><span className="msg__name">{agentLabel(activeAgent, activeModelLabel)}</span><span className="msg__time">now</span></div>
+                      <div className="msg__text">
+                        <p>프로젝트 컨텍스트를 먼저 확인하겠습니다. 최근 채팅, 작업 경로, 연결된 파일을 기준으로 이어서 볼 수 있습니다.</p>
+                      </div>
+                      <div
+                        className="tool"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleCopy(projectPath, 'Tool command')}
+                        onKeyDown={(keyEvent) => {
+                          if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
+                            keyEvent.preventDefault();
+                            handleCopy(projectPath, 'Tool command');
+                          }
+                        }}
+                      >
+                        <span className="tool__icon tool__icon--success"><Check size={12} /></span>
+                        <div className="tool__body">
+                          <span className="tool__title">Read · project context</span>
+                          <span className="tool__cmd">{projectPath}</span>
+                        </div>
+                        <span className="tool__meta">active</span>
+                        <ChevronRight size={12} className="tool__caret" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="msg">
+                    <span className={`msg__avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent)}</span>
+                    <div className="msg__body">
+                      <div className="msg__header"><span className="msg__name">{agentLabel(activeAgent, activeModelLabel)}</span><span className="msg__time">now</span></div>
+                      <div className="msg__text">
+                        <p>선택한 대화 흐름을 불러왔습니다. 필요한 파일과 로그를 열어 다음 작업을 진행할 준비가 되어 있습니다.</p>
+                      </div>
+                      <div className="code">
+                        <div className="code__head">
+                          <div className="code__head-left">
+                            <span className="code__lang">ctx</span>
+                            <span>project scope</span>
+                          </div>
+                          <button type="button" className="code__copy" onClick={() => handleCopy(`project=${projectName}\nchat=${activeChat?.title ?? 'new chat'}\npath=${projectPath}\nentry=${projectChatRoute}`, 'Project scope')}>Copy</button>
+                        </div>
+                        <pre className="code__body">{`project=${projectName}\nchat=${activeChat?.title ?? 'new chat'}\npath=${projectPath}\nentry=${projectChatRoute}`}</pre>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="msg">
+                    <span className={`msg__avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent)}</span>
+                    <div className="msg__body">
+                      <div className="msg__header"><span className="msg__name">{agentLabel(activeAgent, activeModelLabel)}</span><span className="msg__time">now</span></div>
+                      <div className="msg__text">
+                        <p>다음 요청을 보내면 이 대화에서 이어서 작업하겠습니다. 실행 상태, 파일 맥락, 이전 턴은 오른쪽 작업 패널에서 함께 추적됩니다.</p>
+                      </div>
+                      <div className="artifact">
+                        <div className="artifact__thumb" />
+                        <div className="artifact__meta">
+                          <span className="artifact__name">project-context.snapshot</span>
+                          <span className="artifact__sub">workspace context · ready</span>
+                        </div>
+                        <button type="button" className="artifact__btn" data-preview-open onClick={() => setPreviewState('open')}>Preview</button>
+                      </div>
+                      <div className="thinking">
+                        <span className="thinking__dots"><span className="thinking__dot" /><span className="thinking__dot" /><span className="thinking__dot" /></span>
+                        <span>프로젝트 맥락 대기 중</span>
+                        <span className="thinking__time">{tokenLabel}</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
               )}
 
               {visibleEvents.map((item) => {
@@ -1780,7 +2373,7 @@ function ProjectChatSurface({
                 const snippet = item.parsed?.snippets?.[0];
                 const toolLike = !isUser && isToolLikeEvent(item);
                 return (
-                  <div key={item.id} className="msg">
+                  <div key={item.id} className={`msg${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
                     <span className={`msg__avatar ${isUser ? 'msg__avatar--user' : agentAvatarClass(activeAgent)}`}>{isUser ? 'U' : agentInitial(activeAgent)}</span>
                     <div className="msg__body">
                       <div className="msg__header">
@@ -1806,7 +2399,18 @@ function ProjectChatSurface({
                         <>
                           <div className="msg__text"><p>{getEventText(item)}</p></div>
                           {toolLike && (
-                            <div className="tool">
+                            <div
+                              className="tool"
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => handleCopy(eventCommand(item), 'Tool command')}
+                              onKeyDown={(keyEvent) => {
+                                if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
+                                  keyEvent.preventDefault();
+                                  handleCopy(eventCommand(item), 'Tool command');
+                                }
+                              }}
+                            >
                               <span className="tool__icon tool__icon--success"><Check size={12} /></span>
                               <div className="tool__body">
                                 <span className="tool__title">{item.title || item.kind}</span>
@@ -1823,7 +2427,7 @@ function ProjectChatSurface({
                                   <span className="code__lang">{snippet.language || 'txt'}</span>
                                   <span>generated snippet</span>
                                 </div>
-                                <button type="button" className="code__copy">Copy</button>
+                                <button type="button" className="code__copy" onClick={() => handleCopy(snippet.code, 'Code block')}>Copy</button>
                               </div>
                               <pre className="code__body">{snippet.code}</pre>
                             </div>
@@ -1835,7 +2439,7 @@ function ProjectChatSurface({
                                 <span className="artifact__name">{item.parsed.files[0]}</span>
                                 <span className="artifact__sub">project file · referenced</span>
                               </div>
-                              <button type="button" className="artifact__btn">Preview</button>
+                              <button type="button" className="artifact__btn" data-preview-open onClick={() => setPreviewState('open')}>Preview</button>
                             </div>
                           )}
                         </>
@@ -1850,32 +2454,121 @@ function ProjectChatSurface({
               <div className="jb">
                 <span className="jb__dot" />
                 <span>Project scope active</span>
-                <button type="button" className="jb__btn" aria-label="Jump">
+                <button type="button" className="jb__btn" aria-label="Jump" onClick={handleJumpToLatest}>
                   <ChevronRight size={12} />
                 </button>
               </div>
             </div>
           </div>
 
-          <footer className="cmp-wrap">
+          <footer ref={composerWrapRef} className="cmp-wrap">
             <form className="cmp" onSubmit={handleSubmit}>
               <div className="cmp__top">
                 <div className="cmp-mode" role="tablist" aria-label="Mode">
-                  <button type="button" className="cmp-mode__pill" data-mode="agent" aria-pressed="true"><span className="cmp-mode__pill-dot" />Agent</button>
-                  <button type="button" className="cmp-mode__pill" data-mode="plan" aria-pressed="false"><span className="cmp-mode__pill-dot" />Plan</button>
-                  <button type="button" className="cmp-mode__pill" data-mode="terminal" aria-pressed="false"><span className="cmp-mode__pill-dot" />Terminal</button>
+                  {(['agent', 'plan', 'terminal'] as ComposerMode[]).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className="cmp-mode__pill"
+                      data-mode={mode}
+                      aria-pressed={composerMode === mode}
+                      onClick={() => setComposerMode(mode)}
+                    >
+                      <span className="cmp-mode__pill-dot" />
+                      {COMPOSER_MODE_COPY[mode]}
+                    </button>
+                  ))}
                 </div>
-                <button type="button" className="cmp-ctx" aria-label="Current model">
-                  <span className="cmp-ctx__logo">{agentInitial(activeAgent).slice(0, 1)}</span>
+                <button type="button" className="cmp-ctx" aria-label="Current model" aria-expanded={modelSelectorOpen} onClick={() => setModelSelectorOpen((current) => !current)}>
+                  <span className={`cmp-ctx__logo cmp-ctx__logo--${selectedProvider}`}>{agentInitial(activeAgent).slice(0, 1)}</span>
                   <span className="cmp-ctx__name">{activeModelLabel}</span>
-                  <span className="cmp-ctx__effort">High</span>
+                  <span className="cmp-ctx__effort">{selectedEffort}</span>
                   <ChevronRight size={12} />
                 </button>
+              </div>
+              <div className={`ms${modelSelectorOpen ? ' ms--open' : ''}`} role="dialog" aria-label="Model selector">
+                <div className="ms__eyebrow-row">
+                  <span className="ms__eyebrow">Model</span>
+                  <button type="button" className="ms__close" aria-label="Close model selector" onClick={() => setModelSelectorOpen(false)}>
+                    <X size={12} />
+                  </button>
+                </div>
+                <div className="ms__providers" role="tablist">
+                  {(['claude', 'codex', 'gemini'] as ModelProvider[]).map((provider) => (
+                    <button
+                      key={provider}
+                      type="button"
+                      className="ms__provider"
+                      data-provider={provider}
+                      aria-pressed={selectedProvider === provider}
+                      onClick={() => {
+                        setSelectedProvider(provider);
+                        setSelectedModel(MODEL_OPTIONS[provider][0]?.name ?? activeModelLabel);
+                        const allowedEfforts = PROVIDER_EFFORTS[provider];
+                        if (!allowedEfforts.includes(selectedEffort)) {
+                          setSelectedEffort(allowedEfforts.at(-1) ?? 'High');
+                        }
+                      }}
+                    >
+                      <span>{agentInitial(provider).slice(0, 1)}</span>
+                      <span className="ms__provider-label">{PROVIDER_LABELS[provider]}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="ms__list-wrap">
+                  {(['claude', 'codex', 'gemini'] as ModelProvider[]).map((provider) => (
+                    <div key={provider} className="ms__group" data-provider={provider} data-active={selectedProvider === provider ? '' : undefined}>
+                      {MODEL_OPTIONS[provider].map((model) => (
+                        <button
+                          key={model.name}
+                          type="button"
+                          className="ms__item"
+                          aria-pressed={selectedProvider === provider && activeModelLabel === model.name}
+                          onClick={() => {
+                            setSelectedProvider(provider);
+                            setSelectedModel(model.name);
+                            setModelSelectorOpen(false);
+                            showTransientFeedback(`${model.name} selected`);
+                          }}
+                        >
+                          <span className="ms__item-check" />
+                          <span className="ms__item-body">
+                            <span className="ms__item-name">{model.name}</span>
+                            <span className="ms__item-meta">{model.meta}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                <div className="ms__footer">
+                  <span className="ms__eyebrow">Effort</span>
+                  <div className="ms__effort-chips" role="tablist" aria-label="Reasoning effort">
+                    {(['Low', 'Medium', 'High', 'XHigh', 'Max'] as ReasoningEffort[]).map((effort) => {
+                      const disabled = !PROVIDER_EFFORTS[selectedProvider].includes(effort);
+                      return (
+                        <button
+                          key={effort}
+                          type="button"
+                          className={`ms__effort-chip${disabled ? ' ms__effort-chip--disabled' : ''}`}
+                          aria-pressed={selectedEffort === effort}
+                          disabled={disabled}
+                          onClick={() => setSelectedEffort(effort)}
+                        >
+                          {effort}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
               <div className="cmp__chips">
                 <span className="cmp-attach">
                   <span className="cmp-attach__icon"><FileText size={12} /></span>
                   <span className="cmp-attach__name">{displayProjectName(session)}</span>
+                  <button type="button" className="cmp-attach__x" aria-label="Copy attached project path" onClick={() => handleCopy(projectPath, 'Project path')}>
+                    <Copy size={10} />
+                  </button>
                 </span>
               </div>
               <textarea
@@ -1887,16 +2580,40 @@ function ProjectChatSurface({
               />
               <div className="cmp__toolbar">
                 <div className="cmp__tools">
-                  <button type="button" className="cmp__tool" aria-label="Add"><Plus size={15} /></button>
-                  <button type="button" className="cmp__tool" aria-label="Attach file"><FileText size={15} /></button>
-                  <button type="button" className="cmp__tool" aria-label="Mention"><Database size={15} /></button>
-                  <button type="button" className="cmp__tool" aria-label="Voice"><Mic size={15} /></button>
+                  <button type="button" className="cmp__tool" aria-label="Add" onClick={() => showTransientFeedback('Context action ready')}><Plus size={15} /></button>
+                  <button
+                    type="button"
+                    className="cmp__tool"
+                    aria-label="Attach file"
+                    onClick={() => {
+                      activateWorkspaceTab('files');
+                      showTransientFeedback('Files panel opened');
+                    }}
+                  >
+                    <Paperclip size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className="cmp__tool"
+                    aria-label="Mention"
+                    onClick={() => setPrompt((value) => `${value}${value.endsWith(' ') || value.length === 0 ? '' : ' '}@${displayProjectName(session)} `)}
+                  >
+                    <AtSign size={15} />
+                  </button>
+                  <button type="button" className="cmp__tool" aria-label="Voice" onClick={() => showTransientFeedback('Voice input is not available in this workspace')}>
+                    <Mic size={15} />
+                  </button>
                 </div>
                 <div className="cmp__right">
                   <span className="cmp__hint"><span className="kbd">⌘</span><span className="kbd">↵</span><span>send</span></span>
-                  <button type="submit" className="cmp__send" disabled={!prompt.trim() || isSubmitting}>
-                    {isSubmitting ? 'Sending' : 'Send'}
-                    <Send size={13} />
+                  <button
+                    type="submit"
+                    className={`cmp__send${isSubmitting ? ' cmp__send--running' : ''}`}
+                    disabled={isSubmitting ? false : !prompt.trim()}
+                    aria-label={isSubmitting ? 'Stop generation' : 'Send message'}
+                  >
+                    {isSubmitting ? 'Stop' : 'Send'}
+                    {isSubmitting ? <Square size={11} /> : <Send size={13} />}
                   </button>
                 </div>
               </div>
@@ -1905,86 +2622,86 @@ function ProjectChatSurface({
           </footer>
         </main>
 
-        <aside className="shell__workspace ws" aria-label={`${projectName} workspace`}>
-          <div className="ws__head">
-            <div className="ws__title"><PanelsTopLeft size={14} />Workspace</div>
-            <div className="ws__actions">
-              <button type="button" className="ws__action" aria-label="Open files"><FileText size={13} /></button>
+        <aside ref={workspaceRef} className="shell__workspace ws ws-pane" aria-label={`${projectName} workspace`}>
+          <div className="ws__head ws-pane__header">
+            <div className="ws__title ws-pane__title"><PanelRight size={14} />Workspace</div>
+            <div className="ws__actions ws-pane__actions">
+              <button type="button" className="ws__action ws-pane__action btn btn--ghost btn--icon btn--sm" aria-label="Open preview" onClick={() => setPreviewState('open')}>
+                <Maximize2 size={13} />
+              </button>
+              <button type="button" className="ws__action ws-pane__action btn btn--ghost btn--icon btn--sm" aria-label="Open files" onClick={() => activateWorkspaceTab('files')}>
+                <FileText size={13} />
+              </button>
+              <button type="button" className="ws__action ws-pane__action btn btn--ghost btn--icon btn--sm" aria-label="Close workspace" onClick={closeWorkspacePanel}>
+                <X size={13} />
+              </button>
             </div>
           </div>
           <div className="ws__tabs" role="tablist">
-            <button type="button" className="ws__tab" data-tab="run" aria-pressed="true"><Clock3 size={12} />Run</button>
-            <button type="button" className="ws__tab" data-tab="files" aria-pressed="false"><FileText size={12} />Files <span className="ws__tab-badge">{fileCount}</span></button>
-            <button type="button" className="ws__tab" data-tab="terminal" aria-pressed="false"><Monitor size={12} />Term</button>
-            <button type="button" className="ws__tab" data-tab="context" aria-pressed="false"><Database size={12} />Ctx</button>
+            <button type="button" className="ws__tab" data-tab="run" aria-pressed={workspaceTab === 'run'} onClick={() => activateWorkspaceTab('run')}><Clock size={12} />Run</button>
+            <button type="button" className="ws__tab" data-tab="files" aria-pressed={workspaceTab === 'files'} onClick={() => activateWorkspaceTab('files')}><FileIcon size={12} />Files</button>
+            <button type="button" className="ws__tab" data-tab="terminal" aria-pressed={workspaceTab === 'terminal'} onClick={() => activateWorkspaceTab('terminal')}><Terminal size={12} />Terminal</button>
+            <button type="button" className="ws__tab" data-tab="context" aria-pressed={workspaceTab === 'context'} onClick={() => activateWorkspaceTab('context')}><PanelsTopLeft size={12} />Context</button>
           </div>
           <div className="ws__status">
             <div className="ws__status-left">
-              <span className="ws__model"><span className="ws__model-dot" />{activeModelLabel}</span>
+              <span className={`ws__model ws__model--${selectedProvider}`}><span className="ws__model-dot" />{activeModelLabel}</span>
               <span className="ws__pill"><span className="ws__pill-dot" />{projectStatusLabel(session.status)}</span>
             </div>
             <div className="ws__status-right">
               <span>{tokenLabel}</span>
-              <button type="button" className="ws__stop" aria-label="Stop"><Square size={10} /></button>
+              <button type="button" className="ws__stop" aria-label="Stop" onClick={() => showTransientFeedback('Stop request staged for this project chat')}><Square size={10} /></button>
             </div>
           </div>
           <div className="ws__body">
-            <div className="ws__pane ws__pane--active">
+            <div className={`ws__pane${workspaceTab === 'run' ? ' ws__pane--active' : ''}`} data-pane="run">
               <div className="run-summary">
-                <div className="run-summary__cell"><span className="run-summary__label">Steps</span><span className="run-summary__value">{Math.max(1, visibleEvents.length)}</span></div>
+                <div className="run-summary__cell"><span className="run-summary__label">Steps</span><span className="run-summary__value">{hasRuntimeEvents ? Math.max(1, visibleEvents.length) : '4 / 5'}</span></div>
                 <div className="run-summary__cell"><span className="run-summary__label">Tokens</span><span className="run-summary__value">{tokenLabel}</span></div>
-                <div className="run-summary__cell"><span className="run-summary__label">Rank</span><span className="run-summary__value">#{index + 1}</span></div>
+                <div className="run-summary__cell"><span className="run-summary__label">Activity</span><span className="run-summary__value">{formatRelativeTime(selectedChatTimestamp)}</span></div>
               </div>
-              <div className="run-steps">
-                {visibleEvents.slice(-4).map((item) => (
-                  <div key={item.id} className="run-step">
-                    <span className="run-step__dot run-step__dot--done" />
-                    <div className="run-step__body">
-                      <div className="run-step__title">{item.title || item.kind}</div>
-                      <div className="run-step__cmd">{eventCommand(item)}</div>
-                    </div>
-                    <span className="run-step__time">{formatRelativeTime(item.timestamp)}</span>
-                  </div>
-                ))}
-                {visibleEvents.length === 0 && (
-                  <div className="run-step run-step--active">
-                    <span className="run-step__dot run-step__dot--running" />
-                    <div className="run-step__body">
-                      <div className="run-step__title">Waiting for first turn</div>
-                      <div className="run-step__cmd">{projectPath}</div>
-                    </div>
-                    <span className="run-step__time">now</span>
-                  </div>
-                )}
+              <div className="ws-card ws-card--run">
+                <div className="ws-card__head">
+                  <div className="ws-card__title">Run · {activeChat?.id ? `#${activeChat.id.slice(-4)}` : '#0142'}</div>
+                  <div className="ws-card__meta">{formatRelativeTime(selectedChatTimestamp)} · {tokenLabel} tokens</div>
+                </div>
+                <div className="run-steps">
+                  {runStepItems.map((item) => (
+                    <button key={item.id} type="button" className={`run-step ws-run-step${item.state === 'running' ? ' run-step--active' : ''}`} onClick={() => handleCopy(item.cmd, 'Run step')}>
+                      <span className={`run-step__dot ws-run-step__dot${item.state === 'running' ? ' run-step__dot--running' : ' run-step__dot--done ws-run-step__dot--done'}`} />
+                      <div className="run-step__body ws-run-step__body">
+                        <div className="run-step__title ws-run-step__title">{item.title}</div>
+                        <div className="run-step__cmd ws-run-step__time">{item.cmd}</div>
+                      </div>
+                      <span className="run-step__time ws-run-step__time">{item.time}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="chist">
+              <div className="chist ws-card ws-card--history">
                 <div className="chist__head">
                   <span className="chist__title"><MessageSquareText size={12} />Chat history</span>
-                  <span className="chist__meta">{userTurns.length || 1} turns</span>
+                  <span className="chist__meta">{historyTurnItems.length} turns</span>
                 </div>
                 <div className="chist__list">
-                  {(userTurns.slice(-3).length
-                    ? userTurns.slice(-3)
-                    : [{
-                      id: 'empty-turn',
-                      timestamp: activeChat?.lastActivityAt ?? new Date().toISOString(),
-                      kind: 'text_reply',
-                      title: 'Project context',
-                      body: recentPreview,
-                      meta: { role: 'user' },
-                    } satisfies UiEvent]).map((item, turnIndex) => (
-                    <div key={item.id} className="chturn" data-open={turnIndex === 0 ? 'true' : 'false'}>
-                      <button type="button" className="chturn__preview">
+                  {historyTurnItems.map((item) => (
+                    <div key={item.id} className="chturn" data-open={visibleExpandedTurnId === item.id ? 'true' : 'false'}>
+                      <button
+                        type="button"
+                        className="chturn__preview"
+                        data-turn-toggle
+                        onClick={() => setExpandedTurnId(visibleExpandedTurnId === item.id ? '__none__' : item.id)}
+                      >
                         <span className="chturn__avatar">U</span>
                         <span className="chturn__body">
                           <span className="chturn__meta">
                             <span className="chturn__name">You</span>
                             <span className="chturn__time">{formatRelativeTime(item.timestamp)}</span>
-                            <span className={`chturn__pill ${turnIndex === 0 ? 'chturn__pill--run' : 'chturn__pill--ok'}`}>
-                              <span className="chturn__pill-dot" />{turnIndex === 0 ? 'running' : 'answered'}
+                            <span className={`chturn__pill ${item.state === 'running' ? 'chturn__pill--run' : 'chturn__pill--ok'}`}>
+                              <span className="chturn__pill-dot" />{item.state}
                             </span>
                           </span>
-                          <span className="chturn__text">{getEventText(item)}</span>
+                          <span className="chturn__text">{item.text}</span>
                         </span>
                         <ChevronRight size={12} className="chturn__caret" />
                       </button>
@@ -1992,17 +2709,105 @@ function ProjectChatSurface({
                         <div className="chturn__agent-head">
                           <span className={`chturn__agent-avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent).slice(0, 1)}</span>
                           <span className="chturn__agent-label"><strong>{agentLabel(activeAgent, activeModelLabel)}</strong></span>
-                          <span className="chturn__agent-final">{turnIndex === 0 ? 'In progress' : 'Final'}</span>
+                          <span className="chturn__agent-final">{item.state === 'running' ? 'In progress' : 'Final'}</span>
                         </div>
-                        <div className="chturn__agent-text">{representativeAgentEvent ? getEventText(representativeAgentEvent) : '프로젝트 맥락을 기준으로 응답을 준비합니다.'}</div>
+                        <div className="chturn__agent-text">{item.agentText}</div>
                         <div className="chturn__actions">
-                          <button type="button" className="chturn__btn"><ChevronRight size={11} />Jump</button>
-                          <button type="button" className="chturn__btn"><FileText size={11} />Preview</button>
+                          <button type="button" className="chturn__btn" onClick={() => handleJumpToTurn(item.id)}><ChevronRight size={11} />Jump</button>
+                          <button type="button" className="chturn__btn" data-preview-open onClick={() => setPreviewState('open')}><FileText size={11} />Preview</button>
+                          <button type="button" className="chturn__btn" onClick={() => handleCopy(`${item.text}\n\n${item.agentText}`, 'Turn summary')}><Copy size={11} />Copy</button>
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+            <div className={`ws__pane${workspaceTab === 'files' ? ' ws__pane--active' : ''}`} data-pane="files">
+              <div className="file-tree">
+                {workspaceFiles.map((file) => (
+                  <button
+                    key={file.id}
+                    type="button"
+                    className={`file-row${selectedWorkspaceFile === file.name ? ' file-row--selected' : ''}`}
+                    onClick={() => {
+                      setSelectedWorkspaceFile(file.name);
+                      if (file.kind === 'file') setPreviewState('dock');
+                    }}
+                  >
+                    <span className={`file-row__icon${file.kind === 'dir' ? ' file-row__icon--dir' : ''}`}>
+                      {file.kind === 'dir' ? <FolderOpen size={13} /> : <FileText size={13} />}
+                    </span>
+                    <span className="file-row__name">{file.name}</span>
+                    <span className="file-row__meta">{file.meta}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className={`ws__pane${workspaceTab === 'terminal' ? ' ws__pane--active' : ''}`} data-pane="terminal">
+              <div className="term">
+                <div className="term__head">
+                  <div className="term__head-left">
+                    <span className="term__dots"><span className="term__dot term__dot--r" /><span className="term__dot term__dot--y" /><span className="term__dot term__dot--g" /></span>
+                    <span className="term__tag">bash · project chat</span>
+                  </div>
+                  <span className="term__dim">{composerMode}</span>
+                </div>
+                <div className="term__body">
+                  <div className="term__line"><span className="term__prompt">~/aris$</span><span>{draftTerminalCommand}</span></div>
+                  <div className="term__line"><span className="term__dim">selected · {selectedWorkspaceFile}</span></div>
+                  <div className="term__line"><span className="term__ok">✓</span><span>ready to run in this project context</span></div>
+                </div>
+              </div>
+              <div className="snip-group">
+                <div className="snip-group__head">
+                  <span className="snip-group__label"><Terminal size={12} />Snippets</span>
+                  <span className="snip-group__count">{terminalSnippets.length}</span>
+                </div>
+                {terminalSnippets.map((snippet) => (
+                  <button
+                    key={snippet.id}
+                    type="button"
+                    className="snip-row"
+                    onClick={() => {
+                      setDraftTerminalCommand(snippet.cmd);
+                      setPrompt((value) => value || snippet.cmd);
+                    }}
+                  >
+                    <span className="snip-row__name">{snippet.name}</span>
+                    <span className="snip-row__cmd">{snippet.cmd}</span>
+                    <span className="snip-row__tag">{snippet.tag}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className={`ws__pane${workspaceTab === 'context' ? ' ws__pane--active' : ''}`} data-pane="context">
+              <div className="ctx-summary">
+                <div className="ctx-ring" aria-label={`${tokenLabel} context usage`}>
+                  <svg viewBox="0 0 80 80" width="80" height="80" aria-hidden="true">
+                    <circle className="ctx-ring__track" cx="40" cy="40" r="34" strokeWidth="6" fill="none" />
+                    <circle className="ctx-ring__fill" cx="40" cy="40" r="34" strokeWidth="6" fill="none" strokeDasharray="214" strokeDashoffset="194" strokeLinecap="round" />
+                  </svg>
+                  <div className="ctx-ring__center">9.2%</div>
+                </div>
+                <div className="ctx-summary__body">
+                  <div className="ctx-summary__title">Context usage</div>
+                  <div className="ctx-summary__meta">{tokenLabel} / 200k tokens</div>
+                  <div className="ctx-summary__split">
+                    <div className="ctx-summary__split-cell"><div className="ctx-summary__split-label">Model</div><div className="ctx-summary__split-value">{activeModelLabel}</div></div>
+                    <div className="ctx-summary__split-cell"><div className="ctx-summary__split-label">Mode</div><div className="ctx-summary__split-value">{COMPOSER_MODE_COPY[composerMode]}</div></div>
+                  </div>
+                </div>
+              </div>
+              <div className="ctx-group">
+                <div className="ctx-group__head"><span className="ctx-group__title">Attached context</span><span className="ctx-group__count">{contextItems.length}</span></div>
+                {contextItems.map((item) => (
+                  <button key={item.id} type="button" className="ctx-item" onClick={() => handleCopy(item.name, 'Context item')}>
+                    <FileText size={13} className="ctx-item__icon" />
+                    <span className="ctx-item__name">{item.name}</span>
+                    <span className="ctx-item__tokens">{item.tokens}</span>
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -2013,6 +2818,76 @@ function ProjectChatSurface({
           </div>
         </aside>
       </div>
+      <div className="overlay" data-preview-overlay role="dialog" aria-modal="true" aria-label="Preview">
+        <div className="preview-frame">
+          <div className="preview-topbar">
+            <div className="preview-topbar__nav">
+              <button type="button" className="preview-topbar__btn" aria-label="Back"><ChevronLeft size={13} /></button>
+              <button type="button" className="preview-topbar__btn" aria-label="Refresh" onClick={() => showTransientFeedback('Preview refreshed')}><RefreshCcw size={13} /></button>
+            </div>
+            <div className="preview-url">
+              <span className="preview-url__protocol">https://</span>
+              <span className="preview-url__target">{previewTarget}</span>
+              <span className="preview-url__meta">project</span>
+            </div>
+            <div className="preview-device" role="tablist" aria-label="Preview size">
+              {(['1200', '768', '390'] as const).map((device) => (
+                <button key={device} type="button" aria-pressed={previewDevice === device} onClick={() => setPreviewDevice(device)}>{device}</button>
+              ))}
+            </div>
+            <button type="button" className="preview-topbar__btn" aria-label="Copy preview URL" onClick={() => handleCopy(`https://${previewTarget}`, 'Preview URL')}><ExternalLink size={13} /></button>
+            <button type="button" className="preview-topbar__btn" data-preview-dock aria-label="Dock preview" onClick={() => setPreviewState('dock')}><PanelsTopLeft size={13} /></button>
+            <button type="button" className="preview-topbar__btn" aria-label="Close preview" onClick={() => setPreviewState('closed')}><X size={13} /></button>
+          </div>
+          <div className="preview-canvas" data-preview-size={previewDevice}>
+            <div className="preview-page">
+              <aside className="preview-page__sb">
+                <div className="preview-page__sb-logo">ARIS</div>
+                <div className="preview-page__sb-item preview-page__sb-item--active">{displayProjectName(session)}</div>
+                <div className="preview-page__sb-item">{activeChat?.title ?? 'Project chat'}</div>
+                <div className="preview-page__sb-item">{selectedWorkspaceFile}</div>
+              </aside>
+              <main className="preview-page__main">
+                <h2 className="preview-page__h">{activeChat?.title ?? 'Project chat'}</h2>
+                <p className="preview-page__sub">{agentLabel(activeAgent, activeModelLabel)} · {COMPOSER_MODE_COPY[composerMode]} · {tokenLabel}</p>
+                <div className="preview-page__cards">
+                  <div className="preview-page__card">
+                    <div className="preview-page__card-t">Workspace</div>
+                    <div className="preview-page__card-m">{workspaceTab} · {selectedWorkspaceFile}</div>
+                    <div className="preview-page__bar"><div className="preview-page__bar-fill" style={{ width: '74%' }} /></div>
+                  </div>
+                  <div className="preview-page__card">
+                    <div className="preview-page__card-t">Context</div>
+                    <div className="preview-page__card-m">{projectPath}</div>
+                    <div className="preview-page__bar"><div className="preview-page__bar-fill" style={{ width: '42%' }} /></div>
+                  </div>
+                </div>
+              </main>
+            </div>
+            <div className="preview-controls">
+              <button type="button" aria-label="Zoom out" onClick={() => showTransientFeedback('Preview zoom 90%')}><ChevronLeft size={12} /></button>
+              <span className="preview-controls__zoom">100%</span>
+              <button type="button" aria-label="Zoom in" onClick={() => showTransientFeedback('Preview zoom 110%')}><ChevronRight size={12} /></button>
+              <span className="preview-controls__sep" />
+              <button type="button" aria-label="Screenshot" onClick={() => showTransientFeedback('Screenshot staged')}><Copy size={12} /></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="preview-dock-wrap" data-preview-dock>
+        <div className="preview-dock">
+          <span className="preview-dock__thumb" />
+          <span className="preview-dock__name">{selectedWorkspaceFile}</span>
+          <span className="preview-dock__meta">{previewDevice}</span>
+          <button type="button" className="preview-dock__btn preview-dock__btn--live" data-preview-open aria-label="Expand preview" onClick={() => setPreviewState('open')}>
+            <Maximize2 size={12} />
+          </button>
+          <button type="button" className="preview-dock__btn" aria-label="Close preview dock" onClick={() => setPreviewState('closed')}>
+            <X size={12} />
+          </button>
+        </div>
+      </div>
+      {copyFeedback && <div className="pc-toast" data-copy-feedback role="status">{copyFeedback}</div>}
     </div>
   );
 }
