@@ -33,6 +33,17 @@ describe('mobile home/workspace layout overflow guards', () => {
     expect(fabCss).toMatch(/@media\s*\(min-width:\s*768px\)\s*\{[\s\S]*?\.main\s*\{[^}]*padding-block:\s*2rem;/s);
   });
 
+  it('keeps the redesigned IA home shell and recent project cards usable on phones', () => {
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.aris-ia-shell\s*\{[^}]*width:\s*calc\(100% - var\(--sp-12\)\);/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.aris-ia-shell\s*\{[^}]*margin-inline:\s*auto;/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.cmd-console\s*\{[^}]*display:\s*none;/s);
+    expect(uiCss).toMatch(/\.home-grid,\s*[\r\n]+\.home-proj\s*\{[^}]*max-width:\s*100%;/s);
+    expect(uiCss).toMatch(/\.home-proj__head > div\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*100%;/s);
+    expect(uiCss).toMatch(/\.home-proj__chat-body\s*\{[^}]*max-width:\s*100%;/s);
+    expect(uiCss).toMatch(/\.home-feed-row\s*\{[^}]*min-width:\s*0;/s);
+    expect(uiCss).toMatch(/\.home-feed-text\s*\{[^}]*max-width:\s*100%;/s);
+  });
+
   it('uses a single-column server resource grid on narrow phones', () => {
     expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.serverResourceGridHorizontal\s*\{[^}]*display:\s*flex;/s);
     expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.serverResourceGridHorizontal\s*\{[^}]*flex-direction:\s*column;/s);

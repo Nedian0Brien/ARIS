@@ -322,6 +322,16 @@ describe('project list surface', () => {
     expect(dockWrap).not.toContain('bottom: 92px;');
   });
 
+  it('keeps the project chat prototype practical on mobile viewports', () => {
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto\s*\{[^}]*min-height:\s*calc\(var\(--app-vh,\s*100dvh\) - 48px - 96px\);/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto \.shell\s*\{[^}]*height:\s*100%;[^}]*min-height:\s*0;/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto \.tl\s*\{[^}]*min-height:\s*0;/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto \.cmp__top\s*\{[^}]*flex-direction:\s*row;[^}]*overflow-x:\s*auto;/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto \.cmp__toolbar\s*\{[^}]*flex-direction:\s*row;/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto \.cmp-mode\s*\{[^}]*width:\s*auto;/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto \.cmp__right,\s*[\r\n ]+\.pc-proto \.cmp__send\s*\{[^}]*width:\s*auto;/s);
+  });
+
   it('matches the chat-screen-v1 background hierarchy', () => {
     expect(cssBlock('.m-sb')).toContain('background: var(--surface);');
     expect(cssBlock('.m-main')).toContain('background: var(--canvas);');
