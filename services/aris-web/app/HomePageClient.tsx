@@ -3339,8 +3339,10 @@ export default function HomePageWrapper({
     return <HomeSurface metrics={metrics} onProjectOpen={handleProjectOpen} sessions={sessions} user={user} />;
   })();
 
+  const shouldShowBottomNav = !(activeTab === 'project' && selectedProjectView === 'chat');
+
   return (
-    <div className="app-shell app-shell-ia">
+    <div className={`app-shell app-shell-ia${shouldShowBottomNav ? '' : ' app-shell-ia--chat-screen'}`}>
       <div className="aris-ia-shell">
         <Sidebar
           activeProjectChatId={selectedProjectChatId}
@@ -3358,7 +3360,7 @@ export default function HomePageWrapper({
           {content}
         </main>
       </div>
-      <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
+      {shouldShowBottomNav && <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />}
     </div>
   );
 }

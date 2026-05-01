@@ -5372,6 +5372,10 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
     overflow-x: hidden;
   }
 
+  .app-shell-ia--chat-screen {
+    padding-bottom: 0;
+  }
+
   .aris-ia-shell {
     grid-template-columns: minmax(0, 1fr);
     width: calc(100% - var(--sp-12));
@@ -5379,6 +5383,10 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
     min-height: calc(var(--app-vh, 100dvh) - 96px - var(--safe-area-inset-bottom));
     margin-inline: auto;
     overflow: hidden;
+  }
+
+  .app-shell-ia--chat-screen .aris-ia-shell {
+    min-height: var(--app-vh, 100dvh);
   }
 
   .m-sb {
@@ -5546,7 +5554,7 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
   }
 
   .pc-proto {
-    min-height: calc(var(--app-vh, 100dvh) - 48px - 96px);
+    min-height: calc(var(--app-vh, 100dvh) - 48px);
   }
 
   .pc-proto .shell {
