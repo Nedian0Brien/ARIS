@@ -1735,6 +1735,8 @@ function ProjectChatSurface({
     setWorkspaceOpen(true);
   };
 
+  const defaultWorkspaceOpen = () => !window.matchMedia('(max-width: 1100px)').matches;
+
   const toggleWorkspacePanel = () => {
     setWorkspaceOpen((current) => !current);
   };
@@ -1791,8 +1793,8 @@ function ProjectChatSurface({
   useEffect(() => {
     setComposerMode('agent');
     setWorkspaceTab('run');
-    setWorkspaceOpen(true);
-    setWorkspaceLayoutReady(false);
+    setWorkspaceOpen(defaultWorkspaceOpen());
+    setWorkspaceLayoutReady(true);
     setPreviewState('dock');
     setModelSelectorOpen(false);
     setSelectedProvider(providerFromAgent(runtimeAgent));
@@ -1807,7 +1809,7 @@ function ProjectChatSurface({
   useEffect(() => {
     const media = window.matchMedia('(max-width: 1100px)');
     const syncWorkspacePanel = () => {
-      setWorkspaceOpen(!media.matches);
+      setWorkspaceOpen(defaultWorkspaceOpen());
       setWorkspaceLayoutReady(true);
     };
 
