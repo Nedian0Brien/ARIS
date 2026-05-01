@@ -3,6 +3,7 @@
 > 구현 단계에서 놓치는 기능이 없도록 `chat-prototype.html` 기준 전체 기능을 체크리스트로 정리한 문서.
 > 체크박스 `[ ]` → 미구현, `[x]` → 구현 완료.
 > 관련 디자인 참조: [chat-screen-v1.html](./chat-screen-v1.html), [chat-prototype.html](./chat-prototype.html), [design-system-v1.html](./design-system-v1.html), [chat-composer-v2.html](./chat-composer-v2.html).
+> 후속 구현 후보: [project-chat-redesign-next-candidates.md](./project-chat-redesign-next-candidates.md).
 
 ---
 
