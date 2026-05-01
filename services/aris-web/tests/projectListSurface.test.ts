@@ -149,6 +149,8 @@ describe('project list surface', () => {
     expect(homeClient).toContain('<aside ref={workspaceRef} className="shell__workspace ws ws-pane"');
     expect(uiCss).toContain('.pc-proto[data-workspace-ready="true"][data-workspace="open"] .shell__workspace');
     expect(uiCss).toContain('.pc-proto[data-workspace-ready="true"][data-workspace="closing"] .shell__workspace');
+    expect(uiCss).toContain('top: 0;\n    right: 0;\n    bottom: 0;');
+    expect(uiCss).not.toContain('top: 52px;\n    right: 0;\n    bottom: 0;');
     expect(uiCss).toContain('width: min(420px, calc(100vw - 32px));');
     expect(uiCss).toContain('box-shadow: -18px 0 44px rgba(15, 23, 42, 0.18);');
     expect(uiCss).toContain('animation: pc-workspace-drawer-in 180ms var(--ease-smooth) both;');

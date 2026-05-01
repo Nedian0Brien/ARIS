@@ -5278,7 +5278,7 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
   .pc-proto[data-workspace-ready="true"][data-workspace="closing"] .shell__workspace {
     display: flex;
     position: absolute;
-    top: 52px;
+    top: 0;
     right: 0;
     bottom: 0;
     width: min(420px, calc(100vw - 32px));
