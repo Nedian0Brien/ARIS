@@ -9,7 +9,12 @@ deploy_nginx_pgrep() {
 }
 
 deploy_nginx_kill() {
-  "${ARIS_DEPLOY_KILL:-kill}" "$@"
+  if [[ -n "${ARIS_DEPLOY_KILL:-}" ]]; then
+    "${ARIS_DEPLOY_KILL}" "$@"
+    return
+  fi
+
+  deploy_nginx_sudo kill "$@"
 }
 
 log_nginx_reload_diagnostics() {
@@ -51,8 +56,12 @@ reload_nginx() {
   master_pid="$(deploy_nginx_pgrep -xo nginx 2>/dev/null || true)"
   if [[ -n "$master_pid" ]]; then
     echo "[deploy:web-zd] falling back to nginx master HUP: ${master_pid}" >&2
-    deploy_nginx_kill -HUP "$master_pid"
-    return 0
+    if deploy_nginx_kill -HUP "$master_pid"; then
+      return 0
+    fi
+
+    echo "[deploy:web-zd] failed to signal nginx master process: ${master_pid}" >&2
+    return 1
   fi
 
   echo "[deploy:web-zd] nginx reload failed and no nginx master process was found" >&2
