@@ -1271,6 +1271,11 @@ html[data-theme='dark'] .cmd-console__line__caret {
   margin-bottom: var(--sp-14);
 }
 
+.home-grid,
+.home-proj {
+  max-width: 100%;
+}
+
 .home-proj {
   padding: var(--sp-10);
   transition: transform 220ms var(--ease-smooth), box-shadow 220ms var(--ease-smooth), border-color 220ms var(--ease-smooth);
@@ -1307,11 +1312,21 @@ html[data-theme='dark'] .home-proj:focus-visible {
   min-width: 0;
 }
 
+.home-proj__head > div {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .home-proj__title {
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .home-proj__path {
@@ -1371,6 +1386,7 @@ html[data-theme='dark'] .home-proj:focus-visible {
 .home-proj__chat-body {
   flex: 1;
   min-width: 0;
+  max-width: 100%;
 }
 
 .home-proj__chat-title {
@@ -1417,6 +1433,7 @@ html[data-theme='dark'] .home-proj:focus-visible {
 
 .home-feed-row {
   width: 100%;
+  min-width: 0;
   display: flex;
   gap: var(--sp-4);
   padding: var(--sp-6) var(--sp-10);
@@ -1456,18 +1473,29 @@ html[data-theme='dark'] .home-proj:focus-visible {
   color: var(--text-tertiary);
   margin-bottom: 2px;
   min-width: 0;
+  max-width: 100%;
 }
 
 .home-feed-actor {
   font-weight: 600;
   color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .home-feed-proj {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
   padding: 0 6px;
   border-radius: var(--r-xs);
   background: var(--surface-sunken);
   font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .home-feed-time {
@@ -1479,6 +1507,7 @@ html[data-theme='dark'] .home-proj:focus-visible {
   font-size: 12.5px;
   color: var(--text-secondary);
   display: block;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5340,21 +5369,45 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
 @media (max-width: 767px) {
   .app-shell-ia {
     padding-bottom: calc(96px + var(--safe-area-inset-bottom));
+    overflow-x: hidden;
   }
 
   .aris-ia-shell {
     grid-template-columns: minmax(0, 1fr);
+    width: calc(100% - var(--sp-12));
+    max-width: 100%;
+    min-height: calc(var(--app-vh, 100dvh) - 96px - var(--safe-area-inset-bottom));
+    margin-inline: auto;
+    overflow: hidden;
   }
 
   .m-sb {
     display: none;
   }
 
+  .m-main {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+
   .m-top {
-    padding: 0 var(--sp-6);
+    gap: var(--sp-3);
+    padding: 0 var(--sp-4);
+  }
+
+  .m-top__left {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .m-top__right {
+    gap: var(--sp-2);
+    min-width: 0;
   }
 
   .m-theme-toggle {
+    flex: 0 0 auto;
     min-width: 98px;
   }
 
@@ -5377,35 +5430,18 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
 
   .m-body,
   .m-main-scroll {
-    padding: var(--sp-10);
+    max-width: 100%;
+    overflow-x: hidden;
+    padding: var(--sp-8);
   }
 
   .m-main-scroll--project-chat-detail {
+    overflow: hidden;
     padding: 0;
   }
 
   .cmd-console {
-    top: var(--sp-2);
-    left: 0;
-    transform: none;
-    width: 100%;
-    max-width: none;
-    height: 112px;
-    opacity: 0.34;
-  }
-
-  html[data-theme='dark'] .cmd-console {
-    opacity: 0.42;
-  }
-
-  .cmd-console__viewport {
-    align-items: flex-end;
-    padding: 0 var(--sp-3);
-  }
-
-  .cmd-console__line {
-    max-width: min(72vw, 280px);
-    font-size: 11.5px;
+    display: none;
   }
 
   .home-strip,
@@ -5430,11 +5466,47 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
     padding: var(--sp-10);
   }
 
+  .proj-head__row {
+    min-width: 0;
+  }
+
+  .proj-head__row > div {
+    min-width: 0;
+  }
+
   .proj-head__actions,
   .proj-list-chips,
   .files-chips {
     margin-left: 0;
     width: 100%;
+  }
+
+  .proj-head__actions {
+    flex-wrap: wrap;
+  }
+
+  .proj-head__actions .btn {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .proj-tabs {
+    max-width: 100%;
+    padding: 0 var(--sp-8);
+    scrollbar-width: none;
+  }
+
+  .proj-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .proj-tab {
+    flex: 0 0 auto;
+    padding: var(--sp-5);
+  }
+
+  .proj-item__meta {
+    max-width: 100%;
   }
 
   .proj-list-body {
@@ -5474,12 +5546,12 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
   }
 
   .pc-proto {
-    min-height: calc(100vh - 48px - 96px);
+    min-height: calc(var(--app-vh, 100dvh) - 48px - 96px);
   }
 
   .pc-proto .shell {
-    height: calc(100vh - 48px - 96px);
-    min-height: 560px;
+    height: 100%;
+    min-height: 0;
   }
 
   .pc-proto .ch {
@@ -5497,7 +5569,8 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
   }
 
   .pc-proto .tl {
-    padding: var(--sp-8) var(--sp-5) var(--sp-12);
+    min-height: 0;
+    padding: var(--sp-8) var(--sp-5) var(--sp-8);
   }
 
   .pc-proto .msg {
@@ -5516,24 +5589,46 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
   }
 
   .pc-proto .cmp-wrap {
-    padding: var(--sp-3) var(--sp-4) var(--sp-5);
+    padding: var(--sp-3) var(--sp-3) calc(var(--sp-4) + var(--safe-area-inset-bottom));
   }
 
-  .pc-proto .cmp__top,
+  .pc-proto .cmp__top {
+    align-items: center;
+    flex-direction: row;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .pc-proto .cmp__top::-webkit-scrollbar {
+    display: none;
+  }
+
   .pc-proto .cmp__toolbar {
-    align-items: stretch;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
   }
 
-  .pc-proto .cmp-mode,
+  .pc-proto .cmp-mode {
+    width: auto;
+    min-width: max-content;
+  }
+
   .pc-proto .cmp__right,
   .pc-proto .cmp__send {
-    width: 100%;
+    width: auto;
   }
 
   .pc-proto .cmp-mode__pill,
   .pc-proto .cmp__send {
     justify-content: center;
+  }
+
+  .pc-proto .cmp-ctx {
+    flex: 0 0 auto;
+  }
+
+  .pc-proto .cmp__tools {
+    min-width: 0;
   }
 
   .files-list__head,
