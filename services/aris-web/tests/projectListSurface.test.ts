@@ -129,6 +129,10 @@ describe('project list surface', () => {
     expect(uiCss).toContain('.pc-proto[data-workspace-ready="true"][data-workspace="open"] .shell__workspace');
     expect(uiCss).toContain('width: min(420px, calc(100vw - 32px));');
     expect(uiCss).toContain('box-shadow: -18px 0 44px rgba(15, 23, 42, 0.18);');
+    expect(uiCss).toContain('animation: pc-workspace-drawer-in 180ms var(--ease-smooth) both;');
+    expect(uiCss).toContain('@keyframes pc-workspace-drawer-in');
+    expect(uiCss).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(uiCss).toContain('animation: none;');
   });
 
   it('renders functional workspace panes instead of one static Run panel', () => {
