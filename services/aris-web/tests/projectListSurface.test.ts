@@ -121,7 +121,7 @@ describe('project list surface', () => {
     expect(homeClient).toContain('if (workspaceOpen) {');
     expect(homeClient).toContain('closeWorkspacePanel();');
     expect(homeClient).toContain('openWorkspacePanel();');
-    expect(homeClient).toContain('<div className="ws__title"><PanelRight size={14} />Workspace</div>');
+    expect(homeClient).toContain('<div className="ws__title ws-pane__title"><PanelRight size={14} />Workspace</div>');
   });
 
   it('shows the workspace panel from the header toggle on compact project chat layouts', () => {
@@ -141,7 +141,7 @@ describe('project list surface', () => {
     expect(homeClient).toContain('const handleWorkspaceEscape = (event: KeyboardEvent) => {');
     expect(homeClient).toContain("event.key !== 'Escape'");
     expect(homeClient).toContain("document.addEventListener('keydown', handleWorkspaceEscape);");
-    expect(homeClient).toContain('<aside ref={workspaceRef} className="shell__workspace ws"');
+    expect(homeClient).toContain('<aside ref={workspaceRef} className="shell__workspace ws ws-pane"');
     expect(uiCss).toContain('.pc-proto[data-workspace-ready="true"][data-workspace="open"] .shell__workspace');
     expect(uiCss).toContain('.pc-proto[data-workspace-ready="true"][data-workspace="closing"] .shell__workspace');
     expect(uiCss).toContain('width: min(420px, calc(100vw - 32px));');
@@ -152,6 +152,20 @@ describe('project list surface', () => {
     expect(uiCss).toContain('@keyframes pc-workspace-drawer-out');
     expect(uiCss).toContain('@media (prefers-reduced-motion: reduce)');
     expect(uiCss).toContain('animation: none;');
+  });
+
+  it('matches the workspace panel header to the chat-screen-v1 prototype', () => {
+    expect(homeClient).toContain('<div className="ws__head ws-pane__header">');
+    expect(homeClient).toContain('<div className="ws__title ws-pane__title"><PanelRight size={14} />Workspace</div>');
+    expect(homeClient).toContain('<div className="ws__actions ws-pane__actions">');
+    expect(homeClient).toContain('className="ws__action ws-pane__action btn btn--ghost btn--icon btn--sm"');
+    expect(uiCss).toContain('.pc-proto .ws-pane__header {');
+    expect(uiCss).toContain('height: 52px;');
+    expect(uiCss).toContain('padding: 0 var(--sp-8);');
+    expect(uiCss).toContain('border-bottom: 1px solid var(--border-subtle);');
+    expect(uiCss).toContain('--ls-snug: -0.014em;');
+    expect(uiCss).toContain('.pc-proto .ws-pane__title {');
+    expect(uiCss).toContain('letter-spacing: var(--ls-snug);');
   });
 
   it('keeps the workspace metrics while restyling run details as chat-screen-v1 cards', () => {

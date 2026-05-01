@@ -2548,17 +2548,17 @@ function ProjectChatSurface({
           </footer>
         </main>
 
-        <aside ref={workspaceRef} className="shell__workspace ws" aria-label={`${projectName} workspace`}>
-          <div className="ws__head">
-            <div className="ws__title"><PanelRight size={14} />Workspace</div>
-            <div className="ws__actions">
-              <button type="button" className="ws__action" aria-label="Open preview" onClick={() => setPreviewState('open')}>
+        <aside ref={workspaceRef} className="shell__workspace ws ws-pane" aria-label={`${projectName} workspace`}>
+          <div className="ws__head ws-pane__header">
+            <div className="ws__title ws-pane__title"><PanelRight size={14} />Workspace</div>
+            <div className="ws__actions ws-pane__actions">
+              <button type="button" className="ws__action ws-pane__action btn btn--ghost btn--icon btn--sm" aria-label="Open preview" onClick={() => setPreviewState('open')}>
                 <Maximize2 size={13} />
               </button>
-              <button type="button" className="ws__action" aria-label="Open files" onClick={() => activateWorkspaceTab('files')}>
+              <button type="button" className="ws__action ws-pane__action btn btn--ghost btn--icon btn--sm" aria-label="Open files" onClick={() => activateWorkspaceTab('files')}>
                 <FileText size={13} />
               </button>
-              <button type="button" className="ws__action" aria-label="Close workspace" onClick={closeWorkspacePanel}>
+              <button type="button" className="ws__action ws-pane__action btn btn--ghost btn--icon btn--sm" aria-label="Close workspace" onClick={closeWorkspacePanel}>
                 <X size={13} />
               </button>
             </div>
