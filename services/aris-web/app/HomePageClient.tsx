@@ -381,6 +381,28 @@ function buildProjectDetailPath(sessionId: string, view: ProjectView = 'overview
   return `/?${params.toString()}`;
 }
 
+async function createProjectSessionChat(
+  sessionId: string,
+  input: {
+    title?: string;
+    agent?: SessionSummary['agent'];
+    model?: string | null;
+    geminiMode?: string | null;
+    modelReasoningEffort?: SessionChat['modelReasoningEffort'];
+  },
+): Promise<SessionChat> {
+  const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
+  if (!response.ok || !body.chat) {
+    throw new Error(body.error ?? '새 채팅을 만들지 못했습니다.');
+  }
+  return body.chat;
+}
+
 function navigateTo(path: string) {
   window.location.assign(withAppBasePath(path));
 }
@@ -1270,6 +1292,27 @@ function ProjectDetailSurface({
   const tokenLabel = deriveProjectTokenLabel(session, index);
   const modelLabel = session.model || session.metadata?.runtimeModel || 'default model';
   const recentPreview = createChatPreview(session, index);
+  const [isCreatingHeaderChat, setIsCreatingHeaderChat] = useState(false);
+  const [headerCreateError, setHeaderCreateError] = useState<string | null>(null);
+
+  const handleProjectHeaderNewChat = async () => {
+    if (isCreatingHeaderChat) return;
+    setIsCreatingHeaderChat(true);
+    setHeaderCreateError(null);
+    try {
+      const createdChat = await createProjectSessionChat(session.id, {
+        title: `Chat ${Math.max(1, totalChats + 1)}`,
+        agent: session.agent,
+        model: modelLabel,
+        modelReasoningEffort: serializeReasoningEffort('High'),
+      });
+      onProjectChatOpen(createdChat.id);
+    } catch (createError) {
+      setHeaderCreateError(createError instanceof Error ? createError.message : '새 채팅을 만들지 못했습니다.');
+    } finally {
+      setIsCreatingHeaderChat(false);
+    }
+  };
 
   if (projectView === 'chat') {
     return (
@@ -1314,12 +1357,19 @@ function ProjectDetailSurface({
               <PanelsTopLeft size={14} />
               Settings
             </button>
-            <button type="button" className="btn btn--primary btn--sm" onClick={() => onProjectViewChange('chats')}>
+            <button
+              type="button"
+              className="btn btn--primary btn--sm"
+              onClick={handleProjectHeaderNewChat}
+              disabled={isCreatingHeaderChat}
+              aria-busy={isCreatingHeaderChat}
+            >
               <Plus size={14} />
               New chat
             </button>
           </div>
         </div>
+        {headerCreateError && <div className="pc-chat-error" role="alert">{headerCreateError}</div>}
         <div className="proj-stats">
           <div>
             <div className="proj-stat-label">Chats</div>
@@ -2020,21 +2070,12 @@ function ProjectChatSurface({
 
   const createChat = async (): Promise<SessionChat | null> => {
     setError(null);
-    const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: `Chat ${Math.max(1, chats.length + 1)}`,
-        agent: selectedProvider,
-        model: activeModelLabel,
-        modelReasoningEffort: serializeReasoningEffort(selectedEffort),
-      }),
+    const createdChat = await createProjectSessionChat(session.id, {
+      title: `Chat ${Math.max(1, chats.length + 1)}`,
+      agent: selectedProvider,
+      model: activeModelLabel,
+      modelReasoningEffort: serializeReasoningEffort(selectedEffort),
     });
-    const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
-    if (!response.ok || !body.chat) {
-      throw new Error(body.error ?? '새 채팅을 만들지 못했습니다.');
-    }
-    const createdChat = body.chat;
     setChats((previous) => [createdChat, ...previous.filter((chat) => chat.id !== createdChat.id)]);
     setEvents([]);
     onChatOpen(createdChat.id);

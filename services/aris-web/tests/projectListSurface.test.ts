@@ -79,6 +79,25 @@ describe('project list surface', () => {
     expect(homeClient).not.toContain('/sessions/${session.id}');
   });
 
+  it('creates a project chat from the project detail header New chat button', () => {
+    const detailStart = homeClient.indexOf('function ProjectDetailSurface({');
+    const chatSurfaceStart = homeClient.indexOf('function ProjectChatSurface({');
+    const detailSource = homeClient.slice(detailStart, chatSurfaceStart);
+
+    expect(homeClient).toContain('async function createProjectSessionChat(');
+    expect(detailSource).toContain('const handleProjectHeaderNewChat = async () => {');
+    expect(detailSource).toContain('const createdChat = await createProjectSessionChat(session.id, {');
+    expect(detailSource).toContain('title: `Chat ${Math.max(1, totalChats + 1)}`,');
+    expect(detailSource).toContain('agent: session.agent,');
+    expect(detailSource).toContain('model: modelLabel,');
+    expect(detailSource).toContain("modelReasoningEffort: serializeReasoningEffort('High'),");
+    expect(detailSource).toContain('onProjectChatOpen(createdChat.id);');
+    expect(detailSource).toContain('disabled={isCreatingHeaderChat}');
+    expect(detailSource).toContain('aria-busy={isCreatingHeaderChat}');
+    expect(detailSource).toContain('onClick={handleProjectHeaderNewChat}');
+    expect(detailSource).not.toContain('className="btn btn--primary btn--sm" onClick={() => onProjectViewChange(\'chats\')}');
+  });
+
   it('wires the prototype chat controls to real project-chat state', () => {
     expect(homeClient).toContain("type ComposerMode = 'agent' | 'plan' | 'terminal';");
     expect(homeClient).toContain("type WorkspaceTab = 'run' | 'files' | 'terminal' | 'context';");
