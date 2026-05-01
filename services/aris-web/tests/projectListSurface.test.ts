@@ -90,8 +90,8 @@ describe('project list surface', () => {
     expect(homeClient).toContain('void copyToClipboard');
     expect(homeClient).toContain("setComposerMode(mode)");
     expect(homeClient).toContain("setWorkspaceTab(tab)");
-    expect(homeClient).toContain('const openWorkspacePanel = () => {');
-    expect(homeClient).toContain('const closeWorkspacePanel = () => {');
+    expect(homeClient).toContain('const openWorkspacePanel = useCallback(() => {');
+    expect(homeClient).toContain('const closeWorkspacePanel = useCallback(() => {');
     expect(homeClient).toContain("setPreviewState('open')");
     expect(homeClient).toContain("setPreviewState('dock')");
     expect(homeClient).toContain('data-preview-overlay');
@@ -114,6 +114,7 @@ describe('project list surface', () => {
     expect(workspaceAction).toContain('title="Workspace"');
     expect(workspaceAction).toContain('aria-pressed={workspaceOpen}');
     expect(workspaceAction).toContain('onClick={toggleWorkspacePanel}');
+    expect(workspaceAction).toContain('ref={workspaceToggleRef}');
     expect(workspaceAction).toContain('<PanelRight size={14} />');
     expect(workspaceAction).not.toContain('PanelsTopLeft');
     expect(homeClient).toContain('const toggleWorkspacePanel = () => {');
@@ -131,8 +132,16 @@ describe('project list surface', () => {
     expect(homeClient).not.toContain('setWorkspaceLayoutReady(false);');
     expect(homeClient).toContain("const [workspaceDrawerPhase, setWorkspaceDrawerPhase] = useState<'idle' | 'closing'>('idle');");
     expect(homeClient).toContain("data-workspace={workspaceDrawerPhase === 'closing' ? 'closing' : workspaceOpen ? 'open' : 'closed'}");
-    expect(homeClient).toContain('const closeWorkspacePanel = () => {');
+    expect(homeClient).toContain('const closeWorkspacePanel = useCallback(() => {');
     expect(homeClient).toContain("setWorkspaceDrawerPhase('closing');");
+    expect(homeClient).toContain('const workspaceRef = useRef<HTMLElement | null>(null);');
+    expect(homeClient).toContain('const workspaceToggleRef = useRef<HTMLButtonElement | null>(null);');
+    expect(homeClient).toContain('const handleWorkspaceOutsideClick = (event: PointerEvent) => {');
+    expect(homeClient).toContain("document.addEventListener('pointerdown', handleWorkspaceOutsideClick);");
+    expect(homeClient).toContain('const handleWorkspaceEscape = (event: KeyboardEvent) => {');
+    expect(homeClient).toContain("event.key !== 'Escape'");
+    expect(homeClient).toContain("document.addEventListener('keydown', handleWorkspaceEscape);");
+    expect(homeClient).toContain('<aside ref={workspaceRef} className="shell__workspace ws"');
     expect(uiCss).toContain('.pc-proto[data-workspace-ready="true"][data-workspace="open"] .shell__workspace');
     expect(uiCss).toContain('.pc-proto[data-workspace-ready="true"][data-workspace="closing"] .shell__workspace');
     expect(uiCss).toContain('width: min(420px, calc(100vw - 32px));');
@@ -143,6 +152,26 @@ describe('project list surface', () => {
     expect(uiCss).toContain('@keyframes pc-workspace-drawer-out');
     expect(uiCss).toContain('@media (prefers-reduced-motion: reduce)');
     expect(uiCss).toContain('animation: none;');
+  });
+
+  it('keeps the workspace metrics while restyling run details as chat-screen-v1 cards', () => {
+    expect(homeClient).toContain('<div className="run-summary">');
+    expect(homeClient).toContain('<span className="run-summary__label">Steps</span>');
+    expect(homeClient).toContain('<span className="run-summary__label">Tokens</span>');
+    expect(homeClient).toContain('<span className="run-summary__label">Activity</span>');
+    expect(homeClient).toContain('className="ws-card ws-card--run"');
+    expect(homeClient).toContain('className="chist ws-card ws-card--history"');
+    expect(homeClient).toContain('className="ws-card__head"');
+    expect(homeClient).toContain('className="ws-card__title">Run ·');
+    expect(homeClient).toContain('className="ws-card__meta"');
+    expect(homeClient).toContain('className={`run-step ws-run-step${item.state ===');
+    expect(homeClient).toContain('className={`run-step__dot ws-run-step__dot');
+    expect(homeClient).toContain('className="run-step__body ws-run-step__body"');
+    expect(homeClient).toContain('className="run-step__time ws-run-step__time"');
+    expect(uiCss).toContain('.pc-proto .ws-card {');
+    expect(uiCss).toContain('.pc-proto .ws-card__head {');
+    expect(uiCss).toContain('.pc-proto .ws-run-step {');
+    expect(uiCss).toContain('grid-template-columns: auto minmax(0, 1fr) auto;');
   });
 
   it('renders functional workspace panes instead of one static Run panel', () => {

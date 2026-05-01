@@ -1632,6 +1632,8 @@ function ProjectChatSurface({
   const runtimeModelLabel = activeChat?.model ?? modelLabel;
   const runtimeAgent = activeChat?.agent ?? session.agent;
   const timelineRef = useRef<HTMLDivElement | null>(null);
+  const workspaceRef = useRef<HTMLElement | null>(null);
+  const workspaceToggleRef = useRef<HTMLButtonElement | null>(null);
   const workspaceCloseTimerRef = useRef<number | null>(null);
   const [composerMode, setComposerMode] = useState<ComposerMode>('agent');
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('run');
@@ -1747,11 +1749,11 @@ function ProjectChatSurface({
     setWorkspaceOpen(open);
   }, [clearWorkspaceCloseTimer]);
 
-  const openWorkspacePanel = () => {
+  const openWorkspacePanel = useCallback(() => {
     setWorkspacePanelImmediate(true);
-  };
+  }, [setWorkspacePanelImmediate]);
 
-  const closeWorkspacePanel = () => {
+  const closeWorkspacePanel = useCallback(() => {
     clearWorkspaceCloseTimer();
     setWorkspaceOpen(false);
 
@@ -1765,7 +1767,7 @@ function ProjectChatSurface({
       setWorkspaceDrawerPhase('idle');
       workspaceCloseTimerRef.current = null;
     }, WORKSPACE_DRAWER_CLOSE_MS);
-  };
+  }, [clearWorkspaceCloseTimer]);
 
   const activateWorkspaceTab = (tab: WorkspaceTab) => {
     setWorkspaceTab(tab);
@@ -1834,6 +1836,39 @@ function ProjectChatSurface({
       window.clearTimeout(workspaceCloseTimerRef.current);
     }
   }, []);
+
+  useEffect(() => {
+    if (!workspaceOpen || workspaceDrawerPhase === 'closing') return;
+
+    const handleWorkspaceOutsideClick = (event: PointerEvent) => {
+      if (!window.matchMedia('(max-width: 1100px)').matches) return;
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (workspaceRef.current?.contains(target)) return;
+      if (workspaceToggleRef.current?.contains(target)) return;
+      closeWorkspacePanel();
+    };
+
+    document.addEventListener('pointerdown', handleWorkspaceOutsideClick);
+    return () => {
+      document.removeEventListener('pointerdown', handleWorkspaceOutsideClick);
+    };
+  }, [closeWorkspacePanel, workspaceDrawerPhase, workspaceOpen]);
+
+  useEffect(() => {
+    if (!workspaceOpen || workspaceDrawerPhase === 'closing') return;
+
+    const handleWorkspaceEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (!window.matchMedia('(max-width: 1100px)').matches) return;
+      closeWorkspacePanel();
+    };
+
+    document.addEventListener('keydown', handleWorkspaceEscape);
+    return () => {
+      document.removeEventListener('keydown', handleWorkspaceEscape);
+    };
+  }, [closeWorkspacePanel, workspaceDrawerPhase, workspaceOpen]);
 
   useEffect(() => {
     setComposerMode('agent');
@@ -2142,6 +2177,7 @@ function ProjectChatSurface({
               <button
                 type="button"
                 id="wsToggle"
+                ref={workspaceToggleRef}
                 className="ch__action ch__action--ws"
                 aria-pressed={workspaceOpen}
                 aria-label="Toggle workspace"
@@ -2512,7 +2548,7 @@ function ProjectChatSurface({
           </footer>
         </main>
 
-        <aside className="shell__workspace ws" aria-label={`${projectName} workspace`}>
+        <aside ref={workspaceRef} className="shell__workspace ws" aria-label={`${projectName} workspace`}>
           <div className="ws__head">
             <div className="ws__title"><PanelRight size={14} />Workspace</div>
             <div className="ws__actions">
@@ -2550,19 +2586,25 @@ function ProjectChatSurface({
                 <div className="run-summary__cell"><span className="run-summary__label">Tokens</span><span className="run-summary__value">{tokenLabel}</span></div>
                 <div className="run-summary__cell"><span className="run-summary__label">Activity</span><span className="run-summary__value">{formatRelativeTime(selectedChatTimestamp)}</span></div>
               </div>
-              <div className="run-steps">
-                {runStepItems.map((item) => (
-                  <button key={item.id} type="button" className={`run-step${item.state === 'running' ? ' run-step--active' : ''}`} onClick={() => handleCopy(item.cmd, 'Run step')}>
-                    <span className={`run-step__dot ${item.state === 'running' ? 'run-step__dot--running' : 'run-step__dot--done'}`} />
-                    <div className="run-step__body">
-                      <div className="run-step__title">{item.title}</div>
-                      <div className="run-step__cmd">{item.cmd}</div>
-                    </div>
-                    <span className="run-step__time">{item.time}</span>
-                  </button>
-                ))}
+              <div className="ws-card ws-card--run">
+                <div className="ws-card__head">
+                  <div className="ws-card__title">Run · {activeChat?.id ? `#${activeChat.id.slice(-4)}` : '#0142'}</div>
+                  <div className="ws-card__meta">{formatRelativeTime(selectedChatTimestamp)} · {tokenLabel} tokens</div>
+                </div>
+                <div className="run-steps">
+                  {runStepItems.map((item) => (
+                    <button key={item.id} type="button" className={`run-step ws-run-step${item.state === 'running' ? ' run-step--active' : ''}`} onClick={() => handleCopy(item.cmd, 'Run step')}>
+                      <span className={`run-step__dot ws-run-step__dot${item.state === 'running' ? ' run-step__dot--running' : ' run-step__dot--done ws-run-step__dot--done'}`} />
+                      <div className="run-step__body ws-run-step__body">
+                        <div className="run-step__title ws-run-step__title">{item.title}</div>
+                        <div className="run-step__cmd ws-run-step__time">{item.cmd}</div>
+                      </div>
+                      <span className="run-step__time ws-run-step__time">{item.time}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="chist">
+              <div className="chist ws-card ws-card--history">
                 <div className="chist__head">
                   <span className="chist__title"><MessageSquareText size={12} />Chat history</span>
                   <span className="chist__meta">{historyTurnItems.length} turns</span>
