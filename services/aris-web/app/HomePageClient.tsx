@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import {
   Activity,
   AlertCircle,
+  ArrowDown,
   AtSign,
   ChevronLeft,
   Check,
@@ -2451,13 +2452,15 @@ function ProjectChatSurface({
             </div>
 
             <div className="jb-wrap">
-              <div className="jb">
-                <span className="jb__dot" />
-                <span>Project scope active</span>
-                <button type="button" className="jb__btn" aria-label="Jump" onClick={handleJumpToLatest}>
-                  <ChevronRight size={12} />
-                </button>
-              </div>
+              <button
+                type="button"
+                className="jb"
+                aria-label="최신 메시지로 이동"
+                title="최신 메시지로 이동"
+                onClick={handleJumpToLatest}
+              >
+                <ArrowDown size={15} />
+              </button>
             </div>
           </div>
 

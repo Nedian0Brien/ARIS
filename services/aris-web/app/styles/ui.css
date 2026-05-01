@@ -2684,8 +2684,7 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
 .pc-proto .ch__menu,
 .pc-proto .ch__action,
 .pc-proto .ws__action,
-.pc-proto .cmp__tool,
-.pc-proto .jb__btn {
+.pc-proto .cmp__tool {
   display: grid;
   place-items: center;
   border-radius: var(--r-md);
@@ -2701,8 +2700,7 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
 .pc-proto .ch__menu:hover,
 .pc-proto .ch__action:hover,
 .pc-proto .ws__action:hover,
-.pc-proto .cmp__tool:hover,
-.pc-proto .jb__btn:hover {
+.pc-proto .cmp__tool:hover {
   background: var(--surface-hover);
   color: var(--text-primary);
 }
@@ -3111,32 +3109,24 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
 }
 
 .pc-proto .jb {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-4);
-  padding: 6px 6px 6px 14px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
   background: color-mix(in srgb, var(--surface) 85%, transparent);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border-default);
-  border-radius: var(--r-full);
+  border-radius: 50%;
   box-shadow: var(--shadow-sm);
-  font-size: 12px;
   color: var(--text-secondary);
   pointer-events: auto;
 }
 
-.pc-proto .jb__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--b-500);
-  animation: msb-pulse 2s infinite;
-}
-
-.pc-proto .jb__btn {
-  width: 24px;
-  height: 24px;
+.pc-proto .jb:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
 }
 
 .pc-proto .cmp-wrap {
