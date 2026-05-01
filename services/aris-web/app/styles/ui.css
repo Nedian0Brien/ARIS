@@ -2590,6 +2590,7 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   --mc-ring-soft: rgba(47, 107, 255, 0.16);
   --mc-ring-shadow: rgba(30, 80, 219, 0.35);
   --ws-w: 420px;
+  --pc-composer-height: 226px;
 }
 
 .pc-proto[data-mode="plan"] {
@@ -4824,7 +4825,7 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
 .pc-proto .preview-dock-wrap {
   position: absolute;
   right: var(--sp-8);
-  bottom: 92px;
+  bottom: calc(var(--pc-composer-height, 226px) + var(--sp-8));
   z-index: 20;
   display: none;
   pointer-events: none;

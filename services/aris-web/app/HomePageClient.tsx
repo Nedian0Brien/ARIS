@@ -1667,6 +1667,8 @@ function ProjectChatSurface({
     ?? new Date().toISOString();
   const projectChatRoute = `/?tab=project&project=${session.id}&view=chat${selectedChatId ? `&chat=${selectedChatId}` : ''}`;
   const previewTarget = `aris.lawdigest.cloud${projectChatRoute}`;
+  const prototypeRef = useRef<HTMLDivElement | null>(null);
+  const composerWrapRef = useRef<HTMLElement | null>(null);
   const workspaceFiles = [
     { id: 'root', name: projectPath, kind: 'dir', meta: 'project' },
     { id: 'home-client', name: 'services/aris-web/app/HomePageClient.tsx', kind: 'file', meta: '+ UI' },
@@ -1912,6 +1914,34 @@ function ProjectChatSurface({
   }, [selectedChatId, setWorkspacePanelImmediate]);
 
   useEffect(() => {
+    const prototypeNode = prototypeRef.current;
+    const composerNode = composerWrapRef.current;
+    if (!prototypeNode || !composerNode) return;
+
+    const syncComposerHeight = () => {
+      const height = Math.ceil(composerNode.getBoundingClientRect().height);
+      prototypeNode.style.setProperty('--pc-composer-height', `${height}px`);
+    };
+
+    syncComposerHeight();
+    window.addEventListener('resize', syncComposerHeight);
+
+    if (typeof ResizeObserver === 'undefined') {
+      return () => {
+        window.removeEventListener('resize', syncComposerHeight);
+      };
+    }
+
+    const composerObserver = new ResizeObserver(syncComposerHeight);
+    composerObserver.observe(composerNode);
+
+    return () => {
+      composerObserver.disconnect();
+      window.removeEventListener('resize', syncComposerHeight);
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     async function loadChats() {
       setIsLoadingChats(true);
@@ -2153,6 +2183,7 @@ function ProjectChatSurface({
 
   return (
     <div
+      ref={prototypeRef}
       className="pc-proto"
       data-project-chat-screen
       data-mode={composerMode}
@@ -2389,7 +2420,7 @@ function ProjectChatSurface({
             </div>
           </div>
 
-          <footer className="cmp-wrap">
+          <footer ref={composerWrapRef} className="cmp-wrap">
             <form className="cmp" onSubmit={handleSubmit}>
               <div className="cmp__top">
                 <div className="cmp-mode" role="tablist" aria-label="Mode">

@@ -282,6 +282,20 @@ describe('project list surface', () => {
     expect(homeClient).not.toContain('chats total`');
   });
 
+  it('keeps the docked preview above the composer instead of overlapping it', () => {
+    expect(homeClient).toContain('const prototypeRef = useRef<HTMLDivElement | null>(null);');
+    expect(homeClient).toContain('const composerWrapRef = useRef<HTMLElement | null>(null);');
+    expect(homeClient).toContain("prototypeNode.style.setProperty('--pc-composer-height'");
+    expect(homeClient).toContain('const composerObserver = new ResizeObserver(syncComposerHeight);');
+    expect(homeClient).toContain('ref={prototypeRef}');
+    expect(homeClient).toContain('<footer ref={composerWrapRef} className="cmp-wrap">');
+
+    const dockWrap = cssBlock('.pc-proto .preview-dock-wrap');
+    expect(uiCss).toContain('--pc-composer-height: 226px;');
+    expect(dockWrap).toContain('bottom: calc(var(--pc-composer-height, 226px) + var(--sp-8));');
+    expect(dockWrap).not.toContain('bottom: 92px;');
+  });
+
   it('keeps the project filter chips attached to the search field instead of the screen edge', () => {
     const toolbar = cssBlock('.proj-list-toolbar');
     const chips = cssBlock('.proj-list-chips');
