@@ -2565,15 +2565,6 @@ function ProjectChatSurface({
                   </div>
                 </div>
               </div>
-              <div className="cmp__chips">
-                <span className="cmp-attach">
-                  <span className="cmp-attach__icon"><FileText size={12} /></span>
-                  <span className="cmp-attach__name">{displayProjectName(session)}</span>
-                  <button type="button" className="cmp-attach__x" aria-label="Copy attached project path" onClick={() => handleCopy(projectPath, 'Project path')}>
-                    <Copy size={10} />
-                  </button>
-                </span>
-              </div>
               <textarea
                 className="cmp__input"
                 value={prompt}
