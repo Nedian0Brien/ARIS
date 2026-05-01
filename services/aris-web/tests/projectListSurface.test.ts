@@ -99,6 +99,27 @@ describe('project list surface', () => {
     expect(homeClient).toContain("mode: composerMode");
   });
 
+  it('uses the prototype workspace panel icon and toggle wiring in the chat header', () => {
+    const marker = 'className="ch__action ch__action--ws"';
+    const markerIndex = homeClient.indexOf(marker);
+    const workspaceAction = homeClient.slice(
+      homeClient.lastIndexOf('<button', markerIndex),
+      homeClient.indexOf('</button>', markerIndex) + '</button>'.length,
+    );
+
+    expect(workspaceAction).toContain(marker);
+    expect(workspaceAction).toContain('id="wsToggle"');
+    expect(workspaceAction).toContain('aria-label="Toggle workspace"');
+    expect(workspaceAction).toContain('title="Workspace"');
+    expect(workspaceAction).toContain('aria-pressed={workspaceOpen}');
+    expect(workspaceAction).toContain('onClick={toggleWorkspacePanel}');
+    expect(workspaceAction).toContain('<PanelRight size={14} />');
+    expect(workspaceAction).not.toContain('PanelsTopLeft');
+    expect(homeClient).toContain('const toggleWorkspacePanel = () => {');
+    expect(homeClient).toContain('setWorkspaceOpen((current) => !current);');
+    expect(homeClient).toContain('<div className="ws__title"><PanelRight size={14} />Workspace</div>');
+  });
+
   it('renders functional workspace panes instead of one static Run panel', () => {
     expect(homeClient).toContain("workspaceTab === 'run'");
     expect(homeClient).toContain("workspaceTab === 'files'");

@@ -25,6 +25,7 @@ import {
   Monitor,
   Moon,
   MoreHorizontal,
+  PanelRight,
   PanelsTopLeft,
   Paperclip,
   Plus,
@@ -1733,6 +1734,10 @@ function ProjectChatSurface({
     setWorkspaceOpen(true);
   };
 
+  const toggleWorkspacePanel = () => {
+    setWorkspaceOpen((current) => !current);
+  };
+
   const handleJumpToLatest = () => {
     const targetId = visibleEvents.at(-1)?.id ?? 'seed-history-primary';
     setHighlightedMessageId(targetId);
@@ -2063,12 +2068,14 @@ function ProjectChatSurface({
               </button>
               <button
                 type="button"
+                id="wsToggle"
                 className="ch__action ch__action--ws"
                 aria-pressed={workspaceOpen}
-                aria-label="Workspace"
-                onClick={() => setWorkspaceOpen((current) => !current)}
+                aria-label="Toggle workspace"
+                title="Workspace"
+                onClick={toggleWorkspacePanel}
               >
-                <PanelsTopLeft size={14} />
+                <PanelRight size={14} />
               </button>
               <button type="button" className="ch__action" aria-label="More chat actions" onClick={() => setModelSelectorOpen((current) => !current)}>
                 <MoreHorizontal size={15} />
@@ -2434,7 +2441,7 @@ function ProjectChatSurface({
 
         <aside className="shell__workspace ws" aria-label={`${projectName} workspace`}>
           <div className="ws__head">
-            <div className="ws__title"><PanelsTopLeft size={14} />Workspace</div>
+            <div className="ws__title"><PanelRight size={14} />Workspace</div>
             <div className="ws__actions">
               <button type="button" className="ws__action" aria-label="Open preview" onClick={() => setPreviewState('open')}>
                 <Maximize2 size={13} />
