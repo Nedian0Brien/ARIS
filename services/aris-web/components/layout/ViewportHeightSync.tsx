@@ -15,6 +15,7 @@ export function ViewportHeightSync() {
       appViewportHeight: number;
       height: number;
       keyboardInset: number;
+      visualViewportBottomInset: number;
       viewportOffsetTop: number;
     } | null = null;
 
@@ -24,6 +25,7 @@ export function ViewportHeightSync() {
       const height = window.visualViewport?.height ?? window.innerHeight;
       const viewportOffsetTop = window.visualViewport?.offsetTop ?? 0;
       const innerWidth = window.innerWidth;
+      const layoutViewportHeight = window.innerHeight;
       const orientationChanged = Math.abs(innerWidth - lastInnerWidth) > 120;
       if (orientationChanged) {
         maxViewportHeight = height;
@@ -32,7 +34,10 @@ export function ViewportHeightSync() {
       if (height > maxViewportHeight) {
         maxViewportHeight = height;
       }
-      const keyboardInset = Math.max(0, maxViewportHeight - height - viewportOffsetTop);
+      const historicalBottomInset = Math.max(0, maxViewportHeight - height - viewportOffsetTop);
+      const layoutBottomInset = Math.max(0, layoutViewportHeight - height - viewportOffsetTop);
+      const visualViewportBottomInset = Math.max(historicalBottomInset, layoutBottomInset);
+      const keyboardInset = visualViewportBottomInset;
       const keyboardOpen = keyboardInset > 120;
       const appViewportHeight = keyboardOpen ? height : maxViewportHeight;
       const vh = height * 0.01;
@@ -40,18 +45,21 @@ export function ViewportHeightSync() {
       root.style.setProperty('--app-vh', `${appViewportHeight}px`);
       root.style.setProperty('--visual-viewport-height', `${height}px`);
       root.style.setProperty('--visual-viewport-offset-top', `${viewportOffsetTop}px`);
+      root.style.setProperty('--visual-viewport-bottom-inset', `${visualViewportBottomInset}px`);
       root.style.setProperty('--keyboard-inset-height', `${keyboardInset}px`);
       root.dataset.keyboardOpen = keyboardOpen ? 'true' : 'false';
       const nextMetrics = {
         appViewportHeight,
         height,
         keyboardInset,
+        visualViewportBottomInset,
         viewportOffsetTop,
       };
       const metricsChanged = previousMetrics === null
         || previousMetrics.appViewportHeight !== nextMetrics.appViewportHeight
         || previousMetrics.height !== nextMetrics.height
         || previousMetrics.keyboardInset !== nextMetrics.keyboardInset
+        || previousMetrics.visualViewportBottomInset !== nextMetrics.visualViewportBottomInset
         || previousMetrics.viewportOffsetTop !== nextMetrics.viewportOffsetTop;
       recordScrollDebugEvent({
         kind: 'trigger',
@@ -60,6 +68,7 @@ export function ViewportHeightSync() {
           reason,
           metricsChanged,
           ...nextMetrics,
+          layoutViewportHeight,
           maxViewportHeight,
           keyboardOpen,
         },
@@ -103,6 +112,7 @@ export function ViewportHeightSync() {
       window.visualViewport?.removeEventListener('scroll', handleVisualViewportScroll);
       delete root.dataset.keyboardOpen;
       root.style.removeProperty('--keyboard-inset-height');
+      root.style.removeProperty('--visual-viewport-bottom-inset');
       root.style.removeProperty('--visual-viewport-height');
       root.style.removeProperty('--visual-viewport-offset-top');
     };

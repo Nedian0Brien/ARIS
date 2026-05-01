@@ -4,7 +4,10 @@
   --composer-dock-width: calc(100vw - 1.75rem);
   --center-header-height: 60px;
   --global-header-offset-effective: var(--global-header-offset, 64px);
-  --safe-area-bottom-effective: max(0px, calc(env(safe-area-inset-bottom) - var(--keyboard-inset-height, 0px)));
+  --chat-viewport-bottom-inset: max(var(--keyboard-inset-height, 0px), var(--visual-viewport-bottom-inset, 0px));
+  --safe-area-bottom-effective: max(0px, calc(env(safe-area-inset-bottom) - var(--chat-viewport-bottom-inset)));
+  --composer-dock-bottom-offset: calc(0.5rem + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
+  --chat-timeline-bottom-offset: calc(var(--composer-dock-height) + 1.2rem + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
   --chat-panel-border: rgba(148, 163, 184, 0.24);
   --chat-panel-bg: linear-gradient(170deg, rgba(255, 255, 255, 0.98) 0%, rgba(241, 245, 249, 0.96) 100%);
   --chat-panel-shadow: 0 12px 28px rgba(15, 23, 42, 0.1);
@@ -2783,7 +2786,7 @@
   height: 0;
   min-height: 0;
   overflow-y: auto;
-  padding: 1.1rem 1rem calc(var(--composer-dock-height) + 1.2rem + var(--safe-area-bottom-effective));
+  padding: 1.1rem 1rem var(--chat-timeline-bottom-offset);
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: auto;
   display: flex;
@@ -3821,7 +3824,7 @@
 .scrollBottomButton {
   position: fixed;
   right: max(0.9rem, env(safe-area-inset-right));
-  bottom: calc(var(--composer-dock-height) + 0.92rem + var(--safe-area-bottom-effective) + var(--keyboard-inset-height, 0px));
+  bottom: calc(var(--composer-dock-height) + 0.92rem + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
   width: 36px;
   height: 36px;
   border-radius: 999px;
@@ -4155,7 +4158,7 @@
   position: fixed;
   left: var(--composer-dock-left);
   width: var(--composer-dock-width);
-  bottom: calc(0.5rem + var(--safe-area-bottom-effective) + var(--keyboard-inset-height, 0px));
+  bottom: var(--composer-dock-bottom-offset);
   z-index: 220;
   border-top: none;
   background: transparent;
@@ -5210,14 +5213,15 @@
 
   .stream {
     min-height: 0;
-    padding: 0.85rem 0.75rem calc(var(--composer-dock-height) + 1.1rem + var(--safe-area-bottom-effective));
+    --chat-timeline-bottom-offset: calc(var(--composer-dock-height) + 1.1rem + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
+    padding: 0.85rem 0.75rem var(--chat-timeline-bottom-offset);
   }
 
   .composerDock {
     left: 0.65rem;
     right: 0.65rem;
     width: auto;
-    bottom: calc(0.45rem + var(--safe-area-bottom-effective));
+    --composer-dock-bottom-offset: calc(0.45rem + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
   }
 
   .composerFloating {
@@ -5307,7 +5311,7 @@
 
   .scrollBottomButton {
     right: max(0.8rem, env(safe-area-inset-right));
-    bottom: calc(var(--composer-dock-height) + 0.7rem + var(--safe-area-bottom-effective) + var(--keyboard-inset-height, 0px));
+    bottom: calc(var(--composer-dock-height) + 0.7rem + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
   }
 }
 
@@ -6539,7 +6543,8 @@
 
 .stream {
   gap: var(--sp-4);
-  padding: var(--sp-5) var(--sp-5) calc(var(--composer-dock-height) + var(--sp-7) + var(--safe-area-bottom-effective));
+  --chat-timeline-bottom-offset: calc(var(--composer-dock-height) + var(--sp-7) + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
+  padding: var(--sp-5) var(--sp-5) var(--chat-timeline-bottom-offset);
   background: var(--chat-stream-bg);
 }
 
@@ -6604,7 +6609,8 @@
   position: absolute;
   left: 50%;
   right: auto;
-  bottom: calc(var(--sp-4) + var(--safe-area-bottom-effective) + var(--keyboard-inset-height, 0px));
+  --composer-dock-bottom-offset: calc(var(--sp-4) + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
+  bottom: var(--composer-dock-bottom-offset);
   width: min(780px, calc(100% - var(--sp-8)));
   max-width: calc(100% - var(--sp-8));
   transform: translateX(-50%);
@@ -6831,7 +6837,9 @@
   --global-header-offset-effective: 0px;
   --center-header-height: 52px;
   --composer-dock-height: 160px;
-  --safe-area-bottom-effective: max(0px, env(safe-area-inset-bottom));
+  --safe-area-bottom-effective: max(0px, calc(env(safe-area-inset-bottom) - var(--chat-viewport-bottom-inset)));
+  --composer-dock-bottom-offset: calc(var(--sp-8) + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
+  --chat-timeline-bottom-offset: calc(var(--composer-dock-height) + var(--sp-14) + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
   display: grid;
   grid-template-columns: 264px minmax(0, 1fr);
   gap: 0;
@@ -7275,7 +7283,7 @@
 .csTimeline {
   flex: 1;
   overflow-y: auto;
-  padding: var(--sp-14) var(--sp-16) calc(var(--composer-dock-height) + var(--sp-14) + var(--safe-area-bottom-effective));
+  padding: var(--sp-14) var(--sp-16) var(--chat-timeline-bottom-offset);
   position: relative;
   background: var(--canvas);
   gap: 0;
@@ -7367,7 +7375,7 @@
   position: absolute;
   left: 50%;
   right: auto;
-  bottom: calc(var(--sp-8) + var(--safe-area-bottom-effective) + var(--keyboard-inset-height, 0px));
+  bottom: var(--composer-dock-bottom-offset);
   width: min(780px, calc(100% - var(--sp-16)));
   max-width: calc(100% - var(--sp-16));
   transform: translateX(-50%);
@@ -7764,6 +7772,8 @@
   .chatShellPrototype,
   .chatShellPrototype.chatShellSidebarOpen,
   .chatShellPrototype.chatShellSidebarClosed {
+    --composer-dock-bottom-offset: calc(var(--sp-4) + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
+    --chat-timeline-bottom-offset: calc(var(--composer-dock-height) + var(--sp-10) + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -7772,13 +7782,13 @@
   }
 
   .csTimeline {
-    padding: var(--sp-8) var(--sp-4) calc(var(--composer-dock-height) + var(--sp-10) + var(--safe-area-bottom-effective));
+    padding: var(--sp-8) var(--sp-4) var(--chat-timeline-bottom-offset);
   }
 
   .composerDock {
     width: calc(100% - var(--sp-4));
     max-width: calc(100% - var(--sp-4));
-    bottom: calc(var(--sp-4) + var(--safe-area-bottom-effective) + var(--keyboard-inset-height, 0px));
+    bottom: var(--composer-dock-bottom-offset);
   }
 
   .compV2Top {

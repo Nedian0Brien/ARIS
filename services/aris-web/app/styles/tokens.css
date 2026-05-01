@@ -245,6 +245,7 @@
   --app-vh: 100vh;
   --visual-viewport-height: 100vh;
   --keyboard-inset-height: 0px;
+  --visual-viewport-bottom-inset: 0px;
   --safe-area-inset-top: env(safe-area-inset-top, 0px);
   --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
 }
