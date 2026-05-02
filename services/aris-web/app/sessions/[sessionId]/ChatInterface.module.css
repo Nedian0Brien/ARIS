@@ -2875,6 +2875,47 @@
   align-items: flex-start;
 }
 
+.runStatusRow {
+  align-items: center;
+}
+
+.runStatusCard {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  min-height: 1.9rem;
+  padding: 0.34rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, currentColor 26%, transparent);
+  box-shadow: var(--chat-msg-shadow);
+  font-size: 0.71rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.runStatusIcon {
+  flex-shrink: 0;
+}
+
+.runStatusLabel {
+  min-width: 0;
+}
+
+.runStatusSeparator {
+  opacity: 0.65;
+}
+
+.runStatusTime {
+  font-family: var(--font-mono);
+  font-size: 0.67rem;
+  font-weight: 700;
+  opacity: 0.82;
+}
+
 .messageMeta {
   display: inline-flex;
   align-items: center;
