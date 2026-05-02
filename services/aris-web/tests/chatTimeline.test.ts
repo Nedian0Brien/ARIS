@@ -281,6 +281,49 @@ describe('ChatTimeline', () => {
     expect(markup).toContain('disabled=""');
   });
 
+  it('renders run lifecycle events as status cards instead of raw status text', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(ChatTimeline, buildTimelineProps({
+        isAgentRunning: false,
+        timelineItems: [
+          {
+            type: 'stream',
+            sortKey: 1,
+            order: 1,
+            item: {
+              type: 'event',
+              event: buildEvent({
+                id: 'run-started-1',
+                body: 'run status: run_started',
+                kind: 'text_reply',
+                meta: { role: 'assistant', streamEvent: 'run_status', runStatus: 'run_started' },
+              }),
+            },
+          },
+          {
+            type: 'stream',
+            sortKey: 2,
+            order: 2,
+            item: {
+              type: 'event',
+              event: buildEvent({
+                id: 'run-completed-1',
+                body: 'run status: completed',
+                kind: 'text_reply',
+                meta: { role: 'assistant', streamEvent: 'run_status', runStatus: 'completed' },
+              }),
+            },
+          },
+        ],
+      })),
+    );
+
+    expect(markup).toContain('실행 시작');
+    expect(markup).toContain('실행 종료');
+    expect(markup).not.toContain('run status: run_started');
+    expect(markup).not.toContain('run status: completed');
+  });
+
   it('hides timeline content from assistive tech while the chat transition overlay is active', () => {
     const markup = renderToStaticMarkup(
       React.createElement(ChatTimeline, buildTimelineProps({
