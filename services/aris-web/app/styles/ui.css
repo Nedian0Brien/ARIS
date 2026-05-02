@@ -1359,6 +1359,17 @@ html[data-theme='dark'] .home-proj:focus-visible {
   min-width: 0;
 }
 
+.home-proj__chat--button {
+  width: 100%;
+  text-align: left;
+  border-radius: var(--r-sm);
+  padding: 0;
+}
+
+.home-proj__chat--button:hover .home-proj__chat-title {
+  color: var(--b-500);
+}
+
 .home-proj__chat-dot {
   width: 7px;
   height: 7px;
@@ -1979,6 +1990,13 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
 
 .home-proj__chats--project-list {
   margin-bottom: 0;
+}
+
+.home-proj__chats--project-overview {
+  padding-top: var(--sp-5);
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: 0;
 }
 
 .proj-list-card__foot {

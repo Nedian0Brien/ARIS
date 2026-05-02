@@ -103,6 +103,21 @@ describe('project list surface', () => {
     expect(detailSource).not.toContain('className="btn btn--primary btn--sm" onClick={() => onProjectViewChange(\'chats\')}');
   });
 
+  it('renders the project overview secondary card as real recent chats', () => {
+    const detailStart = homeClient.indexOf('function ProjectDetailSurface({');
+    const chatSurfaceStart = homeClient.indexOf('function ProjectChatSurface({');
+    const detailSource = homeClient.slice(detailStart, chatSurfaceStart);
+
+    expect(detailSource).toContain('Recent chats');
+    expect(detailSource).toContain('className="proj-card proj-card--recent-chats"');
+    expect(detailSource).toContain('<ProjectRecentChatRows');
+    expect(detailSource).toContain('onChatOpen={onProjectChatOpen}');
+    expect(detailSource).not.toContain('Recent decisions');
+    expect(detailSource).not.toContain('최근 작업 범위를 프로젝트 단위로 고정');
+    expect(detailSource).not.toContain('배포 전 런타임 헬스 체크 유지');
+    expect(detailSource).not.toContain('workspace path');
+  });
+
   it('wires the prototype chat controls to real project-chat state', () => {
     expect(homeClient).toContain("type ComposerMode = 'agent' | 'plan' | 'terminal';");
     expect(homeClient).toContain("type WorkspaceTab = 'run' | 'files' | 'terminal' | 'context';");

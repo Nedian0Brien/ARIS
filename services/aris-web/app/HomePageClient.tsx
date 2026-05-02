@@ -373,25 +373,44 @@ function createChatPreview(session: SessionSummary): string {
 function ProjectRecentChatRows({
   className = '',
   emptyCopy = '아직 채팅 내역이 없습니다.',
+  onChatOpen,
   session,
 }: {
   className?: string;
   emptyCopy?: string;
+  onChatOpen?: (chatId: string) => void;
   session: SessionSummary;
 }) {
   const chats = (session.recentChats ?? []).slice(0, 2);
 
   return (
     <div className={`home-proj__chats${className ? ` ${className}` : ''}`}>
-      {chats.length > 0 ? chats.map((chat) => (
-        <div key={chat.id} className="home-proj__chat">
-          <span className={`home-proj__chat-dot home-proj__chat-dot--${chatDotStatusClass(chat)}`} />
-          <div className="home-proj__chat-body">
-            <div className="home-proj__chat-title">{chatTitle(chat)}</div>
-            <div className="home-proj__chat-last">{chatPreviewText(chat)}</div>
+      {chats.length > 0 ? chats.map((chat) => {
+        const content = (
+          <>
+            <span className={`home-proj__chat-dot home-proj__chat-dot--${chatDotStatusClass(chat)}`} />
+            <div className="home-proj__chat-body">
+              <div className="home-proj__chat-title">{chatTitle(chat)}</div>
+              <div className="home-proj__chat-last">{chatPreviewText(chat)}</div>
+            </div>
+          </>
+        );
+
+        return onChatOpen ? (
+          <button
+            key={chat.id}
+            type="button"
+            className="home-proj__chat home-proj__chat--button"
+            onClick={() => onChatOpen(chat.id)}
+          >
+            {content}
+          </button>
+        ) : (
+          <div key={chat.id} className="home-proj__chat">
+            {content}
           </div>
-        </div>
-      )) : (
+        );
+      }) : (
         <div className="home-proj__chat home-proj__chat--empty">
           <span className="home-proj__chat-dot home-proj__chat-dot--idle" />
           <div className="home-proj__chat-body">
@@ -1574,32 +1593,17 @@ function ProjectDetailSurface({
                 <span>{tokenLabel} · project scope</span>
               </div>
             </button>
-            <article className="proj-card">
+            <article className="proj-card proj-card--recent-chats">
               <div className="proj-card__title">
-                <Clock3 size={14} />
-                Recent decisions
+                <MessageSquareText size={14} />
+                Recent chats
               </div>
-              <div className="proj-item">
-                <span className="proj-item__ico proj-item__ico--done">✓</span>
-                <div className="proj-item__body">
-                  <div className="proj-item__title">최근 작업 범위를 프로젝트 단위로 고정</div>
-                  <div className="proj-item__meta">Project context · workspace scope</div>
-                </div>
-              </div>
-              <div className="proj-item">
-                <span className="proj-item__ico proj-item__ico--done">✓</span>
-                <div className="proj-item__body">
-                  <div className="proj-item__title">배포 전 런타임 헬스 체크 유지</div>
-                  <div className="proj-item__meta">deploy · health · runtime token</div>
-                </div>
-              </div>
-              <div className="proj-item">
-                <span className="proj-item__ico proj-item__ico--idle">·</span>
-                <div className="proj-item__body">
-                  <div className="proj-item__title">{projectPath}</div>
-                  <div className="proj-item__meta">workspace path</div>
-                </div>
-              </div>
+              <ProjectRecentChatRows
+                className="home-proj__chats--project-overview"
+                emptyCopy="프로젝트에서 채팅을 시작하면 최신 내역이 여기에 표시됩니다."
+                onChatOpen={onProjectChatOpen}
+                session={session}
+              />
             </article>
           </div>
 
