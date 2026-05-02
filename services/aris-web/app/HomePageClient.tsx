@@ -1620,10 +1620,18 @@ function agentInitial(agent: SessionSummary['agent'] | SessionChat['agent']): st
   return 'A';
 }
 
-function isToolLikeEvent(event: UiEvent): boolean {
-  return event.kind !== 'text_reply'
-    && event.kind !== 'unknown'
-    || Boolean(event.action?.command || event.action?.path || event.parsed?.commands?.length);
+function isProjectActionEvent(event: UiEvent): boolean {
+  if (readEventRole(event) === 'user') return false;
+  if (event.action?.command || event.action?.path || event.parsed?.commands?.length) return true;
+  return event.kind === 'command_execution'
+    || event.kind === 'docker_execution'
+    || event.kind === 'exec_execution'
+    || event.kind === 'file_list'
+    || event.kind === 'file_read'
+    || event.kind === 'file_write'
+    || event.kind === 'git_execution'
+    || event.kind === 'run_execution'
+    || event.kind === 'think';
 }
 
 function eventCommand(event: UiEvent): string {
@@ -1633,6 +1641,66 @@ function eventCommand(event: UiEvent): string {
     || event.result?.preview
     || event.body
     || event.title;
+}
+
+function projectActionMeta(kind: UiEvent['kind']) {
+  if (kind === 'file_read') return { Icon: FileText, label: 'Read', tone: 'read' };
+  if (kind === 'file_write') return { Icon: FileIcon, label: 'Write', tone: 'write' };
+  if (kind === 'file_list') return { Icon: FolderOpen, label: 'List', tone: 'list' };
+  if (kind === 'think') return { Icon: Clock3, label: 'Thinking', tone: 'think' };
+  if (kind === 'git_execution') return { Icon: Check, label: 'Git', tone: 'run' };
+  if (kind === 'docker_execution') return { Icon: HardDrive, label: 'Docker', tone: 'run' };
+  return { Icon: Terminal, label: 'Run', tone: 'run' };
+}
+
+function projectActionPreview(event: UiEvent): string {
+  const command = eventCommand(event);
+  const preview = event.result?.preview || event.body || event.title || '';
+  if (!preview || preview === command) return '';
+  return preview.trim();
+}
+
+function ProjectActionCard({
+  event,
+  onCopy,
+  onPreview,
+}: {
+  event: UiEvent;
+  onCopy: () => void;
+  onPreview?: () => void;
+}) {
+  const { Icon, label, tone } = projectActionMeta(event.kind);
+  const primary = eventCommand(event);
+  const preview = projectActionPreview(event);
+  const filePath = event.parsed?.files?.[0] || event.action?.path || '';
+
+  return (
+    <div className="pc-action-card" data-project-action-card data-kind={tone}>
+      <div className="pc-action-card__main">
+        <div className="pc-action-card__top">
+          <span className="pc-action-card__kind"><Icon size={12} />{label}</span>
+          <span className="pc-action-card__time">{formatRelativeTime(event.timestamp)}</span>
+        </div>
+        <div className="pc-action-card__primary">{primary}</div>
+        {filePath && filePath !== primary && (
+          <div className="pc-action-card__path">{filePath}</div>
+        )}
+        {preview && (
+          <pre className="pc-action-card__preview">{preview}</pre>
+        )}
+      </div>
+      <div className="pc-action-card__actions">
+        {onPreview && (
+          <button type="button" className="pc-action-card__preview-btn" onClick={onPreview} title="Preview referenced file">
+            <Maximize2 size={13} />
+          </button>
+        )}
+        <button type="button" className="pc-action-card__copy" onClick={onCopy} title="Copy action command">
+          <Copy size={13} />
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function ProjectPlaceholderPanel({
@@ -2241,10 +2309,22 @@ function ProjectChatSurface({
               )}
 
               {visibleEvents.map((item) => {
+                const event = item;
                 const role = readEventRole(item);
                 const isUser = role === 'user';
                 const snippet = item.parsed?.snippets?.[0];
-                const toolLike = !isUser && isToolLikeEvent(item);
+                const actionEvent = !isUser && isProjectActionEvent(item);
+                if (actionEvent) {
+                  return (
+                    <div key={item.id} className={`msg msg--action${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
+                      <ProjectActionCard
+                        event={event}
+                        onCopy={() => handleCopy(eventCommand(event), 'Action command')}
+                        onPreview={item.parsed?.files?.[0] ? () => setPreviewState('open') : undefined}
+                      />
+                    </div>
+                  );
+                }
                 return (
                   <div key={item.id} className={`msg${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
                     <span className={`msg__avatar ${isUser ? 'msg__avatar--user' : agentAvatarClass(activeAgent)}`}>{isUser ? 'U' : agentInitial(activeAgent)}</span>
@@ -2271,28 +2351,6 @@ function ProjectChatSurface({
                       ) : (
                         <>
                           <div className="msg__text"><p>{getEventText(item)}</p></div>
-                          {toolLike && (
-                            <div
-                              className="tool"
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => handleCopy(eventCommand(item), 'Tool command')}
-                              onKeyDown={(keyEvent) => {
-                                if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
-                                  keyEvent.preventDefault();
-                                  handleCopy(eventCommand(item), 'Tool command');
-                                }
-                              }}
-                            >
-                              <span className="tool__icon tool__icon--success"><Check size={12} /></span>
-                              <div className="tool__body">
-                                <span className="tool__title">{item.title || item.kind}</span>
-                                <span className="tool__cmd">{eventCommand(item)}</span>
-                              </div>
-                              <span className="tool__meta">{item.kind}</span>
-                              <ChevronRight size={12} className="tool__caret" />
-                            </div>
-                          )}
                           {snippet && (
                             <div className="code">
                               <div className="code__head">

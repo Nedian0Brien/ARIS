@@ -129,6 +129,20 @@ describe('project list surface', () => {
     expect(homeClient).toContain("mode: composerMode");
   });
 
+  it('renders project chat action events through a dedicated action-card branch', () => {
+    expect(homeClient).toContain('function isProjectActionEvent(event: UiEvent): boolean');
+    expect(homeClient).toContain('function ProjectActionCard({');
+    expect(homeClient).toContain('const actionEvent = !isUser && isProjectActionEvent(item);');
+    expect(homeClient).toContain('if (actionEvent) {');
+    expect(homeClient).toContain('data-project-action-card');
+    expect(homeClient).toContain('className="pc-action-card"');
+    expect(homeClient).toContain('className="pc-action-card__kind"');
+    expect(homeClient).toContain('className="pc-action-card__primary"');
+    expect(homeClient).toContain('className="pc-action-card__preview"');
+    expect(homeClient).toContain("handleCopy(eventCommand(event), 'Action command')");
+    expect(homeClient).not.toContain('const toolLike = !isUser && isToolLikeEvent(item);');
+  });
+
   it('uses the prototype workspace panel icon and toggle wiring in the chat header', () => {
     const marker = 'className="ch__action ch__action--ws"';
     const markerIndex = homeClient.indexOf(marker);
@@ -282,6 +296,10 @@ describe('project list surface', () => {
       '.pc-proto .ch',
       '.pc-proto .tl',
       '.pc-proto .msg',
+      '.pc-proto .msg--action',
+      '.pc-proto .pc-action-card',
+      '.pc-proto .pc-action-card__kind',
+      '.pc-proto .pc-action-card__primary',
       '.pc-proto .tool',
       '.pc-proto .code',
       '.pc-proto .artifact',
@@ -307,6 +325,8 @@ describe('project list surface', () => {
     expect(uiCss).toContain('grid-template-columns: minmax(0, 1fr) 420px;');
     expect(cssBlock('.pc-proto .tl')).toContain('padding: var(--sp-12) var(--sp-10) var(--sp-24);');
     expect(cssBlock('.pc-proto .cmp')).toContain('border-radius: 14px;');
+    expect(cssBlock('.pc-proto .pc-action-card')).toContain('border-radius: 8px;');
+    expect(cssBlock('.pc-proto .pc-action-card')).toContain('grid-template-columns: minmax(0, 1fr) auto;');
     expect(cssBlock('.pc-proto .ws__pane')).toContain('display: none;');
     expect(cssBlock('.pc-proto .ws__pane--active')).toContain('display: flex;');
     expect(uiCss).toContain('.pc-proto[data-workspace="closed"] .shell');
