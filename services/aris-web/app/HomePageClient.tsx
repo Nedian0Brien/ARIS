@@ -200,6 +200,13 @@ function serializeReasoningEffort(value: ReasoningEffort): SessionChat['modelRea
   return 'high';
 }
 
+function normalizeProjectChatModelInput(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  const canonical = trimmed === 'gpt-5-codex' ? 'gpt-5.3-codex' : trimmed;
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(canonical) ? canonical : undefined;
+}
+
 async function copyToClipboard(value: string): Promise<boolean> {
   try {
     if (navigator.clipboard?.writeText) {
@@ -1300,10 +1307,11 @@ function ProjectDetailSurface({
     setIsCreatingHeaderChat(true);
     setHeaderCreateError(null);
     try {
+      const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);
       const createdChat = await createProjectSessionChat(session.id, {
         title: `Chat ${Math.max(1, totalChats + 1)}`,
         agent: session.agent,
-        model: modelLabel,
+        model: projectModelInput,
         modelReasoningEffort: serializeReasoningEffort('High'),
       });
       onProjectChatOpen(createdChat.id);
