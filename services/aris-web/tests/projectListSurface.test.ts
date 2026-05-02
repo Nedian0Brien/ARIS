@@ -73,9 +73,12 @@ describe('project list surface', () => {
     expect(homeClient).toContain("params.set('view', view);");
     expect(homeClient).toContain('/api/runtime/sessions/${encodeURIComponent(session.id)}/chats');
     expect(homeClient).toContain('/api/runtime/sessions/${encodeURIComponent(session.id)}/events');
-    expect(homeClient).toContain('selectedChatPreview');
-    expect(homeClient).toContain('Read · project context');
-    expect(homeClient).toContain('project-context.snapshot');
+    expect(homeClient).toContain('pc-chat-empty-state');
+    expect(homeClient).not.toContain('seed-history-primary');
+    expect(homeClient).not.toContain('seed-context');
+    expect(homeClient).not.toContain('Read · project context');
+    expect(homeClient).not.toContain('project-context.snapshot');
+    expect(homeClient).not.toContain('프로젝트 컨텍스트를 먼저 확인하겠습니다.');
     expect(homeClient).not.toContain('/sessions/${session.id}');
   });
 
@@ -86,15 +89,17 @@ describe('project list surface', () => {
 
     expect(homeClient).toContain('async function createProjectSessionChat(');
     expect(detailSource).toContain('const handleProjectHeaderNewChat = async () => {');
+    expect(detailSource).toContain('const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);');
     expect(detailSource).toContain('const createdChat = await createProjectSessionChat(session.id, {');
     expect(detailSource).toContain('title: `Chat ${Math.max(1, totalChats + 1)}`,');
     expect(detailSource).toContain('agent: session.agent,');
-    expect(detailSource).toContain('model: modelLabel,');
+    expect(detailSource).toContain('model: projectModelInput,');
     expect(detailSource).toContain("modelReasoningEffort: serializeReasoningEffort('High'),");
     expect(detailSource).toContain('onProjectChatOpen(createdChat.id);');
     expect(detailSource).toContain('disabled={isCreatingHeaderChat}');
     expect(detailSource).toContain('aria-busy={isCreatingHeaderChat}');
     expect(detailSource).toContain('onClick={handleProjectHeaderNewChat}');
+    expect(detailSource).not.toContain('model: modelLabel,');
     expect(detailSource).not.toContain('className="btn btn--primary btn--sm" onClick={() => onProjectViewChange(\'chats\')}');
   });
 
@@ -122,6 +127,20 @@ describe('project list surface', () => {
     expect(homeClient).toContain('className={`ms${modelSelectorOpen ?');
     expect(homeClient).toContain("body: JSON.stringify({");
     expect(homeClient).toContain("mode: composerMode");
+  });
+
+  it('renders project chat action events through a dedicated action-card branch', () => {
+    expect(homeClient).toContain('function isProjectActionEvent(event: UiEvent): boolean');
+    expect(homeClient).toContain('function ProjectActionCard({');
+    expect(homeClient).toContain('const actionEvent = !isUser && isProjectActionEvent(item);');
+    expect(homeClient).toContain('if (actionEvent) {');
+    expect(homeClient).toContain('data-project-action-card');
+    expect(homeClient).toContain('className="pc-action-card"');
+    expect(homeClient).toContain('className="pc-action-card__kind"');
+    expect(homeClient).toContain('className="pc-action-card__primary"');
+    expect(homeClient).toContain('className="pc-action-card__preview"');
+    expect(homeClient).toContain("handleCopy(eventCommand(event), 'Action command')");
+    expect(homeClient).not.toContain('const toolLike = !isUser && isToolLikeEvent(item);');
   });
 
   it('uses the prototype workspace panel icon and toggle wiring in the chat header', () => {
@@ -223,13 +242,15 @@ describe('project list surface', () => {
     expect(homeClient).toContain('className="ws-card__head"');
     expect(homeClient).toContain('className="ws-card__title">Run ·');
     expect(homeClient).toContain('className="ws-card__meta"');
-    expect(homeClient).toContain('className={`run-step ws-run-step${item.state ===');
-    expect(homeClient).toContain('className={`run-step__dot ws-run-step__dot');
+    expect(homeClient).toContain('className="run-step ws-run-step"');
+    expect(homeClient).toContain('className="run-step__dot ws-run-step__dot run-step__dot--done ws-run-step__dot--done"');
     expect(homeClient).toContain('className="run-step__body ws-run-step__body"');
     expect(homeClient).toContain('className="run-step__time ws-run-step__time"');
+    expect(homeClient).toContain('className="ws-empty-state"');
     expect(uiCss).toContain('.pc-proto .ws-card {');
     expect(uiCss).toContain('.pc-proto .ws-card__head {');
     expect(uiCss).toContain('.pc-proto .ws-run-step {');
+    expect(uiCss).toContain('.pc-proto .ws-empty-state {');
     expect(uiCss).toContain('grid-template-columns: auto minmax(0, 1fr) auto;');
   });
 
@@ -275,6 +296,10 @@ describe('project list surface', () => {
       '.pc-proto .ch',
       '.pc-proto .tl',
       '.pc-proto .msg',
+      '.pc-proto .msg--action',
+      '.pc-proto .pc-action-card',
+      '.pc-proto .pc-action-card__kind',
+      '.pc-proto .pc-action-card__primary',
       '.pc-proto .tool',
       '.pc-proto .code',
       '.pc-proto .artifact',
@@ -300,6 +325,8 @@ describe('project list surface', () => {
     expect(uiCss).toContain('grid-template-columns: minmax(0, 1fr) 420px;');
     expect(cssBlock('.pc-proto .tl')).toContain('padding: var(--sp-12) var(--sp-10) var(--sp-24);');
     expect(cssBlock('.pc-proto .cmp')).toContain('border-radius: 14px;');
+    expect(cssBlock('.pc-proto .pc-action-card')).toContain('border-radius: 8px;');
+    expect(cssBlock('.pc-proto .pc-action-card')).toContain('grid-template-columns: minmax(0, 1fr) auto;');
     expect(cssBlock('.pc-proto .ws__pane')).toContain('display: none;');
     expect(cssBlock('.pc-proto .ws__pane--active')).toContain('display: flex;');
     expect(uiCss).toContain('.pc-proto[data-workspace="closed"] .shell');

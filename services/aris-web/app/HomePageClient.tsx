@@ -201,6 +201,13 @@ function serializeReasoningEffort(value: ReasoningEffort): SessionChat['modelRea
   return 'high';
 }
 
+function normalizeProjectChatModelInput(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  const canonical = trimmed === 'gpt-5-codex' ? 'gpt-5.3-codex' : trimmed;
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(canonical) ? canonical : undefined;
+}
+
 async function copyToClipboard(value: string): Promise<boolean> {
   try {
     if (navigator.clipboard?.writeText) {
@@ -1301,10 +1308,11 @@ function ProjectDetailSurface({
     setIsCreatingHeaderChat(true);
     setHeaderCreateError(null);
     try {
+      const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);
       const createdChat = await createProjectSessionChat(session.id, {
         title: `Chat ${Math.max(1, totalChats + 1)}`,
         agent: session.agent,
-        model: modelLabel,
+        model: projectModelInput,
         modelReasoningEffort: serializeReasoningEffort('High'),
       });
       onProjectChatOpen(createdChat.id);
@@ -1613,10 +1621,18 @@ function agentInitial(agent: SessionSummary['agent'] | SessionChat['agent']): st
   return 'A';
 }
 
-function isToolLikeEvent(event: UiEvent): boolean {
-  return event.kind !== 'text_reply'
-    && event.kind !== 'unknown'
-    || Boolean(event.action?.command || event.action?.path || event.parsed?.commands?.length);
+function isProjectActionEvent(event: UiEvent): boolean {
+  if (readEventRole(event) === 'user') return false;
+  if (event.action?.command || event.action?.path || event.parsed?.commands?.length) return true;
+  return event.kind === 'command_execution'
+    || event.kind === 'docker_execution'
+    || event.kind === 'exec_execution'
+    || event.kind === 'file_list'
+    || event.kind === 'file_read'
+    || event.kind === 'file_write'
+    || event.kind === 'git_execution'
+    || event.kind === 'run_execution'
+    || event.kind === 'think';
 }
 
 function eventCommand(event: UiEvent): string {
@@ -1626,6 +1642,66 @@ function eventCommand(event: UiEvent): string {
     || event.result?.preview
     || event.body
     || event.title;
+}
+
+function projectActionMeta(kind: UiEvent['kind']) {
+  if (kind === 'file_read') return { Icon: FileText, label: 'Read', tone: 'read' };
+  if (kind === 'file_write') return { Icon: FileIcon, label: 'Write', tone: 'write' };
+  if (kind === 'file_list') return { Icon: FolderOpen, label: 'List', tone: 'list' };
+  if (kind === 'think') return { Icon: Clock3, label: 'Thinking', tone: 'think' };
+  if (kind === 'git_execution') return { Icon: Check, label: 'Git', tone: 'run' };
+  if (kind === 'docker_execution') return { Icon: HardDrive, label: 'Docker', tone: 'run' };
+  return { Icon: Terminal, label: 'Run', tone: 'run' };
+}
+
+function projectActionPreview(event: UiEvent): string {
+  const command = eventCommand(event);
+  const preview = event.result?.preview || event.body || event.title || '';
+  if (!preview || preview === command) return '';
+  return preview.trim();
+}
+
+function ProjectActionCard({
+  event,
+  onCopy,
+  onPreview,
+}: {
+  event: UiEvent;
+  onCopy: () => void;
+  onPreview?: () => void;
+}) {
+  const { Icon, label, tone } = projectActionMeta(event.kind);
+  const primary = eventCommand(event);
+  const preview = projectActionPreview(event);
+  const filePath = event.parsed?.files?.[0] || event.action?.path || '';
+
+  return (
+    <div className="pc-action-card" data-project-action-card data-kind={tone}>
+      <div className="pc-action-card__main">
+        <div className="pc-action-card__top">
+          <span className="pc-action-card__kind"><Icon size={12} />{label}</span>
+          <span className="pc-action-card__time">{formatRelativeTime(event.timestamp)}</span>
+        </div>
+        <div className="pc-action-card__primary">{primary}</div>
+        {filePath && filePath !== primary && (
+          <div className="pc-action-card__path">{filePath}</div>
+        )}
+        {preview && (
+          <pre className="pc-action-card__preview">{preview}</pre>
+        )}
+      </div>
+      <div className="pc-action-card__actions">
+        {onPreview && (
+          <button type="button" className="pc-action-card__preview-btn" onClick={onPreview} title="Preview referenced file">
+            <Maximize2 size={13} />
+          </button>
+        )}
+        <button type="button" className="pc-action-card__copy" onClick={onCopy} title="Copy action command">
+          <Copy size={13} />
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function ProjectPlaceholderPanel({
@@ -1710,8 +1786,6 @@ function ProjectChatSurface({
   const userTurns = visibleEvents.filter((item) => readEventRole(item) === 'user');
   const representativeAgentEvent = visibleEvents.find((item) => readEventRole(item) !== 'user');
   const hasRuntimeEvents = visibleEvents.length > 0;
-  const selectedChatPreview = (activeChat?.latestPreview ?? recentPreview).trim()
-    || '프로젝트 맥락을 이어서 다루기 위한 채팅입니다.';
   const selectedChatTimestamp = activeChat?.latestEventAt
     ?? activeChat?.lastActivityAt
     ?? session.lastActivityAt
@@ -1739,44 +1813,13 @@ function ProjectChatSurface({
     { id: 'ctx-prototype', name: 'design/chat-prototype.html', tokens: 'source' },
     { id: 'ctx-mode', name: `${COMPOSER_MODE_COPY[composerMode]} mode`, tokens: selectedEffort },
   ];
-  const runStepItems = hasRuntimeEvents
-    ? visibleEvents.slice(-4).map((item) => ({
-      id: item.id,
-      title: item.title || item.kind,
-      cmd: eventCommand(item),
-      time: formatRelativeTime(item.timestamp),
-      state: 'done' as const,
-    }))
-    : [
-      {
-        id: 'seed-route',
-        title: 'Route · project chat',
-        cmd: projectChatRoute,
-        time: 'now',
-        state: 'done' as const,
-      },
-      {
-        id: 'seed-context',
-        title: 'Read · project context',
-        cmd: projectPath,
-        time: 'now',
-        state: 'done' as const,
-      },
-      {
-        id: 'seed-preview',
-        title: 'Load · chat preview',
-        cmd: selectedChatPreview,
-        time: formatRelativeTime(selectedChatTimestamp),
-        state: 'done' as const,
-      },
-      {
-        id: 'seed-ready',
-        title: 'Ready · next turn',
-        cmd: 'composer is scoped to this project chat',
-        time: 'now',
-        state: 'running' as const,
-      },
-    ];
+  const runStepItems = visibleEvents.slice(-4).map((item) => ({
+    id: item.id,
+    title: item.title || item.kind,
+    cmd: eventCommand(item),
+    time: formatRelativeTime(item.timestamp),
+    state: 'done' as const,
+  }));
   const showTransientFeedback = (message: string) => {
     setCopyFeedback(message);
     window.setTimeout(() => {
@@ -1838,7 +1881,7 @@ function ProjectChatSurface({
   };
 
   const handleJumpToLatest = () => {
-    const targetId = visibleEvents.at(-1)?.id ?? 'seed-history-primary';
+    const targetId = visibleEvents.at(-1)?.id ?? null;
     setHighlightedMessageId(targetId);
     timelineRef.current?.scrollTo({ top: timelineRef.current.scrollHeight, behavior: 'smooth' });
     window.setTimeout(() => {
@@ -1854,33 +1897,14 @@ function ProjectChatSurface({
       setHighlightedMessageId(null);
     }, 1800);
   };
-  const historyTurnItems = hasRuntimeEvents
-    ? userTurns.slice(-3).map((item, turnIndex) => ({
-      id: item.id,
-      timestamp: item.timestamp,
-      text: getEventText(item),
-      open: turnIndex === 0,
-      state: turnIndex === 0 ? 'running' : 'answered',
-      agentText: representativeAgentEvent ? getEventText(representativeAgentEvent) : '프로젝트 맥락을 기준으로 응답을 준비합니다.',
-    }))
-    : [
-      {
-        id: 'seed-history-primary',
-        timestamp: selectedChatTimestamp,
-        text: selectedChatPreview,
-        open: true,
-        state: 'running',
-        agentText: '프로젝트 컨텍스트를 기준으로 최근 대화와 작업 경로를 확인하고 있습니다.',
-      },
-      {
-        id: 'seed-history-context',
-        timestamp: selectedChatTimestamp,
-        text: `${projectName} · ${projectPath}`,
-        open: false,
-        state: 'answered',
-        agentText: '연결된 작업 경로와 채팅 기록을 불러왔습니다.',
-      },
-    ];
+  const historyTurnItems = userTurns.slice(-3).map((item, turnIndex) => ({
+    id: item.id,
+    timestamp: item.timestamp,
+    text: getEventText(item),
+    open: turnIndex === 0,
+    state: turnIndex === 0 ? 'running' : 'answered',
+    agentText: representativeAgentEvent ? getEventText(representativeAgentEvent) : '프로젝트 맥락을 기준으로 응답을 준비합니다.',
+  }));
   const defaultExpandedTurnId = historyTurnItems[0]?.id ?? null;
   const visibleExpandedTurnId = expandedTurnId === '__none__'
     ? null
@@ -2277,102 +2301,31 @@ function ProjectChatSurface({
 
               {isLoadingEvents && <div className="pc-chat-loading">Loading messages...</div>}
               {!isLoadingEvents && !hasRuntimeEvents && (
-                <>
-                  <div className={`msg${highlightedMessageId === 'seed-history-primary' ? ' msg--highlight' : ''}`}>
-                    <span className="msg__avatar msg__avatar--user">U</span>
-                    <div className="msg__body">
-                      <div className="msg__header"><span className="msg__name">You</span><span className="msg__time">{formatRelativeTime(selectedChatTimestamp)}</span></div>
-                      <div className="msg__bubble">{selectedChatPreview}</div>
-                      <div className="msg__attachments">
-                        <span className="msg__attach">
-                          <span className="msg__attach-icon"><FolderOpen size={12} /></span>
-                          <span className="msg__attach-name">{displayProjectName(session)}</span>
-                          <span className="msg__attach-size">project</span>
-                        </span>
-                      </div>
-                    </div>
+                <div className="pc-chat-empty-state" role="status">
+                  <div className="pc-chat-empty-state__title">아직 메시지가 없습니다.</div>
+                  <div className="pc-chat-empty-state__meta">
+                    첫 요청을 보내면 이 채팅의 실제 이벤트만 표시됩니다.
                   </div>
-
-                  <div className="msg">
-                    <span className={`msg__avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent)}</span>
-                    <div className="msg__body">
-                      <div className="msg__header"><span className="msg__name">{agentLabel(activeAgent, activeModelLabel)}</span><span className="msg__time">now</span></div>
-                      <div className="msg__text">
-                        <p>프로젝트 컨텍스트를 먼저 확인하겠습니다. 최근 채팅, 작업 경로, 연결된 파일을 기준으로 이어서 볼 수 있습니다.</p>
-                      </div>
-                      <div
-                        className="tool"
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => handleCopy(projectPath, 'Tool command')}
-                        onKeyDown={(keyEvent) => {
-                          if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
-                            keyEvent.preventDefault();
-                            handleCopy(projectPath, 'Tool command');
-                          }
-                        }}
-                      >
-                        <span className="tool__icon tool__icon--success"><Check size={12} /></span>
-                        <div className="tool__body">
-                          <span className="tool__title">Read · project context</span>
-                          <span className="tool__cmd">{projectPath}</span>
-                        </div>
-                        <span className="tool__meta">active</span>
-                        <ChevronRight size={12} className="tool__caret" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="msg">
-                    <span className={`msg__avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent)}</span>
-                    <div className="msg__body">
-                      <div className="msg__header"><span className="msg__name">{agentLabel(activeAgent, activeModelLabel)}</span><span className="msg__time">now</span></div>
-                      <div className="msg__text">
-                        <p>선택한 대화 흐름을 불러왔습니다. 필요한 파일과 로그를 열어 다음 작업을 진행할 준비가 되어 있습니다.</p>
-                      </div>
-                      <div className="code">
-                        <div className="code__head">
-                          <div className="code__head-left">
-                            <span className="code__lang">ctx</span>
-                            <span>project scope</span>
-                          </div>
-                          <button type="button" className="code__copy" onClick={() => handleCopy(`project=${projectName}\nchat=${activeChat?.title ?? 'new chat'}\npath=${projectPath}\nentry=${projectChatRoute}`, 'Project scope')}>Copy</button>
-                        </div>
-                        <pre className="code__body">{`project=${projectName}\nchat=${activeChat?.title ?? 'new chat'}\npath=${projectPath}\nentry=${projectChatRoute}`}</pre>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="msg">
-                    <span className={`msg__avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent)}</span>
-                    <div className="msg__body">
-                      <div className="msg__header"><span className="msg__name">{agentLabel(activeAgent, activeModelLabel)}</span><span className="msg__time">now</span></div>
-                      <div className="msg__text">
-                        <p>다음 요청을 보내면 이 대화에서 이어서 작업하겠습니다. 실행 상태, 파일 맥락, 이전 턴은 오른쪽 작업 패널에서 함께 추적됩니다.</p>
-                      </div>
-                      <div className="artifact">
-                        <div className="artifact__thumb" />
-                        <div className="artifact__meta">
-                          <span className="artifact__name">project-context.snapshot</span>
-                          <span className="artifact__sub">workspace context · ready</span>
-                        </div>
-                        <button type="button" className="artifact__btn" data-preview-open onClick={() => setPreviewState('open')}>Preview</button>
-                      </div>
-                      <div className="thinking">
-                        <span className="thinking__dots"><span className="thinking__dot" /><span className="thinking__dot" /><span className="thinking__dot" /></span>
-                        <span>프로젝트 맥락 대기 중</span>
-                        <span className="thinking__time">{tokenLabel}</span>
-                      </div>
-                    </div>
-                  </div>
-                </>
+                </div>
               )}
 
               {visibleEvents.map((item) => {
+                const event = item;
                 const role = readEventRole(item);
                 const isUser = role === 'user';
                 const snippet = item.parsed?.snippets?.[0];
-                const toolLike = !isUser && isToolLikeEvent(item);
+                const actionEvent = !isUser && isProjectActionEvent(item);
+                if (actionEvent) {
+                  return (
+                    <div key={item.id} className={`msg msg--action${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
+                      <ProjectActionCard
+                        event={event}
+                        onCopy={() => handleCopy(eventCommand(event), 'Action command')}
+                        onPreview={item.parsed?.files?.[0] ? () => setPreviewState('open') : undefined}
+                      />
+                    </div>
+                  );
+                }
                 return (
                   <div key={item.id} className={`msg${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
                     <span className={`msg__avatar ${isUser ? 'msg__avatar--user' : agentAvatarClass(activeAgent)}`}>{isUser ? 'U' : agentInitial(activeAgent)}</span>
@@ -2399,28 +2352,6 @@ function ProjectChatSurface({
                       ) : (
                         <>
                           <div className="msg__text"><p>{getEventText(item)}</p></div>
-                          {toolLike && (
-                            <div
-                              className="tool"
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => handleCopy(eventCommand(item), 'Tool command')}
-                              onKeyDown={(keyEvent) => {
-                                if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
-                                  keyEvent.preventDefault();
-                                  handleCopy(eventCommand(item), 'Tool command');
-                                }
-                              }}
-                            >
-                              <span className="tool__icon tool__icon--success"><Check size={12} /></span>
-                              <div className="tool__body">
-                                <span className="tool__title">{item.title || item.kind}</span>
-                                <span className="tool__cmd">{eventCommand(item)}</span>
-                              </div>
-                              <span className="tool__meta">{item.kind}</span>
-                              <ChevronRight size={12} className="tool__caret" />
-                            </div>
-                          )}
                           {snippet && (
                             <div className="code">
                               <div className="code__head">
@@ -2650,7 +2581,7 @@ function ProjectChatSurface({
           <div className="ws__body">
             <div className={`ws__pane${workspaceTab === 'run' ? ' ws__pane--active' : ''}`} data-pane="run">
               <div className="run-summary">
-                <div className="run-summary__cell"><span className="run-summary__label">Steps</span><span className="run-summary__value">{hasRuntimeEvents ? Math.max(1, visibleEvents.length) : '4 / 5'}</span></div>
+                <div className="run-summary__cell"><span className="run-summary__label">Steps</span><span className="run-summary__value">{visibleEvents.length}</span></div>
                 <div className="run-summary__cell"><span className="run-summary__label">Tokens</span><span className="run-summary__value">{tokenLabel}</span></div>
                 <div className="run-summary__cell"><span className="run-summary__label">Activity</span><span className="run-summary__value">{formatRelativeTime(selectedChatTimestamp)}</span></div>
               </div>
@@ -2660,16 +2591,20 @@ function ProjectChatSurface({
                   <div className="ws-card__meta">{formatRelativeTime(selectedChatTimestamp)} · {tokenLabel} tokens</div>
                 </div>
                 <div className="run-steps">
-                  {runStepItems.map((item) => (
-                    <button key={item.id} type="button" className={`run-step ws-run-step${item.state === 'running' ? ' run-step--active' : ''}`} onClick={() => handleCopy(item.cmd, 'Run step')}>
-                      <span className={`run-step__dot ws-run-step__dot${item.state === 'running' ? ' run-step__dot--running' : ' run-step__dot--done ws-run-step__dot--done'}`} />
-                      <div className="run-step__body ws-run-step__body">
-                        <div className="run-step__title ws-run-step__title">{item.title}</div>
-                        <div className="run-step__cmd ws-run-step__time">{item.cmd}</div>
-                      </div>
-                      <span className="run-step__time ws-run-step__time">{item.time}</span>
-                    </button>
-                  ))}
+                  {runStepItems.length > 0 ? (
+                    runStepItems.map((item) => (
+                      <button key={item.id} type="button" className="run-step ws-run-step" onClick={() => handleCopy(item.cmd, 'Run step')}>
+                        <span className="run-step__dot ws-run-step__dot run-step__dot--done ws-run-step__dot--done" />
+                        <div className="run-step__body ws-run-step__body">
+                          <div className="run-step__title ws-run-step__title">{item.title}</div>
+                          <div className="run-step__cmd ws-run-step__time">{item.cmd}</div>
+                        </div>
+                        <span className="run-step__time ws-run-step__time">{item.time}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="ws-empty-state">실행 기록이 없습니다.</div>
+                  )}
                 </div>
               </div>
               <div className="chist ws-card ws-card--history">
@@ -2678,42 +2613,46 @@ function ProjectChatSurface({
                   <span className="chist__meta">{historyTurnItems.length} turns</span>
                 </div>
                 <div className="chist__list">
-                  {historyTurnItems.map((item) => (
-                    <div key={item.id} className="chturn" data-open={visibleExpandedTurnId === item.id ? 'true' : 'false'}>
-                      <button
-                        type="button"
-                        className="chturn__preview"
-                        data-turn-toggle
-                        onClick={() => setExpandedTurnId(visibleExpandedTurnId === item.id ? '__none__' : item.id)}
-                      >
-                        <span className="chturn__avatar">U</span>
-                        <span className="chturn__body">
-                          <span className="chturn__meta">
-                            <span className="chturn__name">You</span>
-                            <span className="chturn__time">{formatRelativeTime(item.timestamp)}</span>
-                            <span className={`chturn__pill ${item.state === 'running' ? 'chturn__pill--run' : 'chturn__pill--ok'}`}>
-                              <span className="chturn__pill-dot" />{item.state}
+                  {historyTurnItems.length > 0 ? (
+                    historyTurnItems.map((item) => (
+                      <div key={item.id} className="chturn" data-open={visibleExpandedTurnId === item.id ? 'true' : 'false'}>
+                        <button
+                          type="button"
+                          className="chturn__preview"
+                          data-turn-toggle
+                          onClick={() => setExpandedTurnId(visibleExpandedTurnId === item.id ? '__none__' : item.id)}
+                        >
+                          <span className="chturn__avatar">U</span>
+                          <span className="chturn__body">
+                            <span className="chturn__meta">
+                              <span className="chturn__name">You</span>
+                              <span className="chturn__time">{formatRelativeTime(item.timestamp)}</span>
+                              <span className={`chturn__pill ${item.state === 'running' ? 'chturn__pill--run' : 'chturn__pill--ok'}`}>
+                                <span className="chturn__pill-dot" />{item.state}
+                              </span>
                             </span>
+                            <span className="chturn__text">{item.text}</span>
                           </span>
-                          <span className="chturn__text">{item.text}</span>
-                        </span>
-                        <ChevronRight size={12} className="chturn__caret" />
-                      </button>
-                      <div className="chturn__expanded">
-                        <div className="chturn__agent-head">
-                          <span className={`chturn__agent-avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent).slice(0, 1)}</span>
-                          <span className="chturn__agent-label"><strong>{agentLabel(activeAgent, activeModelLabel)}</strong></span>
-                          <span className="chturn__agent-final">{item.state === 'running' ? 'In progress' : 'Final'}</span>
-                        </div>
-                        <div className="chturn__agent-text">{item.agentText}</div>
-                        <div className="chturn__actions">
-                          <button type="button" className="chturn__btn" onClick={() => handleJumpToTurn(item.id)}><ChevronRight size={11} />Jump</button>
-                          <button type="button" className="chturn__btn" data-preview-open onClick={() => setPreviewState('open')}><FileText size={11} />Preview</button>
-                          <button type="button" className="chturn__btn" onClick={() => handleCopy(`${item.text}\n\n${item.agentText}`, 'Turn summary')}><Copy size={11} />Copy</button>
+                          <ChevronRight size={12} className="chturn__caret" />
+                        </button>
+                        <div className="chturn__expanded">
+                          <div className="chturn__agent-head">
+                            <span className={`chturn__agent-avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent).slice(0, 1)}</span>
+                            <span className="chturn__agent-label"><strong>{agentLabel(activeAgent, activeModelLabel)}</strong></span>
+                            <span className="chturn__agent-final">{item.state === 'running' ? 'In progress' : 'Final'}</span>
+                          </div>
+                          <div className="chturn__agent-text">{item.agentText}</div>
+                          <div className="chturn__actions">
+                            <button type="button" className="chturn__btn" onClick={() => handleJumpToTurn(item.id)}><ChevronRight size={11} />Jump</button>
+                            <button type="button" className="chturn__btn" data-preview-open onClick={() => setPreviewState('open')}><FileText size={11} />Preview</button>
+                            <button type="button" className="chturn__btn" onClick={() => handleCopy(`${item.text}\n\n${item.agentText}`, 'Turn summary')}><Copy size={11} />Copy</button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  ) : (
+                    <div className="ws-empty-state">대화 기록이 없습니다.</div>
+                  )}
                 </div>
               </div>
             </div>
