@@ -60,6 +60,50 @@ elif [[ -n "${DEV_HAPPY_SERVER_TOKEN:-}" ]]; then
   export RUNTIME_API_TOKEN="${DEV_HAPPY_SERVER_TOKEN}"
 fi
 
+git_ref="$(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"
+git_sha="$(git -C "${ROOT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+proxy_url="https://lawdigest.cloud/proxy/${WEB_DEV_PORT}/"
+
+port_probe_status=0
+if command -v python3 >/dev/null 2>&1; then
+  python3 - "${WEB_DEV_HOST}" "${WEB_DEV_PORT}" <<'PY' || port_probe_status=$?
+import socket
+import sys
+
+host = sys.argv[1]
+port = int(sys.argv[2])
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+try:
+    sock.bind((host, port))
+except OSError:
+    sys.exit(1)
+finally:
+    sock.close()
+PY
+fi
+
+if (( port_probe_status != 0 )); then
+  echo "[web-dev] port ${WEB_DEV_PORT} is already in use; refusing to start a second dev server" >&2
+  echo "[web-dev] requested bind=${WEB_DEV_HOST}:${WEB_DEV_PORT}" >&2
+  if command -v lsof >/dev/null 2>&1; then
+    mapfile -t listening_pids < <(lsof -tiTCP:"${WEB_DEV_PORT}" -sTCP:LISTEN -n -P 2>/dev/null || true)
+    if (( ${#listening_pids[@]} > 0 )); then
+      for pid in "${listening_pids[@]}"; do
+        cwd="$(readlink -f "/proc/${pid}/cwd" 2>/dev/null || echo "unknown")"
+        cmd="$(ps -p "${pid}" -o cmd= 2>/dev/null || echo "unknown")"
+        echo "[web-dev] existing pid=${pid} cwd=${cwd}" >&2
+        echo "[web-dev] existing cmd=${cmd}" >&2
+      done
+    else
+      echo "[web-dev] no listener pid was visible to lsof; the port may be held by docker-proxy or another privileged process" >&2
+    fi
+  fi
+  echo "[web-dev] stop the old process or choose WEB_DEV_PORT=<free-port>" >&2
+  exit 1
+fi
+
 # Host dev mode does not receive Docker Compose's DATABASE_URL injection.
 # Build it from deploy env and point to the running postgres container IP.
 if [[ -z "${DATABASE_URL:-}" ]]; then
@@ -98,6 +142,10 @@ if [[ "${SKIP_DB_PREPARE}" != "1" ]]; then
 fi
 
 echo "[web-dev] starting Next.js dev server on http://${WEB_DEV_HOST}:${WEB_DEV_PORT}"
+echo "[web-dev] checkout=${ROOT_DIR}"
+echo "[web-dev] git=${git_ref}@${git_sha}"
+echo "[web-dev] proxy URL=${proxy_url}"
+echo "[web-dev] note: this dev proxy is not production deploy; production is https://aris.lawdigest.cloud"
 echo "[web-dev] APP_BASE_URL=${APP_BASE_URL}"
 echo "[web-dev] RUNTIME_API_URL=${RUNTIME_API_URL}"
 echo "[web-dev] save files to see immediate reload in browser"

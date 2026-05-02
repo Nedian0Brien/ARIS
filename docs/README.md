@@ -28,6 +28,7 @@ ARIS(Agentic Runtime Interface System)의 문서는 **사용자 의도 중심(Ch
 - `03-feature-backlog.md`: Post-MVP 백로그
 - `04-deployment-guide.md`: 배포 절차와 런타임 이슈 트러블슈팅
 - `05-dark-mode-support-plan.md`: 다크모드 지원 설계/구현/검증 계획
+- `06-deployment-target-policy.md`: production/dev proxy/local slot의 배포 대상 기준
 
 ## 권장 읽기 순서
 

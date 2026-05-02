@@ -98,4 +98,13 @@ describe('dev proxy asset prefix resolution', () => {
     expect(server).toContain('./lib/routing/devProxyAssetPrefix.mjs');
     expect(dockerfile).toContain('COPY --link --from=builder /app/lib ./lib');
   });
+
+  it('makes dev proxy target identity explicit before starting hot reload', () => {
+    const script = readFileSync(resolve(__dirname, '../../../deploy/dev/run_web_dev_hot_reload.sh'), 'utf8');
+
+    expect(script).toContain('port ${WEB_DEV_PORT} is already in use');
+    expect(script).toContain('readlink -f "/proc/${pid}/cwd"');
+    expect(script).toContain('proxy URL=${proxy_url}');
+    expect(script).toContain('this dev proxy is not production deploy');
+  });
 });
