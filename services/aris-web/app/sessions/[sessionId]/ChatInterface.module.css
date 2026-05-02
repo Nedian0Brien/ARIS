@@ -5259,9 +5259,11 @@
   }
 
   .composerDock {
+    position: fixed;
     left: 0.65rem;
     right: 0.65rem;
     width: auto;
+    max-width: none;
     --composer-dock-bottom-offset: calc(0.45rem + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
   }
 
@@ -7827,8 +7829,11 @@
   }
 
   .composerDock {
-    width: calc(100% - var(--sp-4));
-    max-width: calc(100% - var(--sp-4));
+    position: fixed;
+    left: 0.65rem;
+    right: 0.65rem;
+    width: auto;
+    max-width: none;
     bottom: var(--composer-dock-bottom-offset);
   }
 

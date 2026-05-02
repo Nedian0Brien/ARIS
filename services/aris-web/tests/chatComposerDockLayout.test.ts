@@ -37,6 +37,12 @@ describe('chat composer dock desktop layout guards', () => {
     expect(chatInterfaceCss).toMatch(/\.csTimeline\s*\{[\s\S]*padding:[\s\S]*var\(--chat-timeline-bottom-offset\);/);
   });
 
+  it('pins the mobile composer dock to the viewport instead of the scroll container', () => {
+    expect(chatInterfaceCss).toMatch(/@media\s*\(max-width:\s*960px\)\s*\{[\s\S]*?\.composerDock\s*\{[^}]*position:\s*fixed;/s);
+    expect(chatInterfaceCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.composerDock\s*\{[^}]*position:\s*fixed;/s);
+    expect(chatInterfaceCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.composerDock\s*\{[^}]*bottom:\s*var\(--composer-dock-bottom-offset\);/s);
+  });
+
   it('derives browser chrome obstruction from visual viewport and layout viewport heights', () => {
     expect(viewportHeightSync).toContain('const layoutBottomInset = Math.max(0, layoutViewportHeight - height - viewportOffsetTop);');
     expect(viewportHeightSync).toContain('const visualViewportBottomInset = Math.max(historicalBottomInset, layoutBottomInset);');
