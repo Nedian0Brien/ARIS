@@ -2774,6 +2774,29 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   font-weight: 700;
 }
 
+.pc-proto .pc-chat-empty-state {
+  width: min(420px, 100%);
+  margin: var(--sp-16) auto 0;
+  padding: var(--sp-10);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  text-align: center;
+}
+
+.pc-proto .pc-chat-empty-state__title {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.pc-proto .pc-chat-empty-state__meta {
+  display: block;
+  margin-top: var(--sp-2);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
 .pc-proto .msg {
   display: flex;
   gap: var(--sp-4);
@@ -3776,6 +3799,15 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
+}
+
+.pc-proto .ws-empty-state {
+  padding: var(--sp-6) var(--sp-4);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--r-sm);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-align: center;
 }
 
 .pc-proto .run-step,

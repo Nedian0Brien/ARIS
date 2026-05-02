@@ -73,9 +73,12 @@ describe('project list surface', () => {
     expect(homeClient).toContain("params.set('view', view);");
     expect(homeClient).toContain('/api/runtime/sessions/${encodeURIComponent(session.id)}/chats');
     expect(homeClient).toContain('/api/runtime/sessions/${encodeURIComponent(session.id)}/events');
-    expect(homeClient).toContain('selectedChatPreview');
-    expect(homeClient).toContain('Read · project context');
-    expect(homeClient).toContain('project-context.snapshot');
+    expect(homeClient).toContain('pc-chat-empty-state');
+    expect(homeClient).not.toContain('seed-history-primary');
+    expect(homeClient).not.toContain('seed-context');
+    expect(homeClient).not.toContain('Read · project context');
+    expect(homeClient).not.toContain('project-context.snapshot');
+    expect(homeClient).not.toContain('프로젝트 컨텍스트를 먼저 확인하겠습니다.');
     expect(homeClient).not.toContain('/sessions/${session.id}');
   });
 
@@ -225,13 +228,15 @@ describe('project list surface', () => {
     expect(homeClient).toContain('className="ws-card__head"');
     expect(homeClient).toContain('className="ws-card__title">Run ·');
     expect(homeClient).toContain('className="ws-card__meta"');
-    expect(homeClient).toContain('className={`run-step ws-run-step${item.state ===');
-    expect(homeClient).toContain('className={`run-step__dot ws-run-step__dot');
+    expect(homeClient).toContain('className="run-step ws-run-step"');
+    expect(homeClient).toContain('className="run-step__dot ws-run-step__dot run-step__dot--done ws-run-step__dot--done"');
     expect(homeClient).toContain('className="run-step__body ws-run-step__body"');
     expect(homeClient).toContain('className="run-step__time ws-run-step__time"');
+    expect(homeClient).toContain('className="ws-empty-state"');
     expect(uiCss).toContain('.pc-proto .ws-card {');
     expect(uiCss).toContain('.pc-proto .ws-card__head {');
     expect(uiCss).toContain('.pc-proto .ws-run-step {');
+    expect(uiCss).toContain('.pc-proto .ws-empty-state {');
     expect(uiCss).toContain('grid-template-columns: auto minmax(0, 1fr) auto;');
   });
 
