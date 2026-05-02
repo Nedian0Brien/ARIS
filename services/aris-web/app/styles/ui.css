@@ -1443,6 +1443,7 @@ html[data-theme='dark'] .home-proj:focus-visible {
 
 .home-feed-row:last-child { border-bottom: 0; }
 .home-feed-row:hover { background: var(--surface-hover); }
+.home-feed-row--empty { color: var(--text-tertiary); }
 
 .home-feed-avatar {
   width: 24px;
@@ -1457,6 +1458,8 @@ html[data-theme='dark'] .home-proj:focus-visible {
 }
 
 .home-feed-avatar--c { background: var(--agent-claude); }
+.home-feed-avatar--g { background: var(--agent-gemini); }
+.home-feed-avatar--x { background: var(--agent-codex); }
 .home-feed-avatar--u { background: linear-gradient(135deg, #FFB74D, #F57C00); }
 
 .home-feed-body {

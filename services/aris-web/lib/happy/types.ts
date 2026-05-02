@@ -21,6 +21,7 @@ export type SessionSummary = {
   // 채팅 집계 (API route에서 주입, happy 서버에서 오지 않음)
   chatAgentCounts?: { claude: number; codex: number; gemini: number; unknown: number };
   totalChats?: number;
+  recentChats?: SessionChat[];
 };
 
 export type SessionChat = {

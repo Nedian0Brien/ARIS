@@ -11,4 +11,11 @@ describe('home surface copy', () => {
     expect(homePageClient).toContain('<h2>Recent Project</h2>');
     expect(homePageClient).toContain('aria-label="Recent Project"');
   });
+
+  it('labels the home feed section as Recent Chat', () => {
+    expect(homePageClient).toContain('<h2>Recent Chat</h2>');
+    expect(homePageClient).toContain('aria-label="Recent Chat"');
+    expect(homePageClient).not.toContain('<h2>Recent activity</h2>');
+    expect(homePageClient).not.toContain('aria-label="Recent activity"');
+  });
 });
