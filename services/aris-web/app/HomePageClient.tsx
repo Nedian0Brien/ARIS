@@ -1,6 +1,6 @@
 'use client';
 
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Activity,
@@ -168,6 +168,12 @@ const PROVIDER_LABELS: Record<ModelProvider, string> = {
   claude: 'Claude',
   codex: 'Codex',
   gemini: 'Gemini',
+};
+
+const PROVIDER_ICON_PATHS: Record<ModelProvider, string> = {
+  claude: '/icons/claude.svg',
+  codex: '/icons/codex.svg',
+  gemini: '/icons/gemini.svg',
 };
 
 const PROVIDER_EFFORTS: Record<ModelProvider, ReasoningEffort[]> = {
@@ -1694,6 +1700,16 @@ function agentInitial(agent: SessionSummary['agent'] | SessionChat['agent']): st
   return 'A';
 }
 
+function ProviderLogo({ provider }: { provider: ModelProvider }) {
+  return (
+    <span
+      className={`provider-logo provider-logo--${provider}`}
+      aria-hidden="true"
+      style={{ '--provider-logo-url': `url(${PROVIDER_ICON_PATHS[provider]})` } as CSSProperties}
+    />
+  );
+}
+
 function isProjectActionEvent(event: UiEvent): boolean {
   if (readEventRole(event) === 'user') return false;
   if (event.action?.command || event.action?.path || event.parsed?.commands?.length) return true;
@@ -2487,7 +2503,9 @@ function ProjectChatSurface({
                   ))}
                 </div>
                 <button type="button" className="cmp-ctx" aria-label="Current model" aria-expanded={modelSelectorOpen} onClick={() => setModelSelectorOpen((current) => !current)}>
-                  <span className={`cmp-ctx__logo cmp-ctx__logo--${selectedProvider}`}>{agentInitial(activeAgent).slice(0, 1)}</span>
+                  <span className={`cmp-ctx__logo cmp-ctx__logo--${selectedProvider}`}>
+                    <ProviderLogo provider={selectedProvider} />
+                  </span>
                   <span className="cmp-ctx__name">{activeModelLabel}</span>
                   <span className="cmp-ctx__effort">{selectedEffort}</span>
                   <ChevronRight size={12} />
@@ -2517,7 +2535,7 @@ function ProjectChatSurface({
                         }
                       }}
                     >
-                      <span>{agentInitial(provider).slice(0, 1)}</span>
+                      <ProviderLogo provider={provider} />
                       <span className="ms__provider-label">{PROVIDER_LABELS[provider]}</span>
                     </button>
                   ))}
