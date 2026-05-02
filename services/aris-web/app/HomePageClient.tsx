@@ -45,7 +45,7 @@ import {
 } from 'lucide-react';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { BackendNotice } from '@/components/ui/BackendNotice';
-import { selectRecentProjects } from './homeProjects';
+import { selectRecentChats, selectRecentProjects, type HomeRecentChat } from './homeProjects';
 import { withAppBasePath } from '@/lib/routing/appPath';
 import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
 import type { AuthenticatedUser } from '@/lib/auth/types';
@@ -326,7 +326,40 @@ function statusClass(status: SessionStatus): string {
   return 'idle';
 }
 
-function createChatPreview(session: SessionSummary, index: number): string {
+function chatTitle(chat: Pick<SessionChat, 'title'>): string {
+  return chat.title?.trim() || 'Untitled chat';
+}
+
+function chatPreviewText(chat: Pick<SessionChat, 'latestPreview' | 'latestEventIsUser'>): string {
+  const preview = chat.latestPreview?.trim();
+  if (preview) return preview;
+  if (chat.latestEventIsUser) return '마지막 사용자 메시지가 기록되었습니다.';
+  return '아직 미리보기가 없습니다.';
+}
+
+function chatActivityAt(chat: Pick<SessionChat, 'latestEventAt' | 'lastActivityAt' | 'updatedAt' | 'createdAt'>): string | null {
+  return chat.latestEventAt || chat.lastActivityAt || chat.updatedAt || chat.createdAt || null;
+}
+
+function chatDotStatusClass(chat: Pick<SessionChat, 'latestHasErrorSignal' | 'latestEventIsUser'>): string {
+  if (chat.latestHasErrorSignal) return 'appr';
+  if (chat.latestEventIsUser) return 'idle';
+  return 'done';
+}
+
+function homeFeedAvatarClass(agent: SessionChat['agent']): string {
+  if (agent === 'claude') return 'home-feed-avatar--c';
+  if (agent === 'gemini') return 'home-feed-avatar--g';
+  if (agent === 'codex') return 'home-feed-avatar--x';
+  return 'home-feed-avatar--u';
+}
+
+function createChatPreview(session: SessionSummary): string {
+  const latestChat = session.recentChats?.[0];
+  if (latestChat) {
+    return chatPreviewText(latestChat);
+  }
+
   const project = displayProjectName(session);
   if (session.status === 'running') {
     return `${project} 작업이 실행 중입니다. 최근 런타임 이벤트와 파일 변경을 확인하세요.`;
@@ -334,10 +367,41 @@ function createChatPreview(session: SessionSummary, index: number): string {
   if (session.status === 'error') {
     return `${project}에서 확인이 필요한 오류 신호가 있습니다. 마지막 이벤트부터 추적하세요.`;
   }
-  if (index % 2 === 0) {
-    return `${project}의 최근 결정과 변경 파일을 한 화면에서 다시 이어갈 수 있습니다.`;
-  }
-  return `${project} 관련 이전 채팅과 작업 맥락이 프로젝트 카드에 묶여 있습니다.`;
+  return '아직 채팅 내역이 없습니다.';
+}
+
+function ProjectRecentChatRows({
+  className = '',
+  emptyCopy = '아직 채팅 내역이 없습니다.',
+  session,
+}: {
+  className?: string;
+  emptyCopy?: string;
+  session: SessionSummary;
+}) {
+  const chats = (session.recentChats ?? []).slice(0, 2);
+
+  return (
+    <div className={`home-proj__chats${className ? ` ${className}` : ''}`}>
+      {chats.length > 0 ? chats.map((chat) => (
+        <div key={chat.id} className="home-proj__chat">
+          <span className={`home-proj__chat-dot home-proj__chat-dot--${chatDotStatusClass(chat)}`} />
+          <div className="home-proj__chat-body">
+            <div className="home-proj__chat-title">{chatTitle(chat)}</div>
+            <div className="home-proj__chat-last">{chatPreviewText(chat)}</div>
+          </div>
+        </div>
+      )) : (
+        <div className="home-proj__chat home-proj__chat--empty">
+          <span className="home-proj__chat-dot home-proj__chat-dot--idle" />
+          <div className="home-proj__chat-body">
+            <div className="home-proj__chat-title">{displayProjectName(session)}</div>
+            <div className="home-proj__chat-last">{emptyCopy}</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function buildRecentAsks(sessions: SessionSummary[]): Array<{ question: string; meta: string }> {
@@ -628,8 +692,7 @@ function Sidebar({
       </div>
       {hoveredProject && tipPosition ? (() => {
         const statusKey = statusClass(hoveredProject.status);
-        const previewIndex = projects.indexOf(hoveredProject);
-        const lastUserText = createChatPreview(hoveredProject, previewIndex >= 0 ? previewIndex : 0);
+        const lastUserText = createChatPreview(hoveredProject);
         return (
           <div
             id="sb-tip"
@@ -1085,11 +1148,12 @@ function HomeSurface({
   user,
 }: {
   metrics: RuntimeMetrics | null;
-  onProjectOpen: (sessionId: string, view?: ProjectView) => void;
+  onProjectOpen: (sessionId: string, view?: ProjectView, chatId?: string | null) => void;
   sessions: SessionSummary[];
   user: AuthenticatedUser;
 }) {
   const projects = selectRecentProjects(sessions);
+  const recentChats = selectRecentChats(sessions);
   const running = sessions.filter((session) => session.status === 'running').length;
   const needsReview = sessions.filter((session) => session.status === 'error').length;
   const idle = sessions.filter((session) => session.status === 'idle' || session.status === 'stopped').length;
@@ -1152,65 +1216,70 @@ function HomeSurface({
         <button type="button" onClick={() => navigateTo('/?tab=project')}>View all</button>
       </div>
       <section className="home-grid" aria-label="Recent Project">
-        {projects.map((session, index) => (
-          <button
-            key={session.id}
-            type="button"
-            className="home-proj"
-            data-project-href={buildProjectDetailPath(session.id)}
-            onClick={() => onProjectOpen(session.id)}
-          >
-            <div className="home-proj__head">
-              <div>
-                <div className="home-proj__title">{displayProjectName(session)}</div>
-                <div className="home-proj__path">{displayProjectPath(session)}</div>
-              </div>
-              <ChevronRight size={15} />
-            </div>
-            <div className="home-proj__chats">
-              <div className="home-proj__chat">
-                <span className={`home-proj__chat-dot home-proj__chat-dot--${statusClass(session.status)}`} />
-                <div className="home-proj__chat-body">
-                  <div className="home-proj__chat-title">{session.alias || displayProjectName(session)}</div>
-                  <div className="home-proj__chat-last">{createChatPreview(session, index)}</div>
+        {projects.map((session) => {
+          const latestChatActivityAt = session.recentChats?.[0] ? chatActivityAt(session.recentChats[0]) : null;
+
+          return (
+            <button
+              key={session.id}
+              type="button"
+              className="home-proj"
+              data-project-href={buildProjectDetailPath(session.id)}
+              onClick={() => onProjectOpen(session.id)}
+            >
+              <div className="home-proj__head">
+                <div>
+                  <div className="home-proj__title">{displayProjectName(session)}</div>
+                  <div className="home-proj__path">{displayProjectPath(session)}</div>
                 </div>
+                <ChevronRight size={15} />
               </div>
-              <div className="home-proj__chat">
-                <span className="home-proj__chat-dot home-proj__chat-dot--done" />
-                <div className="home-proj__chat-body">
-                  <div className="home-proj__chat-title">{session.agent} · {session.model || session.metadata?.runtimeModel || 'default model'}</div>
-                  <div className="home-proj__chat-last">최근 채팅과 파일 맥락이 이 프로젝트에 연결되어 있습니다.</div>
-                </div>
+              <ProjectRecentChatRows session={session} />
+              <div className="home-proj__foot">
+                <span>{session.totalChats ?? 0} chats</span>
+                <span>{formatRelativeTime(latestChatActivityAt ?? session.lastActivityAt)}</span>
               </div>
-            </div>
-            <div className="home-proj__foot">
-              <span>{session.totalChats ?? 0} chats</span>
-              <span>{formatRelativeTime(session.lastActivityAt)}</span>
-            </div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </section>
 
       <div className="home-grid-head">
-        <h2>Recent activity</h2>
-        <button type="button">All events</button>
+        <h2>Recent Chat</h2>
+        <button type="button" onClick={() => navigateTo('/?tab=project')}>All chats</button>
       </div>
-      <section className="home-feed" aria-label="Recent activity">
-        {projects.slice(0, 4).map((session, index) => (
-          <button key={session.id} type="button" className="home-feed-row" onClick={() => onProjectOpen(session.id, 'chats')}>
-            <span className={`home-feed-avatar ${index % 2 === 0 ? 'home-feed-avatar--c' : 'home-feed-avatar--u'}`}>
-              {index % 2 === 0 ? session.agent.slice(0, 1).toUpperCase() : (user.email[0] || 'U').toUpperCase()}
+      <section className="home-feed" aria-label="Recent Chat">
+        {recentChats.length > 0 ? recentChats.map((chat: HomeRecentChat) => (
+          <button
+            key={chat.id}
+            type="button"
+            className="home-feed-row"
+            data-chat-href={buildProjectDetailPath(chat.sessionId, 'chat', chat.id)}
+            onClick={() => onProjectOpen(chat.sessionId, 'chat', chat.id)}
+          >
+            <span className={`home-feed-avatar ${homeFeedAvatarClass(chat.agent)}`}>
+              {(chat.agent[0] || 'C').toUpperCase()}
             </span>
             <span className="home-feed-body">
               <span className="home-feed-head">
-                <span className="home-feed-actor">{index % 2 === 0 ? session.agent : user.email.split('@')[0]}</span>
-                <span className="home-feed-proj">{displayProjectName(session)}</span>
-                <span className="home-feed-time">{formatRelativeTime(session.lastActivityAt)}</span>
+                <span className="home-feed-actor">{chatTitle(chat)}</span>
+                <span className="home-feed-proj">{chat.sessionName}</span>
+                <span className="home-feed-time">{formatRelativeTime(chatActivityAt(chat))}</span>
               </span>
-              <span className="home-feed-text">{createChatPreview(session, index)}</span>
+              <span className="home-feed-text">{chatPreviewText(chat)}</span>
             </span>
           </button>
-        ))}
+        )) : (
+          <div className="home-feed-row home-feed-row--empty">
+            <span className="home-feed-avatar home-feed-avatar--u">{(user.email[0] || 'U').toUpperCase()}</span>
+            <span className="home-feed-body">
+              <span className="home-feed-head">
+                <span className="home-feed-actor">No recent chats</span>
+              </span>
+              <span className="home-feed-text">프로젝트에서 채팅을 시작하면 이곳에 최신 내역이 표시됩니다.</span>
+            </span>
+          </div>
+        )}
       </section>
     </div>
   );
@@ -1299,7 +1368,7 @@ function ProjectDetailSurface({
   const fileCount = deriveProjectFileCount(session, index);
   const tokenLabel = deriveProjectTokenLabel(session, index);
   const modelLabel = session.model || session.metadata?.runtimeModel || 'default model';
-  const recentPreview = createChatPreview(session, index);
+  const recentPreview = createChatPreview(session);
   const [isCreatingHeaderChat, setIsCreatingHeaderChat] = useState(false);
   const [headerCreateError, setHeaderCreateError] = useState<string | null>(null);
 
@@ -2913,21 +2982,24 @@ function ProjectSurface({
 
       <div className="proj-list-body">
         <div className="proj-list-grid">
-          {filteredProjects.map((session, index) => (
-            <article
-              key={session.id}
-              className="proj-list-card"
-              role="button"
-              tabIndex={0}
-              aria-label={`${displayProjectName(session)} 프로젝트 열기`}
-              onClick={() => onProjectOpen(session.id)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  onProjectOpen(session.id);
-                }
-              }}
-            >
+          {filteredProjects.map((session, index) => {
+            const latestChatActivityAt = session.recentChats?.[0] ? chatActivityAt(session.recentChats[0]) : null;
+
+            return (
+              <article
+                key={session.id}
+                className="proj-list-card"
+                role="button"
+                tabIndex={0}
+                aria-label={`${displayProjectName(session)} 프로젝트 열기`}
+                onClick={() => onProjectOpen(session.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onProjectOpen(session.id);
+                  }
+                }}
+              >
               <div className="proj-list-card__head">
                 <div className="proj-list-card__info">
                   <div className="proj-list-card__name">{displayProjectName(session)}</div>
@@ -2956,24 +3028,13 @@ function ProjectSurface({
                   <div className="proj-list-stat__val">{deriveProjectTokenLabel(session, index)}</div>
                 </div>
               </div>
-              <div className="home-proj__chats home-proj__chats--project-list">
-                <div className="home-proj__chat">
-                  <span className={`home-proj__chat-dot home-proj__chat-dot--${statusClass(session.status)}`} />
-                  <div className="home-proj__chat-body">
-                    <div className="home-proj__chat-title">{session.alias || displayProjectName(session)}</div>
-                    <div className="home-proj__chat-last">{createChatPreview(session, index)}</div>
-                  </div>
-                </div>
-                <div className="home-proj__chat">
-                  <span className="home-proj__chat-dot home-proj__chat-dot--done" />
-                  <div className="home-proj__chat-body">
-                    <div className="home-proj__chat-title">{session.agent} · {session.model || session.metadata?.runtimeModel || 'default model'}</div>
-                    <div className="home-proj__chat-last">프로젝트 채팅과 최근 파일 맥락이 이 카드에 묶여 있습니다.</div>
-                  </div>
-                </div>
-              </div>
+              <ProjectRecentChatRows
+                className="home-proj__chats--project-list"
+                emptyCopy="프로젝트에서 채팅을 시작하면 최근 내역이 여기에 표시됩니다."
+                session={session}
+              />
               <div className="proj-list-card__foot">
-                <span className="proj-list-card__foot-meta">last {formatRelativeTime(session.lastActivityAt)}</span>
+                <span className="proj-list-card__foot-meta">last {formatRelativeTime(latestChatActivityAt ?? session.lastActivityAt)}</span>
                 <button
                   type="button"
                   className="proj-list-new-btn"
@@ -2987,7 +3048,8 @@ function ProjectSurface({
                 </button>
               </div>
             </article>
-          ))}
+            );
+          })}
 
           <button type="button" className="proj-list-card proj-list-card--new">
             <Plus size={20} />
