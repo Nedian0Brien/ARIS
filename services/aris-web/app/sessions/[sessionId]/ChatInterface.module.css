@@ -3182,6 +3182,11 @@
   align-self: flex-start;
 }
 
+.msgAvatar :global(.provider-logo) {
+  width: 15px;
+  height: 15px;
+}
+
 .msgBody {
   min-width: 0;
   flex: 1;

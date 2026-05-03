@@ -7,6 +7,7 @@ import {
   AlertCircle,
   ArrowDown,
   AtSign,
+  Brain,
   ChevronLeft,
   Check,
   ChevronRight,
@@ -17,9 +18,12 @@ import {
   Database,
   ExternalLink,
   File as FileIcon,
+  FilePenLine,
+  FileSearch,
   FileText,
   Folder,
   FolderOpen,
+  FolderTree,
   HardDrive,
   Home,
   Maximize2,
@@ -40,12 +44,15 @@ import {
   Square,
   Sun,
   Terminal,
+  TerminalSquare,
   Wifi,
   X,
 } from 'lucide-react';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { BackendNotice } from '@/components/ui/BackendNotice';
+import { ProviderLogo, type ProviderLogoProvider } from '@/components/ui/ProviderLogo';
 import { selectRecentChats, selectRecentProjects, type HomeRecentChat } from './homeProjects';
+import { readUiEventRunStatus } from '@/lib/happy/chatRuntime';
 import { withAppBasePath } from '@/lib/routing/appPath';
 import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
 import type { AuthenticatedUser } from '@/lib/auth/types';
@@ -55,7 +62,7 @@ type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';
 type ComposerMode = 'agent' | 'plan' | 'terminal';
 type WorkspaceTab = 'run' | 'files' | 'terminal' | 'context';
 type PreviewState = 'closed' | 'open' | 'dock';
-type ModelProvider = 'claude' | 'codex' | 'gemini';
+type ModelProvider = ProviderLogoProvider;
 type ReasoningEffort = 'Low' | 'Medium' | 'High' | 'XHigh' | 'Max';
 type ExpandedTurnState = string | null | '__none__';
 
@@ -168,12 +175,6 @@ const PROVIDER_LABELS: Record<ModelProvider, string> = {
   claude: 'Claude',
   codex: 'Codex',
   gemini: 'Gemini',
-};
-
-const PROVIDER_ICON_PATHS: Record<ModelProvider, string> = {
-  claude: '/icons/claude.svg',
-  codex: '/icons/codex.svg',
-  gemini: '/icons/gemini.svg',
 };
 
 const PROVIDER_EFFORTS: Record<ModelProvider, ReasoningEffort[]> = {
@@ -1693,23 +1694,6 @@ function agentAvatarClass(agent: SessionSummary['agent'] | SessionChat['agent'])
   return 'msg__avatar--sys';
 }
 
-function agentInitial(agent: SessionSummary['agent'] | SessionChat['agent']): string {
-  if (agent === 'claude') return 'C';
-  if (agent === 'gemini') return 'G';
-  if (agent === 'codex') return 'GPT';
-  return 'A';
-}
-
-function ProviderLogo({ provider }: { provider: ModelProvider }) {
-  return (
-    <span
-      className={`provider-logo provider-logo--${provider}`}
-      aria-hidden="true"
-      style={{ '--provider-logo-url': `url(${PROVIDER_ICON_PATHS[provider]})` } as CSSProperties}
-    />
-  );
-}
-
 function isProjectActionEvent(event: UiEvent): boolean {
   if (readEventRole(event) === 'user') return false;
   if (event.action?.command || event.action?.path || event.parsed?.commands?.length) return true;
@@ -1724,6 +1708,14 @@ function isProjectActionEvent(event: UiEvent): boolean {
     || event.kind === 'think';
 }
 
+function isProjectRunStatusEvent(event: UiEvent): boolean {
+  if (readEventRole(event) === 'user') return false;
+  const runStatus = readUiEventRunStatus(event);
+  if (!runStatus) return false;
+  const streamEvent = typeof event.meta?.streamEvent === 'string' ? event.meta.streamEvent.trim().toLowerCase() : '';
+  return streamEvent === 'run_status' || /^run status:/i.test(event.body || event.title);
+}
+
 function eventCommand(event: UiEvent): string {
   return event.action?.command
     || event.parsed?.commands?.[0]
@@ -1733,14 +1725,59 @@ function eventCommand(event: UiEvent): string {
     || event.title;
 }
 
+function commandTokenClass(token: string, tokenIndex: number): string {
+  if (tokenIndex === 0) return 'pc-action-token--bin';
+  if (/^[A-Z_][A-Z0-9_]*=/.test(token)) return 'pc-action-token--env';
+  if (/^-{1,2}[\w-]+/.test(token)) return 'pc-action-token--flag';
+  if (/^https?:\/\//.test(token)) return 'pc-action-token--url';
+  if (/^(?:\/|~\/|\.{1,2}\/)/.test(token)) return 'pc-action-token--path';
+  if (/^(?:&&|\|\||[|;])$/.test(token)) return 'pc-action-token--op';
+  if (/^\d+(?:\.\d+)?(?::\d+)?$/.test(token) || /:\d+/.test(token)) return 'pc-action-token--number';
+  return 'pc-action-token--arg';
+}
+
+function renderCommandTokens(command: string) {
+  let tokenIndex = 0;
+  return (command.match(/\s+|[^\s]+/g) ?? []).map((token, index) => {
+    if (/^\s+$/.test(token)) {
+      return <span key={`space-${index}`}>{token}</span>;
+    }
+    const className = commandTokenClass(token, tokenIndex);
+    tokenIndex += 1;
+    return <span key={`${className}-${index}`} className={`pc-action-token ${className}`}>{token}</span>;
+  });
+}
+
+function GitActionMark({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" role="img" aria-label="Git">
+      <path
+        d="M22.1 10.9 13.1 1.9a1.55 1.55 0 0 0-2.2 0L8.98 3.82l2.38 2.38a1.92 1.92 0 0 1 2.43 2.45l2.28 2.28a1.92 1.92 0 1 1-1.15 1.15l-2.13-2.13v5.6a1.92 1.92 0 1 1-1.58-.02V9.82a1.92 1.92 0 0 1-.9-2.55L7.85 4.81 1.9 10.76a1.55 1.55 0 0 0 0 2.2l9.14 9.14a1.55 1.55 0 0 0 2.2 0l8.86-8.86a1.65 1.65 0 0 0 0-2.34Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function DockerActionMark({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" role="img" aria-label="Docker">
+      <path
+        d="M4.9 11.8h2.2V9.7H4.9v2.1Zm2.7 0h2.2V9.7H7.6v2.1Zm2.7 0h2.2V9.7h-2.2v2.1Zm2.7 0h2.2V9.7H13v2.1Zm-5.4-2.6h2.2V7.1H7.6v2.1Zm2.7 0h2.2V7.1h-2.2v2.1Zm2.7 0h2.2V7.1H13v2.1Zm0-2.6h2.2V4.5H13v2.1Zm9.1 5.1c-.5-.3-1.5-.4-2.3-.2-.1-.8-.6-1.5-1.3-2l-.5-.3-.3.5c-.4.7-.5 1.7-.1 2.4.2.4.5.8.9 1-1.2.7-3.2.7-3.5.7H2.2l-.1.5c-.2 1.4.1 2.6.8 3.5.8 1.1 2.1 1.7 3.8 1.7 3.7 0 6.5-1.7 8-4.8 1 .1 3.1.1 4.5-1.3.6 0 1.9-.1 2.8-1l.4-.4-.3-.3Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 function projectActionMeta(kind: UiEvent['kind']) {
-  if (kind === 'file_read') return { Icon: FileText, label: 'Read', tone: 'read' };
-  if (kind === 'file_write') return { Icon: FileIcon, label: 'Write', tone: 'write' };
-  if (kind === 'file_list') return { Icon: FolderOpen, label: 'List', tone: 'list' };
-  if (kind === 'think') return { Icon: Clock3, label: 'Thinking', tone: 'think' };
-  if (kind === 'git_execution') return { Icon: Check, label: 'Git', tone: 'run' };
-  if (kind === 'docker_execution') return { Icon: HardDrive, label: 'Docker', tone: 'run' };
-  return { Icon: Terminal, label: 'Run', tone: 'run' };
+  if (kind === 'file_read') return { Icon: FileSearch, label: 'Read', tone: 'read' };
+  if (kind === 'file_write') return { Icon: FilePenLine, label: 'Write', tone: 'write' };
+  if (kind === 'file_list') return { Icon: FolderTree, label: 'List', tone: 'list' };
+  if (kind === 'think') return { Icon: Brain, label: 'Thinking', tone: 'think' };
+  if (kind === 'git_execution') return { Icon: GitActionMark, label: 'Git', tone: 'git' };
+  if (kind === 'docker_execution') return { Icon: DockerActionMark, label: 'Docker', tone: 'docker' };
+  return { Icon: TerminalSquare, label: 'Run', tone: 'run' };
 }
 
 function projectActionPreview(event: UiEvent): string {
@@ -1748,6 +1785,33 @@ function projectActionPreview(event: UiEvent): string {
   const preview = event.result?.preview || event.body || event.title || '';
   if (!preview || preview === command) return '';
   return preview.trim();
+}
+
+function projectRunStatusMeta(runStatus: string) {
+  const normalized = runStatus.trim().toLowerCase();
+  if (normalized === 'run_started' || normalized === 'turn_started' || normalized === 'model_normalized') {
+    return { Icon: Terminal, label: '실행 시작', tone: 'run' };
+  }
+  if (normalized === 'completed' || normalized === 'run_completed') {
+    return { Icon: Check, label: '실행 종료', tone: 'done' };
+  }
+  if (normalized === 'waiting_for_approval') {
+    return { Icon: Clock3, label: '승인 대기', tone: 'wait' };
+  }
+  return { Icon: AlertCircle, label: normalized ? normalized.replace(/_/g, ' ') : '실행 상태', tone: 'alert' };
+}
+
+function ProjectRunStatusChip({ event }: { event: UiEvent }) {
+  const runStatus = readUiEventRunStatus(event);
+  const { Icon, label, tone } = projectRunStatusMeta(runStatus);
+
+  return (
+    <div className="pc-run-status" data-tone={tone} title={`${label} · ${formatRelativeTime(event.timestamp)}`}>
+      <span className="pc-run-status__icon" aria-hidden="true"><Icon size={12} /></span>
+      <span className="pc-run-status__label">{label}</span>
+      <time className="pc-run-status__time" dateTime={event.timestamp}>{formatRelativeTime(event.timestamp)}</time>
+    </div>
+  );
 }
 
 function ProjectActionCard({
@@ -1763,32 +1827,97 @@ function ProjectActionCard({
   const primary = eventCommand(event);
   const preview = projectActionPreview(event);
   const filePath = event.parsed?.files?.[0] || event.action?.path || '';
+  const stackRef = useRef<HTMLDivElement | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const resultRef = useRef<HTMLDivElement | null>(null);
+  const [connectorMetrics, setConnectorMetrics] = useState<{
+    cardCenter: number;
+    resultCenter: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const stack = stackRef.current;
+    const card = cardRef.current;
+    const result = resultRef.current;
+    if (!preview || !stack || !card || !result) {
+      setConnectorMetrics(null);
+      return undefined;
+    }
+
+    let frame = 0;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const stackRect = stack.getBoundingClientRect();
+        const cardRect = card.getBoundingClientRect();
+        const resultRect = result.getBoundingClientRect();
+        const nextMetrics = {
+          cardCenter: Math.round(cardRect.top - stackRect.top + cardRect.height / 2),
+          resultCenter: Math.round(resultRect.top - stackRect.top + resultRect.height / 2),
+        };
+        setConnectorMetrics((current) => {
+          if (
+            current &&
+            current.cardCenter === nextMetrics.cardCenter &&
+            current.resultCenter === nextMetrics.resultCenter
+          ) {
+            return current;
+          }
+          return nextMetrics;
+        });
+      });
+    };
+
+    measure();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    observer?.observe(card);
+    observer?.observe(result);
+    window.addEventListener('resize', measure);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [preview]);
+
+  const connectorStyle = connectorMetrics
+    ? ({
+        '--pc-action-card-center': `${connectorMetrics.cardCenter}px`,
+        '--pc-action-result-center': `${connectorMetrics.resultCenter}px`,
+      } as CSSProperties)
+    : undefined;
 
   return (
-    <div className="pc-action-card" data-project-action-card data-kind={tone}>
-      <div className="pc-action-card__main">
-        <div className="pc-action-card__top">
-          <span className="pc-action-card__kind"><Icon size={12} />{label}</span>
-          <span className="pc-action-card__time">{formatRelativeTime(event.timestamp)}</span>
+    <div ref={stackRef} className="pc-action-stack" data-kind={tone} style={connectorStyle}>
+      <div ref={cardRef} className="pc-action-card" data-project-action-card data-kind={tone}>
+        <span className="pc-action-card__kind" aria-hidden="true"><Icon size={12} /></span>
+        <div className="pc-action-card__main">
+          <span className="pc-action-card__primary">{label}</span>
+          <span className="pc-action-card__cmd" aria-label={primary}>{renderCommandTokens(primary)}</span>
+          {filePath && filePath !== primary && (
+            <div className="pc-action-card__path">{filePath}</div>
+          )}
         </div>
-        <div className="pc-action-card__primary">{primary}</div>
-        {filePath && filePath !== primary && (
-          <div className="pc-action-card__path">{filePath}</div>
-        )}
-        {preview && (
-          <pre className="pc-action-card__preview">{preview}</pre>
-        )}
-      </div>
-      <div className="pc-action-card__actions">
-        {onPreview && (
-          <button type="button" className="pc-action-card__preview-btn" onClick={onPreview} title="Preview referenced file">
-            <Maximize2 size={13} />
+        <span className="pc-action-card__time">{formatRelativeTime(event.timestamp)}</span>
+        <div className="pc-action-card__actions">
+          {onPreview && (
+            <button type="button" className="pc-action-card__preview-btn" onClick={onPreview} title="Preview referenced file">
+              <Maximize2 size={13} />
+            </button>
+          )}
+          <button type="button" className="pc-action-card__copy" onClick={onCopy} title="Copy action command">
+            <Copy size={13} />
           </button>
-        )}
-        <button type="button" className="pc-action-card__copy" onClick={onCopy} title="Copy action command">
-          <Copy size={13} />
-        </button>
+        </div>
       </div>
+      {preview && (
+        <span className="pc-action-connector" aria-hidden="true" />
+      )}
+      {preview && (
+        <div ref={resultRef} className="pc-action-result">
+          <pre className="pc-action-result__body">{preview}</pre>
+        </div>
+      )}
     </div>
   );
 }
@@ -2404,6 +2533,14 @@ function ProjectChatSurface({
                 const isUser = role === 'user';
                 const snippet = item.parsed?.snippets?.[0];
                 const actionEvent = !isUser && isProjectActionEvent(item);
+                const runStatusEvent = !isUser && isProjectRunStatusEvent(item);
+                if (runStatusEvent) {
+                  return (
+                    <div key={item.id} className={`msg msg--run-status${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
+                      <ProjectRunStatusChip event={event} />
+                    </div>
+                  );
+                }
                 if (actionEvent) {
                   return (
                     <div key={item.id} className={`msg msg--action${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
@@ -2417,7 +2554,9 @@ function ProjectChatSurface({
                 }
                 return (
                   <div key={item.id} className={`msg${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
-                    <span className={`msg__avatar ${isUser ? 'msg__avatar--user' : agentAvatarClass(activeAgent)}`}>{isUser ? 'U' : agentInitial(activeAgent)}</span>
+                    <span className={`msg__avatar ${isUser ? 'msg__avatar--user' : agentAvatarClass(activeAgent)}`}>
+                      {isUser ? 'U' : <ProviderLogo provider={selectedProvider} />}
+                    </span>
                     <div className="msg__body">
                       <div className="msg__header">
                         <span className="msg__name">{isUser ? 'You' : agentLabel(activeAgent, activeModelLabel)}</span>
@@ -2728,7 +2867,9 @@ function ProjectChatSurface({
                         </button>
                         <div className="chturn__expanded">
                           <div className="chturn__agent-head">
-                            <span className={`chturn__agent-avatar ${agentAvatarClass(activeAgent)}`}>{agentInitial(activeAgent).slice(0, 1)}</span>
+                            <span className={`chturn__agent-avatar ${agentAvatarClass(activeAgent)}`}>
+                              <ProviderLogo provider={selectedProvider} />
+                            </span>
                             <span className="chturn__agent-label"><strong>{agentLabel(activeAgent, activeModelLabel)}</strong></span>
                             <span className="chturn__agent-final">{item.state === 'running' ? 'In progress' : 'Final'}</span>
                           </div>

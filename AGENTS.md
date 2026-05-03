@@ -14,6 +14,7 @@
 - production 배포는 사용자가 명시적으로 배포를 지시한 시점에만 수행한다. main 머지, PR 병합, dev proxy 확인만으로 production 배포를 진행하지 않는다.
 - 소규모 UI/카피/CSS 수정은 fast path로 처리한다. 동일 화면의 연속 diff comment는 가능한 한 하나의 worktree, 하나의 PR, 하나의 dev proxy 확인으로 묶고, 검증은 `git diff --check`, 관련 targeted test, `tsc --noEmit` 중심으로 제한한다.
 - fast path에서도 사용자가 직접 볼 수 있도록 변경 worktree 기준 dev hot reload 서버를 띄운다. 기본 dev port는 `2233`으로 하고, 포트 충돌 시 `WEB_DEV_AUTO_PORT=1`로 다음 가용 포트를 자동 탐색한다. 최종 보고에는 정확한 dev proxy URL(예: `https://lawdigest.cloud/proxy/2233/`), commit, worktree 경로, 확인 범위를 포함한다.
+- fast path 최종 보고 템플릿은 아래 항목을 유지한다: `변경 요약`, `검증`, `dev proxy URL`, `commit`, `worktree`, `배포 여부`. production 배포를 하지 않은 경우 `배포 여부: production 배포 안 함`으로 명시한다.
 - 머지 과정에서 충돌이 발생한 경우 어떤 내용이 서로 충돌하는지 파악한 후 사용자에게 설명하고, 처리 방안 3가지를 제안한다.
 - 작업이 마무리되고 나면 후속 작업 5가지를 제안한다.
 - 사용자의 지침 중 확실하지 않은 부분이 있으면 작업을 진행하기 전에 사용자에게 분명히 물어본다. 이때 사용자의 의도일 가능성이 있는 최대 3가지 경우를 제시하며 사용자에게 의도를 명확히 해 달라고 요청한다.

@@ -146,14 +146,36 @@ describe('project list surface', () => {
 
   it('renders project chat action events through a dedicated action-card branch', () => {
     expect(homeClient).toContain('function isProjectActionEvent(event: UiEvent): boolean');
+    expect(homeClient).toContain('function isProjectRunStatusEvent(event: UiEvent): boolean');
+    expect(homeClient).toContain('function ProjectRunStatusChip({ event }: { event: UiEvent })');
     expect(homeClient).toContain('function ProjectActionCard({');
+    expect(homeClient).toContain('function GitActionMark({ size = 12 }: { size?: number })');
+    expect(homeClient).toContain('function DockerActionMark({ size = 12 }: { size?: number })');
+    expect(homeClient).toContain("if (kind === 'file_read') return { Icon: FileSearch, label: 'Read', tone: 'read' };");
+    expect(homeClient).toContain("if (kind === 'file_write') return { Icon: FilePenLine, label: 'Write', tone: 'write' };");
+    expect(homeClient).toContain("if (kind === 'file_list') return { Icon: FolderTree, label: 'List', tone: 'list' };");
+    expect(homeClient).toContain("if (kind === 'think') return { Icon: Brain, label: 'Thinking', tone: 'think' };");
+    expect(homeClient).toContain("if (kind === 'git_execution') return { Icon: GitActionMark, label: 'Git', tone: 'git' };");
+    expect(homeClient).toContain("if (kind === 'docker_execution') return { Icon: DockerActionMark, label: 'Docker', tone: 'docker' };");
+    expect(homeClient).toContain("return { Icon: TerminalSquare, label: 'Run', tone: 'run' };");
+    expect(homeClient).toContain('function renderCommandTokens(command: string)');
+    expect(homeClient).toContain('function commandTokenClass(token: string, tokenIndex: number): string');
     expect(homeClient).toContain('const actionEvent = !isUser && isProjectActionEvent(item);');
+    expect(homeClient).toContain('const runStatusEvent = !isUser && isProjectRunStatusEvent(item);');
+    expect(homeClient).toContain('if (runStatusEvent) {');
+    expect(homeClient).toContain('className={`msg msg--run-status');
+    expect(homeClient).toContain('<ProjectRunStatusChip event={event} />');
     expect(homeClient).toContain('if (actionEvent) {');
     expect(homeClient).toContain('data-project-action-card');
+    expect(homeClient).toContain('className="pc-action-stack"');
     expect(homeClient).toContain('className="pc-action-card"');
     expect(homeClient).toContain('className="pc-action-card__kind"');
     expect(homeClient).toContain('className="pc-action-card__primary"');
-    expect(homeClient).toContain('className="pc-action-card__preview"');
+    expect(homeClient).toContain('className="pc-action-card__cmd"');
+    expect(homeClient).toContain('aria-label={primary}>{renderCommandTokens(primary)}</span>');
+    expect(homeClient).toContain('className="pc-action-connector" aria-hidden="true" />');
+    expect(homeClient).toContain('className="pc-action-result"');
+    expect(homeClient).toContain('className="pc-action-result__body"');
     expect(homeClient).toContain("handleCopy(eventCommand(event), 'Action command')");
     expect(homeClient).not.toContain('const toolLike = !isUser && isToolLikeEvent(item);');
   });
@@ -312,9 +334,13 @@ describe('project list surface', () => {
       '.pc-proto .tl',
       '.pc-proto .msg',
       '.pc-proto .msg--action',
+      '.pc-proto .msg--run-status',
+      '.pc-proto .pc-run-status',
+      '.pc-proto .pc-action-stack',
       '.pc-proto .pc-action-card',
       '.pc-proto .pc-action-card__kind',
       '.pc-proto .pc-action-card__primary',
+      '.pc-proto .pc-action-result',
       '.pc-proto .tool',
       '.pc-proto .code',
       '.pc-proto .artifact',
@@ -340,8 +366,49 @@ describe('project list surface', () => {
     expect(uiCss).toContain('grid-template-columns: minmax(0, 1fr) 420px;');
     expect(cssBlock('.pc-proto .tl')).toContain('padding: var(--sp-12) var(--sp-10) var(--sp-24);');
     expect(cssBlock('.pc-proto .cmp')).toContain('border-radius: 14px;');
-    expect(cssBlock('.pc-proto .pc-action-card')).toContain('border-radius: 8px;');
-    expect(cssBlock('.pc-proto .pc-action-card')).toContain('grid-template-columns: minmax(0, 1fr) auto;');
+    expect(cssBlock('.pc-proto .msg--action')).toContain('width: 100%;');
+    expect(cssBlock('.pc-proto .msg--action')).toContain('box-sizing: border-box;');
+    expect(cssBlock('.pc-proto .msg--action')).toContain('padding-left: calc(28px + var(--sp-4));');
+    expect(cssBlock('.pc-proto .msg--run-status')).toContain('padding-left: calc(28px + var(--sp-4));');
+    expect(cssBlock('.pc-proto .pc-run-status')).toContain('display: inline-flex;');
+    expect(cssBlock('.pc-proto .pc-run-status[data-tone="done"]')).toContain('--pc-run-status-accent: var(--success-fg);');
+    expect(cssBlock('.pc-proto .pc-action-stack')).toContain('display: grid;');
+    expect(cssBlock('.pc-proto .pc-action-stack')).toContain('position: relative;');
+    expect(cssBlock('.pc-proto .pc-action-stack')).toContain('width: 100%;');
+    expect(cssBlock('.pc-proto .pc-action-stack')).toContain('max-width: 100%;');
+    expect(cssBlock('.pc-proto .pc-action-stack')).toContain('--pc-action-connector-opacity: 0.42;');
+    expect(cssBlock("html[data-theme='dark'] .pc-proto .pc-action-stack")).toContain('--pc-action-connector-opacity: 0.34;');
+    expect(cssBlock('.pc-proto .pc-action-stack[data-kind="git"]')).toContain('--pc-action-accent: #f05033;');
+    expect(cssBlock('.pc-proto .pc-action-stack[data-kind="docker"]')).toContain('--pc-action-accent: #2496ed;');
+    expect(cssBlock('.pc-proto .pc-action-card')).toContain('display: inline-flex;');
+    expect(cssBlock('.pc-proto .pc-action-card')).toContain('width: 100%;');
+    expect(cssBlock('.pc-proto .pc-action-card')).toContain('max-width: 100%;');
+    expect(cssBlock('.pc-proto .pc-action-card')).toContain('overflow: hidden;');
+    expect(cssBlock('.pc-proto .pc-action-card')).toContain('padding: 7px 10px 7px 6px;');
+    expect(cssBlock('.pc-proto .pc-action-card__kind')).toContain('width: 22px;');
+    expect(cssBlock('.pc-proto .pc-action-card__kind')).toContain('background: var(--pc-action-accent);');
+    expect(cssBlock('.pc-proto .pc-action-card__cmd')).toContain('display: block;');
+    expect(cssBlock('.pc-proto .pc-action-card__cmd')).toContain('white-space: pre;');
+    expect(cssBlock('.pc-proto .pc-action-token--bin')).toContain('font-weight: 700;');
+    expect(cssBlock('.pc-proto .pc-action-token--flag')).toContain('color: var(--info-fg);');
+    expect(cssBlock('.pc-proto .pc-action-result')).toContain('display: block;');
+    expect(cssBlock('.pc-proto .pc-action-result')).toContain('width: 100%;');
+    expect(cssBlock('.pc-proto .pc-action-connector')).toContain('position: absolute;');
+    expect(cssBlock('.pc-proto .pc-action-connector')).toContain('left: calc(-1 * (var(--sp-4) + 18px));');
+    expect(cssBlock('.pc-proto .pc-action-connector')).toContain('top: var(--pc-action-card-center, 22px);');
+    expect(cssBlock('.pc-proto .pc-action-connector')).toContain('width: 18px;');
+    expect(cssBlock('.pc-proto .pc-action-connector')).toContain('height: max(38px, calc(var(--pc-action-result-center, 82px) - var(--pc-action-card-center, 22px)));');
+    expect(cssBlock('.pc-proto .pc-action-connector')).toContain('opacity: var(--pc-action-connector-opacity);');
+    expect(cssBlock('.pc-proto .pc-action-connector::before')).toContain('border-top: 2px solid currentColor;');
+    expect(cssBlock('.pc-proto .pc-action-connector::before')).toContain('height: 100%;');
+    expect(cssBlock('.pc-proto .pc-action-connector::before')).toContain('border-left: 2px solid currentColor;');
+    expect(cssBlock('.pc-proto .pc-action-connector::before')).toContain('border-bottom: 2px solid currentColor;');
+    expect(cssBlock('.pc-proto .pc-action-connector::before')).toContain('border-top-left-radius: 7px;');
+    expect(cssBlock('.pc-proto .pc-action-connector::before')).toContain('border-bottom-left-radius: 7px;');
+    expect(cssBlock('.pc-proto .pc-action-result__body')).toContain('width: 100%;');
+    expect(cssBlock('.pc-proto .pc-action-result__body')).toContain('padding: var(--sp-4);');
+    expect(cssBlock('.pc-proto .pc-action-result__body')).toContain('white-space: pre-wrap;');
+    expect(uiCss).toContain('padding-left: calc(28px + var(--sp-3));');
     expect(cssBlock('.pc-proto .ws__pane')).toContain('display: none;');
     expect(cssBlock('.pc-proto .ws__pane--active')).toContain('display: flex;');
     expect(uiCss).toContain('.pc-proto[data-workspace="closed"] .shell');
