@@ -1673,12 +1673,24 @@ function ProjectDetailSurface({
   );
 }
 
-function readEventRole(event: UiEvent): 'user' | 'agent' {
-  return event.meta?.role === 'user' ? 'user' : 'agent';
+function readEventRole(event: UiEvent): 'user' | 'agent' | 'terminal' {
+  if (event.meta?.role === 'user') return 'user';
+  if (event.meta?.role === 'terminal') return 'terminal';
+  return 'agent';
 }
 
 function getEventText(event: UiEvent): string {
   return event.result?.preview || event.body || event.title;
+}
+
+function terminalCommand(event: UiEvent): string {
+  const metaCommand = typeof event.meta?.command === 'string' ? event.meta.command.trim() : '';
+  return event.action?.command || metaCommand || eventCommand(event);
+}
+
+function terminalOutput(event: UiEvent): string {
+  const bodyOutput = event.body.replace(/\r\n/g, '\n').split('\n').slice(1).join('\n').trim();
+  return event.result?.preview || bodyOutput || getEventText(event) || '(no output)';
 }
 
 function agentLabel(agent: SessionSummary['agent'], model?: string | null): string {
@@ -2217,33 +2229,47 @@ function ProjectChatSurface({
         throw new Error('활성 채팅을 찾지 못했습니다.');
       }
       const submittedAt = new Date().toISOString();
-      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events`, {
+      const isTerminalMode = composerMode === 'terminal';
+      const endpoint = isTerminalMode ? `/api/runtime/sessions/${encodeURIComponent(session.id)}/terminal` : `/api/runtime/sessions/${encodeURIComponent(session.id)}/events`;
+      const payload = isTerminalMode ? {
+        chatId: chat.id,
+        command: text,
+        agent: selectedProvider,
+        model: activeModelLabel,
+        modelReasoningEffort: serializeReasoningEffort(selectedEffort),
+      } : {
+        type: 'message',
+        title: 'User Instruction',
+        text,
+        meta: {
+          role: 'user',
+          chatId: chat.id,
+          agent: selectedProvider,
+          model: activeModelLabel,
+          mode: composerMode,
+          modelReasoningEffort: serializeReasoningEffort(selectedEffort),
+          workspaceTab,
+        },
+      };
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'message',
-          title: 'User Instruction',
-          text,
-          meta: {
-            role: 'user',
-            chatId: chat.id,
-            agent: selectedProvider,
-            model: activeModelLabel,
-            mode: composerMode,
-            modelReasoningEffort: serializeReasoningEffort(selectedEffort),
-            workspaceTab,
-          },
-        }),
+        body: JSON.stringify(payload),
       });
-      const body = (await response.json().catch(() => ({}))) as { event?: UiEvent; error?: string };
-      if (!response.ok || !body.event) {
+      const body = (await response.json().catch(() => ({}))) as { event?: UiEvent; events?: UiEvent[]; error?: string };
+      const submittedEvents = isTerminalMode
+        ? body.events ?? []
+        : body.event ? [body.event] : [];
+      if (!response.ok || submittedEvents.length === 0) {
         throw new Error(body.error ?? '메시지 전송에 실패했습니다.');
       }
+      const latestEvent = submittedEvents[submittedEvents.length - 1] as UiEvent;
+      const latestEventAt = latestEvent.timestamp || submittedAt;
       setPrompt('');
-      setEvents((previous) => [...previous, body.event as UiEvent]);
+      setEvents((previous) => [...previous, ...submittedEvents]);
       setChats((previous) => previous.map((item) => (
         item.id === chat.id
-          ? { ...item, latestPreview: text, latestEventAt: submittedAt, latestEventIsUser: true, lastActivityAt: submittedAt }
+          ? { ...item, latestPreview: isTerminalMode ? `$ ${text}` : text, latestEventAt, latestEventIsUser: !isTerminalMode, lastActivityAt: latestEventAt }
           : item
       )));
       void fetch(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats/${encodeURIComponent(chat.id)}`, {
@@ -2251,10 +2277,10 @@ function ProjectChatSurface({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           touchActivity: true,
-          latestPreview: text,
-          latestEventId: body.event.id,
-          latestEventAt: submittedAt,
-          latestEventIsUser: true,
+          latestPreview: isTerminalMode ? `$ ${text}` : text,
+          latestEventId: latestEvent.id,
+          latestEventAt,
+          latestEventIsUser: !isTerminalMode,
         }),
       });
     } catch (submitError) {
@@ -2402,8 +2428,9 @@ function ProjectChatSurface({
                 const event = item;
                 const role = readEventRole(item);
                 const isUser = role === 'user';
+                const isTerminal = role === 'terminal';
                 const snippet = item.parsed?.snippets?.[0];
-                const actionEvent = !isUser && isProjectActionEvent(item);
+                const actionEvent = !isUser && !isTerminal && isProjectActionEvent(item);
                 if (actionEvent) {
                   return (
                     <div key={item.id} className={`msg msg--action${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
@@ -2417,10 +2444,10 @@ function ProjectChatSurface({
                 }
                 return (
                   <div key={item.id} className={`msg${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
-                    <span className={`msg__avatar ${isUser ? 'msg__avatar--user' : agentAvatarClass(activeAgent)}`}>{isUser ? 'U' : agentInitial(activeAgent)}</span>
+                    <span className={`msg__avatar ${isUser ? 'msg__avatar--user' : isTerminal ? 'msg__avatar--terminal' : agentAvatarClass(activeAgent)}`}>{isUser ? 'U' : isTerminal ? <Terminal size={14} /> : agentInitial(activeAgent)}</span>
                     <div className="msg__body">
                       <div className="msg__header">
-                        <span className="msg__name">{isUser ? 'You' : agentLabel(activeAgent, activeModelLabel)}</span>
+                        <span className="msg__name">{isUser ? 'You' : isTerminal ? 'Terminal' : agentLabel(activeAgent, activeModelLabel)}</span>
                         <span className="msg__time">{formatRelativeTime(item.timestamp)}</span>
                       </div>
                       {isUser ? (
@@ -2438,6 +2465,11 @@ function ProjectChatSurface({
                             </div>
                           ) : null}
                         </>
+                      ) : isTerminal ? (
+                        <div className="msg__terminal-output" data-terminal-response>
+                          <div className="msg__terminal-command">$ {terminalCommand(item)}</div>
+                          <pre>{terminalOutput(item)}</pre>
+                        </div>
                       ) : (
                         <>
                           <div className="msg__text"><p>{getEventText(item)}</p></div>

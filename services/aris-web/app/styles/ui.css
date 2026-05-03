@@ -2868,6 +2868,15 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
 .pc-proto .msg__avatar--codex { background: var(--agent-codex); }
 .pc-proto .msg__avatar--gemini { background: var(--agent-gemini); }
 .pc-proto .msg__avatar--sys { background: var(--n-400); }
+.pc-proto .msg__avatar--terminal {
+  background: var(--n-900);
+  color: #fff;
+}
+
+.pc-proto .msg__avatar--terminal svg {
+  width: 14px;
+  height: 14px;
+}
 
 .pc-proto .msg__body {
   flex: 1;
@@ -2913,6 +2922,31 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
 }
 
 .pc-proto .msg__text p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pc-proto .msg__terminal-output {
+  width: min(680px, 100%);
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.pc-proto .msg__terminal-command {
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pc-proto .msg__terminal-output pre {
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

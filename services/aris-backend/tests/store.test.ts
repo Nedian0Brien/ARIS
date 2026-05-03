@@ -30,6 +30,141 @@ describe('RuntimeStore.isSessionRunning', () => {
   });
 });
 
+describe('RuntimeStore.appendChatEvent', () => {
+  it('does not wake an agent turn for terminal-authored command events', async () => {
+    const delegate = {
+      appendChatEvent: vi.fn().mockResolvedValue({
+        id: 'event-1',
+        sessionId: 'session-1',
+        type: 'tool',
+        title: 'Terminal completed',
+        text: '$ pwd\n/home/ubuntu/project/ARIS',
+        meta: {
+          role: 'terminal',
+          chatId: 'chat-1',
+          command: 'pwd',
+        },
+      }),
+    };
+    const runtimeExecutor = {
+      triggerPersistedUserMessage: vi.fn().mockResolvedValue(undefined),
+    };
+    const store = buildRuntimeStore({ delegate, runtimeExecutor });
+
+    await store.appendChatEvent('chat-1', {
+      sessionId: 'session-1',
+      type: 'tool',
+      title: 'Terminal completed',
+      text: '$ pwd\n/home/ubuntu/project/ARIS',
+      meta: {
+        role: 'terminal',
+        chatId: 'chat-1',
+        command: 'pwd',
+      },
+    });
+
+    expect(runtimeExecutor.triggerPersistedUserMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not wake an agent turn for persisted user chat messages', async () => {
+    const delegate = {
+      appendChatEvent: vi.fn().mockResolvedValue({
+        id: 'event-1',
+        sessionId: 'session-1',
+        type: 'message',
+        title: 'User Instruction',
+        text: 'continue',
+        meta: {
+          role: 'user',
+          chatId: 'chat-1',
+          agent: 'codex',
+        },
+      }),
+    };
+    const runtimeExecutor = {
+      triggerPersistedUserMessage: vi.fn().mockResolvedValue(undefined),
+    };
+    const store = buildRuntimeStore({ delegate, runtimeExecutor });
+
+    await store.appendChatEvent('chat-1', {
+      sessionId: 'session-1',
+      type: 'message',
+      title: 'User Instruction',
+      text: 'continue',
+      meta: {
+        role: 'user',
+        chatId: 'chat-1',
+        agent: 'codex',
+      },
+    });
+
+    expect(runtimeExecutor.triggerPersistedUserMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('RuntimeStore.submitChatUserPrompt', () => {
+  it('persists the user prompt and explicitly wakes the agent turn', async () => {
+    const delegate = {
+      appendChatEvent: vi.fn().mockResolvedValue({
+        id: 'event-1',
+        sessionId: 'session-1',
+        type: 'message',
+        title: 'User Instruction',
+        text: 'continue',
+        meta: {
+          role: 'user',
+          chatId: 'chat-1',
+          agent: 'codex',
+        },
+      }),
+    };
+    const runtimeExecutor = {
+      triggerPersistedUserMessage: vi.fn().mockResolvedValue(undefined),
+    };
+    const store = buildRuntimeStore({ delegate, runtimeExecutor });
+
+    await store.submitChatUserPrompt('chat-1', {
+      sessionId: 'session-1',
+      type: 'message',
+      title: 'User Instruction',
+      text: 'continue',
+      meta: {
+        actor: 'user',
+        role: 'user',
+        kind: 'user_message',
+        chatId: 'chat-1',
+        agent: 'codex',
+      },
+    });
+
+    expect(delegate.appendChatEvent).toHaveBeenCalledWith('chat-1', {
+      sessionId: 'session-1',
+      type: 'message',
+      title: 'User Instruction',
+      text: 'continue',
+      meta: {
+        actor: 'user',
+        kind: 'user_message',
+        role: 'user',
+        chatId: 'chat-1',
+        agent: 'codex',
+      },
+    });
+    expect(runtimeExecutor.triggerPersistedUserMessage).toHaveBeenCalledWith('session-1', {
+      type: 'message',
+      title: 'User Instruction',
+      text: 'continue',
+      meta: {
+        actor: 'user',
+        kind: 'user_message',
+        role: 'user',
+        chatId: 'chat-1',
+        agent: 'codex',
+      },
+    });
+  });
+});
+
 describe('RuntimeStore.applySessionAction', () => {
   it('replays the latest persisted chat user message when retry is requested', async () => {
     const delegate = {
