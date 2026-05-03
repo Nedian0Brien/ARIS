@@ -83,11 +83,11 @@ docker compose --env-file /home/ubuntu/.config/aris/prod.env \
 # worktree에서 실행
 DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env \
   SKIP_DB_PREPARE=1 \
-  WEB_DEV_PORT=3305 \
+  WEB_DEV_AUTO_PORT=1 \
   ./deploy/dev/run_web_dev_hot_reload.sh
 ```
 
-→ `http://localhost:3305` 로 접속 후 브라우저 DevTools > Console 탭 확인.
+→ 스크립트가 출력하는 `https://lawdigest.cloud/proxy/<port>/` URL로 접속 후 브라우저 DevTools > Console 탭 확인.
 
 ---
 

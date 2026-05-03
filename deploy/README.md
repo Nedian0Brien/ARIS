@@ -195,14 +195,16 @@ Daily cron example:
 Use hot reload without touching production routing:
 
 ```bash
-DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/dev/run_web_dev_hot_reload.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env WEB_DEV_AUTO_PORT=1 ./deploy/dev/run_web_dev_hot_reload.sh
 ```
 
 Optional fast restart:
 
 ```bash
-DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env SKIP_DB_PREPARE=1 ./deploy/dev/run_web_dev_hot_reload.sh
+DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env SKIP_DB_PREPARE=1 WEB_DEV_AUTO_PORT=1 ./deploy/dev/run_web_dev_hot_reload.sh
 ```
+
+The default dev proxy port is `2233`; with `WEB_DEV_AUTO_PORT=1`, the script increments to the next free port and prints the external URL as `https://lawdigest.cloud/proxy/<port>/`.
 
 ## Legacy fallback
 
