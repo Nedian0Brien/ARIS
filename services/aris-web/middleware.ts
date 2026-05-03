@@ -95,7 +95,7 @@ export function middleware(request: NextRequest) {
     );
   }
 
-  if (pathname.startsWith('/_next') || pathname.startsWith('/favicon.ico') || pathname.startsWith('/api/auth/')) {
+  if (pathname.startsWith('/_next') || pathname.startsWith('/favicon.ico') || pathname.startsWith('/icons/') || pathname.startsWith('/api/auth/')) {
     return withSecurityHeaders(NextResponse.next());
   }
 

@@ -5,6 +5,7 @@ import type { CSSProperties, RefObject } from 'react';
 import { CheckCircle2, ChevronDown, ChevronLeft, ChevronUp, Copy, Eye, Loader2, MessageSquarePlus } from 'lucide-react';
 import { readChatImageAttachments } from '@/lib/chatImageAttachments';
 import { isRunLifecycleEvent } from '@/lib/happy/chatRuntime';
+import { ProviderLogo } from '@/components/ui/ProviderLogo';
 import type { AgentFlavor, PermissionDecision, SessionChat, UiEvent } from '@/lib/happy/types';
 import { PermissionRequestMessage } from '../../PermissionRequestMessage';
 import styles from '../../ChatInterface.module.css';
@@ -353,7 +354,7 @@ export function ChatTimeline({
             <article id={`event-${event.id}`} className={`${styles.messageRow} ${styles.messageRowAgent} ${styles.csMsg} ${styles.csMsgAgent}`}>
               <div className={styles.messageWithAvatar}>
                 <div className={`${styles.msgAvatar} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
-                  <AgentIcon size={14} />
+                  <ProviderLogo provider={activeAgentFlavor} />
                 </div>
                 <div className={styles.msgBody}>
                   <div className={styles.msgHeader}>
@@ -393,7 +394,7 @@ export function ChatTimeline({
           <article className={`${styles.messageRow} ${styles.messageRowAgent} ${styles.csMsg} ${styles.csMsgAgent}`}>
             <div className={styles.messageWithAvatar}>
               <div className={`${styles.msgAvatar} ${getAgentAvatarToneClass(agentMeta.tone)}`}>
-                <AgentIcon size={14} />
+                <ProviderLogo provider={activeAgentFlavor} />
               </div>
               <div className={styles.msgBody}>
                 <div className={styles.msgHeader}>

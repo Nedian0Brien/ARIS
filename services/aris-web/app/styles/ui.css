@@ -2869,6 +2869,11 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
 .pc-proto .msg__avatar--gemini { background: var(--agent-gemini); }
 .pc-proto .msg__avatar--sys { background: var(--n-400); }
 
+.pc-proto .msg__avatar .provider-logo {
+  width: 15px;
+  height: 15px;
+}
+
 .pc-proto .msg__body {
   flex: 1;
   min-width: 0;
@@ -2970,7 +2975,78 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
 
 .pc-proto .msg--action {
   display: block;
-  padding-left: 42px;
+  width: 100%;
+  box-sizing: border-box;
+  padding-left: calc(28px + var(--sp-4));
+}
+
+.pc-proto .msg--run-status {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding-left: calc(28px + var(--sp-4));
+}
+
+.pc-proto .pc-run-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  max-width: 100%;
+  min-height: 26px;
+  padding: 4px 10px 4px 5px;
+  border: 1px solid color-mix(in srgb, var(--pc-run-status-accent, var(--b-600)) 28%, var(--border-subtle));
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--pc-run-status-bg, var(--b-50)) 58%, var(--surface));
+  color: var(--pc-run-status-accent, var(--b-700));
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.pc-proto .pc-run-status[data-tone="run"] {
+  --pc-run-status-accent: var(--info-fg);
+  --pc-run-status-bg: var(--info-bg);
+}
+
+.pc-proto .pc-run-status[data-tone="done"] {
+  --pc-run-status-accent: var(--success-fg);
+  --pc-run-status-bg: var(--success-bg);
+}
+
+.pc-proto .pc-run-status[data-tone="wait"] {
+  --pc-run-status-accent: var(--warning-fg);
+  --pc-run-status-bg: var(--warning-bg);
+}
+
+.pc-proto .pc-run-status[data-tone="alert"] {
+  --pc-run-status-accent: var(--danger-fg);
+  --pc-run-status-bg: var(--danger-bg);
+}
+
+.pc-proto .pc-run-status__icon {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: var(--r-full);
+  background: var(--pc-run-status-accent, var(--b-600));
+  color: #fff;
+}
+
+.pc-proto .pc-run-status__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-proto .pc-run-status__time {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .pc-proto .pc-action-card {
@@ -2981,17 +3057,30 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   gap: var(--sp-5);
   align-items: start;
   max-width: 680px;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 10px 10px 10px 12px;
   background: var(--surface);
   border: 1px solid var(--border-default);
   border-left: 3px solid var(--pc-action-accent);
   border-radius: 8px;
   box-shadow: var(--shadow-xs);
+  overflow: hidden;
 }
 
 .pc-proto .pc-action-card[data-kind="run"] {
   --pc-action-accent: var(--warning-fg);
   --pc-action-bg: color-mix(in srgb, var(--warning-bg) 54%, var(--surface));
+}
+
+.pc-proto .pc-action-card[data-kind="git"] {
+  --pc-action-accent: #f05033;
+  --pc-action-bg: color-mix(in srgb, #f05033 20%, var(--surface));
+}
+
+.pc-proto .pc-action-card[data-kind="docker"] {
+  --pc-action-accent: #2496ed;
+  --pc-action-bg: color-mix(in srgb, #2496ed 20%, var(--surface));
 }
 
 .pc-proto .pc-action-card[data-kind="read"] {
@@ -3070,8 +3159,8 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
 }
 
 .pc-proto .pc-action-card__preview {
-  max-height: 132px;
   margin: 0;
+  max-height: 132px;
   padding: var(--sp-4);
   overflow: auto;
   background: var(--surface-sunken);
@@ -3083,6 +3172,7 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   line-height: 1.55;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+  min-width: 0;
 }
 
 .pc-proto .pc-action-card__actions {
@@ -4627,6 +4717,11 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
   font-weight: 700;
 }
 
+.pc-proto .chturn__agent-avatar .provider-logo {
+  width: 10px;
+  height: 10px;
+}
+
 .pc-proto .chturn__agent-label {
   font-size: 10px;
   font-weight: 700;
@@ -5763,7 +5858,11 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
   }
 
   .pc-proto .msg--action {
-    padding-left: 0;
+    padding-left: calc(28px + var(--sp-3));
+  }
+
+  .pc-proto .msg--run-status {
+    padding-left: calc(28px + var(--sp-3));
   }
 
   .pc-proto .pc-action-card {
