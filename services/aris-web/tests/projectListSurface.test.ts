@@ -147,7 +147,7 @@ describe('project list surface', () => {
   it('renders project chat action events through a dedicated action-card branch', () => {
     expect(homeClient).toContain('function isProjectActionEvent(event: UiEvent): boolean');
     expect(homeClient).toContain('function isProjectRunStatusEvent(event: UiEvent): boolean');
-    expect(homeClient).toContain('function ProjectRunStatusChip({ event }: { event: UiEvent })');
+    expect(homeClient).toContain('function ProjectRunStatusLine({ event }: { event: UiEvent })');
     expect(homeClient).toContain('function ProjectActionCard({');
     expect(homeClient).toContain('function GitActionMark({ size = 12 }: { size?: number })');
     expect(homeClient).toContain('function DockerActionMark({ size = 12 }: { size?: number })');
@@ -164,7 +164,8 @@ describe('project list surface', () => {
     expect(homeClient).toContain('const runStatusEvent = !isUser && isProjectRunStatusEvent(item);');
     expect(homeClient).toContain('if (runStatusEvent) {');
     expect(homeClient).toContain('className={`msg msg--run-status');
-    expect(homeClient).toContain('<ProjectRunStatusChip event={event} />');
+    expect(homeClient).toContain('<ProjectRunStatusLine event={event} />');
+    expect(homeClient).toContain('className="pc-run-status__dash" aria-hidden="true">-</span>');
     expect(homeClient).toContain('if (actionEvent) {');
     expect(homeClient).toContain('data-project-action-card');
     expect(homeClient).toContain('className="pc-action-stack"');
@@ -369,9 +370,13 @@ describe('project list surface', () => {
     expect(cssBlock('.pc-proto .msg--action')).toContain('width: 100%;');
     expect(cssBlock('.pc-proto .msg--action')).toContain('box-sizing: border-box;');
     expect(cssBlock('.pc-proto .msg--action')).toContain('padding-left: calc(28px + var(--sp-4));');
-    expect(cssBlock('.pc-proto .msg--run-status')).toContain('padding-left: calc(28px + var(--sp-4));');
+    expect(cssBlock('.pc-proto .msg--run-status')).toContain('justify-content: center;');
+    expect(cssBlock('.pc-proto .msg--run-status')).toContain('padding: var(--sp-1) 0;');
     expect(cssBlock('.pc-proto .pc-run-status')).toContain('display: inline-flex;');
-    expect(cssBlock('.pc-proto .pc-run-status[data-tone="done"]')).toContain('--pc-run-status-accent: var(--success-fg);');
+    expect(cssBlock('.pc-proto .pc-run-status')).toContain('background: transparent;');
+    expect(cssBlock('.pc-proto .pc-run-status')).toContain('font-family: var(--font-mono);');
+    expect(cssBlock('.pc-proto .pc-run-status[data-tone="done"]')).toContain('--pc-run-status-color: color-mix(in srgb, var(--success-fg) 62%, var(--text-tertiary));');
+    expect(cssBlock('.pc-proto .pc-run-status__dash')).toContain('color: color-mix(in srgb, var(--pc-run-status-color) 70%, transparent);');
     expect(cssBlock('.pc-proto .pc-action-stack')).toContain('display: grid;');
     expect(cssBlock('.pc-proto .pc-action-stack')).toContain('position: relative;');
     expect(cssBlock('.pc-proto .pc-action-stack')).toContain('width: 100%;');
