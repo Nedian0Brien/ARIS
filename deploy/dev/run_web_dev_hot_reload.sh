@@ -4,8 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "${ROOT_DIR}/deploy/lib/env.sh"
 ENV_FILE="$(require_deploy_env_file "web-dev")"
-WEB_DEV_PORT="${WEB_DEV_PORT:-3305}"
+WEB_DEV_PORT="${WEB_DEV_PORT:-2233}"
 WEB_DEV_HOST="${WEB_DEV_HOST:-0.0.0.0}"
+WEB_DEV_AUTO_PORT="${WEB_DEV_AUTO_PORT:-0}"
+WEB_DEV_PORT_SCAN_LIMIT="${WEB_DEV_PORT_SCAN_LIMIT:-20}"
 SKIP_DB_PREPARE="${SKIP_DB_PREPARE:-0}"
 
 require_env_keys "web-dev" "${ENV_FILE}" \
@@ -37,6 +39,76 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   export "${key}=${value}"
 done < "${ENV_FILE}"
 
+probe_dev_port() {
+  local host="$1"
+  local port="$2"
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 0
+  fi
+
+  python3 - "${host}" "${port}" <<'PY'
+import socket
+import sys
+
+host = sys.argv[1]
+port = int(sys.argv[2])
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+try:
+    sock.bind((host, port))
+except OSError:
+    sys.exit(1)
+finally:
+    sock.close()
+PY
+}
+
+describe_port_conflict() {
+  if command -v lsof >/dev/null 2>&1; then
+    mapfile -t listening_pids < <(lsof -tiTCP:"${WEB_DEV_PORT}" -sTCP:LISTEN -n -P 2>/dev/null || true)
+    if (( ${#listening_pids[@]} > 0 )); then
+      for pid in "${listening_pids[@]}"; do
+        cwd="$(readlink -f "/proc/${pid}/cwd" 2>/dev/null || echo "unknown")"
+        cmd="$(ps -p "${pid}" -o cmd= 2>/dev/null || echo "unknown")"
+        echo "[web-dev] existing pid=${pid} cwd=${cwd}" >&2
+        echo "[web-dev] existing cmd=${cmd}" >&2
+      done
+    else
+      echo "[web-dev] no listener pid was visible to lsof; the port may be held by docker-proxy or another privileged process" >&2
+    fi
+  fi
+}
+
+port_probe_status=0
+port_scan_attempts=0
+while true; do
+  port_probe_status=0
+  probe_dev_port "${WEB_DEV_HOST}" "${WEB_DEV_PORT}" || port_probe_status=$?
+  if (( port_probe_status == 0 )); then
+    break
+  fi
+
+  echo "[web-dev] port ${WEB_DEV_PORT} is already in use" >&2
+  echo "[web-dev] requested bind=${WEB_DEV_HOST}:${WEB_DEV_PORT}" >&2
+
+  if [[ "${WEB_DEV_AUTO_PORT}" != "1" ]]; then
+    describe_port_conflict
+    echo "[web-dev] stop the old process, choose WEB_DEV_PORT=<free-port>, or set WEB_DEV_AUTO_PORT=1" >&2
+    exit 1
+  fi
+
+  if (( port_scan_attempts >= WEB_DEV_PORT_SCAN_LIMIT )); then
+    describe_port_conflict
+    echo "[web-dev] no free port found after ${WEB_DEV_PORT_SCAN_LIMIT} attempts from ${WEB_DEV_PORT}" >&2
+    exit 1
+  fi
+
+  WEB_DEV_PORT="$((WEB_DEV_PORT + 1))"
+  port_scan_attempts="$((port_scan_attempts + 1))"
+  echo "[web-dev] trying next port ${WEB_DEV_PORT}" >&2
+done
+
 export NODE_ENV=development
 export HOST="${WEB_DEV_HOST}"
 export PORT="${WEB_DEV_PORT}"
@@ -63,46 +135,6 @@ fi
 git_ref="$(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"
 git_sha="$(git -C "${ROOT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
 proxy_url="https://lawdigest.cloud/proxy/${WEB_DEV_PORT}/"
-
-port_probe_status=0
-if command -v python3 >/dev/null 2>&1; then
-  python3 - "${WEB_DEV_HOST}" "${WEB_DEV_PORT}" <<'PY' || port_probe_status=$?
-import socket
-import sys
-
-host = sys.argv[1]
-port = int(sys.argv[2])
-
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-try:
-    sock.bind((host, port))
-except OSError:
-    sys.exit(1)
-finally:
-    sock.close()
-PY
-fi
-
-if (( port_probe_status != 0 )); then
-  echo "[web-dev] port ${WEB_DEV_PORT} is already in use; refusing to start a second dev server" >&2
-  echo "[web-dev] requested bind=${WEB_DEV_HOST}:${WEB_DEV_PORT}" >&2
-  if command -v lsof >/dev/null 2>&1; then
-    mapfile -t listening_pids < <(lsof -tiTCP:"${WEB_DEV_PORT}" -sTCP:LISTEN -n -P 2>/dev/null || true)
-    if (( ${#listening_pids[@]} > 0 )); then
-      for pid in "${listening_pids[@]}"; do
-        cwd="$(readlink -f "/proc/${pid}/cwd" 2>/dev/null || echo "unknown")"
-        cmd="$(ps -p "${pid}" -o cmd= 2>/dev/null || echo "unknown")"
-        echo "[web-dev] existing pid=${pid} cwd=${cwd}" >&2
-        echo "[web-dev] existing cmd=${cmd}" >&2
-      done
-    else
-      echo "[web-dev] no listener pid was visible to lsof; the port may be held by docker-proxy or another privileged process" >&2
-    fi
-  fi
-  echo "[web-dev] stop the old process or choose WEB_DEV_PORT=<free-port>" >&2
-  exit 1
-fi
 
 # Host dev mode does not receive Docker Compose's DATABASE_URL injection.
 # Build it from deploy env and point to the running postgres container IP.
