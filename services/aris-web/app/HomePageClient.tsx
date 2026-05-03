@@ -1790,30 +1790,30 @@ function projectActionPreview(event: UiEvent): string {
 function projectRunStatusMeta(runStatus: string) {
   const normalized = runStatus.trim().toLowerCase();
   if (normalized === 'run_started' || normalized === 'turn_started' || normalized === 'model_normalized') {
-    return { label: '실행 시작', tone: 'run' };
+    return { Icon: Terminal, label: '실행 시작', tone: 'run' };
   }
   if (normalized === 'completed' || normalized === 'run_completed') {
-    return { label: '실행 종료', tone: 'done' };
+    return { Icon: Check, label: '실행 종료', tone: 'done' };
   }
   if (normalized === 'waiting_for_approval') {
-    return { label: '승인 대기', tone: 'wait' };
+    return { Icon: Clock3, label: '승인 대기', tone: 'wait' };
   }
   if (normalized === 'aborted' || normalized === 'run_aborted' || normalized === 'cancelled' || normalized === 'canceled') {
-    return { label: 'aborted', tone: 'alert' };
+    return { Icon: AlertCircle, label: 'aborted', tone: 'alert' };
   }
-  return { label: normalized ? normalized.replace(/_/g, ' ') : '실행 상태', tone: 'alert' };
+  return { Icon: AlertCircle, label: normalized ? normalized.replace(/_/g, ' ') : '실행 상태', tone: 'alert' };
 }
 
-function ProjectRunStatusLine({ event }: { event: UiEvent }) {
+function ProjectRunStatusChip({ event }: { event: UiEvent }) {
   const runStatus = readUiEventRunStatus(event);
-  const { label, tone } = projectRunStatusMeta(runStatus);
+  const { Icon, label, tone } = projectRunStatusMeta(runStatus);
   const relativeTime = formatRelativeTime(event.timestamp);
 
   return (
     <div className="pc-run-status" data-tone={tone} title={`${label} · ${relativeTime}`} aria-label={`${label} · ${relativeTime}`}>
-      <span className="pc-run-status__dash" aria-hidden="true">-</span>
+      <span className="pc-run-status__icon" aria-hidden="true"><Icon size={12} /></span>
       <span className="pc-run-status__label">{label}</span>
-      <span className="pc-run-status__dash" aria-hidden="true">-</span>
+      <time className="pc-run-status__time" dateTime={event.timestamp}>{relativeTime}</time>
     </div>
   );
 }
@@ -2541,7 +2541,7 @@ function ProjectChatSurface({
                 if (runStatusEvent) {
                   return (
                     <div key={item.id} className={`msg msg--run-status${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
-                      <ProjectRunStatusLine event={event} />
+                      <ProjectRunStatusChip event={event} />
                     </div>
                   );
                 }

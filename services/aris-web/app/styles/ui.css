@@ -2989,38 +2989,50 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
 }
 
 .pc-proto .pc-run-status {
-  --pc-run-status-color: var(--text-tertiary);
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.42em;
+  gap: var(--sp-3);
   max-width: 100%;
-  min-height: 20px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--pc-run-status-color);
-  font-family: var(--font-mono);
+  min-height: 26px;
+  padding: 4px 10px 4px 5px;
+  border: 1px solid color-mix(in srgb, var(--pc-run-status-accent, var(--b-600)) 28%, var(--border-subtle));
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--pc-run-status-bg, var(--b-50)) 58%, var(--surface));
+  color: var(--pc-run-status-accent, var(--b-700));
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0;
   box-shadow: none;
 }
 
 .pc-proto .pc-run-status[data-tone="run"] {
-  --pc-run-status-color: color-mix(in srgb, var(--info-fg) 62%, var(--text-tertiary));
+  --pc-run-status-accent: var(--info-fg);
+  --pc-run-status-bg: var(--info-bg);
 }
 
 .pc-proto .pc-run-status[data-tone="done"] {
-  --pc-run-status-color: color-mix(in srgb, var(--success-fg) 62%, var(--text-tertiary));
+  --pc-run-status-accent: var(--success-fg);
+  --pc-run-status-bg: var(--success-bg);
 }
 
 .pc-proto .pc-run-status[data-tone="wait"] {
-  --pc-run-status-color: color-mix(in srgb, var(--warning-fg) 66%, var(--text-tertiary));
+  --pc-run-status-accent: var(--warning-fg);
+  --pc-run-status-bg: var(--warning-bg);
 }
 
 .pc-proto .pc-run-status[data-tone="alert"] {
-  --pc-run-status-color: color-mix(in srgb, var(--danger-fg) 68%, var(--text-tertiary));
+  --pc-run-status-accent: var(--danger-fg);
+  --pc-run-status-bg: var(--danger-bg);
+}
+
+.pc-proto .pc-run-status__icon {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: var(--r-full);
+  background: var(--pc-run-status-accent, var(--b-600));
+  color: #fff;
 }
 
 .pc-proto .pc-run-status__label {
@@ -3030,8 +3042,11 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   white-space: nowrap;
 }
 
-.pc-proto .pc-run-status__dash {
-  color: color-mix(in srgb, var(--pc-run-status-color) 70%, transparent);
+.pc-proto .pc-run-status__time {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -5942,7 +5957,7 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
   }
 
   .pc-proto .msg--run-status {
-    padding-left: calc(28px + var(--sp-3));
+    padding: var(--sp-1) 0;
   }
 
   .pc-proto .pc-action-card {
