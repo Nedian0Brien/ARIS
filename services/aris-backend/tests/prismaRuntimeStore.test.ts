@@ -302,7 +302,7 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
     expect(sessionChat.update).toHaveBeenCalledTimes(1);
   });
 
-  it('appends chat events with chat-local seq and updates the chat snapshot', async () => {
+  it('appends chat events with chat-local seq and updates the chat snapshot without starting runs from display role', async () => {
     const sessionChat = {
       findFirst: vi.fn().mockResolvedValue({
         id: 'chat-1',
@@ -352,14 +352,14 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
     };
 
     const event = await store.appendChatEvent('chat-1', {
-        sessionId: 'session-1',
-        type: 'message',
-        title: 'Text Reply',
-        text: '완료',
-        meta: { role: 'user' },
-      });
+      sessionId: 'session-1',
+      type: 'message',
+      title: 'Text Reply',
+      text: '완료',
+      meta: { role: 'user' },
+    });
 
-    expect(sessionRun.create).toHaveBeenCalledTimes(1);
+    expect(sessionRun.create).not.toHaveBeenCalled();
     expect(sessionChatEvent.aggregate).toHaveBeenCalledWith({
       where: { chatId: 'chat-1' },
       _max: { seq: true },
@@ -368,7 +368,6 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
       data: expect.objectContaining({
         chatId: 'chat-1',
         sessionId: 'session-1',
-        runId: 'run-1',
         seq: 3,
       }),
     }));
@@ -376,7 +375,7 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
     expect(event.meta?.seq).toBe(3);
   });
 
-  it('marks the latest running run as completed when an agent event closes the chat turn', async () => {
+  it('marks the latest running run as completed when a lifecycle event closes the chat turn', async () => {
     const sessionChat = {
       findFirst: vi.fn().mockResolvedValue({
         id: 'chat-1',
@@ -432,9 +431,9 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
     const event = await store.appendChatEvent('chat-1', {
       sessionId: 'session-1',
       type: 'message',
-      title: 'Text Reply',
-      text: '완료',
-      meta: { role: 'agent' },
+      title: 'Run Status',
+      text: 'run status: completed',
+      meta: { role: 'agent', streamEvent: 'run_status', sessionTurnStatus: 'completed' },
     });
 
     expect(sessionRun.findFirst).toHaveBeenCalledTimes(1);

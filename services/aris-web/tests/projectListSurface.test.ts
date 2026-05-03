@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
 const uiCss = readFileSync(resolve(__dirname, '../app/styles/ui.css'), 'utf8');
+const terminalRoute = readFileSync(resolve(__dirname, '../app/api/runtime/sessions/[sessionId]/terminal/route.ts'), 'utf8');
 
 function cssBlock(selector: string) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -147,7 +148,7 @@ describe('project list surface', () => {
   it('renders project chat action events through a dedicated action-card branch', () => {
     expect(homeClient).toContain('function isProjectActionEvent(event: UiEvent): boolean');
     expect(homeClient).toContain('function ProjectActionCard({');
-    expect(homeClient).toContain('const actionEvent = !isUser && isProjectActionEvent(item);');
+    expect(homeClient).toContain('const actionEvent = !isUser && !isTerminal && isProjectActionEvent(item);');
     expect(homeClient).toContain('if (actionEvent) {');
     expect(homeClient).toContain('data-project-action-card');
     expect(homeClient).toContain('className="pc-action-card"');
@@ -156,6 +157,43 @@ describe('project list surface', () => {
     expect(homeClient).toContain('className="pc-action-card__preview"');
     expect(homeClient).toContain("handleCopy(eventCommand(event), 'Action command')");
     expect(homeClient).not.toContain('const toolLike = !isUser && isToolLikeEvent(item);');
+  });
+
+  it('routes Terminal composer submissions through the command execution endpoint', () => {
+    const submitStart = homeClient.indexOf('const handleSubmit = async');
+    const submitEnd = homeClient.indexOf('const projectShellClasses =', submitStart);
+    const submitSource = homeClient.slice(submitStart, submitEnd);
+
+    expect(submitSource).toContain("const isTerminalMode = composerMode === 'terminal';");
+    expect(submitSource).toContain("isTerminalMode ? `/api/runtime/sessions/${encodeURIComponent(session.id)}/terminal`");
+    expect(submitSource).toContain('command: text,');
+    expect(submitSource).toContain("const body = (await response.json().catch(() => ({}))) as { event?: UiEvent; events?: UiEvent[]; error?: string };");
+    expect(submitSource).toContain('const submittedEvents = isTerminalMode');
+    expect(submitSource).toContain('setEvents((previous) => [...previous, ...submittedEvents]);');
+  });
+
+  it('renders Terminal command output as a Terminal timeline response with its own avatar', () => {
+    expect(homeClient).toContain("function readEventRole(event: UiEvent): 'user' | 'agent' | 'terminal'");
+    expect(homeClient).toContain("if (event.meta?.role === 'terminal') return 'terminal';");
+    expect(homeClient).toContain('const isTerminal = role === \'terminal\';');
+    expect(homeClient).toContain('data-terminal-response');
+    expect(homeClient).toContain('className="msg__terminal-command"');
+    expect(homeClient).toContain('<Terminal size={14} />');
+    expect(homeClient).toContain("{isUser ? 'You' : isTerminal ? 'Terminal' : agentLabel(activeAgent, activeModelLabel)}");
+    expect(cssBlock('.pc-proto .msg__avatar--terminal')).toContain('background: var(--n-900);');
+    expect(cssBlock('.pc-proto .msg__terminal-output')).toContain('font-family: var(--font-mono);');
+  });
+
+  it('marks command execution results as Terminal-authored events', () => {
+    expect(terminalRoute).toContain('runChatTerminalCommand({');
+    expect(terminalRoute).toContain('command,');
+    expect(terminalRoute).not.toContain("from 'node:child_process'");
+    expect(terminalRoute).not.toContain('execAsync(command');
+    expect(terminalRoute).not.toContain('appendSessionMessage');
+    expect(terminalRoute).not.toContain("role: 'agent'");
+    expect(terminalRoute).not.toContain("displayRole: 'terminal'");
+    expect(terminalRoute).not.toContain("role: 'user'");
+    expect(terminalRoute).toContain('return NextResponse.json({ events });');
   });
 
   it('uses the prototype workspace panel icon and toggle wiring in the chat header', () => {

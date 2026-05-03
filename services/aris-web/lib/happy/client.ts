@@ -820,6 +820,73 @@ export async function appendSessionMessage(input: {
   throw new Error('백엔드 응답에서 이벤트를 읽을 수 없습니다.');
 }
 
+export async function submitUserPrompt(input: {
+  sessionId: string;
+  title?: string;
+  text: string;
+  meta?: Record<string, unknown>;
+}): Promise<UiEvent> {
+  const chatId = typeof input.meta?.chatId === 'string' && input.meta.chatId.trim().length > 0
+    ? input.meta.chatId.trim()
+    : null;
+  const raw = chatId
+    ? await fetchHappy(`/v1/chats/${encodeURIComponent(chatId)}/user-prompts`, {
+        method: 'POST',
+        body: JSON.stringify({
+          sessionId: input.sessionId,
+          type: 'message',
+          title: input.title,
+          text: input.text,
+          meta: input.meta,
+        }),
+      })
+    : await fetchHappy(`/v1/sessions/${encodeURIComponent(input.sessionId)}/user-prompts`, {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'message',
+          title: input.title,
+          text: input.text,
+          meta: input.meta,
+        }),
+      });
+
+  const obj = asObject(raw);
+  const message = obj?.message ?? obj?.event;
+  const normalized = normalizeEvents(message ? [message] : []);
+  if (normalized[0]) {
+    return normalized[0];
+  }
+
+  throw new Error('백엔드 응답에서 사용자 프롬프트 이벤트를 읽을 수 없습니다.');
+}
+
+export async function runChatTerminalCommand(input: {
+  sessionId: string;
+  chatId: string;
+  command: string;
+}): Promise<UiEvent[]> {
+  const raw = await fetchHappy(`/v1/chats/${encodeURIComponent(input.chatId)}/terminal/commands`, {
+    method: 'POST',
+    body: JSON.stringify({
+      sessionId: input.sessionId,
+      command: input.command,
+    }),
+  });
+  const events = normalizeEvents(extractArrayPayload(raw, 'events'));
+  if (events.length > 0) {
+    return events;
+  }
+
+  const obj = asObject(raw);
+  const event = obj?.event;
+  const normalized = normalizeEvents(event ? [event] : []);
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  throw new Error('백엔드 응답에서 터미널 실행 결과를 읽을 수 없습니다.');
+}
+
 export async function getSessionRealtimeEvents(input: {
   sessionId: string;
   afterCursor?: number;

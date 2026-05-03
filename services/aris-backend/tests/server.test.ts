@@ -218,6 +218,109 @@ describe('aris-backend API', () => {
     await app.close();
   });
 
+  it('submits user prompts through the explicit chat prompt route', async () => {
+    const app = buildServer({
+      RUNTIME_API_TOKEN: TOKEN,
+      DEFAULT_PROJECT_PATH: '/tmp/project',
+      LOG_LEVEL: 'silent',
+    });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: {
+        ...authHeader(),
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        path: '/tmp/project',
+        flavor: 'claude',
+      }),
+    });
+    expect(createResponse.statusCode).toBe(201);
+    const sessionId = (createResponse.json() as { session: { id: string } }).session.id;
+
+    const promptResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/chats/chat-1/user-prompts',
+      headers: {
+        ...authHeader(),
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        sessionId,
+        type: 'message',
+        title: 'User Instruction',
+        text: '구조를 올바르게 리팩토링해줘',
+        meta: { role: 'user', agent: 'codex' },
+      }),
+    });
+
+    expect(promptResponse.statusCode).toBe(201);
+    const promptPayload = promptResponse.json() as { event?: { text?: string; meta?: { role?: string; chatId?: string } } };
+    expect(promptPayload.event).toEqual(expect.objectContaining({
+      text: '구조를 올바르게 리팩토링해줘',
+      meta: expect.objectContaining({
+        role: 'user',
+        chatId: 'chat-1',
+      }),
+    }));
+
+    await app.close();
+  });
+
+  it('runs terminal commands through a dedicated terminal command route', async () => {
+    const app = buildServer({
+      RUNTIME_API_TOKEN: TOKEN,
+      DEFAULT_PROJECT_PATH: '/tmp',
+      LOG_LEVEL: 'silent',
+    });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: {
+        ...authHeader(),
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        path: '/tmp',
+        flavor: 'claude',
+      }),
+    });
+    expect(createResponse.statusCode).toBe(201);
+    const sessionId = (createResponse.json() as { session: { id: string } }).session.id;
+
+    const terminalResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/chats/chat-1/terminal/commands',
+      headers: {
+        ...authHeader(),
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        sessionId,
+        command: 'printf aris-terminal',
+      }),
+    });
+
+    expect(terminalResponse.statusCode).toBe(201);
+    const terminalPayload = terminalResponse.json() as {
+      events?: Array<{ text?: string; meta?: { role?: string; kind?: string; exitCode?: number; command?: string } }>;
+    };
+    expect(terminalPayload.events?.[0]).toEqual(expect.objectContaining({
+      text: expect.stringContaining('aris-terminal'),
+      meta: expect.objectContaining({
+        role: 'terminal',
+        kind: 'terminal_result',
+        exitCode: 0,
+        command: 'printf aris-terminal',
+      }),
+    }));
+
+    await app.close();
+  });
+
   it('returns Gemini capabilities even when the session flavor is not gemini', async () => {
     const app = buildServer({
       RUNTIME_API_TOKEN: TOKEN,
