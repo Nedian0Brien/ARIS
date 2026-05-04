@@ -148,6 +148,26 @@ function deriveRunningStateFromMeta(meta: unknown): boolean | null {
   return null;
 }
 
+function readRunLifecycleStatus(meta: unknown): 'run_started' | 'completed' | 'failed' | 'aborted' | null {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) {
+    return null;
+  }
+  const record = meta as Record<string, unknown>;
+  const status = typeof record.sessionTurnStatus === 'string'
+    ? record.sessionTurnStatus.trim()
+    : typeof record.runStatus === 'string'
+      ? record.runStatus.trim()
+      : '';
+  if (status === 'run_started' || status === 'completed' || status === 'failed' || status === 'aborted') {
+    return status;
+  }
+  return null;
+}
+
+function toSessionRunStatus(status: 'completed' | 'failed' | 'aborted'): 'completed' | 'failed' | 'aborted' {
+  return status;
+}
+
 export function resolveChatRunningState<
   TRow extends {
     meta: unknown;
@@ -440,24 +460,36 @@ export class PrismaRuntimeStore {
     }
 
     const row = await this.runRuntimeWriteMutationWithRetry(async (tx) => {
-      const role = typeof input.meta?.role === 'string' ? input.meta.role.trim() : '';
       let resolvedRunId = input.runId;
-      if (!resolvedRunId && role === 'user') {
-        const createdRun = await tx.sessionRun.create({
-          data: {
-            sessionId: input.sessionId,
-            chatId,
-            agent: typeof input.meta?.agent === 'string' && input.meta.agent.trim().length > 0
-              ? input.meta.agent.trim()
-              : 'unknown',
-            model: typeof input.meta?.model === 'string' && input.meta.model.trim().length > 0
-              ? input.meta.model.trim()
-              : null,
-            status: 'running',
-          },
+      const lifecycleStatus = readRunLifecycleStatus(input.meta);
+      if (!resolvedRunId && lifecycleStatus === 'run_started') {
+        const activeRun = await tx.sessionRun.findFirst({
+          where: { chatId, status: 'running' },
+          orderBy: { startedAt: 'desc' },
         });
-        resolvedRunId = createdRun.id;
-      } else if (!resolvedRunId && role === 'agent') {
+        if (activeRun) {
+          resolvedRunId = activeRun.id;
+        } else {
+          const createdRun = await tx.sessionRun.create({
+            data: {
+              sessionId: input.sessionId,
+              chatId,
+              agent: typeof input.meta?.agent === 'string' && input.meta.agent.trim().length > 0
+                ? input.meta.agent.trim()
+                : 'unknown',
+              model: typeof input.meta?.model === 'string' && input.meta.model.trim().length > 0
+                ? input.meta.model.trim()
+                : null,
+              status: 'running',
+            },
+          });
+          resolvedRunId = createdRun.id;
+        }
+      } else if (!resolvedRunId && (
+        lifecycleStatus === 'completed'
+        || lifecycleStatus === 'failed'
+        || lifecycleStatus === 'aborted'
+      )) {
         const latestRun = await tx.sessionRun.findFirst({
           where: { chatId, status: 'running' },
           orderBy: { startedAt: 'desc' },
@@ -467,7 +499,7 @@ export class PrismaRuntimeStore {
           await tx.sessionRun.update({
             where: { id: latestRun.id },
             data: {
-              status: 'completed',
+              status: toSessionRunStatus(lifecycleStatus),
               finishedAt: new Date(),
             },
           });

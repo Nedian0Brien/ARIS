@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'node:path';
 import { requireApiUser } from '@/lib/auth/guard';
-import { getSessionEvents, appendSessionMessage, HappyHttpError } from '@/lib/happy/client';
+import { getSessionEvents, appendSessionMessage, submitUserPrompt, HappyHttpError } from '@/lib/happy/client';
 import { prisma } from '@/lib/db/prisma';
 import {
   normalizeSupportedAgent,
@@ -178,13 +178,20 @@ export async function POST(
       };
     }
 
-    const event = await appendSessionMessage({
-      sessionId,
-      type,
-      title: body.title,
-      text: body.text,
-      meta,
-    });
+    const event = role === 'user' && type === 'message'
+      ? await submitUserPrompt({
+          sessionId,
+          title: body.title,
+          text: body.text,
+          meta,
+        })
+      : await appendSessionMessage({
+          sessionId,
+          type,
+          title: body.title,
+          text: body.text,
+          meta,
+        });
     return NextResponse.json({ event });
   } catch (error) {
     if (error instanceof HappyHttpError && [401, 403, 404].includes(error.status)) {

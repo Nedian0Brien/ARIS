@@ -80,6 +80,21 @@ const appendChatEventSchema = z.object({
   meta: z.record(z.string(), z.unknown()).optional(),
 });
 
+const submitUserPromptSchema = appendChatEventSchema.extend({
+  type: z.literal('message').default('message'),
+  text: z.string().min(1),
+});
+
+const submitSessionUserPromptSchema = appendMessageSchema.extend({
+  type: z.literal('message').default('message'),
+  text: z.string().min(1),
+});
+
+const terminalCommandSchema = z.object({
+  sessionId: z.string().min(1),
+  command: z.string().trim().min(1),
+});
+
 type AppendMessageInput = z.infer<typeof appendMessageSchema>;
 
 type HappyBridgeAppendMessage = {
@@ -667,6 +682,29 @@ export function buildServer(config: ServerConfig) {
     }
   });
 
+  app.post('/v1/sessions/:sessionId/user-prompts', async (request, reply) => {
+    const { sessionId } = request.params as { sessionId: string };
+    const parsed = submitSessionUserPromptSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid request body' });
+    }
+
+    try {
+      const session = await store.getSession(sessionId);
+      if (!session) {
+        return reply.code(404).send({ error: 'Session not found' });
+      }
+      const message = await store.submitUserPrompt(sessionId, parsed.data);
+      return reply.code(201).send({ message });
+    } catch (error) {
+      if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
+        return reply.code(404).send({ error: 'Session not found' });
+      }
+      const message = toErrorMessage(error, 'Failed to submit user prompt');
+      return reply.code(502).send({ error: message });
+    }
+  });
+
   app.get('/v1/chats/:chatId/events', async (request, reply) => {
     try {
       const { chatId } = request.params as { chatId: string };
@@ -711,6 +749,64 @@ export function buildServer(config: ServerConfig) {
         return reply.code(404).send({ error: 'Chat not found' });
       }
       const message = toErrorMessage(error, 'Failed to append chat event');
+      return reply.code(502).send({ error: message });
+    }
+  });
+
+  app.post('/v1/chats/:chatId/user-prompts', async (request, reply) => {
+    const { chatId } = request.params as { chatId: string };
+    const parsed = submitUserPromptSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid request body' });
+    }
+
+    try {
+      const session = await store.getSession(parsed.data.sessionId);
+      if (!session) {
+        return reply.code(404).send({ error: 'Session not found' });
+      }
+      if (!supportsChatScopedRuntime(session)) {
+        return reply.code(409).send({ error: 'Legacy sessions are read-only for chat-scoped runtime writes.' });
+      }
+      const event = await store.submitChatUserPrompt(chatId, parsed.data);
+      return reply.code(201).send({ event });
+    } catch (error) {
+      if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
+        return reply.code(404).send({ error: 'Session not found' });
+      }
+      if (error instanceof Error && error.message === 'CHAT_NOT_FOUND') {
+        return reply.code(404).send({ error: 'Chat not found' });
+      }
+      const message = toErrorMessage(error, 'Failed to submit user prompt');
+      return reply.code(502).send({ error: message });
+    }
+  });
+
+  app.post('/v1/chats/:chatId/terminal/commands', async (request, reply) => {
+    const { chatId } = request.params as { chatId: string };
+    const parsed = terminalCommandSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid request body' });
+    }
+
+    try {
+      const session = await store.getSession(parsed.data.sessionId);
+      if (!session) {
+        return reply.code(404).send({ error: 'Session not found' });
+      }
+      if (!supportsChatScopedRuntime(session)) {
+        return reply.code(409).send({ error: 'Legacy sessions are read-only for chat-scoped runtime writes.' });
+      }
+      const event = await store.runTerminalCommand(chatId, parsed.data);
+      return reply.code(201).send({ events: [event] });
+    } catch (error) {
+      if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
+        return reply.code(404).send({ error: 'Session not found' });
+      }
+      if (error instanceof Error && error.message === 'CHAT_NOT_FOUND') {
+        return reply.code(404).send({ error: 'Chat not found' });
+      }
+      const message = toErrorMessage(error, 'Failed to run terminal command');
       return reply.code(502).send({ error: message });
     }
   });

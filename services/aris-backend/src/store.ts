@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 import type {
   ApprovalPolicy,
   GeminiSessionCapabilities,
@@ -15,6 +17,10 @@ import { PrismaRuntimeStore } from './runtime/prismaStore.js';
 import { computeWorktreePath, ensureWorktree } from './runtime/worktreeManager.js';
 
 type RuntimeBackend = 'mock' | 'happy' | 'prisma';
+const execAsync = promisify(exec);
+const TERMINAL_COMMAND_TIMEOUT_MS = 30_000;
+const TERMINAL_COMMAND_MAX_BUFFER = 1024 * 1024;
+const TERMINAL_OUTPUT_MAX_CHARS = 12_000;
 
 type CreateSessionInput = {
   path: string;
@@ -44,6 +50,54 @@ type AppendMessageInput = {
   meta?: Record<string, unknown>;
 };
 
+type AppendChatEventInput = {
+  sessionId: string;
+  runId?: string;
+  type: string;
+  title?: string;
+  text: string;
+  meta?: Record<string, unknown>;
+};
+
+type RunTerminalCommandInput = {
+  sessionId: string;
+  command: string;
+};
+
+function asUserPromptInput(input: AppendMessageInput): AppendMessageInput {
+  return {
+    ...input,
+    type: 'message',
+    meta: {
+      ...(input.meta ?? {}),
+      actor: 'user',
+      kind: 'user_message',
+      role: 'user',
+    },
+  };
+}
+
+function asChatUserPromptInput(chatId: string, input: AppendChatEventInput): AppendChatEventInput {
+  return {
+    ...input,
+    type: 'message',
+    meta: {
+      ...(input.meta ?? {}),
+      chatId,
+      actor: 'user',
+      kind: 'user_message',
+      role: 'user',
+    },
+  };
+}
+
+function trimTerminalOutput(value: string): string {
+  if (value.length <= TERMINAL_OUTPUT_MAX_CHARS) {
+    return value;
+  }
+  return `${value.slice(0, TERMINAL_OUTPUT_MAX_CHARS)}\n\n[output truncated at ${TERMINAL_OUTPUT_MAX_CHARS} chars]`;
+}
+
 type CreatePermissionInput = {
   sessionId: string;
   chatId?: string | null;
@@ -63,10 +117,7 @@ interface RuntimeStoreBackend {
   listChatEvents?(chatId: string, options?: { afterSeq?: number; limit?: number }): Promise<RuntimeMessage[]>;
   listRealtimeEvents?(sessionId: string, options?: { afterCursor?: number; limit?: number; chatId?: string }): Promise<{ events: RuntimeMessage[]; cursor: number }>;
   appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage>;
-  appendChatEvent?(
-    chatId: string,
-    input: { sessionId: string; runId?: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
-  ): Promise<RuntimeMessage>;
+  appendChatEvent?(chatId: string, input: AppendChatEventInput): Promise<RuntimeMessage>;
   getLatestUserMessageForAction?(sessionId: string, chatId?: string): Promise<AppendMessageInput | null>;
   applySessionAction(sessionId: string, action: SessionAction, chatId?: string): Promise<{ accepted: boolean; message: string; at: string }>;
   isSessionRunning(sessionId: string, chatId?: string): Promise<boolean>;
@@ -562,30 +613,97 @@ export class RuntimeStore {
   }
 
   async appendMessage(sessionId: string, input: AppendMessageInput) {
-    const created = await this.delegate.appendMessage(sessionId, input);
-    if (this.runtimeExecutor && input.meta?.role !== 'agent') {
-      await this.runtimeExecutor.triggerPersistedUserMessage(sessionId, input);
+    return this.delegate.appendMessage(sessionId, input);
+  }
+
+  async submitUserPrompt(sessionId: string, input: AppendMessageInput) {
+    const promptInput = asUserPromptInput(input);
+    const created = await this.delegate.appendMessage(sessionId, promptInput);
+    if (this.runtimeExecutor) {
+      await this.runtimeExecutor.triggerPersistedUserMessage(sessionId, promptInput);
     }
     return created;
   }
 
   async appendChatEvent(
     chatId: string,
-    input: { sessionId: string; runId?: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
+    input: AppendChatEventInput,
   ) {
     if (typeof this.delegate.appendChatEvent === 'function') {
-      const created = await this.delegate.appendChatEvent(chatId, input);
-      if (this.runtimeExecutor && input.meta?.role !== 'agent') {
-        await this.runtimeExecutor.triggerPersistedUserMessage(input.sessionId, {
-          type: input.type,
-          title: input.title,
-          text: input.text,
-          meta: input.meta,
-        });
-      }
-      return created;
+      return this.delegate.appendChatEvent(chatId, input);
     }
     throw new Error('APPEND_CHAT_EVENT_NOT_SUPPORTED');
+  }
+
+  async submitChatUserPrompt(chatId: string, input: AppendChatEventInput) {
+    if (typeof this.delegate.appendChatEvent !== 'function') {
+      throw new Error('APPEND_CHAT_EVENT_NOT_SUPPORTED');
+    }
+
+    const promptInput = asChatUserPromptInput(chatId, input);
+    const created = await this.delegate.appendChatEvent(chatId, promptInput);
+    if (this.runtimeExecutor) {
+      await this.runtimeExecutor.triggerPersistedUserMessage(promptInput.sessionId, {
+        type: promptInput.type,
+        title: promptInput.title,
+        text: promptInput.text,
+        meta: promptInput.meta,
+      });
+    }
+    return created;
+  }
+
+  async runTerminalCommand(chatId: string, input: RunTerminalCommandInput) {
+    const command = input.command.trim();
+    if (!command) {
+      throw new Error('COMMAND_REQUIRED');
+    }
+
+    const session = await this.delegate.getSession(input.sessionId);
+    if (!session) {
+      throw new Error('SESSION_NOT_FOUND');
+    }
+
+    const startedAt = new Date().toISOString();
+    let stdout = '';
+    let stderr = '';
+    let exitCode = 0;
+    try {
+      const result = await execAsync(command, {
+        cwd: session.metadata.path,
+        timeout: TERMINAL_COMMAND_TIMEOUT_MS,
+        maxBuffer: TERMINAL_COMMAND_MAX_BUFFER,
+        shell: '/bin/bash',
+      });
+      stdout = result.stdout;
+      stderr = result.stderr;
+    } catch (error) {
+      const err = error as Error & { stdout?: string; stderr?: string; code?: number | string };
+      stdout = err.stdout ?? '';
+      stderr = err.stderr ?? err.message;
+      exitCode = typeof err.code === 'number' ? err.code : 1;
+    }
+
+    const output = trimTerminalOutput([stdout, stderr].filter(Boolean).join('\n'));
+    const preview = output || '(no output)';
+    return this.appendChatEvent(chatId, {
+      sessionId: input.sessionId,
+      type: 'tool',
+      title: exitCode === 0 ? 'Terminal completed' : 'Terminal failed',
+      text: `$ ${command}\n${preview}`,
+      meta: {
+        role: 'terminal',
+        actor: 'terminal',
+        kind: 'terminal_result',
+        chatId,
+        actionType: 'command_execution',
+        composerMode: 'terminal',
+        startedAt,
+        completedAt: new Date().toISOString(),
+        exitCode,
+        command,
+      },
+    });
   }
 
   async listRealtimeEvents(sessionId: string, options?: { afterCursor?: number; limit?: number; chatId?: string }) {
