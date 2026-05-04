@@ -2982,15 +2982,28 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
 
 .pc-proto .msg--run-status {
   display: flex;
+  align-items: center;
   justify-content: center;
+  gap: var(--sp-4);
   width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   padding: var(--sp-1) 0;
+}
+
+.pc-proto .msg--run-status::before,
+.pc-proto .msg--run-status::after {
+  content: "";
+  flex: 1 1 0;
+  min-width: var(--sp-8);
+  height: 1px;
+  background: color-mix(in srgb, var(--border-default) 58%, transparent);
 }
 
 .pc-proto .pc-run-status {
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: var(--sp-3);
   max-width: 100%;
   min-height: 26px;

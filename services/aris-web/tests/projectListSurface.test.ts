@@ -371,8 +371,12 @@ describe('project list surface', () => {
     expect(cssBlock('.pc-proto .msg--action')).toContain('box-sizing: border-box;');
     expect(cssBlock('.pc-proto .msg--action')).toContain('padding-left: calc(28px + var(--sp-4));');
     expect(cssBlock('.pc-proto .msg--run-status')).toContain('justify-content: center;');
+    expect(cssBlock('.pc-proto .msg--run-status')).toContain('gap: var(--sp-4);');
     expect(cssBlock('.pc-proto .msg--run-status')).toContain('padding: var(--sp-1) 0;');
+    expect(cssBlock('.pc-proto .msg--run-status::before,\n.pc-proto .msg--run-status::after')).toContain('flex: 1 1 0;');
+    expect(cssBlock('.pc-proto .msg--run-status::before,\n.pc-proto .msg--run-status::after')).toContain('background: color-mix(in srgb, var(--border-default) 58%, transparent);');
     expect(cssBlock('.pc-proto .pc-run-status')).toContain('display: inline-flex;');
+    expect(cssBlock('.pc-proto .pc-run-status')).toContain('flex: 0 0 auto;');
     expect(cssBlock('.pc-proto .pc-run-status')).toContain('border-radius: var(--r-full);');
     expect(cssBlock('.pc-proto .pc-run-status[data-tone="done"]')).toContain('--pc-run-status-accent: var(--success-fg);');
     expect(cssBlock('.pc-proto .pc-run-status__icon')).toContain('border-radius: var(--r-full);');
