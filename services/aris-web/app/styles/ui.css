@@ -2988,7 +2988,7 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  padding: var(--sp-1) 0;
+  padding: var(--sp-1) var(--sp-8);
 }
 
 .pc-proto .msg--run-status::before,
