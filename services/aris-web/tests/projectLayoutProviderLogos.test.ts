@@ -5,6 +5,10 @@ import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
+const providerLogo = readFileSync(resolve(__dirname, '../components/ui/ProviderLogo.tsx'), 'utf8');
+const chatTimeline = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/ChatTimeline.tsx'), 'utf8');
+const chatInterfaceCss = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.module.css'), 'utf8');
+const middleware = readFileSync(resolve(__dirname, '../middleware.ts'), 'utf8');
 const uiCss = readFileSync(resolve(__dirname, '../app/styles/ui.css'), 'utf8');
 
 describe('project layout and provider logo guards', () => {
@@ -16,15 +20,29 @@ describe('project layout and provider logo guards', () => {
   });
 
   it('uses the real provider logo assets in the model picker', () => {
-    expect(homeClient).toContain("claude: '/icons/claude.svg'");
-    expect(homeClient).toContain("codex: '/icons/codex.svg'");
-    expect(homeClient).toContain("gemini: '/icons/gemini.svg'");
-    expect(homeClient).toContain('function ProviderLogo({');
+    expect(providerLogo).toContain('PROVIDER_ICON_SVGS');
+    expect(providerLogo).toContain('svgToMaskDataUrl');
+    expect(providerLogo).toContain('data:image/svg+xml');
+    expect(middleware).toContain("pathname.startsWith('/icons/')");
+    expect(homeClient).toContain("import { ProviderLogo, type ProviderLogoProvider } from '@/components/ui/ProviderLogo';");
     expect(homeClient).toContain('<ProviderLogo provider={selectedProvider} />');
     expect(homeClient).toContain('<ProviderLogo provider={provider} />');
+    expect(homeClient).not.toContain('function ProviderLogo({');
     expect(homeClient).not.toContain('<span>{agentInitial(provider).slice(0, 1)}</span>');
 
     expect(uiCss).toContain('.provider-logo');
     expect(uiCss).toContain('mask-image: var(--provider-logo-url);');
+  });
+
+  it('uses the shared provider logo in chat avatars', () => {
+    expect(homeClient).toContain('msg__avatar');
+    expect(homeClient).toContain('<ProviderLogo provider={selectedProvider} />');
+    expect(homeClient).not.toContain("agentInitial(activeAgent)");
+    expect(uiCss).toContain('.pc-proto .msg__avatar .provider-logo');
+    expect(uiCss).toContain('.pc-proto .chturn__agent-avatar .provider-logo');
+
+    expect(chatTimeline).toContain("import { ProviderLogo } from '@/components/ui/ProviderLogo';");
+    expect(chatTimeline).toContain('<ProviderLogo provider={activeAgentFlavor} />');
+    expect(chatInterfaceCss).toContain(':global(.provider-logo)');
   });
 });
