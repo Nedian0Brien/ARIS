@@ -4360,6 +4360,70 @@ html[data-theme='dark'] .pc-proto .pc-action-stack {
   flex-shrink: 0;
 }
 
+.pc-proto .file-tree__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-default);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.pc-proto .file-tree__cwd {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.pc-proto .file-tree__refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.pc-proto .file-tree__refresh:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.pc-proto .file-row--parent .file-row__name {
+  color: var(--text-secondary);
+}
+
+.pc-proto .file-row--state {
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  cursor: default;
+}
+
+.pc-proto .file-row--state.file-row--error {
+  color: var(--accent-danger, #d8554d);
+}
+
+.pc-proto .cmp__send--aborting {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.pc-proto .ws__stop:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .pc-proto .term {
   overflow: hidden;
   background: #0F1117;
