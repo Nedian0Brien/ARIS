@@ -50,6 +50,8 @@ import { withAppBasePath } from '@/lib/routing/appPath';
 import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
 import type { AuthenticatedUser } from '@/lib/auth/types';
 import type { SessionChat, SessionStatus, SessionSummary, UiEvent } from '@/lib/happy/types';
+import { abortActiveChat } from '@/lib/runtime/abortChat';
+import { useWorkspaceFiles, type WorkspaceFileItem } from '@/lib/hooks/useWorkspaceFiles';
 
 type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';
 type ComposerMode = 'agent' | 'plan' | 'terminal';
@@ -1857,6 +1859,7 @@ function ProjectChatSurface({
   const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAborting, setIsAborting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const activeChat = selectedChatId ? chats.find((chat) => chat.id === selectedChatId) ?? null : null;
   const runtimeModelLabel = activeChat?.model ?? modelLabel;
@@ -1877,7 +1880,7 @@ function ProjectChatSurface({
   const [selectedEffort, setSelectedEffort] = useState<ReasoningEffort>(() => normalizeReasoningEffort(activeChat?.modelReasoningEffort));
   const [expandedTurnId, setExpandedTurnId] = useState<ExpandedTurnState>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
-  const [selectedWorkspaceFile, setSelectedWorkspaceFile] = useState('HomePageClient.tsx');
+  const [selectedWorkspaceFile, setSelectedWorkspaceFile] = useState('');
   const [draftTerminalCommand, setDraftTerminalCommand] = useState('npm test -- --run tests/projectListSurface.test.ts');
   const [previewDevice, setPreviewDevice] = useState<'1200' | '768' | '390'>('1200');
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
@@ -1895,13 +1898,7 @@ function ProjectChatSurface({
   const previewTarget = `aris.lawdigest.cloud${projectChatRoute}`;
   const prototypeRef = useRef<HTMLDivElement | null>(null);
   const composerWrapRef = useRef<HTMLElement | null>(null);
-  const workspaceFiles = [
-    { id: 'root', name: projectPath, kind: 'dir', meta: 'project' },
-    { id: 'home-client', name: 'services/aris-web/app/HomePageClient.tsx', kind: 'file', meta: '+ UI' },
-    { id: 'ui-css', name: 'services/aris-web/app/styles/ui.css', kind: 'file', meta: '+ CSS' },
-    { id: 'surface-test', name: 'services/aris-web/tests/projectListSurface.test.ts', kind: 'file', meta: '+ tests' },
-    { id: 'prototype', name: 'design/chat-prototype.html', kind: 'file', meta: 'source' },
-  ];
+  const workspaceFiles = useWorkspaceFiles('/workspace');
   const terminalSnippets = [
     { id: 'test', name: 'test target', cmd: 'npm test -- --run tests/projectListSurface.test.ts', tag: 'test' },
     { id: 'mobile', name: 'mobile guard', cmd: 'npm test -- --run tests/mobileOverflowLayout.test.ts', tag: 'mobile' },
@@ -2290,6 +2287,21 @@ function ProjectChatSurface({
     }
   };
 
+  const handleStopActiveChat = useCallback(async () => {
+    if (isAborting) return;
+    if (!isSubmitting && !activeChat) return;
+    setIsAborting(true);
+    try {
+      await abortActiveChat({ sessionId: session.id, chatId: activeChat?.id });
+      showTransientFeedback('Stop 요청을 보냈습니다');
+    } catch (abortError) {
+      setError(abortError instanceof Error ? abortError.message : '에이전트 실행 중단에 실패했습니다.');
+    } finally {
+      setIsAborting(false);
+      setIsSubmitting(false);
+    }
+  }, [activeChat, isAborting, isSubmitting, session.id]);
+
   if (!selectedChatId) {
     return (
       <div className="pc-chat-directory" data-project-chat-list>
@@ -2654,15 +2666,28 @@ function ProjectChatSurface({
                 </div>
                 <div className="cmp__right">
                   <span className="cmp__hint"><span className="kbd">⌘</span><span className="kbd">↵</span><span>send</span></span>
-                  <button
-                    type="submit"
-                    className={`cmp__send${isSubmitting ? ' cmp__send--running' : ''}`}
-                    disabled={isSubmitting ? false : !prompt.trim()}
-                    aria-label={isSubmitting ? 'Stop generation' : 'Send message'}
-                  >
-                    {isSubmitting ? 'Stop' : 'Send'}
-                    {isSubmitting ? <Square size={11} /> : <Send size={13} />}
-                  </button>
+                  {isSubmitting || isAborting ? (
+                    <button
+                      type="button"
+                      className={`cmp__send cmp__send--running${isAborting ? ' cmp__send--aborting' : ''}`}
+                      disabled={isAborting}
+                      aria-label="Stop generation"
+                      onClick={() => { void handleStopActiveChat(); }}
+                    >
+                      {isAborting ? 'Stopping…' : 'Stop'}
+                      <Square size={11} />
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      className="cmp__send"
+                      disabled={!prompt.trim()}
+                      aria-label="Send message"
+                    >
+                      Send
+                      <Send size={13} />
+                    </button>
+                  )}
                 </div>
               </div>
             </form>
@@ -2698,7 +2723,15 @@ function ProjectChatSurface({
             </div>
             <div className="ws__status-right">
               <span>{tokenLabel}</span>
-              <button type="button" className="ws__stop" aria-label="Stop" onClick={() => showTransientFeedback('Stop request staged for this project chat')}><Square size={10} /></button>
+              <button
+                type="button"
+                className="ws__stop"
+                aria-label="Stop"
+                disabled={!isSubmitting && !isAborting}
+                onClick={() => { void handleStopActiveChat(); }}
+              >
+                <Square size={10} />
+              </button>
             </div>
           </div>
           <div className="ws__body">
@@ -2780,22 +2813,60 @@ function ProjectChatSurface({
               </div>
             </div>
             <div className={`ws__pane${workspaceTab === 'files' ? ' ws__pane--active' : ''}`} data-pane="files">
+              <div className="file-tree__head">
+                <span className="file-tree__cwd" title={workspaceFiles.currentPath}>{workspaceFiles.currentPath}</span>
+                <button
+                  type="button"
+                  className="file-tree__refresh"
+                  aria-label="Refresh files"
+                  onClick={() => workspaceFiles.refresh()}
+                  disabled={workspaceFiles.loading}
+                >
+                  <RefreshCcw size={11} />
+                </button>
+              </div>
               <div className="file-tree">
-                {workspaceFiles.map((file) => (
+                {workspaceFiles.parentPath && (
                   <button
-                    key={file.id}
                     type="button"
-                    className={`file-row${selectedWorkspaceFile === file.name ? ' file-row--selected' : ''}`}
+                    className="file-row file-row--parent"
+                    onClick={() => workspaceFiles.goUp()}
+                  >
+                    <span className="file-row__icon file-row__icon--dir">
+                      <FolderOpen size={13} />
+                    </span>
+                    <span className="file-row__name">..</span>
+                    <span className="file-row__meta">parent</span>
+                  </button>
+                )}
+                {workspaceFiles.loading && workspaceFiles.items.length === 0 && (
+                  <div className="file-row file-row--state">Loading…</div>
+                )}
+                {workspaceFiles.error && (
+                  <div className="file-row file-row--state file-row--error">{workspaceFiles.error}</div>
+                )}
+                {!workspaceFiles.loading && !workspaceFiles.error && workspaceFiles.items.length === 0 && (
+                  <div className="file-row file-row--state">빈 디렉터리</div>
+                )}
+                {workspaceFiles.items.map((file: WorkspaceFileItem) => (
+                  <button
+                    key={file.path}
+                    type="button"
+                    className={`file-row${selectedWorkspaceFile === file.path ? ' file-row--selected' : ''}`}
                     onClick={() => {
-                      setSelectedWorkspaceFile(file.name);
-                      if (file.kind === 'file') setPreviewState('dock');
+                      if (file.isDirectory) {
+                        workspaceFiles.cdInto(file);
+                      } else {
+                        setSelectedWorkspaceFile(file.path);
+                        setPreviewState('dock');
+                      }
                     }}
                   >
-                    <span className={`file-row__icon${file.kind === 'dir' ? ' file-row__icon--dir' : ''}`}>
-                      {file.kind === 'dir' ? <FolderOpen size={13} /> : <FileText size={13} />}
+                    <span className={`file-row__icon${file.isDirectory ? ' file-row__icon--dir' : ''}`}>
+                      {file.isDirectory ? <FolderOpen size={13} /> : <FileText size={13} />}
                     </span>
                     <span className="file-row__name">{file.name}</span>
-                    <span className="file-row__meta">{file.meta}</span>
+                    <span className="file-row__meta">{file.isDirectory ? 'dir' : 'file'}</span>
                   </button>
                 ))}
               </div>
