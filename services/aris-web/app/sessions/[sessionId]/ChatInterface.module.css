@@ -7832,9 +7832,13 @@
   }
 
   .composerDock {
-    width: calc(100% - var(--sp-4));
-    max-width: calc(100% - var(--sp-4));
+    position: fixed;
+    left: 0.65rem;
+    right: 0.65rem;
+    width: auto;
+    max-width: none;
     bottom: var(--composer-dock-bottom-offset);
+    transform: none;
   }
 
   .compV2Top {

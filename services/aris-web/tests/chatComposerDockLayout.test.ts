@@ -34,6 +34,7 @@ describe('chat composer dock desktop layout guards', () => {
     expect(chatInterfaceCss).toContain('--composer-dock-bottom-offset');
     expect(chatInterfaceCss).toContain('--chat-timeline-bottom-offset');
     expect(chatInterfaceCss).toMatch(/\.composerDock\s*\{[\s\S]*bottom:\s*var\(--composer-dock-bottom-offset\);/);
+    expect(chatInterfaceCss).toMatch(/@media \(max-width: 767px\) \{[\s\S]*\.composerDock\s*\{[\s\S]*position:\s*fixed;[\s\S]*transform:\s*none;/s);
     expect(chatInterfaceCss).toMatch(/\.csTimeline\s*\{[\s\S]*padding:[\s\S]*var\(--chat-timeline-bottom-offset\);/);
   });
 
