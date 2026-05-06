@@ -410,7 +410,7 @@ function ProjectRecentChatRows({
             key={chat.id}
             type="button"
             className="home-proj__chat home-proj__chat--button"
-            onClick={() => onChatOpen(chat.id)}
+            onClick={(e) => { e.stopPropagation(); onChatOpen(chat.id); }}
           >
             {content}
           </button>
@@ -1262,7 +1262,7 @@ function HomeSurface({
                 </div>
                 <ChevronRight size={15} />
               </div>
-              <ProjectRecentChatRows session={session} />
+              <ProjectRecentChatRows session={session} onChatOpen={(chatId) => onProjectOpen(session.id, 'chat', chatId)} />
               <div className="home-proj__foot">
                 <span>{session.totalChats ?? 0} chats</span>
                 <span>{formatRelativeTime(latestChatActivityAt ?? session.lastActivityAt)}</span>
@@ -3302,6 +3302,7 @@ function ProjectSurface({
                 className="home-proj__chats--project-list"
                 emptyCopy="프로젝트에서 채팅을 시작하면 최근 내역이 여기에 표시됩니다."
                 session={session}
+                onChatOpen={(chatId) => onProjectChatOpen(session.id, chatId)}
               />
               <div className="proj-list-card__foot">
                 <span className="proj-list-card__foot-meta">last {formatRelativeTime(latestChatActivityAt ?? session.lastActivityAt)}</span>
