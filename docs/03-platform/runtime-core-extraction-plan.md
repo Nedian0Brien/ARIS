@@ -72,18 +72,39 @@
 - happy-server 컨테이너의 외부 인프라 위치 확인 (별도 docker-compose 또는 systemd?).
 - aris-web의 `HAPPY_SERVER_*` 사용처가 backend 호출용인지 web 자체 의존인지 분류.
 
-### 2.5b — Happy-server HTTP 메서드 제거 + `'happy'` backend 분기 삭제
-**목표**: `RuntimeBackend` union에서 `'happy'` 제거, `HappyRuntimeStore`의 HTTP 메서드 그룹 삭제, store.ts의 `delegate` 분기 정리.
+### 2.5b — Happy-server backend 정리 (2 PR로 분할 실행)
+
+원래 한 sprint로 묶었던 항목을 실제 작업 시 두 PR로 분할했다. **self-fetch HTTP 메서드 제거**는 단순 dead-code가 아니라 PrismaStore 직접 위임 + 8개 호출 site 변환 + `request<T>` 헬퍼 + serverUrl/token 필드 정리가 묶여 있어 sprint 1개로 안전히 다루기 어렵다 → 2.5c-e의 orchestration 추출 과정에서 자연스럽게 흡수한다 (HappyRuntimeStore 메서드가 모듈로 빠져나갈 때 self-fetch 분기도 함께 사라진다).
+
+#### 2.5b.1 — `'happy'` backend 분기 + 종속 dead code 제거 (#288 ✅)
+
+목표: `RuntimeBackend` union에서 `'happy'` 제거 + 그 분기에서만 도달하던 dead code 동시 제거.
+
+변경 (실측):
+- `config.ts`: enum `'mock'|'happy'|'prisma'` → `'mock'|'prisma'`. `HAPPY_SERVER_URL`/`HAPPY_SERVER_TOKEN`/`HAPPY_ACCOUNT_SECRET` 환경변수 스키마에서 제거.
+- `store.ts`: `RuntimeBackend` union narrowing. constructor `happyServerUrl?`/`happyServerToken?` 파라미터 제거. `if (runtimeBackend === 'happy')` 13줄 블록 삭제.
+- `server.ts`: `ServerConfig` 타입 narrowing. `new RuntimeStore()` 호출 인자 정리. happy-bridge self-reference 가드 9줄 + kill action happy fallback 23줄 + `HAPPY_BRIDGE_HEADER`/`HAPPY_SELF_REFERENCE_ERROR` 상수 제거.
+- `tests/server.test.ts`: `RUNTIME_BACKEND='happy'` 의존 테스트 2개 삭제.
+
+검증: `tsc --noEmit` clean, `vitest run --exclude e2e` 261/261 PASS, 4 files +14 -107.
+
+#### 2.5b.2 — Backend-side `HAPPY_SERVER_*` env 정리 (이번 PR)
+
+목표: backend가 더 이상 읽지 않는 `HAPPY_SERVER_URL`/`HAPPY_SERVER_TOKEN`/`HAPPY_ACCOUNT_SECRET` env 변수를 deploy/PM2/예제 파일에서 제거. **aris-web은 손대지 않음** (별도 sprint 2.5g).
 
 변경 대상:
-- `services/aris-backend/src/store.ts` — `RuntimeBackend = 'mock' | 'prisma'`. `happy` 분기 제거. `runtimeExecutor`도 `HappyRuntimeStore`에서 분리할 준비 (실제 분리는 2.5c~e).
-- `services/aris-backend/src/runtime/happyClient.ts` — HTTP 메서드 (~30개?) 삭제. PrismaStore와 중복되는 것 모두.
-- `services/aris-backend/src/config.ts` — `RUNTIME_BACKEND=happy` validation 제거. `HAPPY_SERVER_URL`/`HAPPY_SERVER_TOKEN`은 일단 deprecation 경고만 출력 (env 변경은 2.5g).
+- `services/aris-backend/.env.example` — `HAPPY_SERVER_*` 3줄 제거.
+- `deploy/internal/backend_zero_downtime.sh` — `if [[ "$runtime_backend" == "happy" ]]` 블록 제거 (이미 `'happy'` backend가 사라졌으므로 dead).
+- `deploy/ecosystem.config.cjs` — PM2 env에서 `HAPPY_SERVER_URL`/`HAPPY_SERVER_TOKEN`/`HAPPY_ACCOUNT_SECRET` propagation 3줄 제거.
+
+남는 위치 (2.5g에서 처리):
+- `deploy/.env` — `HAPPY_SERVER_*` 라인. 운영 단계에서 사용자 확인 후 제거.
+- `deploy/dev/run_web_dev_hot_reload.sh` — `DEV_HAPPY_SERVER_*` fallback. dev 편의용이라 web 정리와 함께 제거.
+- `services/aris-web/lib/config.ts`, `server.mjs`, `.env.example` — `RUNTIME_API_URL || HAPPY_SERVER_URL` legacy fallback. **prod env에 `RUNTIME_API_URL`이 명시되지 않은 상태**라 fallback 의존 가능. web 측 RUNTIME_API_URL 명시 + fallback 제거를 함께 처리.
 
 회귀 가드:
-- 기존 e2e 테스트(claudeAlignment, geminiAlignment, happyAlignment) 통과.
-- `happyAlignment.e2e.test.ts`가 happy-server에 의존하면 prisma fixture로 전환.
-- 단위 테스트: `RUNTIME_BACKEND=happy`로 부팅 시도 시 명확한 에러 메시지로 실패.
+- prod env에서 `HAPPY_SERVER_URL`이 남아 있어도 backend는 더 이상 읽지 않으므로 무영향 (config.ts에서 제거된 후 zod가 unknown key를 strip).
+- `backend_zero_downtime.sh`가 새 env로 정상 동작 (require 줄어든 것뿐).
 
 ### 2.5c — `permissionRouter.ts` 추출
 **목표**: 권한 협상 로직(③)을 `runtime/orchestration/permissionRouter.ts`로 분리. 외부 인터페이스는 PrismaStore의 `decidePermission` / `getPermissionById`만 통과.

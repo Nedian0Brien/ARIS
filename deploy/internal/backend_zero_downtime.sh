@@ -18,9 +18,6 @@ ENV_FILE="$(require_deploy_env_file "deploy:backend-zd")"
 require_env_keys "deploy:backend-zd" "$ENV_FILE" RUNTIME_API_TOKEN RUNTIME_BACKEND
 
 runtime_backend="$(read_env_value "$ENV_FILE" "RUNTIME_BACKEND" || true)"
-if [[ "$runtime_backend" == "happy" ]]; then
-  require_env_keys "deploy:backend-zd" "$ENV_FILE" HAPPY_SERVER_URL HAPPY_SERVER_TOKEN
-fi
 if [[ "$runtime_backend" == "prisma" ]]; then
   require_env_keys "deploy:backend-zd" "$ENV_FILE" DATABASE_URL
 fi
