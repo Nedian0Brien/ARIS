@@ -39,7 +39,7 @@ function toSessionChat(record: PrismaSessionChat): SessionChat {
 export async function enrichSessionsWithRecentChats(
   userId: string,
   sessions: SessionSummary[],
-  recentPerSession = 2,
+  recentPerSession = 5,
 ): Promise<SessionSummary[]> {
   const sessionIds = sessions.map((session) => session.id);
   if (sessionIds.length === 0) {
