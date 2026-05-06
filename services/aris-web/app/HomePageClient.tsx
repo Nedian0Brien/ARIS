@@ -1528,7 +1528,6 @@ function ProjectDetailSurface({
         >
           <Database size={14} />
           Context
-          <span className="proj-tab__count">6</span>
         </button>
         <button
           type="button"
@@ -2308,7 +2307,7 @@ function ProjectChatSurface({
   const createChat = async (): Promise<SessionChat | null> => {
     setError(null);
     const createdChat = await createProjectSessionChat(session.id, {
-      title: `Chat ${Math.max(1, chats.length + 1)}`,
+      title: '새 채팅',
       agent: selectedProvider,
       model: activeModelLabel,
       modelReasoningEffort: serializeReasoningEffort(selectedEffort),
@@ -2431,8 +2430,9 @@ function ProjectChatSurface({
             {isLoadingChats && <div className="pc-chat-loading">Loading chats...</div>}
             {!isLoadingChats && chats.length > 0 && (
               <button type="button" className="pc-chat-card pc-chat-card--new" onClick={handleNewChat}>
-                <span className="pc-chat-card__new-icon"><Plus size={16} /></span>
+                <span className="pc-chat-card__new-icon" aria-hidden="true"><Plus size={16} strokeWidth={2.25} /></span>
                 <span className="pc-chat-card__new-label">새 채팅 시작</span>
+                <span className="pc-chat-card__new-hint">{agentLabel(selectedProvider, activeModelLabel)}</span>
               </button>
             )}
             {!isLoadingChats && chats.map((chat) => (
@@ -2457,10 +2457,10 @@ function ProjectChatSurface({
             ))}
             {!isLoadingChats && chats.length === 0 && (
               <button type="button" className="pc-chat-card pc-chat-card--empty" onClick={handleNewChat}>
-                <span className="pc-chat-card__empty-icon"><Plus size={20} /></span>
+                <span className="pc-chat-card__empty-icon" aria-hidden="true"><Plus size={20} strokeWidth={2.25} /></span>
                 <span className="pc-chat-card__empty-body">
-                  <span className="pc-chat-card__empty-title">Start the first chat</span>
-                  <span className="pc-chat-card__empty-text">프로젝트 하위에 새 채팅을 만들고 프로토타입 화면으로 진입합니다.</span>
+                  <span className="pc-chat-card__empty-title">첫 채팅 시작</span>
+                  <span className="pc-chat-card__empty-text">{agentLabel(selectedProvider, activeModelLabel)}로 이 프로젝트의 첫 대화를 엽니다.</span>
                 </span>
               </button>
             )}
@@ -2475,14 +2475,6 @@ function ProjectChatSurface({
               <div className="pc-chat-side-stat"><span>Total chats</span><strong>{chats.length || session.totalChats || 0}</strong></div>
               <div className="pc-chat-side-stat"><span>Active signal</span><strong>{projectStatusLabel(session.status)}</strong></div>
               <div className="pc-chat-side-stat"><span>Context</span><strong>{tokenLabel}</strong></div>
-            </article>
-            <article className="pc-chat-side-card">
-              <div className="pc-chat-side-card__title">
-                <FolderOpen size={14} />
-                Attached context
-              </div>
-              <div className="ctx-item"><FileText size={13} /><span className="ctx-item__name">design/chat-prototype.html</span><span className="ctx-item__tokens">source</span></div>
-              <div className="ctx-item"><FileText size={13} /><span className="ctx-item__name">Project IA shell</span><span className="ctx-item__tokens">active</span></div>
             </article>
           </aside>
         </div>

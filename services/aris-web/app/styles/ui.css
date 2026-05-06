@@ -2285,6 +2285,13 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   background: var(--surface-sunken);
   color: var(--text-tertiary);
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  transition: background-color 140ms var(--ease-smooth), color 140ms var(--ease-smooth);
+}
+
+.proj-tab--active .proj-tab__count {
+  background: color-mix(in srgb, var(--b-500) 12%, transparent);
+  color: var(--b-600);
 }
 
 .proj-pane {
@@ -2613,40 +2620,66 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
 .pc-chat-card--new {
   flex-direction: row;
   align-items: center;
-  justify-content: center;
-  gap: var(--sp-3);
-  padding: var(--sp-6) var(--sp-10);
-  border-style: dashed;
-  background: transparent;
-  color: var(--text-secondary);
+  gap: var(--sp-4);
+  padding: var(--sp-8) var(--sp-10);
+  border-color: color-mix(in srgb, var(--b-500) 24%, var(--border-subtle));
+  background: color-mix(in srgb, var(--b-500) 5%, var(--surface));
+  color: var(--text-primary);
 }
 
-.pc-chat-card--new:hover,
+.pc-chat-card--new:hover {
+  border-color: color-mix(in srgb, var(--b-500) 50%, var(--border-subtle));
+  background: color-mix(in srgb, var(--b-500) 9%, var(--surface));
+}
+
 .pc-chat-card--new:focus-visible {
-  color: var(--text-primary);
-  border-color: var(--b-500);
-  background: color-mix(in srgb, var(--b-500) 6%, transparent);
+  border-color: color-mix(in srgb, var(--b-500) 50%, var(--border-subtle));
+  background: color-mix(in srgb, var(--b-500) 9%, var(--surface));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--b-500) 32%, transparent);
 }
 
 .pc-chat-card__new-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--b-500) 14%, transparent);
+  color: var(--b-600);
+  flex-shrink: 0;
 }
 
 .pc-chat-card__new-label {
   font-size: var(--text-sm);
   font-weight: 600;
   letter-spacing: 0;
+  color: var(--text-primary);
+}
+
+.pc-chat-card__new-hint {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .pc-chat-card--empty {
   flex-direction: row;
   align-items: center;
   gap: var(--sp-6);
-  border-style: dashed;
-  background: transparent;
+  border-color: color-mix(in srgb, var(--b-500) 20%, var(--border-subtle));
+  background: color-mix(in srgb, var(--b-500) 4%, var(--surface));
   padding: var(--sp-12) var(--sp-10);
+}
+
+.pc-chat-card--empty:hover {
+  border-color: color-mix(in srgb, var(--b-500) 45%, var(--border-subtle));
+  background: color-mix(in srgb, var(--b-500) 8%, var(--surface));
 }
 
 .pc-chat-card__empty-icon {
@@ -2656,8 +2689,8 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   width: 40px;
   height: 40px;
   border-radius: var(--r-full);
-  background: var(--surface-sunken);
-  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--b-500) 14%, transparent);
+  color: var(--b-600);
   flex-shrink: 0;
 }
 
