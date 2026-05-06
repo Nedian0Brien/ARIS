@@ -390,7 +390,7 @@ function ProjectRecentChatRows({
   onChatOpen?: (chatId: string) => void;
   session: SessionSummary;
 }) {
-  const chats = (session.recentChats ?? []).filter((chat) => !isChatEmpty(chat)).slice(0, 2);
+  const chats = (session.recentChats ?? []).filter((chat) => !isChatEmpty(chat)).slice(0, 3);
 
   return (
     <div className={`home-proj__chats${className ? ` ${className}` : ''}`}>
