@@ -258,13 +258,14 @@ function normalizeTab(tab: string | null): TabType {
 
 function normalizeProjectView(view: string | null): ProjectView {
   switch (view) {
-    case 'chats':
     case 'chat':
+    case 'overview':
     case 'files':
     case 'context':
       return view;
+    case 'chats':
     default:
-      return 'overview';
+      return 'chats';
   }
 }
 
@@ -468,11 +469,11 @@ function deriveProjectTokenLabel(session: SessionSummary, index: number): string
   return `${total.toFixed(1)}k`;
 }
 
-function buildProjectDetailPath(sessionId: string, view: ProjectView = 'overview', chatId?: string | null): string {
+function buildProjectDetailPath(sessionId: string, view: ProjectView = 'chats', chatId?: string | null): string {
   const params = new URLSearchParams();
   params.set('tab', 'project');
   params.set('project', sessionId);
-  if (view !== 'overview') {
+  if (view !== 'chats') {
     params.set('view', view);
   }
   if (view === 'chat' && chatId) {
@@ -1526,14 +1527,6 @@ function ProjectDetailSurface({
       <nav className="proj-tabs" aria-label={`${projectName} project sections`}>
         <button
           type="button"
-          className={`proj-tab${projectView === 'overview' ? ' proj-tab--active' : ''}`}
-          onClick={() => onProjectViewChange('overview')}
-        >
-          <PanelsTopLeft size={14} />
-          Overview
-        </button>
-        <button
-          type="button"
           className={`proj-tab${projectView === 'chats' ? ' proj-tab--active' : ''}`}
           onClick={() => onProjectViewChange('chats')}
         >
@@ -1558,6 +1551,14 @@ function ProjectDetailSurface({
           <Database size={14} />
           Context
           <span className="proj-tab__count">6</span>
+        </button>
+        <button
+          type="button"
+          className={`proj-tab${projectView === 'overview' ? ' proj-tab--active' : ''}`}
+          onClick={() => onProjectViewChange('overview')}
+        >
+          <PanelsTopLeft size={14} />
+          Overview
         </button>
       </nav>
 
@@ -2455,31 +2456,41 @@ function ProjectChatSurface({
         <div className="pc-chat-directory__grid">
           <section className="pc-chat-directory__list" aria-label={`${projectName} chat list`}>
             {isLoadingChats && <div className="pc-chat-loading">Loading chats...</div>}
+            {!isLoadingChats && chats.length > 0 && (
+              <button type="button" className="pc-chat-card pc-chat-card--new" onClick={handleNewChat}>
+                <span className="pc-chat-card__new-icon"><Plus size={16} /></span>
+                <span className="pc-chat-card__new-label">새 채팅 시작</span>
+              </button>
+            )}
             {!isLoadingChats && chats.map((chat) => (
               <button
                 key={chat.id}
                 type="button"
-                className="pc-chat-row"
+                className="pc-chat-card"
                 onClick={() => onChatOpen(chat.id)}
               >
-                <span className={`pc-chat-row__dot pc-chat-row__dot--${statusClass(session.status)}`} />
-                <span className="pc-chat-row__body">
-                  <span className="pc-chat-row__title">{chat.title}</span>
-                  <span className="pc-chat-row__preview">{chat.latestPreview || recentPreview}</span>
-                  <span className="pc-chat-row__meta">
-                    {agentLabel(chat.agent, chat.model ?? modelLabel)} · {formatRelativeTime(chat.lastActivityAt)}
+                <span className="pc-chat-card__head">
+                  <span className="pc-chat-card__title">{chat.title}</span>
+                  <span className={`pc-chat-card__status pc-chat-card__status--${statusClass(session.status)}`}>
+                    <span className="pc-chat-card__status-dot" />
+                    {projectStatusLabel(session.status)}
                   </span>
                 </span>
-                <ChevronRight size={14} />
+                <span className="pc-chat-card__preview">{chat.latestPreview || recentPreview}</span>
+                <span className="pc-chat-card__meta">
+                  <span>{agentLabel(chat.agent, chat.model ?? modelLabel)}</span>
+                  <span className="pc-chat-card__meta-sep">·</span>
+                  <span>{formatRelativeTime(chat.lastActivityAt)}</span>
+                </span>
               </button>
             ))}
             {!isLoadingChats && chats.length === 0 && (
-              <button type="button" className="pc-chat-row pc-chat-row--empty" onClick={handleNewChat}>
-                <span className="pc-chat-row__body">
-                  <span className="pc-chat-row__title">Start the first chat</span>
-                  <span className="pc-chat-row__preview">프로젝트 하위에 새 채팅을 만들고 프로토타입 화면으로 진입합니다.</span>
+              <button type="button" className="pc-chat-card pc-chat-card--empty" onClick={handleNewChat}>
+                <span className="pc-chat-card__empty-icon"><Plus size={20} /></span>
+                <span className="pc-chat-card__empty-body">
+                  <span className="pc-chat-card__empty-title">Start the first chat</span>
+                  <span className="pc-chat-card__empty-text">프로젝트 하위에 새 채팅을 만들고 프로토타입 화면으로 진입합니다.</span>
                 </span>
-                <Plus size={14} />
               </button>
             )}
           </section>
@@ -3478,13 +3489,13 @@ export default function HomePageWrapper({
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [selectedProjectView, setSelectedProjectView] = useState<ProjectView>('overview');
+  const [selectedProjectView, setSelectedProjectView] = useState<ProjectView>('chats');
   const [selectedProjectChatId, setSelectedProjectChatId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<RuntimeMetrics | null>(null);
 
   useEffect(() => {
     const nextTab = normalizeTab(searchParams.get('tab'));
-    const nextProjectView = nextTab === 'project' ? normalizeProjectView(searchParams.get('view')) : 'overview';
+    const nextProjectView = nextTab === 'project' ? normalizeProjectView(searchParams.get('view')) : 'chats';
     setActiveTab(nextTab);
     setSelectedProjectId(nextTab === 'project' ? (searchParams.get('project') ?? null) : null);
     setSelectedProjectView(nextProjectView);
@@ -3495,7 +3506,7 @@ export default function HomePageWrapper({
     const syncRouteFromLocation = () => {
       const url = new URL(window.location.href);
       const nextTab = normalizeTab(url.searchParams.get('tab'));
-      const nextProjectView = nextTab === 'project' ? normalizeProjectView(url.searchParams.get('view')) : 'overview';
+      const nextProjectView = nextTab === 'project' ? normalizeProjectView(url.searchParams.get('view')) : 'chats';
       setActiveTab(nextTab);
       setSelectedProjectId(nextTab === 'project' ? (url.searchParams.get('project') ?? null) : null);
       setSelectedProjectView(nextProjectView);
@@ -3550,12 +3561,12 @@ export default function HomePageWrapper({
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
     setSelectedProjectId(null);
-    setSelectedProjectView('overview');
+    setSelectedProjectView('chats');
     setSelectedProjectChatId(null);
     window.history.replaceState(null, '', withAppBasePath(`/?tab=${tab}`));
   };
 
-  const handleProjectOpen = (sessionId: string, view: ProjectView = 'overview', chatId?: string | null) => {
+  const handleProjectOpen = (sessionId: string, view: ProjectView = 'chats', chatId?: string | null) => {
     setActiveTab('project');
     setSelectedProjectId(sessionId);
     setSelectedProjectView(view);
@@ -3582,7 +3593,7 @@ export default function HomePageWrapper({
   const handleBackToProjects = () => {
     setActiveTab('project');
     setSelectedProjectId(null);
-    setSelectedProjectView('overview');
+    setSelectedProjectView('chats');
     setSelectedProjectChatId(null);
     window.history.pushState(null, '', withAppBasePath('/?tab=project'));
   };
