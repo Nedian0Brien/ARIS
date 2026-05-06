@@ -526,7 +526,7 @@ export class PrismaRuntimeStore {
       await tx.sessionChat.update({
         where: { id: chatId },
         data: {
-          latestPreview: input.text.slice(0, 280),
+          ...(lifecycleStatus === null && { latestPreview: input.text.slice(0, 280) }),
           latestEventId: created.id,
           latestEventAt: created.createdAt,
           latestEventIsUser: input.meta?.role === 'user',
