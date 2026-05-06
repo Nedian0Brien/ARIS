@@ -1248,12 +1248,14 @@ function HomeSurface({
           const latestChatActivityAt = session.recentChats?.[0] ? chatActivityAt(session.recentChats[0]) : null;
 
           return (
-            <button
+            <article
               key={session.id}
-              type="button"
               className="home-proj"
+              role="button"
+              tabIndex={0}
               data-project-href={buildProjectDetailPath(session.id)}
               onClick={() => onProjectOpen(session.id)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onProjectOpen(session.id); } }}
             >
               <div className="home-proj__head">
                 <div>
@@ -1267,7 +1269,7 @@ function HomeSurface({
                 <span>{session.totalChats ?? 0} chats</span>
                 <span>{formatRelativeTime(latestChatActivityAt ?? session.lastActivityAt)}</span>
               </div>
-            </button>
+            </article>
           );
         })}
       </section>
