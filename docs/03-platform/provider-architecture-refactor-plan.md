@@ -123,6 +123,17 @@ runtime/
 
 **검증**: codex 채팅 통합 테스트 통과, ndjson 로그 diff 빈 결과, `tsc --noEmit` 통과.
 
+### Phase 2.5 — Runtime Core Extraction & Happy-Server Removal ⭐ (8 sprints)
+
+상세: [`runtime-core-extraction-plan.md`](./runtime-core-extraction-plan.md).
+
+요지: `happyClient.ts`(5,921 LOC)의 이름과 책임이 어긋나 있고, happy-server는 prod에서 이미 dead path지만 코드/env/deploy 스크립트에 잔존. 이 phase는 두 가지를 묶어서 처리한다.
+
+1. happy-server 레거시 경로 완전 제거 (store.ts `'happy'` 분기, HTTP 메서드, `HAPPY_SERVER_URL/TOKEN` env, 관련 deploy 스크립트).
+2. `happyClient.ts`를 책임별 4개 모듈로 분해 (`permissionRouter`, `realtimeEventBus`, `activeRunRegistry`, `sessionOrchestrator`)하고 남은 파일을 `runtimeCore.ts`로 리네임.
+
+순서가 Phase 3 앞에 오는 이유: Codex 추출(Phase 3)이 직접 호출해야 할 surface(권한 라우팅, 실시간 이벤트, active run registry)를 명시적 모듈로 먼저 빼두면, Codex 추출 시 "어디로 호출해야 하나" 모호함이 사라진다.
+
 ### Phase 3 — Managed Worktree 자동화 (worktree 4)
 - `runtime/managedWorktree/naming.ts` — Tessera `naming.ts` 그대로 차용. 한국어 IME `isComposing` 가드, slug 정규화, mmdd-xx 슬러그.
 - `runtime/managedWorktree/allocator.ts` — `~/.aris/worktrees/<projectSlug>/<branchName>` 자동 할당. 충돌 시 suffix.
@@ -149,10 +160,10 @@ runtime/
 
 **검증**: `pm2 reload aris-backend` 시 진행 중 turn이 안전하게 마무리되는지, `kill -SIGTERM` 시 child process group까지 정리되는지 확인.
 
-### Phase 6 — happyClient.ts 해체 (worktree 7)
-- Phase 2 이후 codex가 빠져나가도 happyClient.ts는 약 4,500줄 남음. claude/gemini 잔여 일반 로직과 runtime store, persistence, run-key 관리, agent message sanitizer 잔여물 등이 섞여 있음.
-- `happyClient/` 디렉터리로 분해. CLAUDE.md "MANY SMALL FILES > FEW LARGE FILES" (200~400 LOC) 원칙 적용.
-- `happyClient.ts`는 barrel export로 축소.
+### Phase 6 — runtimeCore.ts 최종 정리 (worktree 7)
+- Phase 2.5에서 책임 분해와 리네임이 끝났으므로 본 phase는 잔여물 정리만 담당.
+- Phase 5 종료 시점까지 `runtimeCore.ts`에 남는 코드(provider 실행 잔여물, 미분류 헬퍼)가 있다면 책임별로 추가 분해, 없다면 파일 자체 삭제.
+- `happyClient/` 디렉터리 명칭은 사용하지 않음 (Phase 2.5에서 폐지).
 
 **검증**: 외부 import 경로 호환성 유지, 단위 테스트 통과.
 
@@ -188,7 +199,7 @@ runtime/
 ### R6. happy-server JWT vs RUNTIME_API_TOKEN 혼동
 **증상**: AGENTS.md 디버깅 가이드에 명시된 인증 토큰 분리. 리팩토링 중 토큰 사용처가 섞이면 production 디버깅 불가.
 
-**완화**: 본 리팩토링은 토큰 처리 코드를 건드리지 않는다 — happy-server 클라이언트 부분은 Phase 6에서만 정리.
+**완화**: 본 리팩토링은 토큰 처리 코드를 건드리지 않는다 — happy-server 클라이언트 부분은 Phase 2.5에서 별도 plan(`runtime-core-extraction-plan.md`)으로 정리.
 
 ## Definition of Done (전체)
 
@@ -198,7 +209,7 @@ runtime/
 - `providerCommandFactory.ts`가 세 provider 모두 분기.
 - AgentFlavor union의 모든 1급 시민이 실행 어댑터 계층에서도 1급 시민.
 - 기존 채팅 시나리오 회귀 0건. ndjson fixture diff 0건.
-- happyClient.ts < 1,500 LOC (Phase 6 종료 시점).
+- `happyClient.ts` 파일 자체 사라짐 (Phase 2.5 종료 시점). `runtimeCore.ts`로 리네임 + 책임 분해 완료.
 - PM2 cluster 환경에서 graceful shutdown 시 자식 프로세스 잔존 0건.
 
 ## Phase별 PR 라벨 / 브랜치 컨벤션
