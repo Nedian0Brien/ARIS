@@ -2306,10 +2306,11 @@ function ProjectChatSurface({
 
   const createChat = async (): Promise<SessionChat | null> => {
     setError(null);
+    const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);
     const createdChat = await createProjectSessionChat(session.id, {
       title: '새 채팅',
       agent: selectedProvider,
-      model: activeModelLabel,
+      model: projectModelInput,
       modelReasoningEffort: serializeReasoningEffort(selectedEffort),
     });
     setChats((previous) => [createdChat, ...previous.filter((chat) => chat.id !== createdChat.id)]);
@@ -2432,7 +2433,6 @@ function ProjectChatSurface({
               <button type="button" className="pc-chat-card pc-chat-card--new" onClick={handleNewChat}>
                 <span className="pc-chat-card__new-icon" aria-hidden="true"><Plus size={16} strokeWidth={2.25} /></span>
                 <span className="pc-chat-card__new-label">새 채팅 시작</span>
-                <span className="pc-chat-card__new-hint">{agentLabel(selectedProvider, activeModelLabel)}</span>
               </button>
             )}
             {!isLoadingChats && chats.map((chat) => (
@@ -2460,7 +2460,7 @@ function ProjectChatSurface({
                 <span className="pc-chat-card__empty-icon" aria-hidden="true"><Plus size={20} strokeWidth={2.25} /></span>
                 <span className="pc-chat-card__empty-body">
                   <span className="pc-chat-card__empty-title">첫 채팅 시작</span>
-                  <span className="pc-chat-card__empty-text">{agentLabel(selectedProvider, activeModelLabel)}로 이 프로젝트의 첫 대화를 엽니다.</span>
+                  <span className="pc-chat-card__empty-text">이 프로젝트의 첫 대화를 만들고 화면을 엽니다.</span>
                 </span>
               </button>
             )}
