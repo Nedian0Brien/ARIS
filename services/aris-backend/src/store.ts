@@ -16,7 +16,7 @@ import { HappyRuntimeStore } from './runtime/happyClient.js';
 import { PrismaRuntimeStore } from './runtime/prismaStore.js';
 import { computeWorktreePath, ensureWorktree } from './runtime/worktreeManager.js';
 
-type RuntimeBackend = 'mock' | 'happy' | 'prisma';
+type RuntimeBackend = 'mock' | 'prisma';
 const execAsync = promisify(exec);
 const TERMINAL_COMMAND_TIMEOUT_MS = 30_000;
 const TERMINAL_COMMAND_MAX_BUFFER = 1024 * 1024;
@@ -503,8 +503,6 @@ export class RuntimeStore {
   constructor(
     defaultProjectPath: string,
     runtimeBackend: RuntimeBackend = 'mock',
-    happyServerUrl?: string,
-    happyServerToken?: string,
     hostProjectsRoot?: string,
     databaseUrl?: string,
     runtimeApiUrl?: string,
@@ -541,20 +539,6 @@ export class RuntimeStore {
           },
         },
       });
-      return;
-    }
-
-    if (runtimeBackend === 'happy') {
-      if (!happyServerUrl) {
-        throw new Error('HAPPY_SERVER_URL is required when RUNTIME_BACKEND=happy');
-      }
-      this.delegate = new HappyRuntimeStore({
-        serverUrl: happyServerUrl,
-        token: happyServerToken ?? '',
-        workspaceRoot: defaultProjectPath,
-        hostProjectsRoot: hostProjectsRoot ?? '',
-      });
-      this.runtimeExecutor = null;
       return;
     }
 

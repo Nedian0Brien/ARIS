@@ -13,10 +13,8 @@ type ServerConfig = {
   HOST: string;
   PORT: number;
   RUNTIME_API_TOKEN: string;
-  RUNTIME_BACKEND?: 'mock' | 'happy' | 'prisma';
+  RUNTIME_BACKEND?: 'mock' | 'prisma';
   DATABASE_URL?: string;
-  HAPPY_SERVER_URL?: string;
-  HAPPY_SERVER_TOKEN?: string;
   DEFAULT_PROJECT_PATH: string;
   HOST_PROJECTS_ROOT?: string;
   LOG_LEVEL: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
@@ -126,8 +124,6 @@ const decidePermissionSchema = z.object({
   decision: z.enum(['allow_once', 'allow_session', 'deny']),
 });
 
-const HAPPY_BRIDGE_HEADER = 'x-aris-happy-bridge';
-const HAPPY_SELF_REFERENCE_ERROR = 'HAPPY_SERVER_URL이 현재 aris-backend 자신을 가리켜 요청 루프가 발생했습니다. 외부 Happy 런타임 URL로 변경하거나 RUNTIME_BACKEND=mock으로 전환하세요.';
 
 function toErrorMessage(error: unknown, fallback = 'Internal Server Error'): string {
   if (error instanceof Error) {
@@ -248,8 +244,6 @@ export function buildServer(config: ServerConfig) {
   const store = new RuntimeStore(
     config.DEFAULT_PROJECT_PATH,
     config.RUNTIME_BACKEND,
-    config.HAPPY_SERVER_URL,
-    config.HAPPY_SERVER_TOKEN,
     config.HOST_PROJECTS_ROOT,
     config.DATABASE_URL,
     `http://127.0.0.1:${config.PORT}`,
@@ -303,16 +297,6 @@ export function buildServer(config: ServerConfig) {
       return reply.code(429).send({
         error: '요청이 너무 빠릅니다. 잠시 후 다시 시도하세요.',
       });
-    }
-
-    if (config.RUNTIME_BACKEND === 'happy') {
-      const bridgeHeader = request.headers[HAPPY_BRIDGE_HEADER];
-      const isBridgeCall = Array.isArray(bridgeHeader)
-        ? bridgeHeader.includes('1')
-        : bridgeHeader === '1';
-      if (isBridgeCall) {
-        return reply.code(502).send({ error: HAPPY_SELF_REFERENCE_ERROR });
-      }
     }
 
     if (isRateLimitedPath(path)) {
@@ -419,29 +403,10 @@ export function buildServer(config: ServerConfig) {
         parsed.data.chatId,
       );
 
-      if (parsed.data.action === 'kill') {
-        const remaining = await store.getSession(sessionId);
-        if (remaining && config.RUNTIME_BACKEND === 'happy') {
-          const happyServerUrl = config.HAPPY_SERVER_URL;
-          if (!happyServerUrl) {
-            throw new Error('HAPPY_SERVER_URL is required for kill fallback');
-          }
-          const deleteResponse = await fetch(
-            `${happyServerUrl.replace(/\/+$/, '')}/v1/sessions/${encodeURIComponent(sessionId)}`,
-            {
-              method: 'DELETE',
-              headers: {
-                Authorization: `Bearer ${config.HAPPY_SERVER_TOKEN}`,
-              },
-            },
-          );
-
-          if (!deleteResponse.ok && deleteResponse.status !== 404) {
-            const body = (await deleteResponse.text().catch(() => '')).trim();
-            throw new Error(`Failed to hard-delete session (${deleteResponse.status}): ${body || deleteResponse.statusText}`);
-          }
-        }
-      }
+      // RUNTIME_BACKEND='happy' kill fallback was the only remaining caller of
+      // config.HAPPY_SERVER_URL/TOKEN. Removed in 2.5b.1: prisma backend
+      // handles kill via store.applySessionAction() above; mock backend has
+      // nothing to hard-delete on a remote service.
 
       return { result: { sessionId, action: parsed.data.action, ...result } };
     } catch (error) {
