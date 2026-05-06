@@ -1500,28 +1500,6 @@ function ProjectDetailSurface({
             <div className="proj-stat-value">{tokenLabel}</div>
           </div>
         </div>
-        <div className="proj-docs">
-          <article className="proj-doc">
-            <div className="proj-doc__eyebrow">Project instructions</div>
-            <div className="proj-doc__body">
-              <p>작업 시작 전 프로젝트 지침과 최근 결정 맥락을 먼저 확인합니다.</p>
-              <p>모든 변경은 전용 브랜치와 git worktree에서 분리해 진행합니다.</p>
-              <p>모바일 UI 변경은 overflow 회귀를 기본 검증에 포함합니다.</p>
-              <p>배포는 공식 스크립트와 런타임 헬스 체크로 확인합니다.</p>
-            </div>
-            <button type="button" className="proj-doc__more">전체 보기 →</button>
-          </article>
-          <article className="proj-doc">
-            <div className="proj-doc__eyebrow">Project memory</div>
-            <div className="proj-doc__body">
-              <p>{projectName}의 최근 채팅과 실행 이력이 이 홈에 묶입니다.</p>
-              <p>활성 작업, 결정 사항, 파일 힌트를 프로젝트 단위로 재진입합니다.</p>
-              <p>모델과 에이전트 선택, 최근 실행 결과를 함께 유지합니다.</p>
-              <p>다음 작업 시작 시 같은 프로젝트 맥락을 이어받습니다.</p>
-            </div>
-            <button type="button" className="proj-doc__more">전체 보기 →</button>
-          </article>
-        </div>
       </section>
 
       <nav className="proj-tabs" aria-label={`${projectName} project sections`}>
@@ -2442,15 +2420,10 @@ function ProjectChatSurface({
     return (
       <div className="pc-chat-directory" data-project-chat-list>
         <div className="pc-chat-directory__head">
-          <div>
-            <div className="pc-chat-directory__eyebrow">Chats</div>
-            <h2>{projectName} conversations</h2>
-            <p>{projectPath}</p>
-          </div>
-          <button type="button" className="btn btn--primary btn--sm" onClick={handleNewChat}>
-            <Plus size={14} />
-            New chat
-          </button>
+          <span className="pc-chat-directory__eyebrow">
+            Chats
+            <span className="pc-chat-directory__count">{chats.length || session.totalChats || 0}</span>
+          </span>
         </div>
 
         <div className="pc-chat-directory__grid">
@@ -2471,16 +2444,14 @@ function ProjectChatSurface({
               >
                 <span className="pc-chat-card__head">
                   <span className="pc-chat-card__title">{chat.title}</span>
-                  <span className={`pc-chat-card__status pc-chat-card__status--${statusClass(session.status)}`}>
-                    <span className="pc-chat-card__status-dot" />
-                    {projectStatusLabel(session.status)}
-                  </span>
+                  <span className="pc-chat-card__time">{formatRelativeTime(chat.lastActivityAt)}</span>
                 </span>
                 <span className="pc-chat-card__preview">{chat.latestPreview || recentPreview}</span>
                 <span className="pc-chat-card__meta">
+                  <span className={`badge badge--dot ${projectStatusBadgeClass(session.status)}`}>
+                    {projectStatusLabel(session.status)}
+                  </span>
                   <span>{agentLabel(chat.agent, chat.model ?? modelLabel)}</span>
-                  <span className="pc-chat-card__meta-sep">·</span>
-                  <span>{formatRelativeTime(chat.lastActivityAt)}</span>
                 </span>
               </button>
             ))}
