@@ -35,7 +35,7 @@ describe('project list surface', () => {
 
   it('routes project card clicks to the IA project detail instead of the legacy session screen', () => {
     expect(homeClient).toContain("type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';");
-    expect(homeClient).toContain("function buildProjectDetailPath(sessionId: string, view: ProjectView = 'overview', chatId?: string | null)");
+    expect(homeClient).toContain("function buildProjectDetailPath(sessionId: string, view: ProjectView = 'chats', chatId?: string | null)");
     expect(homeClient).toContain("params.set('tab', 'project');");
     expect(homeClient).toContain("params.set('project', sessionId);");
     expect(homeClient).toContain("if (view === 'chat' && chatId) {");
@@ -55,7 +55,7 @@ describe('project list surface', () => {
     expect(homeClient).toContain('className="proj-tabs"');
     expect(homeClient).toContain('className="proj-pane"');
     expect(homeClient).toContain("setSelectedProjectId(nextTab === 'project' ? (searchParams.get('project') ?? null) : null);");
-    expect(homeClient).toContain("const nextProjectView = nextTab === 'project' ? normalizeProjectView(searchParams.get('view')) : 'overview';");
+    expect(homeClient).toContain("const nextProjectView = nextTab === 'project' ? normalizeProjectView(searchParams.get('view')) : 'chats';");
     expect(homeClient).toContain('setSelectedProjectView(nextProjectView);');
     expect(homeClient).toContain('if (selectedProject) {');
   });
@@ -367,7 +367,7 @@ describe('project list surface', () => {
       '.proj-list-stats',
       '.proj-list-new-btn',
       '.pc-chat-directory',
-      '.pc-chat-row',
+      '.pc-chat-card',
       '.pc-proto .shell',
       '.pc-proto .ch',
       '.pc-proto .tl',
