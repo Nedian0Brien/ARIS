@@ -51,7 +51,7 @@ import {
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import { ProviderLogo, type ProviderLogoProvider } from '@/components/ui/ProviderLogo';
-import { selectRecentChats, selectRecentProjects, type HomeRecentChat } from './homeProjects';
+import { isChatEmpty, selectRecentChats, selectRecentProjects, type HomeRecentChat } from './homeProjects';
 import { readUiEventRunStatus } from '@/lib/happy/chatRuntime';
 import { withAppBasePath } from '@/lib/routing/appPath';
 import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
@@ -390,7 +390,7 @@ function ProjectRecentChatRows({
   onChatOpen?: (chatId: string) => void;
   session: SessionSummary;
 }) {
-  const chats = (session.recentChats ?? []).slice(0, 2);
+  const chats = (session.recentChats ?? []).filter((chat) => !isChatEmpty(chat)).slice(0, 2);
 
   return (
     <div className={`home-proj__chats${className ? ` ${className}` : ''}`}>

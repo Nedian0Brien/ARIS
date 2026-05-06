@@ -753,6 +753,13 @@ export class RuntimeStore {
     this.runtimeExecutor?.beginShutdownDrain();
   }
 
+  async cleanupEmptyChats(maxAgeMs: number): Promise<number> {
+    if (this.delegate instanceof PrismaRuntimeStore) {
+      return this.delegate.cleanupEmptyChats(maxAgeMs);
+    }
+    return 0;
+  }
+
   async awaitDrain(timeoutMs: number): Promise<void> {
     if (!this.runtimeExecutor) {
       return;

@@ -270,6 +270,17 @@ export class PrismaRuntimeStore {
     await this.db.$disconnect();
   }
 
+  async cleanupEmptyChats(maxAgeMs: number): Promise<number> {
+    const threshold = new Date(Date.now() - maxAgeMs);
+    const result = await this.db.sessionChat.deleteMany({
+      where: {
+        latestEventId: null,
+        createdAt: { lt: threshold },
+      },
+    });
+    return result.count;
+  }
+
   private async runRuntimeWriteMutationWithRetry<T>(
     operation: (tx: Prisma.TransactionClient) => Promise<T>,
   ): Promise<T> {

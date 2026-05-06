@@ -23,6 +23,10 @@ function chatActivityTime(chat: SessionChat): number {
   );
 }
 
+export function isChatEmpty(chat: SessionChat): boolean {
+  return chat.latestEventId == null && !(chat.latestPreview ?? '').trim();
+}
+
 function displaySessionName(session: SessionSummary): string {
   const candidate = session.alias || session.projectName || session.id;
   const normalized = candidate.replace(/\\/g, '/').replace(/\/+$/, '');
@@ -56,12 +60,14 @@ export function selectRecentChats(
   const count = Math.max(0, Math.floor(limit));
 
   return sessions
-    .flatMap((session) => (session.recentChats ?? []).map((chat): HomeRecentChat => ({
-      ...chat,
-      sessionName: displaySessionName(session),
-      sessionProjectPath: session.projectName || session.id,
-      sessionLastActivityAt: session.lastActivityAt,
-    })))
+    .flatMap((session) => (session.recentChats ?? [])
+      .filter((chat) => !isChatEmpty(chat))
+      .map((chat): HomeRecentChat => ({
+        ...chat,
+        sessionName: displaySessionName(session),
+        sessionProjectPath: session.projectName || session.id,
+        sessionLastActivityAt: session.lastActivityAt,
+      })))
     .sort((a, b) => {
       const timeDelta = chatActivityTime(b) - chatActivityTime(a);
       if (timeDelta !== 0) return timeDelta;
