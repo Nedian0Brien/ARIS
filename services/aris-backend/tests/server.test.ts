@@ -473,50 +473,11 @@ describe('aris-backend API', () => {
     await app.close();
   });
 
-  it('blocks self-referential happy bridge requests with actionable error', async () => {
-    const app = buildServer({
-      RUNTIME_API_TOKEN: TOKEN,
-      DEFAULT_PROJECT_PATH: '/tmp/project',
-      LOG_LEVEL: 'silent',
-      RUNTIME_BACKEND: 'happy',
-      HAPPY_SERVER_URL: 'http://127.0.0.1:8088',
-      HAPPY_SERVER_TOKEN: 'happy-runtime-token',
-    });
-
-    const response = await app.inject({
-      method: 'GET',
-      url: '/v1/sessions',
-      headers: {
-        ...authHeader(),
-        'x-aris-happy-bridge': '1',
-      },
-    });
-
-    expect(response.statusCode).toBe(502);
-    const payload = response.json() as { error?: string };
-    expect(payload.error).toContain('HAPPY_SERVER_URL');
-    await app.close();
-  });
-
-  it('returns 502 with error details when happy runtime credentials are missing', async () => {
-    const app = buildServer({
-      RUNTIME_API_TOKEN: TOKEN,
-      DEFAULT_PROJECT_PATH: '/tmp/project',
-      LOG_LEVEL: 'silent',
-      RUNTIME_BACKEND: 'happy',
-      HAPPY_SERVER_URL: 'http://127.0.0.1:8088',
-      HAPPY_SERVER_TOKEN: '',
-    });
-
-    const response = await app.inject({
-      method: 'GET',
-      url: '/v1/sessions',
-      headers: authHeader(),
-    });
-
-    expect(response.statusCode).toBe(502);
-    const payload = response.json() as { error?: string };
-    expect(payload.error).toContain('HAPPY_SERVER_TOKEN');
-    await app.close();
-  });
+  // Two tests removed in 2.5b.1:
+  // - 'blocks self-referential happy bridge requests with actionable error'
+  // - 'returns 502 with error details when happy runtime credentials are missing'
+  // Both required RUNTIME_BACKEND='happy', which no longer exists. The
+  // self-reference guard targeted misconfigured happy backend recursion; in
+  // prisma backend the runtimeExecutor self-fetches to 127.0.0.1:PORT by
+  // design, so the guard was inapplicable.
 });
