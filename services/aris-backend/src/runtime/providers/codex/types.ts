@@ -27,7 +27,10 @@ import type { ApprovalPolicy, PermissionDecision } from '../../../types.js';
 export type CodexResumeTarget = ProviderResumeTarget;
 export type CodexThreadIdSource = ProviderThreadIdSource;
 export type CodexActionEvent = ProviderActionEvent;
-export type CodexPermissionRequest = ProviderPermissionRequest;
+export type CodexPermissionRequest = ProviderPermissionRequest & {
+  /** Whether this is a shell-command approval or a patch-apply approval. */
+  actionType: 'exec' | 'patch';
+};
 export type CodexTextEvent = ProviderTextEvent;
 
 export type CodexCliResult = ProviderCliResult & {

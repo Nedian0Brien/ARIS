@@ -30,6 +30,17 @@ import { createGeminiRuntime } from './providers/gemini/geminiRuntime.js';
 import { GeminiStreamAdapter } from './providers/gemini/geminiStreamAdapter.js';
 import { GeminiSessionRegistry } from './providers/gemini/geminiSessionRegistry.js';
 import { buildProviderCommand, type ProviderCommand } from './providers/providerCommandFactory.js';
+import {
+  buildCodexPermissionKey,
+  buildCodexThreadCacheKey,
+  classifyCodexAppServerFailure,
+  extractCodexPermissionRequest,
+  isMissingCodexThreadError,
+  inferCodexFileWriteItem,
+  type CodexAppServerFailureInfo,
+  type CodexAppServerFailureKind,
+} from './providers/codex/codexProtocolMapper.js';
+import type { CodexPermissionRequest } from './providers/codex/types.js';
 import type { SessionProtocolEnvelope } from './contracts/sessionProtocol.js';
 import type {
   ProviderActionEvent,
@@ -146,16 +157,7 @@ type RuntimeAgent = RuntimeSession['metadata']['flavor'];
 type ModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 type PermissionState = PermissionRequest['state'];
 type SessionStatusValue = RuntimeSession['state']['status'];
-type PermissionActionType = 'exec' | 'patch';
 type JsonRpcId = string | number | null;
-type CodexPermissionRequest = {
-  actionType: PermissionActionType;
-  callId: string;
-  approvalId?: string;
-  command: string;
-  reason: string;
-  risk: PermissionRisk;
-};
 
 type HappyRuntimeCreateInput = {
   path: string;
@@ -1105,127 +1107,6 @@ function isAbortFailure(error: unknown): boolean {
   return typeof candidate.message === 'string' && candidate.message.toLowerCase().includes('aborted');
 }
 
-function isMissingCodexThreadError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-  if (!message.includes('thread') && !message.includes('session')) {
-    return false;
-  }
-
-  return (
-    message.includes('not found')
-    || message.includes('unknown')
-    || message.includes('invalid')
-    || message.includes('does not exist')
-    || message.includes('no such')
-  );
-}
-
-type CodexAppServerFailureKind =
-  | 'aborted'
-  | 'missing_thread'
-  | 'context_window'
-  | 'timeout'
-  | 'websocket_connect'
-  | 'websocket_closed'
-  | 'turn_failed'
-  | 'other';
-
-type CodexAppServerFailureInfo = {
-  kind: CodexAppServerFailureKind;
-  detail: string;
-  clearCachedThread: boolean;
-  retryWithFreshThread: boolean;
-  logTransportClose: boolean;
-};
-
-function classifyCodexAppServerFailure(error: unknown): CodexAppServerFailureInfo {
-  const detail = error instanceof Error ? error.message : String(error);
-  const message = detail.toLowerCase();
-
-  if (isAbortFailure(error)) {
-    return {
-      kind: 'aborted',
-      detail,
-      clearCachedThread: false,
-      retryWithFreshThread: false,
-      logTransportClose: false,
-    };
-  }
-
-  if (isMissingCodexThreadError(error)) {
-    return {
-      kind: 'missing_thread',
-      detail,
-      clearCachedThread: true,
-      retryWithFreshThread: true,
-      logTransportClose: false,
-    };
-  }
-
-  if (message.includes('context window') || message.includes('ran out of room')) {
-    return {
-      kind: 'context_window',
-      detail,
-      clearCachedThread: true,
-      retryWithFreshThread: true,
-      logTransportClose: false,
-    };
-  }
-
-  if (message.includes('turn timed out')) {
-    return {
-      kind: 'timeout',
-      detail,
-      clearCachedThread: false,
-      retryWithFreshThread: false,
-      logTransportClose: false,
-    };
-  }
-
-  if (
-    message.includes('timed out waiting for codex app-server websocket')
-    || message.includes('failed to connect to codex app-server websocket')
-    || message.includes('websocket connection failed')
-    || message.includes('websocket closed before opening')
-  ) {
-    return {
-      kind: 'websocket_connect',
-      detail,
-      clearCachedThread: false,
-      retryWithFreshThread: false,
-      logTransportClose: false,
-    };
-  }
-
-  if (message.includes('websocket closed before turn completion')) {
-    return {
-      kind: 'websocket_closed',
-      detail,
-      clearCachedThread: false,
-      retryWithFreshThread: false,
-      logTransportClose: true,
-    };
-  }
-
-  if (message.includes('turn failed')) {
-    return {
-      kind: 'turn_failed',
-      detail,
-      clearCachedThread: false,
-      retryWithFreshThread: false,
-      logTransportClose: false,
-    };
-  }
-
-  return {
-    kind: 'other',
-    detail,
-    clearCachedThread: false,
-    retryWithFreshThread: false,
-    logTransportClose: false,
-  };
-}
-
 function unwrapShellCommand(command: string): string {
   let current = command.trim();
   if (current.startsWith('$ ')) {
@@ -1252,83 +1133,6 @@ function unwrapShellCommand(command: string): string {
   return current;
 }
 
-function normalizeCodexApprovalDecision(value: unknown): PermissionRisk {
-  const text = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (text === 'low' || text === 'medium' || text === 'high') {
-    return text;
-  }
-  return 'medium';
-}
-
-function inferCodexApprovalRisk(payload: Record<string, unknown>, fallback: PermissionRisk = 'medium'): PermissionRisk {
-  const directRisk = normalizeCodexApprovalDecision(payload.risk);
-  if (directRisk !== 'medium' || String(payload.risk ?? '').trim().length > 0) {
-    return directRisk;
-  }
-
-  const hasNetworkContext = asRecord(payload.network_approval_context) !== null;
-  const networkPolicyAmendments = payload.proposed_network_policy_amendments;
-  const hasNetworkAmendments = Array.isArray(networkPolicyAmendments) && networkPolicyAmendments.length > 0;
-  const additionalPermissions = asRecord(payload.additional_permissions);
-  const hasAdditionalPermissions = additionalPermissions !== null && Object.keys(additionalPermissions).length > 0;
-  const grantRoot = asString(payload.grant_root, '').trim();
-
-  if (hasNetworkContext || hasNetworkAmendments || hasAdditionalPermissions || grantRoot) {
-    return 'high';
-  }
-
-  return fallback;
-}
-
-function extractCodexPermissionRequest(payload: Record<string, unknown>): CodexPermissionRequest | null {
-  const payloadType = asString(payload.type, '').trim();
-  const item = payloadType === 'item.completed' ? asRecord(payload.item) : payload;
-  if (!item) {
-    return null;
-  }
-
-  const itemType = asString(item.type, '').trim();
-  if (itemType !== 'exec_approval_request' && itemType !== 'apply_patch_approval_request') {
-    return null;
-  }
-
-  const callId = asString(item.call_id, asString(item.item_id, '')).trim();
-  if (!callId) {
-    return null;
-  }
-
-  const approvalId = asString(item.approval_id, '').trim() || undefined;
-  if (itemType === 'exec_approval_request') {
-    const rawCommand = asString(item.command, asString(item.parsed_cmd, asString(item.interaction_input, ''))).trim();
-    const command = unwrapShellCommand(rawCommand || `exec command (${callId})`);
-    const reason = asString(item.reason, '명령 실행을 위해 사용자 승인이 필요합니다.').trim();
-    return {
-      actionType: 'exec',
-      callId,
-      approvalId,
-      command,
-      reason,
-      risk: inferCodexApprovalRisk(item),
-    };
-  }
-
-  const grantRoot = asString(item.grant_root, '').trim();
-  const command = grantRoot ? `apply_patch (grant_root: ${grantRoot})` : 'apply_patch';
-  const reason = asString(item.reason, '패치 적용을 위해 사용자 승인이 필요합니다.').trim();
-  return {
-    actionType: 'patch',
-    callId,
-    approvalId,
-    command,
-    reason,
-    risk: inferCodexApprovalRisk(item),
-  };
-}
-
-function buildCodexPermissionKey(sessionId: string, request: CodexPermissionRequest): string {
-  return `${sessionId}:${request.approvalId || request.callId}`;
-}
-
 function resolveClaudeLaunchMode(input: {
   sessionPath?: string;
   workspaceRoot: string;
@@ -1344,182 +1148,6 @@ function resolveClaudeLaunchMode(input: {
   return raw === normalizedWorkspaceRoot || raw.startsWith(workspacePrefix)
     ? 'remote'
     : 'local';
-}
-
-function inferCodexFileWriteItem(item: Record<string, unknown>): {
-  command: string;
-  path?: string;
-  detail?: string;
-  status?: string;
-  additions: number;
-  deletions: number;
-  hasDiffSignal: boolean;
-} | null {
-  const itemType = asString(item.type, '').trim().toLowerCase();
-  if (!itemType || itemType.includes('approval')) {
-    return null;
-  }
-  if (itemType === 'agentmessage' || itemType === 'agent_message') {
-    return null;
-  }
-  if (itemType === 'commandexecution' || itemType === 'command_execution') {
-    return null;
-  }
-
-  const isFileWriteType = (
-    itemType.includes('filechange')
-    || itemType.includes('file_change')
-    || itemType.includes('apply_patch')
-    || itemType.includes('applypatch')
-    || itemType === 'patch'
-  );
-
-  if (!isFileWriteType) {
-    return null;
-  }
-
-  const pickPathFromArray = (value: unknown): string => {
-    if (!Array.isArray(value)) {
-      return '';
-    }
-    for (const entry of value) {
-      if (typeof entry === 'string' && entry.trim()) {
-        return entry.trim();
-      }
-      const rec = asRecord(entry);
-      const candidate = asString(
-        rec?.path,
-        asString(
-          rec?.file_path,
-          asString(rec?.filePath, asString(rec?.target_path, asString(rec?.targetPath, ''))),
-        ),
-      ).trim();
-      if (candidate) {
-        return candidate;
-      }
-    }
-    return '';
-  };
-
-  const pickDiffFromArray = (value: unknown): string => {
-    if (!Array.isArray(value)) {
-      return '';
-    }
-
-    const details: string[] = [];
-    for (const entry of value) {
-      const rec = asRecord(entry);
-      if (!rec) {
-        continue;
-      }
-      const candidate = asString(
-        rec.diff,
-        asString(
-          rec.patch,
-          asString(rec.unified_diff, asString(rec.unifiedDiff, asString(rec.text, asString(rec.result, '')))),
-        ),
-      ).trim();
-      if (candidate) {
-        details.push(candidate);
-      }
-    }
-
-    return details.join('\n').trim();
-  };
-
-  const pickDiffStatsFromArray = (value: unknown): { additions: number; deletions: number; hasDiffSignal: boolean } => {
-    if (!Array.isArray(value)) {
-      return { additions: 0, deletions: 0, hasDiffSignal: false };
-    }
-
-    let additions = 0;
-    let deletions = 0;
-    let hasDiffSignal = false;
-
-    for (const entry of value) {
-      const rec = asRecord(entry);
-      if (!rec) {
-        continue;
-      }
-
-      const kind = asString(asRecord(rec.kind)?.type, asString(rec.kind, '')).trim();
-      const candidate = asString(
-        rec.diff,
-        asString(
-          rec.patch,
-          asString(rec.unified_diff, asString(rec.unifiedDiff, asString(rec.text, asString(rec.result, '')))),
-        ),
-      ).trim();
-      if (!candidate) {
-        continue;
-      }
-
-      const stats = summarizeFileChangeDiff(candidate, kind);
-      additions += stats.additions;
-      deletions += stats.deletions;
-      hasDiffSignal = hasDiffSignal || stats.hasDiffSignal;
-    }
-
-    return { additions, deletions, hasDiffSignal };
-  };
-
-  const arrayPath = pickPathFromArray(item.paths)
-    || pickPathFromArray(item.files)
-    || pickPathFromArray(item.changes)
-    || pickPathFromArray(item.changed_files)
-    || pickPathFromArray(item.changedFiles);
-
-  const path = asString(
-    item.path,
-    asString(
-      item.file_path,
-      asString(
-        item.filePath,
-        asString(
-          item.target_path,
-          asString(item.targetPath, asString(item.relative_path, asString(item.relativePath, arrayPath))),
-        ),
-      ),
-    ),
-  ).trim() || undefined;
-  const commandRaw = asString(item.command, '').trim();
-  const command = unwrapShellCommand(commandRaw || 'apply_patch');
-  const arrayDiff = pickDiffFromArray(item.changes);
-  const detailRaw = stripAnsi(asString(
-    item.diff,
-    asString(
-      item.patch,
-      asString(
-        item.unified_diff,
-        asString(
-          item.unifiedDiff,
-          asString(item.output, asString(item.text, asString(item.result, arrayDiff))),
-        ),
-      ),
-    ),
-  )).trim();
-  const detail = detailRaw && detailRaw.toLowerCase() !== 'apply_patch' ? detailRaw : undefined;
-  const status = asString(item.status, '').trim() || undefined;
-  const directDiffStats = summarizeDiffText(detailRaw);
-  const arrayDiffStats = pickDiffStatsFromArray(item.changes);
-  const diffStats = directDiffStats.hasDiffSignal
-    ? directDiffStats
-    : arrayDiffStats.hasDiffSignal
-      ? arrayDiffStats
-      : directDiffStats;
-
-  if (!path && !detail) {
-    return null;
-  }
-
-  return { command, path, detail, status, ...diffStats };
-}
-
-function buildCodexThreadCacheKey(sessionId: string, chatId?: string): string {
-  if (chatId && chatId.trim().length > 0) {
-    return `${sessionId}:${chatId.trim()}`;
-  }
-  return sessionId;
 }
 
 function isRetryableHappyMessageWriteError(error: unknown): boolean {
