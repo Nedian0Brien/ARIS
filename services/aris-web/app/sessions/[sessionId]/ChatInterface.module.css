@@ -5259,7 +5259,7 @@
 
   .stream {
     min-height: 0;
-    --chat-timeline-bottom-offset: calc(var(--composer-dock-height) + 1.1rem + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
+    --chat-timeline-bottom-offset: calc(var(--composer-dock-height) + var(--composer-dock-bottom-offset));
     padding: 0.85rem 0.75rem var(--chat-timeline-bottom-offset);
   }
 
@@ -5269,7 +5269,7 @@
     position: fixed;
     width: auto;
     transform: none;
-    --composer-dock-bottom-offset: calc(0.45rem + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
+    --composer-dock-bottom-offset: calc(0.25rem + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
   }
 
   .composerFloating {
@@ -5359,7 +5359,7 @@
 
   .scrollBottomButton {
     right: max(0.8rem, env(safe-area-inset-right));
-    bottom: calc(var(--composer-dock-height) + 0.7rem + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
+    bottom: calc(var(--composer-dock-height) + var(--composer-dock-bottom-offset) + 0.25rem);
   }
 }
 
@@ -7820,8 +7820,8 @@
   .chatShellPrototype,
   .chatShellPrototype.chatShellSidebarOpen,
   .chatShellPrototype.chatShellSidebarClosed {
-    --composer-dock-bottom-offset: calc(var(--sp-4) + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
-    --chat-timeline-bottom-offset: calc(var(--composer-dock-height) + var(--sp-10) + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
+    --composer-dock-bottom-offset: calc(var(--sp-2) + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
+    --chat-timeline-bottom-offset: calc(var(--composer-dock-height) + var(--composer-dock-bottom-offset));
     grid-template-columns: minmax(0, 1fr);
   }
 
