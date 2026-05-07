@@ -44,6 +44,13 @@ import type {
 } from './contracts/runtimeCoordinationStore.js';
 import { PermissionRouter, buildScopedPermissionKey } from './orchestration/permissionRouter.js';
 import { RealtimeEventBus } from './orchestration/realtimeEventBus.js';
+import {
+  ActiveRunRegistry,
+  buildRunKey,
+  isSessionRunKey,
+  type ActiveRun,
+  type StaleRunCleanupInput,
+} from './orchestration/activeRunRegistry.js';
 import type { ClaudeSessionLaunchMode } from './providers/claude/claudeSessionContract.js';
 import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeTextEvent } from './providers/claude/types.js';
 import type {
@@ -141,17 +148,6 @@ type PermissionState = PermissionRequest['state'];
 type SessionStatusValue = RuntimeSession['state']['status'];
 type PermissionActionType = 'exec' | 'patch';
 type JsonRpcId = string | number | null;
-type ActiveRun = {
-  controller: AbortController;
-  sessionId: string;
-  chatId?: string;
-  startedAt: number;
-  agent: RuntimeAgent;
-  model?: string;
-  modelReasoningEffort?: ModelReasoningEffort;
-  completed: Promise<void>;
-};
-
 type CodexPermissionRequest = {
   actionType: PermissionActionType;
   callId: string;
@@ -1890,7 +1886,6 @@ export const happyClientTestHooks = {
 };
 
 export class HappyRuntimeStore {
-  private readonly activeRuns = new Map<string, ActiveRun>();
   private readonly claudeSessionRegistry = new ClaudeSessionRegistry();
   private readonly geminiSessionRegistry = new GeminiSessionRegistry();
   private readonly claudeSessionScanners = new Map<string, ClaudeSessionLogTracker>();
@@ -1905,7 +1900,7 @@ export class HappyRuntimeStore {
   private readonly workspaceRoot: string;
   private readonly hostProjectsRoot: string;
   private readonly happyEventLogger: HappyEventLogger;
-  private draining = false;
+  private readonly activeRunRegistry: ActiveRunRegistry;
 
   // listSessions() 응답을 1초간 캐시하여 getSession() 호출 시 happy-server 왕복을 줄임
   private sessionListCache: { sessions: RuntimeSession[]; expiresAt: number } | null = null;
@@ -1937,24 +1932,19 @@ export class HappyRuntimeStore {
     this.realtimeEventBus = new RealtimeEventBus({
       getSession: (sessionId) => this.getSession(sessionId),
     });
+    this.activeRunRegistry = new ActiveRunRegistry({
+      claudeSessionRegistry: this.claudeSessionRegistry,
+      staleTimeoutMs: STALE_RUN_TIMEOUT_MS,
+      handleStaleRunCleanup: (input) => this.handleStaleRunCleanup(input),
+    });
   }
 
   beginShutdownDrain(): void {
-    this.draining = true;
+    this.activeRunRegistry.beginShutdownDrain();
   }
 
   async awaitDrain(timeoutMs: number): Promise<void> {
-    const deadline = Date.now() + Math.max(0, timeoutMs);
-    while (Date.now() <= deadline) {
-      if (this.getActiveRunCount() === 0) {
-        return;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-  }
-
-  private getActiveRunCount(): number {
-    return this.activeRuns.size + this.claudeSessionRegistry.activeRunCount();
+    return this.activeRunRegistry.awaitDrain(timeoutMs);
   }
 
   private resolveSessionApprovalPolicy(session: RuntimeSession): ApprovalPolicy {
@@ -2150,87 +2140,15 @@ export class HappyRuntimeStore {
     return created;
   }
 
-  private buildRunKey(sessionId: string, chatId?: string): string {
-    if (chatId && chatId.trim().length > 0) {
-      return `${sessionId}:${chatId.trim()}`;
-    }
-    return `${sessionId}:__default__`;
-  }
-
-  private isSessionRunKey(runKey: string, sessionId: string): boolean {
-    return runKey === `${sessionId}:__default__` || runKey.startsWith(`${sessionId}:`);
-  }
-
   private abortSessionRuns(sessionId: string, chatId?: string): void {
-    this.claudeSessionRegistry.abortSessionRuns({ sessionId, chatId });
-    const scopedRunKey = typeof chatId === 'string' && chatId.trim().length > 0
-      ? this.buildRunKey(sessionId, chatId)
-      : null;
-    for (const [runKey, run] of this.activeRuns.entries()) {
-      if (scopedRunKey) {
-        if (runKey !== scopedRunKey) {
-          continue;
-        }
-      } else if (!this.isSessionRunKey(runKey, sessionId)) {
-        continue;
-      }
-      if (!run.controller.signal.aborted) {
-        run.controller.abort();
-      }
-      this.activeRuns.delete(runKey);
-    }
+    this.activeRunRegistry.abortSessionRuns(sessionId, chatId);
   }
 
   private async cleanupStaleRuns(reason: string): Promise<void> {
-    await this.claudeSessionRegistry.cleanupStaleRuns(
-      STALE_RUN_TIMEOUT_MS,
-      async ({ runKey, run, ageMs }) => this.handleStaleRunCleanup({
-        sessionId: run.sessionId,
-        chatId: run.chatId,
-        model: run.model,
-        agent: 'claude',
-        runKey,
-        ageMs,
-        reason,
-      }),
-    );
-
-    const now = Date.now();
-    const staleRuns: Array<{ runKey: string; run: ActiveRun; ageMs: number }> = [];
-    for (const [runKey, run] of this.activeRuns.entries()) {
-      const ageMs = now - run.startedAt;
-      if (ageMs <= STALE_RUN_TIMEOUT_MS) {
-        continue;
-      }
-      staleRuns.push({ runKey, run, ageMs });
-    }
-
-    for (const stale of staleRuns) {
-      if (!stale.run.controller.signal.aborted) {
-        stale.run.controller.abort();
-      }
-      this.activeRuns.delete(stale.runKey);
-      await this.handleStaleRunCleanup({
-        sessionId: stale.run.sessionId,
-        chatId: stale.run.chatId,
-        model: stale.run.model,
-        agent: stale.run.agent,
-        runKey: stale.runKey,
-        ageMs: stale.ageMs,
-        reason,
-      });
-    }
+    await this.activeRunRegistry.cleanupStaleRuns(reason);
   }
 
-  private async handleStaleRunCleanup(input: {
-    sessionId: string;
-    chatId?: string;
-    model?: string;
-    agent: RuntimeAgent;
-    runKey: string;
-    ageMs: number;
-    reason: string;
-  }): Promise<void> {
+  private async handleStaleRunCleanup(input: StaleRunCleanupInput): Promise<void> {
     const channel = input.agent === 'codex' && CODEX_RUNTIME_MODE !== 'exec' ? 'app_server' : 'exec_cli';
     this.happyEventLogger.logParsed({
       sessionId: input.sessionId,
@@ -3930,7 +3848,7 @@ export class HappyRuntimeStore {
       await appendChain.catch(() => undefined);
 
       await this.permissionRouter.finalizeCodexPermissions(runtimePermissionIds, {
-        preservePending: this.draining && !signal?.aborted,
+        preservePending: this.activeRunRegistry.isDraining() && !signal?.aborted,
       });
 
       if (!turnCompleted && !signal?.aborted) {
@@ -4486,9 +4404,9 @@ export class HappyRuntimeStore {
         this.claudeSessionRegistry.finish(activeClaudeController);
       };
     } else {
-      const runKey = this.buildRunKey(session.id, scopedChatId);
+      const runKey = buildRunKey(session.id, scopedChatId);
       const activeController = new AbortController();
-      const existing = this.activeRuns.get(runKey);
+      const existing = this.activeRunRegistry.get(runKey);
       if (existing && !existing.controller.signal.aborted) {
         existing.controller.abort();
       }
@@ -4504,7 +4422,7 @@ export class HappyRuntimeStore {
       const completed = new Promise<void>((resolve) => {
         finishRun = resolve;
       });
-      this.activeRuns.set(runKey, {
+      this.activeRunRegistry.set(runKey, {
         controller: activeController,
         sessionId: session.id,
         ...(scopedChatId ? { chatId: scopedChatId } : {}),
@@ -4518,9 +4436,9 @@ export class HappyRuntimeStore {
       controller = activeController;
       finalizeRun = () => {
         finishRun();
-        const current = this.activeRuns.get(runKey);
+        const current = this.activeRunRegistry.get(runKey);
         if (current?.controller === activeController) {
-          this.activeRuns.delete(runKey);
+          this.activeRunRegistry.delete(runKey);
         }
       };
     }
@@ -5544,10 +5462,10 @@ export class HappyRuntimeStore {
       return true;
     }
     if (chatId && chatId.trim().length > 0) {
-      return this.activeRuns.has(this.buildRunKey(sessionId, chatId));
+      return this.activeRunRegistry.has(buildRunKey(sessionId, chatId));
     }
-    for (const runKey of this.activeRuns.keys()) {
-      if (this.isSessionRunKey(runKey, sessionId)) {
+    for (const runKey of this.activeRunRegistry.keys()) {
+      if (isSessionRunKey(runKey, sessionId)) {
         return true;
       }
     }
