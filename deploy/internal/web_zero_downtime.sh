@@ -174,13 +174,25 @@ wait_for_http_ready() {
 }
 
 compute_context_fingerprint() {
-  if git rev-parse HEAD >/dev/null 2>&1; then
-    git rev-parse HEAD
-    return
+  # Hash only the web service tree so changes to backend, docs, deploy scripts,
+  # or other services don't force a full web rebuild.
+  local service_rel="services/aris-web"
+  local service_abs="${ROOT_DIR}/${service_rel}"
+
+  if git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local file_count
+    file_count="$(git -C "$ROOT_DIR" ls-files -- "$service_rel" 2>/dev/null | wc -l)"
+    if [[ "$file_count" -gt 0 ]]; then
+      ( cd "$ROOT_DIR" \
+        && git ls-files -z -- "$service_rel" \
+        | xargs -0 sha256sum \
+        | sha256sum \
+        | awk '{print $1}' )
+      return
+    fi
   fi
 
-  local service_dir="${ROOT_DIR}/services/aris-web"
-  find "$service_dir" -type f \
+  find "$service_abs" -type f \
     ! -path '*/node_modules/*' \
     ! -path '*/.next/*' \
     ! -name '.env' \
