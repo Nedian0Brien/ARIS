@@ -124,12 +124,10 @@ else
 fi
 
 # Route web runtime calls through aris-backend by default in dev mode.
-# This keeps API surface consistent (e.g. /v1/permissions) while backend proxies to happy runtime.
-export RUNTIME_API_URL="${DEV_RUNTIME_API_URL:-${DEV_HAPPY_SERVER_URL:-http://127.0.0.1:4080}}"
+# This keeps API surface consistent (e.g. /v1/permissions).
+export RUNTIME_API_URL="${DEV_RUNTIME_API_URL:-http://127.0.0.1:4080}"
 if [[ -n "${DEV_RUNTIME_API_TOKEN:-}" ]]; then
   export RUNTIME_API_TOKEN="${DEV_RUNTIME_API_TOKEN}"
-elif [[ -n "${DEV_HAPPY_SERVER_TOKEN:-}" ]]; then
-  export RUNTIME_API_TOKEN="${DEV_HAPPY_SERVER_TOKEN}"
 fi
 
 git_ref="$(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"

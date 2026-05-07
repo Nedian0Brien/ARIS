@@ -4,24 +4,18 @@ describe('getSessionEvents fetch limits', () => {
   const originalEnv = {
     RUNTIME_API_URL: process.env.RUNTIME_API_URL,
     RUNTIME_API_TOKEN: process.env.RUNTIME_API_TOKEN,
-    HAPPY_SERVER_URL: process.env.HAPPY_SERVER_URL,
-    HAPPY_SERVER_TOKEN: process.env.HAPPY_SERVER_TOKEN,
   };
 
   beforeEach(() => {
     vi.resetModules();
     process.env.RUNTIME_API_URL = 'http://runtime.test';
     process.env.RUNTIME_API_TOKEN = 'test-token';
-    process.env.HAPPY_SERVER_URL = 'http://runtime.test';
-    process.env.HAPPY_SERVER_TOKEN = 'test-token';
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     process.env.RUNTIME_API_URL = originalEnv.RUNTIME_API_URL;
     process.env.RUNTIME_API_TOKEN = originalEnv.RUNTIME_API_TOKEN;
-    process.env.HAPPY_SERVER_URL = originalEnv.HAPPY_SERVER_URL;
-    process.env.HAPPY_SERVER_TOKEN = originalEnv.HAPPY_SERVER_TOKEN;
   });
 
   it('clamps chat-scoped session message fetches to the Happy API max page size', async () => {

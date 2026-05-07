@@ -32,8 +32,8 @@ if (dev && devProxyAssetPrefix.changed) {
 
 const JWT_SECRET = process.env.AUTH_JWT_SECRET || 'dev-only-jwt-secret-dev-only-jwt-secret';
 const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'aris_session';
-const RUNTIME_API_URL = process.env.RUNTIME_API_URL || process.env.HAPPY_SERVER_URL || 'http://localhost:4080';
-const RUNTIME_API_TOKEN = process.env.RUNTIME_API_TOKEN || process.env.HAPPY_SERVER_TOKEN || '';
+const RUNTIME_API_URL = process.env.RUNTIME_API_URL || 'http://localhost:4080';
+const RUNTIME_API_TOKEN = process.env.RUNTIME_API_TOKEN || '';
 const SSH_KEY_ENCRYPTION_SECRET = process.env.SSH_KEY_ENCRYPTION_SECRET || 'dev-only-ssh-enc-secret-change-me';
 const SSH_HOST = process.env.SSH_HOST || 'host.docker.internal';
 const LOCAL_PREVIEW_PREFIX = '/__local_preview';

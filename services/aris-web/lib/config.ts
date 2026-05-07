@@ -7,8 +7,6 @@ const envSchema = z.object({
   AUTH_COOKIE_NAME: z.string().min(1).default('aris_session'),
   RUNTIME_API_URL: z.string().url().optional(),
   RUNTIME_API_TOKEN: z.string().optional(),
-  HAPPY_SERVER_URL: z.string().url().optional(),
-  HAPPY_SERVER_TOKEN: z.string().optional(),
   HOST_PROJECTS_ROOT: z.string().default(''),
   HOST_HOME_DIR: z.string().default('/home/ubuntu'),
   SSH_BASE_COMMAND: z.string().default('ssh ubuntu@your-server'),
@@ -29,15 +27,13 @@ const envSchema = z.object({
 
 type ParsedEnv = z.infer<typeof envSchema>;
 
-export function resolveRuntimeApiUrl(env: Pick<ParsedEnv, 'RUNTIME_API_URL' | 'HAPPY_SERVER_URL'>): string {
-  // RUNTIME_API_URL takes precedence. HAPPY_SERVER_URL is kept for legacy compatibility
-  // but should point to aris-backend (4080), not the happy server (3005).
-  const next = env.RUNTIME_API_URL?.trim() || env.HAPPY_SERVER_URL?.trim() || '';
+export function resolveRuntimeApiUrl(env: Pick<ParsedEnv, 'RUNTIME_API_URL'>): string {
+  const next = env.RUNTIME_API_URL?.trim() || '';
   return next || 'http://localhost:4080';
 }
 
-export function resolveRuntimeApiToken(env: Pick<ParsedEnv, 'RUNTIME_API_TOKEN' | 'HAPPY_SERVER_TOKEN'>): string | undefined {
-  const next = env.RUNTIME_API_TOKEN?.trim() || env.HAPPY_SERVER_TOKEN?.trim() || '';
+export function resolveRuntimeApiToken(env: Pick<ParsedEnv, 'RUNTIME_API_TOKEN'>): string | undefined {
+  const next = env.RUNTIME_API_TOKEN?.trim() || '';
   return next || undefined;
 }
 
