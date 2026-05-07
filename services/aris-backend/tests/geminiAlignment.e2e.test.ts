@@ -1,6 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { describe, expect, it } from 'vitest';
-import { HappyRuntimeStore } from '../src/runtime/happyClient.js';
+import { RuntimeCore } from '../src/runtime/runtimeCore.js';
 
 type FakeHappySession = {
   id: string;
@@ -33,7 +33,7 @@ async function waitFor<T>(read: () => Promise<T>, predicate: (value: T) => boole
 }
 
 function createFakeGeminiStore(options: { emitAction?: boolean; emitCommentary?: boolean; requirePermission?: boolean } = {}) {
-  const store = new HappyRuntimeStore({
+  const store = new RuntimeCore({
     serverUrl: 'http://fake-happy',
     token: 'fake-token',
     workspaceRoot: '/workspace',

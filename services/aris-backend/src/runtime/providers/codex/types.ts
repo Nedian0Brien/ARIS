@@ -8,7 +8,7 @@
  * Phase 2 Sprint 2 introduces this file as part of the codex/ skeleton.
  * Subsequent sprints will extend it with codex-specific subtypes (thread
  * cache key, app-server failure kinds, etc.) as logic is extracted from
- * happyClient.ts.
+ * runtimeCore.ts.
  */
 
 import type { SessionProtocolEnvelope } from '../../contracts/sessionProtocol.js';

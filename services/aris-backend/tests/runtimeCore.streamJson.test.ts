@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { HappyRuntimeStore, happyClientTestHooks } from '../src/runtime/happyClient.js';
+import { RuntimeCore, runtimeCoreTestHooks } from '../src/runtime/runtimeCore.js';
 import { parseGeminiStreamLine } from '../src/runtime/providers/gemini/geminiProtocolMapper.js';
 
 afterEach(() => {
@@ -24,11 +24,11 @@ describe('happyClient stream-json parsing', () => {
       }),
     ].join('\n');
 
-    const parsed = happyClientTestHooks.parseAgentStreamOutput(streamOutput);
+    const parsed = runtimeCoreTestHooks.parseAgentStreamOutput(streamOutput);
     expect(parsed.output).toBe('');
     expect(parsed.actions.length).toBeGreaterThan(0);
     expect(parsed.actions[0]?.command).toContain('ls -la');
-    expect(happyClientTestHooks.looksLikeActionTranscript('$ ls -la\nexit code: 0')).toBe(true);
+    expect(runtimeCoreTestHooks.looksLikeActionTranscript('$ ls -la\nexit code: 0')).toBe(true);
   });
 
   it('parses Gemini stream-json sample into both action and assistant message', () => {
@@ -51,7 +51,7 @@ describe('happyClient stream-json parsing', () => {
       }),
     ].join('\n');
 
-    const parsed = happyClientTestHooks.parseAgentStreamOutput(streamOutput);
+    const parsed = runtimeCoreTestHooks.parseAgentStreamOutput(streamOutput);
     expect(parsed.output).toBe('README 내용을 확인했고 핵심만 요약했습니다.');
     expect(parsed.actions.length).toBeGreaterThan(0);
     expect(parsed.actions[0]?.command).toContain('cat README.md');
@@ -85,14 +85,14 @@ describe('happyClient stream-json parsing', () => {
       },
     });
 
-    expect(happyClientTestHooks.extractGeminiStreamTextEvent(parseGeminiStreamLine(commentaryLine))).toMatchObject({
+    expect(runtimeCoreTestHooks.extractGeminiStreamTextEvent(parseGeminiStreamLine(commentaryLine))).toMatchObject({
       text: '먼저 코드를 살펴보겠습니다.',
       source: 'assistant',
       threadId: 'gemini-thread',
       turnId: 'turn-1',
       itemId: 'msg-commentary',
     });
-    expect(happyClientTestHooks.extractGeminiStreamTextEvent(parseGeminiStreamLine(finalLine))).toMatchObject({
+    expect(runtimeCoreTestHooks.extractGeminiStreamTextEvent(parseGeminiStreamLine(finalLine))).toMatchObject({
       text: '최종 답변입니다.',
       source: 'assistant',
       threadId: 'gemini-thread',
@@ -116,7 +116,7 @@ describe('happyClient stream-json parsing', () => {
       },
     });
 
-    expect(happyClientTestHooks.extractGeminiStreamTextEvent(parseGeminiStreamLine(deltaLine))).toMatchObject({
+    expect(runtimeCoreTestHooks.extractGeminiStreamTextEvent(parseGeminiStreamLine(deltaLine))).toMatchObject({
       text: '실시간 ',
       source: 'assistant',
       threadId: 'gemini-thread',
@@ -137,7 +137,7 @@ describe('happyClient stream-json parsing', () => {
       },
     });
 
-    expect(happyClientTestHooks.extractGeminiStreamTextEvent(parseGeminiStreamLine(deltaLine))).toMatchObject({
+    expect(runtimeCoreTestHooks.extractGeminiStreamTextEvent(parseGeminiStreamLine(deltaLine))).toMatchObject({
       text: '중간 코멘터리 ',
       source: 'assistant',
       threadId: 'gemini-thread',
@@ -148,14 +148,14 @@ describe('happyClient stream-json parsing', () => {
   });
 
   it('skips Gemini final fallback persistence when the same text was already streamed', () => {
-    expect(happyClientTestHooks.shouldPersistFinalAgentOutput({
+    expect(runtimeCoreTestHooks.shouldPersistFinalAgentOutput({
       flavor: 'gemini',
       streamedPersisted: false,
       agentMessagePersisted: true,
       finalAgentOutput: '최종 답변',
     })).toBe(false);
 
-    expect(happyClientTestHooks.shouldPersistFinalAgentOutput({
+    expect(runtimeCoreTestHooks.shouldPersistFinalAgentOutput({
       flavor: 'gemini',
       streamedPersisted: false,
       agentMessagePersisted: false,
@@ -178,7 +178,7 @@ status: pending`,
       }),
     ].join('\n');
 
-    const parsed = happyClientTestHooks.parseAgentStreamOutput(streamOutput);
+    const parsed = runtimeCoreTestHooks.parseAgentStreamOutput(streamOutput);
     expect(parsed.output).toBe(`Sprint 2 구현 계획은 이렇습니다.
 
 ClaudeSession 객체 추가
@@ -202,7 +202,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
       }),
     ].join('\n');
 
-    const parsed = happyClientTestHooks.parseAgentStreamOutput(streamOutput);
+    const parsed = runtimeCoreTestHooks.parseAgentStreamOutput(streamOutput);
     expect(parsed.actions.length).toBe(1);
     expect(parsed.actions[0]?.callId).toBe('call-123');
     expect(parsed.actions[0]?.command).toBe('git status');
@@ -217,7 +217,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
       output: 'total 12',
     });
 
-    const parsed = happyClientTestHooks.parseAgentStreamLine(line);
+    const parsed = runtimeCoreTestHooks.parseAgentStreamLine(line);
     expect(parsed.action?.actionType).toBe('file_list');
     expect(parsed.action?.callId).toBe('call-line-1');
     expect(parsed.action?.command).toBe('ls -la');
@@ -225,13 +225,13 @@ registry/controller를 ClaudeSession 중심으로 재편`);
   });
 
   it('builds session hint meta for text and tool-call events', () => {
-    const textMeta = happyClientTestHooks.buildSessionHintMeta({
+    const textMeta = runtimeCoreTestHooks.buildSessionHintMeta({
       eventType: 'text',
     });
     expect((textMeta.sessionEvent as { ev: { t: string } }).ev.t).toBe('text');
     expect(textMeta.sessionEventType).toBe('text');
 
-    const toolMeta = happyClientTestHooks.buildSessionHintMeta({
+    const toolMeta = runtimeCoreTestHooks.buildSessionHintMeta({
       eventType: 'tool-call-end',
       callId: 'call-9',
     });
@@ -250,14 +250,14 @@ registry/controller를 ClaudeSession 중심으로 재편`);
       }),
     };
 
-    const parsed = happyClientTestHooks.parseMessagePayloadText(wrappedPayload);
+    const parsed = runtimeCoreTestHooks.parseMessagePayloadText(wrappedPayload);
     expect(parsed.role).toBe('agent');
     expect(parsed.title).toBe('Text Reply');
     expect(parsed.text).toBe('wrapped content from happy');
   });
 
   it('falls back to raw payload text when happy payload parsing fails', () => {
-    const parsed = happyClientTestHooks.parseMessagePayloadText({
+    const parsed = runtimeCoreTestHooks.parseMessagePayloadText({
       unknownShape: { foo: 'bar' },
     });
     expect(parsed.text).toContain('[UNPARSED HAPPY PAYLOAD]');
@@ -267,16 +267,16 @@ registry/controller를 ClaudeSession 중심으로 재편`);
   it('skips duplicate agent messages for the same turn only', () => {
     const seen = new Set<string>();
 
-    expect(happyClientTestHooks.shouldSkipDuplicateAgentMessage(seen, 'turn-1', 'same reply')).toBe(false);
-    expect(happyClientTestHooks.shouldSkipDuplicateAgentMessage(seen, 'turn-1', 'same reply')).toBe(true);
-    expect(happyClientTestHooks.shouldSkipDuplicateAgentMessage(seen, 'turn-1', 'different reply')).toBe(false);
-    expect(happyClientTestHooks.shouldSkipDuplicateAgentMessage(seen, 'turn-2', 'same reply')).toBe(false);
+    expect(runtimeCoreTestHooks.shouldSkipDuplicateAgentMessage(seen, 'turn-1', 'same reply')).toBe(false);
+    expect(runtimeCoreTestHooks.shouldSkipDuplicateAgentMessage(seen, 'turn-1', 'same reply')).toBe(true);
+    expect(runtimeCoreTestHooks.shouldSkipDuplicateAgentMessage(seen, 'turn-1', 'different reply')).toBe(false);
+    expect(runtimeCoreTestHooks.shouldSkipDuplicateAgentMessage(seen, 'turn-2', 'same reply')).toBe(false);
   });
 
   it('builds a stable Claude session id per session and chat', () => {
-    const first = happyClientTestHooks.buildClaudeSessionId('session-1', 'chat-1');
-    const second = happyClientTestHooks.buildClaudeSessionId('session-1', 'chat-1');
-    const otherChat = happyClientTestHooks.buildClaudeSessionId('session-1', 'chat-2');
+    const first = runtimeCoreTestHooks.buildClaudeSessionId('session-1', 'chat-1');
+    const second = runtimeCoreTestHooks.buildClaudeSessionId('session-1', 'chat-1');
+    const otherChat = runtimeCoreTestHooks.buildClaudeSessionId('session-1', 'chat-2');
 
     expect(first).toBe(second);
     expect(otherChat).not.toBe(first);
@@ -284,7 +284,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
   });
 
   it('treats workspace-root Claude paths as remote launch mode when host mapping exists', () => {
-    const launchMode = happyClientTestHooks.resolveClaudeLaunchMode({
+    const launchMode = runtimeCoreTestHooks.resolveClaudeLaunchMode({
       sessionPath: '/workspace/ARIS',
       workspaceRoot: '/workspace',
       hostProjectsRoot: '/home/ubuntu/project',
@@ -294,7 +294,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
   });
 
   it('keeps Claude launch mode local when no host mapping is configured', () => {
-    const launchMode = happyClientTestHooks.resolveClaudeLaunchMode({
+    const launchMode = runtimeCoreTestHooks.resolveClaudeLaunchMode({
       sessionPath: '/workspace/ARIS',
       workspaceRoot: '/workspace',
       hostProjectsRoot: '',
@@ -304,28 +304,28 @@ registry/controller를 ClaudeSession 중심으로 재편`);
   });
 
   it('uses a longer timeout budget for Claude turns than generic CLI agents', () => {
-    expect(happyClientTestHooks.resolveAgentCommandTimeoutMs('claude')).toBeGreaterThan(
-      happyClientTestHooks.resolveAgentCommandTimeoutMs('gemini'),
+    expect(runtimeCoreTestHooks.resolveAgentCommandTimeoutMs('claude')).toBeGreaterThan(
+      runtimeCoreTestHooks.resolveAgentCommandTimeoutMs('gemini'),
     );
   });
 
   it('uses a longer timeout budget for Gemini turns than generic CLI agents', () => {
-    expect(happyClientTestHooks.resolveAgentCommandTimeoutMs('gemini')).toBeGreaterThan(
-      happyClientTestHooks.resolveAgentCommandTimeoutMs('unknown'),
+    expect(runtimeCoreTestHooks.resolveAgentCommandTimeoutMs('gemini')).toBeGreaterThan(
+      runtimeCoreTestHooks.resolveAgentCommandTimeoutMs('unknown'),
     );
   });
 
   it('enables Gemini stream backend v2 by default and supports explicit rollback values', () => {
-    expect(happyClientTestHooks.resolveGeminiStreamBackendV2Enabled()).toBe(true);
-    expect(happyClientTestHooks.resolveGeminiStreamBackendV2Enabled('1')).toBe(true);
-    expect(happyClientTestHooks.resolveGeminiStreamBackendV2Enabled('false')).toBe(false);
-    expect(happyClientTestHooks.resolveGeminiStreamBackendV2Enabled('off')).toBe(false);
-    expect(happyClientTestHooks.resolveGeminiStreamBackendV2Enabled('0')).toBe(false);
+    expect(runtimeCoreTestHooks.resolveGeminiStreamBackendV2Enabled()).toBe(true);
+    expect(runtimeCoreTestHooks.resolveGeminiStreamBackendV2Enabled('1')).toBe(true);
+    expect(runtimeCoreTestHooks.resolveGeminiStreamBackendV2Enabled('false')).toBe(false);
+    expect(runtimeCoreTestHooks.resolveGeminiStreamBackendV2Enabled('off')).toBe(false);
+    expect(runtimeCoreTestHooks.resolveGeminiStreamBackendV2Enabled('0')).toBe(false);
   });
 
   it('does not inject --session-id for Claude when given a synthetic target', () => {
-    const sessionId = happyClientTestHooks.buildClaudeSessionId('session-2', 'chat-2');
-    const command = happyClientTestHooks.buildAgentCommand(
+    const sessionId = runtimeCoreTestHooks.buildClaudeSessionId('session-2', 'chat-2');
+    const command = runtimeCoreTestHooks.buildAgentCommand(
       'claude',
       'Reply with OK',
       'on-request',
@@ -340,7 +340,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
   });
 
   it('uses --resume for stored Claude session ids', () => {
-    const command = happyClientTestHooks.buildAgentCommand(
+    const command = runtimeCoreTestHooks.buildAgentCommand(
       'claude',
       'Reply with OK',
       'on-request',
@@ -368,7 +368,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
       }),
     ].join('\n');
 
-    const parsed = happyClientTestHooks.parseAgentStreamOutput(streamOutput);
+    const parsed = runtimeCoreTestHooks.parseAgentStreamOutput(streamOutput);
     expect(parsed.sessionId).toBe('stream-session-abc');
     expect(parsed.output).toBe('응답 완료');
   });
@@ -390,13 +390,13 @@ registry/controller를 ClaudeSession 중심으로 재편`);
       }),
     ].join('\n');
 
-    const parsed = happyClientTestHooks.parseAgentStreamOutput(streamOutput);
+    const parsed = runtimeCoreTestHooks.parseAgentStreamOutput(streamOutput);
     expect(parsed.sessionId).toBe('gemini-session-lower');
     expect(parsed.output).toBe('Gemini 응답 완료');
   });
 
   it('spawns codex app-server in its own detached process group', () => {
-    const options = happyClientTestHooks.buildCodexAppServerSpawnOptions({
+    const options = runtimeCoreTestHooks.buildCodexAppServerSpawnOptions({
       cwd: '/tmp/aris-redeploy-stream-fix',
       env: { PATH: '/usr/bin' },
       signal: undefined,
@@ -413,7 +413,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
   it('kills the detached codex app-server process group when closing', () => {
     const killMock = vi.fn();
 
-    happyClientTestHooks.terminateCodexAppServerProcess(
+    runtimeCoreTestHooks.terminateCodexAppServerProcess(
       {
         pid: 4321,
         killed: false,
@@ -426,12 +426,12 @@ registry/controller를 ClaudeSession 중심으로 재편`);
   });
 
   it('uses a loopback websocket transport URL for codex app-server', () => {
-    expect(happyClientTestHooks.buildCodexAppServerListenUrl(38991)).toBe('ws://127.0.0.1:38991');
+    expect(runtimeCoreTestHooks.buildCodexAppServerListenUrl(38991)).toBe('ws://127.0.0.1:38991');
   });
 
   it('classifies context-window app-server failures as fresh-thread retry candidates', () => {
     expect(
-      happyClientTestHooks.classifyCodexAppServerFailure(
+      runtimeCoreTestHooks.classifyCodexAppServerFailure(
         new Error("Codex ran out of room in the model's context window"),
       ),
     ).toMatchObject({
@@ -444,7 +444,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
 
   it('classifies websocket turn closures separately from startup connection failures', () => {
     expect(
-      happyClientTestHooks.classifyCodexAppServerFailure(
+      runtimeCoreTestHooks.classifyCodexAppServerFailure(
         new Error('codex app-server websocket closed before turn completion'),
       ),
     ).toMatchObject({
@@ -453,7 +453,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     });
 
     expect(
-      happyClientTestHooks.classifyCodexAppServerFailure(
+      runtimeCoreTestHooks.classifyCodexAppServerFailure(
         new Error('codex app-server websocket connection failed'),
       ),
     ).toMatchObject({
@@ -473,7 +473,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     ]);
     const onAbort = vi.fn();
 
-    const abortState = happyClientTestHooks.createCodexAppServerAbortPromise({
+    const abortState = runtimeCoreTestHooks.createCodexAppServerAbortPromise({
       signal: abortController.signal,
       pendingRequests,
       onAbort,
@@ -502,7 +502,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     ]);
     const onAbort = vi.fn();
 
-    const abortState = happyClientTestHooks.createCodexAppServerAbortPromise({
+    const abortState = runtimeCoreTestHooks.createCodexAppServerAbortPromise({
       signal: abortController.signal,
       pendingRequests,
       onAbort,
@@ -525,7 +525,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
       lastActivityAt = Date.now();
     }, 100);
 
-    const waitPromise = happyClientTestHooks.waitForStableActivity({
+    const waitPromise = runtimeCoreTestHooks.waitForStableActivity({
       getActivityTick: () => activityTick,
       getLastActivityAt: () => lastActivityAt,
       quietMs: 200,
@@ -553,7 +553,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
       lastActivityAt = Date.now();
     }, 40);
 
-    const waitPromise = happyClientTestHooks.waitForStableActivity({
+    const waitPromise = runtimeCoreTestHooks.waitForStableActivity({
       getActivityTick: () => activityTick,
       getLastActivityAt: () => lastActivityAt,
       quietMs: 200,
@@ -575,7 +575,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const store = new HappyRuntimeStore({
+    const store = new RuntimeCore({
       serverUrl: 'http://runtime.test',
       token: 'token',
       workspaceRoot: '/workspace',
@@ -623,7 +623,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
       });
     vi.stubGlobal('fetch', fetchMock);
 
-    const store = new HappyRuntimeStore({
+    const store = new RuntimeCore({
       serverUrl: 'http://runtime.test',
       token: 'token',
       workspaceRoot: '/workspace',
@@ -665,7 +665,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     const coordinationStore = {
       decidePermission: vi.fn(),
     };
-    const store = new HappyRuntimeStore({
+    const store = new RuntimeCore({
       serverUrl: 'http://runtime.test',
       token: 'token',
       workspaceRoot: '/workspace',
@@ -684,7 +684,7 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     store.permissionRouter.codexPermissionResponders.set('perm-1', vi.fn());
     store.draining = true;
 
-    await happyClientTestHooks.finalizeCodexRuntimePermissions(store as never, ['perm-1'], {
+    await runtimeCoreTestHooks.finalizeCodexRuntimePermissions(store as never, ['perm-1'], {
       preservePending: true,
     });
 

@@ -2,7 +2,7 @@
  * ActiveRunRegistry — bookkeeping for in-flight provider runs (codex/gemini)
  * plus shutdown-drain coordination.
  *
- * Owned by `runtime/happyClient.ts` until 2.5e, where it moves into a
+ * Owned by `runtime/runtimeCore.ts` until 2.5e, where it moves into a
  * standalone module to continue the runtime-core extraction track started
  * in 2.5c (PermissionRouter) and 2.5d (RealtimeEventBus).
  *
@@ -61,7 +61,7 @@ export interface ActiveRunRegistryDeps {
 
 /**
  * Build a run-key for the (sessionId, chatId) tuple. Verbatim port of the
- * helper that lived in happyClient.ts.
+ * helper that lived in runtimeCore.ts.
  */
 export function buildRunKey(sessionId: string, chatId?: string): string {
   if (chatId && chatId.trim().length > 0) {

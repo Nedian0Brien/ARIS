@@ -2,7 +2,7 @@
  * PermissionRouter — provider-agnostic permission orchestration.
  *
  * Owns the runtime side of the permission protocol that was previously
- * tangled inside `HappyRuntimeStore` in `runtime/happyClient.ts`:
+ * tangled inside `RuntimeCore` in `runtime/runtimeCore.ts`:
  *
  *   - In-memory mirror of permission records (`permissions` Map).
  *   - Provider-agnostic awaiter machinery (`providerPermissionWaiters`,
@@ -11,7 +11,7 @@
  *     `codexPermissionResponders`). These are scheduled to migrate to
  *     `runtime/providers/codex/` in Phase 3 of the provider-architecture
  *     refactor; for now the router exposes typed accessors so the codex
- *     code in happyClient.ts can keep working without reaching into router
+ *     code in runtimeCore.ts can keep working without reaching into router
  *     internals.
  *
  * Storage delegation is performed through the optional
@@ -43,7 +43,7 @@ import type {
 
 /**
  * Build a permission key scoped to a chat slot. Verbatim port of the helper
- * that lived in happyClient.ts (`${chatId}:${baseKey}` format) so existing
+ * that lived in runtimeCore.ts (`${chatId}:${baseKey}` format) so existing
  * collision behavior is preserved byte-for-byte.
  */
 export function buildScopedPermissionKey(baseKey: string, chatId?: string): string {

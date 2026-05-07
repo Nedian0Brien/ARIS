@@ -1,6 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { describe, expect, it } from 'vitest';
-import { HappyRuntimeStore } from '../src/runtime/happyClient.js';
+import { RuntimeCore } from '../src/runtime/runtimeCore.js';
 import type { PermissionRequest } from '../src/types.js';
 
 type FakeHappySession = {
@@ -35,7 +35,7 @@ async function waitFor<T>(read: () => Promise<T>, predicate: (value: T) => boole
 
 describe('happy alignment E2E', () => {
   it('runs a remote Claude turn through permission wait, tool ordering, and final text persistence', async () => {
-    const store = new HappyRuntimeStore({
+    const store = new RuntimeCore({
       serverUrl: 'http://fake-happy',
       token: 'fake-token',
       workspaceRoot: '/workspace',
@@ -240,7 +240,7 @@ describe('happy alignment E2E', () => {
   });
 
   it('persists Claude intermediate commentary before streamed actions and final text', async () => {
-    const store = new HappyRuntimeStore({
+    const store = new RuntimeCore({
       serverUrl: 'http://fake-happy',
       token: 'fake-token',
       workspaceRoot: '/workspace',

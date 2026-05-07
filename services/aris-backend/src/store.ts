@@ -12,7 +12,7 @@ import type {
   SessionAction,
   SessionStatus,
 } from './types.js';
-import { HappyRuntimeStore } from './runtime/happyClient.js';
+import { RuntimeCore } from './runtime/runtimeCore.js';
 import { PrismaRuntimeStore } from './runtime/prismaStore.js';
 import { computeWorktreePath, ensureWorktree } from './runtime/worktreeManager.js';
 
@@ -127,7 +127,7 @@ interface RuntimeStoreBackend {
 }
 
 type RuntimeExecutor = Pick<
-  HappyRuntimeStore,
+  RuntimeCore,
   | 'triggerPersistedUserMessage'
   | 'listRealtimeEvents'
   | 'applySessionAction'
@@ -516,7 +516,7 @@ export class RuntimeStore {
       const internalRuntimeUrl = typeof runtimeApiUrl === 'string' && runtimeApiUrl.trim().length > 0
         ? runtimeApiUrl.trim()
         : 'http://127.0.0.1:4080';
-      this.runtimeExecutor = new HappyRuntimeStore({
+      this.runtimeExecutor = new RuntimeCore({
         serverUrl: internalRuntimeUrl,
         token: runtimeApiToken ?? '',
         workspaceRoot: defaultProjectPath,
