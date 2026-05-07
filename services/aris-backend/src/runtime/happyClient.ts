@@ -43,6 +43,7 @@ import type {
   RuntimeCoordinationStore,
 } from './contracts/runtimeCoordinationStore.js';
 import { PermissionRouter, buildScopedPermissionKey } from './orchestration/permissionRouter.js';
+import { RealtimeEventBus } from './orchestration/realtimeEventBus.js';
 import type { ClaudeSessionLaunchMode } from './providers/claude/claudeSessionContract.js';
 import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeTextEvent } from './providers/claude/types.js';
 import type {
@@ -174,11 +175,6 @@ type HappyRuntimeAppendInput = {
   title?: string;
   text: string;
   meta?: Record<string, unknown>;
-};
-
-type SessionRealtimeEventRecord = {
-  cursor: number;
-  event: RuntimeMessage;
 };
 
 type GeminiPartialTextState = {
@@ -1899,11 +1895,10 @@ export class HappyRuntimeStore {
   private readonly geminiSessionRegistry = new GeminiSessionRegistry();
   private readonly claudeSessionScanners = new Map<string, ClaudeSessionLogTracker>();
   private readonly codexThreads = new Map<string, string>();
-  private readonly sessionRealtimeEvents = new Map<string, SessionRealtimeEventRecord[]>();
-  private readonly sessionRealtimeCursor = new Map<string, number>();
   private readonly geminiPartialTextStates = new Map<string, GeminiPartialTextState>();
   private readonly coordinationStore: RuntimeCoordinationStore | null;
   private readonly permissionRouter: PermissionRouter;
+  private readonly realtimeEventBus: RealtimeEventBus;
 
   private readonly serverUrl: string;
   private readonly serverToken: string;
@@ -1939,6 +1934,9 @@ export class HappyRuntimeStore {
       appendRunLifecycleEvent: (sessionId, state, meta) =>
         this.appendRunLifecycleEvent(sessionId, state, meta),
     });
+    this.realtimeEventBus = new RealtimeEventBus({
+      getSession: (sessionId) => this.getSession(sessionId),
+    });
   }
 
   beginShutdownDrain(): void {
@@ -1969,18 +1967,6 @@ export class HappyRuntimeStore {
         this.codexThreads.delete(key);
       }
     }
-  }
-
-  private appendSessionRealtimeEvent(sessionId: string, event: RuntimeMessage): RuntimeMessage {
-    const nextCursor = (this.sessionRealtimeCursor.get(sessionId) ?? 0) + 1;
-    this.sessionRealtimeCursor.set(sessionId, nextCursor);
-    const bucket = this.sessionRealtimeEvents.get(sessionId) ?? [];
-    bucket.push({ cursor: nextCursor, event });
-    if (bucket.length > 500) {
-      bucket.splice(0, bucket.length - 500);
-    }
-    this.sessionRealtimeEvents.set(sessionId, bucket);
-    return event;
   }
 
   private buildGeminiPartialIdentity(input: {
@@ -2047,7 +2033,7 @@ export class HappyRuntimeStore {
 
     const isCommentary = nextState.phase === 'commentary';
 
-    this.appendSessionRealtimeEvent(input.session.id, {
+    this.realtimeEventBus.append(input.session.id, {
       id: nextState.eventId,
       sessionId: input.session.id,
       type: isCommentary ? 'tool' : 'message',
@@ -4837,7 +4823,7 @@ export class HappyRuntimeStore {
             mode: selectedGeminiMode,
             signal: controller.signal,
             onAction: async (action, meta) => {
-              this.appendSessionRealtimeEvent(session.id, {
+              this.realtimeEventBus.append(session.id, {
                 id: `gemini-action-pending:${action.callId ?? String(Date.now())}`,
                 sessionId: session.id,
                 type: 'tool',
@@ -5370,37 +5356,7 @@ export class HappyRuntimeStore {
       chatId?: string;
     } = {},
   ): Promise<{ events: RuntimeMessage[]; cursor: number }> {
-    const session = await this.getSession(sessionId);
-    if (!session) {
-      throw new Error('SESSION_NOT_FOUND');
-    }
-
-    const bucket = this.sessionRealtimeEvents.get(sessionId) ?? [];
-    const normalizedAfterCursor = Number.isFinite(options.afterCursor)
-      ? Math.max(0, Math.floor(Number(options.afterCursor)))
-      : 0;
-    const normalizedLimit = Number.isFinite(options.limit)
-      ? Math.max(1, Math.floor(Number(options.limit)))
-      : 100;
-
-    const events = bucket
-      .filter((entry) => entry.cursor > normalizedAfterCursor)
-      .filter((entry) => {
-        if (!options.chatId) {
-          return true;
-        }
-        const chatId = typeof entry.event.meta?.chatId === 'string'
-          ? entry.event.meta.chatId.trim()
-          : '';
-        return chatId === options.chatId;
-      })
-      .slice(-normalizedLimit)
-      .map((entry) => entry.event);
-
-    return {
-      events,
-      cursor: this.sessionRealtimeCursor.get(sessionId) ?? 0,
-    };
+    return this.realtimeEventBus.list(sessionId, options);
   }
 
   private async listAllMessages(sessionId: string): Promise<HappyBackendMessage[]> {
