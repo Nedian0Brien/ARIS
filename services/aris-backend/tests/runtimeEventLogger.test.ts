@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:f
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { HappyEventLogger } from '../src/runtime/happyEventLogger.js';
+import { RuntimeEventLogger } from '../src/runtime/runtimeEventLogger.js';
 
 const tempDirs: string[] = [];
 
@@ -32,7 +32,7 @@ function collectNdjsonFiles(dir: string): string[] {
   return collectNdjsonFilesRecursively(dir, files);
 }
 
-describe('HappyEventLogger', () => {
+describe('RuntimeEventLogger', () => {
   afterEach(() => {
     while (tempDirs.length > 0) {
       const dir = tempDirs.pop();
@@ -44,7 +44,7 @@ describe('HappyEventLogger', () => {
 
   it('writes raw and parsed records into separate ndjson files', () => {
     const logsDir = createTempLogsDir();
-    const logger = new HappyEventLogger(logsDir, 10_000);
+    const logger = new RuntimeEventLogger(logsDir, 10_000);
 
     logger.logRaw({
       sessionId: 's1',
@@ -85,7 +85,7 @@ describe('HappyEventLogger', () => {
 
   it('prunes oldest ndjson logs when total size exceeds configured limit', () => {
     const logsDir = createTempLogsDir();
-    const logger = new HappyEventLogger(logsDir, 350);
+    const logger = new RuntimeEventLogger(logsDir, 350);
 
     for (let index = 0; index < 12; index += 1) {
       logger.logRaw({

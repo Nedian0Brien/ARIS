@@ -9,7 +9,7 @@ import { promisify } from 'node:util';
 import { inferActionTypeFromCommand, titleForActionType } from './actionType.js';
 import { sanitizeAgentMessageText, shouldDisplayToolStatus } from './agentMessageSanitizer.js';
 import { summarizeDiffText, summarizeFileChangeDiff } from './diffStats.js';
-import { HappyEventLogger } from './happyEventLogger.js';
+import { RuntimeEventLogger } from './runtimeEventLogger.js';
 import { resolveRuntimeModelSelection } from './modelPolicy.js';
 import { recoverClaudeThreadIdFromMessages, runClaudeProviderTurn } from './providers/claude/claudeOrchestrator.js';
 import {
@@ -1899,7 +1899,7 @@ export class RuntimeCore {
   private readonly serverToken: string;
   private readonly workspaceRoot: string;
   private readonly hostProjectsRoot: string;
-  private readonly happyEventLogger: HappyEventLogger;
+  private readonly runtimeEventLogger: RuntimeEventLogger;
   private readonly activeRunRegistry: ActiveRunRegistry;
 
   // listSessions() 응답을 1초간 캐시하여 getSession() 호출 시 happy-server 왕복을 줄임
@@ -1918,7 +1918,7 @@ export class RuntimeCore {
     this.workspaceRoot = (opts.workspaceRoot || '/workspace').replace(/\/+$/, '');
     this.hostProjectsRoot = (opts.hostProjectsRoot || '').replace(/\/+$/, '');
     this.coordinationStore = opts.coordinationStore ?? null;
-    this.happyEventLogger = new HappyEventLogger(HAPPY_EVENT_LOG_DIR, HAPPY_EVENT_LOG_MAX_BYTES);
+    this.runtimeEventLogger = new RuntimeEventLogger(HAPPY_EVENT_LOG_DIR, HAPPY_EVENT_LOG_MAX_BYTES);
     this.permissionRouter = new PermissionRouter({
       coordinationStore: this.coordinationStore,
       getSession: (sessionId) => this.getSession(sessionId),
@@ -2150,7 +2150,7 @@ export class RuntimeCore {
 
   private async handleStaleRunCleanup(input: StaleRunCleanupInput): Promise<void> {
     const channel = input.agent === 'codex' && CODEX_RUNTIME_MODE !== 'exec' ? 'app_server' : 'exec_cli';
-    this.happyEventLogger.logParsed({
+    this.runtimeEventLogger.logParsed({
       sessionId: input.sessionId,
       agent: input.agent,
       ...(input.chatId ? { chatId: input.chatId } : {}),
@@ -2863,7 +2863,7 @@ export class RuntimeCore {
         ? ((event, meta) => input.onText!(event, meta))
         : undefined,
       onRawLine: (line) => {
-        this.happyEventLogger.logRaw({
+        this.runtimeEventLogger.logRaw({
           sessionId: input.session.id,
           agent: 'gemini',
           ...(input.chatId ? { chatId: input.chatId } : {}),
@@ -2992,7 +2992,7 @@ export class RuntimeCore {
         this.codexThreads.delete(threadCacheKey);
       }
       if (failure.retryWithFreshThread && hadThreadId) {
-        this.happyEventLogger.logParsed({
+        this.runtimeEventLogger.logParsed({
           sessionId: session.id,
           agent: 'codex',
           ...(chatId ? { chatId } : {}),
@@ -3010,7 +3010,7 @@ export class RuntimeCore {
         return this.runCodexAppServerWithEvents(session, prompt, signal, undefined, chatId, model, modelReasoningEffort);
       }
 
-      this.happyEventLogger.logParsed({
+      this.runtimeEventLogger.logParsed({
         sessionId: session.id,
         agent: 'codex',
         ...(chatId ? { chatId } : {}),
@@ -3067,7 +3067,7 @@ export class RuntimeCore {
       args,
       signal,
     });
-    this.happyEventLogger.logParsed({
+    this.runtimeEventLogger.logParsed({
       sessionId: session.id,
       agent: 'codex',
       ...(chatId ? { chatId } : {}),
@@ -3144,7 +3144,7 @@ export class RuntimeCore {
       meta: Record<string, unknown>,
       options: { type?: string; title?: string } = {},
     ) => {
-      this.happyEventLogger.logParsed({
+      this.runtimeEventLogger.logParsed({
         sessionId: session.id,
         agent: 'codex',
         ...(chatId ? { chatId } : {}),
@@ -3560,7 +3560,7 @@ export class RuntimeCore {
 
         const status = asString(turn?.status, '').trim() || 'completed';
         const errorMessage = asString(asRecord(turn?.error)?.message, '').trim() || undefined;
-        this.happyEventLogger.logParsed({
+        this.runtimeEventLogger.logParsed({
           sessionId: session.id,
           agent: 'codex',
           ...(chatId ? { chatId } : {}),
@@ -3583,7 +3583,7 @@ export class RuntimeCore {
       transportActivityTick += 1;
       lastTransportActivityAt = Date.now();
       const rawLine = rawText.trim();
-      this.happyEventLogger.logRaw({
+      this.runtimeEventLogger.logRaw({
         sessionId: session.id,
         agent: 'codex',
         ...(chatId ? { chatId } : {}),
@@ -3593,7 +3593,7 @@ export class RuntimeCore {
       });
       const payload = parseJsonLine(rawLine);
       if (!payload) {
-        this.happyEventLogger.logParsed({
+        this.runtimeEventLogger.logParsed({
           sessionId: session.id,
           agent: 'codex',
           ...(chatId ? { chatId } : {}),
@@ -3604,7 +3604,7 @@ export class RuntimeCore {
         });
         return;
       }
-      this.happyEventLogger.logParsed({
+      this.runtimeEventLogger.logParsed({
         sessionId: session.id,
         agent: 'codex',
         ...(chatId ? { chatId } : {}),
@@ -3769,7 +3769,7 @@ export class RuntimeCore {
         approvalPolicy: codexApprovalPolicy,
       });
       activeTurnId = asString(asRecord(turnStarted.turn)?.id, '').trim();
-      this.happyEventLogger.logParsed({
+      this.runtimeEventLogger.logParsed({
         sessionId: session.id,
         agent: 'codex',
         ...(chatId ? { chatId } : {}),
@@ -3857,7 +3857,7 @@ export class RuntimeCore {
           runErrorMessage = 'turn did not complete before process close';
           runFailureKind = 'websocket_closed';
         }
-        this.happyEventLogger.logParsed({
+        this.runtimeEventLogger.logParsed({
           sessionId: session.id,
           agent: 'codex',
           ...(chatId ? { chatId } : {}),
@@ -3878,7 +3878,7 @@ export class RuntimeCore {
           console.error(`codex app-server transport closed early; pid=${appServerPid} listenUrl=${listenUrl}`);
         }
       }
-      this.happyEventLogger.logParsed({
+      this.runtimeEventLogger.logParsed({
         sessionId: session.id,
         agent: 'codex',
         ...(chatId ? { chatId } : {}),
@@ -3938,7 +3938,7 @@ export class RuntimeCore {
       stdio: ['pipe', 'pipe', 'pipe'],
       signal,
     });
-    this.happyEventLogger.logParsed({
+    this.runtimeEventLogger.logParsed({
       sessionId: session.id,
       agent: 'codex',
       ...(chatId ? { chatId } : {}),
@@ -3969,7 +3969,7 @@ export class RuntimeCore {
       meta: Record<string, unknown>,
       options: { type?: string; title?: string } = {},
     ) => {
-      this.happyEventLogger.logParsed({
+      this.runtimeEventLogger.logParsed({
         sessionId: session.id,
         agent: 'codex',
         ...(chatId ? { chatId } : {}),
@@ -4032,7 +4032,7 @@ export class RuntimeCore {
 
     stdoutLines.on('line', (line) => {
       const rawLine = line.trim();
-      this.happyEventLogger.logRaw({
+      this.runtimeEventLogger.logRaw({
         sessionId: session.id,
         agent: 'codex',
         ...(chatId ? { chatId } : {}),
@@ -4042,7 +4042,7 @@ export class RuntimeCore {
       });
       const payload = parseJsonLine(rawLine);
       if (!payload) {
-        this.happyEventLogger.logParsed({
+        this.runtimeEventLogger.logParsed({
           sessionId: session.id,
           agent: 'codex',
           ...(chatId ? { chatId } : {}),
@@ -4053,7 +4053,7 @@ export class RuntimeCore {
         });
         return;
       }
-      this.happyEventLogger.logParsed({
+      this.runtimeEventLogger.logParsed({
         sessionId: session.id,
         agent: 'codex',
         ...(chatId ? { chatId } : {}),
@@ -4210,7 +4210,7 @@ export class RuntimeCore {
 
     const finalText = sanitizeAgentMessageText(lastAgentMessage.trim());
     if (signal?.aborted) {
-      this.happyEventLogger.logParsed({
+      this.runtimeEventLogger.logParsed({
         sessionId: session.id,
         agent: 'codex',
         ...(chatId ? { chatId } : {}),
@@ -4233,7 +4233,7 @@ export class RuntimeCore {
 
     if (result.code !== 0 && !finalText) {
       const detail = stripAnsi(stderr).slice(0, 800) || `exit code ${result.code}`;
-      this.happyEventLogger.logParsed({
+      this.runtimeEventLogger.logParsed({
         sessionId: session.id,
         agent: 'codex',
         ...(chatId ? { chatId } : {}),
@@ -4250,7 +4250,7 @@ export class RuntimeCore {
       throw new Error(`codex CLI failed: ${detail}`);
     }
 
-    this.happyEventLogger.logParsed({
+    this.runtimeEventLogger.logParsed({
       sessionId: session.id,
       agent: 'codex',
       ...(chatId ? { chatId } : {}),
@@ -4361,7 +4361,7 @@ export class RuntimeCore {
       ? normalizeModelReasoningEffort(context.modelReasoningEffort)
       : undefined;
     if (modelSelection.source !== 'requested') {
-      this.happyEventLogger.logParsed({
+      this.runtimeEventLogger.logParsed({
         sessionId: session.id,
         agent: flavor,
         ...(scopedChatId ? { chatId: scopedChatId } : {}),
@@ -4706,7 +4706,7 @@ export class RuntimeCore {
             session: geminiSession,
             chatId: scopedChatId,
           });
-          this.happyEventLogger.logParsed({
+          this.runtimeEventLogger.logParsed({
             sessionId: session.id,
             agent: 'gemini',
             ...(scopedChatId ? { chatId: scopedChatId } : {}),
@@ -4720,7 +4720,7 @@ export class RuntimeCore {
               requestedThreadId,
             },
           });
-          this.happyEventLogger.logParsed({
+          this.runtimeEventLogger.logParsed({
             sessionId: session.id,
             agent: 'gemini',
             ...(scopedChatId ? { chatId: scopedChatId } : {}),
@@ -4759,7 +4759,7 @@ export class RuntimeCore {
                   threadId: meta.threadId,
                 },
               });
-              this.happyEventLogger.logParsed({
+              this.runtimeEventLogger.logParsed({
                 sessionId: session.id,
                 agent: 'gemini',
                 ...(scopedChatId ? { chatId: scopedChatId } : {}),
@@ -4813,7 +4813,7 @@ export class RuntimeCore {
                 streamedGeminiCompletedTextPersisted = true;
               }
               const isCommentaryText = event.phase === 'commentary';
-              this.happyEventLogger.logParsed({
+              this.runtimeEventLogger.logParsed({
                 sessionId: session.id,
                 agent: 'gemini',
                 ...(scopedChatId ? { chatId: scopedChatId } : {}),
@@ -4843,7 +4843,7 @@ export class RuntimeCore {
               await geminiMessageQueue?.flush();
             },
           });
-          this.happyEventLogger.logParsed({
+          this.runtimeEventLogger.logParsed({
             sessionId: session.id,
             agent: 'gemini',
             ...(scopedChatId ? { chatId: scopedChatId } : {}),
