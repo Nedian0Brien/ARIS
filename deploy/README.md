@@ -33,8 +33,7 @@ Production deployment policy:
 All deploy scripts now require `DEPLOY_ENV_FILE` and production should use `/home/ubuntu/.config/aris/prod.env` as the single source of truth.
 
 For runtime auth naming:
-- `services/aris-web` uses `RUNTIME_API_URL` / `RUNTIME_API_TOKEN`
-- `services/aris-backend` uses `HAPPY_SERVER_URL` / `HAPPY_SERVER_TOKEN` only for upstream Happy runtime access
+- `services/aris-web` and `services/aris-backend` both use `RUNTIME_API_URL` / `RUNTIME_API_TOKEN`. The legacy `HAPPY_SERVER_*` names were retired in Phase 2.5 of the runtime-core refactor.
 
 `deploy/deploy_web_zero_downtime.sh` remains only as a compatibility wrapper. New docs and automation should use `deploy/deploy_web.sh`.
 
@@ -85,11 +84,10 @@ deploy/
 
 1. Confirm branch and commit are correct.
 2. Confirm `/home/ubuntu/.config/aris/prod.env` exists and export `DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env`.
-3. Ensure required keys are set: `APP_BASE_URL`, `AUTH_JWT_SECRET`, `ARIS_ADMIN_EMAIL`, `ARIS_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `RUNTIME_API_TOKEN`, `RUNTIME_BACKEND`, `SSH_KEY_ENCRYPTION_SECRET`.
-4. If `RUNTIME_BACKEND=happy`, also ensure `HAPPY_SERVER_URL`, `HAPPY_SERVER_TOKEN` are set.
-5. If `services/aris-backend/.env` is still maintained for local checks, keep its `RUNTIME_API_TOKEN` aligned with `prod.env`.
-6. If deployment is needed, run the appropriate script entrypoint directly and do not assume that `main` push alone performed production deployment.
-7. After running a deployment script, complete the health checks in this document before reporting completion.
+3. Ensure required keys are set: `APP_BASE_URL`, `AUTH_JWT_SECRET`, `ARIS_ADMIN_EMAIL`, `ARIS_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `RUNTIME_API_TOKEN`, `RUNTIME_BACKEND` (must be `prisma`), `SSH_KEY_ENCRYPTION_SECRET`.
+4. If `services/aris-backend/.env` is still maintained for local checks, keep its `RUNTIME_API_TOKEN` aligned with `prod.env`.
+5. If deployment is needed, run the appropriate script entrypoint directly and do not assume that `main` push alone performed production deployment.
+6. After running a deployment script, complete the health checks in this document before reporting completion.
 
 ## Standard deployment flows
 
