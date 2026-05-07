@@ -40,7 +40,7 @@ export type HappyParsedLogRecord = {
   payload: unknown;
 };
 
-export class HappyEventLogger {
+export class RuntimeEventLogger {
   private readonly logsDir: string;
 
   private readonly maxBytes: number;
