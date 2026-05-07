@@ -6,7 +6,7 @@
  * `isAvailable`, `checkStatus`) are functional. Process-lifecycle methods
  * (`spawn`, `sendMessage`, `parseStdout`, …) throw `NotYetWiredError` —
  * Sprint 6 will replace those throws with extracted logic from
- * `happyClient.ts`.
+ * `runtimeCore.ts`.
  *
  * The adapter is registered with `cliProviderRegistry` via
  * `./bootstrap.ts`, but bootstrap is not imported anywhere in production
@@ -34,7 +34,7 @@ class NotYetWiredError extends Error {
   constructor(method: string) {
     super(
       `CodexAdapter.${method}() is not wired yet. Phase 2 Sprint 2 ships only the structural slot; ` +
-        'Sprint 6 will extract the implementation from happyClient.ts.',
+        'Sprint 6 will extract the implementation from runtimeCore.ts.',
     );
     this.name = 'NotYetWiredError';
   }

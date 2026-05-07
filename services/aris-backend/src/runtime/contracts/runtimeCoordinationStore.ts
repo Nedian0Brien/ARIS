@@ -2,7 +2,7 @@
  * Shared types for permission/coordination delegation between the runtime
  * core and the storage layer (PrismaRuntimeStore in production, mock in tests).
  *
- * These types were inlined inside `runtime/happyClient.ts` until 2.5c. Moving
+ * These types were inlined inside `runtime/runtimeCore.ts` until 2.5c. Moving
  * them here lets `runtime/orchestration/permissionRouter.ts` consume the
  * coordination-store contract without circular imports through happyClient.
  */
@@ -25,7 +25,7 @@ export type HappyRuntimePermissionInput = {
   sessionId: string;
   /**
    * `null` accepted alongside `undefined` to mirror the original inline
-   * surface in happyClient.ts (callers occasionally pass nullable chat ids
+   * surface in runtimeCore.ts (callers occasionally pass nullable chat ids
    * from optional-property reads).
    */
   chatId?: string | null;

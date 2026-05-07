@@ -1855,7 +1855,7 @@ function createCodexAppServerAbortPromise(input: {
   };
 }
 
-export const happyClientTestHooks = {
+export const runtimeCoreTestHooks = {
   parseAgentStreamLine,
   parseAgentStreamOutput,
   looksLikeActionTranscript,
@@ -1878,14 +1878,14 @@ export const happyClientTestHooks = {
   resolveAgentCommandTimeoutMs,
   resolveGeminiStreamBackendV2Enabled,
   finalizeCodexRuntimePermissions: (
-    store: HappyRuntimeStore,
+    store: RuntimeCore,
     permissionIds: Iterable<string>,
     options?: { preservePending?: boolean },
   ) => (store as unknown as { permissionRouter: PermissionRouter }).permissionRouter
     .finalizeCodexPermissions(permissionIds, options),
 };
 
-export class HappyRuntimeStore {
+export class RuntimeCore {
   private readonly claudeSessionRegistry = new ClaudeSessionRegistry();
   private readonly geminiSessionRegistry = new GeminiSessionRegistry();
   private readonly claudeSessionScanners = new Map<string, ClaudeSessionLogTracker>();

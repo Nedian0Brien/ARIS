@@ -6,8 +6,8 @@
  * name, args, and channel selection (`app-server` vs `exec`).
  *
  * The exec-mode args returned here are byte-equivalent to the inline spawn
- * at `services/aris-backend/src/runtime/happyClient.ts:4198-4221` as of the
- * Phase 2 baseline. happyClient.ts is NOT yet routed through this builder;
+ * at `services/aris-backend/src/runtime/runtimeCore.ts:4198-4221` as of the
+ * Phase 2 baseline. runtimeCore.ts is NOT yet routed through this builder;
  * Sprint 6 will perform that wiring with a fixture-locked regression check.
  *
  * App-server-mode commands are also returned here, even though the
@@ -98,7 +98,7 @@ function appendReasoningEffort(args: string[], reasoningEffort?: CodexReasoningE
 /**
  * Build a CodexLaunchCommand.
  *
- * exec channel args (matches `happyClient.ts:4198` baseline):
+ * exec channel args (matches `runtimeCore.ts:4198` baseline):
  *   codex
  *     -a <approvalPolicy>
  *     -s <sandboxMode>

@@ -1,12 +1,12 @@
 /**
  * RealtimeEventBus — in-memory ring buffer of session realtime events.
  *
- * Owned by `runtime/happyClient.ts` until 2.5d, where it moves into a
+ * Owned by `runtime/runtimeCore.ts` until 2.5d, where it moves into a
  * standalone module so the runtime core can shrink and so future
  * subscribers (SSE polling, WebSocket fanout) can take a stable
  * dependency on a focused surface.
  *
- * Buffer semantics (preserved verbatim from happyClient.ts):
+ * Buffer semantics (preserved verbatim from runtimeCore.ts):
  *   - Per-session bucket capped at 500 entries; overflow drops the
  *     oldest entries via `splice(0, bucket.length - 500)`.
  *   - Cursor monotonically increases per session and is independent of
@@ -25,7 +25,7 @@ import type { RuntimeMessage, RuntimeSession } from '../../types.js';
 
 /**
  * One entry in a session bucket. Verbatim port of the inline type that
- * lived in happyClient.ts.
+ * lived in runtimeCore.ts.
  */
 export interface SessionRealtimeEventRecord {
   cursor: number;
