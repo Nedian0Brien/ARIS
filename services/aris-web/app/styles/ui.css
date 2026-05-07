@@ -2235,6 +2235,11 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface);
   overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.proj-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .proj-tab {
@@ -6102,11 +6107,6 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
     max-width: 100%;
     width: 100%;
     padding: 0 var(--sp-8);
-    scrollbar-width: none;
-  }
-
-  .proj-tabs::-webkit-scrollbar {
-    display: none;
   }
 
   .proj-tab {
