@@ -20,7 +20,7 @@ PULL_BASE="${PULL_BASE:-0}"
 STOP_LEGACY_WEB="${STOP_LEGACY_WEB:-1}"
 WEB_PRUNE_MODE="${WEB_PRUNE_MODE:-light}"              # off | light | aggressive
 WEB_PRUNE_ASYNC="${WEB_PRUNE_ASYNC:-1}"               # 1 to run pruning in background
-WEB_PRUNE_CACHE_UNTIL="${WEB_PRUNE_CACHE_UNTIL:-168h}" # e.g. 24h, 168h
+WEB_PRUNE_CACHE_UNTIL="${WEB_PRUNE_CACHE_UNTIL:-24h}"  # e.g. 24h, 168h
 WEB_PRUNE_CACHE_KEEP_STORAGE="${WEB_PRUNE_CACHE_KEEP_STORAGE:-8gb}"
 
 ARIS_WEB_IMAGE="${ARIS_WEB_IMAGE:-aris-stack-aris-web:latest}"
