@@ -55,9 +55,10 @@ x-aris-web-common: &aris_web_common
         "CMD-SHELL",
         "node -e \"fetch('http://127.0.0.1:3000/login',{redirect:'manual'}).then(r=>process.exit(r.status>=200&&r.status<400?0:1)).catch(()=>process.exit(1))\"",
       ]
-    interval: 15s
+    interval: 3s
     timeout: 5s
     retries: 20
+    start_period: 30s
   networks:
     - aris_net
 
