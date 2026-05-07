@@ -5266,7 +5266,9 @@
   .composerDock {
     left: 0.65rem;
     right: 0.65rem;
+    position: fixed;
     width: auto;
+    transform: none;
     --composer-dock-bottom-offset: calc(0.45rem + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
   }
 
@@ -7834,7 +7836,9 @@
   .composerDock {
     width: calc(100% - var(--sp-4));
     max-width: calc(100% - var(--sp-4));
+    position: fixed;
     bottom: var(--composer-dock-bottom-offset);
+    transform: none;
   }
 
   .compV2Top {
