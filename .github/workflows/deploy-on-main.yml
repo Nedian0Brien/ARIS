@@ -2,6 +2,11 @@ name: Deploy Manually
 
 on:
   workflow_dispatch:
+    inputs:
+      force_full_deploy:
+        description: 'Force deploy both web and backend regardless of file changes'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -27,8 +32,58 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "run_web=true" >> "$GITHUB_OUTPUT"
-          echo "run_backend=true" >> "$GITHUB_OUTPUT"
+
+          if [[ "${{ inputs.force_full_deploy }}" == "true" ]]; then
+            echo "run_web=true" >> "$GITHUB_OUTPUT"
+            echo "run_backend=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::force_full_deploy=true — deploying both web and backend"
+            exit 0
+          fi
+
+          # Inspect files changed across recent commits. Using HEAD~10..HEAD gives
+          # a generous window so that multi-commit pushes don't silently skip deploys.
+          changed="$(git diff --name-only HEAD~10..HEAD 2>/dev/null || git diff --name-only HEAD^..HEAD)"
+
+          run_web=false
+          run_backend=false
+
+          while IFS= read -r f; do
+            case "$f" in
+              # Web service sources
+              services/aris-web/*|\
+              docker-compose.yml|\
+              # Web-specific deploy scripts and shared deploy libs
+              deploy/deploy_web.sh|\
+              deploy/deploy_zero_downtime.sh|\
+              deploy/deploy_web_zero_downtime.sh|\
+              deploy/internal/web_zero_downtime.sh|\
+              deploy/lib/*|\
+              deploy/dev/*)
+                run_web=true ;;
+            esac
+            case "$f" in
+              # Backend service sources
+              services/aris-backend/*|\
+              # Backend-specific deploy scripts
+              deploy/deploy_backend_zero_downtime.sh|\
+              deploy/deploy_zero_downtime.sh|\
+              deploy/internal/backend_zero_downtime.sh|\
+              deploy/ecosystem.config.cjs|\
+              deploy/lib/*)
+                run_backend=true ;;
+            esac
+          done <<< "$changed"
+
+          # Safety fallback: if nothing matched, deploy both to avoid silent no-ops.
+          if [[ "$run_web" == "false" && "$run_backend" == "false" ]]; then
+            echo "::warning::No service-specific changes detected in last 10 commits; deploying both as safety fallback"
+            run_web=true
+            run_backend=true
+          fi
+
+          echo "run_web=$run_web" >> "$GITHUB_OUTPUT"
+          echo "run_backend=$run_backend" >> "$GITHUB_OUTPUT"
+          echo "::notice::deploy targets — web=${run_web} backend=${run_backend}"
 
   deploy:
     runs-on: self-hosted
