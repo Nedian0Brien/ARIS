@@ -671,15 +671,17 @@ registry/controller를 ClaudeSession 중심으로 재편`);
       workspaceRoot: '/workspace',
       coordinationStore: coordinationStore as never,
     }) as unknown as {
-      permissions: Map<string, typeof persistedPermission>;
-      codexPermissionIndex: Map<string, string>;
-      codexPermissionResponders: Map<string, (decision: 'allow_once' | 'allow_session' | 'deny') => Promise<void>>;
+      permissionRouter: {
+        permissions: Map<string, typeof persistedPermission>;
+        codexPermissionIndex: Map<string, string>;
+        codexPermissionResponders: Map<string, (decision: 'allow_once' | 'allow_session' | 'deny') => Promise<void>>;
+      };
       draining: boolean;
     };
 
-    store.permissions.set('perm-1', persistedPermission);
-    store.codexPermissionIndex.set('chat-1:session-1:perm-1', 'perm-1');
-    store.codexPermissionResponders.set('perm-1', vi.fn());
+    store.permissionRouter.permissions.set('perm-1', persistedPermission);
+    store.permissionRouter.codexPermissionIndex.set('chat-1:session-1:perm-1', 'perm-1');
+    store.permissionRouter.codexPermissionResponders.set('perm-1', vi.fn());
     store.draining = true;
 
     await happyClientTestHooks.finalizeCodexRuntimePermissions(store as never, ['perm-1'], {
@@ -687,11 +689,11 @@ registry/controller를 ClaudeSession 중심으로 재편`);
     });
 
     expect(coordinationStore.decidePermission).not.toHaveBeenCalled();
-    expect(store.permissions.get('perm-1')).toMatchObject({
+    expect(store.permissionRouter.permissions.get('perm-1')).toMatchObject({
       id: 'perm-1',
       state: 'pending',
     });
-    expect(store.codexPermissionIndex.size).toBe(0);
-    expect(store.codexPermissionResponders.size).toBe(0);
+    expect(store.permissionRouter.codexPermissionIndex.size).toBe(0);
+    expect(store.permissionRouter.codexPermissionResponders.size).toBe(0);
   });
 });
