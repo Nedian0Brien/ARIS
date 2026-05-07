@@ -12,18 +12,17 @@
 [nginx] → aris-web-blue(:3301) 또는 aris-web-green(:3302)  ← Docker Compose
     ↓ RUNTIME_API_URL=http://127.0.0.1:4080
 [aris-backend] (:4080)  ← PM2 cluster, /home/ubuntu/project/ARIS/.runtime/aris-backend/
-    ↓ HAPPY_SERVER_URL=http://127.0.0.1:3005
-[Happy Server] (:3005)  ← 외부 런타임 (Gemini/Claude/Codex 실행)
+    ↓ provider CLI spawn (Claude / Gemini / Codex)
+[provider CLI processes]  ← runtimeCore가 직접 실행 (Phase 2.5 이후 외부 Happy Server 의존성 제거)
 ```
 
-### 인증 토큰 구분
+### 인증 토큰
 
 | 토큰 | 환경변수 | 용도 |
 |------|---------|------|
 | `RUNTIME_API_TOKEN` | prod.env, aris-backend/.env | aris-web → aris-backend API 호출 |
-| `HAPPY_SERVER_TOKEN` | prod.env, aris-backend/.env | aris-backend → Happy Server 호출 |
 
-> **주의**: 두 토큰은 다를 수 있다. `check-runtime-connection.sh`가 정렬 여부를 검증해 준다.
+> Phase 2.5 이전에 사용되던 `HAPPY_SERVER_TOKEN`은 외부 happy-server 의존성과 함께 제거됐다. `check-runtime-connection.sh`는 단일 `RUNTIME_API_TOKEN` 일치 여부만 검증한다.
 
 ---
 

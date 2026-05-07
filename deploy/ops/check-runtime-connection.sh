@@ -123,26 +123,15 @@ main() {
   local backend_token=''
   local deploy_token=''
   local runtime_backend=''
-  local happy_server_url=''
   local mismatch=0
 
   deploy_token="$(read_env_value "$DEPLOY_ENV" "RUNTIME_API_TOKEN" || true)"
   backend_token="$(read_env_value "$BACKEND_ENV" "RUNTIME_API_TOKEN" || true)"
   web_runtime_api_token="$(read_env_value "$WEB_ENV" "RUNTIME_API_TOKEN" || true)"
-  if [[ -z "$web_runtime_api_token" ]]; then
-    web_runtime_api_token="$(read_env_value "$WEB_ENV" "HAPPY_SERVER_TOKEN" || true)"
-  fi
   web_runtime_api_url="$(read_env_value "$WEB_ENV" "RUNTIME_API_URL" || true)"
-  if [[ -z "$web_runtime_api_url" ]]; then
-    web_runtime_api_url="$(read_env_value "$WEB_ENV" "HAPPY_SERVER_URL" || true)"
-  fi
   runtime_backend="$(read_env_value "$DEPLOY_ENV" "RUNTIME_BACKEND" || true)"
   if [[ -z "$runtime_backend" ]]; then
     runtime_backend="$(read_env_value "$BACKEND_ENV" "RUNTIME_BACKEND" || true)"
-  fi
-  happy_server_url="$(read_env_value "$DEPLOY_ENV" "HAPPY_SERVER_URL" || true)"
-  if [[ -z "$happy_server_url" ]]; then
-    happy_server_url="$(read_env_value "$BACKEND_ENV" "HAPPY_SERVER_URL" || true)"
   fi
 
   log_section "env validation"
@@ -151,9 +140,6 @@ main() {
   echo "shared repo root: $SHARED_REPO_ROOT"
   echo "runtime url     : $runtime_url"
   echo "runtime backend : ${runtime_backend:-unset}"
-  if [[ "$runtime_backend" == "happy" ]]; then
-    echo "happy server url: ${happy_server_url:-unset}"
-  fi
   echo "deploy token    : $(mask_value "$deploy_token")"
   if [[ -f "$BACKEND_ENV" ]]; then
     echo "backend token   : $(mask_value "$backend_token")"
@@ -184,33 +170,6 @@ main() {
     echo "❗ continue check with deploy token can fail until tokens are aligned"
   else
     echo "✅ token values are aligned for configured env files"
-  fi
-
-  if [[ "$runtime_backend" == "happy" ]]; then
-    if [[ -z "$happy_server_url" ]]; then
-      echo "❌ RUNTIME_BACKEND=happy 인데 HAPPY_SERVER_URL이 비어 있습니다."
-      exit 1
-    fi
-
-    local runtime_origin happy_origin
-    runtime_origin="$(extract_origin "$runtime_url")"
-    happy_origin="$(extract_origin "$happy_server_url")"
-
-    if [[ "$happy_origin" == "$runtime_origin" ]] || is_local_backend_origin "$happy_origin"; then
-      echo "❌ HAPPY_SERVER_URL이 aris-backend 자체 주소로 설정되어 있습니다: $happy_server_url"
-      echo "   외부 Happy 런타임 URL로 변경하거나 RUNTIME_BACKEND=mock으로 전환하세요."
-      exit 1
-    fi
-
-    local happy_health_status
-    happy_health_status="$(curl -sS -o /tmp/happy-health-status.$$ -w '%{http_code}' --max-time 4 "$happy_server_url/health" 2>/dev/null || true)"
-    happy_health_status="$(normalize_http_code "$happy_health_status")"
-    rm -f "/tmp/happy-health-status.$$"
-    if [[ "$happy_health_status" == "000" ]]; then
-      echo "❌ HAPPY_SERVER_URL에 연결할 수 없습니다: $happy_server_url"
-      echo "   외부 Happy 런타임이 내려가 있으면 RUNTIME_BACKEND=mock으로 전환 후 backend reload를 권장합니다."
-      exit 1
-    fi
   fi
 
   log_section "runtime connectivity"
