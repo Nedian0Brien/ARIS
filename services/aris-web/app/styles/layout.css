@@ -1,4 +1,17 @@
 /* Layout Utilities */
+
+/* Lock window scroll on immersive/chat layouts.
+   .app-shell-chat-screen은 visible viewport와 같은 높이로 의도되어 있지만,
+   초기 페인트(JS sync 전) 또는 scrollIntoView 호출이 body를 스크롤시켜
+   상단 헤더가 viewport 위로 밀려 올라가는 회귀가 있어 명시적으로 잠근다. */
+html:has(body > .app-shell-chat-screen),
+html:has(body > .app-shell-immersive),
+body:has(> .app-shell-chat-screen),
+body:has(> .app-shell-immersive) {
+  overflow: hidden;
+  height: 100%;
+}
+
 .app-shell {
   display: flex;
   flex-direction: column;
