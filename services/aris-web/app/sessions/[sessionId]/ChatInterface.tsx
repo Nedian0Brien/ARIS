@@ -736,6 +736,7 @@ export function ChatInterface({
     eventsForChatId,
     hasLoadedCurrentChat,
     hasDetachedTail,
+    isMobileLayout,
     isTailRestoreHydrated,
     isNewChatPlaceholder,
     isWorkspaceHome,
