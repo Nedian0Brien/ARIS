@@ -250,6 +250,15 @@
   --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* iOS Safari 15.4+: dvh가 layout viewport(URL바·툴바 포함)보다 작은 dynamic 값이라
+   초기 페인트에서 .app-shell-chat-screen이 visible viewport를 넘어 body 스크롤을 만드는 것을 방지. */
+@supports (height: 100dvh) {
+  :root {
+    --app-vh: 100dvh;
+    --visual-viewport-height: 100dvh;
+  }
+}
+
 html[data-theme='dark'] {
   color-scheme: dark;
   --b-50: #112358;
