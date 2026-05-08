@@ -1,0 +1,9 @@
+{
+  "method": "thread/status/changed",
+  "params": {
+    "threadId": "REDACTED-UUID",
+    "status": {
+      "type": "idle"
+    }
+  }
+}
