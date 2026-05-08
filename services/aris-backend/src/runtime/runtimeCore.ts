@@ -45,6 +45,10 @@ import {
   terminateCodexAppServerProcess,
 } from './providers/codex/codexAppServerLifecycle.js';
 import {
+  extractCodexAppServerApproval,
+  normalizeCodexApprovalPolicy,
+} from './providers/codex/codexPermissionBridge.js';
+import {
   buildCodexPermissionKey,
   buildCodexThreadCacheKey,
   classifyCodexAppServerFailure,
@@ -364,13 +368,6 @@ function normalizeApprovalPolicy(value: unknown, fallback: ApprovalPolicy = 'on-
     return normalized;
   }
   return fallback;
-}
-
-function normalizeCodexApprovalPolicy(value: ApprovalPolicy): 'on-request' | 'on-failure' | 'never' {
-  if (value === 'on-failure' || value === 'never' || value === 'on-request') {
-    return value;
-  }
-  return 'on-request';
 }
 
 function normalizeMetadata(raw: unknown): {
@@ -1076,36 +1073,6 @@ function toJsonRpcIdKey(value: unknown): string {
     return 'null';
   }
   return JSON.stringify(value);
-}
-
-function mapCodexDecisionForCommandApproval(decision: PermissionDecision): string {
-  if (decision === 'allow_session') {
-    return 'acceptForSession';
-  }
-  if (decision === 'deny') {
-    return 'decline';
-  }
-  return 'accept';
-}
-
-function mapCodexDecisionForPatchApproval(decision: PermissionDecision): string {
-  if (decision === 'allow_session') {
-    return 'acceptForSession';
-  }
-  if (decision === 'deny') {
-    return 'decline';
-  }
-  return 'accept';
-}
-
-function mapCodexDecisionForLegacyReview(decision: PermissionDecision): string {
-  if (decision === 'allow_session') {
-    return 'approved_for_session';
-  }
-  if (decision === 'deny') {
-    return 'denied';
-  }
-  return 'approved';
 }
 
 function isAbortFailure(error: unknown): boolean {
@@ -2620,89 +2587,19 @@ export class RuntimeCore {
       const params = asRecord(payload.params) ?? {};
       const requestIdKey = toJsonRpcIdKey(requestId);
 
-      if (method === 'item/commandExecution/requestApproval') {
-        const itemId = asString(params.itemId, '').trim();
-        const approvalId = asString(params.approvalId, '').trim();
-        const callId = approvalId || itemId || requestIdKey;
-        const commandRaw = asString(params.command, `command (${callId})`);
-        const reason = asString(params.reason, '명령 실행을 위해 사용자 승인이 필요합니다.').trim();
-        const hasNetworkContext = asRecord(params.networkApprovalContext) !== null;
-        const hasAdditionalPermissions = asRecord(params.additionalPermissions) !== null;
-        const hasNetworkAmendments = Array.isArray(params.proposedNetworkPolicyAmendments)
-          && params.proposedNetworkPolicyAmendments.length > 0;
-        const risk: PermissionRisk = hasNetworkContext || hasAdditionalPermissions || hasNetworkAmendments
-          ? 'high'
-          : 'medium';
-        const key = buildScopedPermissionKey(
-          `${session.id}:cmd:${approvalId || itemId || requestIdKey}`,
-          chatId,
-        );
+      const approval = extractCodexAppServerApproval({
+        method,
+        params,
+        requestIdKey,
+        sessionId: session.id,
+      });
+      if (approval) {
         await registerPermissionResponder(
-          key,
-          unwrapShellCommand(commandRaw),
-          reason,
-          risk,
-          (decision) => sendJsonRpcResult(requestId, { decision: mapCodexDecisionForCommandApproval(decision) }),
-        );
-        return;
-      }
-
-      if (method === 'item/fileChange/requestApproval') {
-        const itemId = asString(params.itemId, '').trim();
-        const grantRoot = asString(params.grantRoot, '').trim();
-        const reason = asString(params.reason, '패치 적용을 위해 사용자 승인이 필요합니다.').trim();
-        const command = grantRoot ? `apply_patch (grant_root: ${grantRoot})` : 'apply_patch';
-        const key = buildScopedPermissionKey(
-          `${session.id}:patch:${itemId || requestIdKey}`,
-          chatId,
-        );
-        await registerPermissionResponder(
-          key,
-          command,
-          reason,
-          grantRoot ? 'high' : 'medium',
-          (decision) => sendJsonRpcResult(requestId, { decision: mapCodexDecisionForPatchApproval(decision) }),
-        );
-        return;
-      }
-
-      if (method === 'execCommandApproval') {
-        const callId = asString(params.callId, requestIdKey).trim();
-        const approvalId = asString(params.approvalId, '').trim();
-        const commandParts = Array.isArray(params.command)
-          ? params.command.filter((part): part is string => typeof part === 'string')
-          : [];
-        const command = commandParts.length > 0 ? commandParts.join(' ') : `exec command (${callId})`;
-        const reason = asString(params.reason, '명령 실행을 위해 사용자 승인이 필요합니다.').trim();
-        const key = buildScopedPermissionKey(
-          `${session.id}:legacy-exec:${approvalId || callId}`,
-          chatId,
-        );
-        await registerPermissionResponder(
-          key,
-          unwrapShellCommand(command),
-          reason,
-          'medium',
-          (decision) => sendJsonRpcResult(requestId, { decision: mapCodexDecisionForLegacyReview(decision) }),
-        );
-        return;
-      }
-
-      if (method === 'applyPatchApproval') {
-        const callId = asString(params.callId, requestIdKey).trim();
-        const grantRoot = asString(params.grantRoot, '').trim();
-        const reason = asString(params.reason, '패치 적용을 위해 사용자 승인이 필요합니다.').trim();
-        const command = grantRoot ? `apply_patch (grant_root: ${grantRoot})` : 'apply_patch';
-        const key = buildScopedPermissionKey(
-          `${session.id}:legacy-patch:${callId}`,
-          chatId,
-        );
-        await registerPermissionResponder(
-          key,
-          command,
-          reason,
-          grantRoot ? 'high' : 'medium',
-          (decision) => sendJsonRpcResult(requestId, { decision: mapCodexDecisionForLegacyReview(decision) }),
+          buildScopedPermissionKey(approval.permissionKey, chatId),
+          approval.command,
+          approval.reason,
+          approval.risk,
+          (decision) => sendJsonRpcResult(requestId, { decision: approval.mapDecision(decision) }),
         );
         return;
       }
