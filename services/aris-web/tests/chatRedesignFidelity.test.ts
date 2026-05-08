@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const chatCss = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.module.css'), 'utf8');
+const layoutCss = readFileSync(resolve(__dirname, '../app/styles/layout.css'), 'utf8');
 const sessionPage = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/page.tsx'), 'utf8');
 const pagerShell = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/WorkspacePagerShell.tsx'), 'utf8');
 const chatInterface = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.tsx'), 'utf8');
@@ -22,6 +23,16 @@ describe('chat redesign fidelity', () => {
     expect(sessionPage).toContain('app-shell-chat-screen');
     expect(chatInterface).toContain('chatShellPrototype');
     expect(chatCss).toMatch(/\.chatShellPrototype\s*\{[\s\S]*grid-template-columns:\s*264px minmax\(0,\s*1fr\);[\s\S]*height:\s*100dvh;/);
+  });
+
+  it('treats both mobile chat shell variants as viewport-locked chat screens', () => {
+    expect(layoutCss).toContain('html:has(body > .app-shell-chat-screen),');
+    expect(layoutCss).toContain('html:has(body > .app-shell-ia--chat-screen),');
+    expect(layoutCss).toContain('body:has(> .app-shell-chat-screen),');
+    expect(layoutCss).toContain('body:has(> .app-shell-ia--chat-screen),');
+    expect(layoutCss).toMatch(/body:has\(> \.app-shell-ia--chat-screen\),[\s\S]*body:has\(> \.app-shell-immersive\)\s*\{[\s\S]*overflow:\s*hidden;[\s\S]*height:\s*100%;/s);
+    expect(layoutCss).toMatch(/\.app-shell-chat-screen,\s*\.app-shell-ia--chat-screen\s*\{[\s\S]*padding-bottom:\s*0;/s);
+    expect(layoutCss).toMatch(/@media\s*\(max-width:\s*960px\)\s*\{[\s\S]*?\.app-shell-chat-screen,\s*\.app-shell-ia--chat-screen\s*\{[\s\S]*?height:\s*var\(--app-vh,\s*100dvh\);[\s\S]*?overflow:\s*hidden;/s);
   });
 
   it('uses the prototype desktop shell with chat and a persistent 420px workspace pane', () => {
