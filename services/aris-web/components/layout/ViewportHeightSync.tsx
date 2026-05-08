@@ -9,7 +9,7 @@ export const VIEWPORT_LAYOUT_CHANGE_EVENT = 'aris:viewport-layout-change';
 export function ViewportHeightSync() {
   useEffect(() => {
     const root = document.documentElement;
-    let maxViewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    let lastNoKeyboardHeight = window.visualViewport?.height ?? window.innerHeight;
     let lastInnerWidth = window.innerWidth;
     let previousMetrics: {
       appViewportHeight: number;
@@ -28,18 +28,25 @@ export function ViewportHeightSync() {
       const layoutViewportHeight = window.innerHeight;
       const orientationChanged = Math.abs(innerWidth - lastInnerWidth) > 120;
       if (orientationChanged) {
-        maxViewportHeight = height;
+        lastNoKeyboardHeight = height;
         lastInnerWidth = innerWidth;
       }
-      if (height > maxViewportHeight) {
-        maxViewportHeight = height;
+
+      // bottomInset = layout viewport에서 visible viewport와 top offset을 뺀 나머지.
+      // iOS Safari 하단 툴바, 하단 URL바, 또는 가상 키보드가 점유하는 영역.
+      const bottomInset = Math.max(0, layoutViewportHeight - height - viewportOffsetTop);
+      const keyboardOpen = bottomInset > 120;
+      const keyboardInset = keyboardOpen ? bottomInset : 0;
+      const visualViewportBottomInset = keyboardOpen ? 0 : bottomInset;
+
+      // 키보드가 닫혀 있는 동안에는 --app-vh가 현재 visible viewport를 그대로 따라가도록 한다.
+      // (이 잠금을 풀지 않으면 maxViewportHeight가 URL바 숨김 상태로 굳어져서 외부 스크롤이 발생한다.)
+      // 키보드가 열린 동안에만 직전 닫힘 상태의 높이로 고정해서 채팅 컨테이너 reflow를 방지한다.
+      if (!keyboardOpen) {
+        lastNoKeyboardHeight = height;
       }
-      const historicalBottomInset = Math.max(0, maxViewportHeight - height - viewportOffsetTop);
-      const layoutBottomInset = Math.max(0, layoutViewportHeight - height - viewportOffsetTop);
-      const visualViewportBottomInset = Math.max(historicalBottomInset, layoutBottomInset);
-      const keyboardInset = visualViewportBottomInset;
-      const keyboardOpen = keyboardInset > 120;
-      const appViewportHeight = keyboardOpen ? height : maxViewportHeight;
+      const appViewportHeight = keyboardOpen ? lastNoKeyboardHeight : height;
+
       const vh = height * 0.01;
       root.style.setProperty('--vh', `${vh}px`);
       root.style.setProperty('--app-vh', `${appViewportHeight}px`);
@@ -69,7 +76,7 @@ export function ViewportHeightSync() {
           metricsChanged,
           ...nextMetrics,
           layoutViewportHeight,
-          maxViewportHeight,
+          lastNoKeyboardHeight,
           keyboardOpen,
         },
       });
