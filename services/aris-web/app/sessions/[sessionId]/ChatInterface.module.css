@@ -1231,10 +1231,12 @@
 }
 
 .chatShell.chatShellMobileScroll {
-  height: calc(var(--app-vh, 100dvh) - var(--global-header-offset-effective));
-  max-height: calc(var(--app-vh, 100dvh) - var(--global-header-offset-effective));
-  min-height: 0;
-  overflow: hidden;
+  /* Page-scroll model on mobile: shell grows with content, body handles scroll.
+     이렇게 해야 iOS 하단 툴바가 스크롤에 따라 자동 숨김 처리되어 채팅 영역 확보. */
+  height: auto;
+  max-height: none;
+  min-height: calc(var(--app-vh, 100dvh) - var(--global-header-offset-effective));
+  overflow: visible;
 }
 
 .chatSidebar {
@@ -7818,9 +7820,19 @@
   .chatShellPrototype,
   .chatShellPrototype.chatShellSidebarOpen,
   .chatShellPrototype.chatShellSidebarClosed {
-    --composer-dock-bottom-offset: calc(var(--sp-4) + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
-    --chat-timeline-bottom-offset: calc(var(--composer-dock-height) + var(--sp-10) + var(--safe-area-bottom-effective) + var(--chat-viewport-bottom-inset));
+    /* Page-scroll model on mobile (pre-redesign 동작 복구).
+       composer/timeline 오프셋은 keyboard만 반영. iOS 하단 툴바는 body scroll 시 자동 숨김 처리되므로
+       --visual-viewport-bottom-inset를 더하지 않는다. (commit 01d0842가 추가한 보정이 고정 viewport 조합에서
+       전체 UI를 위로 밀어 올리는 회귀를 만들었음.) */
+    --safe-area-bottom-effective: max(0px, calc(env(safe-area-inset-bottom) - var(--keyboard-inset-height, 0px)));
+    --composer-dock-bottom-offset: calc(var(--sp-4) + var(--safe-area-bottom-effective) + var(--keyboard-inset-height, 0px));
+    --chat-timeline-bottom-offset: calc(var(--composer-dock-height) + var(--sp-10) + var(--safe-area-bottom-effective) + var(--keyboard-inset-height, 0px));
     grid-template-columns: minmax(0, 1fr);
+    /* Page-scroll model: shell grows with content, body handles scroll */
+    height: auto;
+    max-height: none;
+    min-height: 100dvh;
+    overflow: visible;
   }
 
   .chatShellPrototype .csSidebar {
@@ -7828,6 +7840,11 @@
   }
 
   .csTimeline {
+    /* Page-scroll model: no inner scroll, content grows with messages */
+    flex: 0 0 auto;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
     padding: var(--sp-8) var(--sp-4) var(--chat-timeline-bottom-offset);
   }
 
