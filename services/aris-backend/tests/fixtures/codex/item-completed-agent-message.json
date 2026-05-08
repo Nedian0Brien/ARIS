@@ -1,0 +1,14 @@
+{
+  "method": "item/completed",
+  "params": {
+    "item": {
+      "type": "agentMessage",
+      "id": "msg_REDACTED",
+      "text": "Hi",
+      "phase": "final_answer",
+      "memoryCitation": null
+    },
+    "threadId": "REDACTED-UUID",
+    "turnId": "REDACTED-UUID"
+  }
+}

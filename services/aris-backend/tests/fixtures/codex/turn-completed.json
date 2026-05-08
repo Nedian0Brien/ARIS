@@ -1,0 +1,15 @@
+{
+  "method": "turn/completed",
+  "params": {
+    "threadId": "REDACTED-UUID",
+    "turn": {
+      "id": "REDACTED-UUID",
+      "items": [],
+      "status": "completed",
+      "error": null,
+      "startedAt": 1778200084,
+      "completedAt": 1778200091,
+      "durationMs": 7177
+    }
+  }
+}

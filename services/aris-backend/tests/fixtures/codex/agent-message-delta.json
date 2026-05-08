@@ -1,0 +1,9 @@
+{
+  "method": "item/agentMessage/delta",
+  "params": {
+    "threadId": "REDACTED-UUID",
+    "turnId": "REDACTED-UUID",
+    "itemId": "msg_REDACTED",
+    "delta": "Hi"
+  }
+}
