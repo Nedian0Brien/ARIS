@@ -182,6 +182,12 @@ describe('project list surface', () => {
     expect(homeClient).not.toContain('const toolLike = !isUser && isToolLikeEvent(item);');
   });
 
+  it('renders project chat text replies through the shared markdown renderer', () => {
+    expect(homeClient).toContain("import { MarkdownContent } from './sessions/[sessionId]/chat-screen/center-pane/renderers/MarkdownContent';");
+    expect(homeClient).toContain('<div className="msg__text"><MarkdownContent body={getEventText(item)} /></div>');
+    expect(homeClient).toContain('<div className="chturn__agent-text"><MarkdownContent body={item.agentText} /></div>');
+  });
+
   it('routes Terminal composer submissions through the command execution endpoint', () => {
     const submitStart = homeClient.indexOf('const handleSubmit = async');
     const submitEnd = homeClient.indexOf('const projectShellClasses =', submitStart);
