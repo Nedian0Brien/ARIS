@@ -751,7 +751,19 @@ function Sidebar({
   );
 }
 
-function Topbar({ activeTab, sessions }: { activeTab: TabType; sessions: SessionSummary[] }) {
+function Topbar({
+  activeTab,
+  sessions,
+  chatScreenMode = false,
+  chatProjectName = null,
+  onLogoHome,
+}: {
+  activeTab: TabType;
+  sessions: SessionSummary[];
+  chatScreenMode?: boolean;
+  chatProjectName?: string | null;
+  onLogoHome?: () => void;
+}) {
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
   const activeProjects = sessions.filter((session) => session.status === 'running' || session.status === 'error').length;
   const copy: Record<TabType, { title: string; crumb: string }> = {
@@ -796,9 +808,30 @@ function Topbar({ activeTab, sessions }: { activeTab: TabType; sessions: Session
 
   return (
     <header className="m-top">
-      <div className="m-top__left">
-        <span className="m-top__title">{copy[activeTab].title}</span>
-        <span className="m-top__crumb">{copy[activeTab].crumb}</span>
+      <div className={`m-top__left${chatScreenMode ? ' m-top__left--chat' : ''}`}>
+        {chatScreenMode ? (
+          <>
+            <button
+              type="button"
+              className="m-top__brand"
+              onClick={onLogoHome}
+              aria-label="ARIS 홈으로 이동"
+            >
+              <span className="m-top__brand-logo" aria-hidden="true">A</span>
+              <span className="m-top__brand-name">ARIS</span>
+            </button>
+            {chatProjectName && (
+              <span className="m-top__project-name" title={chatProjectName}>
+                {chatProjectName}
+              </span>
+            )}
+          </>
+        ) : (
+          <>
+            <span className="m-top__title">{copy[activeTab].title}</span>
+            <span className="m-top__crumb">{copy[activeTab].crumb}</span>
+          </>
+        )}
       </div>
       <div className="m-top__right">
         {activeTab === 'project' && (
@@ -3582,6 +3615,14 @@ export default function HomePageWrapper({
   })();
 
   const shouldShowBottomNav = !(activeTab === 'project' && selectedProjectView === 'chat');
+  const isChatScreen = !shouldShowBottomNav;
+  const chatScreenProject = isChatScreen && selectedProjectId
+    ? sessions.find((session) => session.id === selectedProjectId) ?? null
+    : null;
+  const chatScreenProjectName = chatScreenProject ? displayProjectName(chatScreenProject) : null;
+  const handleTopbarLogoHome = () => {
+    handleTabChange('home');
+  };
 
   return (
     <div className={`app-shell app-shell-ia${shouldShowBottomNav ? '' : ' app-shell-ia--chat-screen'}`}>
@@ -3597,7 +3638,13 @@ export default function HomePageWrapper({
           user={user}
         />
         <main className="m-main">
-          <Topbar activeTab={activeTab} sessions={sessions} />
+          <Topbar
+            activeTab={activeTab}
+            sessions={sessions}
+            chatScreenMode={isChatScreen}
+            chatProjectName={chatScreenProjectName}
+            onLogoHome={handleTopbarLogoHome}
+          />
           {runtimeError && <div className="ia-runtime-notice"><BackendNotice message={runtimeError} /></div>}
           {content}
         </main>
