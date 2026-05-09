@@ -2798,12 +2798,16 @@
 }
 
 .stream.streamMobileScroll {
-  flex: 1;
-  height: 0;
+  /* Page-scroll model on mobile (PR #312 복구와 정합).
+     이 클래스는 isMobileLayout=true일 때만 적용되며 모바일은 page-scroll 모델이므로
+     inner stream scroll을 비활성화한다. body가 스크롤을 담당하지 않으면
+     outer body scroll + inner stream scroll로 이중 스크롤 회귀가 발생함. */
+  flex: 0 0 auto;
+  height: auto;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior-y: contain;
+  overflow: visible;
+  overflow-x: visible;
+  overscroll-behavior-y: auto;
 }
 
 .historyLoadMoreRow {
