@@ -112,6 +112,27 @@ export function isRunLifecycleEvent(event: UiEvent): boolean {
   return readUiEventStreamEvent(event) === 'run_status';
 }
 
+export type AgentSwitchInfo = {
+  fromAgent: string;
+  toAgent: string;
+};
+
+export function isAgentSwitchEvent(event: UiEvent): boolean {
+  return readUiEventStreamEvent(event) === 'agent_switched';
+}
+
+export function readAgentSwitchInfo(event: UiEvent): AgentSwitchInfo | null {
+  if (!isAgentSwitchEvent(event)) {
+    return null;
+  }
+  const fromAgent = typeof event.meta?.fromAgent === 'string' ? event.meta.fromAgent.trim() : '';
+  const toAgent = typeof event.meta?.toAgent === 'string' ? event.meta.toAgent.trim() : '';
+  if (!fromAgent || !toAgent) {
+    return null;
+  }
+  return { fromAgent, toAgent };
+}
+
 export function isTerminalRunStatus(status: string | null | undefined): boolean {
   return TERMINAL_RUN_STATUSES.has((status ?? '').trim().toLowerCase() as RunLifecycleStatus);
 }

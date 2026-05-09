@@ -12,6 +12,7 @@ import {
   getLatestAgentEventTimestampSince,
   getLatestCompletionSignalTimestampSince,
   getLatestRunStatusSince,
+  isAgentSwitchEvent,
   isCompletionSignalStillTerminal,
   isRunLifecycleEvent,
   resolveChatRunPhase as resolveRunPhaseState,
@@ -637,7 +638,7 @@ export function ChatInterface({
   );
 
   const nonLifecycleEvents = useMemo(
-    () => events.filter((event) => !isRunLifecycleEvent(event)),
+    () => events.filter((event) => !isRunLifecycleEvent(event) && !isAgentSwitchEvent(event)),
     [events],
   );
   const visibleEvents = useMemo(
