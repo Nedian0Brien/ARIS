@@ -176,6 +176,36 @@ export async function POST(
         ...(resolved.fallbackReason ? { fallbackReason: resolved.fallbackReason } : {}),
         ...(resolved.requestedModel ? { requestedModel: resolved.requestedModel } : {}),
       };
+
+      if (chatId && chat && chat.agent !== resolved.agent) {
+        await prisma.sessionChat.update({
+          where: { id: chatId },
+          data: { agent: resolved.agent, model: resolved.model },
+        });
+        const previousAgent = chat.agent;
+        const isKnownPreviousAgent = previousAgent === 'codex'
+          || previousAgent === 'claude'
+          || previousAgent === 'gemini';
+        if (isKnownPreviousAgent) {
+          try {
+            await appendSessionMessage({
+              sessionId,
+              type: 'message',
+              title: '에이전트 변경',
+              text: `이 채팅의 에이전트가 ${previousAgent} → ${resolved.agent}로 변경되었습니다.`,
+              meta: {
+                chatId,
+                role: 'agent',
+                streamEvent: 'agent_switched',
+                fromAgent: previousAgent,
+                toAgent: resolved.agent,
+              },
+            });
+          } catch {
+            // 알림 이벤트 적재 실패는 사용자 메시지 전송을 막지 않는다.
+          }
+        }
+      }
     }
 
     const event = role === 'user' && type === 'message'

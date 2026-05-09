@@ -4,10 +4,12 @@ import { NextRequest } from 'next/server';
 const mocks = vi.hoisted(() => ({
   requireApiUser: vi.fn(),
   appendSessionMessage: vi.fn(),
+  submitUserPrompt: vi.fn(),
   getUserModelSettings: vi.fn(),
   resolveRuntimeMessageModel: vi.fn(),
   normalizeSupportedAgent: vi.fn(),
   prismaFindFirst: vi.fn(),
+  prismaUpdate: vi.fn(),
 }));
 
 vi.mock('@/lib/auth/guard', () => ({
@@ -16,6 +18,7 @@ vi.mock('@/lib/auth/guard', () => ({
 
 vi.mock('@/lib/happy/client', () => ({
   appendSessionMessage: mocks.appendSessionMessage,
+  submitUserPrompt: mocks.submitUserPrompt,
   getSessionEvents: vi.fn(),
   HappyHttpError: class HappyHttpError extends Error {
     status: number;
@@ -40,6 +43,7 @@ vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     sessionChat: {
       findFirst: mocks.prismaFindFirst,
+      update: mocks.prismaUpdate,
     },
   },
 }));
@@ -51,6 +55,7 @@ describe('session events route', () => {
     vi.clearAllMocks();
     mocks.requireApiUser.mockResolvedValue({ user: { id: 'user-1', role: 'operator' } });
     mocks.prismaFindFirst.mockResolvedValue({ agent: 'codex', model: 'gpt-5.4', geminiMode: null });
+    mocks.prismaUpdate.mockResolvedValue({ id: 'chat-1', agent: 'codex' });
     mocks.normalizeSupportedAgent.mockImplementation((agent: unknown, fallback: unknown) => agent ?? fallback);
     mocks.getUserModelSettings.mockResolvedValue({
       providers: {
@@ -72,13 +77,21 @@ describe('session events route', () => {
       fallbackReason: null,
       customModel: null,
     });
-    mocks.appendSessionMessage.mockResolvedValue({
-      id: 'evt-1',
+    mocks.submitUserPrompt.mockResolvedValue({
+      id: 'evt-user-1',
       timestamp: '2026-04-11T09:00:00.000Z',
       kind: 'text_reply',
       title: 'User Instruction',
       body: '이미지 확인',
       meta: { role: 'user' },
+    });
+    mocks.appendSessionMessage.mockResolvedValue({
+      id: 'evt-notice-1',
+      timestamp: '2026-04-11T09:00:00.000Z',
+      kind: 'text_reply',
+      title: '에이전트 변경',
+      body: '이 채팅의 에이전트가 codex → claude로 변경되었습니다.',
+      meta: { role: 'agent', streamEvent: 'agent_switched' },
     });
   });
 
@@ -113,7 +126,7 @@ describe('session events route', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mocks.appendSessionMessage).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mocks.submitUserPrompt).toHaveBeenCalledWith(expect.objectContaining({
       meta: expect.objectContaining({
         attachments: [
           expect.objectContaining({
@@ -166,5 +179,135 @@ describe('session events route', () => {
       requestedModel: 'gpt-5.5',
       customModels: ['gpt-5.4', 'gpt-5.5'],
     }));
+  });
+
+  describe('chat agent synchronization', () => {
+    it('updates SessionChat.agent and emits agent-switch notice when user message changes the active agent', async () => {
+      mocks.prismaFindFirst.mockResolvedValueOnce({
+        agent: 'codex',
+        model: 'gpt-5.4',
+        geminiMode: null,
+      });
+      mocks.resolveRuntimeMessageModel.mockReturnValueOnce({
+        agent: 'claude',
+        model: 'claude-opus-4-7',
+        source: 'requested',
+        requestedModel: 'claude-opus-4-7',
+        fallbackReason: null,
+        customModel: null,
+      });
+
+      const response = await POST(
+        new NextRequest('http://localhost/api/runtime/sessions/session-1/events', {
+          method: 'POST',
+          body: JSON.stringify({
+            type: 'message',
+            title: 'User Instruction',
+            text: 'switch to claude',
+            meta: {
+              role: 'user',
+              chatId: 'chat-1',
+              agent: 'claude',
+              model: 'claude-opus-4-7',
+            },
+          }),
+        }),
+        { params: Promise.resolve({ sessionId: 'session-1' }) },
+      );
+
+      expect(response.status).toBe(200);
+
+      expect(mocks.prismaUpdate).toHaveBeenCalledWith({
+        where: { id: 'chat-1' },
+        data: expect.objectContaining({ agent: 'claude', model: 'claude-opus-4-7' }),
+      });
+
+      expect(mocks.appendSessionMessage).toHaveBeenCalledWith(expect.objectContaining({
+        sessionId: 'session-1',
+        type: 'message',
+        title: '에이전트 변경',
+        meta: expect.objectContaining({
+          chatId: 'chat-1',
+          role: 'agent',
+          streamEvent: 'agent_switched',
+          fromAgent: 'codex',
+          toAgent: 'claude',
+        }),
+      }));
+
+      // user prompt is still submitted exactly once
+      expect(mocks.submitUserPrompt).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not update SessionChat or emit a notice when the user message keeps the same agent', async () => {
+      mocks.prismaFindFirst.mockResolvedValueOnce({
+        agent: 'codex',
+        model: 'gpt-5.4',
+        geminiMode: null,
+      });
+
+      const response = await POST(
+        new NextRequest('http://localhost/api/runtime/sessions/session-1/events', {
+          method: 'POST',
+          body: JSON.stringify({
+            type: 'message',
+            title: 'User Instruction',
+            text: 'same agent',
+            meta: {
+              role: 'user',
+              chatId: 'chat-1',
+              agent: 'codex',
+              model: 'gpt-5.4',
+            },
+          }),
+        }),
+        { params: Promise.resolve({ sessionId: 'session-1' }) },
+      );
+
+      expect(response.status).toBe(200);
+      expect(mocks.prismaUpdate).not.toHaveBeenCalled();
+      expect(mocks.appendSessionMessage).not.toHaveBeenCalled();
+    });
+
+    it('updates SessionChat silently (no notice) when previous agent is unknown — treats as fresh chat', async () => {
+      mocks.prismaFindFirst.mockResolvedValueOnce({
+        agent: 'unknown',
+        model: null,
+        geminiMode: null,
+      });
+      mocks.resolveRuntimeMessageModel.mockReturnValueOnce({
+        agent: 'claude',
+        model: 'claude-opus-4-7',
+        source: 'requested',
+        requestedModel: 'claude-opus-4-7',
+        fallbackReason: null,
+        customModel: null,
+      });
+
+      const response = await POST(
+        new NextRequest('http://localhost/api/runtime/sessions/session-1/events', {
+          method: 'POST',
+          body: JSON.stringify({
+            type: 'message',
+            title: 'User Instruction',
+            text: 'first message',
+            meta: {
+              role: 'user',
+              chatId: 'chat-1',
+              agent: 'claude',
+              model: 'claude-opus-4-7',
+            },
+          }),
+        }),
+        { params: Promise.resolve({ sessionId: 'session-1' }) },
+      );
+
+      expect(response.status).toBe(200);
+      expect(mocks.prismaUpdate).toHaveBeenCalledWith({
+        where: { id: 'chat-1' },
+        data: expect.objectContaining({ agent: 'claude', model: 'claude-opus-4-7' }),
+      });
+      expect(mocks.appendSessionMessage).not.toHaveBeenCalled();
+    });
   });
 });

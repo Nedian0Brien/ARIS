@@ -4,7 +4,7 @@ import React from 'react';
 import type { CSSProperties, RefObject } from 'react';
 import { CheckCircle2, ChevronDown, ChevronLeft, ChevronUp, Copy, Eye, Loader2, MessageSquarePlus } from 'lucide-react';
 import { readChatImageAttachments } from '@/lib/chatImageAttachments';
-import { isRunLifecycleEvent } from '@/lib/happy/chatRuntime';
+import { isAgentSwitchEvent, isRunLifecycleEvent } from '@/lib/happy/chatRuntime';
 import { ProviderLogo } from '@/components/ui/ProviderLogo';
 import type { AgentFlavor, PermissionDecision, SessionChat, UiEvent } from '@/lib/happy/types';
 import { PermissionRequestMessage } from '../../PermissionRequestMessage';
@@ -15,6 +15,7 @@ import type { AgentMeta, TimelineRenderItem, Tone } from '../types';
 import { renderEventPayload } from './renderers/ActionEventCard';
 import { LinkPreviewCarousel } from './renderers/LinkPreviewCarousel';
 import { RunStatusEventCard } from './renderers/RunStatusEventCard';
+import { AgentSwitchEventCard } from './renderers/AgentSwitchEventCard';
 
 function getToneClass(tone: Tone): string {
   const map: Record<Tone, string> = {
@@ -256,7 +257,8 @@ export function ChatTimeline({
           const event = item.event;
           const userEvent = isUserEvent(event);
           const runLifecycleEvent = isRunLifecycleEvent(event);
-          const actionEvent = !userEvent && isActionKind(event.kind);
+          const agentSwitchEvent = isAgentSwitchEvent(event);
+          const actionEvent = !userEvent && !agentSwitchEvent && isActionKind(event.kind);
 
           if (userEvent) {
             const userAttachments = readChatImageAttachments(event.meta);
@@ -327,6 +329,17 @@ export function ChatTimeline({
                 {dayDivider}
                 <article id={`event-${event.id}`} className={`${styles.messageRow} ${styles.runStatusRow}`}>
                   <RunStatusEventCard event={event} />
+                </article>
+              </React.Fragment>
+            );
+          }
+
+          if (agentSwitchEvent) {
+            return (
+              <React.Fragment key={event.id}>
+                {dayDivider}
+                <article id={`event-${event.id}`} className={`${styles.messageRow} ${styles.runStatusRow}`}>
+                  <AgentSwitchEventCard event={event} />
                 </article>
               </React.Fragment>
             );

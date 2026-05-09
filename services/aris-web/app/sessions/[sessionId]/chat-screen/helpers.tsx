@@ -9,6 +9,7 @@ import {
   TerminalSquare,
 } from 'lucide-react';
 import {
+  isAgentSwitchEvent,
   isRunLifecycleEvent,
   isTerminalRunStatus,
   readUiEventRunStatus,
@@ -434,7 +435,7 @@ export function resolveRecentSummary(event: UiEvent): string {
 export function getLatestVisibleEvent(events: UiEvent[]): UiEvent | null {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
-    if (!isRunLifecycleEvent(event)) {
+    if (!isRunLifecycleEvent(event) && !isAgentSwitchEvent(event)) {
       return event;
     }
   }
