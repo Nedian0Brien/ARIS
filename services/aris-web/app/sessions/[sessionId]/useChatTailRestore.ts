@@ -14,6 +14,8 @@ import {
 import {
   hasTailLayoutSettled,
   isNearBottom,
+  resolveMobileWindowScrollTop,
+  resolveScrollToBottomTarget,
   resolveTailScrollAnchorId,
   shouldRestoreTailScrollOnChatEntry,
 } from './chatScroll';
@@ -31,6 +33,7 @@ export type UseChatTailRestoreInput = {
   eventsForChatId: string | null;
   hasLoadedCurrentChat: boolean;
   hasDetachedTail: boolean;
+  isMobileLayout: boolean;
   isTailRestoreHydrated: boolean;
   isNewChatPlaceholder: boolean;
   isWorkspaceHome: boolean;
@@ -152,6 +155,7 @@ export function useChatTailRestore({
   eventsForChatId,
   hasLoadedCurrentChat,
   hasDetachedTail,
+  isMobileLayout,
   isTailRestoreHydrated,
   isNewChatPlaceholder,
   isWorkspaceHome,
@@ -195,6 +199,30 @@ export function useChatTailRestore({
 
   const scrollConversationToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const stream = scrollRef.current;
+    const target = resolveScrollToBottomTarget({
+      isMobileLayout,
+      keyboardOpen: typeof document !== 'undefined' && document.documentElement.dataset.keyboardOpen === 'true',
+    });
+    if (target === 'window' && typeof window !== 'undefined') {
+      const documentScrollHeight = Math.max(
+        document.documentElement.scrollHeight,
+        document.body.scrollHeight,
+      );
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      const top = resolveMobileWindowScrollTop({
+        scrollHeight: documentScrollHeight,
+        viewportHeight,
+      });
+      recordScrollDebugEvent({
+        kind: 'write',
+        source: 'tail:scrollConversationToBottom:window',
+        top,
+        behavior,
+        detail: { documentScrollHeight, viewportHeight },
+      });
+      window.scrollTo({ top, behavior });
+      return;
+    }
     if (!stream) {
       recordScrollDebugEvent({
         kind: 'trigger',
@@ -213,7 +241,7 @@ export function useChatTailRestore({
       behavior,
     });
     stream.scrollTo({ top, behavior });
-  }, [scrollRef]);
+  }, [isMobileLayout, scrollRef]);
 
   const restoreConversationToTail = useCallback((behavior: ScrollBehavior = 'auto') => {
     const anchorId = resolveTailScrollAnchorId({

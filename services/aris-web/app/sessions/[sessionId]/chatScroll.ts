@@ -1,3 +1,13 @@
+type ScrollToBottomTargetInput = {
+  isMobileLayout: boolean;
+  keyboardOpen: boolean;
+};
+
+type MobileWindowScrollTopInput = {
+  scrollHeight: number;
+  viewportHeight: number;
+};
+
 type TailScrollAnchorIdInput = {
   latestVisibleEventId: string | null;
 };
@@ -119,6 +129,19 @@ type ShouldAllowSystemScrollWriteInput = {
   writer: SystemScrollWriter;
   scrollPhase?: SessionScrollPhase;
 };
+export function resolveScrollToBottomTarget(input: ScrollToBottomTargetInput): 'window' | 'stream' {
+  // 모바일은 page-scroll 모델: 본문이 viewport보다 길면 window가 자연 스크롤하고
+  // iOS 하단 툴바도 자동 숨김 처리됨. 키보드 오픈 중에도 window 기준이 안정적.
+  if (input.isMobileLayout) {
+    return 'window';
+  }
+  return 'stream';
+}
+
+export function resolveMobileWindowScrollTop(input: MobileWindowScrollTopInput): number {
+  return Math.max(0, input.scrollHeight - input.viewportHeight);
+}
+
 export function resolveTailScrollAnchorId(input: TailScrollAnchorIdInput): string | null {
   if (!input.latestVisibleEventId) {
     return null;
