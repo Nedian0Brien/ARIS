@@ -59,6 +59,7 @@ import type { AuthenticatedUser } from '@/lib/auth/types';
 import type { SessionChat, SessionStatus, SessionSummary, UiEvent } from '@/lib/happy/types';
 import { abortActiveChat } from '@/lib/runtime/abortChat';
 import { useWorkspaceFiles, type WorkspaceFileItem } from '@/lib/hooks/useWorkspaceFiles';
+import { WorkspacePreview, type WorkspacePreviewMode } from '@/components/preview/WorkspacePreview';
 
 type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';
 type ComposerMode = 'agent' | 'plan' | 'terminal';
@@ -2029,6 +2030,10 @@ function ProjectChatSurface({
   const [selectedWorkspaceFile, setSelectedWorkspaceFile] = useState('');
   const [draftTerminalCommand, setDraftTerminalCommand] = useState('npm test -- --run tests/projectListSurface.test.ts');
   const [previewDevice, setPreviewDevice] = useState<'1200' | '768' | '390'>('1200');
+  const [previewSourceMode, setPreviewSourceMode] = useState<WorkspacePreviewMode>('file');
+  const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
+  const [previewZoom, setPreviewZoom] = useState(1);
+  const [previewUrl, setPreviewUrl] = useState('');
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const visibleEvents = events.slice(-40);
   const activeModelLabel = selectedModel || runtimeModelLabel;
@@ -2042,6 +2047,18 @@ function ProjectChatSurface({
     ?? new Date().toISOString();
   const projectChatRoute = `/?tab=project&project=${session.id}&view=chat${selectedChatId ? `&chat=${selectedChatId}` : ''}`;
   const previewTarget = `aris.lawdigest.cloud${projectChatRoute}`;
+  const defaultPreviewUrl = `https://${previewTarget}`;
+  const effectivePreviewUrl = previewUrl.trim().length > 0 ? previewUrl.trim() : defaultPreviewUrl;
+  const handlePreviewRefresh = () => {
+    setPreviewRefreshKey((value) => value + 1);
+    showTransientFeedback('Preview refreshed');
+  };
+  const handlePreviewZoomOut = () => {
+    setPreviewZoom((value) => Math.max(0.5, Math.round((value - 0.1) * 100) / 100));
+  };
+  const handlePreviewZoomIn = () => {
+    setPreviewZoom((value) => Math.min(1.5, Math.round((value + 0.1) * 100) / 100));
+  };
   const prototypeRef = useRef<HTMLDivElement | null>(null);
   const composerWrapRef = useRef<HTMLElement | null>(null);
   const workspaceFiles = useWorkspaceFiles('/workspace');
@@ -3104,53 +3121,72 @@ function ProjectChatSurface({
           <div className="preview-topbar">
             <div className="preview-topbar__nav">
               <button type="button" className="preview-topbar__btn" aria-label="Back"><ChevronLeft size={13} /></button>
-              <button type="button" className="preview-topbar__btn" aria-label="Refresh" onClick={() => showTransientFeedback('Preview refreshed')}><RefreshCcw size={13} /></button>
+              <button type="button" className="preview-topbar__btn" aria-label="Refresh" onClick={handlePreviewRefresh}><RefreshCcw size={13} /></button>
             </div>
-            <div className="preview-url">
-              <span className="preview-url__protocol">https://</span>
-              <span className="preview-url__target">{previewTarget}</span>
-              <span className="preview-url__meta">project</span>
+            <div className="preview-source" role="tablist" aria-label="Preview source">
+              <button
+                type="button"
+                className={`preview-source__chip${previewSourceMode === 'file' ? ' preview-source__chip--active' : ''}`}
+                aria-pressed={previewSourceMode === 'file'}
+                onClick={() => setPreviewSourceMode('file')}
+              >
+                File
+              </button>
+              <button
+                type="button"
+                className={`preview-source__chip${previewSourceMode === 'url' ? ' preview-source__chip--active' : ''}`}
+                aria-pressed={previewSourceMode === 'url'}
+                onClick={() => setPreviewSourceMode('url')}
+              >
+                URL
+              </button>
             </div>
+            {previewSourceMode === 'url' ? (
+              <input
+                type="url"
+                className="preview-url preview-url--input"
+                value={previewUrl}
+                placeholder={defaultPreviewUrl}
+                onChange={(event) => setPreviewUrl(event.target.value)}
+                aria-label="Preview URL"
+              />
+            ) : (
+              <div className="preview-url" title={selectedWorkspaceFile || '파일 미선택'}>
+                <span className="preview-url__protocol">file://</span>
+                <span className="preview-url__target">{selectedWorkspaceFile || '— 파일을 선택하세요 —'}</span>
+                <span className="preview-url__meta">file</span>
+              </div>
+            )}
             <div className="preview-device" role="tablist" aria-label="Preview size">
               {(['1200', '768', '390'] as const).map((device) => (
                 <button key={device} type="button" aria-pressed={previewDevice === device} onClick={() => setPreviewDevice(device)}>{device}</button>
               ))}
             </div>
-            <button type="button" className="preview-topbar__btn" aria-label="Copy preview URL" onClick={() => handleCopy(`https://${previewTarget}`, 'Preview URL')}><ExternalLink size={13} /></button>
+            <button
+              type="button"
+              className="preview-topbar__btn"
+              aria-label="Copy preview URL"
+              onClick={() => handleCopy(previewSourceMode === 'url' ? effectivePreviewUrl : selectedWorkspaceFile, 'Preview URL')}
+            >
+              <ExternalLink size={13} />
+            </button>
             <button type="button" className="preview-topbar__btn" data-preview-dock aria-label="Dock preview" onClick={() => setPreviewState('dock')}><PanelsTopLeft size={13} /></button>
             <button type="button" className="preview-topbar__btn" aria-label="Close preview" onClick={() => setPreviewState('closed')}><X size={13} /></button>
           </div>
           <div className="preview-canvas" data-preview-size={previewDevice}>
-            <div className="preview-page">
-              <aside className="preview-page__sb">
-                <div className="preview-page__sb-logo">ARIS</div>
-                <div className="preview-page__sb-item preview-page__sb-item--active">{displayProjectName(session)}</div>
-                <div className="preview-page__sb-item">{activeChat?.title ?? 'Project chat'}</div>
-                <div className="preview-page__sb-item">{selectedWorkspaceFile}</div>
-              </aside>
-              <main className="preview-page__main">
-                <h2 className="preview-page__h">{activeChat?.title ?? 'Project chat'}</h2>
-                <p className="preview-page__sub">{agentLabel(activeAgent, activeModelLabel)} · {COMPOSER_MODE_COPY[composerMode]} · {tokenLabel}</p>
-                <div className="preview-page__cards">
-                  <div className="preview-page__card">
-                    <div className="preview-page__card-t">Workspace</div>
-                    <div className="preview-page__card-m">{workspaceTab} · {selectedWorkspaceFile}</div>
-                    <div className="preview-page__bar"><div className="preview-page__bar-fill" style={{ width: '74%' }} /></div>
-                  </div>
-                  <div className="preview-page__card">
-                    <div className="preview-page__card-t">Context</div>
-                    <div className="preview-page__card-m">{projectPath}</div>
-                    <div className="preview-page__bar"><div className="preview-page__bar-fill" style={{ width: '42%' }} /></div>
-                  </div>
-                </div>
-              </main>
-            </div>
+            <WorkspacePreview
+              filePath={selectedWorkspaceFile || null}
+              mode={previewSourceMode}
+              url={effectivePreviewUrl}
+              refreshKey={previewRefreshKey}
+              zoom={previewZoom}
+            />
             <div className="preview-controls">
-              <button type="button" aria-label="Zoom out" onClick={() => showTransientFeedback('Preview zoom 90%')}><ChevronLeft size={12} /></button>
-              <span className="preview-controls__zoom">100%</span>
-              <button type="button" aria-label="Zoom in" onClick={() => showTransientFeedback('Preview zoom 110%')}><ChevronRight size={12} /></button>
+              <button type="button" aria-label="Zoom out" onClick={handlePreviewZoomOut} disabled={previewZoom <= 0.5}><ChevronLeft size={12} /></button>
+              <span className="preview-controls__zoom">{Math.round(previewZoom * 100)}%</span>
+              <button type="button" aria-label="Zoom in" onClick={handlePreviewZoomIn} disabled={previewZoom >= 1.5}><ChevronRight size={12} /></button>
               <span className="preview-controls__sep" />
-              <button type="button" aria-label="Screenshot" onClick={() => showTransientFeedback('Screenshot staged')}><Copy size={12} /></button>
+              <button type="button" aria-label="Screenshot" onClick={() => showTransientFeedback('Screenshot capture not implemented yet')}><Copy size={12} /></button>
             </div>
           </div>
         </div>
