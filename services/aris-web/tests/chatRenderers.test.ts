@@ -17,6 +17,30 @@ describe('chat renderers', () => {
     expect(markup).toContain('src/app.tsx');
   });
 
+  it('renders nested markdown lists instead of flattening child items', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(MarkdownContent, {
+        body: '- parent\n  - child',
+      }),
+    );
+
+    expect(markup).toContain('<ul');
+    expect(markup).toContain('parent');
+    expect(markup).toContain('child');
+    expect(markup.match(/<ul/g)?.length).toBe(2);
+  });
+
+  it('keeps full markdown link targets that include parentheses', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(MarkdownContent, {
+        body: '[spec](https://example.com/a_(b))',
+      }),
+    );
+
+    expect(markup).toContain('href="https://example.com/a_(b)"');
+    expect(markup).toContain('>spec<');
+  });
+
   it('renders folder chips as non-button labels', () => {
     const markup = renderToStaticMarkup(
       React.createElement(ResourceChip, {
