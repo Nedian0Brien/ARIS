@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
+import {
+  buildRuntimeEventChannelUrl,
+  shouldRefreshRuntimeForRuntimeMessage,
+  type RuntimeEventChannelMessage,
+} from '@/lib/hooks/runtimeEventChannel';
 
 const RUNTIME_POLL_INTERVAL_MS = 3000;
 const runtimeStateCache = new Map<string, boolean>();
@@ -54,6 +59,7 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null, ena
     let disposed = false;
     let inFlight = false;
     let stopped = false;
+    let realtimeSocket: WebSocket | null = null;
     lastKnownRunningRef.current = runtimeStateCache.get(cacheKey) ?? false;
     setIsRunning(lastKnownRunningRef.current);
     setRuntimeError(null);
@@ -128,6 +134,28 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null, ena
       }
     };
 
+    if (typeof WebSocket === 'function') {
+      realtimeSocket = new WebSocket(buildRuntimeEventChannelUrl({ sessionId, chatId }));
+      realtimeSocket.addEventListener('message', (raw) => {
+        if (disposed || stopped || !isDocumentVisible()) {
+          return;
+        }
+        try {
+          const payload = JSON.parse(String((raw as MessageEvent).data)) as RuntimeEventChannelMessage;
+          if (shouldRefreshRuntimeForRuntimeMessage(payload)) {
+            void refresh();
+          }
+        } catch {
+          // Ignore malformed realtime payloads; polling remains the fallback.
+        }
+      });
+      realtimeSocket.addEventListener('error', () => {
+        if (realtimeSocket?.readyState === WebSocket.OPEN || realtimeSocket?.readyState === WebSocket.CONNECTING) {
+          realtimeSocket.close();
+        }
+      });
+    }
+
     void refresh();
     const timer = window.setInterval(() => {
       void refresh();
@@ -144,6 +172,7 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null, ena
 
     return () => {
       disposed = true;
+      realtimeSocket?.close();
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', syncWhenVisible);
       window.removeEventListener('focus', syncWhenVisible);

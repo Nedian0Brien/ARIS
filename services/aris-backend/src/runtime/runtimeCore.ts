@@ -3237,6 +3237,14 @@ export class RuntimeCore {
     return this.realtimeEventBus.list(sessionId, options);
   }
 
+  subscribeRealtimeEvents(
+    sessionId: string,
+    options: { chatId?: string } = {},
+    listener: (record: { cursor: number; event: RuntimeMessage }) => void,
+  ): () => void {
+    return this.realtimeEventBus.subscribe(sessionId, options, listener);
+  }
+
   private async listAllMessages(sessionId: string): Promise<HappyBackendMessage[]> {
     let afterSeq = 0;
     const allMessages: HappyBackendMessage[] = [];

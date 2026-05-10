@@ -44,6 +44,8 @@ export interface ListRealtimeEventsOptions {
   chatId?: string;
 }
 
+export type RealtimeEventBusListener = (record: SessionRealtimeEventRecord) => void;
+
 /**
  * Host-side callbacks the bus needs.
  */
@@ -60,6 +62,10 @@ const DEFAULT_LIST_LIMIT = 100;
 export class RealtimeEventBus {
   private readonly events = new Map<string, SessionRealtimeEventRecord[]>();
   private readonly cursors = new Map<string, number>();
+  private readonly subscribers = new Map<string, Set<{
+    options: Pick<ListRealtimeEventsOptions, 'chatId'>;
+    listener: RealtimeEventBusListener;
+  }>>();
 
   constructor(private readonly deps: RealtimeEventBusDeps) {}
 
@@ -76,7 +82,25 @@ export class RealtimeEventBus {
       bucket.splice(0, bucket.length - SESSION_BUCKET_CAP);
     }
     this.events.set(sessionId, bucket);
+    this.notify(sessionId, { cursor: nextCursor, event });
     return event;
+  }
+
+  subscribe(
+    sessionId: string,
+    options: Pick<ListRealtimeEventsOptions, 'chatId'>,
+    listener: RealtimeEventBusListener,
+  ): () => void {
+    const subscribers = this.subscribers.get(sessionId) ?? new Set();
+    const subscription = { options, listener };
+    subscribers.add(subscription);
+    this.subscribers.set(sessionId, subscribers);
+    return () => {
+      subscribers.delete(subscription);
+      if (subscribers.size === 0) {
+        this.subscribers.delete(sessionId);
+      }
+    };
   }
 
   /**
@@ -121,4 +145,27 @@ export class RealtimeEventBus {
       cursor: this.cursors.get(sessionId) ?? 0,
     };
   }
+
+  private notify(sessionId: string, record: SessionRealtimeEventRecord): void {
+    const subscribers = this.subscribers.get(sessionId);
+    if (!subscribers || subscribers.size === 0) {
+      return;
+    }
+    for (const subscriber of subscribers) {
+      if (!matchesChatFilter(record.event, subscriber.options.chatId)) {
+        continue;
+      }
+      subscriber.listener(record);
+    }
+  }
+}
+
+function matchesChatFilter(event: RuntimeMessage, chatId?: string): boolean {
+  if (!chatId) {
+    return true;
+  }
+  const eventChatId = typeof event.meta?.chatId === 'string'
+    ? event.meta.chatId.trim()
+    : '';
+  return eventChatId === chatId;
 }

@@ -2,6 +2,7 @@ import Fastify, { type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { requireBearerToken } from './auth.js';
 import { RuntimeStore } from './store.js';
+import { installRuntimeRealtimeWebSocketGateway } from './runtime/realtimeWebSocketGateway.js';
 
 type RequestBucket = {
   windowStartAt: number;
@@ -250,6 +251,7 @@ export function buildServer(config: ServerConfig) {
     config.RUNTIME_API_TOKEN,
   );
   Object.assign(app, { arisRuntimeStore: store });
+  installRuntimeRealtimeWebSocketGateway(app, store, config.RUNTIME_API_TOKEN);
   const rateLimitBuckets = new Map<string, RequestBucket>();
 
   const isRateLimitExceeded = (path: string, ip: string): boolean => {

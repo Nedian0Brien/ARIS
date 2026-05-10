@@ -8,9 +8,11 @@ function buildRuntimeStore(input: {
   const store = Object.create(RuntimeStore.prototype) as RuntimeStore & {
     delegate: Record<string, unknown>;
     runtimeExecutor: Record<string, unknown> | null;
+    realtimeSubscribers: Set<(event: unknown) => void>;
   };
   store.delegate = input.delegate;
   store.runtimeExecutor = input.runtimeExecutor ?? null;
+  store.realtimeSubscribers = new Set();
   return store;
 }
 
@@ -31,6 +33,46 @@ describe('RuntimeStore.isSessionRunning', () => {
 });
 
 describe('RuntimeStore.appendChatEvent', () => {
+  it('broadcasts appended chat events immediately to realtime channel subscribers', async () => {
+    const event = {
+      id: 'event-1',
+      sessionId: 'session-1',
+      type: 'message',
+      title: 'User Instruction',
+      text: 'continue',
+      createdAt: '2026-05-10T00:00:00.000Z',
+      meta: {
+        role: 'user',
+        chatId: 'chat-1',
+      },
+    };
+    const delegate = {
+      appendChatEvent: vi.fn().mockResolvedValue(event),
+    };
+    const store = buildRuntimeStore({ delegate });
+    const listener = vi.fn();
+
+    store.subscribeRealtimeChannel({ sessionId: 'session-1', chatId: 'chat-1' }, listener);
+    await store.appendChatEvent('chat-1', {
+      sessionId: 'session-1',
+      type: 'message',
+      title: 'User Instruction',
+      text: 'continue',
+      meta: {
+        role: 'user',
+        chatId: 'chat-1',
+      },
+    });
+
+    expect(listener).toHaveBeenCalledWith({
+      type: 'event.appended',
+      sessionId: 'session-1',
+      chatId: 'chat-1',
+      event,
+      source: 'mutation',
+    });
+  });
+
   it('does not wake an agent turn for terminal-authored command events', async () => {
     const delegate = {
       appendChatEvent: vi.fn().mockResolvedValue({
@@ -212,7 +254,104 @@ describe('RuntimeStore.applySessionAction', () => {
   });
 });
 
+describe('RuntimeStore.subscribeRealtimeChannel', () => {
+  it('keeps runtime fanout broad when chat subscribers include unassigned events', () => {
+    const runtimeUnsubscribe = vi.fn();
+    const runtimeExecutor = {
+      subscribeRealtimeEvents: vi.fn((_sessionId: string, _options: object, listener: (record: unknown) => void) => {
+        listener({
+          cursor: 1,
+          event: {
+            id: 'event-unassigned',
+            sessionId: 'session-1',
+            type: 'tool',
+            title: 'Unassigned',
+            text: 'workspace update',
+            createdAt: '2026-05-10T00:00:00.000Z',
+            meta: {},
+          },
+        });
+        listener({
+          cursor: 2,
+          event: {
+            id: 'event-chat-1',
+            sessionId: 'session-1',
+            type: 'message',
+            title: 'Chat',
+            text: 'chat update',
+            createdAt: '2026-05-10T00:00:01.000Z',
+            meta: { chatId: 'chat-1' },
+          },
+        });
+        listener({
+          cursor: 3,
+          event: {
+            id: 'event-chat-2',
+            sessionId: 'session-1',
+            type: 'message',
+            title: 'Other chat',
+            text: 'other update',
+            createdAt: '2026-05-10T00:00:02.000Z',
+            meta: { chatId: 'chat-2' },
+          },
+        });
+        return runtimeUnsubscribe;
+      }),
+    };
+    const store = buildRuntimeStore({ delegate: {}, runtimeExecutor });
+    const listener = vi.fn();
+
+    const unsubscribe = store.subscribeRealtimeChannel({
+      sessionId: 'session-1',
+      chatId: 'chat-1',
+      includeUnassigned: true,
+    }, listener);
+
+    expect(runtimeExecutor.subscribeRealtimeEvents).toHaveBeenCalledWith('session-1', {}, expect.any(Function));
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener.mock.calls.map(([event]) => (event as { event: { id: string } }).event.id)).toEqual([
+      'event-unassigned',
+      'event-chat-1',
+    ]);
+
+    unsubscribe();
+    expect(runtimeUnsubscribe).toHaveBeenCalled();
+  });
+});
+
 describe('RuntimeStore.decidePermission', () => {
+  it('broadcasts permission updates to realtime channel subscribers', async () => {
+    const updatedPermission = {
+      id: 'perm-1',
+      sessionId: 'session-1',
+      chatId: 'chat-1',
+      agent: 'codex',
+      command: 'curl -I https://example.com',
+      reason: 'network approval',
+      risk: 'medium',
+      state: 'approved',
+      decision: 'allow_once',
+      requestedAt: '2026-05-10T00:00:00.000Z',
+    };
+    const runtimeExecutor = {
+      decidePermission: vi.fn().mockResolvedValue(updatedPermission),
+      isSessionRunning: vi.fn().mockResolvedValue(true),
+      triggerPersistedUserMessage: vi.fn(),
+    };
+    const store = buildRuntimeStore({ delegate: {}, runtimeExecutor });
+    const listener = vi.fn();
+
+    store.subscribeRealtimeChannel({ sessionId: 'session-1', chatId: 'chat-1' }, listener);
+    await store.decidePermission('perm-1', 'allow_once');
+
+    expect(listener).toHaveBeenCalledWith({
+      type: 'permission.updated',
+      sessionId: 'session-1',
+      chatId: 'chat-1',
+      permission: updatedPermission,
+    });
+  });
+
   it('replays the latest persisted user message when approval is granted after the active run is gone', async () => {
     const delegate = {
       getLatestUserMessageForAction: vi.fn().mockResolvedValue({

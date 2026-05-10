@@ -147,6 +147,55 @@ function filterProxyRequestHeaders(headers) {
   return nextHeaders;
 }
 
+function readFirstQueryValue(value) {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return typeof value === 'string' ? value : null;
+}
+
+function parseRuntimeEventsRequest(reqUrl) {
+  const parsed = parse(reqUrl, true);
+  const pathname = parsed.pathname || '';
+  const match = pathname.match(/^\/ws\/runtime\/events\/([^/]+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const params = new URLSearchParams();
+  const chatId = readFirstQueryValue(parsed.query.chatId);
+  if (chatId?.trim()) {
+    params.set('chatId', chatId.trim());
+  }
+
+  const includeUnassigned = readFirstQueryValue(parsed.query.includeUnassigned);
+  if (includeUnassigned === '1' || includeUnassigned === 'true') {
+    params.set('includeUnassigned', '1');
+  }
+
+  return {
+    sessionId: decodeURIComponent(match[1]),
+    query: params.toString(),
+  };
+}
+
+function runtimeApiWebSocketBase() {
+  const base = RUNTIME_API_URL.replace(/\/+$/, '');
+  if (base.startsWith('https://')) {
+    return `wss://${base.slice('https://'.length)}`;
+  }
+  if (base.startsWith('http://')) {
+    return `ws://${base.slice('http://'.length)}`;
+  }
+  return base;
+}
+
+function buildRuntimeEventsUpstreamUrl(runtimeRequest) {
+  return `${runtimeApiWebSocketBase()}/v1/sessions/${encodeURIComponent(runtimeRequest.sessionId)}/realtime-events/ws${
+    runtimeRequest.query ? `?${runtimeRequest.query}` : ''
+  }`;
+}
+
 async function getStoredLocalPreviewPanel(userId, sessionId, panelId) {
   const workspace = await prisma.workspace.findFirst({
     where: {
@@ -174,6 +223,17 @@ async function getStoredLocalPreviewPanel(userId, sessionId, panelId) {
     port: port ?? 3305,
     path: normalizeLocalPreviewPath(typeof config.path === 'string' ? config.path : '/'),
   };
+}
+
+async function canAccessWorkspace(userId, sessionId) {
+  const workspace = await prisma.workspace.findFirst({
+    where: {
+      id: sessionId,
+      userId,
+    },
+    select: { id: true },
+  });
+  return Boolean(workspace);
 }
 
 async function resolveLocalPreviewTarget(userId, reqUrl) {
@@ -351,6 +411,7 @@ function spawnSshPty(settings, sessionId, sessionCwd) {
 // ── WebSocket 서버 ──────────────────────────────────────────────────────────
 const wss = new WebSocketServer({ noServer: true });
 const localPreviewWss = new WebSocketServer({ noServer: true });
+const runtimeEventsWss = new WebSocketServer({ noServer: true });
 
 wss.on('connection', async (ws, _req, { sessionId, sessionCwd }) => {
   const settings = await getSshSettings();
@@ -446,6 +507,57 @@ localPreviewWss.on('connection', async (ws, req, { userId }) => {
   });
 });
 
+runtimeEventsWss.on('connection', (ws, req, { runtimeRequest }) => {
+  if (!RUNTIME_API_TOKEN) {
+    ws.close(1011, 'runtime_api_token_missing');
+    return;
+  }
+
+  const upstream = new WebSocket(buildRuntimeEventsUpstreamUrl(runtimeRequest), {
+    headers: {
+      Authorization: `Bearer ${RUNTIME_API_TOKEN}`,
+    },
+  });
+
+  upstream.on('open', () => {
+    ws.on('message', (data, isBinary) => {
+      if (upstream.readyState === upstream.OPEN) {
+        upstream.send(data, { binary: isBinary });
+      }
+    });
+  });
+
+  upstream.on('message', (data, isBinary) => {
+    if (ws.readyState === ws.OPEN) {
+      ws.send(data, { binary: isBinary });
+    }
+  });
+
+  upstream.on('close', (code, reason) => {
+    if (ws.readyState === ws.OPEN) {
+      ws.close(code, reason.toString() || 'runtime_events_closed');
+    }
+  });
+
+  upstream.on('error', () => {
+    if (ws.readyState === ws.OPEN) {
+      ws.close(1011, 'runtime_events_upstream_error');
+    }
+  });
+
+  ws.on('close', () => {
+    if (upstream.readyState === upstream.OPEN || upstream.readyState === upstream.CONNECTING) {
+      upstream.close();
+    }
+  });
+
+  ws.on('error', () => {
+    if (upstream.readyState === upstream.OPEN || upstream.readyState === upstream.CONNECTING) {
+      upstream.close();
+    }
+  });
+});
+
 // ── Next.js + HTTP 서버 ─────────────────────────────────────────────────────
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
@@ -512,6 +624,36 @@ app.prepare().then(() => {
       } finally {
         req.url = originalUrl;
       }
+      return;
+    }
+
+    const runtimeRequest = parseRuntimeEventsRequest(req.url);
+    if (runtimeRequest) {
+      const cookies = parseCookies(req.headers.cookie);
+      const token = cookies[AUTH_COOKIE_NAME];
+      if (!token) {
+        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+
+      const payload = await verifyToken(token);
+      if (!payload?.sub) {
+        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+
+      const hasAccess = await canAccessWorkspace(payload.sub, runtimeRequest.sessionId);
+      if (!hasAccess) {
+        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+
+      runtimeEventsWss.handleUpgrade(req, socket, head, (ws) => {
+        runtimeEventsWss.emit('connection', ws, req, { runtimeRequest, userId: payload.sub });
+      });
       return;
     }
 
