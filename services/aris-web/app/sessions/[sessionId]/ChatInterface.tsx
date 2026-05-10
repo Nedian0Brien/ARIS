@@ -68,6 +68,7 @@ import {
   hasResumePhaseSettled,
   hasTailRestoreRenderHydrated,
   isNearBottom,
+  isNearWindowBottom,
   resolvePrependedAnchorScrollTop,
   resolveTailRestoreLayoutReady,
   resolveMobileBottomLockState,
@@ -1606,6 +1607,15 @@ export function ChatInterface({
     });
   }, [isMobileLayout, scrollConversationToBottom, shouldStickToBottomRef]);
 
+  const isConversationNearBottom = useCallback(() => {
+    if (isMobileLayout) {
+      return isNearWindowBottom();
+    }
+
+    const stream = scrollRef.current;
+    return stream ? isNearBottom(stream) : shouldStickToBottomRef.current;
+  }, [isMobileLayout, scrollRef, shouldStickToBottomRef]);
+
   const {
     handleAbortRun,
     handleSubmit,
@@ -1631,6 +1641,7 @@ export function ChatInterface({
     prompt,
     providerSelections,
     runtimeStartedSinceAwaitingRef,
+    isConversationNearBottom,
     sessionScrollPhase,
     scrollConversationToBottom,
     selectedGeminiModeId,

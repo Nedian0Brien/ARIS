@@ -12,6 +12,7 @@ import {
   shouldRestoreTailScrollOnChatEntry,
   shouldAutoScrollToBottom,
   shouldResetScrollForChatChange,
+  shouldStickToBottomOnSubmit,
   shouldAllowSystemScrollWrite,
   shouldBlockLoadOlder,
   shouldRecoverDetachedTailOnScroll,
@@ -48,6 +49,18 @@ describe('chatScroll', () => {
     });
 
     expect(afterDeferredTimelineCatchesUp).not.toBe(beforeDeferredTimelineCatchesUp);
+  });
+
+  it('keeps submit-time bottom lock when the viewport is visibly at the tail', () => {
+    expect(shouldStickToBottomOnSubmit({
+      shouldStickToBottom: false,
+      isNearConversationBottom: true,
+    })).toBe(true);
+
+    expect(shouldStickToBottomOnSubmit({
+      shouldStickToBottom: false,
+      isNearConversationBottom: false,
+    })).toBe(false);
   });
 
   it('resolves the latest visible event into a tail restore anchor id', () => {

@@ -63,6 +63,11 @@ type ChatAutoScrollTriggerKeyInput = {
   showPermissionQueue: boolean;
 };
 
+type SubmitBottomLockInput = {
+  shouldStickToBottom: boolean;
+  isNearConversationBottom: boolean;
+};
+
 type MobileBottomLockStateInput = {
   isNearBottom: boolean;
   hasDetachedTail?: boolean;
@@ -267,6 +272,10 @@ export function buildChatAutoScrollTriggerKey(input: ChatAutoScrollTriggerKeyInp
     input.isAwaitingReply ? '1' : '0',
     input.showPermissionQueue ? '1' : '0',
   ].join(':');
+}
+
+export function shouldStickToBottomOnSubmit(input: SubmitBottomLockInput): boolean {
+  return input.shouldStickToBottom || input.isNearConversationBottom;
 }
 
 export function resolveMobileBottomLockState(input: MobileBottomLockStateInput): {

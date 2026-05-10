@@ -3,7 +3,11 @@
 import { useCallback, type Dispatch, type FormEvent, type MutableRefObject, type SetStateAction } from 'react';
 import type { AgentFlavor, ApprovalPolicy, SessionChat, UiEvent } from '@/lib/happy/types';
 import { buildOptimisticUserEvent } from '../../chatComposer';
-import { shouldAllowSystemScrollWrite, type SessionScrollPhase } from '../../chatScroll';
+import {
+  shouldAllowSystemScrollWrite,
+  shouldStickToBottomOnSubmit,
+  type SessionScrollPhase,
+} from '../../chatScroll';
 import { buildComposerSubmitText, buildUserMessageMeta } from '../../chatSubmitPayload';
 import {
   buildChatTitleFromFirstPrompt,
@@ -45,6 +49,7 @@ type Params = {
   prompt: string;
   providerSelections?: Parameters<typeof resolveDefaultModelId>[1];
   runtimeStartedSinceAwaitingRef: MutableRefObject<boolean>;
+  isConversationNearBottom: () => boolean;
   sessionScrollPhase: SessionScrollPhase;
   scrollConversationToBottom: (behavior?: ScrollBehavior) => void;
   selectedGeminiModeId: string;
@@ -98,6 +103,7 @@ export function useChatRunActions({
   prompt,
   providerSelections,
   runtimeStartedSinceAwaitingRef,
+  isConversationNearBottom,
   sessionScrollPhase,
   scrollConversationToBottom,
   selectedGeminiModeId,
@@ -242,7 +248,10 @@ export function useChatRunActions({
       submittedAt: awaitingSince,
       mode: composerMode,
     });
-    const wasStickyAtSubmit = shouldStickToBottomRef.current;
+    const wasStickyAtSubmit = shouldStickToBottomOnSubmit({
+      shouldStickToBottom: shouldStickToBottomRef.current,
+      isNearConversationBottom: isConversationNearBottom(),
+    });
 
     updateChatRuntimeUi(scopedChatId, {
       isSubmitting: true,
@@ -399,6 +408,7 @@ export function useChatRunActions({
     prompt,
     providerSelections,
     runtimeStartedSinceAwaitingRef,
+    isConversationNearBottom,
     sessionScrollPhase,
     scrollConversationToBottom,
     selectedGeminiModeId,
