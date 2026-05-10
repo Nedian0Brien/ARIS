@@ -125,7 +125,8 @@ const SUGGESTED_ASKS = [
 
 const CMD_CONSOLE_MAX_LINES = 16;
 const WORKSPACE_DRAWER_CLOSE_MS = 160;
-const CODE_SERVER_BASE_URL = 'https://lawdigest.cloud/';
+const DEFAULT_CODE_SERVER_BASE_URL = 'https://lawdigest.cloud/';
+const CODE_SERVER_BASE_URL = process.env.NEXT_PUBLIC_CODE_SERVER_BASE_URL || DEFAULT_CODE_SERVER_BASE_URL;
 
 const CMD_CONSOLE_SCRIPT: Array<[string, CmdConsoleOutput[]]> = [
   ['aris context hydrate --scope workspace', [
