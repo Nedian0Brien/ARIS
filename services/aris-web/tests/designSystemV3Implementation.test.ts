@@ -62,8 +62,11 @@ describe('ARIS IA v3 implementation', () => {
   });
 
   it('keeps the mobile command console ambient instead of covering hero text', () => {
-    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.cmd-console\s*\{[\s\S]*?left:\s*0;[\s\S]*?transform:\s*none;[\s\S]*?height:\s*112px;[\s\S]*?opacity:\s*0\.34;/);
-    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.cmd-console__viewport\s*\{[\s\S]*?align-items:\s*flex-end;/);
-    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.cmd-console__line\s*\{[\s\S]*?max-width:\s*min\(72vw,\s*280px\);[\s\S]*?font-size:\s*11\.5px;/);
+    const mobileCss = uiCss.slice(uiCss.lastIndexOf('@media (max-width: 767px)'));
+    expect(mobileCss).toMatch(/\.cmd-console\s*\{[\s\S]*?left:\s*0;[\s\S]*?transform:\s*none;[\s\S]*?height:\s*112px;[\s\S]*?opacity:\s*0\.34;/);
+    expect(mobileCss).toMatch(/html\[data-theme='dark'\]\s+\.cmd-console\s*\{[\s\S]*?opacity:\s*0\.42;/);
+    expect(mobileCss).toMatch(/\.cmd-console__viewport\s*\{[\s\S]*?align-items:\s*flex-end;/);
+    expect(mobileCss).toMatch(/\.cmd-console__line\s*\{[\s\S]*?max-width:\s*min\(72vw,\s*280px\);[\s\S]*?font-size:\s*11\.5px;/);
+    expect(uiCss).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.cmd-console\s*\{[\s\S]*?display:\s*none;/);
   });
 });

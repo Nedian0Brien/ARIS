@@ -6282,7 +6282,27 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
   }
 
   .cmd-console {
-    display: none;
+    top: var(--sp-2);
+    left: 0;
+    transform: none;
+    width: 100%;
+    max-width: none;
+    height: 112px;
+    opacity: 0.34;
+  }
+
+  html[data-theme='dark'] .cmd-console {
+    opacity: 0.42;
+  }
+
+  .cmd-console__viewport {
+    align-items: flex-end;
+    padding: 0 var(--sp-3);
+  }
+
+  .cmd-console__line {
+    max-width: min(72vw, 280px);
+    font-size: 11.5px;
   }
 
   .home-strip,
