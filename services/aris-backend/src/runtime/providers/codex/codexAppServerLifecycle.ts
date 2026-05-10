@@ -6,8 +6,7 @@
  * fully detached from the ARIS process and its stdio can be closed without
  * affecting the WebSocket session established by `codexAppServerClient.ts`.
  *
- * Phase 2 Sprint 4. Sprint 6 wires these into `runCodexAppServerWithEvents`
- * via `CodexAdapter`.
+ * Used by `runCodexAppServer` for the app-server transport.
  */
 
 import { spawn, type SpawnOptionsWithoutStdio } from 'node:child_process';

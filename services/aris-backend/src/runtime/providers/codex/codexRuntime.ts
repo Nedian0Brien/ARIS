@@ -67,6 +67,7 @@ import {
   isMissingCodexThreadError,
   type CodexAppServerFailureKind,
 } from './codexProtocolMapper.js';
+import { buildCodexCommand } from './codexLauncher.js';
 import type { CodexPermissionRequest } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -1133,28 +1134,23 @@ export async function runCodexExecCli(
   const safeCwd = host.resolveExecutionCwd(session.metadata.path);
   const threadCacheKey = buildCodexThreadCacheKey(session.id, chatId);
   const sessionApprovalPolicy = host.resolveSessionApprovalPolicy(session);
-  const codexApprovalPolicy = normalizeCodexApprovalPolicy(sessionApprovalPolicy);
   const selectedModel = normalizeModel(model) ?? resolveRuntimeModelSelection({
     agent: 'codex',
     sessionModel: session.metadata.model,
   }).model;
   const selectedReasoningEffort = normalizeModelReasoningEffort(modelReasoningEffort);
   const autoApproveAll = sessionApprovalPolicy === 'yolo';
-  const effectiveSandboxMode = autoApproveAll ? 'danger-full-access' : CODEX_SANDBOX_MODE;
   const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
-  const execArgs = threadId
-    ? ['exec', 'resume', threadId, '--json', prompt]
-    : ['exec', '--json', prompt];
-  const args = [
-    '-a',
-    codexApprovalPolicy,
-    '-s',
-    effectiveSandboxMode,
-    ...(selectedModel ? ['-m', selectedModel] : []),
-    ...(selectedReasoningEffort ? ['-c', `model_reasoning_effort=${JSON.stringify(selectedReasoningEffort)}`] : []),
-    ...execArgs,
-  ];
-  const child = spawn('codex', args, {
+  const command = buildCodexCommand({
+    prompt,
+    approvalPolicy: sessionApprovalPolicy,
+    ...(selectedModel ? { model: selectedModel } : {}),
+    ...(selectedReasoningEffort ? { reasoningEffort: selectedReasoningEffort } : {}),
+    channel: 'exec',
+    ...(threadId ? { threadId } : {}),
+  });
+  const args = command.args;
+  const child = spawn(command.command, args, {
     cwd: safeCwd,
     env: { ...process.env, PATH: mergedPath },
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -1528,4 +1524,3 @@ export async function resolveCodexThreadId(host: CodexRuntimeHost, sessionId: st
 
   return undefined;
 }
-

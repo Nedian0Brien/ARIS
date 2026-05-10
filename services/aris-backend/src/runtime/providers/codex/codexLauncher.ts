@@ -5,10 +5,8 @@
  * `geminiLauncher.ts`. Returns a `CodexLaunchCommand` describing the binary
  * name, args, and channel selection (`app-server` vs `exec`).
  *
- * The exec-mode args returned here are byte-equivalent to the inline spawn
- * at `services/aris-backend/src/runtime/runtimeCore.ts:4198-4221` as of the
- * Phase 2 baseline. runtimeCore.ts is NOT yet routed through this builder;
- * Sprint 6 will perform that wiring with a fixture-locked regression check.
+ * The exec-mode args returned here are used by both `CodexAdapter` and the
+ * live `runCodexExecCli` path so command construction stays in one place.
  *
  * App-server-mode commands are also returned here, even though the
  * app-server transport is more complex than a single `spawn(...)` call.

@@ -1,10 +1,9 @@
 /**
  * Codex provider barrel.
  *
- * Re-exports the public surface of the codex/ subtree. The adapter itself
- * is not registered with `cliProviderRegistry` from this barrel — that
- * happens in `./bootstrap.ts`, which is intentionally not imported from
- * any runtime entry point in Phase 2 Sprint 2.
+ * Re-exports the public surface of the codex/ subtree. The adapter itself is
+ * registered by `./bootstrap.ts`, which the backend entry point imports once
+ * for its side effect.
  */
 
 export type {

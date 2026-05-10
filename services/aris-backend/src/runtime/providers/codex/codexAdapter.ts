@@ -1,21 +1,15 @@
 /**
  * Codex CliProvider adapter.
  *
- * Phase 2 Sprint 2 establishes the adapter as a structural slot. Only the
- * read-only methods (`getProviderId`, `getDisplayName`, `getCliArgs`,
- * `isAvailable`, `checkStatus`) are functional. Process-lifecycle methods
- * (`spawn`, `sendMessage`, `parseStdout`, …) throw `NotYetWiredError` —
- * Sprint 6 will replace those throws with extracted logic from
- * `runtimeCore.ts`.
- *
- * The adapter is registered with `cliProviderRegistry` via
- * `./bootstrap.ts`, but bootstrap is not imported anywhere in production
- * code yet. The registry remains empty at runtime until Sprint 6 wires the
- * import — keeping Sprint 2 zero-risk.
+ * Wires the structural provider slot to the shared Codex command builder and
+ * exec-channel protocol mapper. Higher-level turn orchestration still lives
+ * in `codexRuntime.ts`; this adapter owns process-level primitives that can
+ * be registered in `cliProviderRegistry`.
  */
 
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
+import type { ChildProcess } from 'node:child_process';
 import type {
   CliMessageContent,
   CliProvider,
@@ -26,21 +20,44 @@ import type {
 import type { ParsedMessage } from '../../contracts/parsedMessage.js';
 import type { CheckStatusOptions, CliStatusResult } from '../../contracts/cliStatus.js';
 import { buildCodexCommand } from './codexLauncher.js';
+import { parseCodexExecLine } from './codexProtocolMapper.js';
+import type { CodexReasoningEffort, CodexSandboxMode } from './types.js';
 
 const CODEX_DISPLAY_NAME = 'OpenAI Codex CLI';
 const CHECK_STATUS_TIMEOUT_MS = 5_000;
+const AGENT_EXTRA_PATHS = '/home/ubuntu/.local/bin:/home/ubuntu/.nvm/versions/node/v20.18.1/bin:/home/ubuntu/.bun/bin';
 
-class NotYetWiredError extends Error {
-  constructor(method: string) {
-    super(
-      `CodexAdapter.${method}() is not wired yet. Phase 2 Sprint 2 ships only the structural slot; ` +
-        'Sprint 6 will extract the implementation from runtimeCore.ts.',
-    );
-    this.name = 'NotYetWiredError';
-  }
-}
+type CodexAdapterSpawnOptions = CliSpawnOptions & {
+  sandboxMode?: CodexSandboxMode;
+  channel?: 'app-server' | 'exec';
+};
 
 const execFileAsync = promisify(execFile);
+
+function normalizeReasoningEffort(value: string | null | undefined): CodexReasoningEffort | undefined {
+  if (value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh') {
+    return value;
+  }
+  return undefined;
+}
+
+function buildAdapterCommand(options: CliSpawnOptions) {
+  const codexOptions = options as CodexAdapterSpawnOptions;
+  const reasoningEffort = normalizeReasoningEffort(codexOptions.reasoningEffort);
+  return buildCodexCommand({
+    prompt: codexOptions.prompt ?? '',
+    approvalPolicy: codexOptions.approvalPolicy ?? 'on-request',
+    ...(codexOptions.model ? { model: codexOptions.model } : {}),
+    ...(reasoningEffort ? { reasoningEffort } : {}),
+    ...(codexOptions.threadId ? { threadId: codexOptions.threadId } : {}),
+    ...(codexOptions.sandboxMode ? { sandboxMode: codexOptions.sandboxMode } : {}),
+    ...(codexOptions.channel ? { channel: codexOptions.channel } : {}),
+  });
+}
+
+function encodeMessageContent(content: CliMessageContent): string {
+  return typeof content === 'string' ? content : JSON.stringify(content);
+}
 
 async function probeCodexVersion(): Promise<{ ok: boolean; version?: string; error?: string }> {
   try {
@@ -70,46 +87,42 @@ export class CodexAdapter implements CliProvider {
     return result.status === 'connected';
   }
 
-  /**
-   * Build the codex CLI args for the given spawn options.
-   *
-   * Sprint 2 surfaces this via the launcher even though spawn() itself is
-   * not yet wired — the args builder is a pure function and is safe to
-   * exercise from tests.
-   *
-   * Note: this method assumes the caller has already mapped its own concept
-   * of approvalPolicy/model into spawn options. Until full wiring lands in
-   * Sprint 6, the spawn-options shape doesn't carry approvalPolicy, so we
-   * default to `on-request` here and let tests cover the launcher's full
-   * input shape directly.
-   */
   getCliArgs(options: CliSpawnOptions): string[] {
-    const command = buildCodexCommand({
-      prompt: '',
-      approvalPolicy: 'on-request',
-      ...(options.model ? { model: options.model } : {}),
-      ...(options.reasoningEffort
-        ? { reasoningEffort: options.reasoningEffort as 'low' | 'medium' | 'high' | 'xhigh' }
-        : {}),
-      ...(options.threadId ? { threadId: options.threadId } : {}),
+    return buildAdapterCommand(options).args;
+  }
+
+  async spawn(options: CliSpawnOptions): Promise<CliSpawnResult> {
+    const command = buildAdapterCommand(options);
+    const env = {
+      ...process.env,
+      ...options.envOverrides,
+    };
+    const child = spawn(command.command, command.args, {
+      cwd: options.workDir,
+      env: {
+        ...env,
+        PATH: `${env.PATH || ''}:${AGENT_EXTRA_PATHS}`,
+      },
+      signal: options.signal,
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
-    return command.args;
+    return { ok: true, process: child };
   }
 
-  async spawn(_options: CliSpawnOptions): Promise<CliSpawnResult> {
-    throw new NotYetWiredError('spawn');
+  sendMessage(proc: ChildProcess, content: CliMessageContent): boolean {
+    const stdin = proc.stdin;
+    if (!stdin || stdin.destroyed || !stdin.writable) {
+      return false;
+    }
+    return stdin.write(`${encodeMessageContent(content)}\n`);
   }
 
-  sendMessage(_proc: unknown, _content: CliMessageContent): boolean {
-    throw new NotYetWiredError('sendMessage');
+  parseStdout(line: string): ParsedMessage | null {
+    return parseCodexExecLine(line);
   }
 
-  parseStdout(_line: string): ParsedMessage | null {
-    throw new NotYetWiredError('parseStdout');
-  }
-
-  updateSessionConfig(_proc: unknown, _patch: CliRuntimeConfigPatch): boolean {
-    throw new NotYetWiredError('updateSessionConfig');
+  updateSessionConfig(_proc: ChildProcess, _patch: CliRuntimeConfigPatch): boolean {
+    return false;
   }
 
   async checkStatus(_options?: CheckStatusOptions): Promise<CliStatusResult> {
@@ -121,9 +134,8 @@ export class CodexAdapter implements CliProvider {
       };
     }
     // A successful `--version` is enough to mark codex as connected at the
-    // probe level. Auth state (`codex login` status) is checked by happyClient
-    // at turn time and surfaced via runtime errors. A richer auth probe will
-    // land in Sprint 6 alongside the runtime extraction.
+    // probe level. Auth state (`codex login` status) is checked at turn time
+    // and surfaced via runtime errors.
     return {
       status: 'connected',
       ...(probe.version ? { version: probe.version } : {}),

@@ -6,9 +6,8 @@
  * codex payloads, regardless of casing variation between the two channels
  * (app-server JSON-RPC vs exec stdout JSON).
  *
- * Phase 2 Sprint 2 introduces the placeholder. Sprint 3 will fill it with
- * real extractors against captured fixtures (see
- * `docs/03-platform/codex-protocol-conformance.md`).
+ * Fixture coverage lives in `tests/codexProtocolFields.test.ts` and the
+ * captured protocol references under `docs/03-platform/`.
  */
 
 const CODEX_OBSERVED_THREAD_ID_KEYS = [

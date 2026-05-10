@@ -18,13 +18,16 @@
  *   - Persistence and broadcasting are caller responsibilities — driven by
  *     `ParsedMessageSideEffect` descriptors emitted by `parseStdout`.
  *
- * Phase 1 only introduces the interface. No provider implements it yet.
+ * Codex currently implements the process-level adapter; Claude/Gemini still
+ * use their ProviderRuntime extraction paths directly while the long-term
+ * runtime-on-adapter migration continues.
  */
 
 import type { ChildProcess } from 'child_process';
 import type { ParsedMessage } from './parsedMessage.js';
 import type { CliStatusResult, CheckStatusOptions } from './cliStatus.js';
 import type { ProviderRuntimeFlavor } from './providerRuntime.js';
+import type { ApprovalPolicy } from '../../types.js';
 
 /**
  * Options passed to the provider when creating or resuming a CLI session.
@@ -33,6 +36,10 @@ import type { ProviderRuntimeFlavor } from './providerRuntime.js';
  * vocabulary (ApprovalPolicy, AgentFlavor) instead of introducing new types.
  */
 export interface CliSpawnOptions {
+  /** One-shot prompt for exec-style providers. Session transports may ignore it. */
+  prompt?: string;
+  /** Provider permission/approval mode for the spawned process. */
+  approvalPolicy?: ApprovalPolicy;
   /** User id for settings-aware spawn behavior (env propagation, etc). */
   userId?: string;
   /** Normalized model identifier (e.g. "claude-sonnet-4-6"). */

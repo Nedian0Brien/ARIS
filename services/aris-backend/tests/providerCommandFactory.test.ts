@@ -56,4 +56,36 @@ describe('providerCommandFactory', () => {
     expect(command?.args).not.toContain('--resume');
     expect(command?.fallbackArgs).not.toContain('--resume');
   });
+
+  it('dispatches Codex command building to the Codex launcher in exec mode', () => {
+    const command = buildProviderCommand({
+      agent: 'codex',
+      prompt: 'Reply with OK',
+      approvalPolicy: 'on-request',
+      model: 'gpt-5.3-codex',
+      resumeTarget: 'codex-thread-123',
+    });
+
+    expect(command?.command).toBe('codex');
+    expect(command?.streamJson).toBe(true);
+    expect(command?.args).toContain('exec');
+    expect(command?.args).toContain('resume');
+    expect(command?.args).toContain('codex-thread-123');
+    expect(command?.args.at(-1)).toBe('Reply with OK');
+  });
+
+  it('does not pass local Codex correlation ids through provider resume args', () => {
+    const command = buildProviderCommand({
+      agent: 'codex',
+      prompt: 'Reply with OK',
+      approvalPolicy: 'on-request',
+      model: 'gpt-5.3-codex',
+      resumeTarget: { id: 'local-correlation-123', mode: 'session-id' },
+    });
+
+    expect(command?.command).toBe('codex');
+    expect(command?.args).toContain('exec');
+    expect(command?.args).not.toContain('resume');
+    expect(command?.args).not.toContain('local-correlation-123');
+  });
 });

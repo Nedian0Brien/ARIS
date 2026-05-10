@@ -15,9 +15,8 @@
  *
  * Fixture-backed conformance tests: `tests/codexProtocolMapper.test.ts`.
  *
- * Phase 2 Sprint 3. Sprint 6 will wire `CodexAdapter.parseStdout()` to
- * call `parseCodexExecLine` and route each returned `ParsedMessage` to
- * the appropriate dispatcher in `runtimeCore.ts`.
+ * `CodexAdapter.parseStdout()` delegates to `parseCodexExecLine`; the live
+ * Codex runtime uses the same pure helpers before dispatching side effects.
  */
 
 import type { ParsedMessage } from '../../contracts/parsedMessage.js';
@@ -496,7 +495,7 @@ export function buildCodexThreadCacheKey(sessionId: string, chatId?: string): st
  * init frames, heartbeats, unrecognised payload types).
  *
  * This is the implementation of `CodexAdapter.parseStdout()` for the exec
- * channel. Sprint 6 wires it into the adapter.
+ * channel.
  */
 export function parseCodexExecLine(line: string): ParsedMessage | null {
   const payload = parseCodexJsonLine(line);

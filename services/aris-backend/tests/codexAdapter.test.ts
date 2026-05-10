@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { codexAdapter } from '../src/runtime/providers/codex/codexAdapter.js';
 
-describe('codexAdapter (Sprint 2 skeleton)', () => {
+describe('codexAdapter', () => {
   const savedEnv = { runtime: process.env.CODEX_RUNTIME_MODE };
 
   beforeEach(() => {
@@ -35,17 +35,46 @@ describe('codexAdapter (Sprint 2 skeleton)', () => {
     expect(args).toContain('thread-xyz');
   });
 
-  it('throws NotYetWiredError on spawn() until Sprint 6', async () => {
-    await expect(
-      codexAdapter.spawn({ workDir: '/tmp/example' }),
-    ).rejects.toThrow(/not wired yet/i);
+  it('parses codex exec stdout through the shared protocol mapper', () => {
+    const message = codexAdapter.parseStdout(
+      JSON.stringify({ type: 'thread.started', thread_id: 'thread-123' }),
+    );
+
+    expect(message).toEqual({
+      envelopes: [
+        {
+          kind: 'turn-start',
+          provider: 'codex',
+          source: 'system',
+          threadId: 'thread-123',
+          threadIdSource: 'observed',
+        },
+      ],
+      sideEffect: {
+        type: 'update_provider_state',
+        providerState: { threadId: 'thread-123' },
+      },
+    });
   });
 
-  it('throws NotYetWiredError on sendMessage() until Sprint 6', () => {
-    expect(() => codexAdapter.sendMessage(null, 'hi')).toThrow(/not wired yet/i);
+  it('writes newline-delimited message content to process stdin', () => {
+    const writes: string[] = [];
+    const proc = {
+      stdin: {
+        destroyed: false,
+        writable: true,
+        write: (chunk: string) => {
+          writes.push(chunk);
+          return true;
+        },
+      },
+    };
+
+    expect(codexAdapter.sendMessage(proc as never, 'hello codex')).toBe(true);
+    expect(writes).toEqual(['hello codex\n']);
   });
 
-  it('throws NotYetWiredError on parseStdout() until Sprint 6', () => {
-    expect(() => codexAdapter.parseStdout('{}')).toThrow(/not wired yet/i);
+  it('returns false for session config patches when no writable transport exists', () => {
+    expect(codexAdapter.updateSessionConfig({} as never, { model: 'gpt-5.3-codex' })).toBe(false);
   });
 });

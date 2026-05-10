@@ -1,3 +1,4 @@
+import './runtime/providers/codex/bootstrap.js';
 import { config } from './config.js';
 import { buildServer } from './server.js';
 

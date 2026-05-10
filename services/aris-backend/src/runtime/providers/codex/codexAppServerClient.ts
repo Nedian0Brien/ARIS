@@ -9,8 +9,7 @@
  * URL from `buildCodexAppServerListenUrl`, then calls
  * `connectCodexAppServerSocket` to establish the WebSocket session.
  *
- * Phase 2 Sprint 4. Sprint 6 wires these into `runCodexAppServerWithEvents`
- * via `CodexAdapter`.
+ * Used by `runCodexAppServer` for the app-server transport.
  */
 
 import { createServer } from 'node:net';
