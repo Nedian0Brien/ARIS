@@ -62,6 +62,14 @@ function sendJson(ws: WebSocket, payload: unknown): void {
   ws.send(JSON.stringify(payload));
 }
 
+function isAbnormalWebSocketClose(code: number): boolean {
+  return ![1000, 1001, 1005].includes(code);
+}
+
+function closeReasonText(reason: Buffer): string {
+  return reason.toString('utf8').slice(0, 160);
+}
+
 export function installRuntimeRealtimeWebSocketGateway(
   app: FastifyInstance,
   store: RuntimeStore,
@@ -71,6 +79,12 @@ export function installRuntimeRealtimeWebSocketGateway(
   const heartbeatTimers = new WeakMap<WebSocket, NodeJS.Timeout>();
 
   wss.on('connection', (ws: WebSocket, _request: IncomingMessage, context: UpgradeContext) => {
+    app.log.debug({
+      sessionId: context.sessionId,
+      chatId: context.chatId,
+      includeUnassigned: context.includeUnassigned,
+    }, 'runtime realtime websocket connected');
+
     sendJson(ws, {
       type: 'ready',
       sessionId: context.sessionId,
@@ -88,10 +102,28 @@ export function installRuntimeRealtimeWebSocketGateway(
     heartbeat.unref();
     heartbeatTimers.set(ws, heartbeat);
 
-    ws.on('close', () => {
+    ws.on('close', (code: number, reason: Buffer) => {
       unsubscribe();
       clearInterval(heartbeat);
       heartbeatTimers.delete(ws);
+      if (isAbnormalWebSocketClose(code)) {
+        app.log.warn({
+          sessionId: context.sessionId,
+          chatId: context.chatId,
+          includeUnassigned: context.includeUnassigned,
+          code,
+          reason: closeReasonText(reason),
+        }, 'runtime realtime websocket closed abnormally');
+      }
+    });
+
+    ws.on('error', (error) => {
+      app.log.warn({
+        err: error,
+        sessionId: context.sessionId,
+        chatId: context.chatId,
+        includeUnassigned: context.includeUnassigned,
+      }, 'runtime realtime websocket error');
     });
   });
 
@@ -101,6 +133,11 @@ export function installRuntimeRealtimeWebSocketGateway(
       return;
     }
     if (!token || !isAuthorizedUpgrade(request, token)) {
+      app.log.warn({
+        sessionId: context.sessionId,
+        chatId: context.chatId,
+        includeUnassigned: context.includeUnassigned,
+      }, 'runtime realtime websocket unauthorized upgrade');
       rejectUpgrade(socket, 401);
       return;
     }
