@@ -196,6 +196,18 @@ function buildRuntimeEventsUpstreamUrl(runtimeRequest) {
   }`;
 }
 
+function isAbnormalWebSocketClose(code) {
+  return ![1000, 1001, 1005].includes(code);
+}
+
+function safeCloseReason(reason) {
+  return String(reason || '').slice(0, 160);
+}
+
+function logRuntimeEventsWarning(message, details = {}) {
+  console.warn(`[runtime-events-ws] ${message}`, JSON.stringify(details));
+}
+
 async function getStoredLocalPreviewPanel(userId, sessionId, panelId) {
   const workspace = await prisma.workspace.findFirst({
     where: {
@@ -507,8 +519,9 @@ localPreviewWss.on('connection', async (ws, req, { userId }) => {
   });
 });
 
-runtimeEventsWss.on('connection', (ws, req, { runtimeRequest }) => {
+runtimeEventsWss.on('connection', (ws, _req, { runtimeRequest, userId }) => {
   if (!RUNTIME_API_TOKEN) {
+    logRuntimeEventsWarning('missing runtime api token', { sessionId: runtimeRequest.sessionId });
     ws.close(1011, 'runtime_api_token_missing');
     return;
   }
@@ -534,24 +547,50 @@ runtimeEventsWss.on('connection', (ws, req, { runtimeRequest }) => {
   });
 
   upstream.on('close', (code, reason) => {
+    if (isAbnormalWebSocketClose(code)) {
+      logRuntimeEventsWarning('upstream closed abnormally', {
+        sessionId: runtimeRequest.sessionId,
+        userId,
+        code,
+        reason: safeCloseReason(reason),
+      });
+    }
     if (ws.readyState === ws.OPEN) {
       ws.close(code, reason.toString() || 'runtime_events_closed');
     }
   });
 
-  upstream.on('error', () => {
+  upstream.on('error', (error) => {
+    logRuntimeEventsWarning('upstream error', {
+      sessionId: runtimeRequest.sessionId,
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
     if (ws.readyState === ws.OPEN) {
       ws.close(1011, 'runtime_events_upstream_error');
     }
   });
 
-  ws.on('close', () => {
+  ws.on('close', (code, reason) => {
+    if (isAbnormalWebSocketClose(code)) {
+      logRuntimeEventsWarning('client closed abnormally', {
+        sessionId: runtimeRequest.sessionId,
+        userId,
+        code,
+        reason: safeCloseReason(reason),
+      });
+    }
     if (upstream.readyState === upstream.OPEN || upstream.readyState === upstream.CONNECTING) {
       upstream.close();
     }
   });
 
-  ws.on('error', () => {
+  ws.on('error', (error) => {
+    logRuntimeEventsWarning('client socket error', {
+      sessionId: runtimeRequest.sessionId,
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
     if (upstream.readyState === upstream.OPEN || upstream.readyState === upstream.CONNECTING) {
       upstream.close();
     }
@@ -632,6 +671,7 @@ app.prepare().then(() => {
       const cookies = parseCookies(req.headers.cookie);
       const token = cookies[AUTH_COOKIE_NAME];
       if (!token) {
+        logRuntimeEventsWarning('upgrade rejected: missing auth cookie', { sessionId: runtimeRequest.sessionId });
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
         socket.destroy();
         return;
@@ -639,6 +679,7 @@ app.prepare().then(() => {
 
       const payload = await verifyToken(token);
       if (!payload?.sub) {
+        logRuntimeEventsWarning('upgrade rejected: invalid auth cookie', { sessionId: runtimeRequest.sessionId });
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
         socket.destroy();
         return;
@@ -646,6 +687,10 @@ app.prepare().then(() => {
 
       const hasAccess = await canAccessWorkspace(payload.sub, runtimeRequest.sessionId);
       if (!hasAccess) {
+        logRuntimeEventsWarning('upgrade rejected: workspace access denied', {
+          sessionId: runtimeRequest.sessionId,
+          userId: payload.sub,
+        });
         socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
         socket.destroy();
         return;
