@@ -104,7 +104,8 @@ describe('project list surface', () => {
     const detailSource = homeClient.slice(detailStart, chatSurfaceStart);
 
     expect(homeClient).toContain('async function createProjectSessionChat(');
-    expect(homeClient).toContain("const CODE_SERVER_BASE_URL = 'https://lawdigest.cloud/';");
+    expect(homeClient).toContain("const DEFAULT_CODE_SERVER_BASE_URL = 'https://lawdigest.cloud/';");
+    expect(homeClient).toContain('process.env.NEXT_PUBLIC_CODE_SERVER_BASE_URL');
     expect(homeClient).toContain('function buildCodeServerFolderUrl(projectPath: string): string');
     expect(homeClient).toContain('fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`)');
     expect(detailSource).toContain('const [isCreatingHeaderChat, setIsCreatingHeaderChat] = useState(false);');

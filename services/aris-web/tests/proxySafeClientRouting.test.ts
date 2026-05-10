@@ -31,6 +31,13 @@ describe('proxy-safe client routing', () => {
     expect(nextConfig).toContain('NEXT_PUBLIC_ARIS_WEB_ASSET_PREFIX');
   });
 
+  it('exposes the code-server base URL to client-side project actions', () => {
+    const nextConfig = readFileSync(resolve(__dirname, '../next.config.ts'), 'utf8');
+
+    expect(nextConfig).toContain('process.env.CODE_SERVER_BASE_URL');
+    expect(nextConfig).toContain('NEXT_PUBLIC_CODE_SERVER_BASE_URL');
+  });
+
   it('uses proxy-aware paths for login submissions and post-login navigation', () => {
     const loginPage = readFileSync(resolve(__dirname, '../app/login/page.tsx'), 'utf8');
 

@@ -3,11 +3,13 @@ import type { NextConfig } from 'next';
 const dockerFastBuild = process.env.DOCKER_FAST_BUILD === '1';
 const arisWebAssetPrefix = process.env.ARIS_WEB_ASSET_PREFIX || undefined;
 const arisWebClientAssetPrefix = process.env.NEXT_PUBLIC_ARIS_WEB_ASSET_PREFIX || arisWebAssetPrefix || '';
+const codeServerBaseUrl = process.env.NEXT_PUBLIC_CODE_SERVER_BASE_URL || process.env.CODE_SERVER_BASE_URL || 'https://lawdigest.cloud/';
 
 const nextConfig: NextConfig = {
   assetPrefix: arisWebAssetPrefix,
   env: {
     NEXT_PUBLIC_ARIS_WEB_ASSET_PREFIX: arisWebClientAssetPrefix,
+    NEXT_PUBLIC_CODE_SERVER_BASE_URL: codeServerBaseUrl,
   },
   eslint: {
     ignoreDuringBuilds: dockerFastBuild,
