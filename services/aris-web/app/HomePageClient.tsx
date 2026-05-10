@@ -771,6 +771,8 @@ function Topbar({
   onLogoHome?: () => void;
 }) {
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const activeProjects = sessions.filter((session) => session.status === 'running' || session.status === 'error').length;
   const copy: Record<TabType, { title: string; crumb: string }> = {
     home: { title: 'Home', crumb: 'workspace overview' },
@@ -807,9 +809,33 @@ function Topbar({
     };
   }, [themeMode]);
 
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+    const closeOnOutsidePointer = (event: MouseEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) {
+        return;
+      }
+      setMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsidePointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [menuOpen]);
+
   const changeThemeMode = (next: ThemeMode) => {
     setThemeMode(next);
     applyTheme(next);
+    setMenuOpen(false);
   };
 
   return (
@@ -840,30 +866,44 @@ function Topbar({
         )}
       </div>
       <div className="m-top__right">
-        {activeTab === 'project' && (
-          <button type="button" className="btn btn--primary btn--sm">
-            <Plus size={14} />
-            New project
+        <div className="m-context-menu" ref={menuRef}>
+          <button
+            type="button"
+            className="m-context-menu__button"
+            aria-label="상단 헤더 메뉴"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <MoreHorizontal size={16} />
           </button>
-        )}
-        <div className="m-theme-toggle" role="group" aria-label="테마 선택">
-          {THEME_OPTIONS.map(({ mode, label, Icon }) => {
-            const active = themeMode === mode;
-            return (
-              <button
-                key={mode}
-                type="button"
-                className={`m-theme-toggle__item${active ? ' m-theme-toggle__item--active' : ''}`}
-                aria-pressed={active}
-                aria-label={`${label} 테마`}
-                title={`${label} 테마`}
-                onClick={() => changeThemeMode(mode)}
-              >
-                <Icon size={13} />
-                <span className="m-theme-toggle__label">{label}</span>
-              </button>
-            );
-          })}
+          {menuOpen && (
+            <div className="m-context-menu__panel" role="menu" aria-label="상단 헤더 메뉴">
+              <div className="m-context-menu__section">
+                <div className="m-context-menu__label">테마</div>
+                <div className="m-theme-toggle" role="group" aria-label="테마 선택">
+                  {THEME_OPTIONS.map(({ mode, label, Icon }) => {
+                    const active = themeMode === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        role="menuitemradio"
+                        className={`m-theme-toggle__item${active ? ' m-theme-toggle__item--active' : ''}`}
+                        aria-checked={active}
+                        aria-label={`${label} 테마`}
+                        title={`${label} 테마`}
+                        onClick={() => changeThemeMode(mode)}
+                      >
+                        <Icon size={13} />
+                        <span className="m-theme-toggle__label">{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </header>
@@ -1439,28 +1479,6 @@ function ProjectDetailSurface({
   const tokenLabel = deriveProjectTokenLabel(session, index);
   const modelLabel = session.model || session.metadata?.runtimeModel || 'default model';
   const recentPreview = createChatPreview(session);
-  const [isCreatingHeaderChat, setIsCreatingHeaderChat] = useState(false);
-  const [headerCreateError, setHeaderCreateError] = useState<string | null>(null);
-
-  const handleProjectHeaderNewChat = async () => {
-    if (isCreatingHeaderChat) return;
-    setIsCreatingHeaderChat(true);
-    setHeaderCreateError(null);
-    try {
-      const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);
-      const createdChat = await createProjectSessionChat(session.id, {
-        title: `Chat ${Math.max(1, totalChats + 1)}`,
-        agent: session.agent,
-        model: projectModelInput,
-        modelReasoningEffort: serializeReasoningEffort('High'),
-      });
-      onProjectChatOpen(createdChat.id);
-    } catch (createError) {
-      setHeaderCreateError(createError instanceof Error ? createError.message : '새 채팅을 만들지 못했습니다.');
-    } finally {
-      setIsCreatingHeaderChat(false);
-    }
-  };
 
   if (projectView === 'chat') {
     return (
@@ -1496,28 +1514,7 @@ function ProjectDetailSurface({
               <span className={`proj-head__path-status--${status}`}>● {projectStatusLabel(session.status)}</span>
             </div>
           </div>
-          <div className="proj-head__actions">
-            <button type="button" className="btn btn--secondary btn--sm">
-              <Monitor size={14} />
-              Open in IDE
-            </button>
-            <button type="button" className="btn btn--secondary btn--sm">
-              <PanelsTopLeft size={14} />
-              Settings
-            </button>
-            <button
-              type="button"
-              className="btn btn--primary btn--sm"
-              onClick={handleProjectHeaderNewChat}
-              disabled={isCreatingHeaderChat}
-              aria-busy={isCreatingHeaderChat}
-            >
-              <Plus size={14} />
-              New chat
-            </button>
-          </div>
         </div>
-        {headerCreateError && <div className="pc-chat-error" role="alert">{headerCreateError}</div>}
         <div className="proj-stats">
           <div>
             <div className="proj-stat-label">Chats</div>

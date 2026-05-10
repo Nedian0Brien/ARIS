@@ -33,6 +33,21 @@ describe('project list surface', () => {
     expect(homeClient).not.toContain('const selected = sortSessions(sessions)[0] ?? null;');
   });
 
+  it('keeps the Project topbar compact with theme actions behind a context menu', () => {
+    const topbarStart = homeClient.indexOf('function Topbar({');
+    const homeOrbStart = homeClient.indexOf('function HomeOrb()');
+    const topbarSource = homeClient.slice(topbarStart, homeOrbStart);
+
+    expect(topbarSource).toContain('className="m-context-menu"');
+    expect(topbarSource).toContain('className="m-context-menu__button"');
+    expect(topbarSource).toContain('aria-label="상단 헤더 메뉴"');
+    expect(topbarSource).toContain('aria-haspopup="menu"');
+    expect(topbarSource).toContain('className="m-theme-toggle"');
+    expect(topbarSource).toContain('aria-label="테마 선택"');
+    expect(topbarSource).not.toContain('New project');
+    expect(uiCss).toContain('.m-context-menu__panel');
+  });
+
   it('routes project card clicks to the IA project detail instead of the legacy session screen', () => {
     expect(homeClient).toContain("type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';");
     expect(homeClient).toContain("function buildProjectDetailPath(sessionId: string, view: ProjectView = 'chats', chatId?: string | null)");
@@ -83,23 +98,23 @@ describe('project list surface', () => {
     expect(homeClient).not.toContain('/sessions/${session.id}');
   });
 
-  it('creates a project chat from the project detail header New chat button', () => {
+  it('removes unnecessary project detail header actions and keeps chat creation in the chat list', () => {
     const detailStart = homeClient.indexOf('function ProjectDetailSurface({');
     const chatSurfaceStart = homeClient.indexOf('function ProjectChatSurface({');
     const detailSource = homeClient.slice(detailStart, chatSurfaceStart);
+    const projectSurfaceStart = homeClient.indexOf('function ProjectSurface({');
+    const chatSurfaceSource = homeClient.slice(chatSurfaceStart, projectSurfaceStart);
 
     expect(homeClient).toContain('async function createProjectSessionChat(');
-    expect(detailSource).toContain('const handleProjectHeaderNewChat = async () => {');
-    expect(detailSource).toContain('const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);');
-    expect(detailSource).toContain('const createdChat = await createProjectSessionChat(session.id, {');
-    expect(detailSource).toContain('title: `Chat ${Math.max(1, totalChats + 1)}`,');
-    expect(detailSource).toContain('agent: session.agent,');
-    expect(detailSource).toContain('model: projectModelInput,');
-    expect(detailSource).toContain("modelReasoningEffort: serializeReasoningEffort('High'),");
-    expect(detailSource).toContain('onProjectChatOpen(createdChat.id);');
-    expect(detailSource).toContain('disabled={isCreatingHeaderChat}');
-    expect(detailSource).toContain('aria-busy={isCreatingHeaderChat}');
-    expect(detailSource).toContain('onClick={handleProjectHeaderNewChat}');
+    expect(detailSource).not.toContain('className="proj-head__actions"');
+    expect(detailSource).not.toContain('Open in IDE');
+    expect(detailSource).not.toContain('Settings');
+    expect(detailSource).not.toContain('handleProjectHeaderNewChat');
+    expect(detailSource).not.toContain('isCreatingHeaderChat');
+    expect(chatSurfaceSource).toContain('const handleNewChat = async () => {');
+    expect(chatSurfaceSource).toContain('const createdChat = await createProjectSessionChat(session.id, {');
+    expect(chatSurfaceSource).toContain('className="pc-chat-card pc-chat-card--new"');
+    expect(chatSurfaceSource).toContain('className="pc-chat-card pc-chat-card--empty"');
     expect(detailSource).not.toContain('model: modelLabel,');
     expect(detailSource).not.toContain('className="btn btn--primary btn--sm" onClick={() => onProjectViewChange(\'chats\')}');
   });
