@@ -2,6 +2,11 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { PermissionRequest, PermissionDecision } from '@/lib/happy/types';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
 import { isPermissionForChat, normalizePermissionChatId } from '@/lib/happy/permissions';
+import {
+  buildRuntimeEventChannelUrl,
+  shouldRefreshPermissionsForRuntimeMessage,
+  type RuntimeEventChannelMessage,
+} from '@/lib/hooks/runtimeEventChannel';
 
 const POLL_INTERVAL_MS = 10000;
 const isDocumentVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
@@ -156,6 +161,44 @@ export function usePermissions(
       window.removeEventListener('focus', syncWhenVisible);
     };
   }, [enabled, refreshPermissions]);
+
+  useEffect(() => {
+    if (!enabled || typeof WebSocket !== 'function') {
+      return undefined;
+    }
+
+    let disposed = false;
+    const socket = new WebSocket(buildRuntimeEventChannelUrl({
+      sessionId,
+      chatId: activeChatId,
+      includeUnassigned: includeUnassignedForActiveChat,
+    }));
+
+    socket.addEventListener('message', (raw) => {
+      if (disposed || !isDocumentVisible()) {
+        return;
+      }
+      try {
+        const payload = JSON.parse(String((raw as MessageEvent).data)) as RuntimeEventChannelMessage;
+        if (shouldRefreshPermissionsForRuntimeMessage(payload)) {
+          void refreshPermissions();
+        }
+      } catch {
+        // Ignore malformed realtime payloads; polling remains the fallback.
+      }
+    });
+
+    socket.addEventListener('error', () => {
+      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+        socket.close();
+      }
+    });
+
+    return () => {
+      disposed = true;
+      socket.close();
+    };
+  }, [enabled, sessionId, activeChatId, includeUnassignedForActiveChat, refreshPermissions]);
 
   const scopedPermissions = useMemo(
     () => permissions.filter((item) => isPermissionForChat(item, activeChatId, includeUnassignedForActiveChat)),

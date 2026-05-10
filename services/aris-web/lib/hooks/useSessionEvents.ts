@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionEventsPage, UiEvent } from '@/lib/happy/types';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
+import {
+  buildRuntimeEventChannelUrl,
+  type RuntimeEventChannelMessage,
+} from '@/lib/hooks/runtimeEventChannel';
 
 const SAFETY_RECONCILE_INTERVAL_MS = 15000;
 const FALLBACK_POLL_INTERVAL_MS = 4000;
@@ -57,6 +61,14 @@ function mergeEvents(events: UiEvent[]): UiEvent[] {
   );
 }
 
+function isUiEvent(value: unknown): value is UiEvent {
+  return Boolean(
+    value
+      && typeof value === 'object'
+      && typeof (value as UiEvent).id === 'string'
+      && typeof (value as UiEvent).timestamp === 'string',
+  );
+}
 
 function readTrimmedStreamEvent(event: UiEvent): string {
   return typeof event.meta?.streamEvent === 'string'
@@ -729,6 +741,7 @@ export function useSessionEvents(
   useEffect(() => {
     let disposed = false;
     let eventSource: EventSource | null = null;
+    let eventSocket: WebSocket | null = null;
     let pollTimer: number | null = null;
     let pollDelayTimer: number | null = null;
     let reconnectTimer: number | null = null;
@@ -841,39 +854,38 @@ export function useSessionEvents(
     };
 
     const closeStream = () => {
-      if (eventSource) {
-        eventSource.close();
+      if (eventSource !== null) {
+        const stream = eventSource;
         eventSource = null;
+        stream.close();
+      }
+      if (eventSocket !== null) {
+        const socket = eventSocket;
+        eventSocket = null;
+        socket.close();
       }
     };
 
-    const startSafetyReconcile = () => {
-      if (!enabled) {
+    const appendStreamEvent = (event: UiEvent, streamChatId: string | null) => {
+      // 채팅 전환 후 이전 연결에서 도착하는 이벤트를 무시.
+      if (activeChatIdRef.current !== streamChatId) {
         return;
       }
-      if (reconcileTimer !== null) {
-        return;
+      const { trimmedCount } = appendIncomingEvents([event]);
+      if (trimmedCount > 0) {
+        setHasMoreBefore(true);
       }
-      reconcileTimer = window.setInterval(() => {
-        void refreshEvents().catch((error) => {
-          handleRefreshError(error, '백엔드 이벤트 동기화를 확인하세요.');
-        });
-      }, SAFETY_RECONCILE_INTERVAL_MS);
+      setSyncError(null);
     };
 
-    const connect = () => {
-      if (disposed || terminalStatusRef.current === 404) {
-        return;
-      }
-      if (!isDocumentVisible()) {
+    const openEventSource = (streamChatId: string | null) => {
+      if (disposed || terminalStatusRef.current === 404 || !isDocumentVisible()) {
         return;
       }
 
-      closeStream();
       const latestId = findLatestPersistedCursorEventId(eventsRef.current);
-      const streamChatId = chatId;
       const params = new URLSearchParams();
-      appendChatFilters(params, chatId, includeUnassigned);
+      appendChatFilters(params, streamChatId, includeUnassigned);
       if (latestId) {
         params.set('after', latestId);
       }
@@ -891,20 +903,12 @@ export function useSessionEvents(
       });
 
       stream.addEventListener('event', (raw) => {
-        // 채팅 전환 후 이전 SSE 연결에서 도착하는 이벤트를 무시.
-        if (activeChatIdRef.current !== streamChatId) {
-          return;
-        }
         try {
           const payload = JSON.parse((raw as MessageEvent).data) as { event?: UiEvent };
           if (!payload.event) {
             return;
           }
-          const { trimmedCount } = appendIncomingEvents([payload.event!]);
-          if (trimmedCount > 0) {
-            setHasMoreBefore(true);
-          }
-          setSyncError(null);
+          appendStreamEvent(payload.event, streamChatId);
         } catch {
           // Ignore malformed stream payloads and continue receiving subsequent events.
         }
@@ -974,6 +978,99 @@ export function useSessionEvents(
           }, nextReconnectDelayMs());
         }
       });
+    };
+
+    const openWebSocket = (streamChatId: string | null) => {
+      if (typeof WebSocket !== 'function') {
+        return false;
+      }
+
+      const socket = new WebSocket(buildRuntimeEventChannelUrl({
+        sessionId,
+        chatId: streamChatId,
+        includeUnassigned,
+      }));
+      eventSocket = socket;
+      let opened = false;
+
+      socket.addEventListener('open', () => {
+        opened = true;
+        setSyncError(null);
+        stopPolling();
+      });
+
+      socket.addEventListener('message', (raw) => {
+        if (activeChatIdRef.current !== streamChatId) {
+          return;
+        }
+        try {
+          const payload = JSON.parse(String((raw as MessageEvent).data)) as RuntimeEventChannelMessage;
+          if (payload.type === 'event.appended' && isUiEvent(payload.event)) {
+            appendStreamEvent(payload.event, streamChatId);
+          }
+        } catch {
+          // Ignore malformed realtime payloads and keep the channel open.
+        }
+      });
+
+      socket.addEventListener('close', () => {
+        if (disposed || eventSocket !== socket) {
+          return;
+        }
+        eventSocket = null;
+        if (terminalStatusRef.current === 404) {
+          stopPolling();
+          closeStream();
+          return;
+        }
+        setSyncError(opened ? '실시간 채널이 끊겨 재연결 중입니다.' : '실시간 채널 연결 지연으로 SSE 모드로 전환했습니다.');
+        startPolling();
+        openEventSource(streamChatId);
+        if (reconnectTimer === null) {
+          reconnectTimer = window.setTimeout(() => {
+            reconnectTimer = null;
+            connect();
+          }, nextReconnectDelayMs());
+        }
+      });
+
+      socket.addEventListener('error', () => {
+        if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+          socket.close();
+        }
+      });
+
+      return true;
+    };
+
+    const startSafetyReconcile = () => {
+      if (!enabled) {
+        return;
+      }
+      if (reconcileTimer !== null) {
+        return;
+      }
+      reconcileTimer = window.setInterval(() => {
+        void refreshEvents().catch((error) => {
+          handleRefreshError(error, '백엔드 이벤트 동기화를 확인하세요.');
+        });
+      }, SAFETY_RECONCILE_INTERVAL_MS);
+    };
+
+    const connect = () => {
+      if (disposed || terminalStatusRef.current === 404) {
+        return;
+      }
+      if (!isDocumentVisible()) {
+        return;
+      }
+
+      closeStream();
+      const streamChatId = chatId;
+      if (openWebSocket(streamChatId)) {
+        return;
+      }
+      openEventSource(streamChatId);
     };
 
     startSafetyReconcile();

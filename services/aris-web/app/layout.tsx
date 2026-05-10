@@ -33,7 +33,12 @@ const proxyAwareClientRoutingScript = `
     return url.origin === window.location.origin
       && url.pathname !== basePath
       && !url.pathname.startsWith(basePath + '/')
-      && (url.pathname === '/api' || url.pathname.startsWith('/api/'));
+      && (
+        url.pathname === '/api'
+        || url.pathname.startsWith('/api/')
+        || url.pathname === '/ws'
+        || url.pathname.startsWith('/ws/')
+      );
   };
 
   const rewrite = (value) => {
@@ -80,6 +85,14 @@ const proxyAwareClientRoutingScript = `
       return config === undefined ? new NativeEventSource(rewrite(url)) : new NativeEventSource(rewrite(url), config);
     };
     window.EventSource.prototype = NativeEventSource.prototype;
+  }
+
+  const NativeWebSocket = window.WebSocket;
+  if (typeof NativeWebSocket === 'function') {
+    window.WebSocket = function(url, protocols) {
+      return protocols === undefined ? new NativeWebSocket(rewrite(url)) : new NativeWebSocket(rewrite(url), protocols);
+    };
+    window.WebSocket.prototype = NativeWebSocket.prototype;
   }
 })();
 `;

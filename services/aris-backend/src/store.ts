@@ -107,6 +107,37 @@ type CreatePermissionInput = {
   risk: PermissionRisk;
 };
 
+export type RuntimeRealtimeChannelEvent =
+  | {
+      type: 'event.appended';
+      sessionId: string;
+      chatId?: string;
+      event: RuntimeMessage;
+      cursor?: number;
+      source: 'mutation' | 'runtime';
+    }
+  | {
+      type: 'session.created' | 'session.updated' | 'session.action';
+      sessionId: string;
+      chatId?: string;
+      session?: RuntimeSession;
+      action?: SessionAction;
+    }
+  | {
+      type: 'permission.created' | 'permission.updated';
+      sessionId: string;
+      chatId?: string;
+      permission: PermissionRequest;
+    };
+
+export type RuntimeRealtimeChannelFilter = {
+  sessionId: string;
+  chatId?: string;
+  includeUnassigned?: boolean;
+};
+
+export type RuntimeRealtimeChannelListener = (event: RuntimeRealtimeChannelEvent) => void;
+
 interface RuntimeStoreBackend {
   listSessions(): Promise<RuntimeSession[]>;
   getSession(sessionId: string): Promise<RuntimeSession | null>;
@@ -136,6 +167,7 @@ type RuntimeExecutor = Pick<
   | 'createPermission'
   | 'decidePermission'
   | 'getGeminiSessionCapabilities'
+  | 'subscribeRealtimeEvents'
   | 'beginShutdownDrain'
   | 'awaitDrain'
 >;
@@ -499,6 +531,10 @@ class MockRuntimeStore implements RuntimeStoreBackend {
 export class RuntimeStore {
   private readonly delegate: RuntimeStoreBackend;
   private readonly runtimeExecutor: RuntimeExecutor | null;
+  private readonly realtimeSubscribers = new Set<{
+    filter: RuntimeRealtimeChannelFilter;
+    listener: RuntimeRealtimeChannelListener;
+  }>();
 
   constructor(
     defaultProjectPath: string,
@@ -575,12 +611,24 @@ export class RuntimeStore {
       });
     }
 
+    this.emitRealtimeChannel({
+      type: 'session.created',
+      sessionId: session.id,
+      session,
+    });
+
     return session;
   }
 
   async updateApprovalPolicy(sessionId: string, approvalPolicy: ApprovalPolicy) {
     if (typeof this.delegate.updateApprovalPolicy === 'function') {
-      return this.delegate.updateApprovalPolicy(sessionId, approvalPolicy);
+      const session = await this.delegate.updateApprovalPolicy(sessionId, approvalPolicy);
+      this.emitRealtimeChannel({
+        type: 'session.updated',
+        sessionId,
+        session,
+      });
+      return session;
     }
     throw new Error('UPDATE_APPROVAL_POLICY_NOT_SUPPORTED');
   }
@@ -597,12 +645,27 @@ export class RuntimeStore {
   }
 
   async appendMessage(sessionId: string, input: AppendMessageInput) {
-    return this.delegate.appendMessage(sessionId, input);
+    const event = await this.delegate.appendMessage(sessionId, input);
+    this.emitRealtimeChannel({
+      type: 'event.appended',
+      sessionId,
+      ...extractEventChatScope(event),
+      event,
+      source: 'mutation',
+    });
+    return event;
   }
 
   async submitUserPrompt(sessionId: string, input: AppendMessageInput) {
     const promptInput = asUserPromptInput(input);
     const created = await this.delegate.appendMessage(sessionId, promptInput);
+    this.emitRealtimeChannel({
+      type: 'event.appended',
+      sessionId,
+      ...extractEventChatScope(created),
+      event: created,
+      source: 'mutation',
+    });
     if (this.runtimeExecutor) {
       await this.runtimeExecutor.triggerPersistedUserMessage(sessionId, promptInput);
     }
@@ -614,7 +677,15 @@ export class RuntimeStore {
     input: AppendChatEventInput,
   ) {
     if (typeof this.delegate.appendChatEvent === 'function') {
-      return this.delegate.appendChatEvent(chatId, input);
+      const event = await this.delegate.appendChatEvent(chatId, input);
+      this.emitRealtimeChannel({
+        type: 'event.appended',
+        sessionId: input.sessionId,
+        chatId,
+        event,
+        source: 'mutation',
+      });
+      return event;
     }
     throw new Error('APPEND_CHAT_EVENT_NOT_SUPPORTED');
   }
@@ -626,6 +697,13 @@ export class RuntimeStore {
 
     const promptInput = asChatUserPromptInput(chatId, input);
     const created = await this.delegate.appendChatEvent(chatId, promptInput);
+    this.emitRealtimeChannel({
+      type: 'event.appended',
+      sessionId: promptInput.sessionId,
+      chatId,
+      event: created,
+      source: 'mutation',
+    });
     if (this.runtimeExecutor) {
       await this.runtimeExecutor.triggerPersistedUserMessage(promptInput.sessionId, {
         type: promptInput.type,
@@ -710,16 +788,23 @@ export class RuntimeStore {
         if (latestUserMessage) {
           await this.runtimeExecutor.triggerPersistedUserMessage(sessionId, latestUserMessage);
         }
+        this.emitRealtimeChannel({ type: 'session.action', sessionId, ...(chatId ? { chatId } : {}), action });
         return result;
       }
       if (action === 'kill') {
         await this.runtimeExecutor.applySessionAction(sessionId, 'abort');
-        return this.delegate.applySessionAction(sessionId, action, chatId);
+        const result = await this.delegate.applySessionAction(sessionId, action, chatId);
+        this.emitRealtimeChannel({ type: 'session.action', sessionId, ...(chatId ? { chatId } : {}), action });
+        return result;
       }
       await this.runtimeExecutor.applySessionAction(sessionId, action, chatId);
-      return this.delegate.applySessionAction(sessionId, action, chatId);
+      const result = await this.delegate.applySessionAction(sessionId, action, chatId);
+      this.emitRealtimeChannel({ type: 'session.action', sessionId, ...(chatId ? { chatId } : {}), action });
+      return result;
     }
-    return this.delegate.applySessionAction(sessionId, action, chatId);
+    const result = await this.delegate.applySessionAction(sessionId, action, chatId);
+    this.emitRealtimeChannel({ type: 'session.action', sessionId, ...(chatId ? { chatId } : {}), action });
+    return result;
   }
 
   async isSessionRunning(sessionId: string, chatId?: string) {
@@ -759,10 +844,18 @@ export class RuntimeStore {
   }
 
   async createPermission(input: CreatePermissionInput) {
-    if (this.runtimeExecutor) {
-      return this.runtimeExecutor.createPermission(input);
-    }
-    return this.delegate.createPermission(input);
+    const permission = this.runtimeExecutor
+      ? await this.runtimeExecutor.createPermission(input)
+      : await this.delegate.createPermission(input);
+    this.emitRealtimeChannel({
+      type: 'permission.created',
+      sessionId: permission.sessionId,
+      ...(typeof permission.chatId === 'string' && permission.chatId.trim().length > 0
+        ? { chatId: permission.chatId.trim() }
+        : {}),
+      permission,
+    });
+    return permission;
   }
 
   async decidePermission(permissionId: string, decision: PermissionDecision) {
@@ -783,9 +876,78 @@ export class RuntimeStore {
           }
         }
       }
+      this.emitRealtimeChannel({
+        type: 'permission.updated',
+        sessionId: updated.sessionId,
+        ...(normalizedChatId ? { chatId: normalizedChatId } : {}),
+        permission: updated,
+      });
       return updated;
     }
-    return this.delegate.decidePermission(permissionId, decision);
+    const updated = await this.delegate.decidePermission(permissionId, decision);
+    const normalizedChatId = typeof updated.chatId === 'string' && updated.chatId.trim().length > 0
+      ? updated.chatId.trim()
+      : undefined;
+    this.emitRealtimeChannel({
+      type: 'permission.updated',
+      sessionId: updated.sessionId,
+      ...(normalizedChatId ? { chatId: normalizedChatId } : {}),
+      permission: updated,
+    });
+    return updated;
+  }
+
+  subscribeRealtimeChannel(
+    filter: RuntimeRealtimeChannelFilter,
+    listener: RuntimeRealtimeChannelListener,
+  ): () => void {
+    const subscription = {
+      filter: normalizeRealtimeChannelFilter(filter),
+      listener,
+    };
+    this.realtimeSubscribers.add(subscription);
+    const runtimeEventFilter = subscription.filter.chatId && !subscription.filter.includeUnassigned
+      ? { chatId: subscription.filter.chatId }
+      : {};
+    const unsubscribeRuntime = this.runtimeExecutor?.subscribeRealtimeEvents?.(
+      subscription.filter.sessionId,
+      runtimeEventFilter,
+      (record) => {
+        const eventChatScope = extractEventChatScope(record.event);
+        this.deliverRealtimeChannelEvent(subscription, {
+          type: 'event.appended',
+          sessionId: record.event.sessionId,
+          ...eventChatScope,
+          event: record.event,
+          cursor: record.cursor,
+          source: 'runtime',
+        });
+      },
+    );
+
+    return () => {
+      this.realtimeSubscribers.delete(subscription);
+      unsubscribeRuntime?.();
+    };
+  }
+
+  private emitRealtimeChannel(event: RuntimeRealtimeChannelEvent): void {
+    for (const subscription of this.realtimeSubscribers) {
+      this.deliverRealtimeChannelEvent(subscription, event);
+    }
+  }
+
+  private deliverRealtimeChannelEvent(
+    subscription: {
+      filter: RuntimeRealtimeChannelFilter;
+      listener: RuntimeRealtimeChannelListener;
+    },
+    event: RuntimeRealtimeChannelEvent,
+  ): void {
+    if (!matchesRealtimeChannelFilter(subscription.filter, event)) {
+      return;
+    }
+    subscription.listener(event);
   }
 
   resolveExecutionCwd(cwdHint?: string, branch?: string): string {
@@ -797,4 +959,42 @@ export class RuntimeStore {
     }
     return cwdHint || '';
   }
+}
+
+function normalizeRealtimeChannelFilter(filter: RuntimeRealtimeChannelFilter): RuntimeRealtimeChannelFilter {
+  const sessionId = filter.sessionId.trim();
+  const chatId = typeof filter.chatId === 'string' && filter.chatId.trim().length > 0
+    ? filter.chatId.trim()
+    : undefined;
+  return {
+    sessionId,
+    ...(chatId ? { chatId } : {}),
+    ...(filter.includeUnassigned ? { includeUnassigned: true } : {}),
+  };
+}
+
+function extractEventChatScope(event: RuntimeMessage): { chatId?: string } {
+  const chatId = typeof event.meta?.chatId === 'string' && event.meta.chatId.trim().length > 0
+    ? event.meta.chatId.trim()
+    : undefined;
+  return chatId ? { chatId } : {};
+}
+
+function matchesRealtimeChannelFilter(
+  filter: RuntimeRealtimeChannelFilter,
+  event: RuntimeRealtimeChannelEvent,
+): boolean {
+  if (filter.sessionId !== event.sessionId) {
+    return false;
+  }
+  if (!filter.chatId) {
+    return true;
+  }
+  const eventChatId = typeof event.chatId === 'string' && event.chatId.trim().length > 0
+    ? event.chatId.trim()
+    : undefined;
+  if (eventChatId) {
+    return eventChatId === filter.chatId;
+  }
+  return filter.includeUnassigned === true;
 }
