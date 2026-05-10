@@ -211,18 +211,30 @@ describe('project list surface', () => {
   });
 
   it('surfaces the active project chat run with a spinner and elapsed timer', () => {
+    expect(homeClient).toContain("import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';");
     expect(homeClient).toContain('const [submittedRunStartedAt, setSubmittedRunStartedAt] = useState<string | null>(null);');
+    expect(homeClient).toContain('const [runtimeRunStartedAt, setRuntimeRunStartedAt] = useState<string | null>(null);');
     expect(homeClient).toContain('const [projectRunNowMs, setProjectRunNowMs] = useState(() => Date.now());');
+    expect(homeClient).toContain('const { isRunning: runtimeRunning } = useSessionRuntime(');
+    expect(homeClient).toContain('const activeRunStartedAt = submittedRunStartedAt ?? runtimeRunStartedAt;');
     expect(homeClient).toContain('const projectRunIndicator = resolveProjectRunIndicator({');
+    expect(homeClient).toContain('runtimeRunning,');
     expect(homeClient).toContain('const localStartAfterLatestLifecycle =');
-    expect(homeClient).toContain('startedAt: submittedRunStartedAt,');
+    expect(homeClient).toContain('startedAt: activeRunStartedAt,');
     expect(homeClient).toContain('setSubmittedRunStartedAt(submittedAt);');
+    expect(homeClient).toContain('if (!runtimeRunning) {');
+    expect(homeClient).toContain('setRuntimeRunStartedAt(null);');
+    expect(homeClient).toContain('setRuntimeRunStartedAt((current) => lifecycleStartedAt ?? current ?? submittedRunStartedAt ?? new Date().toISOString());');
     expect(homeClient).toContain('setSubmittedRunStartedAt(null);');
+    expect(homeClient).toContain('const projectRunActive = Boolean(projectRunIndicator);');
     expect(homeClient).toContain('<span className="ch__running-indicator" role="status" aria-live="polite" data-tone={projectRunIndicator.tone}>');
     expect(homeClient).toContain('<span className="ch__running-spinner" aria-hidden="true" />');
     expect(homeClient).toContain('{projectRunIndicator.label}');
     expect(homeClient).toContain('<time className="ch__running-elapsed" dateTime={projectRunIndicator.startedAt}>');
     expect(homeClient).toContain('{formatElapsedDuration(projectRunIndicator.startedAt, projectRunNowMs)}');
+    expect(homeClient).toContain('{projectRunActive ? (');
+    expect(homeClient).toContain('disabled={isAborting}');
+    expect(homeClient).toContain('disabled={!projectRunActive}');
   });
 
   it('renders project chat text replies through the shared markdown renderer', () => {

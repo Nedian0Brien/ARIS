@@ -58,6 +58,7 @@ import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientThe
 import type { AuthenticatedUser } from '@/lib/auth/types';
 import type { SessionChat, SessionStatus, SessionSummary, UiEvent } from '@/lib/happy/types';
 import { abortActiveChat } from '@/lib/runtime/abortChat';
+import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
 import { useWorkspaceFiles, type WorkspaceFileItem } from '@/lib/hooks/useWorkspaceFiles';
 import {
   buildChatTitleFromFirstPrompt,
@@ -1987,11 +1988,13 @@ function resolveProjectRunIndicator({
   events,
   isAborting,
   isSubmitting,
+  runtimeRunning,
   startedAt,
 }: {
   events: UiEvent[];
   isAborting: boolean;
   isSubmitting: boolean;
+  runtimeRunning: boolean;
   startedAt: string | null;
 }): ProjectRunIndicator | null {
   const latestLifecycle = readLatestProjectRunLifecycle(events);
@@ -2011,7 +2014,7 @@ function resolveProjectRunIndicator({
   if (latestStatus === 'waiting_for_approval' && resolvedStartedAt) {
     return { label: '승인 대기', startedAt: resolvedStartedAt, tone: 'approval' };
   }
-  if ((PROJECT_ACTIVE_RUN_STATUSES.has(latestStatus) || startedAt) && resolvedStartedAt) {
+  if ((PROJECT_ACTIVE_RUN_STATUSES.has(latestStatus) || runtimeRunning || startedAt) && resolvedStartedAt) {
     return { label: '실행 중', startedAt: resolvedStartedAt, tone: 'running' };
   }
   return null;
@@ -2193,9 +2196,11 @@ function ProjectChatSurface({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAborting, setIsAborting] = useState(false);
   const [submittedRunStartedAt, setSubmittedRunStartedAt] = useState<string | null>(null);
+  const [runtimeRunStartedAt, setRuntimeRunStartedAt] = useState<string | null>(null);
   const [projectRunNowMs, setProjectRunNowMs] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
   const activeChat = selectedChatId ? chats.find((chat) => chat.id === selectedChatId) ?? null : null;
+  const { isRunning: runtimeRunning } = useSessionRuntime(session.id, selectedChatId, Boolean(selectedChatId));
   const runtimeModelLabel = activeChat?.model ?? modelLabel;
   const runtimeAgent = activeChat?.agent ?? session.agent;
   const timelineRef = useRef<HTMLDivElement | null>(null);
@@ -2224,12 +2229,15 @@ function ProjectChatSurface({
   const userTurns = visibleEvents.filter((item) => readEventRole(item) === 'user');
   const representativeAgentEvent = visibleEvents.find((item) => readEventRole(item) !== 'user');
   const hasRuntimeEvents = visibleEvents.length > 0;
+  const activeRunStartedAt = submittedRunStartedAt ?? runtimeRunStartedAt;
   const projectRunIndicator = resolveProjectRunIndicator({
     events,
     isAborting,
     isSubmitting,
-    startedAt: submittedRunStartedAt,
+    runtimeRunning,
+    startedAt: activeRunStartedAt,
   });
+  const projectRunActive = Boolean(projectRunIndicator);
   const selectedChatTimestamp = activeChat?.latestEventAt
     ?? activeChat?.lastActivityAt
     ?? session.lastActivityAt
@@ -2534,10 +2542,28 @@ function ProjectChatSurface({
 
   useEffect(() => {
     const latestLifecycle = readLatestProjectRunLifecycle(events);
-    if (latestLifecycle?.status && isTerminalRunStatus(latestLifecycle.status)) {
+    if (
+      latestLifecycle?.status
+      && isTerminalRunStatus(latestLifecycle.status)
+      && !isProjectTimestampAfter(submittedRunStartedAt, latestLifecycle.timestamp)
+    ) {
       setSubmittedRunStartedAt(null);
     }
-  }, [events]);
+  }, [events, submittedRunStartedAt]);
+
+  useEffect(() => {
+    setSubmittedRunStartedAt(null);
+    setRuntimeRunStartedAt(null);
+  }, [selectedChatId]);
+
+  useEffect(() => {
+    if (!runtimeRunning) {
+      setRuntimeRunStartedAt(null);
+      return;
+    }
+    const lifecycleStartedAt = resolveProjectRunStartedAt(events, null);
+    setRuntimeRunStartedAt((current) => lifecycleStartedAt ?? current ?? submittedRunStartedAt ?? new Date().toISOString());
+  }, [events, runtimeRunning, selectedChatId, submittedRunStartedAt]);
 
   useEffect(() => {
     if (!projectRunIndicator) return;
@@ -2665,10 +2691,10 @@ function ProjectChatSurface({
 
   const handleStopActiveChat = useCallback(async () => {
     if (isAborting) return;
-    if (!isSubmitting && !activeChat) return;
+    if (!projectRunActive || !selectedChatId) return;
     setIsAborting(true);
     try {
-      await abortActiveChat({ sessionId: session.id, chatId: activeChat?.id });
+      await abortActiveChat({ sessionId: session.id, chatId: activeChat?.id ?? selectedChatId });
       showTransientFeedback('Stop 요청을 보냈습니다');
     } catch (abortError) {
       setError(abortError instanceof Error ? abortError.message : '에이전트 실행 중단에 실패했습니다.');
@@ -2676,7 +2702,7 @@ function ProjectChatSurface({
       setIsAborting(false);
       setIsSubmitting(false);
     }
-  }, [activeChat, isAborting, isSubmitting, session.id]);
+  }, [activeChat?.id, isAborting, projectRunActive, selectedChatId, session.id]);
 
   if (!selectedChatId) {
     return (
@@ -3055,8 +3081,8 @@ function ProjectChatSurface({
                   </button>
                 </div>
                 <div className="cmp__right">
-                  <span className="cmp__hint"><span className="kbd">⌘</span><span className="kbd">↵</span><span>send</span></span>
-                  {isSubmitting || isAborting ? (
+                  <span className="cmp__hint"><span className="kbd">⌘</span><span className="kbd">↵</span><span>{projectRunActive ? 'running' : 'send'}</span></span>
+                  {projectRunActive ? (
                     <button
                       type="button"
                       className={`cmp__send cmp__send--running${isAborting ? ' cmp__send--aborting' : ''}`}
@@ -3117,7 +3143,7 @@ function ProjectChatSurface({
                 type="button"
                 className="ws__stop"
                 aria-label="Stop"
-                disabled={!isSubmitting && !isAborting}
+                disabled={!projectRunActive}
                 onClick={() => { void handleStopActiveChat(); }}
               >
                 <Square size={10} />
