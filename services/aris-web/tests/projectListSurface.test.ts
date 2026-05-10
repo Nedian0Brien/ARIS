@@ -33,6 +33,21 @@ describe('project list surface', () => {
     expect(homeClient).not.toContain('const selected = sortSessions(sessions)[0] ?? null;');
   });
 
+  it('keeps the Project topbar compact with theme actions behind a context menu', () => {
+    const topbarStart = homeClient.indexOf('function Topbar({');
+    const homeOrbStart = homeClient.indexOf('function HomeOrb()');
+    const topbarSource = homeClient.slice(topbarStart, homeOrbStart);
+
+    expect(topbarSource).toContain('className="m-context-menu"');
+    expect(topbarSource).toContain('className="m-context-menu__button"');
+    expect(topbarSource).toContain('aria-label="상단 헤더 메뉴"');
+    expect(topbarSource).toContain('aria-haspopup="menu"');
+    expect(topbarSource).toContain('className="m-theme-toggle"');
+    expect(topbarSource).toContain('aria-label="테마 선택"');
+    expect(topbarSource).not.toContain('New project');
+    expect(uiCss).toContain('.m-context-menu__panel');
+  });
+
   it('routes project card clicks to the IA project detail instead of the legacy session screen', () => {
     expect(homeClient).toContain("type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';");
     expect(homeClient).toContain("function buildProjectDetailPath(sessionId: string, view: ProjectView = 'chats', chatId?: string | null)");
@@ -72,8 +87,8 @@ describe('project list surface', () => {
     expect(homeClient).toContain("setSelectedProjectView('chat');");
     expect(homeClient).toContain("buildProjectDetailPath(sessionId, 'chat', chatId)");
     expect(homeClient).toContain("params.set('view', view);");
-    expect(homeClient).toContain('/api/runtime/sessions/${encodeURIComponent(session.id)}/chats');
-    expect(homeClient).toContain('/api/runtime/sessions/${encodeURIComponent(session.id)}/events');
+    expect(homeClient).toContain('fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats`)');
+    expect(homeClient).toContain('fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events?${params.toString()}`)');
     expect(homeClient).toContain('pc-chat-empty-state');
     expect(homeClient).not.toContain('seed-history-primary');
     expect(homeClient).not.toContain('seed-context');
@@ -83,23 +98,34 @@ describe('project list surface', () => {
     expect(homeClient).not.toContain('/sessions/${session.id}');
   });
 
-  it('creates a project chat from the project detail header New chat button', () => {
+  it('wires the project detail header actions to IDE, settings, and real chat creation', () => {
     const detailStart = homeClient.indexOf('function ProjectDetailSurface({');
     const chatSurfaceStart = homeClient.indexOf('function ProjectChatSurface({');
     const detailSource = homeClient.slice(detailStart, chatSurfaceStart);
 
     expect(homeClient).toContain('async function createProjectSessionChat(');
+    expect(homeClient).toContain("const CODE_SERVER_BASE_URL = 'https://lawdigest.cloud/';");
+    expect(homeClient).toContain('function buildCodeServerFolderUrl(projectPath: string): string');
+    expect(homeClient).toContain('fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`)');
+    expect(detailSource).toContain('const [isCreatingHeaderChat, setIsCreatingHeaderChat] = useState(false);');
+    expect(detailSource).toContain('const [settingsModalOpen, setSettingsModalOpen] = useState(false);');
     expect(detailSource).toContain('const handleProjectHeaderNewChat = async () => {');
     expect(detailSource).toContain('const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);');
     expect(detailSource).toContain('const createdChat = await createProjectSessionChat(session.id, {');
     expect(detailSource).toContain('title: `Chat ${Math.max(1, totalChats + 1)}`,');
-    expect(detailSource).toContain('agent: session.agent,');
-    expect(detailSource).toContain('model: projectModelInput,');
-    expect(detailSource).toContain("modelReasoningEffort: serializeReasoningEffort('High'),");
     expect(detailSource).toContain('onProjectChatOpen(createdChat.id);');
+    expect(detailSource).toContain('className="proj-head__actions"');
+    expect(detailSource).toContain('href={buildCodeServerFolderUrl(projectPath)}');
+    expect(detailSource).toContain('target="_blank"');
+    expect(detailSource).toContain('Open in IDE');
+    expect(detailSource).toContain('onClick={() => setSettingsModalOpen(true)}');
+    expect(detailSource).toContain('Settings');
+    expect(detailSource).toContain('onClick={handleProjectHeaderNewChat}');
     expect(detailSource).toContain('disabled={isCreatingHeaderChat}');
     expect(detailSource).toContain('aria-busy={isCreatingHeaderChat}');
-    expect(detailSource).toContain('onClick={handleProjectHeaderNewChat}');
+    expect(detailSource).toContain('role="dialog"');
+    expect(detailSource).toContain('aria-modal="true"');
+    expect(detailSource).toContain('Project settings');
     expect(detailSource).not.toContain('model: modelLabel,');
     expect(detailSource).not.toContain('className="btn btn--primary btn--sm" onClick={() => onProjectViewChange(\'chats\')}');
   });
@@ -194,7 +220,7 @@ describe('project list surface', () => {
     const submitSource = homeClient.slice(submitStart, submitEnd);
 
     expect(submitSource).toContain("const isTerminalMode = composerMode === 'terminal';");
-    expect(submitSource).toContain("isTerminalMode ? `/api/runtime/sessions/${encodeURIComponent(session.id)}/terminal`");
+    expect(submitSource).toContain("const endpoint = withAppBasePath(isTerminalMode ? `/api/runtime/sessions/${encodeURIComponent(session.id)}/terminal`");
     expect(submitSource).toContain('command: text,');
     expect(submitSource).toContain("const body = (await response.json().catch(() => ({}))) as { event?: UiEvent; events?: UiEvent[]; error?: string };");
     expect(submitSource).toContain('const submittedEvents = isTerminalMode');

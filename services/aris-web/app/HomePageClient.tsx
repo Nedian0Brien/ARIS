@@ -125,6 +125,7 @@ const SUGGESTED_ASKS = [
 
 const CMD_CONSOLE_MAX_LINES = 16;
 const WORKSPACE_DRAWER_CLOSE_MS = 160;
+const CODE_SERVER_BASE_URL = 'https://lawdigest.cloud/';
 
 const CMD_CONSOLE_SCRIPT: Array<[string, CmdConsoleOutput[]]> = [
   ['aris context hydrate --scope workspace', [
@@ -300,6 +301,12 @@ function displayProjectName(session: SessionSummary): string {
 
 function displayProjectPath(session: SessionSummary): string {
   return session.projectName || session.id;
+}
+
+function buildCodeServerFolderUrl(projectPath: string): string {
+  const url = new URL(CODE_SERVER_BASE_URL);
+  url.searchParams.set('folder', projectPath);
+  return url.toString();
 }
 
 function formatRelativeTime(value: string | null | undefined): string {
@@ -498,7 +505,7 @@ async function createProjectSessionChat(
     modelReasoningEffort?: SessionChat['modelReasoningEffort'];
   },
 ): Promise<SessionChat> {
-  const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`, {
+  const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -613,7 +620,7 @@ function Sidebar({
     async function loadActiveProjectChats() {
       setIsLoadingProjectChats(true);
       try {
-        const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(projectId)}/chats`, { cache: 'no-store' });
+        const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(projectId)}/chats`), { cache: 'no-store' });
         const body = (await response.json().catch(() => ({}))) as { chats?: SessionChat[] };
         if (!cancelled && response.ok) {
           setActiveProjectChats(body.chats ?? []);
@@ -771,6 +778,8 @@ function Topbar({
   onLogoHome?: () => void;
 }) {
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const activeProjects = sessions.filter((session) => session.status === 'running' || session.status === 'error').length;
   const copy: Record<TabType, { title: string; crumb: string }> = {
     home: { title: 'Home', crumb: 'workspace overview' },
@@ -807,9 +816,33 @@ function Topbar({
     };
   }, [themeMode]);
 
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+    const closeOnOutsidePointer = (event: MouseEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) {
+        return;
+      }
+      setMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsidePointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [menuOpen]);
+
   const changeThemeMode = (next: ThemeMode) => {
     setThemeMode(next);
     applyTheme(next);
+    setMenuOpen(false);
   };
 
   return (
@@ -840,30 +873,44 @@ function Topbar({
         )}
       </div>
       <div className="m-top__right">
-        {activeTab === 'project' && (
-          <button type="button" className="btn btn--primary btn--sm">
-            <Plus size={14} />
-            New project
+        <div className="m-context-menu" ref={menuRef}>
+          <button
+            type="button"
+            className="m-context-menu__button"
+            aria-label="상단 헤더 메뉴"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <MoreHorizontal size={16} />
           </button>
-        )}
-        <div className="m-theme-toggle" role="group" aria-label="테마 선택">
-          {THEME_OPTIONS.map(({ mode, label, Icon }) => {
-            const active = themeMode === mode;
-            return (
-              <button
-                key={mode}
-                type="button"
-                className={`m-theme-toggle__item${active ? ' m-theme-toggle__item--active' : ''}`}
-                aria-pressed={active}
-                aria-label={`${label} 테마`}
-                title={`${label} 테마`}
-                onClick={() => changeThemeMode(mode)}
-              >
-                <Icon size={13} />
-                <span className="m-theme-toggle__label">{label}</span>
-              </button>
-            );
-          })}
+          {menuOpen && (
+            <div className="m-context-menu__panel" role="menu" aria-label="상단 헤더 메뉴">
+              <div className="m-context-menu__section">
+                <div className="m-context-menu__label">테마</div>
+                <div className="m-theme-toggle" role="group" aria-label="테마 선택">
+                  {THEME_OPTIONS.map(({ mode, label, Icon }) => {
+                    const active = themeMode === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        role="menuitemradio"
+                        className={`m-theme-toggle__item${active ? ' m-theme-toggle__item--active' : ''}`}
+                        aria-checked={active}
+                        aria-label={`${label} 테마`}
+                        title={`${label} 테마`}
+                        onClick={() => changeThemeMode(mode)}
+                      >
+                        <Icon size={13} />
+                        <span className="m-theme-toggle__label">{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </header>
@@ -1441,6 +1488,22 @@ function ProjectDetailSurface({
   const recentPreview = createChatPreview(session);
   const [isCreatingHeaderChat, setIsCreatingHeaderChat] = useState(false);
   const [headerCreateError, setHeaderCreateError] = useState<string | null>(null);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!settingsModalOpen) {
+      return;
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSettingsModalOpen(false);
+      }
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [settingsModalOpen]);
 
   const handleProjectHeaderNewChat = async () => {
     if (isCreatingHeaderChat) return;
@@ -1497,11 +1560,16 @@ function ProjectDetailSurface({
             </div>
           </div>
           <div className="proj-head__actions">
-            <button type="button" className="btn btn--secondary btn--sm">
+            <a
+              className="btn btn--secondary btn--sm"
+              href={buildCodeServerFolderUrl(projectPath)}
+              target="_blank"
+              rel="noreferrer"
+            >
               <Monitor size={14} />
               Open in IDE
-            </button>
-            <button type="button" className="btn btn--secondary btn--sm">
+            </a>
+            <button type="button" className="btn btn--secondary btn--sm" onClick={() => setSettingsModalOpen(true)}>
               <PanelsTopLeft size={14} />
               Settings
             </button>
@@ -1540,6 +1608,38 @@ function ProjectDetailSurface({
           </div>
         </div>
       </section>
+      {settingsModalOpen && (
+        <div className="proj-settings-modal__backdrop" role="presentation" onMouseDown={() => setSettingsModalOpen(false)}>
+          <div
+            className="proj-settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="proj-settings-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="proj-settings-modal__head">
+              <div>
+                <div className="proj-settings-modal__eyebrow">{projectName}</div>
+                <h2 id="proj-settings-title">Project settings</h2>
+              </div>
+              <button
+                type="button"
+                className="proj-settings-modal__close"
+                aria-label="설정 닫기"
+                onClick={() => setSettingsModalOpen(false)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="proj-settings-modal__body">
+              <div className="proj-settings-modal__placeholder">
+                프로젝트 설정 화면을 준비 중입니다.
+              </div>
+              <div className="proj-settings-modal__path">{projectPath}</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <nav className="proj-tabs" aria-label={`${projectName} project sections`}>
         <button
@@ -2272,7 +2372,7 @@ function ProjectChatSurface({
       setIsLoadingChats(true);
       setError(null);
       try {
-        const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats`, { cache: 'no-store' });
+        const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats`), { cache: 'no-store' });
         const body = (await response.json().catch(() => ({}))) as { chats?: SessionChat[]; error?: string };
         if (!response.ok) {
           throw new Error(body.error ?? '채팅 목록을 불러오지 못했습니다.');
@@ -2313,7 +2413,7 @@ function ProjectChatSurface({
         if (activeChat?.isDefault) {
           params.set('includeUnassigned', 'true');
         }
-        const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events?${params.toString()}`, { cache: 'no-store' });
+        const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events?${params.toString()}`), { cache: 'no-store' });
         const body = (await response.json().catch(() => ({}))) as { events?: UiEvent[]; error?: string };
         if (!response.ok) {
           throw new Error(body.error ?? '채팅 이벤트를 불러오지 못했습니다.');
@@ -2386,7 +2486,7 @@ function ProjectChatSurface({
       const firstPromptTitle = shouldAutoRenameFromFirstPrompt
         ? buildChatTitleFromFirstPrompt(text)
         : null;
-      const endpoint = isTerminalMode ? `/api/runtime/sessions/${encodeURIComponent(session.id)}/terminal` : `/api/runtime/sessions/${encodeURIComponent(session.id)}/events`;
+      const endpoint = withAppBasePath(isTerminalMode ? `/api/runtime/sessions/${encodeURIComponent(session.id)}/terminal` : `/api/runtime/sessions/${encodeURIComponent(session.id)}/events`);
       const payload = isTerminalMode ? {
         chatId: chat.id,
         command: text,
@@ -2435,7 +2535,7 @@ function ProjectChatSurface({
             }
           : item
       )));
-      void fetch(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats/${encodeURIComponent(chat.id)}`, {
+      void fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats/${encodeURIComponent(chat.id)}`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3375,7 +3475,7 @@ function FilesSurface({ browserRootPath }: { browserRootPath: string }) {
     let cancelled = false;
     async function fetchFiles() {
       try {
-        const response = await fetch(`/api/fs/list?path=${encodeURIComponent(currentPath)}`, { cache: 'no-store' });
+        const response = await fetch(withAppBasePath(`/api/fs/list?path=${encodeURIComponent(currentPath)}`), { cache: 'no-store' });
         if (!response.ok) throw new Error('failed');
         const body = await response.json() as DirectoryData;
         if (!cancelled) {
@@ -3539,7 +3639,7 @@ export default function HomePageWrapper({
     let cancelled = false;
     async function fetchMetrics() {
       try {
-        const response = await fetch('/api/runtime/system', { cache: 'no-store' });
+        const response = await fetch(withAppBasePath('/api/runtime/system'), { cache: 'no-store' });
         const body = await response.json() as {
           metrics?: {
             cpu?: RuntimeMetric;
