@@ -125,6 +125,7 @@ const SUGGESTED_ASKS = [
 
 const CMD_CONSOLE_MAX_LINES = 16;
 const WORKSPACE_DRAWER_CLOSE_MS = 160;
+const CODE_SERVER_BASE_URL = 'https://lawdigest.cloud/';
 
 const CMD_CONSOLE_SCRIPT: Array<[string, CmdConsoleOutput[]]> = [
   ['aris context hydrate --scope workspace', [
@@ -300,6 +301,12 @@ function displayProjectName(session: SessionSummary): string {
 
 function displayProjectPath(session: SessionSummary): string {
   return session.projectName || session.id;
+}
+
+function buildCodeServerFolderUrl(projectPath: string): string {
+  const url = new URL(CODE_SERVER_BASE_URL);
+  url.searchParams.set('folder', projectPath);
+  return url.toString();
 }
 
 function formatRelativeTime(value: string | null | undefined): string {
@@ -498,7 +505,7 @@ async function createProjectSessionChat(
     modelReasoningEffort?: SessionChat['modelReasoningEffort'];
   },
 ): Promise<SessionChat> {
-  const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`, {
+  const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -613,7 +620,7 @@ function Sidebar({
     async function loadActiveProjectChats() {
       setIsLoadingProjectChats(true);
       try {
-        const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(projectId)}/chats`, { cache: 'no-store' });
+        const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(projectId)}/chats`), { cache: 'no-store' });
         const body = (await response.json().catch(() => ({}))) as { chats?: SessionChat[] };
         if (!cancelled && response.ok) {
           setActiveProjectChats(body.chats ?? []);
@@ -1479,6 +1486,44 @@ function ProjectDetailSurface({
   const tokenLabel = deriveProjectTokenLabel(session, index);
   const modelLabel = session.model || session.metadata?.runtimeModel || 'default model';
   const recentPreview = createChatPreview(session);
+  const [isCreatingHeaderChat, setIsCreatingHeaderChat] = useState(false);
+  const [headerCreateError, setHeaderCreateError] = useState<string | null>(null);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!settingsModalOpen) {
+      return;
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSettingsModalOpen(false);
+      }
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [settingsModalOpen]);
+
+  const handleProjectHeaderNewChat = async () => {
+    if (isCreatingHeaderChat) return;
+    setIsCreatingHeaderChat(true);
+    setHeaderCreateError(null);
+    try {
+      const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);
+      const createdChat = await createProjectSessionChat(session.id, {
+        title: `Chat ${Math.max(1, totalChats + 1)}`,
+        agent: session.agent,
+        model: projectModelInput,
+        modelReasoningEffort: serializeReasoningEffort('High'),
+      });
+      onProjectChatOpen(createdChat.id);
+    } catch (createError) {
+      setHeaderCreateError(createError instanceof Error ? createError.message : '새 채팅을 만들지 못했습니다.');
+    } finally {
+      setIsCreatingHeaderChat(false);
+    }
+  };
 
   if (projectView === 'chat') {
     return (
@@ -1514,7 +1559,33 @@ function ProjectDetailSurface({
               <span className={`proj-head__path-status--${status}`}>● {projectStatusLabel(session.status)}</span>
             </div>
           </div>
+          <div className="proj-head__actions">
+            <a
+              className="btn btn--secondary btn--sm"
+              href={buildCodeServerFolderUrl(projectPath)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Monitor size={14} />
+              Open in IDE
+            </a>
+            <button type="button" className="btn btn--secondary btn--sm" onClick={() => setSettingsModalOpen(true)}>
+              <PanelsTopLeft size={14} />
+              Settings
+            </button>
+            <button
+              type="button"
+              className="btn btn--primary btn--sm"
+              onClick={handleProjectHeaderNewChat}
+              disabled={isCreatingHeaderChat}
+              aria-busy={isCreatingHeaderChat}
+            >
+              <Plus size={14} />
+              New chat
+            </button>
+          </div>
         </div>
+        {headerCreateError && <div className="pc-chat-error" role="alert">{headerCreateError}</div>}
         <div className="proj-stats">
           <div>
             <div className="proj-stat-label">Chats</div>
@@ -1537,6 +1608,38 @@ function ProjectDetailSurface({
           </div>
         </div>
       </section>
+      {settingsModalOpen && (
+        <div className="proj-settings-modal__backdrop" role="presentation" onMouseDown={() => setSettingsModalOpen(false)}>
+          <div
+            className="proj-settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="proj-settings-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="proj-settings-modal__head">
+              <div>
+                <div className="proj-settings-modal__eyebrow">{projectName}</div>
+                <h2 id="proj-settings-title">Project settings</h2>
+              </div>
+              <button
+                type="button"
+                className="proj-settings-modal__close"
+                aria-label="설정 닫기"
+                onClick={() => setSettingsModalOpen(false)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="proj-settings-modal__body">
+              <div className="proj-settings-modal__placeholder">
+                프로젝트 설정 화면을 준비 중입니다.
+              </div>
+              <div className="proj-settings-modal__path">{projectPath}</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <nav className="proj-tabs" aria-label={`${projectName} project sections`}>
         <button
@@ -2269,7 +2372,7 @@ function ProjectChatSurface({
       setIsLoadingChats(true);
       setError(null);
       try {
-        const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats`, { cache: 'no-store' });
+        const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats`), { cache: 'no-store' });
         const body = (await response.json().catch(() => ({}))) as { chats?: SessionChat[]; error?: string };
         if (!response.ok) {
           throw new Error(body.error ?? '채팅 목록을 불러오지 못했습니다.');
@@ -2310,7 +2413,7 @@ function ProjectChatSurface({
         if (activeChat?.isDefault) {
           params.set('includeUnassigned', 'true');
         }
-        const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events?${params.toString()}`, { cache: 'no-store' });
+        const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events?${params.toString()}`), { cache: 'no-store' });
         const body = (await response.json().catch(() => ({}))) as { events?: UiEvent[]; error?: string };
         if (!response.ok) {
           throw new Error(body.error ?? '채팅 이벤트를 불러오지 못했습니다.');
@@ -2383,7 +2486,7 @@ function ProjectChatSurface({
       const firstPromptTitle = shouldAutoRenameFromFirstPrompt
         ? buildChatTitleFromFirstPrompt(text)
         : null;
-      const endpoint = isTerminalMode ? `/api/runtime/sessions/${encodeURIComponent(session.id)}/terminal` : `/api/runtime/sessions/${encodeURIComponent(session.id)}/events`;
+      const endpoint = withAppBasePath(isTerminalMode ? `/api/runtime/sessions/${encodeURIComponent(session.id)}/terminal` : `/api/runtime/sessions/${encodeURIComponent(session.id)}/events`);
       const payload = isTerminalMode ? {
         chatId: chat.id,
         command: text,
@@ -2432,7 +2535,7 @@ function ProjectChatSurface({
             }
           : item
       )));
-      void fetch(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats/${encodeURIComponent(chat.id)}`, {
+      void fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats/${encodeURIComponent(chat.id)}`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3372,7 +3475,7 @@ function FilesSurface({ browserRootPath }: { browserRootPath: string }) {
     let cancelled = false;
     async function fetchFiles() {
       try {
-        const response = await fetch(`/api/fs/list?path=${encodeURIComponent(currentPath)}`, { cache: 'no-store' });
+        const response = await fetch(withAppBasePath(`/api/fs/list?path=${encodeURIComponent(currentPath)}`), { cache: 'no-store' });
         if (!response.ok) throw new Error('failed');
         const body = await response.json() as DirectoryData;
         if (!cancelled) {
@@ -3536,7 +3639,7 @@ export default function HomePageWrapper({
     let cancelled = false;
     async function fetchMetrics() {
       try {
-        const response = await fetch('/api/runtime/system', { cache: 'no-store' });
+        const response = await fetch(withAppBasePath('/api/runtime/system'), { cache: 'no-store' });
         const body = await response.json() as {
           metrics?: {
             cpu?: RuntimeMetric;
