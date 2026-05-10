@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildChatAutoScrollTriggerKey,
   haveComposerDockMetricsChanged,
   hasResumePhaseSettled,
   hasTailRestoreRenderHydrated,
@@ -21,6 +22,34 @@ import {
 } from '@/app/sessions/[sessionId]/chatScroll';
 
 describe('chatScroll', () => {
+  it('changes the auto-scroll trigger when deferred agent messages reach the rendered timeline', () => {
+    const beforeDeferredTimelineCatchesUp = buildChatAutoScrollTriggerKey({
+      eventsForChatId: 'chat-1',
+      eventCount: 3,
+      latestVisibleEventId: 'agent-new',
+      latestRenderableEventId: 'agent-prev',
+      renderedStreamItemCount: 2,
+      pendingUserEventCount: 0,
+      pendingPermissionCount: 0,
+      isAwaitingReply: true,
+      showPermissionQueue: false,
+    });
+
+    const afterDeferredTimelineCatchesUp = buildChatAutoScrollTriggerKey({
+      eventsForChatId: 'chat-1',
+      eventCount: 3,
+      latestVisibleEventId: 'agent-new',
+      latestRenderableEventId: 'agent-new',
+      renderedStreamItemCount: 3,
+      pendingUserEventCount: 0,
+      pendingPermissionCount: 0,
+      isAwaitingReply: true,
+      showPermissionQueue: false,
+    });
+
+    expect(afterDeferredTimelineCatchesUp).not.toBe(beforeDeferredTimelineCatchesUp);
+  });
+
   it('resolves the latest visible event into a tail restore anchor id', () => {
     expect(resolveTailScrollAnchorId({ latestVisibleEventId: 'evt-42' })).toBe('event-evt-42');
     expect(resolveTailScrollAnchorId({ latestVisibleEventId: null })).toBeNull();

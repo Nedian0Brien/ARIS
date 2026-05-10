@@ -63,6 +63,7 @@ import { WorkspacePanelsPane } from './chat-screen/right-pane/WorkspacePanelsPan
 import styles from './ChatInterface.module.css';
 import { shouldShowChatTransitionLoading } from './chatSelection';
 import {
+  buildChatAutoScrollTriggerKey,
   haveComposerDockMetricsChanged,
   hasResumePhaseSettled,
   hasTailRestoreRenderHydrated,
@@ -2041,23 +2042,27 @@ export function ChatInterface({
   }, [isMobileLayout, isTailLayoutSettling]);
 
   const autoScrollTriggerKey = useMemo(
-    () => [
-      eventsForChatId ?? '',
-      events.length,
-      latestVisibleEventId ?? '',
-      pendingUserEvents.length,
-      effectivePendingPermissions.length,
-      isAwaitingReply ? '1' : '0',
-      showPermissionQueue ? '1' : '0',
-    ].join(':'),
+    () => buildChatAutoScrollTriggerKey({
+      eventsForChatId,
+      eventCount: events.length,
+      latestVisibleEventId,
+      latestRenderableEventId: latestRenderableStreamEventId,
+      renderedStreamItemCount: streamItems.length,
+      pendingUserEventCount: pendingUserEvents.length,
+      pendingPermissionCount: effectivePendingPermissions.length,
+      isAwaitingReply,
+      showPermissionQueue,
+    }),
     [
       effectivePendingPermissions.length,
       events.length,
       eventsForChatId,
       isAwaitingReply,
+      latestRenderableStreamEventId,
       latestVisibleEventId,
       pendingUserEvents.length,
       showPermissionQueue,
+      streamItems.length,
     ],
   );
 
