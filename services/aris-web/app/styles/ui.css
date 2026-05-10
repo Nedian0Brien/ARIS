@@ -3102,6 +3102,60 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   animation: msb-pulse 1.6s infinite;
 }
 
+.pc-proto .ch__running-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  max-width: min(248px, 34vw);
+  min-width: 0;
+  padding: 3px 8px 3px 6px;
+  border: 1px solid color-mix(in srgb, var(--b-500) 24%, var(--border-subtle));
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--b-500) 8%, var(--surface));
+  color: var(--b-700);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pc-proto .ch__running-indicator[data-tone="approval"] {
+  border-color: color-mix(in srgb, var(--warning-fg) 30%, var(--border-subtle));
+  background: color-mix(in srgb, var(--warning-bg) 56%, var(--surface));
+  color: var(--warning-fg);
+}
+
+.pc-proto .ch__running-indicator[data-tone="aborting"] {
+  border-color: color-mix(in srgb, var(--danger-fg) 30%, var(--border-subtle));
+  background: color-mix(in srgb, var(--danger-bg) 56%, var(--surface));
+  color: var(--danger-fg);
+}
+
+.pc-proto .ch__running-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-top-color: currentColor;
+  border-radius: var(--r-full);
+  animation: pc-spin 0.85s linear infinite;
+  flex: 0 0 auto;
+}
+
+.pc-proto .ch__running-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pc-proto .ch__running-elapsed {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-weight: 800;
+}
+
 .pc-proto .ch__meta,
 .pc-proto .ws__status-right,
 .pc-proto .tool__meta {
@@ -5780,6 +5834,10 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
   100% { opacity: 0; transform: scale(1); }
 }
 
+@keyframes pc-spin {
+  to { transform: rotate(360deg); }
+}
+
 .files-head {
   padding: var(--sp-8) var(--sp-10);
   border-bottom: 1px solid var(--border-subtle);
@@ -6399,6 +6457,15 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
 
   .pc-proto .ch__title-wrap {
     gap: var(--sp-2);
+  }
+
+  .pc-proto .ch__running-indicator {
+    max-width: 118px;
+    padding-right: 6px;
+  }
+
+  .pc-proto .ch__running-label {
+    display: none;
   }
 
   .pc-proto .ch__status,

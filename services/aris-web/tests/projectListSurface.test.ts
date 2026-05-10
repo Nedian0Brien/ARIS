@@ -175,6 +175,7 @@ describe('project list surface', () => {
   it('renders project chat action events through a dedicated action-card branch', () => {
     expect(homeClient).toContain('function isProjectActionEvent(event: UiEvent): boolean');
     expect(homeClient).toContain('function isProjectRunStatusEvent(event: UiEvent): boolean');
+    expect(homeClient).toContain('function resolveProjectRunIndicator(');
     expect(homeClient).toContain('function ProjectRunStatusChip({ event }: { event: UiEvent })');
     expect(homeClient).toContain('function ProjectActionCard({');
     expect(homeClient).toContain('function GitActionMark({ size = 12 }: { size?: number })');
@@ -207,6 +208,21 @@ describe('project list surface', () => {
     expect(homeClient).toContain('className="pc-action-result__body"');
     expect(homeClient).toContain("handleCopy(eventCommand(event), 'Action command')");
     expect(homeClient).not.toContain('const toolLike = !isUser && isToolLikeEvent(item);');
+  });
+
+  it('surfaces the active project chat run with a spinner and elapsed timer', () => {
+    expect(homeClient).toContain('const [submittedRunStartedAt, setSubmittedRunStartedAt] = useState<string | null>(null);');
+    expect(homeClient).toContain('const [projectRunNowMs, setProjectRunNowMs] = useState(() => Date.now());');
+    expect(homeClient).toContain('const projectRunIndicator = resolveProjectRunIndicator({');
+    expect(homeClient).toContain('const localStartAfterLatestLifecycle =');
+    expect(homeClient).toContain('startedAt: submittedRunStartedAt,');
+    expect(homeClient).toContain('setSubmittedRunStartedAt(submittedAt);');
+    expect(homeClient).toContain('setSubmittedRunStartedAt(null);');
+    expect(homeClient).toContain('<span className="ch__running-indicator" role="status" aria-live="polite" data-tone={projectRunIndicator.tone}>');
+    expect(homeClient).toContain('<span className="ch__running-spinner" aria-hidden="true" />');
+    expect(homeClient).toContain('{projectRunIndicator.label}');
+    expect(homeClient).toContain('<time className="ch__running-elapsed" dateTime={projectRunIndicator.startedAt}>');
+    expect(homeClient).toContain('{formatElapsedDuration(projectRunIndicator.startedAt, projectRunNowMs)}');
   });
 
   it('renders project chat text replies through the shared markdown renderer', () => {
@@ -403,6 +419,8 @@ describe('project list surface', () => {
       '.pc-chat-card',
       '.pc-proto .shell',
       '.pc-proto .ch',
+      '.pc-proto .ch__running-indicator',
+      '.pc-proto .ch__running-spinner',
       '.pc-proto .tl',
       '.pc-proto .msg',
       '.pc-proto .msg--action',
@@ -451,6 +469,9 @@ describe('project list surface', () => {
     expect(cssBlock('.pc-proto .pc-run-status')).toContain('border-radius: var(--r-full);');
     expect(cssBlock('.pc-proto .pc-run-status[data-tone="done"]')).toContain('--pc-run-status-accent: var(--success-fg);');
     expect(cssBlock('.pc-proto .pc-run-status__icon')).toContain('border-radius: var(--r-full);');
+    expect(cssBlock('.pc-proto .ch__running-indicator')).toContain('font-variant-numeric: tabular-nums;');
+    expect(cssBlock('.pc-proto .ch__running-spinner')).toContain('animation: pc-spin 0.85s linear infinite;');
+    expect(uiCss).toContain('@keyframes pc-spin');
     expect(cssBlock('.pc-proto .pc-action-stack')).toContain('display: grid;');
     expect(cssBlock('.pc-proto .pc-action-stack')).toContain('position: relative;');
     expect(cssBlock('.pc-proto .pc-action-stack')).toContain('width: 100%;');
