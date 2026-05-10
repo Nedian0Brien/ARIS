@@ -21,17 +21,17 @@ import {
   X,
 } from 'lucide-react';
 import type { GitTreeNode } from '@/lib/git/sidebarUi';
-import styles from './CustomizationSidebar.module.css';
-import { useCustomizationFilesState } from './customization-sidebar/hooks/useCustomizationFilesState';
-import { useCustomizationGitState } from './customization-sidebar/hooks/useCustomizationGitState';
-import { useCustomizationModalState } from './customization-sidebar/hooks/useCustomizationModalState';
-import { useCustomizationOverviewState } from './customization-sidebar/hooks/useCustomizationOverviewState';
-import { CustomizationContentModal } from './customization-sidebar/modals/CustomizationContentModal';
-import { CustomizationFileActionDialog } from './customization-sidebar/modals/CustomizationFileActionDialog';
-import { CustomizationFileModal } from './customization-sidebar/modals/CustomizationFileModal';
-import { CustomizationFilesSection } from './customization-sidebar/sections/CustomizationFilesSection';
-import { CustomizationGitSection } from './customization-sidebar/sections/CustomizationGitSection';
-import { CustomizationOverviewSection } from './customization-sidebar/sections/CustomizationOverviewSection';
+import styles from '../CustomizationSidebar.module.css';
+import { useCustomizationFilesState } from '../customization-sidebar/hooks/useCustomizationFilesState';
+import { useCustomizationGitState } from '../customization-sidebar/hooks/useCustomizationGitState';
+import { useCustomizationModalState } from '../customization-sidebar/hooks/useCustomizationModalState';
+import { useCustomizationOverviewState } from '../customization-sidebar/hooks/useCustomizationOverviewState';
+import { CustomizationContentModal } from './CustomizationContentModal';
+import { CustomizationFileActionDialog } from '../customization-sidebar/modals/CustomizationFileActionDialog';
+import { CustomizationFileModal } from '../customization-sidebar/modals/CustomizationFileModal';
+import { CustomizationFilesSection } from '../customization-sidebar/sections/CustomizationFilesSection';
+import { CustomizationGitSection } from '../customization-sidebar/sections/CustomizationGitSection';
+import { CustomizationOverviewSection } from './CustomizationOverviewSection';
 import {
   formatGitStatusLabel,
   getGitFileName,
@@ -41,14 +41,14 @@ import {
   normalizeWorkspaceClientPath,
   SURFACE_COPY,
   SURFACE_ITEMS,
-} from './customization-sidebar/shared';
+} from '../customization-sidebar/shared';
 import type {
   CustomizationSidebarProps,
   GitDiffScope,
   GitFileEntry,
   SidebarSurface,
   WorkspaceFileEntry,
-} from './customization-sidebar/types';
+} from '../customization-sidebar/types';
 
 export function CustomizationSidebar({
   sessionId,

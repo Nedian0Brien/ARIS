@@ -1,7 +1,7 @@
 import { Blocks, CheckCircle2, FileText, Loader2, PlugZap } from 'lucide-react';
-import styles from '../../CustomizationSidebar.module.css';
-import { formatBytes, formatTimestamp, getMcpStatusClass, getMcpStatusLabel } from '../shared';
-import type { CustomizationOverview, CustomizationSection } from '../types';
+import styles from '../CustomizationSidebar.module.css';
+import { formatBytes, formatTimestamp, getMcpStatusClass, getMcpStatusLabel } from '../customization-sidebar/shared';
+import type { CustomizationOverview, CustomizationSection } from '../customization-sidebar/types';
 
 type Props = {
   activeSection: CustomizationSection;

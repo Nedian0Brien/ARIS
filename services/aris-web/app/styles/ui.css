@@ -314,7 +314,7 @@
   }
 }
 
-/* ARIS IA v2 production shell. Mirrors docs/design/aris-ia-v2.html mockups. */
+/* ARIS IA v2 production shell. Mirrors design/aris-ia-v2.html mockups. */
 .app-shell-ia {
   min-height: var(--app-vh, 100dvh);
   padding-bottom: 0;

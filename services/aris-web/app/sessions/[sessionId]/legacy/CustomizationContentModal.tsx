@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
 import { Blocks, FileText, Loader2, Save, X } from 'lucide-react';
-import styles from '../../CustomizationSidebar.module.css';
-import type { InstructionDocSummary, SkillSummary } from '../types';
+import styles from '../CustomizationSidebar.module.css';
+import type { InstructionDocSummary, SkillSummary } from '../customization-sidebar/types';
 
 type Props = {
   activeInstructionModal: InstructionDocSummary | null;

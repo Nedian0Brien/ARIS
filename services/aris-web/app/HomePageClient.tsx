@@ -1763,7 +1763,7 @@ function ProjectDetailSurface({
               <div className="proj-item proj-item--file">
                 <FileText size={13} />
                 <div className="proj-item__body">
-                  <div className="proj-item__title">docs/design/aris-ia-v3.html</div>
+                  <div className="proj-item__title">design/aris-ia-v3.html</div>
                 </div>
               </div>
             </article>

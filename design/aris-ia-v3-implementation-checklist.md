@@ -1,7 +1,7 @@
 # ARIS IA v3 — 구현 체크리스트
 
-> **Source:** [`docs/design/aris-ia-v3.html`](./aris-ia-v3.html)
-> **Base:** [`docs/design/aris-ia-v2.html`](./aris-ia-v2.html) (v2 정보 구조 · 컴포넌트 · 디자인 토큰 그대로 유지)
+> **Source:** [`design/aris-ia-v3.html`](./aris-ia-v3.html)
+> **Base:** [`design/aris-ia-v2.html`](./aris-ia-v2.html) (v2 정보 구조 · 컴포넌트 · 디자인 토큰 그대로 유지)
 > **Target:** `services/aris-web/` (Next.js 15)
 
 ---
@@ -418,8 +418,8 @@ v3.html 끝 부분의 polish 섹션을 그대로 가져온다. 핵심 규칙:
 
 | 파일 | 용도 |
 |---|---|
-| [`docs/design/aris-ia-v2.html`](./aris-ia-v2.html) | v2 베이스 — 변경 전 컴포넌트 spec |
-| [`docs/design/aris-ia-v3.html`](./aris-ia-v3.html) | v3 시안 — 변경 후 풀-스크린 프로토타입 |
+| [`design/aris-ia-v2.html`](./aris-ia-v2.html) | v2 베이스 — 변경 전 컴포넌트 spec |
+| [`design/aris-ia-v3.html`](./aris-ia-v3.html) | v3 시안 — 변경 후 풀-스크린 프로토타입 |
 | [`docs/design/aris-newchat-btn-variants.html`](./aris-newchat-btn-variants.html) | New chat 버튼 6 variant 비교 (D안 채택) |
 
 > 시안에서 보이는 동작과 다른 부분이 발견되면 v3.html을 정답으로 본다. 본 체크리스트는 시안 캡처 시점(`2026-04-25`)을 기준으로 작성됨.
