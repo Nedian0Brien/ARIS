@@ -21,6 +21,7 @@ ARIS(Agentic Runtime Interface System)의 문서는 **사용자 의도 중심(Ch
 ### 03-platform
 - `01-system-architecture.md`: ARIS 서비스 구성, 런타임 연동 경계
 - `02-security-model.md`: 인증, 권한, 암호화, 감사 로그, SSH fallback 보안 정책
+- `tessera-benchmark-review.md`: Tessera 리포지토리 벤치마킹 후보와 ARIS 적용 우선순위
 
 ### 04-delivery
 - `01-mvp-feature-spec.md`: MVP 기능/수용기준
