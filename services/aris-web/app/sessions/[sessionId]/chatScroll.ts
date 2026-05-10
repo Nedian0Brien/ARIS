@@ -51,6 +51,18 @@ type AutoScrollToBottomInput = {
   scrollPhase?: SessionScrollPhase;
 };
 
+type ChatAutoScrollTriggerKeyInput = {
+  eventsForChatId: string | null;
+  eventCount: number;
+  latestVisibleEventId: string | null;
+  latestRenderableEventId: string | null;
+  renderedStreamItemCount: number;
+  pendingUserEventCount: number;
+  pendingPermissionCount: number;
+  isAwaitingReply: boolean;
+  showPermissionQueue: boolean;
+};
+
 type MobileBottomLockStateInput = {
   isNearBottom: boolean;
   hasDetachedTail?: boolean;
@@ -241,6 +253,20 @@ export function shouldAutoScrollToBottom(input: AutoScrollToBottomInput): boolea
     return false;
   }
   return input.shouldStickToBottom;
+}
+
+export function buildChatAutoScrollTriggerKey(input: ChatAutoScrollTriggerKeyInput): string {
+  return [
+    input.eventsForChatId ?? '',
+    String(input.eventCount),
+    input.latestVisibleEventId ?? '',
+    input.latestRenderableEventId ?? '',
+    String(input.renderedStreamItemCount),
+    String(input.pendingUserEventCount),
+    String(input.pendingPermissionCount),
+    input.isAwaitingReply ? '1' : '0',
+    input.showPermissionQueue ? '1' : '0',
+  ].join(':');
 }
 
 export function resolveMobileBottomLockState(input: MobileBottomLockStateInput): {
