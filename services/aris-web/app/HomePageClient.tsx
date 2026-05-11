@@ -490,6 +490,24 @@ function deriveProjectTokenLabel(session: SessionSummary, index: number): string
   return `${total.toFixed(1)}k`;
 }
 
+function normalizeProjectPathInput(input: string): string {
+  const normalized = input.replace(/\\/g, '/').trim();
+  if (!normalized) return '';
+  if (normalized === '/') return '/';
+  return normalized.replace(/\/+$/, '');
+}
+
+function normalizeAbsoluteBrowserPath(input: string, rootPath: string): string {
+  const normalized = input.replace(/\\/g, '/').trim().replace(/\/+$/, '');
+  if (!normalized || normalized === '/') {
+    return rootPath;
+  }
+  if (normalized.startsWith('/')) {
+    return normalized;
+  }
+  return `${rootPath}/${normalized}`.replace(/\/+/g, '/');
+}
+
 function buildProjectDetailPath(sessionId: string, view: ProjectView = 'chats', chatId?: string | null): string {
   const params = new URLSearchParams();
   params.set('tab', 'project');
@@ -501,6 +519,28 @@ function buildProjectDetailPath(sessionId: string, view: ProjectView = 'chats', 
     params.set('chat', chatId);
   }
   return `/?${params.toString()}`;
+}
+
+async function createProjectSession(
+  input: {
+    path: string;
+    branch?: string;
+  },
+): Promise<{ session: SessionSummary; reused: boolean }> {
+  const response = await fetch(withAppBasePath('/api/runtime/sessions'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  const body = (await response.json().catch(() => ({}))) as {
+    session?: SessionSummary;
+    reused?: boolean;
+    error?: string;
+  };
+  if (!response.ok || !body.session) {
+    throw new Error(body.error ?? '프로젝트를 만들지 못했습니다.');
+  }
+  return { session: body.session, reused: Boolean(body.reused) };
 }
 
 async function createProjectSessionChat(
@@ -3442,6 +3482,8 @@ function ProjectSurface({
   onProjectChatOpen,
   onProjectOpen,
   onProjectViewChange,
+  browserRootPath,
+  canCreateProject,
   projectView,
   selectedChatId,
   selectedProjectId,
@@ -3451,6 +3493,8 @@ function ProjectSurface({
   onProjectChatOpen: (sessionId: string, chatId: string) => void;
   onProjectOpen: (sessionId: string, view?: ProjectView) => void;
   onProjectViewChange: (view: ProjectView) => void;
+  browserRootPath: string;
+  canCreateProject: boolean;
   projectView: ProjectView;
   selectedChatId: string | null;
   selectedProjectId: string | null;
@@ -3458,6 +3502,19 @@ function ProjectSurface({
 }) {
   const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
+  const normalizedBrowserRootPath = useMemo(
+    () => normalizeAbsoluteBrowserPath(browserRootPath, '/home/ubuntu'),
+    [browserRootPath],
+  );
+  const [createProjectModalOpen, setCreateProjectModalOpen] = useState(false);
+  const [createProjectPath, setCreateProjectPath] = useState('');
+  const [createProjectBranch, setCreateProjectBranch] = useState('');
+  const [createProjectError, setCreateProjectError] = useState<string | null>(null);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [projectBrowserPath, setProjectBrowserPath] = useState(normalizedBrowserRootPath);
+  const [projectBrowserParentPath, setProjectBrowserParentPath] = useState<string | null>(null);
+  const [projectDirectories, setProjectDirectories] = useState<FileItem[]>([]);
+  const [isLoadingProjectDirectories, setIsLoadingProjectDirectories] = useState(false);
   const projects = sortSessions(sessions);
   const selectedIndex = selectedProjectId ? projects.findIndex((session) => session.id === selectedProjectId) : -1;
   const selectedProject = selectedIndex >= 0 ? projects[selectedIndex] : null;
@@ -3474,6 +3531,76 @@ function ProjectSurface({
     return true;
   });
   const chips = ['All', 'Active', 'Recent', 'Archived'];
+  const normalizedCreateProjectPath = normalizeProjectPathInput(createProjectPath);
+
+  useEffect(() => {
+    setProjectBrowserPath(normalizedBrowserRootPath);
+    setProjectBrowserParentPath(null);
+    setProjectDirectories([]);
+  }, [normalizedBrowserRootPath]);
+
+  const fetchProjectDirectories = useCallback(async (targetPath: string) => {
+    setIsLoadingProjectDirectories(true);
+    setCreateProjectError(null);
+    try {
+      const response = await fetch(withAppBasePath(`/api/fs/list?path=${encodeURIComponent(targetPath)}`), {
+        cache: 'no-store',
+      });
+      const body = (await response.json().catch(() => ({}))) as DirectoryData & { error?: string };
+      if (!response.ok) {
+        throw new Error(body.error ?? '디렉터리를 불러오지 못했습니다.');
+      }
+      setProjectBrowserPath(body.currentPath || targetPath);
+      setProjectBrowserParentPath(body.parentPath ?? null);
+      setProjectDirectories((body.directories || []).filter((item) => item.isDirectory));
+    } catch (error) {
+      setCreateProjectError(error instanceof Error ? error.message : '디렉터리를 불러오지 못했습니다.');
+    } finally {
+      setIsLoadingProjectDirectories(false);
+    }
+  }, []);
+
+  const closeCreateProjectModal = useCallback(() => {
+    if (isCreatingProject) return;
+    setCreateProjectModalOpen(false);
+    setCreateProjectError(null);
+  }, [isCreatingProject]);
+
+  const openCreateProjectModal = useCallback(() => {
+    if (!canCreateProject) return;
+    setCreateProjectPath('');
+    setCreateProjectBranch('');
+    setCreateProjectError(null);
+    setProjectBrowserPath(normalizedBrowserRootPath);
+    setProjectBrowserParentPath(null);
+    setProjectDirectories([]);
+    setCreateProjectModalOpen(true);
+    void fetchProjectDirectories(normalizedBrowserRootPath);
+  }, [canCreateProject, fetchProjectDirectories, normalizedBrowserRootPath]);
+
+  const handleCreateProjectSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canCreateProject) return;
+    const path = normalizeProjectPathInput(createProjectPath);
+    if (!path) {
+      setCreateProjectError('프로젝트 경로를 입력해 주세요.');
+      return;
+    }
+
+    setCreateProjectError(null);
+    setIsCreatingProject(true);
+    try {
+      const { session } = await createProjectSession({
+        path,
+        ...(createProjectBranch.trim() ? { branch: createProjectBranch.trim() } : {}),
+      });
+      navigateTo(buildProjectDetailPath(session.id));
+    } catch (error) {
+      setCreateProjectError(error instanceof Error ? error.message : '프로젝트를 만들지 못했습니다.');
+    } finally {
+      setIsCreatingProject(false);
+    }
+  }, [canCreateProject, createProjectBranch, createProjectPath]);
 
   if (selectedProject) {
     return (
@@ -3520,6 +3647,17 @@ function ProjectSurface({
               </button>
             );
           })}
+        </div>
+        <div className="proj-list-toolbar__actions">
+          <button
+            type="button"
+            className="btn btn--primary btn--sm proj-list-add-btn"
+            onClick={openCreateProjectModal}
+            disabled={!canCreateProject}
+          >
+            <Plus size={14} />
+            Add project
+          </button>
         </div>
       </div>
 
@@ -3595,9 +3733,14 @@ function ProjectSurface({
             );
           })}
 
-          <button type="button" className="proj-list-card proj-list-card--new">
+          <button
+            type="button"
+            className="proj-list-card proj-list-card--new"
+            onClick={openCreateProjectModal}
+            disabled={!canCreateProject}
+          >
             <Plus size={20} />
-            <span className="proj-list-card__new-title">New project</span>
+            <span className="proj-list-card__new-title">Add project</span>
             <span className="proj-list-card__new-meta">로컬 디렉토리 선택 → 프로젝트 생성</span>
           </button>
         </div>
@@ -3605,6 +3748,139 @@ function ProjectSurface({
           {filteredProjects.length} projects · {activeCount} active · {totalChats} chats total
         </div>
       </div>
+      {createProjectModalOpen ? (
+        <div className="proj-settings-modal__backdrop" role="presentation" onMouseDown={closeCreateProjectModal}>
+          <div
+            className="proj-settings-modal proj-create-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="proj-create-modal-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <form className="proj-create-modal__form" onSubmit={handleCreateProjectSubmit}>
+              <div className="proj-settings-modal__head">
+                <div>
+                  <div className="proj-settings-modal__eyebrow">Project workspace</div>
+                  <h2 id="proj-create-modal-title">Add project</h2>
+                </div>
+                <button
+                  type="button"
+                  className="proj-settings-modal__close"
+                  aria-label="프로젝트 생성 닫기"
+                  onClick={closeCreateProjectModal}
+                >
+                  <X size={15} />
+                </button>
+              </div>
+              <div className="proj-settings-modal__body proj-create-modal__body">
+                <p className="proj-create-modal__hint">
+                  로컬 프로젝트 경로를 선택하거나 직접 입력하세요. 같은 경로가 이미 등록되어 있으면 기존 프로젝트를 다시 엽니다.
+                </p>
+                <label className="proj-create-modal__field">
+                  <span className="proj-create-modal__field-label">Project path</span>
+                  <input
+                    type="text"
+                    className="input"
+                    value={createProjectPath}
+                    onChange={(event) => setCreateProjectPath(event.target.value)}
+                    placeholder="/home/ubuntu/project/my-repo"
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={isCreatingProject}
+                  />
+                </label>
+                <div className="proj-create-modal__selected">
+                  <span className="proj-create-modal__selected-label">
+                    <FolderOpen size={14} />
+                    Selected
+                  </span>
+                  <strong className="proj-create-modal__selected-value">
+                    {normalizedCreateProjectPath || 'Pick a folder below or paste a project path.'}
+                  </strong>
+                </div>
+                <div className="proj-create-modal__browser">
+                  <div className="proj-create-modal__browser-head">
+                    <span className="proj-create-modal__browser-path">{projectBrowserPath}</span>
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => {
+                        setCreateProjectPath(projectBrowserPath);
+                        setCreateProjectError(null);
+                      }}
+                      disabled={isCreatingProject}
+                    >
+                      Use this folder
+                    </button>
+                  </div>
+                  <div className="proj-create-modal__browser-list">
+                    {isLoadingProjectDirectories ? (
+                      <div className="proj-create-modal__browser-state">Browsing directories...</div>
+                    ) : (
+                      <>
+                        {projectBrowserParentPath ? (
+                          <button
+                            type="button"
+                            className="proj-create-modal__browser-item proj-create-modal__browser-item--up"
+                            onClick={() => void fetchProjectDirectories(projectBrowserParentPath)}
+                            disabled={isCreatingProject}
+                          >
+                            <ChevronLeft size={14} />
+                            <span>..</span>
+                          </button>
+                        ) : null}
+                        {projectDirectories.length === 0 ? (
+                          <div className="proj-create-modal__browser-state">표시할 디렉터리가 없습니다.</div>
+                        ) : (
+                          projectDirectories.map((directory) => (
+                            <button
+                              key={directory.path}
+                              type="button"
+                              className="proj-create-modal__browser-item"
+                              onClick={() => void fetchProjectDirectories(directory.path)}
+                              disabled={isCreatingProject}
+                            >
+                              <Folder size={14} />
+                              <span>{directory.name}</span>
+                            </button>
+                          ))
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+                <label className="proj-create-modal__field">
+                  <span className="proj-create-modal__field-label">Branch (optional)</span>
+                  <input
+                    type="text"
+                    className="input"
+                    value={createProjectBranch}
+                    onChange={(event) => setCreateProjectBranch(event.target.value)}
+                    placeholder="feat/my-branch"
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={isCreatingProject}
+                  />
+                </label>
+                {createProjectError ? <div className="proj-create-modal__error">{createProjectError}</div> : null}
+                <div className="proj-create-modal__footer">
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={closeCreateProjectModal} disabled={isCreatingProject}>
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn--primary btn--sm"
+                    disabled={isCreatingProject || !normalizedCreateProjectPath}
+                  >
+                    <Plus size={14} />
+                    {isCreatingProject ? 'Opening...' : 'Open project'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -3867,6 +4143,8 @@ export default function HomePageWrapper({
           onProjectChatOpen={handleProjectChatOpen}
           onProjectOpen={handleProjectOpen}
           onProjectViewChange={handleProjectViewChange}
+          browserRootPath={browserRootPath}
+          canCreateProject={user.role === 'operator'}
           projectView={selectedProjectView}
           selectedChatId={selectedProjectChatId}
           selectedProjectId={selectedProjectId}

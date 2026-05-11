@@ -24,6 +24,9 @@ describe('project list surface', () => {
     expect(homeClient).toContain('function ProjectSurface({');
     expect(homeClient).toContain('className="proj-list-wrap"');
     expect(homeClient).toContain('className="proj-list-toolbar"');
+    expect(homeClient).toContain('className="proj-list-toolbar__actions"');
+    expect(homeClient).toContain('className="btn btn--primary btn--sm proj-list-add-btn"');
+    expect(homeClient).toContain('Add project');
     expect(homeClient).toContain('placeholder="Search projects..."');
     expect(homeClient).toContain("['All', 'Active', 'Recent', 'Archived']");
     expect(homeClient).toContain('className="proj-list-grid"');
@@ -31,6 +34,30 @@ describe('project list surface', () => {
     expect(homeClient).toContain('className="proj-list-card proj-list-card--new"');
     expect(homeClient).toContain('className="proj-list-new-btn"');
     expect(homeClient).not.toContain('const selected = sortSessions(sessions)[0] ?? null;');
+  });
+
+  it('adds a real project creation entry point to the project list surface', () => {
+    expect(homeClient).toContain('function normalizeProjectPathInput(input: string): string');
+    expect(homeClient).toContain('async function createProjectSession(');
+    expect(homeClient).toContain("fetch(withAppBasePath('/api/runtime/sessions')");
+    expect(homeClient).toContain('browserRootPath={browserRootPath}');
+    expect(homeClient).toContain("canCreateProject={user.role === 'operator'}");
+    expect(homeClient).toContain('const [createProjectModalOpen, setCreateProjectModalOpen] = useState(false);');
+    expect(homeClient).toContain('const [projectDirectories, setProjectDirectories] = useState<FileItem[]>([]);');
+    expect(homeClient).toContain('const fetchProjectDirectories = useCallback(async (targetPath: string) => {');
+    expect(homeClient).toContain('const openCreateProjectModal = useCallback(() => {');
+    expect(homeClient).toContain('const handleCreateProjectSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {');
+    expect(homeClient).toContain('navigateTo(buildProjectDetailPath(session.id));');
+    expect(homeClient).toContain('className="proj-settings-modal proj-create-modal"');
+    expect(homeClient).toContain('id="proj-create-modal-title">Add project</h2>');
+    expect(homeClient).toContain('placeholder="/home/ubuntu/project/my-repo"');
+    expect(homeClient).toContain('Use this folder');
+    expect(homeClient).toContain('Browsing directories...');
+    expect(homeClient).toContain('placeholder="feat/my-branch"');
+    expect(homeClient).toContain("className=\"proj-list-card proj-list-card--new\"");
+    expect(uiCss).toContain('.proj-create-modal');
+    expect(uiCss).toContain('.proj-create-modal__browser');
+    expect(uiCss).toContain('.proj-list-toolbar__actions');
   });
 
   it('keeps the Project topbar compact with theme actions behind a context menu', () => {
