@@ -98,6 +98,7 @@ import type {
   RuntimeSession,
   SessionAction,
 } from '../types.js';
+import { computeWorktreePath } from './worktreeManager.js';
 
 const execFileAsync = promisify(execFile);
 const AGENT_COMMAND_TIMEOUT_MS = 120_000;
@@ -167,6 +168,7 @@ type HappyRuntimeCreateInput = {
   model?: string;
   status?: SessionStatusValue;
   riskScore?: number;
+  branch?: string;
 };
 
 type HappyRuntimeAppendInput = {
@@ -321,6 +323,7 @@ function buildProviderRuntimeSession<TFlavor extends ProviderRuntimeFlavor>(
       path: session.metadata.path,
       approvalPolicy: session.metadata.approvalPolicy,
       ...(session.metadata.model ? { model: session.metadata.model } : {}),
+      ...(session.metadata.branch ? { branch: session.metadata.branch } : {}),
     },
   };
 }
@@ -358,6 +361,7 @@ function normalizeMetadata(raw: unknown): {
   path: string;
   approvalPolicy: ApprovalPolicy;
   model?: string;
+  branch?: string;
   status?: string;
 } {
   if (!raw) {
@@ -384,6 +388,7 @@ function normalizeMetadata(raw: unknown): {
     path: normalizePath(record?.path ?? record?.projectPath),
     approvalPolicy: normalizeApprovalPolicy(record?.approvalPolicy, DEFAULT_APPROVAL_POLICY),
     model: normalizeModel(record?.model ?? record?.modelName),
+    branch: asString(record?.branch, ''),
     status: asString(record?.status, ''),
   };
 }
@@ -590,6 +595,7 @@ function toRuntimeSession(raw: HappyBackendSession): RuntimeSession {
       path: metadata.path,
       approvalPolicy: metadata.approvalPolicy,
       ...(metadata.model ? { model: metadata.model } : {}),
+      ...(metadata.branch ? { branch: metadata.branch } : {}),
     },
     state: {
       status: normalizeStatus(metadata.status || asRecord(raw.metadata)?.status, raw.active),
@@ -1529,7 +1535,7 @@ export class RuntimeCore {
     return [];
   }
 
-  resolveExecutionCwd(cwdHint?: string): string {
+  resolveExecutionCwd(cwdHint?: string, branch?: string): string {
     const raw = typeof cwdHint === 'string' ? cwdHint.trim() : '';
     if (!raw) {
       throw new Error('Session project path is empty. Create the session again with a valid path.');
@@ -1549,6 +1555,13 @@ export class RuntimeCore {
 
     for (const candidate of candidates) {
       if (candidate && existsSync(candidate)) {
+        if (branch) {
+          const worktreePath = computeWorktreePath(candidate, branch);
+          if (existsSync(worktreePath)) {
+            return worktreePath;
+          }
+          throw new Error(`Session worktree path not found on backend host: ${worktreePath}`);
+        }
         return candidate;
       }
     }
@@ -1560,6 +1573,7 @@ export class RuntimeCore {
     agent: RuntimeAgent,
     command: AgentCommand | ClaudeLaunchCommand,
     cwdHint?: string,
+    branch?: string,
     signal?: AbortSignal,
     handlers?: {
       onAction?: (action: ParsedAgentActionEvent) => Promise<void>;
@@ -1574,7 +1588,7 @@ export class RuntimeCore {
     threadId?: string;
     protocolEnvelopes?: SessionProtocolEnvelope[];
   }> {
-    const safeCwd = this.resolveExecutionCwd(cwdHint);
+    const safeCwd = this.resolveExecutionCwd(cwdHint, branch);
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
     const { CLAUDECODE: _cc, ...spawnEnv } = process.env;
     const timeoutMs = resolveAgentCommandTimeoutMs(agent);
@@ -2115,6 +2129,7 @@ export class RuntimeCore {
     approvalPolicy: ApprovalPolicy,
     model?: string,
     cwdHint?: string,
+    branch?: string,
     signal?: AbortSignal,
     resumeTarget?: ClaudeResumeTarget | string,
     handlers?: {
@@ -2134,7 +2149,7 @@ export class RuntimeCore {
     if (!command) {
       throw new Error(`Unsupported agent flavor: ${agent}`);
     }
-    return this.runAgentCommand(agent, command, cwdHint, signal, handlers);
+    return this.runAgentCommand(agent, command, cwdHint, branch, signal, handlers);
   }
 
   private async runGeminiAcpTurn(input: {
@@ -2149,7 +2164,7 @@ export class RuntimeCore {
     onPermission?: (request: ProviderPermissionRequest, meta: { threadId: string }) => Promise<PermissionDecision>;
     onText?: (event: ProviderTextEvent, meta: { threadId: string }) => Promise<void>;
   }) {
-    const safeCwd = this.resolveExecutionCwd(input.session.metadata.path);
+    const safeCwd = this.resolveExecutionCwd(input.session.metadata.path, input.session.metadata.branch);
     return runGeminiAcpTurn({
       cwd: safeCwd,
       prompt: input.prompt,
@@ -2537,7 +2552,7 @@ export class RuntimeCore {
           );
         }
       } else {
-        const nonCodexCwd = this.resolveExecutionCwd(session.metadata.path);
+        const nonCodexCwd = this.resolveExecutionCwd(session.metadata.path, session.metadata.branch);
         claudeMessageQueue = isClaude
           ? new ClaudeMessageQueue(
             {
@@ -2627,6 +2642,7 @@ export class RuntimeCore {
               'claude',
               command,
               cwdHint,
+              session.metadata.branch,
               signal,
               {
                 onAction,
@@ -2839,6 +2855,7 @@ export class RuntimeCore {
             session.metadata.approvalPolicy,
             selectedModel,
             session.metadata.path,
+            session.metadata.branch,
             controller.signal,
             preferredThreadId ? { id: preferredThreadId, mode: 'resume' } : undefined,
             {
@@ -3112,7 +3129,7 @@ export class RuntimeCore {
       throw new Error('SESSION_NOT_FOUND');
     }
     return inspectGeminiAcpSessionCapabilities({
-      cwd: this.resolveExecutionCwd(session.metadata.path),
+      cwd: this.resolveExecutionCwd(session.metadata.path, session.metadata.branch),
     });
   }
 
@@ -3124,6 +3141,7 @@ export class RuntimeCore {
       path: input.path,
       approvalPolicy,
       ...(model ? { model } : {}),
+      ...(input.branch ? { branch: input.branch } : {}),
       status: input.status ?? 'idle',
     });
 

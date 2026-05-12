@@ -243,7 +243,7 @@ export interface CodexRuntimeHost {
   ): Promise<RuntimeMessage[]>;
   createPermission(input: HappyRuntimePermissionInput): Promise<PermissionRequest>;
   decidePermission(permissionId: string, decision: PermissionDecision): Promise<PermissionRequest>;
-  resolveExecutionCwd(cwdHint?: string): string;
+  resolveExecutionCwd(cwdHint?: string, branch?: string): string;
   resolveSessionApprovalPolicy(session: RuntimeSession): ApprovalPolicy;
 }
 
@@ -331,7 +331,7 @@ export async function runCodexAppServer(
   model?: string,
   modelReasoningEffort?: ModelReasoningEffort,
 ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; agentMessagePersisted: boolean; threadId?: string }> {
-  const safeCwd = host.resolveExecutionCwd(session.metadata.path);
+  const safeCwd = host.resolveExecutionCwd(session.metadata.path, session.metadata.branch);
   const threadCacheKey = buildCodexThreadCacheKey(session.id, chatId);
   const sessionApprovalPolicy = host.resolveSessionApprovalPolicy(session);
   const codexApprovalPolicy = normalizeCodexApprovalPolicy(sessionApprovalPolicy);
@@ -1130,7 +1130,7 @@ export async function runCodexExecCli(
   model?: string,
   modelReasoningEffort?: ModelReasoningEffort,
 ): Promise<{ output: string; cwd: string; streamedPersisted: boolean; agentMessagePersisted: boolean; threadId?: string }> {
-  const safeCwd = host.resolveExecutionCwd(session.metadata.path);
+  const safeCwd = host.resolveExecutionCwd(session.metadata.path, session.metadata.branch);
   const threadCacheKey = buildCodexThreadCacheKey(session.id, chatId);
   const sessionApprovalPolicy = host.resolveSessionApprovalPolicy(session);
   const codexApprovalPolicy = normalizeCodexApprovalPolicy(sessionApprovalPolicy);
@@ -1528,4 +1528,3 @@ export async function resolveCodexThreadId(host: CodexRuntimeHost, sessionId: st
 
   return undefined;
 }
-

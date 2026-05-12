@@ -72,6 +72,40 @@ describe('aris-backend API', () => {
     await app.close();
   });
 
+  it('returns a session creation error when branch worktree creation fails', async () => {
+    const app = buildServer({
+      RUNTIME_API_TOKEN: TOKEN,
+      DEFAULT_PROJECT_PATH: '/tmp/project',
+      LOG_LEVEL: 'silent',
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: {
+        ...authHeader(),
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        path: '/tmp/project',
+        flavor: 'codex',
+        branch: 'parallel/fails',
+      }),
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect((response.json() as { error?: string }).error).toContain('WORKTREE_CREATE_FAILED');
+
+    const sessionsResponse = await app.inject({
+      method: 'GET',
+      url: '/v1/sessions',
+      headers: authHeader(),
+    });
+    expect((sessionsResponse.json() as { sessions: unknown[] }).sessions).toHaveLength(0);
+
+    await app.close();
+  });
+
   it('accepts happy bridge payloads on the messages endpoint', async () => {
     const app = buildServer({
       RUNTIME_API_TOKEN: TOKEN,

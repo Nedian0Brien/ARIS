@@ -173,19 +173,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Path is required' }, { status: 400 });
     }
 
+    const normalizedBranch = typeof branch === 'string' && branch.trim() ? branch.trim() : undefined;
     const existingSessions = await listSessions();
-    const existing = existingSessions.find((session) => {
-      if (normalizeProjectPath(session.projectName) !== normalizedPath) {
-        return false;
-      }
-      return session.metadata?.runtimeModel === 'chat-stream';
-    });
+    const existing = normalizedBranch
+      ? existingSessions.find((session) => (
+        normalizeProjectPath(session.projectName) === normalizedPath
+        && session.branch === normalizedBranch
+        && session.metadata?.runtimeModel === 'chat-stream'
+      ))
+      : existingSessions.find((session) => {
+        if (normalizeProjectPath(session.projectName) !== normalizedPath) {
+          return false;
+        }
+        if (session.branch) {
+          return false;
+        }
+        return session.metadata?.runtimeModel === 'chat-stream';
+      });
     if (existing) {
       await syncWorkspacesForUser(auth.user.id, [existing]);
       return NextResponse.json({ session: existing, reused: true });
     }
 
-    const normalizedBranch = typeof branch === 'string' && branch.trim() ? branch.trim() : undefined;
     const session = await createSession({ path: normalizedPath, agent: normalizedAgent, approvalPolicy: normalizedPolicy, branch: normalizedBranch });
     await syncWorkspacesForUser(auth.user.id, [session]);
     return NextResponse.json({ session, reused: false });

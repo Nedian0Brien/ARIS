@@ -7,6 +7,16 @@ const execFileAsync = promisify(execFile);
 
 const WORKTREES_DIR = '.worktrees';
 
+function formatGitError(error: unknown): string {
+  const err = error as Error & { stderr?: string; code?: string | number };
+  const detail = typeof err.stderr === 'string' && err.stderr.trim()
+    ? err.stderr.trim()
+    : err instanceof Error
+      ? err.message
+      : String(error);
+  return detail;
+}
+
 /** git branch 이름으로 사용하기 위해 문자열을 정규화 */
 export function sanitizeBranchName(raw: string): string {
   const cleaned = raw
@@ -71,14 +81,22 @@ export async function ensureWorktree(
     .catch(() => false);
 
   if (branchExists) {
-    await execFileAsync('git', ['worktree', 'add', worktreePath, safeBranch], {
-      cwd: projectPath,
-    });
+    try {
+      await execFileAsync('git', ['worktree', 'add', worktreePath, safeBranch], {
+        cwd: projectPath,
+      });
+    } catch (error) {
+      throw new Error(`WORKTREE_CREATE_FAILED: ${formatGitError(error)}`);
+    }
   } else {
     // 없으면 현재 HEAD 기준으로 새 브랜치 생성
-    await execFileAsync('git', ['worktree', 'add', '-b', safeBranch, worktreePath], {
-      cwd: projectPath,
-    });
+    try {
+      await execFileAsync('git', ['worktree', 'add', '-b', safeBranch, worktreePath], {
+        cwd: projectPath,
+      });
+    } catch (error) {
+      throw new Error(`WORKTREE_CREATE_FAILED: ${formatGitError(error)}`);
+    }
   }
 
   return worktreePath;

@@ -1,5 +1,17 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../src/runtime/worktreeManager.js', async () => {
+  const actual = await vi.importActual<typeof import('../src/runtime/worktreeManager.js')>(
+    '../src/runtime/worktreeManager.js',
+  );
+  return {
+    ...actual,
+    ensureWorktree: vi.fn().mockResolvedValue('/projects/app/.worktrees/parallel/panel-one'),
+  };
+});
+
 import { RuntimeStore } from '../src/store.js';
+import { ensureWorktree } from '../src/runtime/worktreeManager.js';
 
 function buildRuntimeStore(input: {
   delegate: Record<string, unknown>;
@@ -15,6 +27,78 @@ function buildRuntimeStore(input: {
   store.realtimeSubscribers = new Set();
   return store;
 }
+
+beforeEach(() => {
+  vi.mocked(ensureWorktree).mockReset();
+  vi.mocked(ensureWorktree).mockResolvedValue('/projects/app/.worktrees/parallel/panel-one');
+});
+
+describe('RuntimeStore.createSession', () => {
+  it('ensures a branch worktree before persisting the session', async () => {
+    const delegate = {
+      createSession: vi.fn().mockResolvedValue({
+        id: 'session-1',
+        metadata: {
+          flavor: 'codex',
+          path: '/projects/app',
+          branch: 'parallel/panel-one',
+          approvalPolicy: 'on-request',
+          runtimeModel: 'chat-stream',
+        },
+        state: { status: 'idle' },
+        updatedAt: '2026-05-12T00:00:00.000Z',
+        riskScore: 20,
+      }),
+    };
+    const store = buildRuntimeStore({ delegate });
+
+    await expect(store.createSession({
+      path: '/projects/app',
+      branch: 'parallel/panel-one',
+      flavor: 'codex',
+    })).resolves.toMatchObject({
+      id: 'session-1',
+      metadata: {
+        branch: 'parallel/panel-one',
+      },
+    });
+
+    expect(ensureWorktree).toHaveBeenCalledWith('/projects/app', 'parallel/panel-one');
+    expect(vi.mocked(ensureWorktree).mock.invocationCallOrder[0]).toBeLessThan(
+      delegate.createSession.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
+  });
+
+  it('does not persist a branch session when worktree creation fails', async () => {
+    vi.mocked(ensureWorktree).mockRejectedValue(new Error('WORKTREE_CREATE_FAILED: boom'));
+    const delegate = {
+      createSession: vi.fn(),
+    };
+    const store = buildRuntimeStore({ delegate });
+
+    await expect(store.createSession({
+      path: '/projects/app',
+      branch: 'parallel/fails',
+      flavor: 'codex',
+    })).rejects.toThrow('WORKTREE_CREATE_FAILED: boom');
+
+    expect(delegate.createSession).not.toHaveBeenCalled();
+  });
+});
+
+describe('RuntimeStore.resolveExecutionCwd', () => {
+  it('applies branch worktree resolution after delegate path resolution', () => {
+    const delegate = {
+      resolveExecutionCwd: vi.fn().mockReturnValue('/host/project/ARIS'),
+    };
+    const store = buildRuntimeStore({ delegate });
+
+    expect(store.resolveExecutionCwd('/workspace/ARIS', 'parallel/panel-one')).toBe(
+      '/host/project/ARIS/.worktrees/parallel/panel-one',
+    );
+    expect(delegate.resolveExecutionCwd).toHaveBeenCalledWith('/workspace/ARIS');
+  });
+});
 
 describe('RuntimeStore.isSessionRunning', () => {
   it('falls back to persisted state when the in-memory executor lost the active run', async () => {

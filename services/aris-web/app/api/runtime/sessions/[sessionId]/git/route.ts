@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
-import { listSessions } from '@/lib/happy/client';
+import { getSessionDetail } from '@/lib/happy/client';
 import {
   getGitSidebarDiff,
   getGitSidebarOverview,
@@ -13,12 +13,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 async function resolveSessionProjectPath(userId: string, sessionId: string): Promise<string> {
-  const sessions = await listSessions(userId);
-  const target = sessions.find((session) => session.id === sessionId);
-  if (!target) {
-    throw new Error('워크스페이스 세션을 찾을 수 없습니다.');
-  }
-  return target.projectName;
+  const target = await getSessionDetail(sessionId, userId);
+  return target.hostPath || target.projectName;
 }
 
 export async function GET(

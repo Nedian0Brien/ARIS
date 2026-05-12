@@ -601,15 +601,11 @@ export class RuntimeStore {
   }
 
   async createSession(input: CreateSessionInput) {
-    const session = await this.delegate.createSession(input);
-
     if (input.branch) {
-      ensureWorktree(session.metadata.path, input.branch).catch((error) => {
-        process.stderr.write(
-          `[worktree] failed to ensure worktree for branch "${input.branch}": ${error instanceof Error ? error.message : String(error)}\n`,
-        );
-      });
+      await ensureWorktree(input.path, input.branch);
     }
+
+    const session = await this.delegate.createSession(input);
 
     this.emitRealtimeChannel({
       type: 'session.created',
@@ -731,8 +727,9 @@ export class RuntimeStore {
     let stderr = '';
     let exitCode = 0;
     try {
+      const cwd = this.resolveExecutionCwd(session.metadata.path, session.metadata.branch);
       const result = await execAsync(command, {
-        cwd: session.metadata.path,
+        cwd,
         timeout: TERMINAL_COMMAND_TIMEOUT_MS,
         maxBuffer: TERMINAL_COMMAND_MAX_BUFFER,
         shell: '/bin/bash',
@@ -951,13 +948,13 @@ export class RuntimeStore {
   }
 
   resolveExecutionCwd(cwdHint?: string, branch?: string): string {
-    if (branch && cwdHint) {
-      return computeWorktreePath(cwdHint, branch);
-    }
-    if ('resolveExecutionCwd' in this.delegate && typeof this.delegate.resolveExecutionCwd === 'function') {
-      return (this.delegate as any).resolveExecutionCwd(cwdHint);
-    }
-    return cwdHint || '';
+    const basePath = (() => {
+      if ('resolveExecutionCwd' in this.delegate && typeof this.delegate.resolveExecutionCwd === 'function') {
+        return (this.delegate as any).resolveExecutionCwd(cwdHint);
+      }
+      return cwdHint || '';
+    })();
+    return branch ? computeWorktreePath(basePath, branch) : basePath;
   }
 }
 

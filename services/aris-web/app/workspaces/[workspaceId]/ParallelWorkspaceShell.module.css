@@ -1,0 +1,243 @@
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+  color: var(--text);
+}
+
+.topbar {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+
+.titleBlock {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 740;
+  line-height: 1.2;
+}
+
+.subtitle {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.button,
+.iconButton,
+.select,
+.input {
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-elevated);
+  color: var(--text);
+  border-radius: 6px;
+}
+
+.button,
+.iconButton {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.button:hover,
+.iconButton:hover {
+  border-color: var(--border-strong);
+}
+
+.button:disabled,
+.iconButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.iconButton {
+  width: 32px;
+  padding: 0;
+}
+
+.form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.input,
+.select {
+  height: 34px;
+  padding: 0 0.6rem;
+  font-size: 0.8rem;
+}
+
+.input {
+  width: min(220px, 28vw);
+}
+
+.select {
+  width: 96px;
+}
+
+.canvas {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.empty {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+}
+
+.emptyInner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.split {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.splitHorizontal {
+  flex-direction: row;
+}
+
+.splitVertical {
+  flex-direction: column;
+}
+
+.panel {
+  flex: 1;
+  min-width: 320px;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+
+.panelHeader {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0 0.65rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-elevated);
+}
+
+.panelTitle {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.panelName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 720;
+}
+
+.panelMeta {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentBadge {
+  flex: 0 0 auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 0.12rem 0.42rem;
+  font-size: 0.66rem;
+  font-weight: 720;
+  color: var(--text-muted);
+}
+
+.panelActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.panelBody {
+  flex: 1;
+  min-height: 0;
+}
+
+.errorPanel {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  color: var(--danger);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    height: auto;
+    min-height: 56px;
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 0.75rem;
+  }
+
+  .toolbar,
+  .form {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .input {
+    flex: 1;
+    min-width: 160px;
+    width: auto;
+  }
+
+  .splitHorizontal {
+    flex-direction: column;
+  }
+}

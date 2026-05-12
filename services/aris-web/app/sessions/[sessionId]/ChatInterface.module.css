@@ -1209,6 +1209,21 @@
   grid-template-columns: 0 minmax(0, 1fr);
 }
 
+.chatShellParallelPanel {
+  --composer-dock-left: 0;
+  --composer-dock-width: min(720px, calc(100% - 1.5rem));
+  --center-header-height: 52px;
+  height: 100%;
+  min-height: 0;
+  border-top: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.chatShellParallelPanel .chatSidebar,
+.chatShellParallelPanel .chatSidebarBackdrop {
+  display: none;
+}
+
 @media (min-width: 961px) {
   .chatShell {
     --composer-dock-left: calc(280px + 1.25rem);
@@ -6243,6 +6258,21 @@
 
 .chatShellSidebarClosed {
   grid-template-columns: 0 minmax(0, 1fr);
+}
+
+.chatShellParallelPanel {
+  --composer-dock-left: 0;
+  --composer-dock-width: min(720px, calc(100% - var(--sp-6)));
+  --center-header-height: 52px;
+  height: 100%;
+  min-height: 0;
+  border-top: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.chatShellParallelPanel .chatSidebar,
+.chatShellParallelPanel .chatSidebarBackdrop {
+  display: none;
 }
 
 .chatSidebar {
