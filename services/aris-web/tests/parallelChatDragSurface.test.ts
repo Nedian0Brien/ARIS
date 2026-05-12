@@ -8,11 +8,12 @@ const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'),
 const uiCss = readFileSync(resolve(__dirname, '../app/styles/ui.css'), 'utf8');
 
 describe('project parallel chat drag surface', () => {
-  it('uses the redesigned project route as the panel target', () => {
-    expect(homeClient).toContain("params.set('tab', 'project');");
-    expect(homeClient).toContain("params.set('view', 'chat');");
-    expect(homeClient).toContain("params.set('surface', 'panel');");
-    expect(homeClient).toContain('withAppBasePath(buildProjectChatPanelPath(session.id, chatId))');
+  it('renders split panels in-process instead of embedding the app in iframes', () => {
+    expect(homeClient).toContain('function ProjectParallelChatPane({');
+    expect(homeClient).toContain('<ProjectParallelChatPane');
+    expect(homeClient).toContain('fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events?${params.toString()}`)');
+    expect(homeClient).not.toContain('className="pc-parallel__iframe"');
+    expect(homeClient).not.toContain('<iframe');
     expect(homeClient).not.toContain('/api/parallel-workspaces');
   });
 
@@ -26,7 +27,7 @@ describe('project parallel chat drag surface', () => {
     expect(homeClient).toContain('className={`m-sb__chat-child${activeProjectChatId === chat.id ?');
   });
 
-  it('renders drop zones and project iframes inside ProjectChatSurface', () => {
+  it('renders drop zones and direct project chat panels inside ProjectChatSurface', () => {
     expect(homeClient).toContain('pc-parallel-dropzones');
     expect(homeClient).toContain('pc-parallel-dropzone');
     expect(homeClient).toContain('handleProjectParallelDrop');
@@ -35,7 +36,8 @@ describe('project parallel chat drag surface', () => {
     expect(homeClient).toContain('resolveProjectParallelDropSide(event)');
     expect(homeClient).toContain('왼쪽에 놓기');
     expect(homeClient).toContain('오른쪽에 놓기');
-    expect(homeClient).toContain('className="pc-parallel__iframe"');
+    expect(homeClient).toContain('className="pc-parallel-chat__composer"');
+    expect(uiCss).toContain('.pc-parallel-chat__timeline');
   });
 
   it('supports compact project panel mode instead of the legacy session screen', () => {

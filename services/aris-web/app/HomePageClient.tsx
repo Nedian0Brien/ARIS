@@ -522,16 +522,6 @@ function buildProjectDetailPath(sessionId: string, view: ProjectView = 'chats', 
   return `/?${params.toString()}`;
 }
 
-function buildProjectChatPanelPath(sessionId: string, chatId: string): string {
-  const params = new URLSearchParams();
-  params.set('tab', 'project');
-  params.set('project', sessionId);
-  params.set('view', 'chat');
-  params.set('chat', chatId);
-  params.set('surface', 'panel');
-  return `/?${params.toString()}`;
-}
-
 function writeProjectChatDragPayload(
   event: DragEvent<HTMLElement>,
   sessionId: string,
@@ -2275,6 +2265,219 @@ function ProjectPlaceholderPanel({
   );
 }
 
+function ProjectParallelChatPane({
+  chat,
+  modelLabel,
+  recentPreview,
+  session,
+  side,
+  tokenLabel,
+}: {
+  chat: SessionChat;
+  modelLabel: string;
+  recentPreview: string;
+  session: SessionSummary;
+  side: ProjectParallelChatSide;
+  tokenLabel: string;
+}) {
+  const [events, setEvents] = useState<UiEvent[]>([]);
+  const [prompt, setPrompt] = useState('');
+  const [isLoadingEvents, setIsLoadingEvents] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const activeAgent = chat.agent ?? session.agent;
+  const activeModelLabel = chat.model ?? modelLabel;
+  const { isRunning: runtimeRunning } = useSessionRuntime(session.id, chat.id, true);
+  const visibleEvents = events.slice(-40);
+  const hasRuntimeEvents = visibleEvents.length > 0;
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadEvents = async (showLoading: boolean) => {
+      if (showLoading) {
+        setIsLoadingEvents(true);
+      }
+      try {
+        const params = new URLSearchParams();
+        params.set('limit', '40');
+        params.set('chatId', chat.id);
+        if (chat.isDefault) {
+          params.set('includeUnassigned', 'true');
+        }
+        const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events?${params.toString()}`), { cache: 'no-store' });
+        const body = (await response.json().catch(() => ({}))) as { events?: UiEvent[]; error?: string };
+        if (!response.ok) {
+          throw new Error(body.error ?? '채팅 이벤트를 불러오지 못했습니다.');
+        }
+        if (!cancelled) {
+          setEvents(body.events ?? []);
+          setError(null);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : '채팅 이벤트를 불러오지 못했습니다.');
+        }
+      } finally {
+        if (!cancelled && showLoading) {
+          setIsLoadingEvents(false);
+        }
+      }
+    };
+
+    void loadEvents(true);
+    const intervalId = window.setInterval(() => {
+      void loadEvents(false);
+    }, 3500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [chat.id, chat.isDefault, session.id]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const text = prompt.trim();
+    if (!text || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'message',
+          title: 'User Instruction',
+          text,
+          meta: {
+            role: 'user',
+            chatId: chat.id,
+            agent: activeAgent,
+            model: activeModelLabel,
+            mode: 'agent',
+            modelReasoningEffort: serializeReasoningEffort(normalizeReasoningEffort(chat.modelReasoningEffort)),
+            workspaceTab: 'run',
+          },
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { event?: UiEvent; error?: string };
+      if (!response.ok || !body.event) {
+        throw new Error(body.error ?? '메시지 전송에 실패했습니다.');
+      }
+      setPrompt('');
+      setEvents((previous) => [...previous, body.event as UiEvent]);
+      void fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats/${encodeURIComponent(chat.id)}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          touchActivity: true,
+          latestPreview: text,
+          latestEventId: body.event.id,
+          latestEventAt: body.event.timestamp,
+          latestEventIsUser: true,
+        }),
+      });
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : '메시지 전송에 실패했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <article className="pc-parallel__frame">
+      <header className="pc-parallel__frame-head">
+        <span>{side === 'left' ? 'LEFT' : 'RIGHT'}</span>
+        <strong title={chat.title}>{chat.title}</strong>
+        {runtimeRunning && <em>running</em>}
+      </header>
+      <div className="pc-parallel-chat">
+        <div className="pc-parallel-chat__timeline">
+          {isLoadingEvents && <div className="pc-chat-loading">Loading messages...</div>}
+          {!isLoadingEvents && !hasRuntimeEvents && (
+            <div className="pc-chat-empty-state" role="status">
+              <div className="pc-chat-empty-state__title">아직 메시지가 없습니다.</div>
+              <div className="pc-chat-empty-state__meta">{recentPreview}</div>
+            </div>
+          )}
+          {visibleEvents.map((item) => {
+            const role = readEventRole(item);
+            const isUser = role === 'user';
+            const isTerminal = role === 'terminal';
+            const snippet = item.parsed?.snippets?.[0];
+            if (!isUser && !isTerminal && isProjectRunStatusEvent(item)) {
+              return (
+                <div key={item.id} className="msg msg--run-status">
+                  <ProjectRunStatusChip event={item} />
+                </div>
+              );
+            }
+            if (!isUser && !isTerminal && isProjectActionEvent(item)) {
+              return (
+                <div key={item.id} className="msg msg--action">
+                  <ProjectActionCard
+                    event={item}
+                    onCopy={() => { void copyToClipboard(eventCommand(item)); }}
+                  />
+                </div>
+              );
+            }
+            return (
+              <div key={item.id} className="msg">
+                <span className={`msg__avatar ${isUser ? 'msg__avatar--user' : isTerminal ? 'msg__avatar--terminal' : agentAvatarClass(activeAgent)}`}>
+                  {isUser ? 'U' : isTerminal ? <Terminal size={14} /> : <ProviderLogo provider={providerFromAgent(activeAgent)} />}
+                </span>
+                <div className="msg__body">
+                  <div className="msg__header">
+                    <span className="msg__name">{isUser ? 'You' : isTerminal ? 'Terminal' : agentLabel(activeAgent, activeModelLabel)}</span>
+                    <span className="msg__time">{formatRelativeTime(item.timestamp)}</span>
+                  </div>
+                  {isTerminal ? (
+                    <div className="msg__terminal-output" data-terminal-response>
+                      <div className="msg__terminal-command">$ {terminalCommand(item)}</div>
+                      <pre>{terminalOutput(item)}</pre>
+                    </div>
+                  ) : (
+                    <>
+                      <div className={isUser ? 'msg__bubble' : 'msg__text'}><MarkdownContent body={getEventText(item)} /></div>
+                      {snippet && (
+                        <div className="code">
+                          <div className="code__head">
+                            <div className="code__head-left">
+                              <span className="code__lang">{snippet.language || 'txt'}</span>
+                              <span>generated snippet</span>
+                            </div>
+                            <button type="button" className="code__copy" onClick={() => { void copyToClipboard(snippet.code); }}>Copy</button>
+                          </div>
+                          <pre className="code__body">{snippet.code}</pre>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <form className="pc-parallel-chat__composer" onSubmit={handleSubmit}>
+          <textarea
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            placeholder={`${agentLabel(activeAgent, activeModelLabel)}에게 요청`}
+            rows={2}
+          />
+          <button type="submit" disabled={!prompt.trim() || isSubmitting}>
+            {isSubmitting ? 'Sending' : 'Send'}
+            <Send size={12} />
+          </button>
+        </form>
+        {error && <div className="pc-chat-error" role="alert">{error}</div>}
+      </div>
+      <div className="pc-parallel-chat__meta">{tokenLabel}</div>
+    </article>
+  );
+}
+
 function ProjectChatSurface({
   fileCount,
   modelLabel,
@@ -3040,19 +3243,28 @@ function ProjectChatSurface({
           <div className="pc-parallel__frames">
             {(['left', 'right'] as const).map((side) => {
               const chatId = side === 'left' ? parallelChatLayout.leftChatId : parallelChatLayout.rightChatId;
-              const title = resolveProjectChatTitle(chatId);
+              const panelChat = chats.find((candidate) => candidate.id === chatId);
+              if (!panelChat) {
+                return (
+                  <article key={side} className="pc-parallel__frame">
+                    <header className="pc-parallel__frame-head">
+                      <span>{side === 'left' ? 'LEFT' : 'RIGHT'}</span>
+                      <strong>{resolveProjectChatTitle(chatId)}</strong>
+                    </header>
+                    <div className="pc-chat-error" role="alert">채팅을 불러오지 못했습니다.</div>
+                  </article>
+                );
+              }
               return (
-                <article key={side} className="pc-parallel__frame">
-                  <header className="pc-parallel__frame-head">
-                    <span>{side === 'left' ? 'LEFT' : 'RIGHT'}</span>
-                    <strong title={title}>{title}</strong>
-                  </header>
-                  <iframe
-                    className="pc-parallel__iframe"
-                    src={withAppBasePath(buildProjectChatPanelPath(session.id, chatId))}
-                    title={`${title} 병렬 프로젝트 채팅`}
-                  />
-                </article>
+                <ProjectParallelChatPane
+                  key={side}
+                  chat={panelChat}
+                  modelLabel={modelLabel}
+                  recentPreview={recentPreview}
+                  session={session}
+                  side={side}
+                  tokenLabel={tokenLabel}
+                />
               );
             })}
           </div>
