@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
+const projectChatSurface = readFileSync(resolve(__dirname, '../components/project-chat/ProjectChatSurface.tsx'), 'utf8');
 const providerLogo = readFileSync(resolve(__dirname, '../components/ui/ProviderLogo.tsx'), 'utf8');
 const chatTimeline = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/ChatTimeline.tsx'), 'utf8');
 const chatInterfaceCss = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.module.css'), 'utf8');
@@ -25,19 +26,20 @@ describe('project layout and provider logo guards', () => {
     expect(providerLogo).toContain('data:image/svg+xml');
     expect(middleware).toContain("pathname.startsWith('/icons/')");
     expect(homeClient).toContain("import { ProviderLogo, type ProviderLogoProvider } from '@/components/ui/ProviderLogo';");
-    expect(homeClient).toContain('<ProviderLogo provider={selectedProvider} />');
-    expect(homeClient).toContain('<ProviderLogo provider={provider} />');
+    expect(projectChatSurface).toContain('<ProviderLogo provider={selectedProvider} />');
+    expect(projectChatSurface).toContain('<ProviderLogo provider={provider} />');
     expect(homeClient).not.toContain('function ProviderLogo({');
-    expect(homeClient).not.toContain('<span>{agentInitial(provider).slice(0, 1)}</span>');
+    expect(projectChatSurface).not.toContain('function ProviderLogo({');
+    expect(projectChatSurface).not.toContain('<span>{agentInitial(provider).slice(0, 1)}</span>');
 
     expect(uiCss).toContain('.provider-logo');
     expect(uiCss).toContain('mask-image: var(--provider-logo-url);');
   });
 
   it('uses the shared provider logo in chat avatars', () => {
-    expect(homeClient).toContain('msg__avatar');
-    expect(homeClient).toContain('<ProviderLogo provider={selectedProvider} />');
-    expect(homeClient).not.toContain("agentInitial(activeAgent)");
+    expect(projectChatSurface).toContain('msg__avatar');
+    expect(projectChatSurface).toContain('<ProviderLogo provider={selectedProvider} />');
+    expect(projectChatSurface).not.toContain("agentInitial(activeAgent)");
     expect(uiCss).toContain('.pc-proto .msg__avatar .provider-logo');
     expect(uiCss).toContain('.pc-proto .chturn__agent-avatar .provider-logo');
 
