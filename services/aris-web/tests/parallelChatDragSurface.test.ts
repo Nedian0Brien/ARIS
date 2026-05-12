@@ -36,8 +36,11 @@ describe('project parallel chat drag surface', () => {
     expect(homeClient).toContain('resolveProjectParallelDropSide(event)');
     expect(homeClient).toContain('왼쪽에 놓기');
     expect(homeClient).toContain('오른쪽에 놓기');
-    expect(homeClient).toContain('className="pc-parallel-chat__composer"');
+    expect(homeClient).toContain('function ProjectChatComposer({');
+    expect(homeClient).toContain('<ProjectChatComposer');
+    expect(homeClient).not.toContain('className="pc-parallel-chat__composer"');
     expect(uiCss).toContain('.pc-parallel-chat__timeline');
+    expect(uiCss).toContain('.pc-proto .pc-parallel .cmp-wrap');
   });
 
   it('supports compact project panel mode instead of the legacy session screen', () => {

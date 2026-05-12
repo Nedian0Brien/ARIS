@@ -1,6 +1,6 @@
 'use client';
 
-import { type CSSProperties, type DragEvent, type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type DragEvent, type FormEvent, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Activity,
@@ -2265,9 +2265,209 @@ function ProjectPlaceholderPanel({
   );
 }
 
+function ProjectChatComposer({
+  activeModelLabel,
+  composerMode,
+  composerWrapRef,
+  error,
+  isAborting,
+  isRunning,
+  modelSelectorOpen,
+  onAddContext,
+  onAttachFile,
+  onComposerModeChange,
+  onEffortSelect,
+  onMentionProject,
+  onModelSelect,
+  onModelSelectorOpenChange,
+  onPromptChange,
+  onProviderSelect,
+  onStop,
+  onSubmit,
+  onVoice,
+  placeholder = '에이전트에게 무엇이든 요청하세요... Shift Enter 줄바꿈 · Cmd Enter 전송',
+  prompt,
+  selectedEffort,
+  selectedProvider,
+}: {
+  activeModelLabel: string;
+  composerMode: ComposerMode;
+  composerWrapRef?: RefObject<HTMLElement | null>;
+  error: string | null;
+  isAborting: boolean;
+  isRunning: boolean;
+  modelSelectorOpen: boolean;
+  onAddContext: () => void;
+  onAttachFile: () => void;
+  onComposerModeChange: (mode: ComposerMode) => void;
+  onEffortSelect: (effort: ReasoningEffort) => void;
+  onMentionProject: () => void;
+  onModelSelect: (provider: ModelProvider, modelName: string) => void;
+  onModelSelectorOpenChange: (open: boolean) => void;
+  onPromptChange: (value: string) => void;
+  onProviderSelect: (provider: ModelProvider) => void;
+  onStop: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onVoice: () => void;
+  placeholder?: string;
+  prompt: string;
+  selectedEffort: ReasoningEffort;
+  selectedProvider: ModelProvider;
+}) {
+  return (
+    <footer ref={composerWrapRef} className="cmp-wrap">
+      <form className="cmp" onSubmit={onSubmit}>
+        <div className="cmp__top">
+          <div className="cmp-mode" role="tablist" aria-label="Mode">
+            {(['agent', 'plan', 'terminal'] as ComposerMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className="cmp-mode__pill"
+                data-mode={mode}
+                aria-pressed={composerMode === mode}
+                onClick={() => onComposerModeChange(mode)}
+              >
+                <span className="cmp-mode__pill-dot" />
+                {COMPOSER_MODE_COPY[mode]}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="cmp-ctx"
+            aria-label="Current model"
+            aria-expanded={modelSelectorOpen}
+            onClick={() => onModelSelectorOpenChange(!modelSelectorOpen)}
+          >
+            <span className={`cmp-ctx__logo cmp-ctx__logo--${selectedProvider}`}>
+              <ProviderLogo provider={selectedProvider} />
+            </span>
+            <span className="cmp-ctx__name">{activeModelLabel}</span>
+            <span className="cmp-ctx__effort">{selectedEffort}</span>
+            <ChevronRight size={12} />
+          </button>
+        </div>
+        <div className={`ms${modelSelectorOpen ? ' ms--open' : ''}`} role="dialog" aria-label="Model selector">
+          <div className="ms__eyebrow-row">
+            <span className="ms__eyebrow">Model</span>
+            <button type="button" className="ms__close" aria-label="Close model selector" onClick={() => onModelSelectorOpenChange(false)}>
+              <X size={12} />
+            </button>
+          </div>
+          <div className="ms__providers" role="tablist">
+            {(['claude', 'codex', 'gemini'] as ModelProvider[]).map((provider) => (
+              <button
+                key={provider}
+                type="button"
+                className="ms__provider"
+                data-provider={provider}
+                aria-pressed={selectedProvider === provider}
+                onClick={() => onProviderSelect(provider)}
+              >
+                <ProviderLogo provider={provider} />
+                <span className="ms__provider-label">{PROVIDER_LABELS[provider]}</span>
+              </button>
+            ))}
+          </div>
+          <div className="ms__list-wrap">
+            {(['claude', 'codex', 'gemini'] as ModelProvider[]).map((provider) => (
+              <div key={provider} className="ms__group" data-provider={provider} data-active={selectedProvider === provider ? '' : undefined}>
+                {MODEL_OPTIONS[provider].map((model) => (
+                  <button
+                    key={model.name}
+                    type="button"
+                    className="ms__item"
+                    aria-pressed={selectedProvider === provider && activeModelLabel === model.name}
+                    onClick={() => onModelSelect(provider, model.name)}
+                  >
+                    <span className="ms__item-check" />
+                    <span className="ms__item-body">
+                      <span className="ms__item-name">{model.name}</span>
+                      <span className="ms__item-meta">{model.meta}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+          <div className="ms__footer">
+            <span className="ms__eyebrow">Effort</span>
+            <div className="ms__effort-chips" role="tablist" aria-label="Reasoning effort">
+              {(['Low', 'Medium', 'High', 'XHigh', 'Max'] as ReasoningEffort[]).map((effort) => {
+                const disabled = !PROVIDER_EFFORTS[selectedProvider].includes(effort);
+                return (
+                  <button
+                    key={effort}
+                    type="button"
+                    className={`ms__effort-chip${disabled ? ' ms__effort-chip--disabled' : ''}`}
+                    aria-pressed={selectedEffort === effort}
+                    disabled={disabled}
+                    onClick={() => onEffortSelect(effort)}
+                  >
+                    {effort}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <textarea
+          className="cmp__input"
+          value={prompt}
+          onChange={(event) => onPromptChange(event.target.value)}
+          placeholder={placeholder}
+          rows={2}
+        />
+        <div className="cmp__toolbar">
+          <div className="cmp__tools">
+            <button type="button" className="cmp__tool" aria-label="Add" onClick={onAddContext}><Plus size={15} /></button>
+            <button type="button" className="cmp__tool" aria-label="Attach file" onClick={onAttachFile}>
+              <Paperclip size={15} />
+            </button>
+            <button type="button" className="cmp__tool" aria-label="Mention" onClick={onMentionProject}>
+              <AtSign size={15} />
+            </button>
+            <button type="button" className="cmp__tool" aria-label="Voice" onClick={onVoice}>
+              <Mic size={15} />
+            </button>
+          </div>
+          <div className="cmp__right">
+            <span className="cmp__hint"><span className="kbd">⌘</span><span className="kbd">↵</span><span>{isRunning ? 'running' : 'send'}</span></span>
+            {isRunning ? (
+              <button
+                type="button"
+                className={`cmp__send cmp__send--running${isAborting ? ' cmp__send--aborting' : ''}`}
+                disabled={isAborting}
+                aria-label="Stop generation"
+                onClick={onStop}
+              >
+                {isAborting ? 'Stopping…' : 'Stop'}
+                <Square size={11} />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="cmp__send"
+                disabled={!prompt.trim()}
+                aria-label="Send message"
+              >
+                Send
+                <Send size={13} />
+              </button>
+            )}
+          </div>
+        </div>
+      </form>
+      {error && <div className="pc-chat-error" role="alert">{error}</div>}
+    </footer>
+  );
+}
+
 function ProjectParallelChatPane({
   chat,
   modelLabel,
+  onOpenFiles,
   recentPreview,
   session,
   side,
@@ -2275,6 +2475,7 @@ function ProjectParallelChatPane({
 }: {
   chat: SessionChat;
   modelLabel: string;
+  onOpenFiles: (chatId: string) => void;
   recentPreview: string;
   session: SessionSummary;
   side: ProjectParallelChatSide;
@@ -2284,12 +2485,50 @@ function ProjectParallelChatPane({
   const [prompt, setPrompt] = useState('');
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAborting, setIsAborting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const activeAgent = chat.agent ?? session.agent;
-  const activeModelLabel = chat.model ?? modelLabel;
+  const [composerMode, setComposerMode] = useState<ComposerMode>('agent');
+  const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<ModelProvider>(() => providerFromAgent(chat.agent ?? session.agent));
+  const [selectedModel, setSelectedModel] = useState(chat.model ?? modelLabel);
+  const [selectedEffort, setSelectedEffort] = useState<ReasoningEffort>(() => normalizeReasoningEffort(chat.modelReasoningEffort));
+  const activeAgent: SessionSummary['agent'] = selectedProvider;
+  const activeModelLabel = selectedModel || chat.model || modelLabel;
   const { isRunning: runtimeRunning } = useSessionRuntime(session.id, chat.id, true);
   const visibleEvents = events.slice(-40);
   const hasRuntimeEvents = visibleEvents.length > 0;
+  const projectRunActive = runtimeRunning || isSubmitting;
+
+  useEffect(() => {
+    setPrompt('');
+    setError(null);
+    setComposerMode('agent');
+    setModelSelectorOpen(false);
+    setSelectedProvider(providerFromAgent(chat.agent ?? session.agent));
+    setSelectedModel(chat.model ?? modelLabel);
+    setSelectedEffort(normalizeReasoningEffort(chat.modelReasoningEffort));
+  }, [chat.agent, chat.id, chat.model, chat.modelReasoningEffort, modelLabel, session.agent]);
+
+  const handleComposerModeChange = (mode: ComposerMode) => {
+    setComposerMode(mode);
+  };
+
+  const handleComposerProviderSelect = (provider: ModelProvider) => {
+    setSelectedProvider(provider);
+    setSelectedModel(MODEL_OPTIONS[provider][0]?.name ?? activeModelLabel);
+    const allowedEfforts = PROVIDER_EFFORTS[provider];
+    setSelectedEffort((current) => allowedEfforts.includes(current) ? current : allowedEfforts.at(-1) ?? 'High');
+  };
+
+  const handleComposerModelSelect = (provider: ModelProvider, modelName: string) => {
+    setSelectedProvider(provider);
+    setSelectedModel(modelName);
+    setModelSelectorOpen(false);
+  };
+
+  const handleMentionProject = () => {
+    setPrompt((value) => `${value}${value.endsWith(' ') || value.length === 0 ? '' : ' '}@${displayProjectName(session)} `);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -2342,39 +2581,52 @@ function ProjectParallelChatPane({
     setIsSubmitting(true);
     setError(null);
     try {
-      const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events`), {
+      const isTerminalMode = composerMode === 'terminal';
+      const endpoint = withAppBasePath(isTerminalMode ? `/api/runtime/sessions/${encodeURIComponent(session.id)}/terminal` : `/api/runtime/sessions/${encodeURIComponent(session.id)}/events`);
+      const payload = isTerminalMode ? {
+        chatId: chat.id,
+        command: text,
+        agent: selectedProvider,
+        model: activeModelLabel,
+        modelReasoningEffort: serializeReasoningEffort(selectedEffort),
+      } : {
+        type: 'message',
+        title: 'User Instruction',
+        text,
+        meta: {
+          role: 'user',
+          chatId: chat.id,
+          agent: selectedProvider,
+          model: activeModelLabel,
+          mode: composerMode,
+          modelReasoningEffort: serializeReasoningEffort(selectedEffort),
+          workspaceTab: 'run',
+        },
+      };
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'message',
-          title: 'User Instruction',
-          text,
-          meta: {
-            role: 'user',
-            chatId: chat.id,
-            agent: activeAgent,
-            model: activeModelLabel,
-            mode: 'agent',
-            modelReasoningEffort: serializeReasoningEffort(normalizeReasoningEffort(chat.modelReasoningEffort)),
-            workspaceTab: 'run',
-          },
-        }),
+        body: JSON.stringify(payload),
       });
-      const body = (await response.json().catch(() => ({}))) as { event?: UiEvent; error?: string };
-      if (!response.ok || !body.event) {
+      const body = (await response.json().catch(() => ({}))) as { event?: UiEvent; events?: UiEvent[]; error?: string };
+      const submittedEvents = isTerminalMode
+        ? body.events ?? []
+        : body.event ? [body.event] : [];
+      if (!response.ok || submittedEvents.length === 0) {
         throw new Error(body.error ?? '메시지 전송에 실패했습니다.');
       }
+      const latestEvent = submittedEvents[submittedEvents.length - 1] as UiEvent;
       setPrompt('');
-      setEvents((previous) => [...previous, body.event as UiEvent]);
+      setEvents((previous) => [...previous, ...submittedEvents]);
       void fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats/${encodeURIComponent(chat.id)}`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           touchActivity: true,
-          latestPreview: text,
-          latestEventId: body.event.id,
-          latestEventAt: body.event.timestamp,
-          latestEventIsUser: true,
+          latestPreview: isTerminalMode ? `$ ${text}` : text,
+          latestEventId: latestEvent.id,
+          latestEventAt: latestEvent.timestamp,
+          latestEventIsUser: !isTerminalMode,
         }),
       });
     } catch (submitError) {
@@ -2383,6 +2635,19 @@ function ProjectParallelChatPane({
       setIsSubmitting(false);
     }
   };
+
+  const handleStopParallelChat = useCallback(async () => {
+    if (isAborting || !projectRunActive) return;
+    setIsAborting(true);
+    try {
+      await abortActiveChat({ sessionId: session.id, chatId: chat.id });
+    } catch (abortError) {
+      setError(abortError instanceof Error ? abortError.message : '에이전트 실행 중단에 실패했습니다.');
+    } finally {
+      setIsAborting(false);
+      setIsSubmitting(false);
+    }
+  }, [chat.id, isAborting, projectRunActive, session.id]);
 
   return (
     <article className="pc-parallel__frame">
@@ -2459,19 +2724,30 @@ function ProjectParallelChatPane({
             );
           })}
         </div>
-        <form className="pc-parallel-chat__composer" onSubmit={handleSubmit}>
-          <textarea
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            placeholder={`${agentLabel(activeAgent, activeModelLabel)}에게 요청`}
-            rows={2}
-          />
-          <button type="submit" disabled={!prompt.trim() || isSubmitting}>
-            {isSubmitting ? 'Sending' : 'Send'}
-            <Send size={12} />
-          </button>
-        </form>
-        {error && <div className="pc-chat-error" role="alert">{error}</div>}
+        <ProjectChatComposer
+          activeModelLabel={activeModelLabel}
+          composerMode={composerMode}
+          error={error}
+          isAborting={isAborting}
+          isRunning={projectRunActive}
+          modelSelectorOpen={modelSelectorOpen}
+          onAddContext={() => setError(null)}
+          onAttachFile={() => onOpenFiles(chat.id)}
+          onComposerModeChange={handleComposerModeChange}
+          onEffortSelect={setSelectedEffort}
+          onMentionProject={handleMentionProject}
+          onModelSelect={handleComposerModelSelect}
+          onModelSelectorOpenChange={setModelSelectorOpen}
+          onPromptChange={setPrompt}
+          onProviderSelect={handleComposerProviderSelect}
+          onStop={() => { void handleStopParallelChat(); }}
+          onSubmit={handleSubmit}
+          onVoice={() => setError('Voice input is not available in this workspace')}
+          placeholder={`${agentLabel(activeAgent, activeModelLabel)}에게 요청하세요... Shift Enter 줄바꿈 · Cmd Enter 전송`}
+          prompt={prompt}
+          selectedEffort={selectedEffort}
+          selectedProvider={selectedProvider}
+        />
       </div>
       <div className="pc-parallel-chat__meta">{tokenLabel}</div>
     </article>
@@ -3127,6 +3403,28 @@ function ProjectChatSurface({
     }
   }, [activeChat?.id, isAborting, projectRunActive, selectedChatId, session.id]);
 
+  const handleComposerModeChange = (mode: ComposerMode) => {
+    setComposerMode(mode);
+  };
+
+  const handleComposerProviderSelect = (provider: ModelProvider) => {
+    setSelectedProvider(provider);
+    setSelectedModel(MODEL_OPTIONS[provider][0]?.name ?? activeModelLabel);
+    const allowedEfforts = PROVIDER_EFFORTS[provider];
+    setSelectedEffort((current) => allowedEfforts.includes(current) ? current : allowedEfforts.at(-1) ?? 'High');
+  };
+
+  const handleComposerModelSelect = (provider: ModelProvider, modelName: string) => {
+    setSelectedProvider(provider);
+    setSelectedModel(modelName);
+    setModelSelectorOpen(false);
+    showTransientFeedback(`${modelName} selected`);
+  };
+
+  const handleMentionProject = () => {
+    setPrompt((value) => `${value}${value.endsWith(' ') || value.length === 0 ? '' : ' '}@${displayProjectName(session)} `);
+  };
+
   if (!selectedChatId) {
     return (
       <div className="pc-chat-directory" data-project-chat-list>
@@ -3260,6 +3558,12 @@ function ProjectChatSurface({
                   key={side}
                   chat={panelChat}
                   modelLabel={modelLabel}
+                  onOpenFiles={(chatId) => {
+                    handleCloseProjectParallelChats();
+                    onChatOpen(chatId);
+                    activateWorkspaceTab('files');
+                    showTransientFeedback('Files panel opened');
+                  }}
                   recentPreview={recentPreview}
                   session={session}
                   side={side}
@@ -3433,171 +3737,33 @@ function ProjectChatSurface({
             </div>
           </div>
 
-          <footer ref={composerWrapRef} className="cmp-wrap">
-            <form className="cmp" onSubmit={handleSubmit}>
-              <div className="cmp__top">
-                <div className="cmp-mode" role="tablist" aria-label="Mode">
-                  {(['agent', 'plan', 'terminal'] as ComposerMode[]).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      className="cmp-mode__pill"
-                      data-mode={mode}
-                      aria-pressed={composerMode === mode}
-                      onClick={() => setComposerMode(mode)}
-                    >
-                      <span className="cmp-mode__pill-dot" />
-                      {COMPOSER_MODE_COPY[mode]}
-                    </button>
-                  ))}
-                </div>
-                <button type="button" className="cmp-ctx" aria-label="Current model" aria-expanded={modelSelectorOpen} onClick={() => setModelSelectorOpen((current) => !current)}>
-                  <span className={`cmp-ctx__logo cmp-ctx__logo--${selectedProvider}`}>
-                    <ProviderLogo provider={selectedProvider} />
-                  </span>
-                  <span className="cmp-ctx__name">{activeModelLabel}</span>
-                  <span className="cmp-ctx__effort">{selectedEffort}</span>
-                  <ChevronRight size={12} />
-                </button>
-              </div>
-              <div className={`ms${modelSelectorOpen ? ' ms--open' : ''}`} role="dialog" aria-label="Model selector">
-                <div className="ms__eyebrow-row">
-                  <span className="ms__eyebrow">Model</span>
-                  <button type="button" className="ms__close" aria-label="Close model selector" onClick={() => setModelSelectorOpen(false)}>
-                    <X size={12} />
-                  </button>
-                </div>
-                <div className="ms__providers" role="tablist">
-                  {(['claude', 'codex', 'gemini'] as ModelProvider[]).map((provider) => (
-                    <button
-                      key={provider}
-                      type="button"
-                      className="ms__provider"
-                      data-provider={provider}
-                      aria-pressed={selectedProvider === provider}
-                      onClick={() => {
-                        setSelectedProvider(provider);
-                        setSelectedModel(MODEL_OPTIONS[provider][0]?.name ?? activeModelLabel);
-                        const allowedEfforts = PROVIDER_EFFORTS[provider];
-                        if (!allowedEfforts.includes(selectedEffort)) {
-                          setSelectedEffort(allowedEfforts.at(-1) ?? 'High');
-                        }
-                      }}
-                    >
-                      <ProviderLogo provider={provider} />
-                      <span className="ms__provider-label">{PROVIDER_LABELS[provider]}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="ms__list-wrap">
-                  {(['claude', 'codex', 'gemini'] as ModelProvider[]).map((provider) => (
-                    <div key={provider} className="ms__group" data-provider={provider} data-active={selectedProvider === provider ? '' : undefined}>
-                      {MODEL_OPTIONS[provider].map((model) => (
-                        <button
-                          key={model.name}
-                          type="button"
-                          className="ms__item"
-                          aria-pressed={selectedProvider === provider && activeModelLabel === model.name}
-                          onClick={() => {
-                            setSelectedProvider(provider);
-                            setSelectedModel(model.name);
-                            setModelSelectorOpen(false);
-                            showTransientFeedback(`${model.name} selected`);
-                          }}
-                        >
-                          <span className="ms__item-check" />
-                          <span className="ms__item-body">
-                            <span className="ms__item-name">{model.name}</span>
-                            <span className="ms__item-meta">{model.meta}</span>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-                <div className="ms__footer">
-                  <span className="ms__eyebrow">Effort</span>
-                  <div className="ms__effort-chips" role="tablist" aria-label="Reasoning effort">
-                    {(['Low', 'Medium', 'High', 'XHigh', 'Max'] as ReasoningEffort[]).map((effort) => {
-                      const disabled = !PROVIDER_EFFORTS[selectedProvider].includes(effort);
-                      return (
-                        <button
-                          key={effort}
-                          type="button"
-                          className={`ms__effort-chip${disabled ? ' ms__effort-chip--disabled' : ''}`}
-                          aria-pressed={selectedEffort === effort}
-                          disabled={disabled}
-                          onClick={() => setSelectedEffort(effort)}
-                        >
-                          {effort}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-              <textarea
-                className="cmp__input"
-                value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-                placeholder="에이전트에게 무엇이든 요청하세요... Shift Enter 줄바꿈 · Cmd Enter 전송"
-                rows={2}
-              />
-              <div className="cmp__toolbar">
-                <div className="cmp__tools">
-                  <button type="button" className="cmp__tool" aria-label="Add" onClick={() => showTransientFeedback('Context action ready')}><Plus size={15} /></button>
-                  <button
-                    type="button"
-                    className="cmp__tool"
-                    aria-label="Attach file"
-                    onClick={() => {
-                      activateWorkspaceTab('files');
-                      showTransientFeedback('Files panel opened');
-                    }}
-                  >
-                    <Paperclip size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    className="cmp__tool"
-                    aria-label="Mention"
-                    onClick={() => setPrompt((value) => `${value}${value.endsWith(' ') || value.length === 0 ? '' : ' '}@${displayProjectName(session)} `)}
-                  >
-                    <AtSign size={15} />
-                  </button>
-                  <button type="button" className="cmp__tool" aria-label="Voice" onClick={() => showTransientFeedback('Voice input is not available in this workspace')}>
-                    <Mic size={15} />
-                  </button>
-                </div>
-                <div className="cmp__right">
-                  <span className="cmp__hint"><span className="kbd">⌘</span><span className="kbd">↵</span><span>{projectRunActive ? 'running' : 'send'}</span></span>
-                  {projectRunActive ? (
-                    <button
-                      type="button"
-                      className={`cmp__send cmp__send--running${isAborting ? ' cmp__send--aborting' : ''}`}
-                      disabled={isAborting}
-                      aria-label="Stop generation"
-                      onClick={() => { void handleStopActiveChat(); }}
-                    >
-                      {isAborting ? 'Stopping…' : 'Stop'}
-                      <Square size={11} />
-                    </button>
-                  ) : (
-                    <button
-                      type="submit"
-                      className="cmp__send"
-                      disabled={!prompt.trim()}
-                      aria-label="Send message"
-                    >
-                      Send
-                      <Send size={13} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </form>
-            {error && <div className="pc-chat-error" role="alert">{error}</div>}
-          </footer>
+          <ProjectChatComposer
+            activeModelLabel={activeModelLabel}
+            composerMode={composerMode}
+            composerWrapRef={composerWrapRef}
+            error={error}
+            isAborting={isAborting}
+            isRunning={projectRunActive}
+            modelSelectorOpen={modelSelectorOpen}
+            onAddContext={() => showTransientFeedback('Context action ready')}
+            onAttachFile={() => {
+              activateWorkspaceTab('files');
+              showTransientFeedback('Files panel opened');
+            }}
+            onComposerModeChange={handleComposerModeChange}
+            onEffortSelect={setSelectedEffort}
+            onMentionProject={handleMentionProject}
+            onModelSelect={handleComposerModelSelect}
+            onModelSelectorOpenChange={setModelSelectorOpen}
+            onPromptChange={setPrompt}
+            onProviderSelect={handleComposerProviderSelect}
+            onStop={() => { void handleStopActiveChat(); }}
+            onSubmit={handleSubmit}
+            onVoice={() => showTransientFeedback('Voice input is not available in this workspace')}
+            prompt={prompt}
+            selectedEffort={selectedEffort}
+            selectedProvider={selectedProvider}
+          />
         </main>
 
         <aside ref={workspaceRef} className="shell__workspace ws ws-pane" aria-label={`${projectName} workspace`}>

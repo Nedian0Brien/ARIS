@@ -232,7 +232,8 @@ describe('project list surface', () => {
     expect(homeClient).toContain('{projectRunIndicator.label}');
     expect(homeClient).toContain('<time className="ch__running-elapsed" dateTime={projectRunIndicator.startedAt}>');
     expect(homeClient).toContain('{formatElapsedDuration(projectRunIndicator.startedAt, projectRunNowMs)}');
-    expect(homeClient).toContain('{projectRunActive ? (');
+    expect(homeClient).toContain('isRunning={projectRunActive}');
+    expect(homeClient).toContain('onStop={() => { void handleStopActiveChat(); }}');
     expect(homeClient).toContain('disabled={isAborting}');
     expect(homeClient).toContain('disabled={!projectRunActive}');
   });

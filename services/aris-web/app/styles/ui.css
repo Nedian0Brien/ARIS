@@ -3169,49 +3169,6 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   background: var(--canvas);
 }
 
-.pc-parallel-chat__composer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--sp-3);
-  align-items: end;
-  padding: var(--sp-4);
-  border-top: 1px solid var(--border-subtle);
-  background: var(--surface);
-}
-
-.pc-parallel-chat__composer textarea {
-  min-width: 0;
-  resize: vertical;
-  max-height: 8rem;
-  min-height: 2.6rem;
-  padding: var(--sp-3) var(--sp-4);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--r-md);
-  background: var(--surface-sunken);
-  color: var(--text-primary);
-  font-size: var(--text-xs);
-  line-height: 1.45;
-}
-
-.pc-parallel-chat__composer button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-2);
-  min-height: 2.6rem;
-  padding: 0 var(--sp-4);
-  border-radius: var(--r-md);
-  background: var(--b-600);
-  color: white;
-  font-size: var(--text-xs);
-  font-weight: 800;
-}
-
-.pc-parallel-chat__composer button:disabled {
-  cursor: not-allowed;
-  opacity: 0.46;
-}
-
 .pc-parallel-chat__meta {
   display: none;
 }
@@ -4193,6 +4150,51 @@ html[data-theme='dark'] .pc-proto .pc-action-stack {
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
   box-shadow: var(--shadow-xs);
+}
+
+.pc-proto .pc-parallel .cmp-wrap {
+  padding: var(--sp-4);
+  background: var(--surface);
+}
+
+.pc-proto .pc-parallel .cmp {
+  max-width: none;
+}
+
+.pc-proto .pc-parallel .cmp__top {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.pc-proto .pc-parallel .cmp-mode {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.pc-proto .pc-parallel .cmp-mode__pill {
+  padding-inline: 8px;
+}
+
+.pc-proto .pc-parallel .cmp-ctx {
+  max-width: 100%;
+}
+
+.pc-proto .pc-parallel .cmp-ctx__name {
+  max-width: clamp(90px, 16vw, 180px);
+}
+
+.pc-proto .pc-parallel .ms {
+  right: 8px;
+  width: min(320px, calc(100vw - 48px));
+}
+
+.pc-proto .pc-parallel .cmp__input {
+  min-height: 48px;
+  max-height: 140px;
+}
+
+.pc-proto .pc-parallel .cmp__hint {
+  display: none;
 }
 
 .pc-proto .cmp:focus-within {
