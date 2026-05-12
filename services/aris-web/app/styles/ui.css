@@ -3732,6 +3732,14 @@ html[data-theme='dark'] .pc-proto .pc-action-stack {
   background: var(--surface-sunken);
 }
 
+/* === Density variants on the existing pc-action-card === */
+/* Default density keeps existing layout — no rule needed beyond data-density="default" placeholder */
+.pc-proto .pc-action-card[data-density="expanded"] .pc-action-card__primary { display: none; }
+/* In expanded mode the cmd-badge carries the label; the legacy __primary text is hidden. */
+
+/* Hide the legacy kind-icon span when the new CmdBadge is shown alongside */
+.pc-proto .pc-action-card[data-density][data-density] .pc-action-card__kind { display: none; }
+
 .pc-proto .thinking,
 .pc-proto .tool {
   display: inline-flex;

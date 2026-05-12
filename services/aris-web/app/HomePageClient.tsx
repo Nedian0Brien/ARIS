@@ -77,6 +77,7 @@ import {
 import { renderCommandTokens, commandTokenClass } from '@/components/project-chat/helpers/commandTokens';
 import { GitActionMark, DockerActionMark } from '@/components/project-chat/helpers/actionMarks';
 import { ProjectRunStatusChip } from '@/components/project-chat/ProjectRunStatusChip';
+import { ProjectActionCard } from '@/components/project-chat/ProjectActionCard';
 
 type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';
 type ComposerMode = 'agent' | 'plan' | 'terminal';
@@ -1937,114 +1938,6 @@ function resolveProjectRunIndicator({
   return null;
 }
 
-function ProjectActionCard({
-  event,
-  onCopy,
-  onPreview,
-}: {
-  event: UiEvent;
-  onCopy: () => void;
-  onPreview?: () => void;
-}) {
-  const { Icon, label, tone } = projectActionMeta(event.kind);
-  const primary = eventCommand(event);
-  const preview = projectActionPreview(event);
-  const filePath = event.parsed?.files?.[0] || event.action?.path || '';
-  const stackRef = useRef<HTMLDivElement | null>(null);
-  const cardRef = useRef<HTMLDivElement | null>(null);
-  const resultRef = useRef<HTMLDivElement | null>(null);
-  const [connectorMetrics, setConnectorMetrics] = useState<{
-    cardCenter: number;
-    resultCenter: number;
-  } | null>(null);
-
-  useEffect(() => {
-    const stack = stackRef.current;
-    const card = cardRef.current;
-    const result = resultRef.current;
-    if (!preview || !stack || !card || !result) {
-      setConnectorMetrics(null);
-      return undefined;
-    }
-
-    let frame = 0;
-    const measure = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const stackRect = stack.getBoundingClientRect();
-        const cardRect = card.getBoundingClientRect();
-        const resultRect = result.getBoundingClientRect();
-        const nextMetrics = {
-          cardCenter: Math.round(cardRect.top - stackRect.top + cardRect.height / 2),
-          resultCenter: Math.round(resultRect.top - stackRect.top + resultRect.height / 2),
-        };
-        setConnectorMetrics((current) => {
-          if (
-            current &&
-            current.cardCenter === nextMetrics.cardCenter &&
-            current.resultCenter === nextMetrics.resultCenter
-          ) {
-            return current;
-          }
-          return nextMetrics;
-        });
-      });
-    };
-
-    measure();
-    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
-    observer?.observe(card);
-    observer?.observe(result);
-    window.addEventListener('resize', measure);
-    return () => {
-      cancelAnimationFrame(frame);
-      observer?.disconnect();
-      window.removeEventListener('resize', measure);
-    };
-  }, [preview]);
-
-  const connectorStyle = connectorMetrics
-    ? ({
-        '--pc-action-card-center': `${connectorMetrics.cardCenter}px`,
-        '--pc-action-result-center': `${connectorMetrics.resultCenter}px`,
-      } as CSSProperties)
-    : undefined;
-
-  return (
-    <div ref={stackRef} className="pc-action-stack" data-kind={tone} style={connectorStyle}>
-      <div ref={cardRef} className="pc-action-card" data-project-action-card data-kind={tone}>
-        <span className="pc-action-card__kind" aria-hidden="true"><Icon size={12} /></span>
-        <div className="pc-action-card__main">
-          <span className="pc-action-card__primary">{label}</span>
-          <span className="pc-action-card__cmd" aria-label={primary}>{renderCommandTokens(primary)}</span>
-          {filePath && filePath !== primary && (
-            <div className="pc-action-card__path">{filePath}</div>
-          )}
-        </div>
-        <span className="pc-action-card__time">{formatRelativeTime(event.timestamp)}</span>
-        <div className="pc-action-card__actions">
-          {onPreview && (
-            <button type="button" className="pc-action-card__preview-btn" onClick={onPreview} title="Preview referenced file">
-              <Maximize2 size={13} />
-            </button>
-          )}
-          <button type="button" className="pc-action-card__copy" onClick={onCopy} title="Copy action command">
-            <Copy size={13} />
-          </button>
-        </div>
-      </div>
-      {preview && (
-        <span className="pc-action-connector" aria-hidden="true" />
-      )}
-      {preview && (
-        <div ref={resultRef} className="pc-action-result">
-          <pre className="pc-action-result__body">{preview}</pre>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function ProjectPlaceholderPanel({
   Icon,
   body,
@@ -2765,6 +2658,9 @@ function ProjectChatSurface({
                     <div key={item.id} className={`msg msg--action${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
                       <ProjectActionCard
                         event={event}
+                        density="default"
+                        isRunning={false}
+                        isError={false}
                         onCopy={() => handleCopy(eventCommand(event), 'Action command')}
                         onPreview={item.parsed?.files?.[0] ? () => setPreviewState('open') : undefined}
                       />
