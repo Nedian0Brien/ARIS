@@ -4,49 +4,47 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const chatInterface = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.tsx'), 'utf8');
-const chatInterfaceCss = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.module.css'), 'utf8');
-const chatSidebarItem = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/left-sidebar/ChatSidebarItem.tsx'), 'utf8');
-const chatSidebarPane = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/left-sidebar/ChatSidebarPane.tsx'), 'utf8');
-const sessionPage = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/page.tsx'), 'utf8');
-const sessionSyncLeader = readFileSync(resolve(__dirname, '../lib/hooks/useSessionSyncLeader.ts'), 'utf8');
+const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
+const uiCss = readFileSync(resolve(__dirname, '../app/styles/ui.css'), 'utf8');
 
-describe('parallel chat drag surface', () => {
-  it('makes left sidebar chat rows draggable and forwards drag lifecycle callbacks', () => {
-    expect(chatSidebarItem).toContain('draggable={!item.isRenaming}');
-    expect(chatSidebarItem).toContain('onDragStart={(event) => onChatDragStart?.(event, item)}');
-    expect(chatSidebarItem).toContain('onDragEnd={onChatDragEnd}');
-    expect(chatSidebarPane).toContain('onChatDragStart={onChatDragStart}');
-    expect(chatSidebarPane).toContain('onChatDragEnd={onChatDragEnd}');
+describe('project parallel chat drag surface', () => {
+  it('uses the redesigned project route as the panel target', () => {
+    expect(homeClient).toContain("params.set('tab', 'project');");
+    expect(homeClient).toContain("params.set('view', 'chat');");
+    expect(homeClient).toContain("params.set('surface', 'panel');");
+    expect(homeClient).toContain('withAppBasePath(buildProjectChatPanelPath(session.id, chatId))');
+    expect(homeClient).not.toContain('/api/parallel-workspaces');
   });
 
-  it('renders left and right drop zones in the existing session surface', () => {
-    expect(chatInterface).toContain("const CHAT_DRAG_MIME = 'application/x-aris-chat-id';");
-    expect(chatInterface).toContain('handleParallelDrop');
-    expect(chatInterface).toContain('parallelChatDropZone');
-    expect(chatInterface).toContain('왼쪽에 놓기');
-    expect(chatInterface).toContain('오른쪽에 놓기');
-    expect(chatInterface).not.toContain('/api/parallel-workspaces');
+  it('makes project sidebar chat children draggable', () => {
+    expect(homeClient).toContain("const PROJECT_CHAT_DRAG_MIME = 'application/x-aris-project-chat';");
+    expect(homeClient).toContain('onProjectChatDragStart(event, session.id, chat)');
+    expect(homeClient).toContain('onProjectChatDragEnd={handleProjectChatDragEnd}');
+    expect(homeClient).toContain('writeProjectChatDragPayload(event, sessionId, chat)');
+    expect(homeClient).toContain('className={`m-sb__chat-child${activeProjectChatId === chat.id ?');
   });
 
-  it('opens compact session panels with proxy-safe panel URLs', () => {
-    expect(chatInterface).toContain("surface: 'panel'");
-    expect(chatInterface).toContain('withAppBasePath(`/sessions/${encodeURIComponent(sessionId)}?${params.toString()}`)');
-    expect(chatInterface).toContain('className={styles.parallelChatFrameContent}');
-    expect(sessionPage).toContain("const surfaceMode = resolvedSearchParams?.surface === 'panel' ? 'parallel-panel' : 'full';");
+  it('renders drop zones and project iframes inside ProjectChatSurface', () => {
+    expect(homeClient).toContain('pc-parallel-dropzones');
+    expect(homeClient).toContain('pc-parallel-dropzone');
+    expect(homeClient).toContain('handleProjectParallelDrop');
+    expect(homeClient).toContain('왼쪽에 놓기');
+    expect(homeClient).toContain('오른쪽에 놓기');
+    expect(homeClient).toContain('className="pc-parallel__iframe"');
   });
 
-  it('scopes sync leadership per chat in compact panels', () => {
-    expect(chatInterface).toContain("const sessionSyncScopeKey = surfaceMode === 'parallel-panel' ? activeChatIdResolved : null;");
-    expect(chatInterface).toContain('useSessionSyncLeader(sessionId, sessionSyncScopeKey)');
-    expect(sessionSyncLeader).toContain('scopeKey: string | null = null');
-    expect(sessionSyncLeader).toContain('`aris:session-sync-leader:${sessionId}:${normalizedScopeKey}`');
+  it('supports compact project panel mode instead of the legacy session screen', () => {
+    expect(homeClient).toContain("type ProjectChatSurfaceMode = 'full' | 'panel';");
+    expect(homeClient).toContain("searchParams.get('surface') === 'panel' ? 'panel' : 'full'");
+    expect(homeClient).toContain("app-shell-ia--project-panel");
+    expect(uiCss).toContain('.app-shell-ia--project-panel .m-sb');
+    expect(uiCss).toContain('.pc-proto[data-surface="panel"]');
   });
 
-  it('keeps the split layout responsive without desktop-only widths', () => {
-    expect(chatInterfaceCss).toContain('.parallelChatFrames');
-    expect(chatInterfaceCss).toContain('grid-template-columns: minmax(0, 1fr);');
-    expect(chatInterfaceCss).toContain('@media (min-width: 768px)');
-    expect(chatInterfaceCss).toContain('grid-template-columns: repeat(2, minmax(0, 1fr));');
+  it('keeps the project parallel layout responsive', () => {
+    expect(uiCss).toContain('.pc-parallel__frames');
+    expect(uiCss).toContain('grid-template-columns: minmax(0, 1fr);');
+    expect(uiCss).toContain('@media (min-width: 768px)');
+    expect(uiCss).toContain('grid-template-columns: repeat(2, minmax(0, 1fr));');
   });
 });

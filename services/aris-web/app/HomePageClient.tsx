@@ -1,6 +1,6 @@
 'use client';
 
-import { type CSSProperties, type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type DragEvent, type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Activity,
@@ -80,6 +80,24 @@ type ProjectRunIndicator = {
   startedAt: string;
   tone: 'submitting' | 'running' | 'approval' | 'aborting';
 };
+type ProjectChatSurfaceMode = 'full' | 'panel';
+type ProjectParallelChatSide = 'left' | 'right';
+type ProjectParallelChatLayout = {
+  leftChatId: string;
+  rightChatId: string;
+};
+type ProjectChatDragPayload = {
+  sessionId: string;
+  chatId: string;
+  title: string;
+};
+type ProjectChatDragStartHandler = (
+  event: DragEvent<HTMLElement>,
+  sessionId: string,
+  chat: Pick<SessionChat, 'id' | 'title'>,
+) => void;
+
+const PROJECT_CHAT_DRAG_MIME = 'application/x-aris-project-chat';
 
 type FileItem = {
   name: string;
@@ -503,6 +521,57 @@ function buildProjectDetailPath(sessionId: string, view: ProjectView = 'chats', 
   return `/?${params.toString()}`;
 }
 
+function buildProjectChatPanelPath(sessionId: string, chatId: string): string {
+  const params = new URLSearchParams();
+  params.set('tab', 'project');
+  params.set('project', sessionId);
+  params.set('view', 'chat');
+  params.set('chat', chatId);
+  params.set('surface', 'panel');
+  return `/?${params.toString()}`;
+}
+
+function writeProjectChatDragPayload(
+  event: DragEvent<HTMLElement>,
+  sessionId: string,
+  chat: Pick<SessionChat, 'id' | 'title'>,
+) {
+  event.dataTransfer.effectAllowed = 'copy';
+  event.dataTransfer.setData(PROJECT_CHAT_DRAG_MIME, JSON.stringify({
+    sessionId,
+    chatId: chat.id,
+    title: chat.title,
+  } satisfies ProjectChatDragPayload));
+  event.dataTransfer.setData('text/plain', chat.title);
+}
+
+function readProjectChatDragPayload(event: DragEvent<HTMLElement>): ProjectChatDragPayload | null {
+  if (!Array.from(event.dataTransfer.types).includes(PROJECT_CHAT_DRAG_MIME)) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(event.dataTransfer.getData(PROJECT_CHAT_DRAG_MIME)) as Partial<ProjectChatDragPayload>;
+    if (
+      typeof parsed.sessionId !== 'string'
+      || typeof parsed.chatId !== 'string'
+      || typeof parsed.title !== 'string'
+      || !parsed.sessionId.trim()
+      || !parsed.chatId.trim()
+    ) {
+      return null;
+    }
+
+    return {
+      sessionId: parsed.sessionId,
+      chatId: parsed.chatId,
+      title: parsed.title,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function createProjectSessionChat(
   sessionId: string,
   input: {
@@ -570,6 +639,8 @@ function Sidebar({
   activeProjectId,
   activeProjectChatId,
   onProjectChatOpen,
+  onProjectChatDragEnd,
+  onProjectChatDragStart,
   onTabChange,
   onProjectOpen,
   sessions,
@@ -579,6 +650,8 @@ function Sidebar({
   activeProjectId: string | null;
   activeProjectChatId: string | null;
   onProjectChatOpen: (sessionId: string, chatId: string) => void;
+  onProjectChatDragEnd: () => void;
+  onProjectChatDragStart: ProjectChatDragStartHandler;
   onTabChange: (tab: TabType) => void;
   onProjectOpen: (sessionId: string, view?: ProjectView) => void;
   sessions: SessionSummary[];
@@ -713,6 +786,9 @@ function Sidebar({
                           key={chat.id}
                           type="button"
                           className={`m-sb__chat-child${activeProjectChatId === chat.id ? ' m-sb__chat-child--active' : ''}`}
+                          draggable
+                          onDragStart={(event) => onProjectChatDragStart(event, session.id, chat)}
+                          onDragEnd={onProjectChatDragEnd}
                           onClick={() => onProjectChatOpen(session.id, chat.id)}
                         >
                           <span className="m-sb__chat-branch" />
@@ -1472,16 +1548,24 @@ function ProjectDetailSurface({
   index,
   onBackToProjects,
   onProjectChatOpen,
+  onProjectChatDragEnd,
+  onProjectChatDragStart,
   onProjectViewChange,
   projectView,
+  projectChatDragActive,
+  projectSurfaceMode,
   selectedChatId,
   session,
 }: {
   index: number;
   onBackToProjects: () => void;
   onProjectChatOpen: (chatId: string) => void;
+  onProjectChatDragEnd: () => void;
+  onProjectChatDragStart: ProjectChatDragStartHandler;
   onProjectViewChange: (view: ProjectView) => void;
   projectView: ProjectView;
+  projectChatDragActive: boolean;
+  projectSurfaceMode: ProjectChatSurfaceMode;
   selectedChatId: string | null;
   session: SessionSummary;
 }) {
@@ -1541,11 +1625,15 @@ function ProjectDetailSurface({
           modelLabel={modelLabel}
           onBackToChatList={() => onProjectViewChange('chats')}
           onChatOpen={onProjectChatOpen}
+          onProjectChatDragEnd={onProjectChatDragEnd}
+          onProjectChatDragStart={onProjectChatDragStart}
           projectName={projectName}
           projectPath={projectPath}
+          projectChatDragActive={projectChatDragActive}
           recentPreview={recentPreview}
           selectedChatId={selectedChatId}
           session={session}
+          surfaceMode={projectSurfaceMode}
           tokenLabel={tokenLabel}
         />
       </div>
@@ -1693,11 +1781,15 @@ function ProjectDetailSurface({
             modelLabel={modelLabel}
             onBackToChatList={() => onProjectViewChange('chats')}
             onChatOpen={onProjectChatOpen}
+            onProjectChatDragEnd={onProjectChatDragEnd}
+            onProjectChatDragStart={onProjectChatDragStart}
             projectName={projectName}
             projectPath={projectPath}
+            projectChatDragActive={projectChatDragActive}
             recentPreview={recentPreview}
             selectedChatId={selectedChatId}
             session={session}
+            surfaceMode={projectSurfaceMode}
             tokenLabel={tokenLabel}
           />
         ) : projectView === 'files' ? (
@@ -2170,22 +2262,30 @@ function ProjectChatSurface({
   modelLabel,
   onBackToChatList,
   onChatOpen,
+  onProjectChatDragEnd,
+  onProjectChatDragStart,
   projectName,
   projectPath,
+  projectChatDragActive,
   recentPreview,
   selectedChatId,
   session,
+  surfaceMode,
   tokenLabel,
 }: {
   fileCount: number;
   modelLabel: string;
   onBackToChatList: () => void;
   onChatOpen: (chatId: string) => void;
+  onProjectChatDragEnd: () => void;
+  onProjectChatDragStart: ProjectChatDragStartHandler;
   projectName: string;
   projectPath: string;
+  projectChatDragActive: boolean;
   recentPreview: string;
   selectedChatId: string | null;
   session: SessionSummary;
+  surfaceMode: ProjectChatSurfaceMode;
   tokenLabel: string;
 }) {
   const [chats, setChats] = useState<SessionChat[]>([]);
@@ -2223,6 +2323,8 @@ function ProjectChatSurface({
   const [draftTerminalCommand, setDraftTerminalCommand] = useState('npm test -- --run tests/projectListSurface.test.ts');
   const [previewDevice, setPreviewDevice] = useState<'1200' | '768' | '390'>('1200');
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [parallelChatLayout, setParallelChatLayout] = useState<ProjectParallelChatLayout | null>(null);
+  const [parallelDropSide, setParallelDropSide] = useState<ProjectParallelChatSide | null>(null);
   const visibleEvents = events.slice(-40);
   const activeModelLabel = selectedModel || runtimeModelLabel;
   const activeAgent: SessionSummary['agent'] = selectedProvider;
@@ -2279,7 +2381,7 @@ function ProjectChatSurface({
     });
   };
 
-  const defaultWorkspaceOpen = () => !window.matchMedia('(max-width: 1100px)').matches;
+  const defaultWorkspaceOpen = () => !window.matchMedia('(max-width: 1100px)').matches && surfaceMode === 'full';
 
   const clearWorkspaceCloseTimer = useCallback(() => {
     if (workspaceCloseTimerRef.current === null) return;
@@ -2355,6 +2457,67 @@ function ProjectChatSurface({
   const visibleExpandedTurnId = expandedTurnId === '__none__'
     ? null
     : expandedTurnId ?? defaultExpandedTurnId;
+  const resolveProjectChatTitle = useCallback((chatId: string) => {
+    return chats.find((chat) => chat.id === chatId)?.title?.trim() || 'Project chat';
+  }, [chats]);
+  const clearParallelProjectDropState = useCallback(() => {
+    setParallelDropSide(null);
+    onProjectChatDragEnd();
+  }, [onProjectChatDragEnd]);
+  const handleProjectParallelDragOver = useCallback((side: ProjectParallelChatSide, event: DragEvent<HTMLDivElement>) => {
+    const payload = readProjectChatDragPayload(event);
+    if (!payload || payload.sessionId !== session.id) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setParallelDropSide(side);
+  }, [session.id]);
+  const handleProjectParallelDrop = useCallback((side: ProjectParallelChatSide, event: DragEvent<HTMLDivElement>) => {
+    const payload = readProjectChatDragPayload(event);
+    if (!payload || payload.sessionId !== session.id) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+
+    const draggedChatId = payload.chatId;
+    if (!chats.some((chat) => chat.id === draggedChatId)) {
+      clearParallelProjectDropState();
+      return;
+    }
+
+    const retainedChatId = parallelChatLayout
+      ? side === 'left'
+        ? parallelChatLayout.rightChatId
+        : parallelChatLayout.leftChatId
+      : selectedChatId;
+    const fallbackChatId = retainedChatId && retainedChatId !== draggedChatId
+      ? retainedChatId
+      : chats.find((chat) => chat.id !== draggedChatId)?.id ?? null;
+
+    clearParallelProjectDropState();
+    if (!fallbackChatId) {
+      setParallelChatLayout(null);
+      onChatOpen(draggedChatId);
+      return;
+    }
+
+    setParallelChatLayout(side === 'left'
+      ? { leftChatId: draggedChatId, rightChatId: fallbackChatId }
+      : { leftChatId: fallbackChatId, rightChatId: draggedChatId });
+  }, [
+    chats,
+    clearParallelProjectDropState,
+    onChatOpen,
+    parallelChatLayout,
+    selectedChatId,
+    session.id,
+  ]);
+  const handleCloseProjectParallelChats = useCallback(() => {
+    setParallelChatLayout(null);
+    setParallelDropSide(null);
+  }, []);
 
   useEffect(() => () => {
     if (workspaceCloseTimerRef.current !== null) {
@@ -2396,6 +2559,10 @@ function ProjectChatSurface({
   }, [closeWorkspacePanel, workspaceDrawerPhase, workspaceOpen]);
 
   useEffect(() => {
+    if (surfaceMode === 'panel') {
+      setParallelChatLayout(null);
+      setParallelDropSide(null);
+    }
     setComposerMode('agent');
     setWorkspaceTab('run');
     setWorkspacePanelImmediate(defaultWorkspaceOpen());
@@ -2409,7 +2576,7 @@ function ProjectChatSurface({
     setCopyFeedback(null);
     setSelectedWorkspaceFile('HomePageClient.tsx');
     setDraftTerminalCommand('npm test -- --run tests/projectListSurface.test.ts');
-  }, [activeChat?.modelReasoningEffort, runtimeAgent, runtimeModelLabel, selectedChatId, setWorkspacePanelImmediate]);
+  }, [activeChat?.modelReasoningEffort, runtimeAgent, runtimeModelLabel, selectedChatId, setWorkspacePanelImmediate, surfaceMode]);
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 1100px)');
@@ -2576,6 +2743,14 @@ function ProjectChatSurface({
     };
   }, [projectRunIndicator?.startedAt]);
 
+  useEffect(() => {
+    if (!parallelChatLayout) return;
+    const chatIds = new Set(chats.map((chat) => chat.id));
+    if (!chatIds.has(parallelChatLayout.leftChatId) || !chatIds.has(parallelChatLayout.rightChatId)) {
+      setParallelChatLayout(null);
+    }
+  }, [chats, parallelChatLayout]);
+
   const createChat = async (): Promise<SessionChat | null> => {
     setError(null);
     const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);
@@ -2728,6 +2903,9 @@ function ProjectChatSurface({
                 key={chat.id}
                 type="button"
                 className="pc-chat-card"
+                draggable
+                onDragStart={(event) => onProjectChatDragStart(event, session.id, chat)}
+                onDragEnd={onProjectChatDragEnd}
                 onClick={() => onChatOpen(chat.id)}
               >
                 <span className="pc-chat-card__head">
@@ -2774,14 +2952,65 @@ function ProjectChatSurface({
   return (
     <div
       ref={prototypeRef}
-      className="pc-proto"
+      className={`pc-proto${projectChatDragActive && surfaceMode === 'full' ? ' pc-proto--chat-drag-active' : ''}`}
       data-project-chat-screen
       data-mode={composerMode}
+      data-surface={surfaceMode}
       data-workspace={workspaceDrawerPhase === 'closing' ? 'closing' : workspaceOpen ? 'open' : 'closed'}
       data-workspace-ready={workspaceLayoutReady ? 'true' : 'false'}
       data-ws-tab={workspaceTab}
       data-preview={previewState}
     >
+      {surfaceMode === 'full' && (
+        <div className="pc-parallel-dropzones" aria-hidden={!projectChatDragActive}>
+          <div
+            className={`pc-parallel-dropzone${parallelDropSide === 'left' ? ' pc-parallel-dropzone--active' : ''}`}
+            onDragOver={(event) => handleProjectParallelDragOver('left', event)}
+            onDrop={(event) => handleProjectParallelDrop('left', event)}
+            onDragLeave={() => setParallelDropSide((current) => (current === 'left' ? null : current))}
+          >
+            <span>왼쪽에 놓기</span>
+          </div>
+          <div
+            className={`pc-parallel-dropzone${parallelDropSide === 'right' ? ' pc-parallel-dropzone--active' : ''}`}
+            onDragOver={(event) => handleProjectParallelDragOver('right', event)}
+            onDrop={(event) => handleProjectParallelDrop('right', event)}
+            onDragLeave={() => setParallelDropSide((current) => (current === 'right' ? null : current))}
+          >
+            <span>오른쪽에 놓기</span>
+          </div>
+        </div>
+      )}
+      {surfaceMode === 'full' && parallelChatLayout ? (
+        <section className="pc-parallel" aria-label="병렬 프로젝트 채팅">
+          <div className="pc-parallel__toolbar">
+            <span className="pc-parallel__title">Parallel chats</span>
+            <button type="button" className="pc-parallel__close" onClick={handleCloseProjectParallelChats}>
+              단일 화면
+            </button>
+          </div>
+          <div className="pc-parallel__frames">
+            {(['left', 'right'] as const).map((side) => {
+              const chatId = side === 'left' ? parallelChatLayout.leftChatId : parallelChatLayout.rightChatId;
+              const title = resolveProjectChatTitle(chatId);
+              return (
+                <article key={side} className="pc-parallel__frame">
+                  <header className="pc-parallel__frame-head">
+                    <span>{side === 'left' ? 'LEFT' : 'RIGHT'}</span>
+                    <strong title={title}>{title}</strong>
+                  </header>
+                  <iframe
+                    className="pc-parallel__iframe"
+                    src={withAppBasePath(buildProjectChatPanelPath(session.id, chatId))}
+                    title={`${title} 병렬 프로젝트 채팅`}
+                  />
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : (
+      <>
       <div className="shell">
         <main className="shell__main">
           <header className="ch">
@@ -3432,6 +3661,8 @@ function ProjectChatSurface({
           </button>
         </div>
       </div>
+      </>
+      )}
       {copyFeedback && <div className="pc-toast" data-copy-feedback role="status">{copyFeedback}</div>}
     </div>
   );
@@ -3440,18 +3671,26 @@ function ProjectChatSurface({
 function ProjectSurface({
   onBackToProjects,
   onProjectChatOpen,
+  onProjectChatDragEnd,
+  onProjectChatDragStart,
   onProjectOpen,
   onProjectViewChange,
   projectView,
+  projectChatDragActive,
+  projectSurfaceMode,
   selectedChatId,
   selectedProjectId,
   sessions,
 }: {
   onBackToProjects: () => void;
   onProjectChatOpen: (sessionId: string, chatId: string) => void;
+  onProjectChatDragEnd: () => void;
+  onProjectChatDragStart: ProjectChatDragStartHandler;
   onProjectOpen: (sessionId: string, view?: ProjectView) => void;
   onProjectViewChange: (view: ProjectView) => void;
   projectView: ProjectView;
+  projectChatDragActive: boolean;
+  projectSurfaceMode: ProjectChatSurfaceMode;
   selectedChatId: string | null;
   selectedProjectId: string | null;
   sessions: SessionSummary[];
@@ -3482,8 +3721,12 @@ function ProjectSurface({
         index={selectedIndex}
         onBackToProjects={onBackToProjects}
         onProjectChatOpen={(chatId) => onProjectChatOpen(selectedProject.id, chatId)}
+        onProjectChatDragEnd={onProjectChatDragEnd}
+        onProjectChatDragStart={onProjectChatDragStart}
         onProjectViewChange={onProjectViewChange}
         projectView={projectView}
+        projectChatDragActive={projectChatDragActive}
+        projectSurfaceMode={projectSurfaceMode}
         selectedChatId={selectedChatId}
       />
     );
@@ -3752,6 +3995,7 @@ export default function HomePageWrapper({
   const [selectedProjectView, setSelectedProjectView] = useState<ProjectView>('chats');
   const [selectedProjectChatId, setSelectedProjectChatId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<RuntimeMetrics | null>(null);
+  const [projectChatDragActive, setProjectChatDragActive] = useState(false);
 
   useEffect(() => {
     const nextTab = normalizeTab(searchParams.get('tab'));
@@ -3817,6 +4061,7 @@ export default function HomePageWrapper({
   }, []);
 
   const sessions = useMemo(() => sortSessions(initialSessions), [initialSessions]);
+  const projectSurfaceMode: ProjectChatSurfaceMode = searchParams.get('surface') === 'panel' ? 'panel' : 'full';
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
@@ -3857,6 +4102,13 @@ export default function HomePageWrapper({
     setSelectedProjectChatId(null);
     window.history.pushState(null, '', withAppBasePath('/?tab=project'));
   };
+  const handleProjectChatDragStart = useCallback<ProjectChatDragStartHandler>((event, sessionId, chat) => {
+    writeProjectChatDragPayload(event, sessionId, chat);
+    setProjectChatDragActive(true);
+  }, []);
+  const handleProjectChatDragEnd = useCallback(() => {
+    setProjectChatDragActive(false);
+  }, []);
 
   const content = (() => {
     if (activeTab === 'ask') return <AskSurface sessions={sessions} />;
@@ -3865,9 +4117,13 @@ export default function HomePageWrapper({
         <ProjectSurface
           onBackToProjects={handleBackToProjects}
           onProjectChatOpen={handleProjectChatOpen}
+          onProjectChatDragEnd={handleProjectChatDragEnd}
+          onProjectChatDragStart={handleProjectChatDragStart}
           onProjectOpen={handleProjectOpen}
           onProjectViewChange={handleProjectViewChange}
           projectView={selectedProjectView}
+          projectChatDragActive={projectChatDragActive}
+          projectSurfaceMode={projectSurfaceMode}
           selectedChatId={selectedProjectChatId}
           selectedProjectId={selectedProjectId}
           sessions={sessions}
@@ -3889,13 +4145,15 @@ export default function HomePageWrapper({
   };
 
   return (
-    <div className={`app-shell app-shell-ia${shouldShowBottomNav ? '' : ' app-shell-ia--chat-screen'}`}>
+    <div className={`app-shell app-shell-ia${shouldShowBottomNav ? '' : ' app-shell-ia--chat-screen'}${projectSurfaceMode === 'panel' ? ' app-shell-ia--project-panel' : ''}`}>
       <div className="aris-ia-shell">
         <Sidebar
           activeProjectChatId={selectedProjectChatId}
           activeProjectId={selectedProjectId}
           activeTab={activeTab}
           onProjectChatOpen={handleProjectChatOpen}
+          onProjectChatDragEnd={handleProjectChatDragEnd}
+          onProjectChatDragStart={handleProjectChatDragStart}
           onProjectOpen={handleProjectOpen}
           onTabChange={handleTabChange}
           sessions={sessions}
