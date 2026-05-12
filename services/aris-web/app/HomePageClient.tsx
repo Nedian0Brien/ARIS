@@ -98,6 +98,7 @@ type ProjectChatDragStartHandler = (
 ) => void;
 
 const PROJECT_CHAT_DRAG_MIME = 'application/x-aris-project-chat';
+const PROJECT_CHAT_DRAG_JSON_MIME = 'application/json';
 
 type FileItem = {
   name: string;
@@ -536,22 +537,29 @@ function writeProjectChatDragPayload(
   sessionId: string,
   chat: Pick<SessionChat, 'id' | 'title'>,
 ) {
-  event.dataTransfer.effectAllowed = 'copy';
-  event.dataTransfer.setData(PROJECT_CHAT_DRAG_MIME, JSON.stringify({
+  const payload = JSON.stringify({
     sessionId,
     chatId: chat.id,
     title: chat.title,
-  } satisfies ProjectChatDragPayload));
-  event.dataTransfer.setData('text/plain', chat.title);
+  } satisfies ProjectChatDragPayload);
+
+  event.dataTransfer.effectAllowed = 'copy';
+  event.dataTransfer.setData(PROJECT_CHAT_DRAG_MIME, payload);
+  event.dataTransfer.setData(PROJECT_CHAT_DRAG_JSON_MIME, payload);
+  event.dataTransfer.setData('text/plain', payload);
 }
 
 function readProjectChatDragPayload(event: DragEvent<HTMLElement>): ProjectChatDragPayload | null {
-  if (!Array.from(event.dataTransfer.types).includes(PROJECT_CHAT_DRAG_MIME)) {
+  const types = Array.from(event.dataTransfer.types);
+  if (!types.includes(PROJECT_CHAT_DRAG_MIME) && !types.includes(PROJECT_CHAT_DRAG_JSON_MIME) && !types.includes('text/plain')) {
     return null;
   }
 
   try {
-    const parsed = JSON.parse(event.dataTransfer.getData(PROJECT_CHAT_DRAG_MIME)) as Partial<ProjectChatDragPayload>;
+    const rawPayload = event.dataTransfer.getData(PROJECT_CHAT_DRAG_MIME)
+      || event.dataTransfer.getData(PROJECT_CHAT_DRAG_JSON_MIME)
+      || event.dataTransfer.getData('text/plain');
+    const parsed = JSON.parse(rawPayload) as Partial<ProjectChatDragPayload>;
     if (
       typeof parsed.sessionId !== 'string'
       || typeof parsed.chatId !== 'string'
@@ -570,6 +578,16 @@ function readProjectChatDragPayload(event: DragEvent<HTMLElement>): ProjectChatD
   } catch {
     return null;
   }
+}
+
+function hasProjectChatDragPayload(event: DragEvent<HTMLElement>): boolean {
+  const types = Array.from(event.dataTransfer.types);
+  return types.includes(PROJECT_CHAT_DRAG_MIME) || types.includes(PROJECT_CHAT_DRAG_JSON_MIME);
+}
+
+function resolveProjectParallelDropSide(event: DragEvent<HTMLElement>): ProjectParallelChatSide {
+  const rect = event.currentTarget.getBoundingClientRect();
+  return event.clientX < rect.left + rect.width / 2 ? 'left' : 'right';
 }
 
 async function createProjectSessionChat(
@@ -2464,23 +2482,7 @@ function ProjectChatSurface({
     setParallelDropSide(null);
     onProjectChatDragEnd();
   }, [onProjectChatDragEnd]);
-  const handleProjectParallelDragOver = useCallback((side: ProjectParallelChatSide, event: DragEvent<HTMLDivElement>) => {
-    const payload = readProjectChatDragPayload(event);
-    if (!payload || payload.sessionId !== session.id) {
-      return;
-    }
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
-    setParallelDropSide(side);
-  }, [session.id]);
-  const handleProjectParallelDrop = useCallback((side: ProjectParallelChatSide, event: DragEvent<HTMLDivElement>) => {
-    const payload = readProjectChatDragPayload(event);
-    if (!payload || payload.sessionId !== session.id) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-
+  const openProjectParallelChat = useCallback((side: ProjectParallelChatSide, payload: ProjectChatDragPayload) => {
     const draggedChatId = payload.chatId;
     if (!chats.some((chat) => chat.id === draggedChatId)) {
       clearParallelProjectDropState();
@@ -2512,8 +2514,51 @@ function ProjectChatSurface({
     onChatOpen,
     parallelChatLayout,
     selectedChatId,
-    session.id,
   ]);
+  const handleProjectParallelDragOver = useCallback((side: ProjectParallelChatSide, event: DragEvent<HTMLDivElement>) => {
+    if (!projectChatDragActive && !hasProjectChatDragPayload(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setParallelDropSide(side);
+  }, [projectChatDragActive]);
+  const handleProjectParallelDrop = useCallback((side: ProjectParallelChatSide, event: DragEvent<HTMLDivElement>) => {
+    const payload = readProjectChatDragPayload(event);
+    if (!payload || payload.sessionId !== session.id) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    openProjectParallelChat(side, payload);
+  }, [openProjectParallelChat, session.id]);
+  const handleProjectParallelSurfaceDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (surfaceMode !== 'full' || (!projectChatDragActive && !hasProjectChatDragPayload(event))) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setParallelDropSide(resolveProjectParallelDropSide(event));
+  }, [projectChatDragActive, surfaceMode]);
+  const handleProjectParallelSurfaceDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (surfaceMode !== 'full') {
+      return;
+    }
+    const payload = readProjectChatDragPayload(event);
+    if (!payload || payload.sessionId !== session.id) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    openProjectParallelChat(resolveProjectParallelDropSide(event), payload);
+  }, [openProjectParallelChat, session.id, surfaceMode]);
+  const handleProjectParallelSurfaceDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
+      return;
+    }
+    setParallelDropSide(null);
+  }, []);
   const handleCloseProjectParallelChats = useCallback(() => {
     setParallelChatLayout(null);
     setParallelDropSide(null);
@@ -2960,6 +3005,9 @@ function ProjectChatSurface({
       data-workspace-ready={workspaceLayoutReady ? 'true' : 'false'}
       data-ws-tab={workspaceTab}
       data-preview={previewState}
+      onDragOver={handleProjectParallelSurfaceDragOver}
+      onDrop={handleProjectParallelSurfaceDrop}
+      onDragLeave={handleProjectParallelSurfaceDragLeave}
     >
       {surfaceMode === 'full' && (
         <div className="pc-parallel-dropzones" aria-hidden={!projectChatDragActive}>

@@ -18,9 +18,11 @@ describe('project parallel chat drag surface', () => {
 
   it('makes project sidebar chat children draggable', () => {
     expect(homeClient).toContain("const PROJECT_CHAT_DRAG_MIME = 'application/x-aris-project-chat';");
+    expect(homeClient).toContain("const PROJECT_CHAT_DRAG_JSON_MIME = 'application/json';");
     expect(homeClient).toContain('onProjectChatDragStart(event, session.id, chat)');
     expect(homeClient).toContain('onProjectChatDragEnd={handleProjectChatDragEnd}');
     expect(homeClient).toContain('writeProjectChatDragPayload(event, sessionId, chat)');
+    expect(homeClient).toContain("event.dataTransfer.setData('text/plain', payload);");
     expect(homeClient).toContain('className={`m-sb__chat-child${activeProjectChatId === chat.id ?');
   });
 
@@ -28,6 +30,9 @@ describe('project parallel chat drag surface', () => {
     expect(homeClient).toContain('pc-parallel-dropzones');
     expect(homeClient).toContain('pc-parallel-dropzone');
     expect(homeClient).toContain('handleProjectParallelDrop');
+    expect(homeClient).toContain('onDragOver={handleProjectParallelSurfaceDragOver}');
+    expect(homeClient).toContain('onDrop={handleProjectParallelSurfaceDrop}');
+    expect(homeClient).toContain('resolveProjectParallelDropSide(event)');
     expect(homeClient).toContain('왼쪽에 놓기');
     expect(homeClient).toContain('오른쪽에 놓기');
     expect(homeClient).toContain('className="pc-parallel__iframe"');
