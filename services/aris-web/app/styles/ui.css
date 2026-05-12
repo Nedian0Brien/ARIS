@@ -5840,6 +5840,106 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
   to { transform: rotate(360deg); }
 }
 
+/* === Action card badge (cmd-tone-driven) === */
+.pc-proto .cmd-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2.5px 8px 2.5px 7px;
+  border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+  font-family: var(--font-mono); letter-spacing: 0.01em;
+  line-height: 1; white-space: nowrap;
+  position: relative; flex-shrink: 0; vertical-align: middle;
+  background: var(--tone-bg); color: var(--tone-fg);
+  border: 0;
+}
+.pc-proto .cmd-badge[data-clickable="true"] {
+  cursor: pointer;
+  transition: transform var(--t-fast), box-shadow var(--t-fast);
+}
+.pc-proto .cmd-badge[data-clickable="true"]:hover,
+.pc-proto .cmd-badge[data-clickable="true"]:focus-visible {
+  transform: translateY(-1px); box-shadow: var(--shadow-sm); z-index: 30; outline: 0;
+}
+.pc-proto .cmd-badge[data-open="true"] {
+  box-shadow: 0 0 0 2px var(--b-500), var(--shadow-sm); z-index: 30;
+}
+
+.pc-proto .cmd-badge[data-tone="read"]    { --tone-fg: var(--tone-read-fg);    --tone-bg: var(--tone-read-bg); }
+.pc-proto .cmd-badge[data-tone="write"]   { --tone-fg: var(--tone-write-fg);   --tone-bg: var(--tone-write-bg); }
+.pc-proto .cmd-badge[data-tone="edit"]    { --tone-fg: var(--tone-edit-fg);    --tone-bg: var(--tone-edit-bg); }
+.pc-proto .cmd-badge[data-tone="shell"]   { --tone-fg: var(--tone-shell-fg);   --tone-bg: var(--tone-shell-bg); }
+.pc-proto .cmd-badge[data-tone="list"]    { --tone-fg: var(--tone-list-fg);    --tone-bg: var(--tone-list-bg); }
+.pc-proto .cmd-badge[data-tone="glob"]    { --tone-fg: var(--tone-glob-fg);    --tone-bg: var(--tone-glob-bg); }
+.pc-proto .cmd-badge[data-tone="search"]  { --tone-fg: var(--tone-search-fg);  --tone-bg: var(--tone-search-bg); }
+.pc-proto .cmd-badge[data-tone="net"]     { --tone-fg: var(--tone-net-fg);     --tone-bg: var(--tone-net-bg); }
+.pc-proto .cmd-badge[data-tone="pkg"]     { --tone-fg: var(--tone-pkg-fg);     --tone-bg: var(--tone-pkg-bg); }
+.pc-proto .cmd-badge[data-tone="build"]   { --tone-fg: var(--tone-build-fg);   --tone-bg: var(--tone-build-bg); }
+.pc-proto .cmd-badge[data-tone="test"]    { --tone-fg: var(--tone-test-fg);    --tone-bg: var(--tone-test-bg); }
+.pc-proto .cmd-badge[data-tone="git"]     { --tone-fg: var(--tone-git-fg);     --tone-bg: var(--tone-git-bg); }
+.pc-proto .cmd-badge[data-tone="docker"]  { --tone-fg: var(--tone-docker-fg);  --tone-bg: var(--tone-docker-bg); }
+.pc-proto .cmd-badge[data-tone="destroy"] { --tone-fg: var(--tone-destroy-fg); --tone-bg: var(--tone-destroy-bg); }
+.pc-proto .cmd-badge[data-tone="think"]   { --tone-fg: var(--tone-think-fg);   --tone-bg: var(--tone-think-bg); }
+.pc-proto .cmd-badge[data-tone="todo"]    { --tone-fg: var(--tone-todo-fg);    --tone-bg: var(--tone-todo-bg); }
+.pc-proto .cmd-badge[data-tone="agent"]   { --tone-fg: var(--tone-agent-fg);   --tone-bg: var(--tone-agent-bg); }
+.pc-proto .cmd-badge[data-tone="cmd"]     { --tone-fg: var(--tone-cmd-fg);     --tone-bg: var(--tone-cmd-bg); }
+
+.pc-proto .cmd-badge[data-running="true"]::after {
+  content: ''; position: absolute; inset: -3px; border-radius: 999px;
+  border: 1.5px dashed currentColor; opacity: 0.6; pointer-events: none;
+  animation: cmdBadgePulse 1.6s ease-out infinite;
+}
+@keyframes cmdBadgePulse {
+  0%   { opacity: 0.55; transform: scale(0.92); }
+  100% { opacity: 0;    transform: scale(1.10); }
+}
+.pc-proto .cmd-badge[data-error="true"]::before {
+  content: ''; position: absolute; top: -2px; right: -2px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--danger-fg); border: 2px solid var(--surface);
+}
+
+/* === File chip === */
+.pc-proto .cmd-file-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 6px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  font-family: var(--font-mono); font-size: 10.8px;
+  color: var(--text-primary);
+  line-height: 1.35;
+  max-width: 36ch;
+  cursor: pointer; vertical-align: middle; flex-shrink: 0;
+}
+.pc-proto .cmd-file-chip:hover { background: var(--surface-hover); border-color: var(--border-default); }
+.pc-proto .cmd-file-chip:focus-visible { outline: 2px solid var(--b-500); outline-offset: 1px; }
+.pc-proto .cmd-file-chip:disabled { cursor: default; opacity: 0.85; }
+.pc-proto .cmd-file-chip__name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.pc-proto .cmd-file-chip[data-variant="code"]   svg { color: var(--tone-read-fg); }
+.pc-proto .cmd-file-chip[data-variant="folder"] svg { color: var(--b-500); }
+.pc-proto .cmd-file-chip[data-variant="config"] svg { color: var(--warning-fg); }
+.pc-proto .cmd-file-chip[data-variant="shell"]  svg { color: var(--success-fg); }
+.pc-proto .cmd-file-chip[data-variant="other"]  svg { color: var(--text-tertiary); }
+
+/* === Density toggle (4-way header control) === */
+.pc-proto .cmd-density-toggle {
+  display: inline-flex; align-items: center;
+  background: var(--surface); border: 1px solid var(--border-default);
+  border-radius: 999px; padding: 3px; gap: 2px;
+}
+.pc-proto .cmd-density-toggle button {
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  background: transparent; border: 0; padding: 5px 12px; border-radius: 999px;
+  cursor: pointer; transition: all var(--t-fast);
+}
+.pc-proto .cmd-density-toggle button:hover { color: var(--text-primary); }
+.pc-proto .cmd-density-toggle button[aria-selected="true"] {
+  background: var(--surface-sunken); color: var(--b-600);
+  box-shadow: inset 0 0 0 1px rgba(47,107,255,0.36);
+}
+
 .files-head {
   padding: var(--sp-8) var(--sp-10);
   border-bottom: 1px solid var(--border-subtle);
