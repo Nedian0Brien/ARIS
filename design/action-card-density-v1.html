@@ -1,0 +1,1600 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARIS · Action Card Density</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+/* ============================================================
+ *  Tokens — extracted from services/aris-web/app/styles/tokens.css (dark)
+ * ============================================================ */
+:root {
+  --font-sans: 'Inter', 'Pretendard Variable', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+  --canvas: #08090c;
+  --surface: #0e1015;
+  --surface-raised: #1c2029;
+  --surface-elevated: #14161d;
+  --surface-sunken: #0b0d12;
+  --surface-hover: #17191f;
+
+  --text-primary: #f0f1f4;
+  --text-secondary: #afb4be;
+  --text-tertiary: #7d828e;
+
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --line-subtle: rgba(255, 255, 255, 0.06);
+
+  --accent-sky: #5e82fd;
+  --accent-sky-bg: rgba(47, 107, 255, 0.14);
+  --accent-amber: #f9b969;
+  --accent-amber-bg: rgba(245, 158, 11, 0.14);
+  --accent-violet: #b78cf7;
+  --accent-violet-bg: rgba(139, 92, 246, 0.16);
+  --accent-emerald: #3fdd9b;
+  --accent-emerald-bg: rgba(16, 185, 129, 0.14);
+  --accent-cyan: #75d4ea;
+  --accent-cyan-bg: rgba(34, 211, 238, 0.14);
+  --accent-red: #f38484;
+  --accent-red-bg: rgba(239, 68, 68, 0.16);
+  --accent-git: #ff8d6c;
+  --accent-git-bg: rgba(240, 80, 50, 0.22);
+  --accent-docker: #7cc5ff;
+  --accent-docker-bg: rgba(36, 150, 237, 0.22);
+
+  --chat-text-primary: var(--text-primary);
+  --chat-text: var(--text-secondary);
+  --chat-text-muted: var(--text-tertiary);
+  --chat-control-text: #c8cdd6;
+  --chat-control-bg: rgba(255,255,255,0.04);
+  --chat-control-border: var(--line);
+  --chat-popover-bg: #181b22;
+  --chat-accent: var(--accent-sky);
+  --chat-surface-hover: rgba(255,255,255,0.06);
+  --chat-item-hover-border: rgba(94, 130, 253, 0.4);
+
+  --shadow-popover: 0 12px 32px -4px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06);
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.02), 0 2px 6px rgba(0,0,0,0.25);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-sans);
+  background:
+    radial-gradient(900px 480px at 12% -10%, rgba(47,107,255,0.10) 0%, transparent 60%),
+    radial-gradient(700px 420px at 88% -6%, rgba(123,92,255,0.08) 0%, transparent 60%),
+    var(--canvas);
+  color: var(--text-primary);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================================
+ *  Layout shell
+ * ============================================================ */
+.page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 48px 32px 96px;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 32px;
+}
+
+.page-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-sky);
+  margin: 0 0 8px;
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.page-subtitle {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  max-width: 620px;
+  line-height: 1.5;
+}
+
+.section {
+  margin-top: 56px;
+}
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.section-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.section-sub {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+/* ============================================================
+ *  Density toggle (header control)
+ * ============================================================ */
+.density-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+}
+.density-toggle button {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: 0.01em;
+  transition: all 160ms ease;
+}
+.density-toggle button:hover { color: var(--text-primary); }
+.density-toggle button.is-active {
+  background: var(--surface);
+  color: var(--accent-sky);
+  box-shadow: inset 0 0 0 1px rgba(94,130,253,0.36);
+}
+.density-toggle .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+  opacity: 0.7;
+}
+
+/* ============================================================
+ *  Action card — shared bits
+ * ============================================================ */
+.bubble-action {
+  background: transparent;
+  padding: 0;
+}
+
+/* Kind chip / tones */
+.kindChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.8px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+  padding: 2.2px 7px;
+  line-height: 1;
+  font-family: var(--font-sans);
+  white-space: nowrap;
+}
+.toneSky    { color: var(--accent-sky);    background: var(--accent-sky-bg); }
+.toneAmber  { color: var(--accent-amber);  background: var(--accent-amber-bg); }
+.toneCyan   { color: var(--accent-cyan);   background: var(--accent-cyan-bg); }
+.toneEmerald{ color: var(--accent-emerald);background: var(--accent-emerald-bg); }
+.toneViolet { color: var(--accent-violet); background: var(--accent-violet-bg); }
+.toneRed    { color: var(--accent-red);    background: var(--accent-red-bg); }
+.toneGit    { color: var(--accent-git);    background: var(--accent-git-bg); }
+.toneDocker { color: var(--accent-docker); background: var(--accent-docker-bg); }
+
+.actionSep {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.actionPrimaryInline {
+  font-size: 11.4px;
+  font-family: var(--font-mono);
+  color: var(--chat-control-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+.actionExpandBtn {
+  width: 22px; height: 22px;
+  border-radius: 999px;
+  border: 1px solid var(--chat-control-border);
+  background: var(--chat-control-bg);
+  color: var(--chat-control-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 140ms ease;
+}
+.actionExpandBtn:hover {
+  background: var(--chat-surface-hover);
+  color: var(--accent-sky);
+  border-color: var(--chat-item-hover-border);
+}
+.actionResult {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--chat-control-border);
+  background: var(--chat-popover-bg);
+  color: var(--chat-text-primary);
+  font-size: 11.4px;
+  line-height: 1.5;
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  overflow-x: auto;
+  max-height: 320px;
+}
+
+/* Resource chip */
+.resourceChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-elevated);
+  padding: 2.2px 7px;
+  font-size: 10.8px;
+  font-weight: 700;
+  color: var(--chat-text-primary);
+  font-family: var(--font-mono);
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.resourceChip .lucide {
+  width: 12px; height: 12px;
+  flex-shrink: 0;
+  color: var(--accent-sky);
+}
+
+/* --- 확장형 (Expanded) ---------------------------------- */
+.actionCard {
+  padding: 0;
+}
+.actionCard .header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.actionCard .header-main {
+  flex: 1;
+  min-width: 0;
+}
+.actionCard .top-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.actionCard .primary-row {
+  display: block;
+  margin-top: 4px;
+  font-size: 11.8px;
+  font-family: var(--font-mono);
+  color: var(--chat-control-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- 기본형 (Default) — chip + 명령어 only -------------- */
+.actionDefault {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.actionDefault .row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* --- 최소형 (Minimal) — circular icon ------------------- */
+.actionMini {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+.actionMiniIcon {
+  --mini-size: 24px;
+  width: var(--mini-size);
+  height: var(--mini-size);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-elevated);
+  border: 1.5px solid var(--line-strong);
+  cursor: pointer;
+  position: relative;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+.actionMiniIcon + .actionMiniIcon { margin-left: -8px; }
+.actionMiniIcon .lucide {
+  width: 12.5px; height: 12.5px;
+}
+.actionMiniIcon.toneSky    { background: var(--accent-sky-bg);    border-color: color-mix(in srgb, var(--accent-sky) 38%, transparent);     color: var(--accent-sky); }
+.actionMiniIcon.toneAmber  { background: var(--accent-amber-bg);  border-color: color-mix(in srgb, var(--accent-amber) 38%, transparent);   color: var(--accent-amber); }
+.actionMiniIcon.toneCyan   { background: var(--accent-cyan-bg);   border-color: color-mix(in srgb, var(--accent-cyan) 38%, transparent);    color: var(--accent-cyan); }
+.actionMiniIcon.toneEmerald{ background: var(--accent-emerald-bg);border-color: color-mix(in srgb, var(--accent-emerald) 38%, transparent); color: var(--accent-emerald); }
+.actionMiniIcon.toneViolet { background: var(--accent-violet-bg); border-color: color-mix(in srgb, var(--accent-violet) 38%, transparent);  color: var(--accent-violet); }
+.actionMiniIcon.toneRed    { background: var(--accent-red-bg);    border-color: color-mix(in srgb, var(--accent-red) 38%, transparent);     color: var(--accent-red); }
+.actionMiniIcon.toneGit    { background: var(--accent-git-bg);    border-color: color-mix(in srgb, var(--accent-git) 38%, transparent);     color: var(--accent-git); }
+.actionMiniIcon.toneDocker { background: var(--accent-docker-bg); border-color: color-mix(in srgb, var(--accent-docker) 38%, transparent);  color: var(--accent-docker); }
+.actionMiniIcon:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35), 0 0 0 2px rgba(94,130,253,0.18);
+  border-color: var(--chat-item-hover-border);
+  z-index: 30;
+}
+.actionMiniIcon.is-open {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 2px var(--accent-sky);
+  z-index: 30;
+}
+.actionMiniIcon.is-running {
+  border-style: dashed;
+  animation: miniPulse 1.8s ease-in-out infinite;
+}
+.actionMiniIcon.is-error::after {
+  content: '';
+  position: absolute;
+  top: -2px; right: -2px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent-red);
+  box-shadow: 0 0 0 2px var(--canvas);
+}
+.actionMiniIcon.is-overflow {
+  background: var(--surface-raised);
+  border-color: var(--line);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+@keyframes miniPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(94,130,253,0.0); }
+  50%      { box-shadow: 0 0 0 4px rgba(94,130,253,0.18); }
+}
+
+/* Hover preview popover */
+.miniPreview {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--chat-popover-bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 220px;
+  max-width: 340px;
+  box-shadow: var(--shadow-popover);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 140ms ease;
+  z-index: 50;
+  white-space: nowrap;
+}
+.actionMiniIcon:hover .miniPreview,
+.actionMiniIcon:focus-visible .miniPreview {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.miniPreview .top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.miniPreview .cmd {
+  font-family: var(--font-mono);
+  font-size: 11.3px;
+  color: var(--chat-control-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.miniPreview .meta {
+  font-size: 10.8px;
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+}
+.miniPreview::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 8px; height: 8px;
+  background: var(--chat-popover-bg);
+  border-right: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line-strong);
+  margin-top: -4px;
+}
+
+/* Inline expansion when minimal icon clicked */
+.miniStack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.miniStackRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+.miniStackLabel {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-right: 8px;
+}
+.miniInlinePanel {
+  border: 1px solid var(--line);
+  background: var(--surface-elevated);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-top: 4px;
+  display: none;
+}
+.miniInlinePanel.is-open { display: block; }
+
+/* Diff styling (CodeChanges) */
+.diff {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--chat-control-border);
+  background: var(--chat-popover-bg);
+  font-family: var(--font-mono);
+  font-size: 11.4px;
+  line-height: 1.55;
+  display: grid;
+  gap: 1px;
+}
+.diff .line { display: block; padding: 0 4px; border-radius: 3px; }
+.diff .add   { color: #6ed4a3; background: rgba(63, 221, 155, 0.07); }
+.diff .del   { color: #f49595; background: rgba(243, 132, 132, 0.07); }
+.diff .ctx   { color: var(--text-secondary); }
+.diff .hunk  { color: #75d4ea; font-weight: 600; }
+.codeChangesSummary {
+  display: flex;
+  gap: 10px;
+  font-size: 10.8px;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  margin-top: 6px;
+}
+.codeChangesSummary .add { color: var(--accent-emerald); }
+.codeChangesSummary .del { color: var(--accent-red); }
+
+/* ============================================================
+ *  Section A — Mode comparison table
+ * ============================================================ */
+.compareGrid {
+  display: grid;
+  grid-template-columns: 100px 1fr 1fr 1fr;
+  gap: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 18px;
+}
+.compareGrid .colHead {
+  font-size: 10.8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: 8px 0 6px;
+  border-bottom: 1px solid var(--line-subtle);
+}
+.compareGrid .rowLabel {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  align-self: center;
+  padding-right: 8px;
+  border-right: 1px solid var(--line-subtle);
+}
+.compareGrid .cell {
+  padding: 10px 6px;
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  border-bottom: 1px solid var(--line-subtle);
+}
+.compareGrid > .cell:nth-last-child(-n+3),
+.compareGrid > .rowLabel:last-of-type { border-bottom: 0; }
+
+/* ============================================================
+ *  Section B — Chat flow simulation
+ * ============================================================ */
+.flowFrame {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+.flowTabs {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-elevated);
+}
+.flowTab {
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: transparent;
+  border: 0;
+  color: var(--text-secondary);
+  padding: 12px 18px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 160ms ease;
+}
+.flowTab:hover { color: var(--text-primary); }
+.flowTab.is-active {
+  color: var(--accent-sky);
+  border-bottom-color: var(--accent-sky);
+}
+.flowTab .badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.05em;
+}
+.flowBody {
+  padding: 18px 22px 26px;
+}
+
+/* Chat-like layout */
+.chatMsg {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 10px;
+  padding: 6px 0;
+}
+.chatMsg.user {
+  grid-template-columns: 1fr;
+  justify-items: end;
+}
+.chatMsg .avatar {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #cb6d4b 0%, #b15536 100%);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700;
+  color: #1a1208;
+  letter-spacing: -0.02em;
+}
+.chatMsg .body {
+  font-size: 13.2px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  max-width: 800px;
+}
+.chatMsg.user .body {
+  background: var(--surface-elevated);
+  border: 1px solid var(--line);
+  padding: 8px 12px;
+  border-radius: 14px;
+  font-size: 13px;
+  color: var(--text-primary);
+  max-width: 560px;
+}
+.chatMsg .body p { margin: 0 0 6px; }
+.chatMsg .body p:last-child { margin: 0; }
+.chatMsg .sender {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.chatMsg .sender .time {
+  margin-left: 8px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+  font-size: 10.8px;
+}
+.chatActionRow {
+  padding: 6px 0 6px 38px;
+}
+.chatActionRow.minimal { padding-left: 38px; }
+.chatActionRow.minimal .miniStackRow { gap: 0; }
+
+/* Section D — Tokens */
+.tokenGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 18px;
+}
+.tokenCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--line-subtle);
+}
+.tokenSwatch {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.tokenMeta {
+  display: grid; gap: 2px;
+}
+.tokenMeta .name { font-size: 11.5px; font-weight: 700; color: var(--text-primary); }
+.tokenMeta .hex  { font-size: 10.5px; font-family: var(--font-mono); color: var(--text-tertiary); }
+
+/* Section header chip */
+.scenarioLegend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  margin-top: 6px;
+}
+.scenarioLegend code {
+  background: var(--surface-raised);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+/* ============================================================
+ *  Lucide icon defaults
+ * ============================================================ */
+.lucide { width: 13px; height: 13px; stroke-width: 2; }
+
+</style>
+</head>
+<body>
+<main class="page">
+
+  <!-- ========================= HEADER ========================= -->
+  <header class="page-header">
+    <div>
+      <p class="page-eyebrow">ARIS · Chat UI · Density</p>
+      <h1 class="page-title">Action Card 밀도 모드</h1>
+      <p class="page-subtitle">
+        에이전트 액션 카드를 <strong>확장형 / 기본형 / 최소형</strong> 세 단계로 압축할 수 있습니다.
+        끝난 액션을 자동으로 가라앉히는 <strong>자동 모드</strong>를 포함합니다.
+      </p>
+    </div>
+    <div class="density-toggle" role="tablist" aria-label="기본 밀도 모드 선택">
+      <button class="is-active" data-density="auto"><span class="dot"></span>자동</button>
+      <button data-density="expanded">확장</button>
+      <button data-density="default">기본</button>
+      <button data-density="minimal">최소</button>
+    </div>
+  </header>
+
+  <!-- ========================= SECTION A ========================= -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">A. 모드별 단일 카드 비교</h2>
+      <span class="section-sub">동일한 액션이 세 모드에서 각각 어떻게 보이는가</span>
+    </div>
+
+    <div class="compareGrid">
+      <div class="colHead">Kind</div>
+      <div class="colHead">최소형</div>
+      <div class="colHead">기본형</div>
+      <div class="colHead">확장형</div>
+
+      <!-- RUN -->
+      <div class="rowLabel">RUN</div>
+      <div class="cell">
+        <div class="actionMiniIcon toneAmber"><i data-lucide="terminal-square"></i></div>
+      </div>
+      <div class="cell">
+        <div class="actionDefault">
+          <div class="row">
+            <span class="kindChip toneAmber"><i data-lucide="terminal-square"></i>RUN</span>
+            <span class="actionPrimaryInline">npm test -- chat-screen/center-pane</span>
+          </div>
+        </div>
+      </div>
+      <div class="cell" style="align-items:flex-start; padding-top:14px; padding-bottom:14px;">
+        <div class="actionCard" style="width:100%;">
+          <div class="header">
+            <div class="header-main">
+              <div class="top-row">
+                <span class="kindChip toneAmber"><i data-lucide="terminal-square"></i>RUN</span>
+                <span class="actionSep">—</span>
+                <span class="actionPrimaryInline">npm test -- chat-screen/center-pane</span>
+              </div>
+            </div>
+            <button class="actionExpandBtn"><i data-lucide="chevron-down"></i></button>
+          </div>
+          <pre class="actionResult">PASS  __tests__/center-pane/ChatTimeline.test.tsx
+  ✓ renders agent message bubble (24ms)
+  ✓ collapses consecutive action events into stack (18ms)
+  ✓ preserves expand state across density changes (9ms)
+
+Tests:       3 passed, 3 total
+Time:        2.41s</pre>
+        </div>
+      </div>
+
+      <!-- READ -->
+      <div class="rowLabel">READ</div>
+      <div class="cell">
+        <div class="actionMiniIcon toneViolet"><i data-lucide="file-search"></i></div>
+      </div>
+      <div class="cell">
+        <div class="actionDefault">
+          <div class="row">
+            <span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span>
+            <span class="resourceChip"><i data-lucide="file-code-2"></i>ChatInterface.tsx</span>
+          </div>
+        </div>
+      </div>
+      <div class="cell" style="align-items:flex-start; padding-top:14px; padding-bottom:14px;">
+        <div class="actionCard" style="width:100%;">
+          <div class="header">
+            <div class="header-main">
+              <div class="top-row">
+                <span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span>
+                <span class="actionSep">—</span>
+                <span class="resourceChip"><i data-lucide="file-code-2"></i>services/aris-web/app/sessions/[sessionId]/ChatInterface.tsx</span>
+              </div>
+            </div>
+            <button class="actionExpandBtn"><i data-lucide="chevron-down"></i></button>
+          </div>
+          <pre class="actionResult">L1   'use client';
+L2
+L3   import React, { useEffect, useMemo, useRef, useState } from 'react';
+L4   import { useRouter } from 'next/navigation';
+L5   import { ChatTimeline } from './chat-screen/center-pane/ChatTimeline';
+L6   import { ChatComposer } from './chat-screen/center-pane/ChatComposer';
+L7   import styles from './ChatInterface.module.css';
+... (+2 891 more)</pre>
+        </div>
+      </div>
+
+      <!-- WRITE -->
+      <div class="rowLabel">WRITE</div>
+      <div class="cell">
+        <div class="actionMiniIcon toneEmerald"><i data-lucide="file-pen-line"></i></div>
+      </div>
+      <div class="cell">
+        <div class="actionDefault">
+          <div class="row">
+            <span class="kindChip toneEmerald"><i data-lucide="file-pen-line"></i>WRITE</span>
+            <span class="resourceChip"><i data-lucide="file-code-2"></i>ActionEventCard.tsx</span>
+          </div>
+        </div>
+      </div>
+      <div class="cell" style="align-items:flex-start; padding-top:14px; padding-bottom:14px;">
+        <div class="actionCard" style="width:100%;">
+          <div class="header">
+            <div class="header-main">
+              <div class="top-row">
+                <span class="kindChip toneEmerald"><i data-lucide="file-pen-line"></i>WRITE</span>
+                <span class="actionSep">—</span>
+                <span class="resourceChip"><i data-lucide="file-code-2"></i>ActionEventCard.tsx</span>
+              </div>
+              <div class="codeChangesSummary">
+                <span>1 file</span>
+                <span class="add">+14</span>
+                <span class="del">-3</span>
+              </div>
+            </div>
+            <button class="actionExpandBtn"><i data-lucide="chevron-down"></i></button>
+          </div>
+          <pre class="diff"><span class="line hunk">@@ -42,7 +42,18 @@</span><span class="line ctx">  if (!expanded) {</span><span class="line ctx">    return (</span><span class="line del">-     &lt;div className={styles.actionCompact}&gt;</span><span class="line add">+     &lt;div className={`${styles.actionCompact} ${styles[densityClass]}`}&gt;</span><span class="line add">+       {density === 'minimal' &amp;&amp; (</span><span class="line add">+         &lt;div className={styles.actionMiniIcon} /&gt;</span><span class="line add">+       )}</span></pre>
+        </div>
+      </div>
+
+      <!-- THINK -->
+      <div class="rowLabel">THINK</div>
+      <div class="cell">
+        <div class="actionMiniIcon toneCyan"><i data-lucide="brain"></i></div>
+      </div>
+      <div class="cell">
+        <div class="actionDefault">
+          <div class="row">
+            <span class="kindChip toneCyan"><i data-lucide="brain"></i>THINKING</span>
+            <span class="actionPrimaryInline">Searching for the auth middleware definition…</span>
+          </div>
+        </div>
+      </div>
+      <div class="cell" style="align-items:flex-start; padding-top:14px; padding-bottom:14px;">
+        <div class="actionCard" style="width:100%;">
+          <div class="header">
+            <div class="header-main">
+              <div class="top-row">
+                <span class="kindChip toneCyan"><i data-lucide="brain"></i>THINKING</span>
+                <span class="actionSep">—</span>
+                <span class="actionPrimaryInline" style="font-family:var(--font-sans); font-weight:600;">Searching for the auth middleware definition</span>
+              </div>
+            </div>
+            <button class="actionExpandBtn"><i data-lucide="chevron-down"></i></button>
+          </div>
+          <pre class="actionResult" style="font-family:var(--font-sans); white-space: pre-wrap;">사용자가 "auth middleware 어디 있어?"라고 물었다.
+프로젝트 구조상 `services/aris-backend/src/middleware/` 또는 `services/aris-web/middleware.ts`에 있을 가능성이 높다.
+먼저 두 후보를 모두 검색해보자.</pre>
+        </div>
+      </div>
+
+      <!-- LIST -->
+      <div class="rowLabel">LIST</div>
+      <div class="cell">
+        <div class="actionMiniIcon toneCyan"><i data-lucide="folder-tree"></i></div>
+      </div>
+      <div class="cell">
+        <div class="actionDefault">
+          <div class="row">
+            <span class="kindChip toneCyan"><i data-lucide="folder-tree"></i>LIST</span>
+            <span class="resourceChip"><i data-lucide="folder"></i>chat-screen/</span>
+          </div>
+        </div>
+      </div>
+      <div class="cell" style="align-items:flex-start; padding-top:14px; padding-bottom:14px;">
+        <div class="actionCard" style="width:100%;">
+          <div class="header">
+            <div class="header-main">
+              <div class="top-row">
+                <span class="kindChip toneCyan"><i data-lucide="folder-tree"></i>LIST</span>
+                <span class="actionSep">—</span>
+                <span class="resourceChip"><i data-lucide="folder"></i>services/aris-web/app/sessions/[sessionId]/chat-screen/</span>
+              </div>
+            </div>
+            <button class="actionExpandBtn"><i data-lucide="chevron-down"></i></button>
+          </div>
+          <pre class="actionResult">actions/
+center-pane/
+hooks/
+left-sidebar/
+preview/
+right-pane/
+browserHelpers.tsx
+helpers.tsx
+constants.ts
+modelHelpers.ts
+types.ts</pre>
+        </div>
+      </div>
+
+      <!-- GIT -->
+      <div class="rowLabel">GIT</div>
+      <div class="cell">
+        <div class="actionMiniIcon toneGit"><i data-lucide="git-branch"></i></div>
+      </div>
+      <div class="cell">
+        <div class="actionDefault">
+          <div class="row">
+            <span class="kindChip toneGit"><i data-lucide="git-branch"></i>GIT</span>
+            <span class="actionPrimaryInline">git commit -m "fix: density toggle keyboard focus"</span>
+          </div>
+        </div>
+      </div>
+      <div class="cell" style="align-items:flex-start; padding-top:14px; padding-bottom:14px;">
+        <div class="actionCard" style="width:100%;">
+          <div class="header">
+            <div class="header-main">
+              <div class="top-row">
+                <span class="kindChip toneGit"><i data-lucide="git-branch"></i>GIT</span>
+                <span class="actionSep">—</span>
+                <span class="actionPrimaryInline">git commit -m "fix: density toggle keyboard focus"</span>
+              </div>
+            </div>
+            <button class="actionExpandBtn"><i data-lucide="chevron-down"></i></button>
+          </div>
+          <pre class="actionResult">[codex/action-card-density-prototype 8f24aa1] fix: density toggle keyboard focus
+ 1 file changed, 6 insertions(+), 2 deletions(-)</pre>
+        </div>
+      </div>
+
+      <!-- EXEC (error) -->
+      <div class="rowLabel">EXEC</div>
+      <div class="cell">
+        <div class="actionMiniIcon toneRed is-error"><i data-lucide="terminal-square"></i></div>
+      </div>
+      <div class="cell">
+        <div class="actionDefault">
+          <div class="row">
+            <span class="kindChip toneRed"><i data-lucide="terminal-square"></i>EXEC</span>
+            <span class="actionPrimaryInline">rm -rf services/aris-web/.next/cache</span>
+          </div>
+        </div>
+      </div>
+      <div class="cell" style="align-items:flex-start; padding-top:14px; padding-bottom:14px;">
+        <div class="actionCard" style="width:100%;">
+          <div class="header">
+            <div class="header-main">
+              <div class="top-row">
+                <span class="kindChip toneRed"><i data-lucide="terminal-square"></i>EXEC</span>
+                <span class="actionSep">—</span>
+                <span class="actionPrimaryInline">rm -rf services/aris-web/.next/cache</span>
+              </div>
+            </div>
+            <button class="actionExpandBtn"><i data-lucide="chevron-down"></i></button>
+          </div>
+          <pre class="actionResult" style="color:#f49595;">rm: cannot remove 'services/aris-web/.next/cache': Permission denied
+exit code 1</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================= SECTION B ========================= -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">B. 채팅 흐름 시뮬레이션</h2>
+      <span class="section-sub">동일한 대화 흐름을 네 가지 밀도 모드로 비교</span>
+    </div>
+    <p class="scenarioLegend">
+      <span><code>READ × 3</code> → <code>WRITE × 2</code> → <code>RUN</code> → 텍스트 답변 → <code>READ × 4</code> → <code>RUN(running)</code></span>
+    </p>
+
+    <div class="flowFrame" style="margin-top:16px;">
+      <div class="flowTabs" role="tablist">
+        <button class="flowTab is-active" data-tab="expanded">확장형</button>
+        <button class="flowTab" data-tab="default">기본형</button>
+        <button class="flowTab" data-tab="minimal">최소형</button>
+        <button class="flowTab" data-tab="auto">자동<span class="badge">권장</span></button>
+      </div>
+
+      <!-- ===== Tab body: Expanded ===== -->
+      <div class="flowBody" data-tab-body="expanded">
+        <article class="chatMsg user">
+          <div class="body">@auth middleware 어디서 정의되는지 확인해서 로깅 추가해줘</div>
+        </article>
+        <article class="chatMsg">
+          <div class="avatar">C</div>
+          <div>
+            <div class="sender">Claude<span class="time">10:24 AM</span></div>
+            <div class="body">
+              <p>확인하겠습니다. 먼저 후보 위치를 살펴볼게요.</p>
+            </div>
+          </div>
+        </article>
+
+        <!-- 3 READ expanded -->
+        <article class="chatMsg">
+          <div></div>
+          <div class="actionCard">
+            <div class="header">
+              <div class="header-main">
+                <div class="top-row">
+                  <span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span>
+                  <span class="actionSep">—</span>
+                  <span class="resourceChip"><i data-lucide="file-code-2"></i>services/aris-web/middleware.ts</span>
+                </div>
+              </div>
+              <button class="actionExpandBtn"><i data-lucide="chevron-down"></i></button>
+            </div>
+            <pre class="actionResult">L1   import { NextRequest, NextResponse } from 'next/server';
+L2   import { verifySession } from '@/lib/auth/session';
+L3
+L4   export async function middleware(req: NextRequest) {
+L5     const session = await verifySession(req);
+... (+58 more)</pre>
+          </div>
+        </article>
+
+        <article class="chatMsg">
+          <div></div>
+          <div class="actionCard">
+            <div class="header">
+              <div class="header-main">
+                <div class="top-row">
+                  <span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span>
+                  <span class="actionSep">—</span>
+                  <span class="resourceChip"><i data-lucide="file-code-2"></i>services/aris-web/lib/auth/session.ts</span>
+                </div>
+              </div>
+              <button class="actionExpandBtn"><i data-lucide="chevron-down"></i></button>
+            </div>
+            <pre class="actionResult">L1   import { cookies } from 'next/headers';
+L2   import jwt from 'jsonwebtoken';
+L3
+L4   export async function verifySession(req) { ... }</pre>
+          </div>
+        </article>
+
+        <article class="chatMsg">
+          <div></div>
+          <div class="actionCard">
+            <div class="header">
+              <div class="header-main">
+                <div class="top-row">
+                  <span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span>
+                  <span class="actionSep">—</span>
+                  <span class="resourceChip"><i data-lucide="file-code-2"></i>services/aris-backend/src/middleware/auth.ts</span>
+                </div>
+              </div>
+              <button class="actionExpandBtn"><i data-lucide="chevron-down"></i></button>
+            </div>
+            <pre class="actionResult">L1   export function authMiddleware(req, res, next) { ... }</pre>
+          </div>
+        </article>
+
+        <!-- 2 WRITE -->
+        <article class="chatMsg">
+          <div></div>
+          <div class="actionCard">
+            <div class="header">
+              <div class="header-main">
+                <div class="top-row">
+                  <span class="kindChip toneEmerald"><i data-lucide="file-pen-line"></i>WRITE</span>
+                  <span class="actionSep">—</span>
+                  <span class="resourceChip"><i data-lucide="file-code-2"></i>services/aris-web/middleware.ts</span>
+                </div>
+                <div class="codeChangesSummary">
+                  <span>1 file</span><span class="add">+5</span><span class="del">-0</span>
+                </div>
+              </div>
+              <button class="actionExpandBtn"><i data-lucide="chevron-down"></i></button>
+            </div>
+            <pre class="diff"><span class="line hunk">@@ -4,6 +4,11 @@</span><span class="line ctx">export async function middleware(req: NextRequest) {</span><span class="line add">+ console.log('[auth] middleware enter', { path: req.nextUrl.pathname });</span><span class="line ctx">  const session = await verifySession(req);</span><span class="line add">+ console.log('[auth] session', { ok: !!session, userId: session?.userId });</span></pre>
+          </div>
+        </article>
+
+        <article class="chatMsg">
+          <div></div>
+          <div class="actionCard">
+            <div class="header">
+              <div class="header-main">
+                <div class="top-row">
+                  <span class="kindChip toneEmerald"><i data-lucide="file-pen-line"></i>WRITE</span>
+                  <span class="actionSep">—</span>
+                  <span class="resourceChip"><i data-lucide="file-code-2"></i>services/aris-backend/src/middleware/auth.ts</span>
+                </div>
+                <div class="codeChangesSummary">
+                  <span>1 file</span><span class="add">+3</span><span class="del">-0</span>
+                </div>
+              </div>
+              <button class="actionExpandBtn"><i data-lucide="chevron-down"></i></button>
+            </div>
+            <pre class="diff"><span class="line hunk">@@ -1,5 +1,8 @@</span><span class="line add">+ import logger from '../utils/logger';</span><span class="line ctx">export function authMiddleware(req, res, next) {</span><span class="line add">+   logger.debug('[auth] enter', { path: req.path });</span></pre>
+          </div>
+        </article>
+
+        <!-- RUN -->
+        <article class="chatMsg">
+          <div></div>
+          <div class="actionCard">
+            <div class="header">
+              <div class="header-main">
+                <div class="top-row">
+                  <span class="kindChip toneAmber"><i data-lucide="terminal-square"></i>RUN</span>
+                  <span class="actionSep">—</span>
+                  <span class="actionPrimaryInline">cd services/aris-web && npx tsc --noEmit</span>
+                </div>
+              </div>
+              <button class="actionExpandBtn"><i data-lucide="chevron-down"></i></button>
+            </div>
+            <pre class="actionResult">$ tsc --noEmit
+✓ no errors
+$ exit 0</pre>
+          </div>
+        </article>
+
+        <article class="chatMsg">
+          <div class="avatar">C</div>
+          <div>
+            <div class="sender">Claude<span class="time">10:25 AM</span></div>
+            <div class="body">
+              <p>두 middleware에 모두 로깅을 추가했습니다. 빌드도 정상이에요. 이제 실제 요청 로그를 한번 살펴볼까요?</p>
+            </div>
+          </div>
+        </article>
+
+        <!-- 4 READ -->
+        <article class="chatMsg">
+          <div></div>
+          <div class="actionCard">
+            <div class="header">
+              <div class="header-main">
+                <div class="top-row">
+                  <span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span>
+                  <span class="actionSep">—</span>
+                  <span class="resourceChip"><i data-lucide="folder"></i>logs/2026/05/12/</span>
+                </div>
+              </div>
+              <button class="actionExpandBtn"><i data-lucide="chevron-down"></i></button>
+            </div>
+            <pre class="actionResult">chat-claude-c8f4-t31-parsed.ndjson
+chat-claude-c8f4-t31-raw.ndjson
+chat-codex-c8a2-t29-parsed.ndjson</pre>
+          </div>
+        </article>
+
+        <!-- (truncated visual repetition) running RUN -->
+        <article class="chatMsg">
+          <div></div>
+          <div class="actionCard">
+            <div class="header">
+              <div class="header-main">
+                <div class="top-row">
+                  <span class="kindChip toneAmber"><i data-lucide="terminal-square"></i>RUN</span>
+                  <span class="actionSep">—</span>
+                  <span class="actionPrimaryInline">tail -f logs/2026/05/12/chat-claude-c8f4-t31-parsed.ndjson</span>
+                </div>
+              </div>
+              <button class="actionExpandBtn"><i data-lucide="chevron-up"></i></button>
+            </div>
+            <pre class="actionResult" style="color:var(--text-secondary)">실행 중…<br></pre>
+          </div>
+        </article>
+      </div>
+
+      <!-- ===== Tab body: Default ===== -->
+      <div class="flowBody" data-tab-body="default" style="display:none;">
+        <article class="chatMsg user">
+          <div class="body">@auth middleware 어디서 정의되는지 확인해서 로깅 추가해줘</div>
+        </article>
+        <article class="chatMsg">
+          <div class="avatar">C</div>
+          <div>
+            <div class="sender">Claude<span class="time">10:24 AM</span></div>
+            <div class="body">
+              <p>확인하겠습니다. 먼저 후보 위치를 살펴볼게요.</p>
+            </div>
+          </div>
+        </article>
+
+        <!-- Default: chip + 명령어 한 줄, no detail -->
+        <article class="chatMsg"><div></div><div class="actionDefault"><div class="row"><span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span><span class="resourceChip"><i data-lucide="file-code-2"></i>middleware.ts</span></div></div></article>
+        <article class="chatMsg"><div></div><div class="actionDefault"><div class="row"><span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span><span class="resourceChip"><i data-lucide="file-code-2"></i>lib/auth/session.ts</span></div></div></article>
+        <article class="chatMsg"><div></div><div class="actionDefault"><div class="row"><span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span><span class="resourceChip"><i data-lucide="file-code-2"></i>middleware/auth.ts</span></div></div></article>
+        <article class="chatMsg"><div></div><div class="actionDefault"><div class="row"><span class="kindChip toneEmerald"><i data-lucide="file-pen-line"></i>WRITE</span><span class="resourceChip"><i data-lucide="file-code-2"></i>middleware.ts</span></div></div></article>
+        <article class="chatMsg"><div></div><div class="actionDefault"><div class="row"><span class="kindChip toneEmerald"><i data-lucide="file-pen-line"></i>WRITE</span><span class="resourceChip"><i data-lucide="file-code-2"></i>middleware/auth.ts</span></div></div></article>
+        <article class="chatMsg"><div></div><div class="actionDefault"><div class="row"><span class="kindChip toneAmber"><i data-lucide="terminal-square"></i>RUN</span><span class="actionPrimaryInline">cd services/aris-web && npx tsc --noEmit</span></div></div></article>
+
+        <article class="chatMsg">
+          <div class="avatar">C</div>
+          <div>
+            <div class="sender">Claude<span class="time">10:25 AM</span></div>
+            <div class="body"><p>두 middleware에 모두 로깅을 추가했습니다. 빌드도 정상이에요. 이제 실제 요청 로그를 한번 살펴볼까요?</p></div>
+          </div>
+        </article>
+        <article class="chatMsg"><div></div><div class="actionDefault"><div class="row"><span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span><span class="resourceChip"><i data-lucide="folder"></i>logs/2026/05/12/</span></div></div></article>
+        <article class="chatMsg"><div></div><div class="actionDefault"><div class="row"><span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span><span class="resourceChip"><i data-lucide="file-code-2"></i>chat-claude-c8f4-t31-parsed.ndjson</span></div></div></article>
+        <article class="chatMsg"><div></div><div class="actionDefault"><div class="row"><span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span><span class="resourceChip"><i data-lucide="file-code-2"></i>chat-claude-c8f4-t31-raw.ndjson</span></div></div></article>
+        <article class="chatMsg"><div></div><div class="actionDefault"><div class="row"><span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span><span class="resourceChip"><i data-lucide="file-code-2"></i>helpers.tsx</span></div></div></article>
+        <article class="chatMsg"><div></div><div class="actionDefault"><div class="row"><span class="kindChip toneAmber"><i data-lucide="terminal-square"></i>RUN</span><span class="actionPrimaryInline">tail -f logs/2026/05/12/chat-claude-c8f4-t31-parsed.ndjson</span></div></div></article>
+      </div>
+
+      <!-- ===== Tab body: Minimal ===== -->
+      <div class="flowBody" data-tab-body="minimal" style="display:none;">
+        <article class="chatMsg user">
+          <div class="body">@auth middleware 어디서 정의되는지 확인해서 로깅 추가해줘</div>
+        </article>
+        <article class="chatMsg">
+          <div class="avatar">C</div>
+          <div>
+            <div class="sender">Claude<span class="time">10:24 AM</span></div>
+            <div class="body"><p>확인하겠습니다. 먼저 후보 위치를 살펴볼게요.</p></div>
+          </div>
+        </article>
+
+        <!-- consecutive action stack: 3R + 2W + 1Run -->
+        <article class="chatMsg">
+          <div></div>
+          <div class="miniStack">
+            <div class="miniStackRow" data-stack="1">
+              <button class="actionMiniIcon toneViolet" data-i="0" aria-label="READ middleware.ts">
+                <i data-lucide="file-search"></i>
+                <div class="miniPreview"><div class="top"><span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span></div><div class="cmd">middleware.ts</div><div class="meta">10:24:11 · 완료 · 64 lines</div></div>
+              </button>
+              <button class="actionMiniIcon toneViolet" data-i="1" aria-label="READ session.ts">
+                <i data-lucide="file-search"></i>
+                <div class="miniPreview"><div class="top"><span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span></div><div class="cmd">lib/auth/session.ts</div><div class="meta">10:24:13 · 완료</div></div>
+              </button>
+              <button class="actionMiniIcon toneViolet" data-i="2" aria-label="READ auth.ts">
+                <i data-lucide="file-search"></i>
+                <div class="miniPreview"><div class="top"><span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span></div><div class="cmd">middleware/auth.ts</div><div class="meta">10:24:15 · 완료</div></div>
+              </button>
+              <button class="actionMiniIcon toneEmerald" data-i="3" aria-label="WRITE middleware.ts">
+                <i data-lucide="file-pen-line"></i>
+                <div class="miniPreview"><div class="top"><span class="kindChip toneEmerald"><i data-lucide="file-pen-line"></i>WRITE</span></div><div class="cmd">middleware.ts</div><div class="meta">+5 / -0 · 10:24:21</div></div>
+              </button>
+              <button class="actionMiniIcon toneEmerald" data-i="4" aria-label="WRITE auth.ts">
+                <i data-lucide="file-pen-line"></i>
+                <div class="miniPreview"><div class="top"><span class="kindChip toneEmerald"><i data-lucide="file-pen-line"></i>WRITE</span></div><div class="cmd">middleware/auth.ts</div><div class="meta">+3 / -0 · 10:24:23</div></div>
+              </button>
+              <button class="actionMiniIcon toneAmber" data-i="5" aria-label="RUN tsc">
+                <i data-lucide="terminal-square"></i>
+                <div class="miniPreview"><div class="top"><span class="kindChip toneAmber"><i data-lucide="terminal-square"></i>RUN</span></div><div class="cmd">tsc --noEmit</div><div class="meta">완료 · exit 0 · 2.41s</div></div>
+              </button>
+              <span class="miniStackLabel" style="margin-left:14px;">6 actions</span>
+            </div>
+            <div class="miniInlinePanel" data-panel-for="1">
+              <div class="actionCard">
+                <div class="header">
+                  <div class="header-main">
+                    <div class="top-row">
+                      <span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span>
+                      <span class="actionSep">—</span>
+                      <span class="resourceChip"><i data-lucide="file-code-2"></i>(클릭한 카드만 인라인 확장)</span>
+                    </div>
+                  </div>
+                  <button class="actionExpandBtn"><i data-lucide="x"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="chatMsg">
+          <div class="avatar">C</div>
+          <div>
+            <div class="sender">Claude<span class="time">10:25 AM</span></div>
+            <div class="body"><p>두 middleware에 모두 로깅을 추가했습니다. 빌드도 정상이에요. 이제 실제 요청 로그를 한번 살펴볼까요?</p></div>
+          </div>
+        </article>
+
+        <!-- second stack: 4R + 1Running -->
+        <article class="chatMsg">
+          <div></div>
+          <div class="miniStack">
+            <div class="miniStackRow" data-stack="2">
+              <button class="actionMiniIcon toneViolet"><i data-lucide="file-search"></i></button>
+              <button class="actionMiniIcon toneViolet"><i data-lucide="file-search"></i></button>
+              <button class="actionMiniIcon toneViolet"><i data-lucide="file-search"></i></button>
+              <button class="actionMiniIcon toneViolet"><i data-lucide="file-search"></i></button>
+              <button class="actionMiniIcon toneAmber is-running"><i data-lucide="terminal-square"></i></button>
+              <span class="miniStackLabel" style="margin-left:14px;">5 actions · 1 실행 중</span>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <!-- ===== Tab body: Auto ===== -->
+      <div class="flowBody" data-tab-body="auto" style="display:none;">
+        <article class="chatMsg user">
+          <div class="body">@auth middleware 어디서 정의되는지 확인해서 로깅 추가해줘</div>
+        </article>
+        <article class="chatMsg">
+          <div class="avatar">C</div>
+          <div>
+            <div class="sender">Claude<span class="time">10:24 AM</span></div>
+            <div class="body"><p>확인하겠습니다. 먼저 후보 위치를 살펴볼게요.</p></div>
+          </div>
+        </article>
+
+        <!-- past actions collapsed to minimal -->
+        <article class="chatMsg">
+          <div></div>
+          <div class="miniStack">
+            <div class="miniStackRow">
+              <button class="actionMiniIcon toneViolet"><i data-lucide="file-search"></i></button>
+              <button class="actionMiniIcon toneViolet"><i data-lucide="file-search"></i></button>
+              <button class="actionMiniIcon toneViolet"><i data-lucide="file-search"></i></button>
+              <button class="actionMiniIcon toneEmerald"><i data-lucide="file-pen-line"></i></button>
+              <button class="actionMiniIcon toneEmerald"><i data-lucide="file-pen-line"></i></button>
+              <button class="actionMiniIcon toneAmber"><i data-lucide="terminal-square"></i></button>
+              <span class="miniStackLabel" style="margin-left:14px;">6 actions</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="chatMsg">
+          <div class="avatar">C</div>
+          <div>
+            <div class="sender">Claude<span class="time">10:25 AM</span></div>
+            <div class="body"><p>두 middleware에 모두 로깅을 추가했습니다. 빌드도 정상이에요. 이제 실제 요청 로그를 한번 살펴볼까요?</p></div>
+          </div>
+        </article>
+
+        <!-- past actions in this turn: 3 minimal + 1 default (most recent finished) + 1 expanded (running) -->
+        <article class="chatMsg">
+          <div></div>
+          <div class="miniStack">
+            <div class="miniStackRow">
+              <button class="actionMiniIcon toneViolet"><i data-lucide="file-search"></i></button>
+              <button class="actionMiniIcon toneViolet"><i data-lucide="file-search"></i></button>
+              <button class="actionMiniIcon toneViolet"><i data-lucide="file-search"></i></button>
+              <span class="miniStackLabel" style="margin-left:14px;">3 actions</span>
+            </div>
+          </div>
+        </article>
+        <article class="chatMsg">
+          <div></div>
+          <div class="actionDefault">
+            <div class="row">
+              <span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span>
+              <span class="resourceChip"><i data-lucide="file-code-2"></i>chat-claude-c8f4-t31-parsed.ndjson</span>
+            </div>
+          </div>
+        </article>
+        <article class="chatMsg">
+          <div></div>
+          <div class="actionCard">
+            <div class="header">
+              <div class="header-main">
+                <div class="top-row">
+                  <span class="kindChip toneAmber"><i data-lucide="terminal-square"></i>RUN</span>
+                  <span class="actionSep">—</span>
+                  <span class="actionPrimaryInline">tail -f logs/2026/05/12/chat-claude-c8f4-t31-parsed.ndjson</span>
+                </div>
+              </div>
+              <button class="actionExpandBtn"><i data-lucide="chevron-up"></i></button>
+            </div>
+            <pre class="actionResult" style="color:var(--text-secondary)">실행 중…</pre>
+          </div>
+        </article>
+
+        <p class="scenarioLegend" style="margin-top:18px;">
+          <span>자동 규칙: <code>실행 중 → 확장</code> · <code>가장 최근 완료 1개 → 기본</code> · <code>그 외 → 최소(stack)</code> · <code>에러는 거리 무관 기본 이상</code></span>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================= SECTION C ========================= -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">C. 인터랙션 — hover & 인라인 확장</h2>
+      <span class="section-sub">최소형 stack에서 카드를 마우스로 올리면 미리보기, 클릭하면 인라인 확장</span>
+    </div>
+
+    <div class="flowFrame" style="padding: 22px 26px;">
+      <div class="miniStack">
+        <div class="miniStackRow" id="interactiveStack">
+          <button class="actionMiniIcon toneViolet" data-mini="0">
+            <i data-lucide="file-search"></i>
+            <div class="miniPreview">
+              <div class="top"><span class="kindChip toneViolet"><i data-lucide="file-search"></i>READ</span></div>
+              <div class="cmd">services/aris-web/middleware.ts</div>
+              <div class="meta">10:24:11 · 완료 · 64 lines</div>
+            </div>
+          </button>
+          <button class="actionMiniIcon toneEmerald" data-mini="1">
+            <i data-lucide="file-pen-line"></i>
+            <div class="miniPreview">
+              <div class="top"><span class="kindChip toneEmerald"><i data-lucide="file-pen-line"></i>WRITE</span></div>
+              <div class="cmd">middleware.ts</div>
+              <div class="meta">+5 / -0 · 10:24:21</div>
+            </div>
+          </button>
+          <button class="actionMiniIcon toneAmber" data-mini="2">
+            <i data-lucide="terminal-square"></i>
+            <div class="miniPreview">
+              <div class="top"><span class="kindChip toneAmber"><i data-lucide="terminal-square"></i>RUN</span></div>
+              <div class="cmd">tsc --noEmit</div>
+              <div class="meta">완료 · exit 0 · 2.41s</div>
+            </div>
+          </button>
+          <button class="actionMiniIcon toneRed is-error" data-mini="3">
+            <i data-lucide="terminal-square"></i>
+            <div class="miniPreview">
+              <div class="top"><span class="kindChip toneRed"><i data-lucide="terminal-square"></i>EXEC</span></div>
+              <div class="cmd">rm -rf .next/cache</div>
+              <div class="meta">실패 · exit 1 · Permission denied</div>
+            </div>
+          </button>
+          <button class="actionMiniIcon toneGit" data-mini="4">
+            <i data-lucide="git-branch"></i>
+            <div class="miniPreview">
+              <div class="top"><span class="kindChip toneGit"><i data-lucide="git-branch"></i>GIT</span></div>
+              <div class="cmd">git commit -m "..."</div>
+              <div class="meta">완료 · 1 file · +6 / -2</div>
+            </div>
+          </button>
+          <button class="actionMiniIcon toneAmber is-running" data-mini="5">
+            <i data-lucide="terminal-square"></i>
+            <div class="miniPreview">
+              <div class="top"><span class="kindChip toneAmber"><i data-lucide="terminal-square"></i>RUN</span></div>
+              <div class="cmd">tail -f logs/.../parsed.ndjson</div>
+              <div class="meta">실행 중 · 00:14</div>
+            </div>
+          </button>
+          <span class="miniStackLabel" style="margin-left:14px;">6 actions · 1 실행 중 · 1 실패</span>
+        </div>
+
+        <div class="miniInlinePanel" id="inlinePanel">
+          <div class="actionCard">
+            <div class="header">
+              <div class="header-main">
+                <div class="top-row">
+                  <span class="kindChip toneEmerald"><i data-lucide="file-pen-line"></i>WRITE</span>
+                  <span class="actionSep">—</span>
+                  <span class="resourceChip"><i data-lucide="file-code-2"></i>services/aris-web/middleware.ts</span>
+                </div>
+                <div class="codeChangesSummary">
+                  <span>1 file</span><span class="add">+5</span><span class="del">-0</span>
+                </div>
+              </div>
+              <button class="actionExpandBtn" id="closeInline"><i data-lucide="x"></i></button>
+            </div>
+            <pre class="diff"><span class="line hunk">@@ -4,6 +4,11 @@</span><span class="line ctx">export async function middleware(req: NextRequest) {</span><span class="line add">+ console.log('[auth] middleware enter', { path: req.nextUrl.pathname });</span><span class="line ctx">  const session = await verifySession(req);</span><span class="line add">+ console.log('[auth] session', { ok: !!session, userId: session?.userId });</span></pre>
+          </div>
+        </div>
+      </div>
+
+      <p class="scenarioLegend" style="margin-top:18px;">
+        <span><code>hover</code>: 위쪽으로 미리보기 popover ·
+        <code>click</code>: 인라인 확장 패널 토글 ·
+        <code>is-error</code>: 우측 상단 빨간 점 ·
+        <code>is-running</code>: 점선 테두리 + 파란 펄스</span>
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= SECTION D ========================= -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">D. 톤 토큰</h2>
+      <span class="section-sub">8개 액션 톤 — 기존 <code style="background:var(--surface-raised);padding:1px 6px;border-radius:4px;font-family:var(--font-mono)">tokens.css</code>에서 가져옴</span>
+    </div>
+    <div class="tokenGrid">
+      <div class="tokenCell"><div class="tokenSwatch" style="background:var(--accent-amber);"></div><div class="tokenMeta"><span class="name">amber · RUN</span><span class="hex">#f9b969</span></div></div>
+      <div class="tokenCell"><div class="tokenSwatch" style="background:var(--accent-red);"></div><div class="tokenMeta"><span class="name">red · EXEC</span><span class="hex">#f38484</span></div></div>
+      <div class="tokenCell"><div class="tokenSwatch" style="background:var(--accent-violet);"></div><div class="tokenMeta"><span class="name">violet · READ</span><span class="hex">#b78cf7</span></div></div>
+      <div class="tokenCell"><div class="tokenSwatch" style="background:var(--accent-emerald);"></div><div class="tokenMeta"><span class="name">emerald · WRITE</span><span class="hex">#3fdd9b</span></div></div>
+      <div class="tokenCell"><div class="tokenSwatch" style="background:var(--accent-cyan);"></div><div class="tokenMeta"><span class="name">cyan · LIST/THINK</span><span class="hex">#75d4ea</span></div></div>
+      <div class="tokenCell"><div class="tokenSwatch" style="background:var(--accent-sky);"></div><div class="tokenMeta"><span class="name">sky · accent</span><span class="hex">#5e82fd</span></div></div>
+      <div class="tokenCell"><div class="tokenSwatch" style="background:var(--accent-git);"></div><div class="tokenMeta"><span class="name">git</span><span class="hex">#ff8d6c</span></div></div>
+      <div class="tokenCell"><div class="tokenSwatch" style="background:var(--accent-docker);"></div><div class="tokenMeta"><span class="name">docker</span><span class="hex">#7cc5ff</span></div></div>
+    </div>
+  </section>
+
+  <!-- ========================= SECTION E — RULES ========================= -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">E. 구현 규칙</h2>
+      <span class="section-sub">시안 적용 시 따라야 할 행동 규칙</span>
+    </div>
+    <div class="flowFrame" style="padding: 22px 26px; font-size: 13.5px; line-height: 1.65; color: var(--text-secondary);">
+      <ul style="margin:0; padding-left:1.2em;">
+        <li><strong>전역 기본값</strong>: 채팅 헤더 또는 설정 패널의 4-way 토글 (자동/확장/기본/최소)이 모든 카드의 기본 밀도를 결정한다.</li>
+        <li><strong>카드별 override</strong>: 어떤 모드에서도 카드를 클릭하면 그 카드만 일시적으로 확장형으로 펼친다. 다시 클릭하면 닫힌다.</li>
+        <li><strong>최소형 그룹화</strong>: 사이에 텍스트(에이전트/유저 메시지)가 없는 연속 액션들은 자동으로 한 row의 stack으로 묶인다. row 우측에 "{N} actions" 표시.</li>
+        <li><strong>최소형 hover</strong>: 마우스를 올리면 위쪽으로 popover — 배지 + 명령어/파일 + 상태 메타.</li>
+        <li><strong>실행 중 / 에러 표식</strong>:
+          <ul>
+            <li>실행 중: 점선 테두리 + 파란 펄스</li>
+            <li>실패(exit ≠ 0): 우측 상단 빨간 점</li>
+          </ul>
+        </li>
+        <li><strong>자동 모드 규칙</strong>:
+          <ul>
+            <li>실행 중: 확장형</li>
+            <li>가장 최근 완료 1개: 기본형</li>
+            <li>그 이전 모두: 최소형 (stack 그룹화 적용)</li>
+            <li>에러 결과는 거리에 상관없이 기본형 이상으로 유지 (stack에 묻히지 않게)</li>
+          </ul>
+        </li>
+        <li><strong>접근성</strong>: 최소형 원형 버튼에 <code style="background:var(--surface-raised);padding:1px 6px;border-radius:4px;font-family:var(--font-mono)">aria-label</code>로 "{KIND} {primary}" 노출. 키보드 포커스 시에도 popover 표시.</li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<script>
+// ----- Lucide icons -----
+if (window.lucide) lucide.createIcons();
+
+// ----- Density toggle (visual only, syncs labels) -----
+document.querySelectorAll('.density-toggle button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.density-toggle button').forEach(b => b.classList.remove('is-active'));
+    btn.classList.add('is-active');
+    // sync the chat flow tabs to mirror the global density choice
+    const d = btn.dataset.density;
+    const map = { auto: 'auto', expanded: 'expanded', default: 'default', minimal: 'minimal' };
+    const target = map[d];
+    document.querySelectorAll('.flowTab').forEach(t => {
+      const isActive = t.dataset.tab === target;
+      t.classList.toggle('is-active', isActive);
+    });
+    document.querySelectorAll('.flowBody').forEach(b => {
+      b.style.display = b.dataset.tabBody === target ? '' : 'none';
+    });
+  });
+});
+
+// ----- Flow tabs -----
+document.querySelectorAll('.flowTab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.flowTab').forEach(t => t.classList.remove('is-active'));
+    tab.classList.add('is-active');
+    const target = tab.dataset.tab;
+    document.querySelectorAll('.flowBody').forEach(b => {
+      b.style.display = b.dataset.tabBody === target ? '' : 'none';
+    });
+  });
+});
+
+// ----- Interactive minimal stack: click to inline expand -----
+const inlinePanel = document.getElementById('inlinePanel');
+document.querySelectorAll('#interactiveStack [data-mini]').forEach((icon) => {
+  icon.addEventListener('click', (event) => {
+    const isOpen = icon.classList.contains('is-open');
+    document.querySelectorAll('#interactiveStack [data-mini]').forEach(i => i.classList.remove('is-open'));
+    if (isOpen) {
+      inlinePanel.classList.remove('is-open');
+    } else {
+      icon.classList.add('is-open');
+      inlinePanel.classList.add('is-open');
+    }
+  });
+});
+document.getElementById('closeInline')?.addEventListener('click', () => {
+  document.querySelectorAll('#interactiveStack [data-mini]').forEach(i => i.classList.remove('is-open'));
+  inlinePanel.classList.remove('is-open');
+});
+
+// ----- Click-to-expand demo inside minimal flow tab too -----
+document.querySelectorAll('[data-stack="1"] [data-i]').forEach((icon) => {
+  icon.addEventListener('click', () => {
+    const panel = document.querySelector('[data-panel-for="1"]');
+    if (!panel) return;
+    const wasOpen = icon.classList.contains('is-open');
+    document.querySelectorAll('[data-stack="1"] [data-i]').forEach(i => i.classList.remove('is-open'));
+    if (wasOpen) {
+      panel.classList.remove('is-open');
+    } else {
+      icon.classList.add('is-open');
+      panel.classList.add('is-open');
+    }
+  });
+});
+</script>
+</body>
+</html>
