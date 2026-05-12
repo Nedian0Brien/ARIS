@@ -76,6 +76,7 @@ import {
 } from '@/components/project-chat/helpers/projectChatEvents';
 import { renderCommandTokens, commandTokenClass } from '@/components/project-chat/helpers/commandTokens';
 import { GitActionMark, DockerActionMark } from '@/components/project-chat/helpers/actionMarks';
+import { ProjectRunStatusChip } from '@/components/project-chat/ProjectRunStatusChip';
 
 type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';
 type ComposerMode = 'agent' | 'plan' | 'terminal';
@@ -1934,20 +1935,6 @@ function resolveProjectRunIndicator({
     return { label: '실행 중', startedAt: resolvedStartedAt, tone: 'running' };
   }
   return null;
-}
-
-function ProjectRunStatusChip({ event }: { event: UiEvent }) {
-  const runStatus = readUiEventRunStatus(event);
-  const { Icon, label, tone } = projectRunStatusMeta(runStatus);
-  const relativeTime = formatRelativeTime(event.timestamp);
-
-  return (
-    <div className="pc-run-status" data-tone={tone} title={`${label} · ${relativeTime}`} aria-label={`${label} · ${relativeTime}`}>
-      <span className="pc-run-status__icon" aria-hidden="true"><Icon size={12} /></span>
-      <span className="pc-run-status__label">{label}</span>
-      <time className="pc-run-status__time" dateTime={event.timestamp}>{relativeTime}</time>
-    </div>
-  );
 }
 
 function ProjectActionCard({
