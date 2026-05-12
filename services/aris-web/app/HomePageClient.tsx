@@ -56,6 +56,7 @@ import { isTerminalRunStatus, readUiEventRunStatus } from '@/lib/happy/chatRunti
 import { withAppBasePath } from '@/lib/routing/appPath';
 import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
 import type { AuthenticatedUser } from '@/lib/auth/types';
+import { readLocalStorage, removeLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
 import type { SessionChat, SessionStatus, SessionSummary, UiEvent } from '@/lib/happy/types';
 import { abortActiveChat } from '@/lib/runtime/abortChat';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
@@ -72,11 +73,14 @@ import {
   closeProjectPanel,
   collectProjectPanelIds,
   computeProjectPanelDropEdge,
+  createProjectPanelLayoutStorageKey,
   createProjectPanelTree,
   findFirstProjectPanelId,
   moveProjectPanelNode,
+  parseProjectPanelState,
   pruneProjectPanelStateByChatIds,
   resizeProjectPanelSplit,
+  serializeProjectPanelState,
   type ProjectParallelPanelDropEdge,
   type ProjectParallelPanelNode,
   type ProjectParallelPanelSplitDirection,
@@ -3157,6 +3161,7 @@ function ProjectChatSurface({
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [parallelPanelState, setParallelPanelState] = useState<ProjectParallelPanelTreeState | null>(null);
   const [parallelSurfaceDropEdge, setParallelSurfaceDropEdge] = useState<ProjectParallelPanelDropEdge | null>(null);
+  const [parallelLayoutHydrated, setParallelLayoutHydrated] = useState(false);
   const visibleEvents = events.slice(-40);
   const activeModelLabel = selectedModel || runtimeModelLabel;
   const activeAgent: SessionSummary['agent'] = selectedProvider;
@@ -3178,6 +3183,7 @@ function ProjectChatSurface({
     ?? new Date().toISOString();
   const projectChatRoute = `/?tab=project&project=${session.id}&view=chat${selectedChatId ? `&chat=${selectedChatId}` : ''}`;
   const previewTarget = `aris.lawdigest.cloud${projectChatRoute}`;
+  const parallelLayoutStorageKey = useMemo(() => createProjectPanelLayoutStorageKey(session.id), [session.id]);
   const prototypeRef = useRef<HTMLDivElement | null>(null);
   const composerWrapRef = useRef<HTMLElement | null>(null);
   const workspaceFiles = useWorkspaceFiles('/workspace');
@@ -3396,6 +3402,41 @@ function ProjectChatSurface({
     setParallelSurfaceDropEdge(null);
     if (activePanel?.chatId) onChatOpen(activePanel.chatId);
   }, [onChatOpen, parallelPanelState]);
+
+  useEffect(() => {
+    setParallelLayoutHydrated(false);
+    setParallelPanelState(null);
+    setParallelSurfaceDropEdge(null);
+  }, [parallelLayoutStorageKey]);
+
+  useEffect(() => {
+    if (surfaceMode !== 'full' || isLoadingChats || parallelLayoutHydrated) return;
+
+    const validChatIds = new Set(chats.map((chat) => chat.id));
+    const restored = parseProjectPanelState(
+      readLocalStorage(parallelLayoutStorageKey),
+      validChatIds,
+    );
+    setParallelLayoutHydrated(true);
+
+    if (restored && Object.keys(restored.panels).length > 1) {
+      setParallelPanelState(restored);
+      return;
+    }
+
+    removeLocalStorage(parallelLayoutStorageKey);
+  }, [chats, isLoadingChats, parallelLayoutHydrated, parallelLayoutStorageKey, surfaceMode]);
+
+  useEffect(() => {
+    if (surfaceMode !== 'full' || !parallelLayoutHydrated) return;
+
+    if (parallelPanelState && Object.keys(parallelPanelState.panels).length > 1) {
+      writeLocalStorage(parallelLayoutStorageKey, serializeProjectPanelState(parallelPanelState));
+      return;
+    }
+
+    removeLocalStorage(parallelLayoutStorageKey);
+  }, [parallelLayoutHydrated, parallelLayoutStorageKey, parallelPanelState, surfaceMode]);
 
   useEffect(() => () => {
     if (workspaceCloseTimerRef.current !== null) {
@@ -3625,7 +3666,12 @@ function ProjectChatSurface({
     if (!parallelPanelState) return;
     const chatIds = new Set(chats.map((chat) => chat.id));
     setParallelPanelState((current) => (
-      current ? pruneProjectPanelStateByChatIds(current, chatIds) : current
+      current
+        ? (() => {
+            const pruned = pruneProjectPanelStateByChatIds(current, chatIds);
+            return pruned && Object.keys(pruned.panels).length > 1 ? pruned : null;
+          })()
+        : current
     ));
   }, [chats, parallelPanelState]);
 

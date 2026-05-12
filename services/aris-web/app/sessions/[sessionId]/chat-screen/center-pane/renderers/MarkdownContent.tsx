@@ -321,7 +321,7 @@ export function MarkdownContent({ body }: { body: string }) {
 
   return (
     <div className={styles.markdownRoot}>
-      {blocks.flatMap((block, index) => {
+      {blocks.map((block, index) => {
         const key = `md-${index}`;
         if (block.type === 'code') {
           return [

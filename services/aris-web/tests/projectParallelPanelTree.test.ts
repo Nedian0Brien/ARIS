@@ -4,8 +4,11 @@ import {
   collectProjectPanelIds,
   computeProjectPanelDropEdge,
   createProjectPanelTree,
+  createProjectPanelLayoutStorageKey,
   moveProjectPanelNode,
+  parseProjectPanelState,
   resizeProjectPanelSplit,
+  serializeProjectPanelState,
   type ProjectParallelPanelTreeState,
 } from '../app/projectParallelPanels';
 
@@ -120,5 +123,81 @@ describe('project parallel panel tree', () => {
         { type: 'leaf', panelId: 'b' },
       ],
     });
+  });
+
+  it('serializes and restores a project panel layout by valid chat ids', () => {
+    const state: ProjectParallelPanelTreeState = {
+      activePanelId: 'b',
+      panels: {
+        a: { id: 'a', chatId: 'chat-a' },
+        b: { id: 'b', chatId: 'chat-b' },
+      },
+      layout: {
+        type: 'hsplit',
+        ratio: 0.42,
+        children: [
+          { type: 'leaf', panelId: 'a' },
+          { type: 'leaf', panelId: 'b' },
+        ],
+      },
+    };
+
+    const restored = parseProjectPanelState(
+      serializeProjectPanelState(state),
+      new Set(['chat-a', 'chat-b']),
+    );
+
+    expect(restored).toEqual(state);
+  });
+
+  it('drops stale panels while restoring persisted layout', () => {
+    const state: ProjectParallelPanelTreeState = {
+      activePanelId: 'c',
+      panels: {
+        a: { id: 'a', chatId: 'chat-a' },
+        b: { id: 'b', chatId: 'chat-b' },
+        c: { id: 'c', chatId: 'chat-c' },
+      },
+      layout: {
+        type: 'hsplit',
+        ratio: 0.5,
+        children: [
+          { type: 'leaf', panelId: 'a' },
+          {
+            type: 'vsplit',
+            ratio: 0.5,
+            children: [
+              { type: 'leaf', panelId: 'b' },
+              { type: 'leaf', panelId: 'c' },
+            ],
+          },
+        ],
+      },
+    };
+
+    const restored = parseProjectPanelState(
+      serializeProjectPanelState(state),
+      new Set(['chat-a', 'chat-b']),
+    );
+
+    expect(restored?.panels).toEqual({
+      a: { id: 'a', chatId: 'chat-a' },
+      b: { id: 'b', chatId: 'chat-b' },
+    });
+    expect(restored?.layout).toEqual({
+      type: 'hsplit',
+      ratio: 0.5,
+      children: [
+        { type: 'leaf', panelId: 'a' },
+        { type: 'leaf', panelId: 'b' },
+      ],
+    });
+    expect(restored?.activePanelId).toBe('a');
+  });
+
+  it('rejects invalid persisted layout payloads and scopes storage by project', () => {
+    expect(parseProjectPanelState('{', new Set(['chat-a']))).toBeNull();
+    expect(parseProjectPanelState(JSON.stringify({ version: 999 }), new Set(['chat-a']))).toBeNull();
+    expect(createProjectPanelLayoutStorageKey('project/a b')).toBe('aris-project-parallel-panels:v1:project%2Fa%20b');
   });
 });

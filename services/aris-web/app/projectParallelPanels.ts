@@ -35,6 +35,15 @@ export interface ProjectPanelDropRect {
   height: number;
 }
 
+interface PersistedProjectParallelPanelState {
+  version: 1;
+  layout: ProjectParallelPanelNode;
+  panels: Record<string, ProjectParallelPanel>;
+  activePanelId: string;
+}
+
+export const PROJECT_PANEL_LAYOUT_STORAGE_PREFIX = 'aris-project-parallel-panels:v1';
+
 const PROJECT_PANEL_EDGE_THRESHOLD = 0.25;
 const PROJECT_PANEL_MIN_RATIO = 0.15;
 const PROJECT_PANEL_MAX_RATIO = 0.85;
@@ -255,6 +264,49 @@ export function pruneProjectPanelStateByChatIds(
   });
 }
 
+export function createProjectPanelLayoutStorageKey(projectId: string): string {
+  return `${PROJECT_PANEL_LAYOUT_STORAGE_PREFIX}:${encodeURIComponent(projectId)}`;
+}
+
+export function serializeProjectPanelState(state: ProjectParallelPanelTreeState): string {
+  const payload: PersistedProjectParallelPanelState = {
+    version: 1,
+    activePanelId: state.activePanelId,
+    layout: state.layout,
+    panels: state.panels,
+  };
+  return JSON.stringify(payload);
+}
+
+export function parseProjectPanelState(
+  raw: string | null,
+  validChatIds?: Set<string>,
+): ProjectParallelPanelTreeState | null {
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<PersistedProjectParallelPanelState>;
+    if (parsed.version !== 1 || typeof parsed.activePanelId !== 'string') return null;
+    const layout = parseProjectPanelNode(parsed.layout);
+    const panels = parseProjectPanels(parsed.panels);
+    if (!layout || !panels) return null;
+
+    const leafIds = collectProjectPanelIds(layout);
+    if (leafIds.some((panelId) => !panels[panelId])) return null;
+
+    const normalized = normalizeProjectPanelState({
+      activePanelId: parsed.activePanelId,
+      layout,
+      panels,
+    });
+    if (!normalized) return null;
+
+    return validChatIds ? pruneProjectPanelStateByChatIds(normalized, validChatIds) : normalized;
+  } catch {
+    return null;
+  }
+}
+
 function replaceTargetPanelChat(
   state: ProjectParallelPanelTreeState,
   targetPanelId: string,
@@ -343,4 +395,43 @@ function updateProjectSplitRatio(
 function clampProjectPanelRatio(ratio: number): number {
   if (!Number.isFinite(ratio)) return 0.5;
   return Math.max(PROJECT_PANEL_MIN_RATIO, Math.min(PROJECT_PANEL_MAX_RATIO, ratio));
+}
+
+function parseProjectPanels(value: unknown): Record<string, ProjectParallelPanel> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+
+  const panels: Record<string, ProjectParallelPanel> = {};
+  for (const [panelId, panel] of Object.entries(value)) {
+    if (!panel || typeof panel !== 'object' || Array.isArray(panel)) return null;
+    const candidate = panel as Partial<ProjectParallelPanel>;
+    if (candidate.id !== panelId || typeof candidate.chatId !== 'string' || !candidate.chatId.trim()) {
+      return null;
+    }
+    panels[panelId] = { id: panelId, chatId: candidate.chatId };
+  }
+  return panels;
+}
+
+function parseProjectPanelNode(value: unknown): ProjectParallelPanelNode | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const node = value as Partial<ProjectParallelPanelNode>;
+
+  if (node.type === 'leaf') {
+    return typeof node.panelId === 'string' && node.panelId.trim()
+      ? { type: 'leaf', panelId: node.panelId }
+      : null;
+  }
+
+  if (node.type !== 'hsplit' && node.type !== 'vsplit') return null;
+  const split = value as Partial<ProjectParallelPanelSplitNode>;
+  if (!Array.isArray(split.children) || split.children.length !== 2) return null;
+  const left = parseProjectPanelNode(split.children[0]);
+  const right = parseProjectPanelNode(split.children[1]);
+  if (!left || !right) return null;
+
+  return {
+    type: node.type,
+    ratio: clampProjectPanelRatio(Number(split.ratio)),
+    children: [left, right],
+  };
 }

@@ -48,6 +48,15 @@ describe('project parallel chat drag surface', () => {
     expect(uiCss).toContain('.pc-proto .pc-parallel .cmp-wrap');
   });
 
+  it('persists project panel layout per project session', () => {
+    expect(homeClient).toContain('createProjectPanelLayoutStorageKey(session.id)');
+    expect(homeClient).toContain('parseProjectPanelState(');
+    expect(homeClient).toContain('serializeProjectPanelState(parallelPanelState)');
+    expect(homeClient).toContain('readLocalStorage(parallelLayoutStorageKey)');
+    expect(homeClient).toContain('writeLocalStorage(parallelLayoutStorageKey');
+    expect(homeClient).toContain('removeLocalStorage(parallelLayoutStorageKey)');
+  });
+
   it('supports compact project panel mode instead of the legacy session screen', () => {
     expect(homeClient).toContain("type ProjectChatSurfaceMode = 'full' | 'panel';");
     expect(homeClient).toContain("searchParams.get('surface') === 'panel' ? 'panel' : 'full'");
