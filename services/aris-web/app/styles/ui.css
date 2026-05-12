@@ -5948,6 +5948,33 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
   box-shadow: inset 0 0 0 1px rgba(47,107,255,0.36);
 }
 
+/* === Minimal stack (consecutive action grouping) === */
+.pc-proto .cmd-mini-stack { display: flex; flex-direction: column; gap: 6px; }
+.pc-proto .cmd-mini-stack__row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; padding: 4px 0; }
+.pc-proto .cmd-mini-stack__label {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--text-tertiary); margin-left: 8px; font-family: var(--font-mono);
+}
+.pc-proto .cmd-mini-stack__inline { margin-top: 6px; }
+.pc-proto .cmd-mini-badge-wrap { position: relative; }
+
+/* Hover popover for minimal badges */
+.pc-proto .cmd-mini-pop {
+  position: absolute; bottom: calc(100% + 8px); left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface); border: 1px solid var(--border-default);
+  border-radius: 6px; padding: 8px 12px; display: grid; gap: 4px;
+  min-width: 240px; max-width: 420px;
+  box-shadow: 0 8px 24px rgba(15,17,23,0.12), 0 0 0 1px rgba(15,17,23,0.06);
+  z-index: 50; white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity var(--t-fast);
+}
+.pc-proto .cmd-mini-badge-wrap:hover .cmd-mini-pop,
+.pc-proto .cmd-mini-badge-wrap:focus-within .cmd-mini-pop { opacity: 1; }
+.pc-proto .cmd-mini-pop__meta {
+  font-size: 10.5px; color: var(--text-tertiary); font-family: var(--font-mono);
+}
+
 .files-head {
   padding: var(--sp-8) var(--sp-10);
   border-bottom: 1px solid var(--border-subtle);
