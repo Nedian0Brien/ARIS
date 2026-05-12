@@ -1,6 +1,6 @@
 'use client';
 
-import { type CSSProperties, type DragEvent, type FormEvent, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type DragEvent, type FormEvent, type PointerEvent as ReactPointerEvent, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Activity,
@@ -67,6 +67,21 @@ import {
   isUserEvent,
 } from './sessions/[sessionId]/chat-screen/helpers';
 import { MarkdownContent } from './sessions/[sessionId]/chat-screen/center-pane/renderers/MarkdownContent';
+import {
+  applyProjectChatDropToPanel,
+  closeProjectPanel,
+  collectProjectPanelIds,
+  computeProjectPanelDropEdge,
+  createProjectPanelTree,
+  findFirstProjectPanelId,
+  moveProjectPanelNode,
+  pruneProjectPanelStateByChatIds,
+  resizeProjectPanelSplit,
+  type ProjectParallelPanelDropEdge,
+  type ProjectParallelPanelNode,
+  type ProjectParallelPanelSplitDirection,
+  type ProjectParallelPanelTreeState,
+} from './projectParallelPanels';
 
 type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';
 type ComposerMode = 'agent' | 'plan' | 'terminal';
@@ -81,24 +96,33 @@ type ProjectRunIndicator = {
   tone: 'submitting' | 'running' | 'approval' | 'aborting';
 };
 type ProjectChatSurfaceMode = 'full' | 'panel';
-type ProjectParallelChatSide = 'left' | 'right';
-type ProjectParallelChatLayout = {
-  leftChatId: string;
-  rightChatId: string;
-};
 type ProjectChatDragPayload = {
   sessionId: string;
   chatId: string;
   title: string;
+};
+type ProjectPanelNodeDragPayload = ProjectChatDragPayload & {
+  panelId: string;
 };
 type ProjectChatDragStartHandler = (
   event: DragEvent<HTMLElement>,
   sessionId: string,
   chat: Pick<SessionChat, 'id' | 'title'>,
 ) => void;
+type ProjectPanelNodeDragStartHandler = (
+  event: DragEvent<HTMLElement>,
+  panelId: string,
+  chat: Pick<SessionChat, 'id' | 'title'>,
+) => void;
+type ProjectPanelDropHandler = (
+  targetPanelId: string,
+  edge: ProjectParallelPanelDropEdge,
+  event: DragEvent<HTMLElement>,
+) => void;
 
 const PROJECT_CHAT_DRAG_MIME = 'application/x-aris-project-chat';
 const PROJECT_CHAT_DRAG_JSON_MIME = 'application/json';
+const PROJECT_PANEL_NODE_DRAG_MIME = 'application/x-aris-project-panel-node';
 
 type FileItem = {
   name: string;
@@ -533,7 +557,27 @@ function writeProjectChatDragPayload(
     title: chat.title,
   } satisfies ProjectChatDragPayload);
 
-  event.dataTransfer.effectAllowed = 'copy';
+  event.dataTransfer.effectAllowed = 'copyMove';
+  event.dataTransfer.setData(PROJECT_CHAT_DRAG_MIME, payload);
+  event.dataTransfer.setData(PROJECT_CHAT_DRAG_JSON_MIME, payload);
+  event.dataTransfer.setData('text/plain', payload);
+}
+
+function writeProjectPanelNodeDragPayload(
+  event: DragEvent<HTMLElement>,
+  sessionId: string,
+  panelId: string,
+  chat: Pick<SessionChat, 'id' | 'title'>,
+) {
+  const payload = JSON.stringify({
+    sessionId,
+    panelId,
+    chatId: chat.id,
+    title: chat.title,
+  } satisfies ProjectPanelNodeDragPayload);
+
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData(PROJECT_PANEL_NODE_DRAG_MIME, payload);
   event.dataTransfer.setData(PROJECT_CHAT_DRAG_MIME, payload);
   event.dataTransfer.setData(PROJECT_CHAT_DRAG_JSON_MIME, payload);
   event.dataTransfer.setData('text/plain', payload);
@@ -570,14 +614,54 @@ function readProjectChatDragPayload(event: DragEvent<HTMLElement>): ProjectChatD
   }
 }
 
-function hasProjectChatDragPayload(event: DragEvent<HTMLElement>): boolean {
-  const types = Array.from(event.dataTransfer.types);
-  return types.includes(PROJECT_CHAT_DRAG_MIME) || types.includes(PROJECT_CHAT_DRAG_JSON_MIME);
+function readProjectPanelNodeDragPayload(event: DragEvent<HTMLElement>): ProjectPanelNodeDragPayload | null {
+  if (!Array.from(event.dataTransfer.types).includes(PROJECT_PANEL_NODE_DRAG_MIME)) {
+    return null;
+  }
+
+  try {
+    const rawPayload = event.dataTransfer.getData(PROJECT_PANEL_NODE_DRAG_MIME);
+    const parsed = JSON.parse(rawPayload) as Partial<ProjectPanelNodeDragPayload>;
+    if (
+      typeof parsed.sessionId !== 'string'
+      || typeof parsed.panelId !== 'string'
+      || typeof parsed.chatId !== 'string'
+      || typeof parsed.title !== 'string'
+      || !parsed.sessionId.trim()
+      || !parsed.panelId.trim()
+      || !parsed.chatId.trim()
+    ) {
+      return null;
+    }
+
+    return {
+      sessionId: parsed.sessionId,
+      panelId: parsed.panelId,
+      chatId: parsed.chatId,
+      title: parsed.title,
+    };
+  } catch {
+    return null;
+  }
 }
 
-function resolveProjectParallelDropSide(event: DragEvent<HTMLElement>): ProjectParallelChatSide {
+function hasProjectChatDragPayload(event: DragEvent<HTMLElement>): boolean {
+  const types = Array.from(event.dataTransfer.types);
+  return types.includes(PROJECT_CHAT_DRAG_MIME)
+    || types.includes(PROJECT_CHAT_DRAG_JSON_MIME)
+    || types.includes(PROJECT_PANEL_NODE_DRAG_MIME);
+}
+
+function resolveProjectParallelDropEdge(event: DragEvent<HTMLElement>): ProjectParallelPanelDropEdge {
   const rect = event.currentTarget.getBoundingClientRect();
-  return event.clientX < rect.left + rect.width / 2 ? 'left' : 'right';
+  return computeProjectPanelDropEdge(event.clientX, event.clientY, rect);
+}
+
+function createProjectPanelId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `pcp-${crypto.randomUUID()}`;
+  }
+  return `pcp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 async function createProjectSessionChat(
@@ -2464,21 +2548,215 @@ function ProjectChatComposer({
   );
 }
 
-function ProjectParallelChatPane({
-  chat,
+function ProjectParallelDropOverlay({ edge }: { edge: ProjectParallelPanelDropEdge }) {
+  return (
+    <div className="pc-parallel-drop-overlay" aria-hidden="true">
+      <div className="pc-parallel-drop-overlay__target" data-edge={edge} />
+    </div>
+  );
+}
+
+function ProjectParallelResizeDivider({
+  containerRef,
+  direction,
+  leftAnchorId,
+  onResize,
+  rightAnchorId,
+}: {
+  containerRef: RefObject<HTMLDivElement | null>;
+  direction: ProjectParallelPanelSplitDirection;
+  leftAnchorId: string;
+  onResize: (leftAnchorId: string, rightAnchorId: string, ratio: number) => void;
+  rightAnchorId: string;
+}) {
+  const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+
+    const updateRatio = (clientX: number, clientY: number) => {
+      const rawRatio = direction === 'horizontal'
+        ? (clientX - rect.left) / rect.width
+        : (clientY - rect.top) / rect.height;
+      onResize(leftAnchorId, rightAnchorId, rawRatio);
+    };
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      updateRatio(moveEvent.clientX, moveEvent.clientY);
+    };
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    updateRatio(event.clientX, event.clientY);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp, { once: true });
+  }, [containerRef, direction, leftAnchorId, onResize, rightAnchorId]);
+
+  return (
+    <div
+      className="pc-parallel__divider"
+      data-direction={direction}
+      onPointerDown={handlePointerDown}
+      role="separator"
+      aria-orientation={direction === 'horizontal' ? 'vertical' : 'horizontal'}
+      tabIndex={0}
+    >
+      <span className="pc-parallel__divider-line" />
+    </div>
+  );
+}
+
+function ProjectParallelPanelTree({
+  chats,
   modelLabel,
+  node,
+  onClosePanel,
   onOpenFiles,
+  onPanelDragEnd,
+  onPanelDragStart,
+  onPanelDrop,
+  onResize,
+  panelState,
   recentPreview,
   session,
-  side,
+  tokenLabel,
+}: {
+  chats: SessionChat[];
+  modelLabel: string;
+  node: ProjectParallelPanelNode;
+  onClosePanel: (panelId: string) => void;
+  onOpenFiles: (chatId: string) => void;
+  onPanelDragEnd: () => void;
+  onPanelDragStart: ProjectPanelNodeDragStartHandler;
+  onPanelDrop: ProjectPanelDropHandler;
+  onResize: (leftAnchorId: string, rightAnchorId: string, ratio: number) => void;
+  panelState: ProjectParallelPanelTreeState;
+  recentPreview: string;
+  session: SessionSummary;
+  tokenLabel: string;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  if (node.type === 'leaf') {
+    const panel = panelState.panels[node.panelId] ?? null;
+    const panelChat = panel ? chats.find((candidate) => candidate.id === panel.chatId) ?? null : null;
+    if (!panel || !panelChat) {
+      return (
+        <article className="pc-parallel__frame pc-parallel__frame--missing">
+          <header className="pc-parallel__frame-head">
+            <span>PANEL</span>
+            <strong>채팅을 불러오지 못했습니다.</strong>
+            <button type="button" className="pc-parallel__frame-action" onClick={() => onClosePanel(node.panelId)} aria-label="Close panel">
+              <X size={13} />
+            </button>
+          </header>
+          <div className="pc-chat-error" role="alert">이 패널의 채팅이 더 이상 존재하지 않습니다.</div>
+        </article>
+      );
+    }
+
+    return (
+      <ProjectParallelChatPane
+        chat={panelChat}
+        isActivePanel={panelState.activePanelId === node.panelId}
+        modelLabel={modelLabel}
+        onClosePanel={() => onClosePanel(node.panelId)}
+        onOpenFiles={onOpenFiles}
+        onPanelDragEnd={onPanelDragEnd}
+        onPanelDragStart={(event) => onPanelDragStart(event, node.panelId, panelChat)}
+        onPanelDrop={(edge, event) => onPanelDrop(node.panelId, edge, event)}
+        panelId={node.panelId}
+        panelLabel={`PANEL ${collectProjectPanelIds(panelState.layout).indexOf(node.panelId) + 1}`}
+        recentPreview={recentPreview}
+        session={session}
+        showClose={Object.keys(panelState.panels).length > 1}
+        tokenLabel={tokenLabel}
+      />
+    );
+  }
+
+  const direction: ProjectParallelPanelSplitDirection = node.type === 'hsplit' ? 'horizontal' : 'vertical';
+  const leftAnchorId = findFirstProjectPanelId(node.children[0]);
+  const rightAnchorId = findFirstProjectPanelId(node.children[1]);
+
+  return (
+    <div ref={containerRef} className="pc-parallel__split" data-direction={direction}>
+      <div className="pc-parallel__split-pane" style={{ flex: node.ratio }}>
+        <ProjectParallelPanelTree
+          chats={chats}
+          modelLabel={modelLabel}
+          node={node.children[0]}
+          onClosePanel={onClosePanel}
+          onOpenFiles={onOpenFiles}
+          onPanelDragEnd={onPanelDragEnd}
+          onPanelDragStart={onPanelDragStart}
+          onPanelDrop={onPanelDrop}
+          onResize={onResize}
+          panelState={panelState}
+          recentPreview={recentPreview}
+          session={session}
+          tokenLabel={tokenLabel}
+        />
+      </div>
+      <ProjectParallelResizeDivider
+        containerRef={containerRef}
+        direction={direction}
+        leftAnchorId={leftAnchorId}
+        onResize={onResize}
+        rightAnchorId={rightAnchorId}
+      />
+      <div className="pc-parallel__split-pane" style={{ flex: 1 - node.ratio }}>
+        <ProjectParallelPanelTree
+          chats={chats}
+          modelLabel={modelLabel}
+          node={node.children[1]}
+          onClosePanel={onClosePanel}
+          onOpenFiles={onOpenFiles}
+          onPanelDragEnd={onPanelDragEnd}
+          onPanelDragStart={onPanelDragStart}
+          onPanelDrop={onPanelDrop}
+          onResize={onResize}
+          panelState={panelState}
+          recentPreview={recentPreview}
+          session={session}
+          tokenLabel={tokenLabel}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ProjectParallelChatPane({
+  chat,
+  isActivePanel,
+  modelLabel,
+  onClosePanel,
+  onOpenFiles,
+  onPanelDragEnd,
+  onPanelDragStart,
+  onPanelDrop,
+  panelId,
+  panelLabel,
+  recentPreview,
+  session,
+  showClose,
   tokenLabel,
 }: {
   chat: SessionChat;
+  isActivePanel: boolean;
   modelLabel: string;
+  onClosePanel: () => void;
   onOpenFiles: (chatId: string) => void;
+  onPanelDragEnd: () => void;
+  onPanelDragStart: (event: DragEvent<HTMLElement>) => void;
+  onPanelDrop: (edge: ProjectParallelPanelDropEdge, event: DragEvent<HTMLElement>) => void;
+  panelId: string;
+  panelLabel: string;
   recentPreview: string;
   session: SessionSummary;
-  side: ProjectParallelChatSide;
+  showClose: boolean;
   tokenLabel: string;
 }) {
   const [events, setEvents] = useState<UiEvent[]>([]);
@@ -2492,6 +2770,8 @@ function ProjectParallelChatPane({
   const [selectedProvider, setSelectedProvider] = useState<ModelProvider>(() => providerFromAgent(chat.agent ?? session.agent));
   const [selectedModel, setSelectedModel] = useState(chat.model ?? modelLabel);
   const [selectedEffort, setSelectedEffort] = useState<ReasoningEffort>(() => normalizeReasoningEffort(chat.modelReasoningEffort));
+  const [dropEdge, setDropEdge] = useState<ProjectParallelPanelDropEdge | null>(null);
+  const frameRef = useRef<HTMLElement | null>(null);
   const activeAgent: SessionSummary['agent'] = selectedProvider;
   const activeModelLabel = selectedModel || chat.model || modelLabel;
   const { isRunning: runtimeRunning } = useSessionRuntime(session.id, chat.id, true);
@@ -2649,12 +2929,66 @@ function ProjectParallelChatPane({
     }
   }, [chat.id, isAborting, projectRunActive, session.id]);
 
+  const isCompatiblePanelDrop = useCallback((event: DragEvent<HTMLElement>) => {
+    if (!hasProjectChatDragPayload(event)) return false;
+    const panelPayload = readProjectPanelNodeDragPayload(event);
+    return !(panelPayload?.sessionId === session.id && panelPayload.panelId === panelId);
+  }, [panelId, session.id]);
+
+  const handlePanelDragOver = useCallback((event: DragEvent<HTMLElement>) => {
+    if (!isCompatiblePanelDrop(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = Array.from(event.dataTransfer.types).includes(PROJECT_PANEL_NODE_DRAG_MIME) ? 'move' : 'copy';
+    const rect = frameRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setDropEdge(computeProjectPanelDropEdge(event.clientX, event.clientY, rect));
+  }, [isCompatiblePanelDrop]);
+
+  const handlePanelDragLeave = useCallback((event: DragEvent<HTMLElement>) => {
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && frameRef.current?.contains(relatedTarget)) return;
+    setDropEdge(null);
+  }, []);
+
+  const handlePanelDrop = useCallback((event: DragEvent<HTMLElement>) => {
+    if (!isCompatiblePanelDrop(event)) return;
+    const rect = frameRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const edge = computeProjectPanelDropEdge(event.clientX, event.clientY, rect);
+    setDropEdge(null);
+    onPanelDrop(edge, event);
+  }, [isCompatiblePanelDrop, onPanelDrop]);
+
   return (
-    <article className="pc-parallel__frame">
+    <article
+      ref={frameRef}
+      className={`pc-parallel__frame${isActivePanel ? ' pc-parallel__frame--active' : ''}`}
+      data-panel-id={panelId}
+      onDragOver={handlePanelDragOver}
+      onDragLeave={handlePanelDragLeave}
+      onDrop={handlePanelDrop}
+    >
       <header className="pc-parallel__frame-head">
-        <span>{side === 'left' ? 'LEFT' : 'RIGHT'}</span>
+        <button
+          type="button"
+          className="pc-parallel__frame-grip"
+          draggable
+          onDragStart={onPanelDragStart}
+          onDragEnd={onPanelDragEnd}
+          aria-label={`${chat.title} 패널 이동`}
+          title="패널 이동"
+        >
+          <PanelsTopLeft size={13} />
+          <span>{panelLabel}</span>
+        </button>
         <strong title={chat.title}>{chat.title}</strong>
         {runtimeRunning && <em>running</em>}
+        {showClose && (
+          <button type="button" className="pc-parallel__frame-action" onClick={onClosePanel} aria-label="Close panel">
+            <X size={13} />
+          </button>
+        )}
       </header>
       <div className="pc-parallel-chat">
         <div className="pc-parallel-chat__timeline">
@@ -2750,6 +3084,7 @@ function ProjectParallelChatPane({
         />
       </div>
       <div className="pc-parallel-chat__meta">{tokenLabel}</div>
+      {dropEdge && <ProjectParallelDropOverlay edge={dropEdge} />}
     </article>
   );
 }
@@ -2820,8 +3155,8 @@ function ProjectChatSurface({
   const [draftTerminalCommand, setDraftTerminalCommand] = useState('npm test -- --run tests/projectListSurface.test.ts');
   const [previewDevice, setPreviewDevice] = useState<'1200' | '768' | '390'>('1200');
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
-  const [parallelChatLayout, setParallelChatLayout] = useState<ProjectParallelChatLayout | null>(null);
-  const [parallelDropSide, setParallelDropSide] = useState<ProjectParallelChatSide | null>(null);
+  const [parallelPanelState, setParallelPanelState] = useState<ProjectParallelPanelTreeState | null>(null);
+  const [parallelSurfaceDropEdge, setParallelSurfaceDropEdge] = useState<ProjectParallelPanelDropEdge | null>(null);
   const visibleEvents = events.slice(-40);
   const activeModelLabel = selectedModel || runtimeModelLabel;
   const activeAgent: SessionSummary['agent'] = selectedProvider;
@@ -2954,94 +3289,113 @@ function ProjectChatSurface({
   const visibleExpandedTurnId = expandedTurnId === '__none__'
     ? null
     : expandedTurnId ?? defaultExpandedTurnId;
-  const resolveProjectChatTitle = useCallback((chatId: string) => {
-    return chats.find((chat) => chat.id === chatId)?.title?.trim() || 'Project chat';
-  }, [chats]);
   const clearParallelProjectDropState = useCallback(() => {
-    setParallelDropSide(null);
+    setParallelSurfaceDropEdge(null);
     onProjectChatDragEnd();
   }, [onProjectChatDragEnd]);
-  const openProjectParallelChat = useCallback((side: ProjectParallelChatSide, payload: ProjectChatDragPayload) => {
-    const draggedChatId = payload.chatId;
-    if (!chats.some((chat) => chat.id === draggedChatId)) {
-      clearParallelProjectDropState();
+
+  const handleProjectParallelPanelDrop = useCallback<ProjectPanelDropHandler>((targetPanelId, edge, event) => {
+    const panelPayload = readProjectPanelNodeDragPayload(event);
+    const chatPayload = readProjectChatDragPayload(event);
+    const payload = panelPayload ?? chatPayload;
+    if (!payload || payload.sessionId !== session.id) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    clearParallelProjectDropState();
+
+    setParallelPanelState((current) => {
+      if (!current) return current;
+      if (panelPayload) {
+        return moveProjectPanelNode(current, panelPayload.panelId, targetPanelId, edge) ?? current;
+      }
+      return applyProjectChatDropToPanel(current, targetPanelId, payload.chatId, edge, createProjectPanelId) ?? current;
+    });
+  }, [clearParallelProjectDropState, session.id]);
+
+  const handleProjectParallelPanelDragStart = useCallback<ProjectPanelNodeDragStartHandler>((event, panelId, chat) => {
+    writeProjectPanelNodeDragPayload(event, session.id, panelId, chat);
+    setParallelSurfaceDropEdge(null);
+  }, [session.id]);
+
+  const handleProjectParallelPanelDragEnd = useCallback(() => {
+    clearParallelProjectDropState();
+  }, [clearParallelProjectDropState]);
+
+  const handleProjectParallelResize = useCallback((leftAnchorId: string, rightAnchorId: string, ratio: number) => {
+    setParallelPanelState((current) => (
+      current ? resizeProjectPanelSplit(current, leftAnchorId, rightAnchorId, ratio) : current
+    ));
+  }, []);
+
+  const handleCloseProjectParallelPanel = useCallback((panelId: string) => {
+    if (!parallelPanelState) return;
+    const nextState = closeProjectPanel(parallelPanelState, panelId);
+    const remainingPanels = nextState ? Object.values(nextState.panels) : [];
+    const remainingSingleChatId = remainingPanels.length <= 1 ? remainingPanels[0]?.chatId ?? null : null;
+    setParallelPanelState(remainingPanels.length <= 1 ? null : nextState);
+    setParallelSurfaceDropEdge(null);
+    if (remainingSingleChatId) onChatOpen(remainingSingleChatId);
+  }, [onChatOpen, parallelPanelState]);
+
+  const handleProjectParallelSurfaceDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (surfaceMode !== 'full' || parallelPanelState || (!projectChatDragActive && !hasProjectChatDragPayload(event))) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setParallelSurfaceDropEdge(resolveProjectParallelDropEdge(event));
+  }, [parallelPanelState, projectChatDragActive, surfaceMode]);
+  const handleProjectParallelSurfaceDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (surfaceMode !== 'full' || parallelPanelState) {
+      return;
+    }
+    const payload = readProjectChatDragPayload(event);
+    if (!payload || payload.sessionId !== session.id) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const edge = resolveProjectParallelDropEdge(event);
+    clearParallelProjectDropState();
+
+    if (edge === 'center') {
+      onChatOpen(payload.chatId);
       return;
     }
 
-    const retainedChatId = parallelChatLayout
-      ? side === 'left'
-        ? parallelChatLayout.rightChatId
-        : parallelChatLayout.leftChatId
-      : selectedChatId;
-    const fallbackChatId = retainedChatId && retainedChatId !== draggedChatId
-      ? retainedChatId
+    const draggedChatId = payload.chatId;
+    const baseChatId = selectedChatId && selectedChatId !== draggedChatId
+      ? selectedChatId
       : chats.find((chat) => chat.id !== draggedChatId)?.id ?? null;
-
-    clearParallelProjectDropState();
-    if (!fallbackChatId) {
-      setParallelChatLayout(null);
+    if (!baseChatId || !chats.some((chat) => chat.id === draggedChatId)) {
       onChatOpen(draggedChatId);
       return;
     }
 
-    setParallelChatLayout(side === 'left'
-      ? { leftChatId: draggedChatId, rightChatId: fallbackChatId }
-      : { leftChatId: fallbackChatId, rightChatId: draggedChatId });
-  }, [
-    chats,
-    clearParallelProjectDropState,
-    onChatOpen,
-    parallelChatLayout,
-    selectedChatId,
-  ]);
-  const handleProjectParallelDragOver = useCallback((side: ProjectParallelChatSide, event: DragEvent<HTMLDivElement>) => {
-    if (!projectChatDragActive && !hasProjectChatDragPayload(event)) {
-      return;
-    }
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
-    setParallelDropSide(side);
-  }, [projectChatDragActive]);
-  const handleProjectParallelDrop = useCallback((side: ProjectParallelChatSide, event: DragEvent<HTMLDivElement>) => {
-    const payload = readProjectChatDragPayload(event);
-    if (!payload || payload.sessionId !== session.id) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    openProjectParallelChat(side, payload);
-  }, [openProjectParallelChat, session.id]);
-  const handleProjectParallelSurfaceDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (surfaceMode !== 'full' || (!projectChatDragActive && !hasProjectChatDragPayload(event))) {
-      return;
-    }
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
-    setParallelDropSide(resolveProjectParallelDropSide(event));
-  }, [projectChatDragActive, surfaceMode]);
-  const handleProjectParallelSurfaceDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (surfaceMode !== 'full') {
-      return;
-    }
-    const payload = readProjectChatDragPayload(event);
-    if (!payload || payload.sessionId !== session.id) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    openProjectParallelChat(resolveProjectParallelDropSide(event), payload);
-  }, [openProjectParallelChat, session.id, surfaceMode]);
+    const baseState = createProjectPanelTree(baseChatId, createProjectPanelId);
+    const nextState = applyProjectChatDropToPanel(
+      baseState,
+      baseState.activePanelId,
+      draggedChatId,
+      edge,
+      createProjectPanelId,
+    );
+    setParallelPanelState(nextState);
+  }, [chats, clearParallelProjectDropState, onChatOpen, parallelPanelState, selectedChatId, session.id, surfaceMode]);
   const handleProjectParallelSurfaceDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
     const relatedTarget = event.relatedTarget;
     if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
       return;
     }
-    setParallelDropSide(null);
+    setParallelSurfaceDropEdge(null);
   }, []);
   const handleCloseProjectParallelChats = useCallback(() => {
-    setParallelChatLayout(null);
-    setParallelDropSide(null);
-  }, []);
+    const activePanel = parallelPanelState?.panels[parallelPanelState.activePanelId] ?? null;
+    setParallelPanelState(null);
+    setParallelSurfaceDropEdge(null);
+    if (activePanel?.chatId) onChatOpen(activePanel.chatId);
+  }, [onChatOpen, parallelPanelState]);
 
   useEffect(() => () => {
     if (workspaceCloseTimerRef.current !== null) {
@@ -3084,8 +3438,8 @@ function ProjectChatSurface({
 
   useEffect(() => {
     if (surfaceMode === 'panel') {
-      setParallelChatLayout(null);
-      setParallelDropSide(null);
+      setParallelPanelState(null);
+      setParallelSurfaceDropEdge(null);
     }
     setComposerMode('agent');
     setWorkspaceTab('run');
@@ -3268,12 +3622,12 @@ function ProjectChatSurface({
   }, [projectRunIndicator?.startedAt]);
 
   useEffect(() => {
-    if (!parallelChatLayout) return;
+    if (!parallelPanelState) return;
     const chatIds = new Set(chats.map((chat) => chat.id));
-    if (!chatIds.has(parallelChatLayout.leftChatId) || !chatIds.has(parallelChatLayout.rightChatId)) {
-      setParallelChatLayout(null);
-    }
-  }, [chats, parallelChatLayout]);
+    setParallelPanelState((current) => (
+      current ? pruneProjectPanelStateByChatIds(current, chatIds) : current
+    ));
+  }, [chats, parallelPanelState]);
 
   const createChat = async (): Promise<SessionChat | null> => {
     setError(null);
@@ -3510,27 +3864,10 @@ function ProjectChatSurface({
       onDrop={handleProjectParallelSurfaceDrop}
       onDragLeave={handleProjectParallelSurfaceDragLeave}
     >
-      {surfaceMode === 'full' && (
-        <div className="pc-parallel-dropzones" aria-hidden={!projectChatDragActive}>
-          <div
-            className={`pc-parallel-dropzone${parallelDropSide === 'left' ? ' pc-parallel-dropzone--active' : ''}`}
-            onDragOver={(event) => handleProjectParallelDragOver('left', event)}
-            onDrop={(event) => handleProjectParallelDrop('left', event)}
-            onDragLeave={() => setParallelDropSide((current) => (current === 'left' ? null : current))}
-          >
-            <span>왼쪽에 놓기</span>
-          </div>
-          <div
-            className={`pc-parallel-dropzone${parallelDropSide === 'right' ? ' pc-parallel-dropzone--active' : ''}`}
-            onDragOver={(event) => handleProjectParallelDragOver('right', event)}
-            onDrop={(event) => handleProjectParallelDrop('right', event)}
-            onDragLeave={() => setParallelDropSide((current) => (current === 'right' ? null : current))}
-          >
-            <span>오른쪽에 놓기</span>
-          </div>
-        </div>
+      {surfaceMode === 'full' && !parallelPanelState && parallelSurfaceDropEdge && (
+        <ProjectParallelDropOverlay edge={parallelSurfaceDropEdge} />
       )}
-      {surfaceMode === 'full' && parallelChatLayout ? (
+      {surfaceMode === 'full' && parallelPanelState ? (
         <section className="pc-parallel" aria-label="병렬 프로젝트 채팅">
           <div className="pc-parallel__toolbar">
             <span className="pc-parallel__title">Parallel chats</span>
@@ -3538,39 +3875,27 @@ function ProjectChatSurface({
               단일 화면
             </button>
           </div>
-          <div className="pc-parallel__frames">
-            {(['left', 'right'] as const).map((side) => {
-              const chatId = side === 'left' ? parallelChatLayout.leftChatId : parallelChatLayout.rightChatId;
-              const panelChat = chats.find((candidate) => candidate.id === chatId);
-              if (!panelChat) {
-                return (
-                  <article key={side} className="pc-parallel__frame">
-                    <header className="pc-parallel__frame-head">
-                      <span>{side === 'left' ? 'LEFT' : 'RIGHT'}</span>
-                      <strong>{resolveProjectChatTitle(chatId)}</strong>
-                    </header>
-                    <div className="pc-chat-error" role="alert">채팅을 불러오지 못했습니다.</div>
-                  </article>
-                );
-              }
-              return (
-                <ProjectParallelChatPane
-                  key={side}
-                  chat={panelChat}
-                  modelLabel={modelLabel}
-                  onOpenFiles={(chatId) => {
-                    handleCloseProjectParallelChats();
-                    onChatOpen(chatId);
-                    activateWorkspaceTab('files');
-                    showTransientFeedback('Files panel opened');
-                  }}
-                  recentPreview={recentPreview}
-                  session={session}
-                  side={side}
-                  tokenLabel={tokenLabel}
-                />
-              );
-            })}
+          <div className="pc-parallel__frames pc-parallel__tree">
+            <ProjectParallelPanelTree
+              chats={chats}
+              modelLabel={modelLabel}
+              node={parallelPanelState.layout}
+              onClosePanel={handleCloseProjectParallelPanel}
+              onOpenFiles={(chatId) => {
+                handleCloseProjectParallelChats();
+                onChatOpen(chatId);
+                activateWorkspaceTab('files');
+                showTransientFeedback('Files panel opened');
+              }}
+              onPanelDragEnd={handleProjectParallelPanelDragEnd}
+              onPanelDragStart={handleProjectParallelPanelDragStart}
+              onPanelDrop={handleProjectParallelPanelDrop}
+              onResize={handleProjectParallelResize}
+              panelState={parallelPanelState}
+              recentPreview={recentPreview}
+              session={session}
+              tokenLabel={tokenLabel}
+            />
           </div>
         </section>
       ) : (

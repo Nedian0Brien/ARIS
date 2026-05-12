@@ -34,14 +34,13 @@ describe('project parallel chat drag surface', () => {
   });
 
   it('renders drop zones and direct project chat panels inside ProjectChatSurface', () => {
-    expect(homeClient).toContain('pc-parallel-dropzones');
-    expect(homeClient).toContain('pc-parallel-dropzone');
-    expect(homeClient).toContain('handleProjectParallelDrop');
+    expect(homeClient).toContain('ProjectParallelDropOverlay');
+    expect(homeClient).toContain('ProjectParallelPanelTree');
+    expect(homeClient).toContain('handleProjectParallelPanelDrop');
     expect(homeClient).toContain('onDragOver={handleProjectParallelSurfaceDragOver}');
     expect(homeClient).toContain('onDrop={handleProjectParallelSurfaceDrop}');
-    expect(homeClient).toContain('resolveProjectParallelDropSide(event)');
-    expect(homeClient).toContain('왼쪽에 놓기');
-    expect(homeClient).toContain('오른쪽에 놓기');
+    expect(homeClient).toContain('resolveProjectParallelDropEdge(event)');
+    expect(homeClient).toContain('computeProjectPanelDropEdge(event.clientX, event.clientY, rect)');
     expect(homeClient).toContain('function ProjectChatComposer({');
     expect(homeClient).toContain('<ProjectChatComposer');
     expect(homeClient).not.toContain('className="pc-parallel-chat__composer"');
@@ -59,9 +58,11 @@ describe('project parallel chat drag surface', () => {
 
   it('keeps the project parallel layout responsive', () => {
     expect(uiCss).toContain('.pc-parallel__frames');
-    expect(uiCss).toContain('grid-template-columns: minmax(0, 1fr);');
-    expect(uiCss).toContain('@media (min-width: 768px)');
-    expect(uiCss).toContain('grid-template-columns: repeat(2, minmax(0, 1fr));');
+    expect(uiCss).toContain('.pc-parallel__split[data-direction="horizontal"]');
+    expect(uiCss).toContain('flex-direction: row;');
+    expect(uiCss).toContain('.pc-parallel__split[data-direction="vertical"]');
+    expect(uiCss).toContain('flex-direction: column;');
+    expect(uiCss).toContain('.pc-parallel__divider');
   });
 
   it('makes the split chat layout fill the project chat viewport instead of leaving blank space under the composer', () => {
