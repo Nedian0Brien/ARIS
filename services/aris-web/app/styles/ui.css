@@ -3639,6 +3639,8 @@ html[data-theme='dark'] .pc-proto .pc-action-stack {
   font-weight: 700;
 }
 
+.pc-proto .pc-action-token--str { color: var(--syn-str); }
+
 .pc-proto .pc-action-card__path {
   display: block;
   color: var(--text-secondary);
