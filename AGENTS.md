@@ -32,6 +32,15 @@
 - 특정 chatId/threadId 로그 조회: `find /home/ubuntu/project/ARIS/logs -name "*<chatId>*"` 또는 `ls logs/<YYYY>/<MM>/<DD>/ | grep <chatId>`.
 - 로그 내용 확인(pretty print): `cat <파일경로> | python3 -c "import json,sys; [print(f'{o.get(\"loggedAt\",\"\")[-15:]} [{o.get(\"stage\",o.get(\"turnStatus\",\"?\"))}] {json.dumps(o.get(\"payload\",{}),ensure_ascii=False)[:120]}') for o in map(json.loads,sys.stdin)]"`
 
+## 모듈 크기 / 추출 기준
+
+- 단일 파일이 800줄을 넘으면 작업 시 의미 있는 분리를 함께 진행한다.
+- 한 파일에 인라인으로 정의된 React 컴포넌트(`function Xxx(...) {}` 또는 `const Xxx = (...) => …`)가 3개 이상이면 별도 파일로 추출한다.
+- React 컴포넌트 함수 본문이 300줄을 넘으면 hook 또는 sub-component 단위로 분해한다.
+- CSS module / global stylesheet 가 단일 화면 단위로 2 000줄을 넘으면 영역별 모듈로 분리한다.
+- 새 기능을 기존 파일에 추가하기 전에 위 기준을 점검하고, 넘는다면 추출/분리를 작업의 일부로 포함한다. 분리만 따로 PR로 내지 말고 작업과 함께 진행해 머지 충돌을 줄인다.
+- 위 기준은 권고지 절대값이 아니다. 분명한 응집도(예: 단일 라우트 핸들러)가 있다면 길어도 유지할 수 있다 — 이 경우 PR 본문에 사유를 명시한다.
+
 ## 디버깅 가이드
 
 > 서버/DB 내부 값을 직접 조회하려 할 때 혼선이 생기므로, 반드시 아래 공식 스크립트와 절차만 사용한다.
