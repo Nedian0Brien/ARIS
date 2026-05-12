@@ -1,0 +1,1417 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARIS · Action Card Density · v2 (post-redesign)</title>
+<style>
+/* ============================================================
+ *  Tokens — synced with design/chat-prototype.html (redesign baseline)
+ * ============================================================ */
+:root {
+  --font-sans: 'Inter', 'Pretendard Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+
+  --n-0:#FFFFFF; --n-50:#F7F8FA; --n-100:#EEF0F4; --n-200:#E0E4EB; --n-300:#C7CCD6; --n-400:#A5ACB8;
+  --n-500:#7E8592; --n-600:#5D6472; --n-700:#444A57; --n-800:#2C313B; --n-900:#1A1D25; --n-950:#0F1117;
+
+  --b-50:#EDF3FF; --b-100:#D6E2FF; --b-200:#B8CAFF; --b-300:#8FA8FF; --b-400:#5E82FD;
+  --b-500:#2F6BFF; --b-600:#1E50DB; --b-700:#173FAE;
+
+  --agent-claude:#CB6D4B; --agent-codex:#0F7E5E; --agent-gemini:#5B3FD1;
+
+  --success-fg:#087A3A; --success-bg:#E7F7EE;
+  --danger-fg:#C22A1F;  --danger-bg:#FCE8E6;
+  --warning-fg:#B85C00; --warning-bg:#FFF3E0;
+  --info-fg:#1E50DB;    --info-bg:#EDF3FF;
+
+  --surface:#FFFFFF; --surface-raised:#FFFFFF; --surface-sunken:#F7F8FA;
+  --surface-hover:#EEF0F4; --surface-active:#E0E4EB; --surface-overlay:rgba(15,17,23,0.44);
+
+  --text-primary:#0F1117; --text-secondary:#4A4F58; --text-tertiary:#7E8592; --text-disabled:#A5ACB8;
+  --text-on-brand:#FFFFFF;
+
+  --border-subtle:#EEF0F4; --border-default:#E0E4EB; --border-strong:#C7CCD6;
+
+  --sp-1:2px; --sp-2:4px; --sp-3:6px; --sp-4:8px; --sp-5:12px; --sp-6:16px;
+  --sp-8:20px; --sp-10:24px; --sp-12:32px; --sp-14:40px; --sp-16:48px;
+
+  --r-xs:3px; --r-sm:4px; --r-md:6px; --r-lg:10px; --r-xl:14px; --r-2xl:20px; --r-full:999px;
+
+  --shadow-xs:0 1px 2px rgba(15,17,23,0.04), 0 0 0 1px rgba(15,17,23,0.04);
+  --shadow-sm:0 1px 2px rgba(15,17,23,0.06), 0 1px 3px rgba(15,17,23,0.06);
+  --shadow-md:0 4px 6px rgba(15,17,23,0.05), 0 2px 4px rgba(15,17,23,0.06);
+  --shadow-lg:0 10px 24px rgba(15,17,23,0.10), 0 4px 8px rgba(15,17,23,0.06);
+  --shadow-popover: 0 8px 24px rgba(15,17,23,0.12), 0 0 0 1px rgba(15,17,23,0.06);
+
+  --t-fast:120ms cubic-bezier(0.16,1,0.3,1);
+  --t-base:180ms cubic-bezier(0.16,1,0.3,1);
+}
+
+html[data-theme='dark'] {
+  --surface:#14171D; --surface-raised:#1C2029; --surface-sunken:#0F1117;
+  --surface-hover:#2C313B; --surface-active:#3B4150; --surface-overlay:rgba(0,0,0,0.6);
+  --text-primary:#F7F8FA; --text-secondary:#C7CCD6; --text-tertiary:#8B92A0; --text-disabled:#5D6472;
+  --border-subtle:#2C313B; --border-default:#3B4150; --border-strong:#5D6472;
+  --b-50:#112358; --b-100:#15327F;
+  --success-bg:#0D2F20; --danger-bg:#3A0F0A; --warning-bg:#3A2200; --info-bg:#112358;
+  --shadow-popover: 0 8px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06);
+}
+
+/* ============================================================
+ *  Reset & base
+ * ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100%; }
+body {
+  font-family: var(--font-sans);
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+svg { display: block; }
+
+.ico  { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.ico--xs { width:10px; height:10px; }
+.ico--sm { width:12px; height:12px; }
+.ico--lg { width:18px; height:18px; }
+
+/* ============================================================
+ *  Layout shell
+ * ============================================================ */
+.page {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: var(--sp-16) var(--sp-12) var(--sp-16);
+}
+.page-header {
+  display:flex; align-items:flex-end; justify-content:space-between;
+  gap: var(--sp-10);
+  padding-bottom: var(--sp-8);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--sp-12);
+}
+.page-eyebrow {
+  font-size:11px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase;
+  color: var(--b-600); margin: 0 0 var(--sp-4);
+}
+.page-title {
+  font-size:28px; font-weight:700; letter-spacing:-0.02em; margin:0;
+  color: var(--text-primary);
+}
+.page-subtitle {
+  margin: var(--sp-4) 0 0; color: var(--text-secondary);
+  font-size:14px; max-width:640px; line-height:1.55;
+}
+.page-subtitle strong { color: var(--text-primary); font-weight:600; }
+
+.section { margin-top: var(--sp-14); }
+.section-header {
+  display:flex; align-items:baseline; gap: var(--sp-5);
+  margin-bottom: var(--sp-6);
+}
+.section-title {
+  font-size:17px; font-weight:700; letter-spacing:-0.01em; margin:0;
+}
+.section-sub {
+  font-size:13px; color: var(--text-tertiary);
+}
+.scenarioLegend {
+  display:flex; gap: var(--sp-5); flex-wrap:wrap;
+  font-size:12px; color: var(--text-tertiary); margin-top: var(--sp-3);
+}
+.scenarioLegend code {
+  background: var(--surface); border:1px solid var(--border-subtle);
+  padding: 1px 6px; border-radius: var(--r-sm);
+  font-family: var(--font-mono); color: var(--text-secondary); font-size:11px;
+}
+
+/* ============================================================
+ *  Density toggle (top-right)
+ * ============================================================ */
+.density-toggle {
+  display:inline-flex; align-items:center;
+  background: var(--surface); border:1px solid var(--border-default);
+  border-radius: var(--r-full); padding:3px; gap:2px;
+  box-shadow: var(--shadow-xs);
+}
+.density-toggle button {
+  font-size:12px; font-weight:600; color: var(--text-secondary);
+  padding: 5px 12px; border-radius: var(--r-full);
+  display:inline-flex; align-items:center; gap: 5px;
+  letter-spacing: 0.01em; transition: all var(--t-fast);
+  cursor: pointer;
+}
+.density-toggle button:hover { color: var(--text-primary); }
+.density-toggle button.is-active {
+  background: var(--surface-sunken);
+  color: var(--b-600);
+  box-shadow: inset 0 0 0 1px var(--b-200);
+}
+html[data-theme='dark'] .density-toggle button.is-active {
+  background: var(--surface-raised);
+  box-shadow: inset 0 0 0 1px var(--b-100);
+}
+.density-toggle .dot {
+  width:5px; height:5px; border-radius:50%; background:currentColor; opacity:.8;
+}
+
+/* ============================================================
+ *  TOOL — base (기본형, redesign baseline)
+ *
+ *  3 modes:
+ *    .tool                — 기본형 (collapsed row)
+ *    .tool.tool--expanded — 확장형 (row + result panel underneath)
+ *    .tool--mini          — 최소형 (icon-only, stack-friendly)
+ * ============================================================ */
+
+/* === 기본형 === */
+.tool {
+  display:flex; align-items:center; gap: var(--sp-4);
+  padding: 7px 10px 7px 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  font-size:12px;
+  max-width: 560px;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.tool:hover {
+  background: var(--surface-sunken);
+  border-color: var(--border-default);
+  cursor: pointer;
+}
+
+.tool__icon {
+  width:22px; height:22px;
+  border-radius: var(--r-md);
+  display:grid; place-items:center;
+  color: #fff;
+  flex-shrink: 0;
+  position: relative;
+}
+.tool__icon--success { background: var(--success-fg); }
+.tool__icon--running { background: var(--b-600); }
+.tool__icon--error   { background: var(--danger-fg); }
+.tool__icon--idle    { background: var(--n-500); }
+
+.tool__icon--running::after {
+  /* soft pulse */
+  content:''; position:absolute; inset:-3px; border-radius: 8px;
+  border: 2px solid var(--b-400); opacity: 0;
+  animation: toolRunningPulse 1.6s ease-out infinite;
+}
+@keyframes toolRunningPulse {
+  0%   { opacity: .65; transform: scale(0.85); }
+  100% { opacity: 0;   transform: scale(1.18); }
+}
+
+.tool__body {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.tool__title {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.005em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tool__title em {
+  font-style: normal; color: var(--text-tertiary); font-weight: 500;
+}
+.tool__cmd {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tool__meta {
+  font-size: 10.5px; color: var(--text-tertiary);
+  font-family: var(--font-mono); flex-shrink: 0;
+}
+.tool__caret { color: var(--text-tertiary); flex-shrink: 0; transition: transform var(--t-fast); }
+.tool.tool--expanded .tool__caret { transform: rotate(90deg); color: var(--b-600); }
+
+/* === 확장형 — result panel under the .tool row === */
+.tool-wrap {
+  display: flex; flex-direction: column; gap: 0;
+  max-width: 680px;
+}
+.tool-wrap .tool { max-width: none; }
+.tool-wrap.is-expanded .tool {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+  background: var(--surface);
+}
+.tool__result {
+  display: none;
+  border: 1px solid var(--border-subtle);
+  border-top: 0;
+  border-bottom-left-radius: var(--r-md);
+  border-bottom-right-radius: var(--r-md);
+  background: var(--surface-sunken);
+  padding: var(--sp-5) var(--sp-6);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  max-height: 360px; overflow: auto;
+}
+html[data-theme='dark'] .tool__result { background: var(--surface-sunken); }
+.tool-wrap.is-expanded .tool__result { display: block; }
+.tool__result.tool__result--error { color: var(--danger-fg); }
+
+/* Diff variant inside result */
+.tool__result.tool__result--diff { padding: var(--sp-4) var(--sp-5); display: grid; gap: 1px; }
+.tool-wrap.is-expanded .tool__result.tool__result--diff { display: grid; }
+.tool-wrap:not(.is-expanded) .tool__result.tool__result--diff { display: none; }
+.diff-line   { display: block; padding: 0 var(--sp-3); border-radius: 2px; }
+.diff-line--add { color: var(--success-fg); background: rgba(8, 122, 58, 0.07); }
+.diff-line--del { color: var(--danger-fg);  background: rgba(194, 42, 31, 0.07); }
+.diff-line--hunk{ color: var(--info-fg); font-weight: 600; }
+.diff-line--ctx { color: var(--text-secondary); }
+.diff-summary {
+  display:inline-flex; gap: var(--sp-4);
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--text-tertiary);
+  margin-left: auto; padding-right: var(--sp-2); flex-shrink: 0;
+}
+.diff-summary .add { color: var(--success-fg); }
+.diff-summary .del { color: var(--danger-fg); }
+
+/* === 최소형 — circular kind/status icon === */
+.tool-mini {
+  --mini-size: 22px;
+  width: var(--mini-size); height: var(--mini-size);
+  border-radius: var(--r-full);
+  display: inline-grid; place-items: center;
+  color: #fff;
+  flex-shrink: 0;
+  position: relative;
+  cursor: pointer;
+  border: 2px solid var(--surface-sunken);   /* separator ring */
+  transition: transform var(--t-fast), box-shadow var(--t-fast);
+}
+.tool-mini--success { background: var(--success-fg); }
+.tool-mini--running { background: var(--b-600); }
+.tool-mini--error   { background: var(--danger-fg); }
+.tool-mini--idle    { background: var(--n-400); }
+
+.tool-mini + .tool-mini { margin-left: -8px; }
+
+.tool-mini:hover,
+.tool-mini:focus-visible {
+  transform: translateY(-1px) scale(1.06);
+  box-shadow: var(--shadow-md);
+  z-index: 30;
+}
+.tool-mini.is-open {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 2px var(--b-500), var(--shadow-sm);
+  z-index: 30;
+}
+.tool-mini.tool-mini--running::after {
+  content:''; position:absolute; inset:-3px; border-radius: 50%;
+  border: 2px solid var(--b-400); opacity: 0;
+  animation: toolRunningPulse 1.6s ease-out infinite;
+}
+.tool-mini.tool-mini--error::before {
+  /* small alert dot in corner */
+  content:''; position:absolute; top:-2px; right:-2px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--danger-fg);
+  border: 2px solid var(--surface-sunken);
+}
+
+/* Hover preview popover */
+.mini-pop {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  padding: var(--sp-4) var(--sp-5);
+  display: grid; gap: 4px;
+  min-width: 220px; max-width: 360px;
+  box-shadow: var(--shadow-popover);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--t-fast), transform var(--t-base);
+  z-index: 50; white-space: nowrap;
+  color: var(--text-primary);
+  text-align: left;
+  font-family: var(--font-sans);
+  cursor: default;
+}
+.tool-mini:hover .mini-pop,
+.tool-mini:focus-visible .mini-pop { opacity: 1; transform: translateX(-50%) translateY(0); }
+.mini-pop__title {
+  font-size: 12px; font-weight: 600; color: var(--text-primary);
+}
+.mini-pop__title em { font-style: normal; color: var(--text-tertiary); font-weight: 500; }
+.mini-pop__cmd {
+  font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis;
+}
+.mini-pop__meta {
+  font-size: 10.5px; color: var(--text-tertiary); font-family: var(--font-mono);
+}
+.mini-pop::after {
+  content:''; position:absolute; top: 100%; left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 8px; height: 8px;
+  background: var(--surface);
+  border-right: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
+  margin-top: -4px;
+}
+
+/* Stack row */
+.mini-stack {
+  display: flex; flex-direction: column; gap: var(--sp-3);
+}
+.mini-stack__row {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 0 var(--sp-4);
+  padding: var(--sp-2) 0;
+}
+.mini-stack__label {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  margin-left: var(--sp-5);
+  font-family: var(--font-mono);
+}
+.mini-stack__label .accent { color: var(--b-600); }
+.mini-stack__inline {
+  display: none;
+  margin-top: var(--sp-3);
+}
+.mini-stack__inline.is-open { display: block; }
+
+/* ============================================================
+ *  Compare grid
+ * ============================================================ */
+.compareCard {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  padding: var(--sp-6) var(--sp-8) var(--sp-8);
+  box-shadow: var(--shadow-xs);
+}
+.compareGrid {
+  display: grid;
+  grid-template-columns: 92px minmax(0,1fr) minmax(0,1.6fr) minmax(0,2fr);
+  gap: 6px var(--sp-6);
+  align-items: stretch;
+}
+.compareGrid .col-head {
+  font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: var(--sp-4) 0 var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--sp-3);
+}
+.compareGrid .row-label {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-secondary);
+  align-self: center;
+  padding-right: var(--sp-5);
+  font-family: var(--font-mono);
+  letter-spacing: -0.005em;
+}
+.compareGrid .cell {
+  padding: var(--sp-3) 0;
+  display: flex; align-items: center;
+  min-height: 44px;
+}
+.compareGrid .cell-expanded { align-items: flex-start; padding-top: var(--sp-4); padding-bottom: var(--sp-4); }
+.compareGrid .row-divider {
+  grid-column: 1 / -1;
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 2px 0;
+}
+
+/* ============================================================
+ *  Flow simulation (Section B)
+ * ============================================================ */
+.flowFrame {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-xs);
+}
+.flowTabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface);
+  padding: 0 var(--sp-6);
+}
+.flowTab {
+  font-size: 12.5px; font-weight: 600;
+  color: var(--text-secondary);
+  padding: 12px 14px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all var(--t-fast);
+}
+.flowTab:hover { color: var(--text-primary); }
+.flowTab.is-active {
+  color: var(--b-600);
+  border-bottom-color: var(--b-500);
+}
+.flowTab .badge {
+  margin-left: 6px; font-size: 10px;
+  color: var(--text-tertiary); font-weight: 500;
+  letter-spacing: 0.04em;
+}
+.flowBody {
+  padding: var(--sp-8) var(--sp-10) var(--sp-10);
+  background: var(--surface-sunken);
+}
+
+/* chat-like message rows */
+.msg {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: var(--sp-4);
+  margin: var(--sp-4) 0;
+}
+.msg--user { grid-template-columns: 1fr; justify-items: end; }
+.msg__avatar {
+  width: 28px; height: 28px; border-radius: var(--r-md);
+  display: grid; place-items: center;
+  font-size: 12px; font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.msg__avatar--claude {
+  background: linear-gradient(135deg, #f0c5a8 0%, var(--agent-claude) 100%);
+  color: #2a1208;
+}
+.msg__body {
+  display: flex; flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+  max-width: 760px;
+}
+.msg__header {
+  display: flex; gap: var(--sp-4); align-items: baseline;
+  font-size: 11.5px;
+}
+.msg__name { font-weight: 700; color: var(--text-secondary); }
+.msg__time { font-family: var(--font-mono); color: var(--text-tertiary); font-size: 10.5px; }
+.msg__text {
+  font-size: 13.2px; line-height: 1.6; color: var(--text-primary);
+}
+.msg__text code {
+  font-family: var(--font-mono); font-size: 11.5px;
+  background: var(--surface-hover);
+  padding: 1px 5px; border-radius: var(--r-xs);
+}
+.msg__text strong { font-weight: 600; }
+.msg__bubble {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--r-lg);
+  font-size: 13px;
+  max-width: 520px;
+}
+.msg__action-row {
+  /* Action card row, indented under avatar column */
+  display: block;
+}
+
+/* Section D — Rules card */
+.rulesCard {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  padding: var(--sp-8) var(--sp-10);
+  box-shadow: var(--shadow-xs);
+  font-size: 13.3px; line-height: 1.7;
+  color: var(--text-secondary);
+}
+.rulesCard h3 {
+  font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text-primary); margin: 0 0 var(--sp-3);
+}
+.rulesCard ul { margin: 0; padding-left: 1.2em; }
+.rulesCard li { margin: 4px 0; }
+.rulesCard strong { color: var(--text-primary); font-weight: 600; }
+.rulesCard code {
+  font-family: var(--font-mono); font-size: 11.5px;
+  background: var(--surface-sunken);
+  padding: 1px 6px; border-radius: var(--r-xs);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+.rulesCard__col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-10);
+}
+@media (max-width: 880px) {
+  .rulesCard__col { grid-template-columns: 1fr; }
+}
+
+/* Theme toggle (top-right corner) */
+.theme-switch {
+  position: fixed; top: 14px; right: 14px;
+  background: var(--surface); border: 1px solid var(--border-default);
+  border-radius: var(--r-full); padding: 5px 11px;
+  font-size: 11px; font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer; z-index: 200;
+  box-shadow: var(--shadow-xs);
+}
+.theme-switch:hover { color: var(--text-primary); }
+
+</style>
+</head>
+<body>
+
+<button class="theme-switch" id="themeSwitch">🌗 theme</button>
+
+<main class="page">
+
+  <!-- ========================= HEADER ========================= -->
+  <header class="page-header">
+    <div>
+      <p class="page-eyebrow">ARIS · Chat UI · Density · v2</p>
+      <h1 class="page-title">Action Card 밀도 모드</h1>
+      <p class="page-subtitle">
+        에이전트 액션 카드를 <strong>확장형 / 기본형 / 최소형</strong> 세 단계로 압축합니다.
+        끝난 액션을 자동으로 가라앉히는 <strong>자동 모드</strong> 포함. 디자인 베이스라인은
+        <code style="font-family:var(--font-mono);background:var(--surface);padding:1px 5px;border-radius:3px;border:1px solid var(--border-subtle);">design/chat-prototype.html</code>의 <code style="font-family:var(--font-mono);background:var(--surface);padding:1px 5px;border-radius:3px;border:1px solid var(--border-subtle);">.tool</code> 칩입니다.
+      </p>
+    </div>
+    <div class="density-toggle" role="tablist" aria-label="기본 밀도 모드 선택">
+      <button class="is-active" data-density="auto"><span class="dot"></span>자동</button>
+      <button data-density="expanded">확장</button>
+      <button data-density="default">기본</button>
+      <button data-density="minimal">최소</button>
+    </div>
+  </header>
+
+  <!-- ========================= SECTION A — Mode comparison ========================= -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">A. 모드별 단일 카드 비교</h2>
+      <span class="section-sub">동일한 액션이 세 모드에서 각각 어떻게 보이는가</span>
+    </div>
+
+    <div class="compareCard">
+      <div class="compareGrid">
+        <div class="col-head">Tool</div>
+        <div class="col-head">최소형</div>
+        <div class="col-head">기본형</div>
+        <div class="col-head">확장형</div>
+
+        <!-- ============ Bash · success ============ -->
+        <div class="row-label">Bash</div>
+        <div class="cell">
+          <span class="tool-mini tool-mini--success" tabindex="0" aria-label="Bash · success">
+            <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+          </span>
+        </div>
+        <div class="cell">
+          <div class="tool">
+            <span class="tool__icon tool__icon--success">
+              <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+            </span>
+            <div class="tool__body">
+              <span class="tool__title">Bash <em>·</em> npm test</span>
+              <span class="tool__cmd">npm test -- chat-screen/center-pane</span>
+            </div>
+            <span class="tool__meta">2.41s</span>
+            <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+        <div class="cell cell-expanded">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="tool__icon tool__icon--success">
+                <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+              </span>
+              <div class="tool__body">
+                <span class="tool__title">Bash <em>·</em> npm test</span>
+                <span class="tool__cmd">npm test -- chat-screen/center-pane</span>
+              </div>
+              <span class="tool__meta">2.41s</span>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+            </div>
+            <pre class="tool__result">PASS  __tests__/center-pane/ChatTimeline.test.tsx
+  ✓ renders agent message bubble (24ms)
+  ✓ collapses consecutive action events into stack (18ms)
+  ✓ preserves expand state across density changes (9ms)
+
+Tests:       3 passed, 3 total
+Time:        2.41s</pre>
+          </div>
+        </div>
+
+        <div class="row-divider"></div>
+
+        <!-- ============ Read · success ============ -->
+        <div class="row-label">Read</div>
+        <div class="cell">
+          <span class="tool-mini tool-mini--success" tabindex="0" aria-label="Read · success">
+            <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          </span>
+        </div>
+        <div class="cell">
+          <div class="tool">
+            <span class="tool__icon tool__icon--success">
+              <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+            </span>
+            <div class="tool__body">
+              <span class="tool__title">Read <em>·</em> ChatInterface.tsx</span>
+              <span class="tool__cmd">services/aris-web/app/sessions/[sessionId]/ChatInterface.tsx</span>
+            </div>
+            <span class="tool__meta">0.1s</span>
+            <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+        <div class="cell cell-expanded">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="tool__icon tool__icon--success">
+                <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+              </span>
+              <div class="tool__body">
+                <span class="tool__title">Read <em>·</em> ChatInterface.tsx</span>
+                <span class="tool__cmd">services/aris-web/app/sessions/[sessionId]/ChatInterface.tsx</span>
+              </div>
+              <span class="tool__meta">0.1s</span>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+            </div>
+            <pre class="tool__result">  1  'use client';
+  2
+  3  import React, { useEffect, useMemo, useRef, useState } from 'react';
+  4  import { useRouter } from 'next/navigation';
+  5  import { ChatTimeline } from './chat-screen/center-pane/ChatTimeline';
+  6  import { ChatComposer } from './chat-screen/center-pane/ChatComposer';
+  7  import styles from './ChatInterface.module.css';
+... (+2 891 more lines)</pre>
+          </div>
+        </div>
+
+        <div class="row-divider"></div>
+
+        <!-- ============ Write · success (diff) ============ -->
+        <div class="row-label">Write</div>
+        <div class="cell">
+          <span class="tool-mini tool-mini--success" tabindex="0" aria-label="Write · success">
+            <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+          </span>
+        </div>
+        <div class="cell">
+          <div class="tool">
+            <span class="tool__icon tool__icon--success">
+              <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+            </span>
+            <div class="tool__body">
+              <span class="tool__title">Write <em>·</em> ActionEventCard.tsx</span>
+              <span class="tool__cmd">+14 / -3 · 1 file</span>
+            </div>
+            <span class="tool__meta">0.4s</span>
+            <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+        <div class="cell cell-expanded">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="tool__icon tool__icon--success">
+                <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+              </span>
+              <div class="tool__body">
+                <span class="tool__title">Write <em>·</em> ActionEventCard.tsx</span>
+                <span class="tool__cmd">+14 / -3 · 1 file</span>
+              </div>
+              <span class="diff-summary"><span class="add">+14</span><span class="del">-3</span></span>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+            </div>
+            <pre class="tool__result tool__result--diff"><span class="diff-line diff-line--hunk">@@ -42,7 +42,18 @@</span><span class="diff-line diff-line--ctx">  if (!expanded) {</span><span class="diff-line diff-line--ctx">    return (</span><span class="diff-line diff-line--del">-     &lt;div className={styles.actionCompact}&gt;</span><span class="diff-line diff-line--add">+     &lt;div className={`${styles.actionCompact} ${styles[densityClass]}`}&gt;</span><span class="diff-line diff-line--add">+       {density === 'minimal' &amp;&amp; (</span><span class="diff-line diff-line--add">+         &lt;span className={styles.toolMini} /&gt;</span><span class="diff-line diff-line--add">+       )}</span></pre>
+          </div>
+        </div>
+
+        <div class="row-divider"></div>
+
+        <!-- ============ Read running ============ -->
+        <div class="row-label">Read · running</div>
+        <div class="cell">
+          <span class="tool-mini tool-mini--running" tabindex="0" aria-label="Read · running">
+            <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          </span>
+        </div>
+        <div class="cell">
+          <div class="tool">
+            <span class="tool__icon tool__icon--running">
+              <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg>
+            </span>
+            <div class="tool__body">
+              <span class="tool__title">Read <em>·</em> ChatInterface.module.css</span>
+              <span class="tool__cmd">lines 1–4 280 of ~5 800 · 74%</span>
+            </div>
+            <span class="tool__meta">…</span>
+          </div>
+        </div>
+        <div class="cell cell-expanded">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="tool__icon tool__icon--running">
+                <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg>
+              </span>
+              <div class="tool__body">
+                <span class="tool__title">Read <em>·</em> ChatInterface.module.css</span>
+                <span class="tool__cmd">lines 1–4 280 of ~5 800 · 74%</span>
+              </div>
+              <span class="tool__meta">…</span>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <pre class="tool__result">스트리밍 중…
+.kindChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.68rem;
+  …</pre>
+          </div>
+        </div>
+
+        <div class="row-divider"></div>
+
+        <!-- ============ Bash error ============ -->
+        <div class="row-label">Bash · error</div>
+        <div class="cell">
+          <span class="tool-mini tool-mini--error" tabindex="0" aria-label="Bash · error">
+            <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </span>
+        </div>
+        <div class="cell">
+          <div class="tool">
+            <span class="tool__icon tool__icon--error">
+              <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </span>
+            <div class="tool__body">
+              <span class="tool__title">Bash <em>·</em> rm .next/cache</span>
+              <span class="tool__cmd">rm -rf services/aris-web/.next/cache</span>
+            </div>
+            <span class="tool__meta">exit 1</span>
+            <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+        <div class="cell cell-expanded">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="tool__icon tool__icon--error">
+                <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </span>
+              <div class="tool__body">
+                <span class="tool__title">Bash <em>·</em> rm .next/cache</span>
+                <span class="tool__cmd">rm -rf services/aris-web/.next/cache</span>
+              </div>
+              <span class="tool__meta">exit 1</span>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <pre class="tool__result tool__result--error">rm: cannot remove 'services/aris-web/.next/cache': Permission denied
+exit code 1</pre>
+          </div>
+        </div>
+
+        <div class="row-divider"></div>
+
+        <!-- ============ Think ============ -->
+        <div class="row-label">Think</div>
+        <div class="cell">
+          <span class="tool-mini tool-mini--idle" tabindex="0" aria-label="Think">
+            <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M9.5 2A4.5 4.5 0 0 0 5 6.5v0a4 4 0 0 0-2 7.5v0a4 4 0 0 0 2 7.5v0a4.5 4.5 0 0 0 4.5 0V2zM14.5 2A4.5 4.5 0 0 1 19 6.5v0a4 4 0 0 1 2 7.5v0a4 4 0 0 1-2 7.5v0a4.5 4.5 0 0 1-4.5 0V2z"/></svg>
+          </span>
+        </div>
+        <div class="cell">
+          <div class="tool">
+            <span class="tool__icon tool__icon--idle">
+              <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M9.5 2A4.5 4.5 0 0 0 5 6.5v0a4 4 0 0 0-2 7.5v0a4 4 0 0 0 2 7.5v0a4.5 4.5 0 0 0 4.5 0V2zM14.5 2A4.5 4.5 0 0 1 19 6.5v0a4 4 0 0 1 2 7.5v0a4 4 0 0 1-2 7.5v0a4.5 4.5 0 0 1-4.5 0V2z"/></svg>
+            </span>
+            <div class="tool__body">
+              <span class="tool__title">Thinking</span>
+              <span class="tool__cmd" style="font-family: var(--font-sans); font-weight: 500;">Searching for the auth middleware definition…</span>
+            </div>
+            <span class="tool__meta">0.8s</span>
+            <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+        <div class="cell cell-expanded">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="tool__icon tool__icon--idle">
+                <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M9.5 2A4.5 4.5 0 0 0 5 6.5v0a4 4 0 0 0-2 7.5v0a4 4 0 0 0 2 7.5v0a4.5 4.5 0 0 0 4.5 0V2zM14.5 2A4.5 4.5 0 0 1 19 6.5v0a4 4 0 0 1 2 7.5v0a4 4 0 0 1-2 7.5v0a4.5 4.5 0 0 1-4.5 0V2z"/></svg>
+              </span>
+              <div class="tool__body">
+                <span class="tool__title">Thinking</span>
+                <span class="tool__cmd" style="font-family: var(--font-sans); font-weight: 500;">Searching for the auth middleware definition</span>
+              </div>
+              <span class="tool__meta">0.8s</span>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <pre class="tool__result" style="font-family: var(--font-sans); white-space: pre-wrap;">사용자가 "auth middleware 어디 있어?"라고 물었다.
+프로젝트 구조상 services/aris-backend/src/middleware/ 또는 services/aris-web/middleware.ts에 있을 가능성이 높다.
+먼저 두 후보를 모두 검색해보자.</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="scenarioLegend">
+      <span>최소형 색: <code>success</code> 녹색 · <code>running</code> 파랑 · <code>error</code> 빨강 · <code>idle/think</code> 회색. Tool 종류는 흰색 SVG로 식별.</span>
+    </p>
+  </section>
+
+  <!-- ========================= SECTION B — Flow simulation ========================= -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">B. 채팅 흐름 시뮬레이션</h2>
+      <span class="section-sub">동일한 대화 흐름을 네 가지 밀도 모드로 비교</span>
+    </div>
+    <p class="scenarioLegend">
+      <span><code>Read × 3</code> → <code>Write × 2</code> → <code>Bash</code> → 텍스트 답변 → <code>Read × 4</code> → <code>Bash(running)</code></span>
+    </p>
+
+    <div class="flowFrame" style="margin-top: var(--sp-5);">
+      <div class="flowTabs" role="tablist">
+        <button class="flowTab" data-tab="expanded">확장형</button>
+        <button class="flowTab" data-tab="default">기본형</button>
+        <button class="flowTab" data-tab="minimal">최소형</button>
+        <button class="flowTab is-active" data-tab="auto">자동<span class="badge">권장</span></button>
+      </div>
+
+      <!-- ============ Tab: Expanded ============ -->
+      <div class="flowBody" data-tab-body="expanded" style="display:none;">
+        <div class="msg msg--user">
+          <div class="msg__body" style="align-items:flex-end;">
+            <div class="msg__bubble">@auth middleware 어디서 정의되는지 확인해서 로깅 추가해줘</div>
+          </div>
+        </div>
+
+        <div class="msg">
+          <span class="msg__avatar msg__avatar--claude">C</span>
+          <div class="msg__body">
+            <div class="msg__header"><span class="msg__name">Claude · 4.7</span><span class="msg__time">10:24</span></div>
+            <div class="msg__text"><p>확인하겠습니다. 먼저 후보 위치를 살펴볼게요.</p></div>
+            <!-- 3 Reads -->
+            <div class="tool-wrap is-expanded">
+              <div class="tool">
+                <span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+                <div class="tool__body">
+                  <span class="tool__title">Read <em>·</em> middleware.ts</span>
+                  <span class="tool__cmd">services/aris-web/middleware.ts</span>
+                </div>
+                <span class="tool__meta">0.1s</span>
+                <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+              </div>
+              <pre class="tool__result">  1  import { NextRequest, NextResponse } from 'next/server';
+  2  import { verifySession } from '@/lib/auth/session';
+  3
+  4  export async function middleware(req: NextRequest) {
+  5    const session = await verifySession(req);
+... (+58 more lines)</pre>
+            </div>
+            <div class="tool-wrap is-expanded">
+              <div class="tool">
+                <span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+                <div class="tool__body">
+                  <span class="tool__title">Read <em>·</em> session.ts</span>
+                  <span class="tool__cmd">services/aris-web/lib/auth/session.ts</span>
+                </div>
+                <span class="tool__meta">0.1s</span>
+                <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+              </div>
+              <pre class="tool__result">  1  import { cookies } from 'next/headers';
+  2  import jwt from 'jsonwebtoken';
+  3
+  4  export async function verifySession(req) { ... }</pre>
+            </div>
+            <div class="tool-wrap is-expanded">
+              <div class="tool">
+                <span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+                <div class="tool__body">
+                  <span class="tool__title">Read <em>·</em> auth.ts</span>
+                  <span class="tool__cmd">services/aris-backend/src/middleware/auth.ts</span>
+                </div>
+                <span class="tool__meta">0.1s</span>
+                <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+              </div>
+              <pre class="tool__result">  1  export function authMiddleware(req, res, next) { ... }</pre>
+            </div>
+            <!-- 2 Writes -->
+            <div class="tool-wrap is-expanded">
+              <div class="tool">
+                <span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>
+                <div class="tool__body">
+                  <span class="tool__title">Write <em>·</em> middleware.ts</span>
+                  <span class="tool__cmd">+5 / -0</span>
+                </div>
+                <span class="diff-summary"><span class="add">+5</span><span class="del">-0</span></span>
+                <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+              </div>
+              <pre class="tool__result tool__result--diff"><span class="diff-line diff-line--hunk">@@ -4,6 +4,11 @@</span><span class="diff-line diff-line--ctx">export async function middleware(req: NextRequest) {</span><span class="diff-line diff-line--add">+ console.log('[auth] middleware enter', { path: req.nextUrl.pathname });</span><span class="diff-line diff-line--ctx">  const session = await verifySession(req);</span><span class="diff-line diff-line--add">+ console.log('[auth] session', { ok: !!session, userId: session?.userId });</span></pre>
+            </div>
+            <div class="tool-wrap is-expanded">
+              <div class="tool">
+                <span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>
+                <div class="tool__body">
+                  <span class="tool__title">Write <em>·</em> auth.ts</span>
+                  <span class="tool__cmd">+3 / -0</span>
+                </div>
+                <span class="diff-summary"><span class="add">+3</span><span class="del">-0</span></span>
+                <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+              </div>
+              <pre class="tool__result tool__result--diff"><span class="diff-line diff-line--hunk">@@ -1,5 +1,8 @@</span><span class="diff-line diff-line--add">+ import logger from '../utils/logger';</span><span class="diff-line diff-line--ctx">export function authMiddleware(req, res, next) {</span><span class="diff-line diff-line--add">+   logger.debug('[auth] enter', { path: req.path });</span></pre>
+            </div>
+            <!-- Bash -->
+            <div class="tool-wrap is-expanded">
+              <div class="tool">
+                <span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>
+                <div class="tool__body">
+                  <span class="tool__title">Bash <em>·</em> tsc check</span>
+                  <span class="tool__cmd">cd services/aris-web && npx tsc --noEmit</span>
+                </div>
+                <span class="tool__meta">3.1s</span>
+                <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+              </div>
+              <pre class="tool__result">$ tsc --noEmit
+✓ no errors
+$ exit 0</pre>
+            </div>
+            <div class="msg__text"><p>두 middleware에 모두 로깅을 추가했습니다. 빌드도 정상이에요. 이제 실제 요청 로그를 한번 살펴볼까요?</p></div>
+          </div>
+        </div>
+
+        <div class="msg">
+          <span class="msg__avatar msg__avatar--claude">C</span>
+          <div class="msg__body">
+            <div class="msg__header"><span class="msg__name">Claude · 4.7</span><span class="msg__time">10:25</span></div>
+            <!-- 4 Reads (logs) -->
+            <div class="tool-wrap is-expanded">
+              <div class="tool">
+                <span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M3 6h6l2 2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H3z"/></svg></span>
+                <div class="tool__body">
+                  <span class="tool__title">List <em>·</em> logs/2026/05/12/</span>
+                  <span class="tool__cmd">3 entries</span>
+                </div>
+                <span class="tool__meta">0.0s</span>
+                <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+              </div>
+              <pre class="tool__result">chat-claude-c8f4-t31-parsed.ndjson
+chat-claude-c8f4-t31-raw.ndjson
+chat-codex-c8a2-t29-parsed.ndjson</pre>
+            </div>
+            <div class="tool-wrap is-expanded">
+              <div class="tool">
+                <span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+                <div class="tool__body">
+                  <span class="tool__title">Read <em>·</em> chat-claude-…parsed.ndjson</span>
+                  <span class="tool__cmd">first 200 lines</span>
+                </div>
+                <span class="tool__meta">0.2s</span>
+                <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+              </div>
+              <pre class="tool__result">{"loggedAt":"10:24:11","stage":"agent_action","payload":{"kind":"file_read",...}}
+{"loggedAt":"10:24:13","stage":"agent_action","payload":{"kind":"file_read",...}}
+...</pre>
+            </div>
+            <!-- Running Bash -->
+            <div class="tool-wrap is-expanded">
+              <div class="tool">
+                <span class="tool__icon tool__icon--running"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg></span>
+                <div class="tool__body">
+                  <span class="tool__title">Bash <em>·</em> tail follow</span>
+                  <span class="tool__cmd">tail -f logs/2026/05/12/chat-claude-c8f4-t31-parsed.ndjson</span>
+                </div>
+                <span class="tool__meta">…</span>
+              </div>
+              <pre class="tool__result">실행 중…
+{"loggedAt":"10:25:02","stage":"agent_action","payload":{"kind":"file_read",...}}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ Tab: Default ============ -->
+      <div class="flowBody" data-tab-body="default" style="display:none;">
+        <div class="msg msg--user">
+          <div class="msg__body" style="align-items:flex-end;">
+            <div class="msg__bubble">@auth middleware 어디서 정의되는지 확인해서 로깅 추가해줘</div>
+          </div>
+        </div>
+        <div class="msg">
+          <span class="msg__avatar msg__avatar--claude">C</span>
+          <div class="msg__body">
+            <div class="msg__header"><span class="msg__name">Claude · 4.7</span><span class="msg__time">10:24</span></div>
+            <div class="msg__text"><p>확인하겠습니다. 먼저 후보 위치를 살펴볼게요.</p></div>
+
+            <div class="tool"><span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span><div class="tool__body"><span class="tool__title">Read <em>·</em> middleware.ts</span><span class="tool__cmd">services/aris-web/middleware.ts</span></div><span class="tool__meta">0.1s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="tool"><span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span><div class="tool__body"><span class="tool__title">Read <em>·</em> session.ts</span><span class="tool__cmd">services/aris-web/lib/auth/session.ts</span></div><span class="tool__meta">0.1s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="tool"><span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span><div class="tool__body"><span class="tool__title">Read <em>·</em> auth.ts</span><span class="tool__cmd">services/aris-backend/src/middleware/auth.ts</span></div><span class="tool__meta">0.1s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="tool"><span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span><div class="tool__body"><span class="tool__title">Write <em>·</em> middleware.ts</span><span class="tool__cmd">+5 / -0</span></div><span class="tool__meta">0.3s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="tool"><span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span><div class="tool__body"><span class="tool__title">Write <em>·</em> auth.ts</span><span class="tool__cmd">+3 / -0</span></div><span class="tool__meta">0.3s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="tool"><span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span><div class="tool__body"><span class="tool__title">Bash <em>·</em> tsc check</span><span class="tool__cmd">cd services/aris-web && npx tsc --noEmit</span></div><span class="tool__meta">3.1s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+
+            <div class="msg__text"><p>두 middleware에 모두 로깅을 추가했습니다. 빌드도 정상이에요. 이제 실제 요청 로그를 한번 살펴볼까요?</p></div>
+
+            <div class="tool"><span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M3 6h6l2 2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H3z"/></svg></span><div class="tool__body"><span class="tool__title">List <em>·</em> logs/2026/05/12/</span><span class="tool__cmd">3 entries</span></div><span class="tool__meta">0.0s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="tool"><span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span><div class="tool__body"><span class="tool__title">Read <em>·</em> chat-claude-c8f4-t31-parsed.ndjson</span><span class="tool__cmd">first 200 lines</span></div><span class="tool__meta">0.2s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="tool"><span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span><div class="tool__body"><span class="tool__title">Read <em>·</em> chat-claude-c8f4-t31-raw.ndjson</span><span class="tool__cmd">first 200 lines</span></div><span class="tool__meta">0.2s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="tool"><span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span><div class="tool__body"><span class="tool__title">Read <em>·</em> helpers.tsx</span><span class="tool__cmd">services/aris-web/.../chat-screen/helpers.tsx</span></div><span class="tool__meta">0.1s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="tool"><span class="tool__icon tool__icon--running"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg></span><div class="tool__body"><span class="tool__title">Bash <em>·</em> tail follow</span><span class="tool__cmd">tail -f logs/2026/05/12/chat-claude-c8f4-t31-parsed.ndjson</span></div><span class="tool__meta">…</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ Tab: Minimal ============ -->
+      <div class="flowBody" data-tab-body="minimal" style="display:none;">
+        <div class="msg msg--user">
+          <div class="msg__body" style="align-items:flex-end;">
+            <div class="msg__bubble">@auth middleware 어디서 정의되는지 확인해서 로깅 추가해줘</div>
+          </div>
+        </div>
+        <div class="msg">
+          <span class="msg__avatar msg__avatar--claude">C</span>
+          <div class="msg__body">
+            <div class="msg__header"><span class="msg__name">Claude · 4.7</span><span class="msg__time">10:24</span></div>
+            <div class="msg__text"><p>확인하겠습니다. 먼저 후보 위치를 살펴볼게요.</p></div>
+
+            <div class="mini-stack">
+              <div class="mini-stack__row" data-stack="flow-1">
+                <span class="tool-mini tool-mini--success" data-idx="0" tabindex="0">
+                  <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                  <div class="mini-pop"><div class="mini-pop__title">Read <em>·</em> middleware.ts</div><div class="mini-pop__cmd">services/aris-web/middleware.ts</div><div class="mini-pop__meta">10:24:11 · 완료 · 64 lines</div></div>
+                </span>
+                <span class="tool-mini tool-mini--success" data-idx="1" tabindex="0">
+                  <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                  <div class="mini-pop"><div class="mini-pop__title">Read <em>·</em> session.ts</div><div class="mini-pop__cmd">services/aris-web/lib/auth/session.ts</div><div class="mini-pop__meta">10:24:13 · 완료</div></div>
+                </span>
+                <span class="tool-mini tool-mini--success" data-idx="2" tabindex="0">
+                  <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                  <div class="mini-pop"><div class="mini-pop__title">Read <em>·</em> auth.ts</div><div class="mini-pop__cmd">services/aris-backend/src/middleware/auth.ts</div><div class="mini-pop__meta">10:24:15 · 완료</div></div>
+                </span>
+                <span class="tool-mini tool-mini--success" data-idx="3" tabindex="0">
+                  <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                  <div class="mini-pop"><div class="mini-pop__title">Write <em>·</em> middleware.ts</div><div class="mini-pop__cmd">+5 / -0</div><div class="mini-pop__meta">10:24:21</div></div>
+                </span>
+                <span class="tool-mini tool-mini--success" data-idx="4" tabindex="0">
+                  <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                  <div class="mini-pop"><div class="mini-pop__title">Write <em>·</em> auth.ts</div><div class="mini-pop__cmd">+3 / -0</div><div class="mini-pop__meta">10:24:23</div></div>
+                </span>
+                <span class="tool-mini tool-mini--success" data-idx="5" tabindex="0">
+                  <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+                  <div class="mini-pop"><div class="mini-pop__title">Bash <em>·</em> tsc check</div><div class="mini-pop__cmd">npx tsc --noEmit</div><div class="mini-pop__meta">완료 · 3.1s</div></div>
+                </span>
+                <span class="mini-stack__label">6 actions · <span class="accent">all done</span></span>
+              </div>
+              <div class="mini-stack__inline" data-inline-for="flow-1">
+                <div class="tool-wrap is-expanded" style="max-width: 680px;">
+                  <div class="tool">
+                    <span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+                    <div class="tool__body">
+                      <span class="tool__title">Read <em>·</em> middleware.ts</span>
+                      <span class="tool__cmd">services/aris-web/middleware.ts</span>
+                    </div>
+                    <span class="tool__meta">0.1s</span>
+                    <button class="tool__caret" aria-label="닫기"><svg class="ico ico--sm" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+                  </div>
+                  <pre class="tool__result">  1  import { NextRequest, NextResponse } from 'next/server';
+  2  import { verifySession } from '@/lib/auth/session';
+  3
+  4  export async function middleware(req: NextRequest) {
+  5    const session = await verifySession(req);
+... (+58 more lines)</pre>
+                </div>
+              </div>
+            </div>
+
+            <div class="msg__text"><p>두 middleware에 모두 로깅을 추가했습니다. 빌드도 정상이에요. 이제 실제 요청 로그를 한번 살펴볼까요?</p></div>
+
+            <div class="mini-stack">
+              <div class="mini-stack__row">
+                <span class="tool-mini tool-mini--success" tabindex="0"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M3 6h6l2 2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H3z"/></svg></span>
+                <span class="tool-mini tool-mini--success" tabindex="0"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+                <span class="tool-mini tool-mini--success" tabindex="0"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+                <span class="tool-mini tool-mini--success" tabindex="0"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+                <span class="tool-mini tool-mini--success" tabindex="0"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+                <span class="tool-mini tool-mini--running" tabindex="0"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg></span>
+                <span class="mini-stack__label">6 actions · <span class="accent">1 실행 중</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ Tab: Auto (recommended) ============ -->
+      <div class="flowBody" data-tab-body="auto">
+        <div class="msg msg--user">
+          <div class="msg__body" style="align-items:flex-end;">
+            <div class="msg__bubble">@auth middleware 어디서 정의되는지 확인해서 로깅 추가해줘</div>
+          </div>
+        </div>
+        <div class="msg">
+          <span class="msg__avatar msg__avatar--claude">C</span>
+          <div class="msg__body">
+            <div class="msg__header"><span class="msg__name">Claude · 4.7</span><span class="msg__time">10:24</span></div>
+            <div class="msg__text"><p>확인하겠습니다. 먼저 후보 위치를 살펴볼게요.</p></div>
+
+            <!-- past turn fully collapsed to minimal stack -->
+            <div class="mini-stack">
+              <div class="mini-stack__row">
+                <span class="tool-mini tool-mini--success" tabindex="0"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+                <span class="tool-mini tool-mini--success" tabindex="0"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+                <span class="tool-mini tool-mini--success" tabindex="0"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+                <span class="tool-mini tool-mini--success" tabindex="0"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>
+                <span class="tool-mini tool-mini--success" tabindex="0"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>
+                <span class="tool-mini tool-mini--success" tabindex="0"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>
+                <span class="mini-stack__label">6 actions · <span class="accent">all done</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="msg">
+          <span class="msg__avatar msg__avatar--claude">C</span>
+          <div class="msg__body">
+            <div class="msg__header"><span class="msg__name">Claude · 4.7</span><span class="msg__time">10:25</span></div>
+            <div class="msg__text"><p>두 middleware에 모두 로깅을 추가했습니다. 빌드도 정상이에요. 이제 실제 요청 로그를 한번 살펴볼까요?</p></div>
+
+            <!-- earlier in current turn → minimal -->
+            <div class="mini-stack">
+              <div class="mini-stack__row">
+                <span class="tool-mini tool-mini--success" tabindex="0"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M3 6h6l2 2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H3z"/></svg></span>
+                <span class="tool-mini tool-mini--success" tabindex="0"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+                <span class="tool-mini tool-mini--success" tabindex="0"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+                <span class="tool-mini tool-mini--success" tabindex="0"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+                <span class="mini-stack__label">4 actions</span>
+              </div>
+            </div>
+
+            <!-- most-recent finished → default -->
+            <div class="tool">
+              <span class="tool__icon tool__icon--success"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+              <div class="tool__body">
+                <span class="tool__title">Read <em>·</em> helpers.tsx</span>
+                <span class="tool__cmd">services/aris-web/.../chat-screen/helpers.tsx</span>
+              </div>
+              <span class="tool__meta">0.1s</span>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+            </div>
+
+            <!-- currently running → expanded -->
+            <div class="tool-wrap is-expanded">
+              <div class="tool">
+                <span class="tool__icon tool__icon--running"><svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg></span>
+                <div class="tool__body">
+                  <span class="tool__title">Bash <em>·</em> tail follow</span>
+                  <span class="tool__cmd">tail -f logs/2026/05/12/chat-claude-c8f4-t31-parsed.ndjson</span>
+                </div>
+                <span class="tool__meta">…</span>
+              </div>
+              <pre class="tool__result">실행 중…
+{"loggedAt":"10:25:02","stage":"agent_action","payload":{"kind":"file_read",...}}
+{"loggedAt":"10:25:04","stage":"agent_action","payload":{"kind":"file_read",...}}</pre>
+            </div>
+          </div>
+        </div>
+
+        <p class="scenarioLegend" style="margin-top: var(--sp-6);">
+          <span>자동 규칙:
+            <code>실행 중 → 확장</code> ·
+            <code>가장 최근 완료 1 → 기본</code> ·
+            <code>그 외 → 최소(stack)</code> ·
+            <code>에러는 거리 무관 기본 이상</code></span>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================= SECTION C — Interactions ========================= -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">C. 인터랙션 — hover &amp; 인라인 확장</h2>
+      <span class="section-sub">최소형 stack에서 마우스 hover 시 미리보기, 클릭 시 인라인 확장</span>
+    </div>
+
+    <div class="flowFrame" style="padding: var(--sp-10) var(--sp-12);">
+      <div class="mini-stack">
+        <div class="mini-stack__row" id="interactiveStack">
+          <span class="tool-mini tool-mini--success" data-mini="0" tabindex="0">
+            <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+            <div class="mini-pop"><div class="mini-pop__title">Read <em>·</em> middleware.ts</div><div class="mini-pop__cmd">services/aris-web/middleware.ts</div><div class="mini-pop__meta">10:24:11 · 완료 · 64 lines</div></div>
+          </span>
+          <span class="tool-mini tool-mini--success" data-mini="1" tabindex="0">
+            <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+            <div class="mini-pop"><div class="mini-pop__title">Write <em>·</em> middleware.ts</div><div class="mini-pop__cmd">+5 / -0</div><div class="mini-pop__meta">10:24:21 · 완료</div></div>
+          </span>
+          <span class="tool-mini tool-mini--success" data-mini="2" tabindex="0">
+            <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+            <div class="mini-pop"><div class="mini-pop__title">Bash <em>·</em> tsc check</div><div class="mini-pop__cmd">npx tsc --noEmit</div><div class="mini-pop__meta">완료 · exit 0 · 3.1s</div></div>
+          </span>
+          <span class="tool-mini tool-mini--error" data-mini="3" tabindex="0">
+            <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            <div class="mini-pop"><div class="mini-pop__title">Bash <em>·</em> rm .next/cache</div><div class="mini-pop__cmd">rm -rf services/aris-web/.next/cache</div><div class="mini-pop__meta">실패 · exit 1 · Permission denied</div></div>
+          </span>
+          <span class="tool-mini tool-mini--success" data-mini="4" tabindex="0">
+            <svg class="ico ico--xs" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><circle cx="6" cy="18" r="2"/><path d="M6 8v8M8 18h2a4 4 0 0 0 4-4V8"/></svg>
+            <div class="mini-pop"><div class="mini-pop__title">Git <em>·</em> commit</div><div class="mini-pop__cmd">git commit -m "fix: …"</div><div class="mini-pop__meta">완료 · 1 file · +6 / -2</div></div>
+          </span>
+          <span class="tool-mini tool-mini--running" data-mini="5" tabindex="0">
+            <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg>
+            <div class="mini-pop"><div class="mini-pop__title">Bash <em>·</em> tail follow</div><div class="mini-pop__cmd">tail -f logs/2026/05/12/chat-claude…</div><div class="mini-pop__meta">실행 중 · 00:14</div></div>
+          </span>
+          <span class="mini-stack__label">6 actions · <span class="accent">1 실행 중 · 1 실패</span></span>
+        </div>
+
+        <div class="mini-stack__inline" id="inlinePanel">
+          <div class="tool-wrap is-expanded" style="max-width: 680px;">
+            <div class="tool">
+              <span class="tool__icon tool__icon--success">
+                <svg class="ico ico--xs" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+              </span>
+              <div class="tool__body">
+                <span class="tool__title">Write <em>·</em> middleware.ts</span>
+                <span class="tool__cmd">+5 / -0 · 1 file</span>
+              </div>
+              <span class="diff-summary"><span class="add">+5</span><span class="del">-0</span></span>
+              <button class="tool__caret" id="closeInline" aria-label="닫기"><svg class="ico ico--sm" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+            </div>
+            <pre class="tool__result tool__result--diff"><span class="diff-line diff-line--hunk">@@ -4,6 +4,11 @@</span><span class="diff-line diff-line--ctx">export async function middleware(req: NextRequest) {</span><span class="diff-line diff-line--add">+ console.log('[auth] middleware enter', { path: req.nextUrl.pathname });</span><span class="diff-line diff-line--ctx">  const session = await verifySession(req);</span><span class="diff-line diff-line--add">+ console.log('[auth] session', { ok: !!session, userId: session?.userId });</span></pre>
+          </div>
+        </div>
+      </div>
+
+      <p class="scenarioLegend" style="margin-top: var(--sp-8);">
+        <span><code>hover</code> 위쪽 popover 미리보기 ·
+        <code>click</code> 인라인 확장 패널 토글 ·
+        <code>--error</code> 빨간 corner 점 ·
+        <code>--running</code> 파란 펄스 ring</span>
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= SECTION D — Rules ========================= -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">D. 구현 규칙</h2>
+      <span class="section-sub">시안 적용 시 따라야 할 행동 규칙</span>
+    </div>
+    <div class="rulesCard">
+      <div class="rulesCard__col">
+        <div>
+          <h3>모드 결정</h3>
+          <ul>
+            <li><strong>전역 기본값</strong> — 채팅 헤더 또는 설정의 4-way 토글(<code>자동/확장/기본/최소</code>)이 모든 카드의 기본 밀도를 결정.</li>
+            <li><strong>카드별 override</strong> — 어떤 모드에서도 카드/원형 아이콘을 클릭하면 그 카드만 일시적으로 확장된다. 다시 클릭하면 닫힘.</li>
+          </ul>
+
+          <h3 style="margin-top: var(--sp-6);">자동 모드 규칙</h3>
+          <ul>
+            <li><strong>실행 중</strong> → 확장형</li>
+            <li><strong>가장 최근 완료 1개</strong> → 기본형</li>
+            <li><strong>그 이전</strong> → 최소형 (stack 그룹화 적용)</li>
+            <li><strong>에러 결과</strong>는 거리 무관 기본형 이상 유지 — stack에 묻히지 않게.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>최소형 stack</h3>
+          <ul>
+            <li>사이에 텍스트(에이전트/유저 메시지)가 없는 연속 액션들은 자동으로 한 row의 stack으로 묶임.</li>
+            <li>원형 아이콘은 <code>22px</code> · <code>-8px margin</code> 으로 살짝 겹침.</li>
+            <li>색상은 <strong>상태</strong>(success/running/error/idle), 흰색 SVG는 <strong>tool 종류</strong>.</li>
+            <li>row 우측에 "<code>N actions · <em>요약</em></code>" 라벨.</li>
+          </ul>
+
+          <h3 style="margin-top: var(--sp-6);">시각 상태 표식</h3>
+          <ul>
+            <li><strong>실행 중</strong> — 파란 펄스 ring</li>
+            <li><strong>실패(exit ≠ 0)</strong> — 우상단 빨간 corner 점</li>
+            <li><strong>thinking</strong> — 회색 idle 톤 (success/error 색 차지하지 않음)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============================================================
+ *  Behavior — inline scripts (CSP-safe: 'unsafe-inline' allowed for script-src)
+ * ============================================================ -->
+<script>
+// ---- Theme switch ----
+document.getElementById('themeSwitch')?.addEventListener('click', () => {
+  const html = document.documentElement;
+  const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+});
+
+// ---- Density toggle (mirrors flow tab) ----
+const densityMap = { auto: 'auto', expanded: 'expanded', default: 'default', minimal: 'minimal' };
+document.querySelectorAll('.density-toggle button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.density-toggle button').forEach(b => b.classList.remove('is-active'));
+    btn.classList.add('is-active');
+    const target = densityMap[btn.dataset.density];
+    document.querySelectorAll('.flowTab').forEach(t => t.classList.toggle('is-active', t.dataset.tab === target));
+    document.querySelectorAll('.flowBody').forEach(b => { b.style.display = b.dataset.tabBody === target ? '' : 'none'; });
+  });
+});
+
+// ---- Flow tabs ----
+document.querySelectorAll('.flowTab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.flowTab').forEach(t => t.classList.remove('is-active'));
+    tab.classList.add('is-active');
+    const target = tab.dataset.tab;
+    document.querySelectorAll('.flowBody').forEach(b => { b.style.display = b.dataset.tabBody === target ? '' : 'none'; });
+  });
+});
+
+// ---- Interactive minimal stack (Section C): click to inline expand ----
+const inlinePanel = document.getElementById('inlinePanel');
+document.querySelectorAll('#interactiveStack [data-mini]').forEach((icon) => {
+  icon.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = icon.classList.contains('is-open');
+    document.querySelectorAll('#interactiveStack [data-mini]').forEach(i => i.classList.remove('is-open'));
+    if (isOpen) {
+      inlinePanel?.classList.remove('is-open');
+    } else {
+      icon.classList.add('is-open');
+      inlinePanel?.classList.add('is-open');
+    }
+  });
+});
+document.getElementById('closeInline')?.addEventListener('click', () => {
+  document.querySelectorAll('#interactiveStack [data-mini]').forEach(i => i.classList.remove('is-open'));
+  inlinePanel?.classList.remove('is-open');
+});
+
+// ---- Minimal flow stack: click to expand inline panel ----
+document.querySelectorAll('[data-stack="flow-1"] [data-idx]').forEach((icon) => {
+  icon.addEventListener('click', () => {
+    const panel = document.querySelector('[data-inline-for="flow-1"]');
+    if (!panel) return;
+    const wasOpen = icon.classList.contains('is-open');
+    document.querySelectorAll('[data-stack="flow-1"] [data-idx]').forEach(i => i.classList.remove('is-open'));
+    if (wasOpen) panel.classList.remove('is-open');
+    else { icon.classList.add('is-open'); panel.classList.add('is-open'); }
+  });
+});
+</script>
+</body>
+</html>
