@@ -58,7 +58,7 @@
   --tone-think-fg:#0B6E8A;    --tone-think-bg:#D7F2FB;
   --tone-todo-fg:#7A5C00;     --tone-todo-bg:#FFF1B8;
   --tone-agent-fg:#3F3D6E;    --tone-agent-bg:#E8E7F4;
-  --tone-other-fg:#4A4F58;    --tone-other-bg:#EBEDF1;
+  --tone-cmd-fg:#4A4F58;    --tone-cmd-bg:#EBEDF1;
 
   /* Syntax highlight tokens (chat-prototype 의 .cb-* 와 매칭) */
   --syn-cmd:#0F1117;       /* command name */
@@ -95,7 +95,7 @@ html[data-theme='dark'] {
   --tone-think-fg:#75D4EA;    --tone-think-bg:rgba(34,211,238,0.18);
   --tone-todo-fg:#F4D266;     --tone-todo-bg:rgba(250,204,21,0.18);
   --tone-agent-fg:#B7B4ED;    --tone-agent-bg:rgba(139,92,246,0.18);
-  --tone-other-fg:#AFB4BE;    --tone-other-bg:rgba(255,255,255,0.06);
+  --tone-cmd-fg:#AFB4BE;    --tone-cmd-bg:rgba(255,255,255,0.06);
 
   --syn-cmd:#F7F8FA;
   --syn-flag:#8B92A0;
@@ -211,7 +211,7 @@ svg { display: block; flex-shrink: 0; }
 .t-think   { color: var(--tone-think-fg);   background: var(--tone-think-bg); }
 .t-todo    { color: var(--tone-todo-fg);    background: var(--tone-todo-bg); }
 .t-agent   { color: var(--tone-agent-fg);   background: var(--tone-agent-bg); }
-.t-other   { color: var(--tone-other-fg);   background: var(--tone-other-bg); }
+.t-cmd   { color: var(--tone-cmd-fg);   background: var(--tone-cmd-bg); }
 
 .cmd-badge.is-running::after {
   content:''; position:absolute; inset:-3px; border-radius: var(--r-full);
@@ -1453,7 +1453,7 @@ Tests:       2 passed</pre>
       </div>
 
       <div class="toneCell">
-        <span class="cmd-badge t-other"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 9h.01M15 9h.01M9 15h6"/></svg>other</span>
+        <span class="cmd-badge t-cmd"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 9h.01M15 9h.01M9 15h6"/></svg>cmd</span>
         <div class="desc"><span>mv</span><span>cp</span><span>mkdir</span><span>touch</span><span>chmod</span><span>chown</span><span>ps</span><span>any unknown</span></div>
         <div class="role">기본 fallback</div>
       </div>
@@ -1461,7 +1461,7 @@ Tests:       2 passed</pre>
     </div>
 
     <p class="scenarioLegend" style="margin-top: var(--sp-5);">
-      <span>이 매핑은 코드의 단일 객체(예: <code>cmd-tone-map.ts</code>)로 관리. 새 명령어가 등장하면 <code>other</code>로 fallback되며 추후 매핑에 추가.</span>
+      <span>이 매핑은 코드의 단일 객체(예: <code>cmd-tone-map.ts</code>)로 관리. 새 명령어가 등장하면 <code>cmd</code>로 fallback되며 추후 매핑에 추가.</span>
     </p>
   </section>
 
@@ -1478,7 +1478,7 @@ Tests:       2 passed</pre>
           <ul>
             <li><strong>Agent-level 도구</strong> (<code>Read</code>·<code>Write</code>·<code>Edit</code>·<code>Glob</code>·<code>Grep</code>·<code>WebFetch</code>·<code>WebSearch</code>·<code>Task</code>·<code>TodoWrite</code>·<code>Think</code>): 도구 이름을 그대로 표시.</li>
             <li><strong>Bash</strong>: 첫 토큰 추출 — 선행 env var/<code>sudo</code>/<code>cd</code>/<code>time</code>/<code>env</code> 건너뛰기. <code>&amp;&amp;</code>/<code>||</code>/<code>;</code> 의 첫 segment의 첫 명령. 파이프(<code>|</code>) 첫 명령 사용 + meta에 <code>+N piped</code>.</li>
-            <li><strong>매핑 미스</strong> → <code>other</code> 톤으로 fallback. 명령어 텍스트는 그대로 노출.</li>
+            <li><strong>매핑 미스</strong> → <code>cmd</code> 톤으로 fallback. 명령어 텍스트는 그대로 노출.</li>
           </ul>
 
           <h3>파일 칩 (file-chip)</h3>
