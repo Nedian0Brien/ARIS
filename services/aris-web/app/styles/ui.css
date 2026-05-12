@@ -5948,6 +5948,65 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
   box-shadow: inset 0 0 0 1px rgba(47,107,255,0.36);
 }
 
+/* === Chat header context menu dropdown === */
+.pc-proto .ch-context-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 240px;
+  background: var(--surface);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 12px 32px rgba(15,17,23,0.16), 0 0 0 1px rgba(15,17,23,0.06);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pc-proto .ch-context-menu__section { display: flex; flex-direction: column; gap: 4px; }
+.pc-proto .ch-context-menu__label {
+  padding: 4px 10px 2px;
+  font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+}
+.pc-proto .ch-density-menu { display: flex; flex-direction: column; gap: 2px; }
+.pc-proto .ch-density-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text-primary);
+  text-align: left;
+  transition: background var(--t-fast);
+}
+.pc-proto .ch-density-menu__item:hover,
+.pc-proto .ch-density-menu__item:focus-visible {
+  background: var(--surface-sunken);
+  outline: 0;
+}
+.pc-proto .ch-density-menu__item.is-active { background: var(--surface-sunken); }
+.pc-proto .ch-density-menu__check {
+  width: 14px; height: 14px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--b-600);
+  flex-shrink: 0;
+}
+.pc-proto .ch-density-menu__main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.pc-proto .ch-density-menu__label { font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
+.pc-proto .ch-density-menu__hint {
+  font-size: 10.8px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
 /* === Minimal stack (consecutive action grouping) === */
 .pc-proto .cmd-mini-stack { display: flex; flex-direction: column; gap: 6px; }
 .pc-proto .cmd-mini-stack__row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; padding: 4px 0; }

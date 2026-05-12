@@ -54,7 +54,7 @@ import { ProjectActionCard } from '@/components/project-chat/ProjectActionCard';
 import { useDensityStore } from './cmd-display/densityStore';
 import { computeAutoDensity } from './cmd-display/densityRules';
 import { MiniStack, type MiniStackItem } from './cmd-display/MiniStack';
-import { DensityToggle } from './cmd-display/DensityToggle';
+import { DensityMenuList } from './cmd-display/DensityMenuList';
 
 // ---------------------------------------------------------------------------
 // Local type aliases (duplicated from HomePageClient.tsx; cleanup out of scope)
@@ -376,6 +376,8 @@ export function ProjectChatSurface({
   const [workspaceLayoutReady, setWorkspaceLayoutReady] = useState(false);
   const [previewState, setPreviewState] = useState<PreviewState>('dock');
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<ModelProvider>(() => providerFromAgent(runtimeAgent));
   const [selectedModel, setSelectedModel] = useState(runtimeModelLabel);
   const [selectedEffort, setSelectedEffort] = useState<ReasoningEffort>(() => normalizeReasoningEffort(activeChat?.modelReasoningEffort));
@@ -518,6 +520,24 @@ export function ProjectChatSurface({
   const visibleExpandedTurnId = expandedTurnId === '__none__'
     ? null
     : expandedTurnId ?? defaultExpandedTurnId;
+
+  useEffect(() => {
+    if (!contextMenuOpen) return;
+    const onPointer = (e: PointerEvent) => {
+      if (!contextMenuRef.current?.contains(e.target as Node)) {
+        setContextMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [contextMenuOpen]);
 
   useEffect(() => () => {
     if (workspaceCloseTimerRef.current !== null) {
@@ -1122,7 +1142,6 @@ export function ProjectChatSurface({
               <span className="ch__meta">{agentLabel(activeAgent, activeModelLabel)} · {tokenLabel} · {fileCount} files</span>
             </div>
             <div className="ch__actions">
-              <DensityToggle />
               <button type="button" className="ch__action" aria-label="Share chat route" onClick={() => handleCopy(projectChatRoute, 'Chat route')}>
                 <Share2 size={14} />
               </button>
@@ -1138,9 +1157,26 @@ export function ProjectChatSurface({
               >
                 <PanelRight size={14} />
               </button>
-              <button type="button" className="ch__action" aria-label="More chat actions" onClick={() => setModelSelectorOpen((current) => !current)}>
-                <MoreHorizontal size={15} />
-              </button>
+              <div className="ch__context-menu-wrap" ref={contextMenuRef} style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  className="ch__action"
+                  aria-label="More chat actions"
+                  aria-expanded={contextMenuOpen}
+                  aria-haspopup="menu"
+                  onClick={(e) => { e.stopPropagation(); setContextMenuOpen((c) => !c); }}
+                >
+                  <MoreHorizontal size={15} />
+                </button>
+                {contextMenuOpen && (
+                  <div className="ch-context-menu" role="menu" aria-label="Chat options">
+                    <div className="ch-context-menu__section">
+                      <div className="ch-context-menu__label">액션 카드 밀도</div>
+                      <DensityMenuList onSelect={() => setContextMenuOpen(false)} />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </header>
 
