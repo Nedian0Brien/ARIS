@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import type { ComponentType, KeyboardEvent, MouseEventHandler, RefObject } from 'react';
+import type { ComponentType, DragEvent, KeyboardEvent, MouseEventHandler, RefObject } from 'react';
 import { CornerDownRight, MoreVertical, Pin } from 'lucide-react';
 import type { ChatApprovalFeedback } from '../types';
 import styles from '../../ChatInterface.module.css';
@@ -65,12 +65,16 @@ export function ChatSidebarItem({
   actionMenuRef,
   RelativeTimeComponent,
   ElapsedTimerComponent,
+  onChatDragStart,
+  onChatDragEnd,
 }: {
   item: ChatSidebarItemViewModel;
   isMounted: boolean;
   actionMenuRef: RefObject<HTMLDivElement | null>;
   RelativeTimeComponent: ComponentType<{ timestamp: string; className?: string }>;
   ElapsedTimerComponent: ComponentType<{ since: string; className?: string }>;
+  onChatDragStart?: (event: DragEvent<HTMLDivElement>, item: ChatSidebarItemViewModel) => void;
+  onChatDragEnd?: () => void;
 }) {
   const statusLabel = item.hasPendingApproval
     ? 'needs approval'
@@ -81,6 +85,9 @@ export function ChatSidebarItem({
   return (
     <div
       className={`${styles.chatListItem} ${styles.csSession} ${item.isActive ? `${styles.chatListItemActive} ${styles.csSessionActive}` : ''} ${item.sidebarStateClassName}`}
+      draggable={!item.isRenaming}
+      onDragStart={(event) => onChatDragStart?.(event, item)}
+      onDragEnd={onChatDragEnd}
     >
       <div className={styles.chatListItemTopRow}>
         <button

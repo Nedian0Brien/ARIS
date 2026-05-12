@@ -23,7 +23,7 @@ export async function generateMetadata({
   searchParams,
 }: {
   params: Promise<{ sessionId: string }>;
-  searchParams: Promise<{ chat?: string }>;
+  searchParams: Promise<{ chat?: string; surface?: string }>;
 }): Promise<Metadata> {
   try {
     const user = await requirePageUser();
@@ -63,7 +63,7 @@ export default async function SessionPage({
   searchParams,
 }: {
   params: Promise<{ sessionId: string }>;
-  searchParams: Promise<{ chat?: string }>;
+  searchParams: Promise<{ chat?: string; surface?: string }>;
 }) {
   const user = await requirePageUser();
   const { sessionId } = await params;
@@ -71,6 +71,7 @@ export default async function SessionPage({
   const requestedChatId = typeof resolvedSearchParams?.chat === 'string' && resolvedSearchParams.chat.trim()
     ? resolvedSearchParams.chat.trim()
     : null;
+  const surfaceMode = resolvedSearchParams?.surface === 'panel' ? 'parallel-panel' : 'full';
 
   try {
     // ?chat= 파라미터가 없으면 워크스페이스 홈 화면을 보여주기 위해
@@ -113,6 +114,7 @@ export default async function SessionPage({
               initialChats={chats}
               activeChatId={null}
               initialShowWorkspaceHome
+              surfaceMode={surfaceMode}
             />
           </main>
         </div>
@@ -154,6 +156,7 @@ export default async function SessionPage({
             initialModelSettings={initialModelSettings}
             initialChats={chats}
             activeChatId={activeChat?.id ?? null}
+            surfaceMode={surfaceMode}
             initialShowChatEntryLoading={shouldStartChatEntryLoading({
               requestedChatId,
               resolvedChatId: activeChat?.id ?? null,

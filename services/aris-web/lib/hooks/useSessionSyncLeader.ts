@@ -79,7 +79,7 @@ export function shouldClaimSessionSyncLeadership(
   return isFocused && record.focused === false;
 }
 
-export function useSessionSyncLeader(sessionId: string) {
+export function useSessionSyncLeader(sessionId: string, scopeKey: string | null = null) {
   const tabIdRef = useRef(`session-sync-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
   const [isLeader, setIsLeader] = useState(true);
 
@@ -88,7 +88,10 @@ export function useSessionSyncLeader(sessionId: string) {
       return;
     }
 
-    const storageKey = `aris:session-sync-leader:${sessionId}`;
+    const normalizedScopeKey = scopeKey?.trim();
+    const storageKey = normalizedScopeKey
+      ? `aris:session-sync-leader:${sessionId}:${normalizedScopeKey}`
+      : `aris:session-sync-leader:${sessionId}`;
     let released = false;
 
     const releaseLeadership = () => {
@@ -178,7 +181,7 @@ export function useSessionSyncLeader(sessionId: string) {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       releaseLeadership();
     };
-  }, [sessionId]);
+  }, [sessionId, scopeKey]);
 
   return { isLeader };
 }

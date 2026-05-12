@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import type { ComponentType, RefObject } from 'react';
+import type { ComponentType, DragEvent, RefObject } from 'react';
 import { MessageSquarePlus, Search, X } from 'lucide-react';
 import type { ChatSidebarSectionKey } from '../types';
 import styles from '../../ChatInterface.module.css';
@@ -36,6 +36,8 @@ export function ChatSidebarPane({
   onCreateChat,
   RelativeTimeComponent,
   ElapsedTimerComponent,
+  onChatDragStart,
+  onChatDragEnd,
 }: {
   sessionTitle: string;
   chatCount: number;
@@ -57,6 +59,8 @@ export function ChatSidebarPane({
   onCreateChat: () => void;
   RelativeTimeComponent: ComponentType<{ timestamp: string; className?: string }>;
   ElapsedTimerComponent: ComponentType<{ since: string; className?: string }>;
+  onChatDragStart?: (event: DragEvent<HTMLDivElement>, item: ChatSidebarItemViewModel) => void;
+  onChatDragEnd?: () => void;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
@@ -167,6 +171,8 @@ export function ChatSidebarPane({
                     actionMenuRef={actionMenuRef}
                     RelativeTimeComponent={RelativeTimeComponent}
                     ElapsedTimerComponent={ElapsedTimerComponent}
+                    onChatDragStart={onChatDragStart}
+                    onChatDragEnd={onChatDragEnd}
                   />
                 ))}
               </ChatSidebarSection>

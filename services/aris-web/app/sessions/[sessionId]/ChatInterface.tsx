@@ -2,11 +2,12 @@
 
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { CSSProperties, ChangeEvent } from 'react';
+import type { CSSProperties, ChangeEvent, DragEvent } from 'react';
 import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
 import { useSessionSyncLeader } from '@/lib/hooks/useSessionSyncLeader';
+import { withAppBasePath } from '@/lib/routing/appPath';
 import type { ModelSettingsResponse } from '@/lib/settings/providerModels';
 import {
   getLatestAgentEventTimestampSince,
@@ -186,6 +187,18 @@ function ElapsedTimer({ since, className }: { since: string; className?: string 
 
 const RESUME_SCROLL_SETTLE_TIMEOUT_MS = 240;
 const SYSTEM_SCROLL_AUTOSCROLL_COOLDOWN_MS = 900;
+const CHAT_DRAG_MIME = 'application/x-aris-chat-id';
+
+type ParallelChatSide = 'left' | 'right';
+
+type ParallelChatLayout = {
+  leftChatId: string;
+  rightChatId: string;
+};
+
+function isChatDragPayload(event: DragEvent<HTMLElement>): boolean {
+  return Array.from(event.dataTransfer.types).includes(CHAT_DRAG_MIME);
+}
 
 export function ChatInterface({
   sessionId,
@@ -248,7 +261,8 @@ export function ChatInterface({
     initialModelSettings,
     initialShowWorkspaceHome,
   });
-  const { isLeader: isSessionSyncLeader } = useSessionSyncLeader(sessionId);
+  const sessionSyncScopeKey = surfaceMode === 'parallel-panel' ? activeChatIdResolved : null;
+  const { isLeader: isSessionSyncLeader } = useSessionSyncLeader(sessionId, sessionSyncScopeKey);
   const {
     activeChatRuntimeUi,
     chatRuntimeUiByChat,
@@ -357,6 +371,9 @@ export function ChatInterface({
     headerObservationKey: activeWorkspacePageId,
   });
   const chatActionMenuRef = useRef<HTMLDivElement>(null);
+  const [parallelChatLayout, setParallelChatLayout] = useState<ParallelChatLayout | null>(null);
+  const [parallelDropSide, setParallelDropSide] = useState<ParallelChatSide | null>(null);
+  const [isChatDragActive, setIsChatDragActive] = useState(false);
   const [pendingUserEventsByChat, setPendingUserEventsByChat] = useState<Record<string, UiEvent[]>>({});
   const handleCopyUserMessage = useCallback(async (event: UiEvent) => {
     const text = stripImageAttachmentPromptPrefix((event.body || event.title || '').replace(/\r\n/g, '\n')).trim();
@@ -1695,6 +1712,94 @@ export function ChatInterface({
     setIsWorkspaceHome,
     setSelectedChatId,
   });
+  const buildParallelPanelUrl = useCallback((chatId: string) => {
+    const params = new URLSearchParams({
+      chat: chatId,
+      surface: 'panel',
+    });
+    return withAppBasePath(`/sessions/${encodeURIComponent(sessionId)}?${params.toString()}`);
+  }, [sessionId]);
+  const resolveParallelChatTitle = useCallback((chatId: string) => {
+    return chats.find((chat) => chat.id === chatId)?.title?.trim() || '채팅';
+  }, [chats]);
+  const clearParallelDragState = useCallback(() => {
+    setIsChatDragActive(false);
+    setParallelDropSide(null);
+  }, []);
+  const handleChatDragStart = useCallback((event: DragEvent<HTMLDivElement>, item: { id: string; title: string }) => {
+    event.dataTransfer.effectAllowed = 'copy';
+    event.dataTransfer.setData(CHAT_DRAG_MIME, item.id);
+    event.dataTransfer.setData('text/plain', item.title);
+    setIsChatDragActive(true);
+  }, []);
+  const handleParallelDragOver = useCallback((side: ParallelChatSide, event: DragEvent<HTMLDivElement>) => {
+    if (!isChatDragPayload(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setIsChatDragActive(true);
+    setParallelDropSide(side);
+  }, []);
+  const handleParallelDrop = useCallback((side: ParallelChatSide, event: DragEvent<HTMLDivElement>) => {
+    if (!isChatDragPayload(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+
+    const draggedChatId = event.dataTransfer.getData(CHAT_DRAG_MIME).trim();
+    if (!draggedChatId || !chats.some((chat) => chat.id === draggedChatId)) {
+      clearParallelDragState();
+      return;
+    }
+
+    const retainedChatId = parallelChatLayout
+      ? side === 'left'
+        ? parallelChatLayout.rightChatId
+        : parallelChatLayout.leftChatId
+      : activeChatIdResolved;
+    const fallbackChatId = retainedChatId && retainedChatId !== draggedChatId
+      ? retainedChatId
+      : chats.find((chat) => chat.id !== draggedChatId)?.id ?? null;
+
+    clearParallelDragState();
+    setActiveWorkspacePageId('chat');
+
+    if (!fallbackChatId) {
+      setParallelChatLayout(null);
+      handleSelectWorkspaceChat(draggedChatId);
+      return;
+    }
+
+    setIsWorkspaceHome(false);
+    setIsNewChatPlaceholder(false);
+    setParallelChatLayout(side === 'left'
+      ? { leftChatId: draggedChatId, rightChatId: fallbackChatId }
+      : { leftChatId: fallbackChatId, rightChatId: draggedChatId });
+  }, [
+    activeChatIdResolved,
+    chats,
+    clearParallelDragState,
+    handleSelectWorkspaceChat,
+    parallelChatLayout,
+    setActiveWorkspacePageId,
+    setIsNewChatPlaceholder,
+    setIsWorkspaceHome,
+  ]);
+  const handleCloseParallelChats = useCallback(() => {
+    setParallelChatLayout(null);
+    clearParallelDragState();
+  }, [clearParallelDragState]);
+  useEffect(() => {
+    if (!parallelChatLayout) {
+      return;
+    }
+    const chatIds = new Set(chats.map((chat) => chat.id));
+    if (!chatIds.has(parallelChatLayout.leftChatId) || !chatIds.has(parallelChatLayout.rightChatId)) {
+      setParallelChatLayout(null);
+    }
+  }, [chats, parallelChatLayout]);
   const {
     handleCopyChatId,
     handleCopyChatThreadIdsJson,
@@ -2715,10 +2820,68 @@ export function ChatInterface({
         onCloseSidebar={() => setIsChatSidebarOpen(false)}
         onGoHome={handleGoHome}
         onCreateChat={handleOpenNewChat}
+        onChatDragStart={handleChatDragStart}
+        onChatDragEnd={clearParallelDragState}
         RelativeTimeComponent={RelativeTime}
         ElapsedTimerComponent={ElapsedTimer}
       />
 
+      <div
+        className={`${styles.parallelChatDropHost} ${isChatDragActive ? styles.parallelChatDropHostActive : ''}`}
+      >
+        {surfaceMode === 'full' && (
+          <div className={styles.parallelChatDropZones} aria-hidden={!isChatDragActive}>
+            <div
+              className={`${styles.parallelChatDropZone} ${parallelDropSide === 'left' ? styles.parallelChatDropZoneActive : ''}`}
+              onDragOver={(event) => handleParallelDragOver('left', event)}
+              onDrop={(event) => handleParallelDrop('left', event)}
+              onDragLeave={() => setParallelDropSide((current) => (current === 'left' ? null : current))}
+            >
+              <span>왼쪽에 놓기</span>
+            </div>
+            <div
+              className={`${styles.parallelChatDropZone} ${parallelDropSide === 'right' ? styles.parallelChatDropZoneActive : ''}`}
+              onDragOver={(event) => handleParallelDragOver('right', event)}
+              onDrop={(event) => handleParallelDrop('right', event)}
+              onDragLeave={() => setParallelDropSide((current) => (current === 'right' ? null : current))}
+            >
+              <span>오른쪽에 놓기</span>
+            </div>
+          </div>
+        )}
+        {surfaceMode === 'full' && parallelChatLayout && activeWorkspacePageId === 'chat' ? (
+          <section className={styles.parallelChatSurface} aria-label="병렬 채팅">
+            <div className={styles.parallelChatToolbar}>
+              <span className={styles.parallelChatToolbarTitle}>병렬 채팅</span>
+              <button
+                type="button"
+                className={styles.parallelChatCloseButton}
+                onClick={handleCloseParallelChats}
+              >
+                단일 화면
+              </button>
+            </div>
+            <div className={styles.parallelChatFrames}>
+              {(['left', 'right'] as const).map((side) => {
+                const chatId = side === 'left' ? parallelChatLayout.leftChatId : parallelChatLayout.rightChatId;
+                const title = resolveParallelChatTitle(chatId);
+                return (
+                  <article key={side} className={styles.parallelChatFrame}>
+                    <header className={styles.parallelChatFrameHeader}>
+                      <span className={styles.parallelChatFrameSide}>{side === 'left' ? 'LEFT' : 'RIGHT'}</span>
+                      <strong title={title}>{title}</strong>
+                    </header>
+                    <iframe
+                      className={styles.parallelChatFrameContent}
+                      src={buildParallelPanelUrl(chatId)}
+                      title={`${title} 병렬 채팅`}
+                    />
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        ) : (
       <WorkspacePagerShell
         centerPanelRef={centerPanelRef}
         isMobileLayout={isMobileLayout}
@@ -2965,6 +3128,8 @@ export function ChatInterface({
           />
         )}
       />
+        )}
+      </div>
     </div>
 
     {/* ── 파일 탐색기 모달 ── */}

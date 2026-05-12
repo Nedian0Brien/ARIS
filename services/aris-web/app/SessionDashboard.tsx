@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import {
   Play, Terminal, FolderOpen, Search, PlusCircle, X, Plus,
   Clock3, ArrowUpRight, Folder, ArrowUp, Check,
-  MoreVertical, Activity, Pin, Edit2, RotateCw, Square, Trash2, HardDrive, Columns2,
+  MoreVertical, Activity, Pin, Edit2, RotateCw, Square, Trash2, HardDrive,
 } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
 import { DeferredResponsiveContainer } from '@/components/charts/DeferredResponsiveContainer';
@@ -205,7 +205,6 @@ export function SessionDashboard({
   const [newPath, setNewPath] = useState('');
   const [newBranch, setNewBranch] = useState('');
   const [isCreating, setIsCreating] = useState(false);
-  const [isCreatingParallelWorkspace, setIsCreatingParallelWorkspace] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
@@ -566,33 +565,6 @@ export function SessionDashboard({
   async function handleCreateSession(e: React.FormEvent) {
     e.preventDefault();
     await createSession(newPath, newBranch);
-  }
-
-  async function createParallelWorkspace(pathInput: string) {
-    if (!isOperator) return;
-    const rootPath = sanitizePath(pathInput);
-    if (!rootPath) { setError('프로젝트 경로를 입력해 주세요.'); return; }
-
-    setError(null);
-    setIsCreatingParallelWorkspace(true);
-    try {
-      const response = await fetch('/api/parallel-workspaces', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rootPath }),
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error ?? '병렬 워크스페이스 생성에 실패했습니다.');
-      const workspaceId = body.workspace?.id;
-      if (!workspaceId) throw new Error('병렬 워크스페이스 생성 응답이 올바르지 않습니다.');
-
-      recordHistory(rootPath);
-      navigateToAppPath(`/workspaces/${workspaceId}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.');
-    } finally {
-      setIsCreatingParallelWorkspace(false);
-    }
   }
 
   function openCreateSessionModal() {
@@ -1064,16 +1036,7 @@ export function SessionDashboard({
                 <Button type="button" variant="ghost" onClick={() => setIsCreateModalOpen(false)}>
                   취소
                 </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  isLoading={isCreatingParallelWorkspace}
-                  disabled={!isOperator || !sanitizePath(newPath) || isCreating}
-                  onClick={() => void createParallelWorkspace(newPath)}
-                >
-                  <Columns2 size={18} /> 병렬 워크스페이스 열기
-                </Button>
-                <Button type="submit" isLoading={isCreating} disabled={!isOperator || !sanitizePath(newPath) || isCreatingParallelWorkspace} className="submit-btn">
+                <Button type="submit" isLoading={isCreating} disabled={!isOperator || !sanitizePath(newPath)} className="submit-btn">
                   <Play size={18} fill="currentColor" /> 워크스페이스 만들기
                 </Button>
               </footer>
