@@ -7,6 +7,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
 const uiCss = readFileSync(resolve(__dirname, '../app/styles/ui.css'), 'utf8');
 
+function cssBlock(selector: string) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = uiCss.match(new RegExp(`${escaped}\\s*\\{([\\s\\S]*?)\\}`));
+  return match?.[1] ?? '';
+}
+
 describe('project parallel chat drag surface', () => {
   it('renders split panels in-process instead of embedding the app in iframes', () => {
     expect(homeClient).toContain('function ProjectParallelChatPane({');
@@ -56,5 +62,12 @@ describe('project parallel chat drag surface', () => {
     expect(uiCss).toContain('grid-template-columns: minmax(0, 1fr);');
     expect(uiCss).toContain('@media (min-width: 768px)');
     expect(uiCss).toContain('grid-template-columns: repeat(2, minmax(0, 1fr));');
+  });
+
+  it('keeps the shared composer compact when rendered inside split panels', () => {
+    expect(cssBlock('.pc-proto .pc-parallel .cmp-wrap')).toContain('padding: var(--sp-3);');
+    expect(cssBlock('.pc-proto .pc-parallel .cmp__input')).toContain('min-height: 40px;');
+    expect(cssBlock('.pc-proto .pc-parallel .cmp__input')).toContain('max-height: 104px;');
+    expect(cssBlock('.pc-proto .pc-parallel .cmp__toolbar')).toContain('padding: var(--sp-2) var(--sp-3) var(--sp-3);');
   });
 });

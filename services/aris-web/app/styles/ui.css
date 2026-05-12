@@ -4153,17 +4153,19 @@ html[data-theme='dark'] .pc-proto .pc-action-stack {
 }
 
 .pc-proto .pc-parallel .cmp-wrap {
-  padding: var(--sp-4);
+  padding: var(--sp-3);
   background: var(--surface);
 }
 
 .pc-proto .pc-parallel .cmp {
   max-width: none;
+  border-radius: 12px;
 }
 
 .pc-proto .pc-parallel .cmp__top {
   align-items: flex-start;
   flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-4);
 }
 
 .pc-proto .pc-parallel .cmp-mode {
@@ -4189,8 +4191,13 @@ html[data-theme='dark'] .pc-proto .pc-action-stack {
 }
 
 .pc-proto .pc-parallel .cmp__input {
-  min-height: 48px;
-  max-height: 140px;
+  min-height: 40px;
+  max-height: 104px;
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.pc-proto .pc-parallel .cmp__toolbar {
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
 }
 
 .pc-proto .pc-parallel .cmp__hint {
