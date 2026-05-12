@@ -64,10 +64,12 @@ describe('project parallel chat drag surface', () => {
     expect(uiCss).toContain('grid-template-columns: repeat(2, minmax(0, 1fr));');
   });
 
-  it('keeps the shared composer compact when rendered inside split panels', () => {
-    expect(cssBlock('.pc-proto .pc-parallel .cmp-wrap')).toContain('padding: var(--sp-3);');
-    expect(cssBlock('.pc-proto .pc-parallel .cmp__input')).toContain('min-height: 40px;');
-    expect(cssBlock('.pc-proto .pc-parallel .cmp__input')).toContain('max-height: 104px;');
-    expect(cssBlock('.pc-proto .pc-parallel .cmp__toolbar')).toContain('padding: var(--sp-2) var(--sp-3) var(--sp-3);');
+  it('makes the split chat layout fill the project chat viewport instead of leaving blank space under the composer', () => {
+    const splitChatViewportBlock = cssBlock('.m-main-scroll--project-chat-detail .pc-proto .pc-parallel');
+    expect(splitChatViewportBlock).toContain('height: 100%;');
+    expect(splitChatViewportBlock).toContain('min-height: 0;');
+    expect(cssBlock('.pc-proto .pc-parallel .cmp-wrap')).toContain('padding: var(--sp-4);');
+    expect(cssBlock('.pc-proto .pc-parallel .cmp__input')).toContain('min-height: 48px;');
+    expect(cssBlock('.pc-proto .pc-parallel .cmp__input')).toContain('max-height: 140px;');
   });
 });
