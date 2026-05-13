@@ -5999,14 +5999,9 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
   display: inline-flex; align-items: center; justify-content: center;
   flex-shrink: 0;
   color: var(--text-secondary);
-  background: var(--surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
 }
 .pc-proto .ch-density-menu__item.is-active .ch-density-menu__icon {
   color: var(--b-600);
-  border-color: rgba(47,107,255,0.32);
-  background: rgba(47,107,255,0.08);
 }
 
 .pc-proto .ch-density-menu__main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
