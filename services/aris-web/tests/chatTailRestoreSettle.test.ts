@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   resolveTailRestoreLoopTransition,
   resolveTailRestoreSettleAction,
-} from '@/app/sessions/[sessionId]/useChatTailRestore';
+} from '@/app/_legacy/sessions/[sessionId]/useChatTailRestore';
 
 const baseInput = {
   activeChatIdResolved: 'chat-2',

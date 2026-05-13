@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildUsageProbeDescriptor, resolveAvailableChatCommands } from '@/app/sessions/[sessionId]/chatCommands';
+import { buildUsageProbeDescriptor, resolveAvailableChatCommands } from '@/app/_legacy/sessions/[sessionId]/chatCommands';
 
 describe('chatCommands', () => {
   it('shows both status and usage commands for Codex and Claude only', () => {

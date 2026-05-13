@@ -4,17 +4,17 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const chatCss = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.module.css'), 'utf8');
+const chatCss = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.module.css'), 'utf8');
 const layoutCss = readFileSync(resolve(__dirname, '../app/styles/layout.css'), 'utf8');
-const sessionPage = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/page.tsx'), 'utf8');
-const pagerShell = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/WorkspacePagerShell.tsx'), 'utf8');
-const chatInterface = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.tsx'), 'utf8');
-const sidebarPane = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/left-sidebar/ChatSidebarPane.tsx'), 'utf8');
-const sidebarItem = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/left-sidebar/ChatSidebarItem.tsx'), 'utf8');
-const timeline = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/ChatTimeline.tsx'), 'utf8');
-const composer = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/ChatComposer.tsx'), 'utf8');
-const chatHeader = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/ChatHeader.tsx'), 'utf8');
-const workspacePane = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/right-pane/WorkspacePanelsPane.tsx'), 'utf8');
+const sessionPage = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/page.tsx'), 'utf8');
+const pagerShell = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/center-pane/WorkspacePagerShell.tsx'), 'utf8');
+const chatInterface = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.tsx'), 'utf8');
+const sidebarPane = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/left-sidebar/ChatSidebarPane.tsx'), 'utf8');
+const sidebarItem = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/left-sidebar/ChatSidebarItem.tsx'), 'utf8');
+const timeline = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/center-pane/ChatTimeline.tsx'), 'utf8');
+const composer = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/center-pane/ChatComposer.tsx'), 'utf8');
+const chatHeader = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/center-pane/ChatHeader.tsx'), 'utf8');
+const workspacePane = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/right-pane/WorkspacePanelsPane.tsx'), 'utf8');
 
 describe('chat redesign fidelity', () => {
   it('renders the chat route as the prototype shell, not inside the legacy global app header', () => {

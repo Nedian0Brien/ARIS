@@ -258,7 +258,7 @@ describe('project list surface', () => {
   });
 
   it('renders project chat text replies through the shared markdown renderer', () => {
-    expect(projectChatSurface).toContain("import { MarkdownContent } from '@/app/sessions/[sessionId]/chat-screen/center-pane/renderers/MarkdownContent';");
+    expect(projectChatSurface).toContain("import { MarkdownContent } from '@/app/_legacy/sessions/[sessionId]/chat-screen/center-pane/renderers/MarkdownContent';");
     expect(projectChatSurface).toContain('<div className="msg__text"><MarkdownContent body={getEventText(item)} /></div>');
     expect(projectChatSurface).toContain('<div className="chturn__agent-text"><MarkdownContent body={item.agentText} /></div>');
   });
@@ -520,7 +520,7 @@ describe('project list surface', () => {
     expect(cssBlock('.pc-proto .pc-action-card__kind')).toContain('width: 22px;');
     expect(cssBlock('.pc-proto .pc-action-card__kind')).toContain('background: var(--pc-action-accent);');
     expect(cssBlock('.pc-proto .pc-action-card__cmd')).toContain('display: block;');
-    expect(cssBlock('.pc-proto .pc-action-card__cmd')).toContain('white-space: pre;');
+    expect(cssBlock('.pc-proto .pc-action-card__cmd')).toContain('white-space: nowrap;');
     expect(cssBlock('.pc-proto .pc-action-token--bin')).toContain('font-weight: 700;');
     expect(cssBlock('.pc-proto .pc-action-token--flag')).toContain('color: var(--info-fg);');
     expect(cssBlock('.pc-proto .pc-action-result')).toContain('display: block;');

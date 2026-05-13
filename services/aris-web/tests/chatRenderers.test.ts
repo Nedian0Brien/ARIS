@@ -1,8 +1,8 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { MarkdownContent } from '@/app/sessions/[sessionId]/chat-screen/center-pane/renderers/MarkdownContent';
-import { ResourceChip } from '@/app/sessions/[sessionId]/chat-screen/center-pane/renderers/ResourceChip';
+import { MarkdownContent } from '@/app/_legacy/sessions/[sessionId]/chat-screen/center-pane/renderers/MarkdownContent';
+import { ResourceChip } from '@/app/_legacy/sessions/[sessionId]/chat-screen/center-pane/renderers/ResourceChip';
 
 describe('chat renderers', () => {
   it('renders markdown links and local file references in separate affordances', () => {

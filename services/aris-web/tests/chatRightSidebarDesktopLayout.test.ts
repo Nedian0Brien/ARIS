@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const chatInterfaceCssPath = resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.module.css');
+const chatInterfaceCssPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.module.css');
 
 const chatInterfaceCss = readFileSync(chatInterfaceCssPath, 'utf8');
 

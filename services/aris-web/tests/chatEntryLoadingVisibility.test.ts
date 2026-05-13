@@ -4,10 +4,10 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const chatInterfaceTsxPath = resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.tsx');
-const chatComposerTsxPath = resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/ChatComposer.tsx');
-const chatCenterPaneTsxPath = resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/ChatCenterPane.tsx');
-const chatInterfaceCssPath = resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.module.css');
+const chatInterfaceTsxPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.tsx');
+const chatComposerTsxPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/center-pane/ChatComposer.tsx');
+const chatCenterPaneTsxPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/center-pane/ChatCenterPane.tsx');
+const chatInterfaceCssPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.module.css');
 
 const chatInterfaceTsx = readFileSync(chatInterfaceTsxPath, 'utf8');
 const chatComposerTsx = readFileSync(chatComposerTsxPath, 'utf8');

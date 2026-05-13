@@ -4,9 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const cssPath = resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.module.css');
-const timelinePath = resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/ChatTimeline.tsx');
-const carouselPath = resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/renderers/LinkPreviewCarousel.tsx');
+const cssPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.module.css');
+const timelinePath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/center-pane/ChatTimeline.tsx');
+const carouselPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/center-pane/renderers/LinkPreviewCarousel.tsx');
 const css = readFileSync(cssPath, 'utf8');
 const timeline = readFileSync(timelinePath, 'utf8');
 const carousel = readFileSync(carouselPath, 'utf8');

@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { ChatSidebarSection } from '@/app/sessions/[sessionId]/chat-screen/left-sidebar/ChatSidebarSection';
+import { ChatSidebarSection } from '@/app/_legacy/sessions/[sessionId]/chat-screen/left-sidebar/ChatSidebarSection';
 
 describe('chat sidebar view', () => {
   it('renders the section label, count, and optional history sentinel', () => {

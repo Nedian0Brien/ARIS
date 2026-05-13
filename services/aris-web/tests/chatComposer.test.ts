@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildOptimisticUserEvent } from '@/app/sessions/[sessionId]/chatComposer';
+import { buildOptimisticUserEvent } from '@/app/_legacy/sessions/[sessionId]/chatComposer';
 
 describe('buildOptimisticUserEvent', () => {
   it('creates a user message event that can render immediately in the chat timeline', () => {

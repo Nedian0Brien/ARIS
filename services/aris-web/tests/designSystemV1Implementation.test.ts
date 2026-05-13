@@ -9,8 +9,8 @@ const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'),
 const uiCss = readFileSync(resolve(__dirname, '../app/styles/ui.css'), 'utf8');
 const header = readFileSync(resolve(__dirname, '../components/layout/Header.tsx'), 'utf8');
 const bottomNav = readFileSync(resolve(__dirname, '../components/layout/BottomNav.tsx'), 'utf8');
-const chatComposer = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/ChatComposer.tsx'), 'utf8');
-const chatCss = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.module.css'), 'utf8');
+const chatComposer = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/center-pane/ChatComposer.tsx'), 'utf8');
+const chatCss = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.module.css'), 'utf8');
 
 describe('ARIS design-system-v1 implementation', () => {
   it('uses design-system-v1 refined blue, cool neutral, and surface role tokens', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseUsageProbeOutput } from '@/app/sessions/[sessionId]/usageProbeParser';
+import { parseUsageProbeOutput } from '@/app/_legacy/sessions/[sessionId]/usageProbeParser';
 
 describe('usageProbeParser', () => {
   it('parses Codex-style remaining usage lines', () => {

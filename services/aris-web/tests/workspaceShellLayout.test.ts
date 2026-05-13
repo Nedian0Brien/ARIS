@@ -3,11 +3,11 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { WorkspaceShell } from '@/app/sessions/[sessionId]/workspace-panels/WorkspaceShell';
+import { WorkspaceShell } from '@/app/_legacy/sessions/[sessionId]/workspace-panels/WorkspaceShell';
 
-const workspaceShellCssPath = resolve(__dirname, '../app/sessions/[sessionId]/workspace-panels/WorkspaceShell.module.css');
+const workspaceShellCssPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/workspace-panels/WorkspaceShell.module.css');
 
-vi.mock('@/app/sessions/[sessionId]/customization-sidebar/sections/CustomizationFilesSection', () => ({
+vi.mock('@/app/_legacy/sessions/[sessionId]/customization-sidebar/sections/CustomizationFilesSection', () => ({
   CustomizationFilesSection: () => React.createElement('div', null, 'Workspace Files Navigation'),
 }));
 

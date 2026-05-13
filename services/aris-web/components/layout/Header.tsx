@@ -8,7 +8,7 @@ import type { TabType } from './BottomNav';
 import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
 import { hasAppBasePath, withAppBasePath } from '@/lib/routing/appPath';
 import { primeAutoHideScrollState, reduceAutoHideScrollState } from './mobileScrollAutoHide';
-import { useSessionScrollOrchestrator } from '@/app/sessions/[sessionId]/useSessionScrollOrchestrator';
+import { useSessionScrollOrchestrator } from '@/app/_legacy/sessions/[sessionId]/useSessionScrollOrchestrator';
 
 interface HeaderProps {
   userEmail: string;

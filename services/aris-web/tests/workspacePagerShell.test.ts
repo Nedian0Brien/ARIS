@@ -1,10 +1,10 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { WorkspacePagerShell } from '@/app/sessions/[sessionId]/chat-screen/center-pane/WorkspacePagerShell';
-import { WorkspacePager } from '@/app/sessions/[sessionId]/workspace-panels/WorkspacePager';
+import { WorkspacePagerShell } from '@/app/_legacy/sessions/[sessionId]/chat-screen/center-pane/WorkspacePagerShell';
+import { WorkspacePager } from '@/app/_legacy/sessions/[sessionId]/workspace-panels/WorkspacePager';
 
-vi.mock('@/app/sessions/[sessionId]/workspace-panels/WorkspacePager', () => ({
+vi.mock('@/app/_legacy/sessions/[sessionId]/workspace-panels/WorkspacePager', () => ({
   WorkspacePager: vi.fn(() => null),
 }));
 

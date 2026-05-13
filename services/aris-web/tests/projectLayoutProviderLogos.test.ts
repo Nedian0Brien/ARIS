@@ -7,8 +7,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
 const projectChatSurface = readFileSync(resolve(__dirname, '../components/project-chat/ProjectChatSurface.tsx'), 'utf8');
 const providerLogo = readFileSync(resolve(__dirname, '../components/ui/ProviderLogo.tsx'), 'utf8');
-const chatTimeline = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/ChatTimeline.tsx'), 'utf8');
-const chatInterfaceCss = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.module.css'), 'utf8');
+const chatTimeline = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/center-pane/ChatTimeline.tsx'), 'utf8');
+const chatInterfaceCss = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.module.css'), 'utf8');
 const middleware = readFileSync(resolve(__dirname, '../middleware.ts'), 'utf8');
 const uiCss = readFileSync(resolve(__dirname, '../app/styles/ui.css'), 'utf8');
 

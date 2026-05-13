@@ -35,15 +35,15 @@ type PagerGestureModule = {
 };
 
 async function loadPagerModelModule(): Promise<PagerModelModule> {
-  return import('@/app/sessions/[sessionId]/workspace-panels/pagerModel').catch(() => ({}));
+  return import('@/app/_legacy/sessions/[sessionId]/workspace-panels/pagerModel').catch(() => ({}));
 }
 
 async function loadPagerComponentModule(): Promise<PagerComponentModule> {
-  return import('@/app/sessions/[sessionId]/workspace-panels/WorkspacePager').catch(() => ({}));
+  return import('@/app/_legacy/sessions/[sessionId]/workspace-panels/WorkspacePager').catch(() => ({}));
 }
 
 async function loadPagerGestureModule(): Promise<PagerGestureModule> {
-  return import('@/app/sessions/[sessionId]/workspace-panels/swipeGesture').catch(() => ({}));
+  return import('@/app/_legacy/sessions/[sessionId]/workspace-panels/swipeGesture').catch(() => ({}));
 }
 
 describe('workspace pager model', () => {

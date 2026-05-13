@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveWorkspaceTitle,
   limitWorkspaceHomeChats,
-} from '@/app/sessions/[sessionId]/workspaceHome';
+} from '@/app/_legacy/sessions/[sessionId]/workspaceHome';
 
 describe('workspace home behavior', () => {
   it('derives the workspace title from the last directory in the path', () => {

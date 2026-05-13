@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { ChatCenterPane } from '@/app/sessions/[sessionId]/chat-screen/center-pane/ChatCenterPane';
+import { ChatCenterPane } from '@/app/_legacy/sessions/[sessionId]/chat-screen/center-pane/ChatCenterPane';
 
 describe('chat center pane view', () => {
   it('renders the center frame shell and forwards the main content slots', () => {

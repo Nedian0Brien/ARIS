@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const chatInterfacePath = resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.tsx');
+const chatInterfacePath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.tsx');
 const chatInterfaceSource = readFileSync(chatInterfacePath, 'utf8');
 
 describe('chat screen state hook refactor', () => {

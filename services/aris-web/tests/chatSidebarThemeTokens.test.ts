@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const cssPath = resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.module.css');
+const cssPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.module.css');
 const css = readFileSync(cssPath, 'utf8');
 
 describe('chat sidebar status theming tokens', () => {

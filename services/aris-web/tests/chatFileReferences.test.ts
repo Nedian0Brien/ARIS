@@ -3,7 +3,7 @@ import {
   parseLocalFileReferenceTarget,
   scanMarkdownLinks,
   tokenizePlainTextFileReferences,
-} from '@/app/sessions/[sessionId]/chatFileReferences';
+} from '@/app/_legacy/sessions/[sessionId]/chatFileReferences';
 
 describe('parseLocalFileReferenceTarget', () => {
   it('parses absolute paths with line suffixes', () => {
