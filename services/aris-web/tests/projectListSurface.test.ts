@@ -520,7 +520,7 @@ describe('project list surface', () => {
     expect(cssBlock('.pc-proto .pc-action-card__kind')).toContain('width: 22px;');
     expect(cssBlock('.pc-proto .pc-action-card__kind')).toContain('background: var(--pc-action-accent);');
     expect(cssBlock('.pc-proto .pc-action-card__cmd')).toContain('display: block;');
-    expect(cssBlock('.pc-proto .pc-action-card__cmd')).toContain('white-space: pre;');
+    expect(cssBlock('.pc-proto .pc-action-card__cmd')).toContain('white-space: nowrap;');
     expect(cssBlock('.pc-proto .pc-action-token--bin')).toContain('font-weight: 700;');
     expect(cssBlock('.pc-proto .pc-action-token--flag')).toContain('color: var(--info-fg);');
     expect(cssBlock('.pc-proto .pc-action-result')).toContain('display: block;');
