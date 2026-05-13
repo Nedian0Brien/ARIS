@@ -49,6 +49,7 @@ import {
   X,
 } from 'lucide-react';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
+import { SidebarFooterMenu } from '@/components/layout/SidebarFooterMenu';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import { ProviderLogo, type ProviderLogoProvider } from '@/components/ui/ProviderLogo';
 import { isChatEmpty, selectRecentChats, selectRecentProjects, type HomeRecentChat } from './homeProjects';
@@ -279,8 +280,9 @@ function normalizeTab(tab: string | null): TabType {
     case 'console':
       return 'ask';
     case 'project':
-    case 'settings':
       return 'project';
+    case 'settings':
+      return 'settings';
     case 'files':
       return 'files';
     default:
@@ -591,6 +593,8 @@ function Sidebar({
   onProjectOpen,
   sessions,
   user,
+  themeMode,
+  onThemeChange,
 }: {
   activeTab: TabType;
   activeProjectId: string | null;
@@ -600,6 +604,8 @@ function Sidebar({
   onProjectOpen: (sessionId: string, view?: ProjectView) => void;
   sessions: SessionSummary[];
   user: AuthenticatedUser;
+  themeMode: ThemeMode;
+  onThemeChange: (mode: ThemeMode) => void;
 }) {
   const projects = sortSessions(sessions).slice(0, 6);
   const totalChats = sessions.reduce((sum, session) => sum + (session.totalChats ?? 0), 0);
@@ -753,11 +759,12 @@ function Sidebar({
       </div>
 
       <div className="m-sb__footer">
-        <span className="m-sb__avatar">{userInitial}</span>
-        <div>
-          <div className="m-sb__footer-name">{user.email.split('@')[0] || 'ARIS'}</div>
-          <div className="m-sb__footer-meta">{user.role}</div>
-        </div>
+        <SidebarFooterMenu
+          user={user}
+          themeMode={themeMode}
+          onThemeChange={onThemeChange}
+          onOpenSettings={() => onTabChange('settings')}
+        />
       </div>
       {hoveredProject && tipPosition ? (() => {
         const statusKey = statusClass(hoveredProject.status);
@@ -797,14 +804,17 @@ function Topbar({
   chatScreenMode = false,
   chatProjectName = null,
   onLogoHome,
+  themeMode,
+  onThemeChange,
 }: {
   activeTab: TabType;
   sessions: SessionSummary[];
   chatScreenMode?: boolean;
   chatProjectName?: string | null;
   onLogoHome?: () => void;
+  themeMode: ThemeMode;
+  onThemeChange: (mode: ThemeMode) => void;
 }) {
-  const [themeMode, setThemeMode] = useState<ThemeMode>('system');
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const activeProjects = sessions.filter((session) => session.status === 'running' || session.status === 'error').length;
@@ -813,35 +823,8 @@ function Topbar({
     ask: { title: 'Ask ARIS', crumb: 'global memory' },
     project: { title: 'Projects', crumb: `${activeProjects} active · project chats in sidebar` },
     files: { title: 'Files', crumb: 'project filesystem' },
+    settings: { title: 'Settings', crumb: 'preferences & configuration' },
   };
-
-  useEffect(() => {
-    const mode = readThemeMode();
-    setThemeMode(mode);
-    applyTheme(mode);
-  }, []);
-
-  useEffect(() => {
-    if (themeMode !== 'system') {
-      return;
-    }
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const sync = () => {
-      applyTheme('system');
-    };
-    if (typeof media.addEventListener === 'function') {
-      media.addEventListener('change', sync);
-    } else {
-      media.addListener(sync);
-    }
-    return () => {
-      if (typeof media.removeEventListener === 'function') {
-        media.removeEventListener('change', sync);
-      } else {
-        media.removeListener(sync);
-      }
-    };
-  }, [themeMode]);
 
   useEffect(() => {
     if (!menuOpen) {
@@ -867,8 +850,7 @@ function Topbar({
   }, [menuOpen]);
 
   const changeThemeMode = (next: ThemeMode) => {
-    setThemeMode(next);
-    applyTheme(next);
+    onThemeChange(next);
     setMenuOpen(false);
   };
 
@@ -2292,6 +2274,40 @@ export default function HomePageWrapper({
   const [selectedProjectView, setSelectedProjectView] = useState<ProjectView>('chats');
   const [selectedProjectChatId, setSelectedProjectChatId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<RuntimeMetrics | null>(null);
+  const [themeMode, setThemeMode] = useState<ThemeMode>('system');
+
+  useEffect(() => {
+    const mode = readThemeMode();
+    setThemeMode(mode);
+    applyTheme(mode);
+  }, []);
+
+  useEffect(() => {
+    if (themeMode !== 'system') {
+      return;
+    }
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const sync = () => {
+      applyTheme('system');
+    };
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', sync);
+    } else {
+      media.addListener(sync);
+    }
+    return () => {
+      if (typeof media.removeEventListener === 'function') {
+        media.removeEventListener('change', sync);
+      } else {
+        media.removeListener(sync);
+      }
+    };
+  }, [themeMode]);
+
+  const changeThemeMode = (next: ThemeMode) => {
+    setThemeMode(next);
+    applyTheme(next);
+  };
 
   useEffect(() => {
     const nextTab = normalizeTab(searchParams.get('tab'));
@@ -2416,6 +2432,7 @@ export default function HomePageWrapper({
       );
     }
     if (activeTab === 'files') return <FilesSurface browserRootPath={browserRootPath} />;
+    if (activeTab === 'settings') return <div data-test="settings-placeholder">Settings (placeholder — Task 2.4 will replace)</div>;
     return <HomeSurface metrics={metrics} onProjectOpen={handleProjectOpen} sessions={sessions} user={user} />;
   })();
 
@@ -2441,6 +2458,8 @@ export default function HomePageWrapper({
           onTabChange={handleTabChange}
           sessions={sessions}
           user={user}
+          themeMode={themeMode}
+          onThemeChange={changeThemeMode}
         />
         <main className="m-main">
           <Topbar
@@ -2449,6 +2468,8 @@ export default function HomePageWrapper({
             chatScreenMode={isChatScreen}
             chatProjectName={chatScreenProjectName}
             onLogoHome={handleTopbarLogoHome}
+            themeMode={themeMode}
+            onThemeChange={changeThemeMode}
           />
           {runtimeError && <div className="ia-runtime-notice"><BackendNotice message={runtimeError} /></div>}
           {content}
