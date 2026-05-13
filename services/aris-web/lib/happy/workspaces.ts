@@ -60,7 +60,7 @@ export async function syncWorkspacesForUser(userId: string, sessions: SessionSum
   }
 
   await prisma.$transaction(
-    uniqueSessions.map((session) => prisma.workspace.upsert({
+    uniqueSessions.map((session) => prisma.project.upsert({
       where: {
         userId_path: {
           userId,
@@ -79,7 +79,7 @@ export async function syncWorkspacesForUser(userId: string, sessions: SessionSum
   );
 
   const paths = uniqueSessions.map((session) => normalizeWorkspacePath(session.projectName));
-  const workspaces = await prisma.workspace.findMany({
+  const workspaces = await prisma.project.findMany({
     where: {
       userId,
       path: { in: paths },
@@ -111,7 +111,7 @@ export async function syncWorkspacesForUser(userId: string, sessions: SessionSum
 }
 
 export async function getWorkspaceById(userId: string, workspaceId: string) {
-  return prisma.workspace.findFirst({
+  return prisma.project.findFirst({
     where: {
       id: workspaceId,
       userId,
@@ -134,7 +134,7 @@ export async function upsertWorkspaceMetadata(input: {
   isPinned?: boolean;
   lastReadAt?: Date | null;
 }) {
-  const current = await prisma.workspace.findFirst({
+  const current = await prisma.project.findFirst({
     where: {
       id: input.workspaceId,
       userId: input.userId,
@@ -149,7 +149,7 @@ export async function upsertWorkspaceMetadata(input: {
     throw new Error('WORKSPACE_NOT_FOUND');
   }
 
-  return prisma.workspace.update({
+  return prisma.project.update({
     where: { id: input.workspaceId },
     data: {
       ...(input.alias !== undefined && { alias: input.alias }),
@@ -163,7 +163,7 @@ export async function getWorkspacePanelLayout(input: {
   userId: string;
   workspaceId: string;
 }): Promise<WorkspacePanelLayout> {
-  const workspace = await prisma.workspace.findFirst({
+  const workspace = await prisma.project.findFirst({
     where: {
       id: input.workspaceId,
       userId: input.userId,
@@ -187,7 +187,7 @@ export async function saveWorkspacePanelLayout(input: {
 }): Promise<WorkspacePanelLayout> {
   const normalized = normalizeWorkspacePanelLayout(input.layout);
 
-  const workspace = await prisma.workspace.updateMany({
+  const workspace = await prisma.project.updateMany({
     where: {
       id: input.workspaceId,
       userId: input.userId,

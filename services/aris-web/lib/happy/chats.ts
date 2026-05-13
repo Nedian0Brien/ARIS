@@ -5,7 +5,7 @@ const DEFAULT_CHAT_TITLE = '새 채팅';
 
 function toSessionChat(record: {
   id: string;
-  sessionId: string;
+  projectId: string;
   agent: string;
   model: string | null;
   geminiMode: string | null;
@@ -27,7 +27,7 @@ function toSessionChat(record: {
 }): SessionChat {
   return {
     id: record.id,
-    sessionId: record.sessionId,
+    sessionId: record.projectId,
     agent: resolveAgentFlavor(record.agent),
     model: record.model,
     geminiMode: record.geminiMode,
@@ -137,18 +137,18 @@ export async function listSessionChats(input: {
   ensureDefault?: boolean;
 }): Promise<SessionChat[]> {
   if (input.ensureDefault ?? true) {
-    const hasAny = await prisma.sessionChat.findFirst({
+    const hasAny = await prisma.chat.findFirst({
       where: {
-        sessionId: input.sessionId,
+        projectId: input.sessionId,
         userId: input.userId,
       },
       select: { id: true },
     });
 
     if (!hasAny) {
-      await prisma.sessionChat.create({
+      await prisma.chat.create({
         data: {
-          sessionId: input.sessionId,
+          projectId: input.sessionId,
           userId: input.userId,
           title: DEFAULT_CHAT_TITLE,
           isDefault: true,
@@ -157,9 +157,9 @@ export async function listSessionChats(input: {
     }
   }
 
-  const chats = await prisma.sessionChat.findMany({
+  const chats = await prisma.chat.findMany({
     where: {
-      sessionId: input.sessionId,
+      projectId: input.sessionId,
       userId: input.userId,
     },
   });
@@ -176,9 +176,9 @@ export async function createSessionChat(input: {
   modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh' | null;
   title?: string;
 }): Promise<SessionChat> {
-  const existing = await prisma.sessionChat.findMany({
+  const existing = await prisma.chat.findMany({
     where: {
-      sessionId: input.sessionId,
+      projectId: input.sessionId,
       userId: input.userId,
     },
     select: { title: true },
@@ -188,9 +188,9 @@ export async function createSessionChat(input: {
     ? normalizeChatTitle(input.title)
     : buildNextChatTitle(existing.map((chat: { title: string }) => chat.title));
 
-  const created = await prisma.sessionChat.create({
+  const created = await prisma.chat.create({
     data: {
-      sessionId: input.sessionId,
+      projectId: input.sessionId,
       userId: input.userId,
       agent: input.agent && input.agent !== 'unknown' ? input.agent : 'codex',
       ...(input.model !== undefined && { model: normalizeChatModel(input.model) }),
@@ -226,10 +226,10 @@ export async function updateSessionChat(input: {
   latestEventIsUser?: boolean;
   latestHasErrorSignal?: boolean;
 }): Promise<SessionChat> {
-  const existing = await prisma.sessionChat.findFirst({
+  const existing = await prisma.chat.findFirst({
     where: {
       id: input.chatId,
-      sessionId: input.sessionId,
+      projectId: input.sessionId,
       userId: input.userId,
     },
     select: { id: true },
@@ -283,7 +283,7 @@ export async function updateSessionChat(input: {
     || input.latestHasErrorSignal !== undefined;
 
   if (!shouldUpdate) {
-    const current = await prisma.sessionChat.findUnique({
+    const current = await prisma.chat.findUnique({
       where: { id: existing.id },
     });
     if (!current) {
@@ -292,7 +292,7 @@ export async function updateSessionChat(input: {
     return toSessionChat(current);
   }
 
-  const updated = await prisma.sessionChat.update({
+  const updated = await prisma.chat.update({
     where: {
       id: existing.id,
     },
@@ -326,10 +326,10 @@ export async function deleteSessionChat(input: {
   userId: string;
   chatId: string;
 }): Promise<{ deleted: boolean; chats: SessionChat[] }> {
-  const existing = await prisma.sessionChat.findFirst({
+  const existing = await prisma.chat.findFirst({
     where: {
       id: input.chatId,
-      sessionId: input.sessionId,
+      projectId: input.sessionId,
       userId: input.userId,
     },
   });
@@ -341,7 +341,7 @@ export async function deleteSessionChat(input: {
     };
   }
 
-  await prisma.sessionChat.delete({
+  await prisma.chat.delete({
     where: { id: existing.id },
   });
 
@@ -349,7 +349,7 @@ export async function deleteSessionChat(input: {
 
   const hasDefault = chats.some((chat) => chat.isDefault);
   if (!hasDefault && chats.length > 0) {
-    const promoted = await prisma.sessionChat.update({
+    const promoted = await prisma.chat.update({
       where: { id: chats[0].id },
       data: { isDefault: true },
     });

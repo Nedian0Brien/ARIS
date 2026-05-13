@@ -51,9 +51,11 @@ export type SessionChat = {
   updatedAt: string;
 };
 
-export type ProjectChat = SessionChat & {
+export type Chat = SessionChat & {
   projectId: string;
 };
+
+export type ProjectChat = Chat;
 
 export type ChatImageAttachment = {
   assetId: string;

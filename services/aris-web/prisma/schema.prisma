@@ -24,15 +24,15 @@ model User {
   sessions     AuthSession[]
   auditLogs    AuditLog[]
   preferences  UiPreference?
+  projects     Project[]
   workspaces   Workspace[]
-  projectWorkspaces ProjectWorkspace[]
   sessionMetadata SessionMetadata[]
-  sessionChats SessionChat[]
+  chats         Chat[]
   trustedDevices TrustedDevice[]
   emailTokens    EmailVerificationToken[]
 }
 
-model Workspace {
+model Project {
   id          String   @id
   userId      String
   path        String
@@ -43,12 +43,13 @@ model Workspace {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaces  Workspace[]
 
   @@unique([userId, path])
   @@index([userId, updatedAt])
 }
 
-model ProjectWorkspace {
+model Workspace {
   id            String   @id @default(cuid())
   userId        String
   projectId     String
@@ -58,9 +59,32 @@ model ProjectWorkspace {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  panels        WorkspacePanel[]
 
   @@unique([userId, projectId, title])
   @@index([userId, projectId, updatedAt])
+}
+
+model WorkspacePanel {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  panelId          String
+  chatId           String
+  runtimeSessionId String?
+  branch           String?
+  worktreePath     String?
+  order            Int      @default(0)
+  meta             Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  chat             Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, panelId])
+  @@unique([workspaceId, chatId])
+  @@index([chatId])
+  @@index([runtimeSessionId])
 }
 
 model SessionMetadata {
@@ -76,9 +100,9 @@ model SessionMetadata {
   @@index([userId])
 }
 
-model SessionChat {
+model Chat {
   id             String   @id @default(cuid())
-  sessionId      String
+  projectId      String
   userId         String
   agent          String   @default("codex")
   title          String
@@ -101,8 +125,9 @@ model SessionChat {
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   runs           SessionRun[]
   events         SessionChatEvent[]
+  workspacePanels WorkspacePanel[]
 
-  @@index([sessionId, userId, isPinned, lastActivityAt])
+  @@index([projectId, userId, isPinned, lastActivityAt])
   @@index([userId, updatedAt])
 }
 
@@ -118,7 +143,7 @@ model SessionRun {
   finishedAt   DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  chat         SessionChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  chat         Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
   events       SessionChatEvent[]
 
   @@index([chatId, status])
@@ -136,7 +161,7 @@ model SessionChatEvent {
   meta      Json?
   seq       Int
   createdAt DateTime @default(now())
-  chat      SessionChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  chat      Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
   run       SessionRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
 
   @@unique([chatId, seq])

@@ -59,54 +59,57 @@ export async function GET(request: NextRequest) {
           const now = Date.now();
           if (!cachedChatStats || now - chatStatsCachedAt > CHAT_STATS_TTL_MS) {
             const runningSessionIds = sessions.filter(s => s.status === 'running').map(s => s.id);
-            const runningCount = await prisma.sessionChat.count({
-              where: { sessionId: { in: runningSessionIds }, latestEventIsUser: false, latestEventId: { not: null }, userId },
+            const runningCount = await prisma.chat.count({
+              where: { projectId: { in: runningSessionIds }, latestEventIsUser: false, latestEventId: { not: null }, userId },
             });
-            const runningSampleRows = await prisma.sessionChat.findMany({
-              where: { sessionId: { in: runningSessionIds }, latestEventIsUser: false, latestEventId: { not: null }, userId },
+            const runningSampleRows = await prisma.chat.findMany({
+              where: { projectId: { in: runningSessionIds }, latestEventIsUser: false, latestEventId: { not: null }, userId },
               orderBy: { lastActivityAt: 'desc' }, take: 3,
-              select: { id: true, title: true, sessionId: true, agent: true },
+              select: { id: true, title: true, projectId: true, agent: true },
             });
-            const completedNullCount = await prisma.sessionChat.count({
-              where: { latestEventIsUser: false, latestEventId: { not: null }, userId, sessionId: { notIn: runningSessionIds }, lastReadAt: null },
+            const completedNullCount = await prisma.chat.count({
+              where: { latestEventIsUser: false, latestEventId: { not: null }, userId, projectId: { notIn: runningSessionIds }, lastReadAt: null },
             });
             const completedNonNullResult = await prisma.$queryRaw<[{ count: bigint }]>`
-              SELECT COUNT(*)::bigint as count FROM "SessionChat"
+              SELECT COUNT(*)::bigint as count FROM "Chat"
               WHERE "userId" = ${userId}
                 AND "latestEventIsUser" = false
                 AND "latestEventId" IS NOT NULL
-                AND "sessionId" != ALL(${runningSessionIds}::text[])
+                AND "projectId" != ALL(${runningSessionIds}::text[])
                 AND "lastReadAt" IS NOT NULL AND "lastActivityAt" > "lastReadAt"
             `;
             const completedCount = completedNullCount + Number(completedNonNullResult[0]?.count ?? 0);
-            const completedNullSample = await prisma.sessionChat.findMany({
-              where: { latestEventIsUser: false, latestEventId: { not: null }, userId, sessionId: { notIn: runningSessionIds }, lastReadAt: null },
+            const completedNullSample = await prisma.chat.findMany({
+              where: { latestEventIsUser: false, latestEventId: { not: null }, userId, projectId: { notIn: runningSessionIds }, lastReadAt: null },
               orderBy: { lastActivityAt: 'desc' }, take: 5,
-              select: { id: true, title: true, sessionId: true, agent: true, lastActivityAt: true },
+              select: { id: true, title: true, projectId: true, agent: true, lastActivityAt: true },
             });
-            const completedNonNullSample = await prisma.$queryRaw<Array<{ id: string; title: string; sessionId: string; agent: string; lastActivityAt: Date }>>`
-              SELECT id, title, "sessionId", agent, "lastActivityAt" FROM "SessionChat"
+            const completedNonNullSample = await prisma.$queryRaw<Array<{ id: string; title: string; projectId: string; agent: string; lastActivityAt: Date }>>`
+              SELECT id, title, "projectId", agent, "lastActivityAt" FROM "Chat"
               WHERE "userId" = ${userId} AND "latestEventIsUser" = false
                 AND "latestEventId" IS NOT NULL
-                AND "sessionId" != ALL(${runningSessionIds}::text[])
+                AND "projectId" != ALL(${runningSessionIds}::text[])
                 AND "lastReadAt" IS NOT NULL AND "lastActivityAt" > "lastReadAt"
               ORDER BY "lastActivityAt" DESC LIMIT 5
             `;
             const completedSample = [...completedNullSample, ...completedNonNullSample]
               .sort((a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime())
               .slice(0, 5);
-            const agentGroupBy = await prisma.sessionChat.groupBy({ by: ['agent'], where: { userId }, _count: { id: true } });
-            const perSessionGroupBy = await prisma.sessionChat.groupBy({ by: ['sessionId', 'agent'], where: { userId }, _count: { id: true } });
+            const agentGroupBy = await prisma.chat.groupBy({ by: ['agent'], where: { userId }, _count: { id: true } });
+            const perSessionGroupBy = await prisma.chat.groupBy({ by: ['projectId', 'agent'], where: { userId }, _count: { id: true } });
             const sessionChatMeta = buildSessionChatMeta(perSessionGroupBy);
             const sessionNameById = new Map(sessions.map(s => {
               const ws = workspaceMap.get(s.id);
               return [s.id, ws?.alias || extractLastDirectoryName(s.projectName)];
             }));
-            const toSample = (c: { id: string; title: string; sessionId: string; agent: string }): ChatSample => ({
-              id: c.id, title: c.title || '(제목 없음)',
-              sessionId: c.sessionId, sessionName: sessionNameById.get(c.sessionId) ?? c.sessionId,
-              agent: resolveAgentFlavor(c.agent),
-            });
+            const toSample = (c: { id: string; title: string; projectId?: string; sessionId?: string; agent: string }): ChatSample => {
+              const projectId = c.projectId ?? c.sessionId ?? '';
+              return {
+                id: c.id, title: c.title || '(제목 없음)',
+                sessionId: projectId, sessionName: sessionNameById.get(projectId) ?? projectId,
+                agent: resolveAgentFlavor(c.agent),
+              };
+            };
             cachedSessionChatMeta = sessionChatMeta;  // 캐시 저장 — 캐시 히트 시에도 재사용
             cachedChatStats = {
               running: runningCount, completed: completedCount,

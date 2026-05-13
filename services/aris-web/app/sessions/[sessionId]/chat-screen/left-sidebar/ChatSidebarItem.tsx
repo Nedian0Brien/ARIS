@@ -85,7 +85,7 @@ export function ChatSidebarItem({
   return (
     <div
       className={`${styles.chatListItem} ${styles.csSession} ${item.isActive ? `${styles.chatListItemActive} ${styles.csSessionActive}` : ''} ${item.sidebarStateClassName}`}
-      draggable={!item.isRenaming}
+      draggable={Boolean(onChatDragStart) && !item.isRenaming}
       onDragStart={(event) => onChatDragStart?.(event, item)}
       onDragEnd={onChatDragEnd}
     >

@@ -41,7 +41,7 @@ vi.mock('@/lib/happy/modelPolicy', () => ({
 
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
-    sessionChat: {
+    chat: {
       findFirst: mocks.prismaFindFirst,
       update: mocks.prismaUpdate,
     },
@@ -182,7 +182,7 @@ describe('session events route', () => {
   });
 
   describe('chat agent synchronization', () => {
-    it('updates SessionChat.agent and emits agent-switch notice when user message changes the active agent', async () => {
+    it('updates Chat.agent and emits agent-switch notice when user message changes the active agent', async () => {
       mocks.prismaFindFirst.mockResolvedValueOnce({
         agent: 'codex',
         model: 'gpt-5.4',
@@ -239,7 +239,7 @@ describe('session events route', () => {
       expect(mocks.submitUserPrompt).toHaveBeenCalledTimes(1);
     });
 
-    it('does not update SessionChat or emit a notice when the user message keeps the same agent', async () => {
+    it('does not update Chat or emit a notice when the user message keeps the same agent', async () => {
       mocks.prismaFindFirst.mockResolvedValueOnce({
         agent: 'codex',
         model: 'gpt-5.4',
@@ -269,7 +269,7 @@ describe('session events route', () => {
       expect(mocks.appendSessionMessage).not.toHaveBeenCalled();
     });
 
-    it('updates SessionChat silently (no notice) when previous agent is unknown — treats as fresh chat', async () => {
+    it('updates Chat silently (no notice) when previous agent is unknown — treats as fresh chat', async () => {
       mocks.prismaFindFirst.mockResolvedValueOnce({
         agent: 'unknown',
         model: null,

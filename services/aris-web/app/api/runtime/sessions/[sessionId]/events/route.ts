@@ -123,8 +123,8 @@ export async function POST(
     if (role === 'user' && type === 'message') {
       const chatId = typeof meta.chatId === 'string' && meta.chatId.trim().length > 0 ? meta.chatId.trim() : undefined;
       const chat = chatId
-        ? await prisma.sessionChat.findFirst({
-            where: { id: chatId, sessionId },
+        ? await prisma.chat.findFirst({
+            where: { id: chatId, projectId: sessionId },
             select: { agent: true, model: true, geminiMode: true },
           })
         : null;
@@ -178,7 +178,7 @@ export async function POST(
       };
 
       if (chatId && chat && chat.agent !== resolved.agent) {
-        await prisma.sessionChat.update({
+        await prisma.chat.update({
           where: { id: chatId },
           data: { agent: resolved.agent, model: resolved.model },
         });

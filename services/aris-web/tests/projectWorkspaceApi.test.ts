@@ -10,10 +10,12 @@ const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'),
 
 describe('project workspace API boundary', () => {
   it('defines workspace as project-scoped parallel panel layout storage', () => {
-    expect(schema).toContain('model ProjectWorkspace');
+    expect(schema).toContain('model Workspace');
+    expect(schema).toContain('model WorkspacePanel');
     expect(schema).toContain('projectId');
     expect(schema).toContain('layoutJson');
     expect(schema).toContain('@@unique([userId, projectId, title])');
+    expect(schema).not.toContain('model ProjectWorkspace');
   });
 
   it('exposes a project workspace route instead of using runtime sessions for layout', () => {
