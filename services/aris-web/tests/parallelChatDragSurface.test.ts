@@ -84,4 +84,20 @@ describe('project parallel chat drag surface', () => {
     expect(cssBlock('.pc-proto .pc-parallel .cmp__input')).toContain('min-height: 48px;');
     expect(cssBlock('.pc-proto .pc-parallel .cmp__input')).toContain('max-height: 140px;');
   });
+
+  it('opens panel-scoped Files and Git tools without leaving the parallel layout', () => {
+    expect(homeClient).toContain("type ProjectParallelPanelTool = 'chat' | 'files' | 'git';");
+    expect(homeClient).toContain('workspacePanelId: panelId');
+    expect(homeClient).toContain('useWorkspaceFiles');
+    expect(homeClient).toContain('fetchProjectPanelGitOverview');
+    expect(homeClient).toContain('pc-parallel-tool');
+    expect(homeClient).not.toContain(`handleCloseProjectParallelChats();
+                onChatOpen(chatId);
+                activateWorkspaceTab('files');`);
+  });
+
+  it('communicates that closing a panel preserves the underlying chat', () => {
+    expect(homeClient).toContain('Close panel; chat stays in the list');
+    expect(homeClient).toContain('패널만 닫힙니다');
+  });
 });

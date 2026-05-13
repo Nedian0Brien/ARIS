@@ -24,10 +24,13 @@ async function resolveWorkspacePanelExecutionTargetWithRuntime(input: {
 }): Promise<WorkspacePanelExecutionTarget> {
   let target = await resolveWorkspacePanelExecutionTarget(input);
   if (input.workspacePanelId && target.source === 'workspace-panel' && target.runtimeSessionId === input.projectId) {
-    await ensureProjectWorkspacePanelRuntimes({
+    const panelRuntimeErrors = await ensureProjectWorkspacePanelRuntimes({
       userId: input.userId,
       projectId: input.projectId,
     });
+    if (panelRuntimeErrors[input.workspacePanelId]) {
+      throw new Error(`runtime 생성 실패: ${panelRuntimeErrors[input.workspacePanelId]}`);
+    }
     target = await resolveWorkspacePanelExecutionTarget(input);
   }
   return target;

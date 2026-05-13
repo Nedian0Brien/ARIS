@@ -9,6 +9,8 @@ type PanelRuntimeCleanupTarget = {
   runtimeSessionId: string | null;
 };
 
+export type WorkspacePanelRuntimeErrors = Record<string, string>;
+
 type WorkspacePanelRuntimeRow = {
   panelId: string;
   runtimeSessionId: string | null;
@@ -27,6 +29,10 @@ function normalizeOptionalString(value: string | null | undefined): string | nul
 
 function normalizeAgent(value: string | null | undefined): AgentFlavor {
   return value === 'claude' || value === 'codex' || value === 'gemini' ? value : 'codex';
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function sanitizeBranchSegment(input: string): string {
@@ -124,7 +130,7 @@ export async function ensureProjectWorkspacePanelRuntimes(input: {
   userId: string;
   projectId: string;
   repairStale?: boolean;
-}): Promise<void> {
+}): Promise<WorkspacePanelRuntimeErrors> {
   const workspace = await prisma.workspace.findFirst({
     where: {
       userId: input.userId,
@@ -155,17 +161,23 @@ export async function ensureProjectWorkspacePanelRuntimes(input: {
     },
   });
 
-  if (!workspace) return;
+  if (!workspace) return {};
 
+  const errors: WorkspacePanelRuntimeErrors = {};
   for (const panel of workspace.panels) {
-    await ensureRuntimeForPanel({
-      workspaceId: workspace.id,
-      projectId: input.projectId,
-      projectPath: workspace.project.path,
-      panel,
-      repairStale: input.repairStale === true,
-    });
+    try {
+      await ensureRuntimeForPanel({
+        workspaceId: workspace.id,
+        projectId: input.projectId,
+        projectPath: workspace.project.path,
+        panel,
+        repairStale: input.repairStale === true,
+      });
+    } catch (error) {
+      errors[panel.panelId] = errorMessage(error);
+    }
   }
+  return errors;
 }
 
 export async function cleanupWorkspacePanelRuntimes(panels: PanelRuntimeCleanupTarget[]): Promise<void> {

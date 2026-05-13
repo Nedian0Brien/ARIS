@@ -93,19 +93,19 @@ export async function PATCH(
       validChatIds,
       panelRuntime: normalizePanelRuntime(body.panelRuntime),
     });
-    if (savedWorkspace.layout) {
-      await ensureProjectWorkspacePanelRuntimes({
+    const panelRuntimeErrors = savedWorkspace.layout
+      ? await ensureProjectWorkspacePanelRuntimes({
         userId: auth.user.id,
         projectId,
         repairStale: body.repairPanelRuntimes === true,
-      });
-    }
+      })
+      : {};
     const workspace = await getProjectWorkspace({
       userId: auth.user.id,
       projectId,
       validChatIds,
     });
-    return NextResponse.json({ workspace });
+    return NextResponse.json({ workspace, panelRuntimeErrors });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to save project workspace';
     if (message === 'PROJECT_NOT_FOUND') {

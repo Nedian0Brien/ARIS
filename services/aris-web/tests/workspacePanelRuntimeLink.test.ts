@@ -47,4 +47,12 @@ describe('workspace panel runtime linkage', () => {
     expect(homePageClient).toContain('workspacePanelId: panelId');
     expect(homePageClient).toContain('runtimeSessionId: runtimeSessionId !== projectId ? runtimeSessionId : undefined');
   });
+
+  it('surfaces panel runtime readiness and creation failures in the parallel UI', () => {
+    expect(homePageClient).toContain('parallelPanelRuntimeErrors');
+    expect(homePageClient).toContain('panelRuntimeError');
+    expect(homePageClient).toContain('resolvePanelRuntimeBadge');
+    expect(homePageClient).toContain('panelRuntimeErrors');
+    expect(homePageClient).toContain('runtime 생성 실패');
+  });
 });

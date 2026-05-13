@@ -107,6 +107,7 @@ type ProjectRunIndicator = {
   tone: 'submitting' | 'running' | 'approval' | 'aborting';
 };
 type ProjectChatSurfaceMode = 'full' | 'panel';
+type ProjectParallelPanelTool = 'chat' | 'files' | 'git';
 type ProjectChatDragPayload = {
   projectId: string;
   chatId: string;
@@ -123,6 +124,34 @@ type ProjectWorkspacePanelRuntime = {
   worktreePath: string | null;
 };
 type ProjectWorkspacePanelRuntimeMap = Record<string, ProjectWorkspacePanelRuntime>;
+type ProjectPanelRuntimeErrors = Record<string, string>;
+type ProjectPanelRuntimeBadge = {
+  label: string;
+  detail: string;
+  tone: 'ready' | 'running' | 'pending' | 'error';
+};
+type ProjectPanelGitFile = {
+  path: string;
+  indexStatus: string;
+  workTreeStatus: string;
+  staged: boolean;
+  unstaged: boolean;
+  untracked: boolean;
+  conflicted: boolean;
+};
+type ProjectPanelGitOverview = {
+  workspacePath: string;
+  branch: string | null;
+  upstreamBranch: string | null;
+  ahead: number;
+  behind: number;
+  isClean: boolean;
+  stagedCount: number;
+  unstagedCount: number;
+  untrackedCount: number;
+  conflictedCount: number;
+  files: ProjectPanelGitFile[];
+};
 type ProjectChatDragStartHandler = (
   event: DragEvent<HTMLElement>,
   projectId: string,
@@ -710,9 +739,13 @@ async function createProjectChat(
 async function fetchProjectWorkspaceLayout(
   projectId: string,
   validChatIds: Set<string>,
-): Promise<{ layout: ProjectParallelPanelTreeState | null; panelRuntime: ProjectWorkspacePanelRuntimeMap }> {
+): Promise<{
+  layout: ProjectParallelPanelTreeState | null;
+  panelRuntime: ProjectWorkspacePanelRuntimeMap;
+  panelRuntimeErrors: ProjectPanelRuntimeErrors;
+}> {
   const response = await fetch(withAppBasePath(buildProjectWorkspacePath(projectId)), { cache: 'no-store' });
-  if (!response.ok) return { layout: null, panelRuntime: {} };
+  if (!response.ok) return { layout: null, panelRuntime: {}, panelRuntimeErrors: {} };
   const body = (await response.json().catch(() => ({}))) as {
     workspace?: {
       layout?: ProjectParallelPanelTreeState | null;
@@ -730,6 +763,7 @@ async function fetchProjectWorkspaceLayout(
   return {
     layout: layout ? parseProjectPanelState(JSON.stringify(layout), validChatIds) : null,
     panelRuntime,
+    panelRuntimeErrors: {},
   };
 }
 
@@ -737,7 +771,7 @@ async function saveProjectWorkspaceLayout(
   projectId: string,
   layout: ProjectParallelPanelTreeState | null,
   options: { repairPanelRuntimes?: boolean } = {},
-): Promise<ProjectWorkspacePanelRuntimeMap> {
+): Promise<{ panelRuntime: ProjectWorkspacePanelRuntimeMap; panelRuntimeErrors: ProjectPanelRuntimeErrors }> {
   const response = await fetch(withAppBasePath(buildProjectWorkspacePath(projectId)), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -747,17 +781,79 @@ async function saveProjectWorkspaceLayout(
     workspace?: {
       panels?: ProjectWorkspacePanelRuntime[];
     };
+    panelRuntimeErrors?: ProjectPanelRuntimeErrors;
+    error?: string;
   };
   if (!response.ok) {
-    throw new Error('Workspace layout 저장에 실패했습니다.');
+    throw new Error(body.error ?? 'Workspace layout 저장에 실패했습니다.');
   }
   const panels = Array.isArray(body.workspace?.panels) ? body.workspace.panels : [];
-  return panels.reduce<ProjectWorkspacePanelRuntimeMap>((acc, panel) => {
-    if (panel && typeof panel.panelId === 'string') {
-      acc[panel.panelId] = panel;
-    }
-    return acc;
-  }, {});
+  return {
+    panelRuntime: panels.reduce<ProjectWorkspacePanelRuntimeMap>((acc, panel) => {
+      if (panel && typeof panel.panelId === 'string') {
+        acc[panel.panelId] = panel;
+      }
+      return acc;
+    }, {}),
+    panelRuntimeErrors: body.panelRuntimeErrors && typeof body.panelRuntimeErrors === 'object'
+      ? body.panelRuntimeErrors
+      : {},
+  };
+}
+
+async function fetchProjectPanelGitOverview(projectId: string, panelId: string): Promise<ProjectPanelGitOverview> {
+  const params = new URLSearchParams();
+  params.set('kind', 'overview');
+  params.set('workspacePanelId', panelId);
+  const response = await fetch(
+    withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(projectId)}/git?${params.toString()}`),
+    { cache: 'no-store' },
+  );
+  const body = (await response.json().catch(() => ({}))) as ProjectPanelGitOverview & { error?: string };
+  if (!response.ok) {
+    throw new Error(body.error ?? 'Git 정보를 불러오지 못했습니다.');
+  }
+  return body;
+}
+
+function resolvePanelRuntimeBadge(
+  panelRuntime: ProjectWorkspacePanelRuntime | null,
+  runtimeRunning: boolean,
+  panelRuntimeError: string | null,
+): ProjectPanelRuntimeBadge {
+  if (panelRuntimeError) {
+    return {
+      label: 'runtime 생성 실패',
+      detail: panelRuntimeError,
+      tone: 'error',
+    };
+  }
+  if (runtimeRunning) {
+    return {
+      label: 'running',
+      detail: panelRuntime?.branch ?? panelRuntime?.runtimeSessionId ?? 'panel runtime',
+      tone: 'running',
+    };
+  }
+  if (!panelRuntime?.runtimeSessionId) {
+    return {
+      label: 'runtime pending',
+      detail: '패널 runtime/worktree 생성 대기',
+      tone: 'pending',
+    };
+  }
+  if (!panelRuntime.worktreePath) {
+    return {
+      label: 'worktree missing',
+      detail: panelRuntime.branch ?? panelRuntime.runtimeSessionId,
+      tone: 'error',
+    };
+  }
+  return {
+    label: 'ready',
+    detail: panelRuntime.branch ?? panelRuntime.worktreePath,
+    tone: 'ready',
+  };
 }
 
 function navigateTo(path: string) {
@@ -2695,12 +2791,12 @@ function ProjectParallelPanelTree({
   modelLabel,
   node,
   onClosePanel,
-  onOpenFiles,
   onPanelDragEnd,
   onPanelDragStart,
   onPanelDrop,
   onRepairPanelRuntime,
   onResize,
+  panelRuntimeErrors,
   panelRuntime,
   panelState,
   recentPreview,
@@ -2711,12 +2807,12 @@ function ProjectParallelPanelTree({
   modelLabel: string;
   node: ProjectParallelPanelNode;
   onClosePanel: (panelId: string) => void;
-  onOpenFiles: (chatId: string) => void;
   onPanelDragEnd: () => void;
   onPanelDragStart: ProjectPanelNodeDragStartHandler;
   onPanelDrop: ProjectPanelDropHandler;
   onRepairPanelRuntime: (panelId: string) => void;
   onResize: (leftAnchorId: string, rightAnchorId: string, ratio: number) => void;
+  panelRuntimeErrors: ProjectPanelRuntimeErrors;
   panelRuntime: ProjectWorkspacePanelRuntimeMap;
   panelState: ProjectParallelPanelTreeState;
   recentPreview: string;
@@ -2749,7 +2845,6 @@ function ProjectParallelPanelTree({
         isActivePanel={panelState.activePanelId === node.panelId}
         modelLabel={modelLabel}
         onClosePanel={() => onClosePanel(node.panelId)}
-        onOpenFiles={onOpenFiles}
         onPanelDragEnd={onPanelDragEnd}
         onPanelDragStart={(event) => onPanelDragStart(event, node.panelId, panelChat)}
         onPanelDrop={(edge, event) => onPanelDrop(node.panelId, edge, event)}
@@ -2757,6 +2852,7 @@ function ProjectParallelPanelTree({
         panelId={node.panelId}
         panelLabel={`PANEL ${collectProjectPanelIds(panelState.layout).indexOf(node.panelId) + 1}`}
         panelRuntime={panelRuntime[node.panelId] ?? null}
+        panelRuntimeError={panelRuntimeErrors[node.panelId] ?? null}
         recentPreview={recentPreview}
         session={session}
         showClose={Object.keys(panelState.panels).length > 1}
@@ -2777,12 +2873,12 @@ function ProjectParallelPanelTree({
           modelLabel={modelLabel}
           node={node.children[0]}
           onClosePanel={onClosePanel}
-          onOpenFiles={onOpenFiles}
           onPanelDragEnd={onPanelDragEnd}
           onPanelDragStart={onPanelDragStart}
           onPanelDrop={onPanelDrop}
           onRepairPanelRuntime={onRepairPanelRuntime}
           onResize={onResize}
+          panelRuntimeErrors={panelRuntimeErrors}
           panelRuntime={panelRuntime}
           panelState={panelState}
           recentPreview={recentPreview}
@@ -2803,12 +2899,12 @@ function ProjectParallelPanelTree({
           modelLabel={modelLabel}
           node={node.children[1]}
           onClosePanel={onClosePanel}
-          onOpenFiles={onOpenFiles}
           onPanelDragEnd={onPanelDragEnd}
           onPanelDragStart={onPanelDragStart}
           onPanelDrop={onPanelDrop}
           onRepairPanelRuntime={onRepairPanelRuntime}
           onResize={onResize}
+          panelRuntimeErrors={panelRuntimeErrors}
           panelRuntime={panelRuntime}
           panelState={panelState}
           recentPreview={recentPreview}
@@ -2825,7 +2921,6 @@ function ProjectParallelChatPane({
   isActivePanel,
   modelLabel,
   onClosePanel,
-  onOpenFiles,
   onPanelDragEnd,
   onPanelDragStart,
   onPanelDrop,
@@ -2833,6 +2928,7 @@ function ProjectParallelChatPane({
   panelId,
   panelLabel,
   panelRuntime,
+  panelRuntimeError,
   recentPreview,
   session,
   showClose,
@@ -2842,7 +2938,6 @@ function ProjectParallelChatPane({
   isActivePanel: boolean;
   modelLabel: string;
   onClosePanel: () => void;
-  onOpenFiles: (chatId: string) => void;
   onPanelDragEnd: () => void;
   onPanelDragStart: (event: DragEvent<HTMLElement>) => void;
   onPanelDrop: (edge: ProjectParallelPanelDropEdge, event: DragEvent<HTMLElement>) => void;
@@ -2850,6 +2945,7 @@ function ProjectParallelChatPane({
   panelId: string;
   panelLabel: string;
   panelRuntime: ProjectWorkspacePanelRuntime | null;
+  panelRuntimeError: string | null;
   recentPreview: string;
   session: SessionSummary;
   showClose: boolean;
@@ -2868,12 +2964,21 @@ function ProjectParallelChatPane({
   const [selectedModel, setSelectedModel] = useState(chat.model ?? modelLabel);
   const [selectedEffort, setSelectedEffort] = useState<ReasoningEffort>(() => normalizeReasoningEffort(chat.modelReasoningEffort));
   const [dropEdge, setDropEdge] = useState<ProjectParallelPanelDropEdge | null>(null);
+  const [panelTool, setPanelTool] = useState<ProjectParallelPanelTool>('chat');
+  const [gitOverview, setGitOverview] = useState<ProjectPanelGitOverview | null>(null);
+  const [gitLoading, setGitLoading] = useState(false);
+  const [gitError, setGitError] = useState<string | null>(null);
   const frameRef = useRef<HTMLElement | null>(null);
   const activeAgent: SessionSummary['agent'] = selectedProvider;
   const activeModelLabel = selectedModel || chat.model || modelLabel;
   const runtimeSessionId = panelRuntime?.runtimeSessionId ?? projectId;
-  const runtimeNeedsRepair = !panelRuntime?.runtimeSessionId || !panelRuntime.worktreePath;
   const { isRunning: runtimeRunning } = useSessionRuntime(runtimeSessionId, chat.id, true);
+  const runtimeBadge = resolvePanelRuntimeBadge(panelRuntime, runtimeRunning, panelRuntimeError);
+  const runtimeNeedsRepair = runtimeBadge.tone === 'pending' || runtimeBadge.tone === 'error';
+  const panelFiles = useWorkspaceFiles('/workspace', {
+    projectId,
+    workspacePanelId: panelId,
+  });
   const visibleEvents = events.slice(-40);
   const hasRuntimeEvents = visibleEvents.length > 0;
   const projectRunActive = runtimeRunning || isSubmitting;
@@ -2886,7 +2991,31 @@ function ProjectParallelChatPane({
     setSelectedProvider(providerFromAgent(chat.agent ?? session.agent));
     setSelectedModel(chat.model ?? modelLabel);
     setSelectedEffort(normalizeReasoningEffort(chat.modelReasoningEffort));
+    setPanelTool('chat');
   }, [chat.agent, chat.id, chat.model, chat.modelReasoningEffort, modelLabel, session.agent]);
+
+  useEffect(() => {
+    if (panelTool !== 'git') return;
+    let cancelled = false;
+    setGitLoading(true);
+    setGitError(null);
+    void fetchProjectPanelGitOverview(projectId, panelId)
+      .then((overview) => {
+        if (!cancelled) setGitOverview(overview);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setGitError(error instanceof Error ? error.message : 'Git 정보를 불러오지 못했습니다.');
+          setGitOverview(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setGitLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [panelId, panelTool, projectId]);
 
   const handleComposerModeChange = (mode: ComposerMode) => {
     setComposerMode(mode);
@@ -3088,7 +3217,33 @@ function ProjectParallelChatPane({
           <span>{panelLabel}</span>
         </button>
         <strong title={chat.title}>{chat.title}</strong>
-        {runtimeRunning && <em>running</em>}
+        <span
+          className="pc-parallel__runtime-badge"
+          data-tone={runtimeBadge.tone}
+          title={runtimeBadge.detail}
+        >
+          {runtimeBadge.label}
+        </span>
+        <button
+          type="button"
+          className="pc-parallel__frame-action"
+          onClick={() => setPanelTool(panelTool === 'files' ? 'chat' : 'files')}
+          aria-pressed={panelTool === 'files'}
+          aria-label="Open panel files"
+          title="Open panel files"
+        >
+          <FileText size={13} />
+        </button>
+        <button
+          type="button"
+          className="pc-parallel__frame-action"
+          onClick={() => setPanelTool(panelTool === 'git' ? 'chat' : 'git')}
+          aria-pressed={panelTool === 'git'}
+          aria-label="Open panel Git"
+          title="Open panel Git"
+        >
+          <GitActionMark size={13} />
+        </button>
         {runtimeNeedsRepair && (
           <button
             type="button"
@@ -3101,14 +3256,23 @@ function ProjectParallelChatPane({
           </button>
         )}
         {showClose && (
-          <button type="button" className="pc-parallel__frame-action" onClick={onClosePanel} aria-label="Close panel">
+          <button
+            type="button"
+            className="pc-parallel__frame-action"
+            onClick={onClosePanel}
+            aria-label="Close panel; chat stays in the list"
+            title="패널만 닫힙니다. 채팅은 목록에 남습니다."
+          >
             <X size={13} />
           </button>
         )}
       </header>
       <div className="pc-parallel-chat">
-        <div className="pc-parallel-chat__timeline">
+        <div className="pc-parallel-chat__timeline" hidden={panelTool !== 'chat'}>
           {isLoadingEvents && <div className="pc-chat-loading">Loading messages...</div>}
+          {panelRuntimeError && (
+            <div className="pc-chat-error" role="alert">runtime 생성 실패: {panelRuntimeError}</div>
+          )}
           {!isLoadingEvents && !hasRuntimeEvents && (
             <div className="pc-chat-empty-state" role="status">
               <div className="pc-chat-empty-state__title">아직 메시지가 없습니다.</div>
@@ -3174,6 +3338,103 @@ function ProjectParallelChatPane({
             );
           })}
         </div>
+        {panelTool === 'files' && (
+          <div className="pc-parallel-tool" data-tool="files">
+            <div className="pc-parallel-tool__head">
+              <span><FileText size={13} />Files</span>
+              <span className="pc-parallel-tool__path" title={panelFiles.currentPath}>{panelFiles.currentPath}</span>
+              <button
+                type="button"
+                className="pc-parallel__frame-action"
+                aria-label="Refresh panel files"
+                onClick={() => panelFiles.refresh()}
+                disabled={panelFiles.loading}
+              >
+                <RefreshCcw size={12} />
+              </button>
+            </div>
+            <div className="pc-parallel-tool__body">
+              {panelFiles.parentPath && (
+                <button type="button" className="pc-panel-file" onClick={() => panelFiles.goUp()}>
+                  <FolderOpen size={13} />
+                  <span>..</span>
+                  <em>parent</em>
+                </button>
+              )}
+              {panelFiles.loading && panelFiles.items.length === 0 && <div className="pc-parallel-tool__empty">Loading files...</div>}
+              {panelFiles.error && <div className="pc-chat-error" role="alert">{panelFiles.error}</div>}
+              {!panelFiles.loading && !panelFiles.error && panelFiles.items.length === 0 && (
+                <div className="pc-parallel-tool__empty">빈 디렉터리</div>
+              )}
+              {panelFiles.items.map((file) => (
+                <button
+                  key={file.path}
+                  type="button"
+                  className="pc-panel-file"
+                  onClick={() => {
+                    if (file.isDirectory) {
+                      panelFiles.cdInto(file);
+                    } else {
+                      setPanelTool('chat');
+                      setPrompt((value) => value || `@${file.path} `);
+                    }
+                  }}
+                >
+                  {file.isDirectory ? <FolderOpen size={13} /> : <FileText size={13} />}
+                  <span>{file.name}</span>
+                  <em>{file.isDirectory ? 'dir' : 'file'}</em>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {panelTool === 'git' && (
+          <div className="pc-parallel-tool" data-tool="git">
+            <div className="pc-parallel-tool__head">
+              <span><GitActionMark size={13} />Git</span>
+              <span className="pc-parallel-tool__path" title={gitOverview?.workspacePath ?? panelRuntime?.worktreePath ?? ''}>
+                {gitOverview?.branch ?? panelRuntime?.branch ?? 'branch pending'}
+              </span>
+              <button
+                type="button"
+                className="pc-parallel__frame-action"
+                aria-label="Refresh panel Git"
+                onClick={() => {
+                  setGitLoading(true);
+                  setGitError(null);
+                  void fetchProjectPanelGitOverview(projectId, panelId)
+                    .then(setGitOverview)
+                    .catch((error) => setGitError(error instanceof Error ? error.message : 'Git 정보를 불러오지 못했습니다.'))
+                    .finally(() => setGitLoading(false));
+                }}
+                disabled={gitLoading}
+              >
+                <RefreshCcw size={12} />
+              </button>
+            </div>
+            <div className="pc-panel-git-summary">
+              <span data-tone={gitOverview?.isClean ? 'ready' : 'pending'}>{gitOverview?.isClean ? 'clean' : 'dirty'}</span>
+              <span>staged {gitOverview?.stagedCount ?? 0}</span>
+              <span>changed {gitOverview?.unstagedCount ?? 0}</span>
+              <span>untracked {gitOverview?.untrackedCount ?? 0}</span>
+              <span>ahead {gitOverview?.ahead ?? 0} / behind {gitOverview?.behind ?? 0}</span>
+            </div>
+            <div className="pc-parallel-tool__body">
+              {gitLoading && <div className="pc-parallel-tool__empty">Loading Git status...</div>}
+              {gitError && <div className="pc-chat-error" role="alert">{gitError}</div>}
+              {!gitLoading && !gitError && gitOverview?.files.length === 0 && (
+                <div className="pc-parallel-tool__empty">변경된 파일이 없습니다.</div>
+              )}
+              {gitOverview?.files.slice(0, 30).map((file) => (
+                <div key={`${file.path}:${file.indexStatus}:${file.workTreeStatus}`} className="pc-panel-git-file">
+                  <span>{file.indexStatus}{file.workTreeStatus}</span>
+                  <strong title={file.path}>{file.path}</strong>
+                  <em>{file.conflicted ? 'conflict' : file.untracked ? 'new' : file.staged ? 'staged' : 'modified'}</em>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <ProjectChatComposer
           activeModelLabel={activeModelLabel}
           composerMode={composerMode}
@@ -3182,7 +3443,7 @@ function ProjectParallelChatPane({
           isRunning={projectRunActive}
           modelSelectorOpen={modelSelectorOpen}
           onAddContext={() => setError(null)}
-          onAttachFile={() => onOpenFiles(chat.id)}
+          onAttachFile={() => setPanelTool('files')}
           onComposerModeChange={handleComposerModeChange}
           onEffortSelect={setSelectedEffort}
           onMentionProject={handleMentionProject}
@@ -3274,6 +3535,7 @@ function ProjectChatSurface({
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [parallelPanelState, setParallelPanelState] = useState<ProjectParallelPanelTreeState | null>(null);
   const [parallelPanelRuntime, setParallelPanelRuntime] = useState<ProjectWorkspacePanelRuntimeMap>({});
+  const [parallelPanelRuntimeErrors, setParallelPanelRuntimeErrors] = useState<ProjectPanelRuntimeErrors>({});
   const [parallelSurfaceDropEdge, setParallelSurfaceDropEdge] = useState<ProjectParallelPanelDropEdge | null>(null);
   const [parallelLayoutHydrated, setParallelLayoutHydrated] = useState(false);
   const activeWorkspacePanelId = parallelPanelState?.activePanelId ?? null;
@@ -3463,6 +3725,11 @@ function ProjectChatSurface({
       delete nextRuntime[panelId];
       return remainingPanels.length <= 1 ? {} : nextRuntime;
     });
+    setParallelPanelRuntimeErrors((current) => {
+      const nextRuntimeErrors = { ...current };
+      delete nextRuntimeErrors[panelId];
+      return remainingPanels.length <= 1 ? {} : nextRuntimeErrors;
+    });
     setParallelSurfaceDropEdge(null);
     if (remainingSingleChatId) onChatOpen(remainingSingleChatId);
   }, [onChatOpen, parallelPanelState]);
@@ -3523,6 +3790,7 @@ function ProjectChatSurface({
     const activePanel = parallelPanelState?.panels[parallelPanelState.activePanelId] ?? null;
     setParallelPanelState(null);
     setParallelPanelRuntime({});
+    setParallelPanelRuntimeErrors({});
     setParallelSurfaceDropEdge(null);
     if (activePanel?.chatId) onChatOpen(activePanel.chatId);
   }, [onChatOpen, parallelPanelState]);
@@ -3531,6 +3799,7 @@ function ProjectChatSurface({
     setParallelLayoutHydrated(false);
     setParallelPanelState(null);
     setParallelPanelRuntime({});
+    setParallelPanelRuntimeErrors({});
     setParallelSurfaceDropEdge(null);
   }, [parallelLayoutStorageKey]);
 
@@ -3549,6 +3818,7 @@ function ProjectChatSurface({
       if (cancelled) return;
       setParallelLayoutHydrated(true);
       setParallelPanelRuntime(serverRestored?.panelRuntime ?? {});
+      setParallelPanelRuntimeErrors(serverRestored?.panelRuntimeErrors ?? {});
 
       if (localRestored && Object.keys(localRestored.panels).length > 1) {
         setParallelPanelState(localRestored);
@@ -3570,21 +3840,36 @@ function ProjectChatSurface({
     if (parallelPanelState && Object.keys(parallelPanelState.panels).length > 1) {
       writeLocalStorage(parallelLayoutStorageKey, serializeProjectPanelState(parallelPanelState));
       void saveProjectWorkspaceLayout(projectId, parallelPanelState)
-        .then((panelRuntime) => setParallelPanelRuntime(panelRuntime))
-        .catch(() => undefined);
+        .then(({ panelRuntime, panelRuntimeErrors }) => {
+          setParallelPanelRuntime(panelRuntime);
+          setParallelPanelRuntimeErrors(panelRuntimeErrors);
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : 'Workspace layout 저장에 실패했습니다.';
+          setParallelPanelRuntimeErrors(Object.fromEntries(
+            Object.keys(parallelPanelState.panels).map((panelId) => [panelId, message]),
+          ));
+        });
       return;
     }
 
     removeLocalStorage(parallelLayoutStorageKey);
     setParallelPanelRuntime({});
+    setParallelPanelRuntimeErrors({});
     void saveProjectWorkspaceLayout(projectId, null).catch(() => undefined);
   }, [parallelLayoutHydrated, parallelLayoutStorageKey, parallelPanelState, projectId, surfaceMode]);
 
   const handleRepairProjectParallelPanelRuntime = useCallback((panelId: string) => {
     if (!parallelPanelState?.panels[panelId]) return;
     void saveProjectWorkspaceLayout(projectId, parallelPanelState, { repairPanelRuntimes: true })
-      .then((panelRuntime) => setParallelPanelRuntime(panelRuntime))
-      .catch(() => setError('패널 runtime을 복구하지 못했습니다.'));
+      .then(({ panelRuntime, panelRuntimeErrors }) => {
+        setParallelPanelRuntime(panelRuntime);
+        setParallelPanelRuntimeErrors(panelRuntimeErrors);
+      })
+      .catch((error) => setParallelPanelRuntimeErrors((current) => ({
+        ...current,
+        [panelId]: error instanceof Error ? error.message : '패널 runtime을 복구하지 못했습니다.',
+      })));
   }, [parallelPanelState, projectId]);
 
   useEffect(() => () => {
@@ -4076,17 +4361,12 @@ function ProjectChatSurface({
               modelLabel={modelLabel}
               node={parallelPanelState.layout}
               onClosePanel={handleCloseProjectParallelPanel}
-              onOpenFiles={(chatId) => {
-                handleCloseProjectParallelChats();
-                onChatOpen(chatId);
-                activateWorkspaceTab('files');
-                showTransientFeedback('Files panel opened');
-              }}
               onPanelDragEnd={handleProjectParallelPanelDragEnd}
               onPanelDragStart={handleProjectParallelPanelDragStart}
               onPanelDrop={handleProjectParallelPanelDrop}
               onRepairPanelRuntime={handleRepairProjectParallelPanelRuntime}
               onResize={handleProjectParallelResize}
+              panelRuntimeErrors={parallelPanelRuntimeErrors}
               panelRuntime={parallelPanelRuntime}
               panelState={parallelPanelState}
               recentPreview={recentPreview}

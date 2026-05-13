@@ -3273,6 +3273,47 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   outline: none;
 }
 
+.pc-parallel__frame-action[aria-pressed="true"] {
+  background: var(--b-50);
+  color: var(--b-700);
+}
+
+.pc-parallel__runtime-badge {
+  flex: 0 0 auto;
+  max-width: 140px;
+  overflow: hidden;
+  padding: 3px 7px;
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-parallel__runtime-badge[data-tone="ready"] {
+  background: color-mix(in srgb, var(--success-bg) 72%, transparent);
+  color: var(--success-fg);
+}
+
+.pc-parallel__runtime-badge[data-tone="running"] {
+  background: color-mix(in srgb, var(--info-bg) 72%, transparent);
+  color: var(--info-fg);
+}
+
+.pc-parallel__runtime-badge[data-tone="pending"] {
+  background: color-mix(in srgb, var(--warning-bg) 72%, transparent);
+  color: var(--warning-fg);
+}
+
+.pc-parallel__runtime-badge[data-tone="error"] {
+  background: color-mix(in srgb, var(--danger-bg) 72%, transparent);
+  color: var(--danger-fg);
+}
+
 .pc-parallel-chat {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
@@ -3294,6 +3335,138 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
 
 .pc-parallel-chat__meta {
   display: none;
+}
+
+.pc-parallel-tool {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--canvas);
+}
+
+.pc-parallel-tool__head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 36px;
+  padding: 0 var(--sp-4);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 750;
+}
+
+.pc-parallel-tool__head > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.pc-parallel-tool__path {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-parallel-tool__body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-4);
+}
+
+.pc-parallel-tool__empty {
+  padding: var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.pc-panel-file,
+.pc-panel-git-file {
+  display: grid;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.pc-panel-file {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  text-align: left;
+}
+
+.pc-panel-file:hover,
+.pc-panel-file:focus-visible {
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.pc-panel-file span,
+.pc-panel-git-file strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-panel-file em,
+.pc-panel-git-file em {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-style: normal;
+}
+
+.pc-panel-git-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pc-panel-git-summary span {
+  padding: 3px 7px;
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 800;
+}
+
+.pc-panel-git-summary span[data-tone="ready"] {
+  color: var(--success-fg);
+}
+
+.pc-panel-git-summary span[data-tone="pending"] {
+  color: var(--warning-fg);
+}
+
+.pc-panel-git-file {
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+}
+
+.pc-panel-git-file span {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
 }
 
 .pc-proto .shell {
