@@ -1,10 +1,10 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { WorkspaceToolsPanelPage } from '@/app/sessions/[sessionId]/workspace-panels/WorkspaceToolsPanelPage';
-import { WorkspaceShell } from '@/app/sessions/[sessionId]/workspace-panels/WorkspaceShell';
+import { WorkspaceToolsPanelPage } from '@/app/_legacy/sessions/[sessionId]/workspace-panels/WorkspaceToolsPanelPage';
+import { WorkspaceShell } from '@/app/_legacy/sessions/[sessionId]/workspace-panels/WorkspaceShell';
 
-vi.mock('@/app/sessions/[sessionId]/workspace-panels/WorkspaceShell', () => ({
+vi.mock('@/app/_legacy/sessions/[sessionId]/workspace-panels/WorkspaceShell', () => ({
   WorkspaceShell: vi.fn(() => React.createElement('div', { 'data-testid': 'workspace-shell' })),
 }));
 

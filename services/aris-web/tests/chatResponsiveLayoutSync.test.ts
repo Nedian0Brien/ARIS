@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const hookPath = resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/hooks/useChatLayoutState.ts');
+const hookPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/hooks/useChatLayoutState.ts');
 
 const hookSource = readFileSync(hookPath, 'utf8');
 

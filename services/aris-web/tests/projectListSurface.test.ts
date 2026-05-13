@@ -258,7 +258,7 @@ describe('project list surface', () => {
   });
 
   it('renders project chat text replies through the shared markdown renderer', () => {
-    expect(projectChatSurface).toContain("import { MarkdownContent } from '@/app/sessions/[sessionId]/chat-screen/center-pane/renderers/MarkdownContent';");
+    expect(projectChatSurface).toContain("import { MarkdownContent } from '@/app/_legacy/sessions/[sessionId]/chat-screen/center-pane/renderers/MarkdownContent';");
     expect(projectChatSurface).toContain('<div className="msg__text"><MarkdownContent body={getEventText(item)} /></div>');
     expect(projectChatSurface).toContain('<div className="chturn__agent-text"><MarkdownContent body={item.agentText} /></div>');
   });

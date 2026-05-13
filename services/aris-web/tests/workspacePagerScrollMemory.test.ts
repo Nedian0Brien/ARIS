@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   transitionWorkspacePageScrollMemory,
   type WorkspacePageScrollMemory,
-} from '@/app/sessions/[sessionId]/workspace-panels/workspacePageScrollMemory';
+} from '@/app/_legacy/sessions/[sessionId]/workspace-panels/workspacePageScrollMemory';
 
 describe('workspace page scroll memory', () => {
   it('stores the previous page scroll and resets unseen pages to the top', () => {

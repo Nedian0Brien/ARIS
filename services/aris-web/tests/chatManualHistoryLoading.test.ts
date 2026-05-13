@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const chatInterfaceTsxPath = resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.tsx');
-const chatTimelineTsxPath = resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/ChatTimeline.tsx');
+const chatInterfaceTsxPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.tsx');
+const chatTimelineTsxPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/center-pane/ChatTimeline.tsx');
 
 const chatInterfaceTsx = readFileSync(chatInterfaceTsxPath, 'utf8');
 const chatTimelineTsx = readFileSync(chatTimelineTsxPath, 'utf8');

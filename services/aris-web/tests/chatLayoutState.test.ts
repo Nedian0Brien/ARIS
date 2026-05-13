@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   resolveChatLayoutState,
   resolveInitialChatLayoutState,
-} from '@/app/sessions/[sessionId]/chat-screen/hooks/chatLayoutState';
+} from '@/app/_legacy/sessions/[sessionId]/chat-screen/hooks/chatLayoutState';
 
 describe('chatLayoutState', () => {
   it('keeps the server fallback desktop-shaped until a browser width is available', () => {

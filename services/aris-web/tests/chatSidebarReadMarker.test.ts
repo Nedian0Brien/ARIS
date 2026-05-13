@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveChatReadMarkerId } from '@/app/sessions/[sessionId]/chatSidebar';
+import { resolveChatReadMarkerId } from '@/app/_legacy/sessions/[sessionId]/chatSidebar';
 
 describe('resolveChatReadMarkerId', () => {
   it('uses the latest event id when available', () => {

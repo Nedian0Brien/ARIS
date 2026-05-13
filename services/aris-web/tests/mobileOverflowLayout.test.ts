@@ -8,9 +8,9 @@ const dashboardCssPath = resolve(__dirname, '../app/SessionDashboard.module.css'
 const dashboardTsxPath = resolve(__dirname, '../app/SessionDashboard.tsx');
 const uiCssPath = resolve(__dirname, '../app/styles/ui.css');
 const fabCssPath = resolve(__dirname, '../app/styles/fab.css');
-const workspaceHomeCssPath = resolve(__dirname, '../app/sessions/[sessionId]/WorkspaceHome.module.css');
-const chatInterfaceCssPath = resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.module.css');
-const customizationSidebarCssPath = resolve(__dirname, '../app/sessions/[sessionId]/CustomizationSidebar.module.css');
+const workspaceHomeCssPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/WorkspaceHome.module.css');
+const chatInterfaceCssPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.module.css');
+const customizationSidebarCssPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/CustomizationSidebar.module.css');
 
 const dashboardCss = readFileSync(dashboardCssPath, 'utf8');
 const dashboardTsx = readFileSync(dashboardTsxPath, 'utf8');

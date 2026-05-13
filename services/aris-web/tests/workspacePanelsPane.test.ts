@@ -1,9 +1,9 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { WorkspacePanelsPane } from '@/app/sessions/[sessionId]/chat-screen/right-pane/WorkspacePanelsPane';
+import { WorkspacePanelsPane } from '@/app/_legacy/sessions/[sessionId]/chat-screen/right-pane/WorkspacePanelsPane';
 
-vi.mock('@/app/sessions/[sessionId]/workspace-panels/PanelPageRenderer', () => ({
+vi.mock('@/app/_legacy/sessions/[sessionId]/workspace-panels/PanelPageRenderer', () => ({
   PanelPageRenderer: vi.fn(() => React.createElement('div', { 'data-testid': 'panel-page-renderer' }, 'Panel page')),
 }));
 

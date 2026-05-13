@@ -5,7 +5,7 @@ import {
   resolveNextSelectedChatId,
   shouldStartChatEntryLoading,
   shouldShowChatTransitionLoading,
-} from '@/app/sessions/[sessionId]/chatSelection';
+} from '@/app/_legacy/sessions/[sessionId]/chatSelection';
 
 function makeChat(id: string, overrides: Partial<SessionChat> = {}): SessionChat {
   return {

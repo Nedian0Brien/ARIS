@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // Tail-restore anchor logic lives in the dedicated hook (extracted from ChatInterface)
-const hookPath = resolve(__dirname, '../app/sessions/[sessionId]/useChatTailRestore.ts');
+const hookPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/useChatTailRestore.ts');
 const hookSource = readFileSync(hookPath, 'utf8');
 
 describe('chat tail restore anchor guards', () => {

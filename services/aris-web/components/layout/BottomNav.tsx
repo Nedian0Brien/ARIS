@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FolderTree, Home, MessageSquareText, PanelsTopLeft } from 'lucide-react';
 import { primeAutoHideScrollState, reduceAutoHideScrollState } from './mobileScrollAutoHide';
-import { useSessionScrollOrchestrator } from '@/app/sessions/[sessionId]/useSessionScrollOrchestrator';
+import { useSessionScrollOrchestrator } from '@/app/_legacy/sessions/[sessionId]/useSessionScrollOrchestrator';
 
 export type TabType = 'home' | 'ask' | 'project' | 'files';
 

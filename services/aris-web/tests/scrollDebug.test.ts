@@ -4,7 +4,7 @@ import {
   clearScrollDebugEvents,
   readScrollDebugEvents,
   recordScrollDebugEvent,
-} from '@/app/sessions/[sessionId]/scrollDebug';
+} from '@/app/_legacy/sessions/[sessionId]/scrollDebug';
 
 describe('scrollDebug', () => {
   afterEach(() => {

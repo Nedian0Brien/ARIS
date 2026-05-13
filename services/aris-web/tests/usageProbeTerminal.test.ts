@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatUsageProbeCloseMessage,
   normalizeUsageProbeMessageData,
-} from '@/app/sessions/[sessionId]/usageProbeTerminal';
+} from '@/app/_legacy/sessions/[sessionId]/usageProbeTerminal';
 
 describe('usageProbeTerminal', () => {
   it('passes string websocket payloads through unchanged', () => {

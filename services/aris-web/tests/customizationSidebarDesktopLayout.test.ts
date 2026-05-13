@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const customizationSidebarCssPath = resolve(__dirname, '../app/sessions/[sessionId]/CustomizationSidebar.module.css');
+const customizationSidebarCssPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/CustomizationSidebar.module.css');
 
 const customizationSidebarCss = readFileSync(customizationSidebarCssPath, 'utf8');
 

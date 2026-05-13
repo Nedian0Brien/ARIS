@@ -4,9 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const chatInterfacePath = resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.tsx');
-const chatTailRestorePath = resolve(__dirname, '../app/sessions/[sessionId]/useChatTailRestore.ts');
-const chatInterfaceCssPath = resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.module.css');
+const chatInterfacePath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.tsx');
+const chatTailRestorePath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/useChatTailRestore.ts');
+const chatInterfaceCssPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.module.css');
 
 const chatInterfaceSource = readFileSync(chatInterfacePath, 'utf8');
 const chatTailRestoreSource = readFileSync(chatTailRestorePath, 'utf8');

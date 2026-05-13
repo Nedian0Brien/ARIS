@@ -6,9 +6,9 @@ import { describe, expect, it } from 'vitest';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const modalTsxPath = resolve(
   __dirname,
-  '../app/sessions/[sessionId]/customization-sidebar/modals/CustomizationFileModal.tsx',
+  '../app/_legacy/sessions/[sessionId]/customization-sidebar/modals/CustomizationFileModal.tsx',
 );
-const modalCssPath = resolve(__dirname, '../app/sessions/[sessionId]/CustomizationSidebar.module.css');
+const modalCssPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/CustomizationSidebar.module.css');
 
 const modalTsx = readFileSync(modalTsxPath, 'utf8');
 const modalCss = readFileSync(modalCssPath, 'utf8');

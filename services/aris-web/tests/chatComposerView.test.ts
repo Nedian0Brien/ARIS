@@ -2,8 +2,8 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { MessageSquarePlus } from 'lucide-react';
-import { ChatComposer } from '@/app/sessions/[sessionId]/chat-screen/center-pane/ChatComposer';
-import { FileBrowserModal } from '@/app/sessions/[sessionId]/chat-screen/center-pane/FileBrowserModal';
+import { ChatComposer } from '@/app/_legacy/sessions/[sessionId]/chat-screen/center-pane/ChatComposer';
+import { FileBrowserModal } from '@/app/_legacy/sessions/[sessionId]/chat-screen/center-pane/FileBrowserModal';
 
 describe('chat composer view', () => {
   it('renders the text context editor', () => {

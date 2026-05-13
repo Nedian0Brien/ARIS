@@ -3,12 +3,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { UiEvent } from '@/lib/happy/types';
 import { buildImageAttachmentPromptPrefix } from '@/lib/chatImageAttachments';
-import { LastUserMessageJumpBar } from '@/app/sessions/[sessionId]/chat-screen/center-pane/LastUserMessageJumpBar';
+import { LastUserMessageJumpBar } from '@/app/_legacy/sessions/[sessionId]/chat-screen/center-pane/LastUserMessageJumpBar';
 import {
   resolveLastPassedUserMessageJumpTarget,
   resolveUserMessageJumpTargets,
   shouldShowLastUserMessageJumpBar,
-} from '@/app/sessions/[sessionId]/chat-screen/center-pane/lastUserMessageBar';
+} from '@/app/_legacy/sessions/[sessionId]/chat-screen/center-pane/lastUserMessageBar';
 
 function buildEvent(overrides: Partial<UiEvent> = {}): UiEvent {
   return {

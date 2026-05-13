@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildComposerSubmitText, buildUserMessageMeta, matchesSubmittedUserPayload } from '@/app/sessions/[sessionId]/chatSubmitPayload';
+import { buildComposerSubmitText, buildUserMessageMeta, matchesSubmittedUserPayload } from '@/app/_legacy/sessions/[sessionId]/chatSubmitPayload';
 
 const attachments = [
   {

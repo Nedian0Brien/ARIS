@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { jumpToLatestPageWindow } from '@/app/sessions/[sessionId]/useChatTailRestore';
+import { jumpToLatestPageWindow } from '@/app/_legacy/sessions/[sessionId]/useChatTailRestore';
 
 describe('chat tail restore latest-page jump', () => {
   it('resets to the latest page window before restoring the tail', async () => {

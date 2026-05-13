@@ -41,6 +41,13 @@
 - 새 기능을 기존 파일에 추가하기 전에 위 기준을 점검하고, 넘는다면 추출/분리를 작업의 일부로 포함한다. 분리만 따로 PR로 내지 말고 작업과 함께 진행해 머지 충돌을 줄인다.
 - 위 기준은 권고지 절대값이 아니다. 분명한 응집도(예: 단일 라우트 핸들러)가 있다면 길어도 유지할 수 있다 — 이 경우 PR 본문에 사유를 명시한다.
 
+## 레거시 경계 (Legacy boundary)
+
+- `services/aris-web/app/_legacy/**` 는 리디자인 이전 코드의 격리 폴더다. **새 기능을 여기에 추가하지 않는다.**
+- 후-리디자인 chat surface는 `services/aris-web/components/project-chat/**` 와 `app/HomePageClient.tsx` (URL: `/?tab=project&view=chat`).
+- Next.js underscore prefix(`_legacy/`)로 라우팅이 자동 비활성화됨.
+- `_legacy/` 내부 모듈을 외부에서 import하고 있다면, 그 모듈은 공유 위치(`lib/`, `components/shared/`)로 추출하는 것을 우선 고려한다.
+
 ## 디버깅 가이드
 
 > 서버/DB 내부 값을 직접 조회하려 할 때 혼선이 생기므로, 반드시 아래 공식 스크립트와 절차만 사용한다.

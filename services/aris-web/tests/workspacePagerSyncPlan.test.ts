@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { WorkspacePagerItem } from '@/app/sessions/[sessionId]/workspace-panels/pagerModel';
-import { resolveWorkspacePagerSyncPlan } from '@/app/sessions/[sessionId]/workspace-panels/workspacePagerSyncPlan';
+import type { WorkspacePagerItem } from '@/app/_legacy/sessions/[sessionId]/workspace-panels/pagerModel';
+import { resolveWorkspacePagerSyncPlan } from '@/app/_legacy/sessions/[sessionId]/workspace-panels/workspacePagerSyncPlan';
 
 describe('workspace pager sync plan', () => {
   const items: readonly WorkspacePagerItem[] = [

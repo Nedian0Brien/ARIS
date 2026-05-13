@@ -20,7 +20,7 @@ import {
   resolvePrependedAnchorScrollTop,
   shouldUseManualScrollRestoration,
   shouldUseWindowScrollFallback,
-} from '@/app/sessions/[sessionId]/chatScroll';
+} from '@/app/_legacy/sessions/[sessionId]/chatScroll';
 
 describe('chatScroll', () => {
   it('changes the auto-scroll trigger when deferred agent messages reach the rendered timeline', () => {

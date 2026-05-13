@@ -3,7 +3,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/app/sessions/[sessionId]/workspace-panels/WorkspaceToolsPanelPage', () => ({
+vi.mock('@/app/_legacy/sessions/[sessionId]/workspace-panels/WorkspaceToolsPanelPage', () => ({
   WorkspaceToolsPanelPage: () => React.createElement('div', null, 'Workspace Tools Mock'),
 }));
 
@@ -50,15 +50,15 @@ type PanelPageRendererModule = {
 };
 
 async function loadCreatePanelPageModule(): Promise<CreatePanelPageModule> {
-  return import('@/app/sessions/[sessionId]/workspace-panels/CreatePanelPage').catch(() => ({}));
+  return import('@/app/_legacy/sessions/[sessionId]/workspace-panels/CreatePanelPage').catch(() => ({}));
 }
 
 async function loadPlaceholderPanelPageModule(): Promise<PlaceholderPanelPageModule> {
-  return import('@/app/sessions/[sessionId]/workspace-panels/PlaceholderPanelPage').catch(() => ({}));
+  return import('@/app/_legacy/sessions/[sessionId]/workspace-panels/PlaceholderPanelPage').catch(() => ({}));
 }
 
 async function loadPanelPageRendererModule(): Promise<PanelPageRendererModule> {
-  return import('@/app/sessions/[sessionId]/workspace-panels/PanelPageRenderer').catch(() => ({}));
+  return import('@/app/_legacy/sessions/[sessionId]/workspace-panels/PanelPageRenderer').catch(() => ({}));
 }
 
 function isElement(node: ReactNode): node is AnyElement {

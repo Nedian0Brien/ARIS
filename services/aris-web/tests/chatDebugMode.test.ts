@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   looksLikeShellTranscript,
   shouldShowDebugToggleInHeader,
-} from '@/app/sessions/[sessionId]/chatDebugMode';
+} from '@/app/_legacy/sessions/[sessionId]/chatDebugMode';
 
 describe('chatDebugMode helpers', () => {
   it('shows the debug toggle in the header only when the header is wide enough', () => {

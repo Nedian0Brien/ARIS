@@ -4,9 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const chatInterfacePath = resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.tsx');
-const workspaceHomePanePath = resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/WorkspaceHomePane.tsx');
-const newChatPlaceholderPanePath = resolve(__dirname, '../app/sessions/[sessionId]/chat-screen/center-pane/NewChatPlaceholderPane.tsx');
+const chatInterfacePath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.tsx');
+const workspaceHomePanePath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/center-pane/WorkspaceHomePane.tsx');
+const newChatPlaceholderPanePath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/center-pane/NewChatPlaceholderPane.tsx');
 
 const chatInterfaceSource = readFileSync(chatInterfacePath, 'utf8');
 const workspaceHomePaneSource = readFileSync(workspaceHomePanePath, 'utf8');

@@ -3,7 +3,7 @@ import {
   readLastSelectedModelId,
   resolvePreferredModelId,
   writeLastSelectedModelId,
-} from '@/app/sessions/[sessionId]/chatModelPreferences';
+} from '@/app/_legacy/sessions/[sessionId]/chatModelPreferences';
 
 const globalWithDom = globalThis as typeof globalThis & {
   window?: Window & typeof globalThis;

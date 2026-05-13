@@ -2,14 +2,14 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MessageSquarePlus } from 'lucide-react';
 import { describe, expect, it, vi } from 'vitest';
-import { ChatTimeline } from '@/app/sessions/[sessionId]/chat-screen/center-pane/ChatTimeline';
-import { PermissionRequestMessage } from '@/app/sessions/[sessionId]/PermissionRequestMessage';
-import { AGENT_QUICK_STARTS } from '@/app/sessions/[sessionId]/chat-screen/constants';
-import { ActionEventCard } from '@/app/sessions/[sessionId]/chat-screen/center-pane/renderers/ActionEventCard';
-import type { AgentMeta, TimelineRenderItem } from '@/app/sessions/[sessionId]/chat-screen/types';
+import { ChatTimeline } from '@/app/_legacy/sessions/[sessionId]/chat-screen/center-pane/ChatTimeline';
+import { PermissionRequestMessage } from '@/app/_legacy/sessions/[sessionId]/PermissionRequestMessage';
+import { AGENT_QUICK_STARTS } from '@/app/_legacy/sessions/[sessionId]/chat-screen/constants';
+import { ActionEventCard } from '@/app/_legacy/sessions/[sessionId]/chat-screen/center-pane/renderers/ActionEventCard';
+import type { AgentMeta, TimelineRenderItem } from '@/app/_legacy/sessions/[sessionId]/chat-screen/types';
 import type { RenderablePermissionRequest } from '@/lib/happy/permissions';
 import type { SessionChat, UiEvent } from '@/lib/happy/types';
-import { buildPermissionTimelineItems } from '@/app/sessions/[sessionId]/chatTimeline';
+import { buildPermissionTimelineItems } from '@/app/_legacy/sessions/[sessionId]/chatTimeline';
 
 function buildPermission(overrides: Partial<RenderablePermissionRequest> = {}): RenderablePermissionRequest {
   return {
