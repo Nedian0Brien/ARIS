@@ -3600,15 +3600,20 @@ html[data-theme='dark'] .pc-proto .pc-action-stack {
 
 .pc-proto .pc-action-card__cmd {
   display: block;
+  width: 100%;
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: pre;
+  white-space: nowrap;
   color: var(--text-tertiary);
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.35;
+}
+.pc-proto .pc-action-card__cmd > .pc-action-token,
+.pc-proto .pc-action-card__cmd > span {
+  white-space: nowrap;
 }
 
 .pc-proto .pc-action-token--bin {

@@ -21,7 +21,7 @@ export function CmdTokens({ parsed, raw, onOpenFile }: { parsed: ParsedCommand; 
 
   let index = 0;
   return (
-    <span className="pc-action-card__cmd" aria-label={rawString}>
+    <span className="pc-action-card__cmd" aria-label={rawString} title={rawString}>
       {(rawString.match(/\s+|[^\s]+/g) ?? []).map((segment, segIdx) => {
         if (/^\s+$/.test(segment)) return <span key={`s${segIdx}`}>{segment}</span>;
         if (filePaths.has(segment)) {
