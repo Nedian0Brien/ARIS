@@ -67,8 +67,25 @@ function stripPrefixes(tokens: string[]): string[] {
   return tokens.slice(i);
 }
 
+/**
+ * If the entire command is wrapped in a leading quote that is followed by an
+ * identifier-like token (e.g. `'docker exec ...`), strip the leading quote so
+ * tokenization doesn't swallow the whole command into one quoted string.
+ *
+ * Only strips when the next char after the quote looks like a command start
+ * (alphanumeric / underscore). This avoids stripping intentional single-arg
+ * quoting like `'{"key":"value"}'` or `"-x flag"`.
+ */
+function stripLeadingWrapQuote(raw: string): string {
+  if (!(raw.startsWith("'") || raw.startsWith('"'))) return raw;
+  const rest = raw.slice(1);
+  // Must look like `<word> ...` (followed by a space) to be a wrap, not a quoted arg.
+  if (/^[A-Za-z_][\w.-]*\s/.test(rest)) return rest;
+  return raw;
+}
+
 export function parseShellCommand(raw: string): ParsedCommand {
-  const trimmed = (raw || '').trim();
+  const trimmed = stripLeadingWrapQuote((raw || '').trim());
   if (!trimmed) return { head: '', tone: 'cmd', icon: 'prompt', label: '', tokens: [], fileArgs: [], pipedCount: 0 };
 
   const { segments } = splitChained(trimmed);

@@ -48,6 +48,15 @@ describe('parseShellCommand', () => {
   it('returns cmd-tone fallback for empty input', () => {
     expect(parseShellCommand('').tone).toBe('cmd');
   });
+  it('strips a leading wrap quote when followed by an identifier', () => {
+    const wrapped = `'docker exec foo -c '"'{"batch":5}'"' bar`;
+    const p = parseShellCommand(wrapped);
+    expect(p.head).toBe('docker');
+    expect(p.tone).toBe('docker');
+  });
+  it('keeps a leading quote when followed by a non-identifier (legitimate quoted-arg)', () => {
+    expect(parseShellCommand(`'{"key":"val"}'`).tone).toBe('cmd');
+  });
 });
 
 describe('parseAgentCommand', () => {
