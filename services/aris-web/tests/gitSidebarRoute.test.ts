@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 
 const mocks = vi.hoisted(() => ({
   requireApiUser: vi.fn(),
-  listSessions: vi.fn(),
+  resolveWorkspacePanelExecutionTarget: vi.fn(),
   getGitSidebarOverview: vi.fn(),
   getGitSidebarDiff: vi.fn(),
   performGitSidebarAction: vi.fn(),
@@ -13,8 +13,23 @@ vi.mock('@/lib/auth/guard', () => ({
   requireApiUser: mocks.requireApiUser,
 }));
 
-vi.mock('@/lib/happy/client', () => ({
-  listSessions: mocks.listSessions,
+vi.mock('@/lib/workspacePanels/executionTarget', () => ({
+  readWorkspacePanelIdFromRecord: (record: Record<string, unknown>) => (
+    typeof record.workspacePanelId === 'string'
+      ? record.workspacePanelId
+      : typeof record.panelId === 'string'
+        ? record.panelId
+        : null
+  ),
+  readWorkspacePanelIdFromSearchParams: (searchParams: URLSearchParams) => (
+    searchParams.get('workspacePanelId') ?? searchParams.get('panelId')
+  ),
+  resolveWorkspacePanelExecutionTarget: mocks.resolveWorkspacePanelExecutionTarget,
+  WorkspacePanelExecutionTargetError: class WorkspacePanelExecutionTargetError extends Error {
+    constructor(readonly code: string) {
+      super(code);
+    }
+  },
 }));
 
 vi.mock('@/lib/git/sidebar', () => ({
@@ -29,9 +44,15 @@ describe('git sidebar route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.requireApiUser.mockResolvedValue({ user: { id: 'user-1', role: 'operator' } });
-    mocks.listSessions.mockResolvedValue([
-      { id: 'session-1', projectName: '/home/ubuntu/project/ARIS' },
-    ]);
+    mocks.resolveWorkspacePanelExecutionTarget.mockResolvedValue({
+      projectId: 'session-1',
+      projectPath: '/home/ubuntu/project/ARIS',
+      runtimeSessionId: 'session-1',
+      executionPath: '/home/ubuntu/project/ARIS',
+      workspacePanelId: null,
+      branch: null,
+      source: 'project',
+    });
   });
 
   it('returns git overview for a session workspace', async () => {
@@ -56,6 +77,43 @@ describe('git sidebar route', () => {
 
     expect(mocks.getGitSidebarOverview).toHaveBeenCalledWith('/home/ubuntu/project/ARIS');
     expect(await response.json()).toEqual(expect.objectContaining({ branch: 'main', isClean: true }));
+  });
+
+  it('uses the workspace panel execution path when a panel id is provided', async () => {
+    mocks.resolveWorkspacePanelExecutionTarget.mockResolvedValue({
+      projectId: 'session-1',
+      projectPath: '/home/ubuntu/project/ARIS',
+      runtimeSessionId: 'runtime-panel-1',
+      executionPath: '/home/ubuntu/project/ARIS/.worktrees/panel-1',
+      workspacePanelId: 'panel-1',
+      branch: 'parallel/panel-1',
+      source: 'workspace-panel',
+    });
+    mocks.getGitSidebarOverview.mockResolvedValue({
+      workspacePath: '/home/ubuntu/project/ARIS/.worktrees/panel-1',
+      branch: 'parallel/panel-1',
+      upstreamBranch: null,
+      ahead: 0,
+      behind: 0,
+      isClean: true,
+      stagedCount: 0,
+      unstagedCount: 0,
+      untrackedCount: 0,
+      conflictedCount: 0,
+      files: [],
+    });
+
+    await GET(
+      new NextRequest('http://localhost/api/runtime/sessions/session-1/git?workspacePanelId=panel-1'),
+      { params: Promise.resolve({ sessionId: 'session-1' }) },
+    );
+
+    expect(mocks.resolveWorkspacePanelExecutionTarget).toHaveBeenCalledWith({
+      userId: 'user-1',
+      projectId: 'session-1',
+      workspacePanelId: 'panel-1',
+    });
+    expect(mocks.getGitSidebarOverview).toHaveBeenCalledWith('/home/ubuntu/project/ARIS/.worktrees/panel-1');
   });
 
   it('returns file diff when requested', async () => {

@@ -2917,6 +2917,7 @@ function ProjectParallelChatPane({
         agent: selectedProvider,
         model: activeModelLabel,
         modelReasoningEffort: serializeReasoningEffort(selectedEffort),
+        workspacePanelId: panelId,
       } : {
         type: 'message',
         title: 'User Instruction',
@@ -3207,6 +3208,7 @@ function ProjectChatSurface({
   const [parallelPanelState, setParallelPanelState] = useState<ProjectParallelPanelTreeState | null>(null);
   const [parallelSurfaceDropEdge, setParallelSurfaceDropEdge] = useState<ProjectParallelPanelDropEdge | null>(null);
   const [parallelLayoutHydrated, setParallelLayoutHydrated] = useState(false);
+  const activeWorkspacePanelId = parallelPanelState?.activePanelId ?? null;
   const visibleEvents = events.slice(-40);
   const activeModelLabel = selectedModel || runtimeModelLabel;
   const activeAgent: SessionSummary['agent'] = selectedProvider;
@@ -3231,7 +3233,10 @@ function ProjectChatSurface({
   const parallelLayoutStorageKey = useMemo(() => createProjectPanelLayoutStorageKey(projectId), [projectId]);
   const prototypeRef = useRef<HTMLDivElement | null>(null);
   const composerWrapRef = useRef<HTMLElement | null>(null);
-  const workspaceFiles = useWorkspaceFiles('/workspace');
+  const workspaceFiles = useWorkspaceFiles('/workspace', {
+    projectId,
+    workspacePanelId: activeWorkspacePanelId,
+  });
   const terminalSnippets = [
     { id: 'test', name: 'test target', cmd: 'npm test -- --run tests/projectListSurface.test.ts', tag: 'test' },
     { id: 'mobile', name: 'mobile guard', cmd: 'npm test -- --run tests/mobileOverflowLayout.test.ts', tag: 'mobile' },

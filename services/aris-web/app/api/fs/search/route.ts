@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { requireApiUser } from '@/lib/auth/guard';
-import { resolveFsPath } from '@/lib/fs/pathResolver';
+import { resolveFsRequestPath, workspacePanelTargetErrorResponse } from '@/lib/fs/requestPath';
 const MAX_RESULTS = 100;
 const MAX_DEPTH = 8;
 const IGNORE_DIRS = new Set([
@@ -71,7 +71,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ results: [] });
   }
 
-  const { visiblePath, runtimePath } = resolveFsPath(requestedRootPath);
+  let visiblePath: string;
+  let runtimePath: string;
+  try {
+    ({ visiblePath, runtimePath } = await resolveFsRequestPath({
+      request,
+      userId: auth.user.id,
+      requestedPath: requestedRootPath,
+    }));
+  } catch (error) {
+    const response = workspacePanelTargetErrorResponse(error);
+    return response ?? NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid path' }, { status: 400 });
+  }
   try {
     const stat = await fs.stat(runtimePath);
     if (!stat.isDirectory()) {

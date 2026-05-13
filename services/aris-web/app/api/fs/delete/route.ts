@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import { requireApiUser } from '@/lib/auth/guard';
-import { resolveFsPath } from '@/lib/fs/pathResolver';
+import { resolveFsRequestPath, workspacePanelTargetErrorResponse } from '@/lib/fs/requestPath';
 
 export async function DELETE(request: NextRequest) {
   const auth = await requireApiUser(request);
@@ -14,7 +14,17 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Valid path required' }, { status: 400 });
   }
 
-  const { runtimePath } = resolveFsPath(targetPath);
+  let runtimePath: string;
+  try {
+    ({ runtimePath } = await resolveFsRequestPath({
+      request,
+      userId: auth.user.id,
+      requestedPath: targetPath,
+    }));
+  } catch (error) {
+    const response = workspacePanelTargetErrorResponse(error);
+    return response ?? NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid path' }, { status: 400 });
+  }
 
   try {
     await fs.rm(runtimePath, { recursive: true, force: true });

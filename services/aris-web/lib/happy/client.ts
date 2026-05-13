@@ -884,6 +884,7 @@ export async function submitUserPrompt(input: {
 
 export async function runChatTerminalCommand(input: {
   sessionId: string;
+  runtimeSessionId?: string;
   chatId: string;
   command: string;
 }): Promise<UiEvent[]> {
@@ -891,6 +892,7 @@ export async function runChatTerminalCommand(input: {
     method: 'POST',
     body: JSON.stringify({
       sessionId: input.sessionId,
+      ...(input.runtimeSessionId ? { runtimeSessionId: input.runtimeSessionId } : {}),
       command: input.command,
     }),
   });

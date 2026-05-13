@@ -61,6 +61,7 @@ type AppendChatEventInput = {
 
 type RunTerminalCommandInput = {
   sessionId: string;
+  runtimeSessionId?: string;
   command: string;
 };
 
@@ -717,17 +718,27 @@ export class RuntimeStore {
       throw new Error('COMMAND_REQUIRED');
     }
 
-    const session = await this.delegate.getSession(input.sessionId);
-    if (!session) {
+    const persistenceSession = await this.delegate.getSession(input.sessionId);
+    if (!persistenceSession) {
       throw new Error('SESSION_NOT_FOUND');
+    }
+    const runtimeSessionId = typeof input.runtimeSessionId === 'string' && input.runtimeSessionId.trim().length > 0
+      ? input.runtimeSessionId.trim()
+      : input.sessionId;
+    const executionSession = runtimeSessionId === input.sessionId
+      ? persistenceSession
+      : await this.delegate.getSession(runtimeSessionId);
+    if (!executionSession) {
+      throw new Error('RUNTIME_SESSION_NOT_FOUND');
     }
 
     const startedAt = new Date().toISOString();
     let stdout = '';
     let stderr = '';
     let exitCode = 0;
+    let cwd = '';
     try {
-      const cwd = this.resolveExecutionCwd(session.metadata.path, session.metadata.branch);
+      cwd = this.resolveExecutionCwd(executionSession.metadata.path, executionSession.metadata.branch);
       const result = await execAsync(command, {
         cwd,
         timeout: TERMINAL_COMMAND_TIMEOUT_MS,
@@ -761,6 +772,8 @@ export class RuntimeStore {
         completedAt: new Date().toISOString(),
         exitCode,
         command,
+        execCwd: cwd,
+        ...(runtimeSessionId !== input.sessionId ? { runtimeSessionId } : {}),
       },
     });
   }

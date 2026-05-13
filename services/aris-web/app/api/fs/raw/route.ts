@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { requireApiUser } from '@/lib/auth/guard';
-import { resolveFsPath } from '@/lib/fs/pathResolver';
+import { resolveFsRequestPath, workspacePanelTargetErrorResponse } from '@/lib/fs/requestPath';
 
 const MIME_TYPES: Record<string, string> = {
   pdf: 'application/pdf',
@@ -23,7 +23,17 @@ export async function GET(request: NextRequest) {
   const filePath = searchParams.get('path');
   if (!filePath) return NextResponse.json({ error: 'Path required' }, { status: 400 });
 
-  const { runtimePath } = resolveFsPath(filePath);
+  let runtimePath: string;
+  try {
+    ({ runtimePath } = await resolveFsRequestPath({
+      request,
+      userId: auth.user.id,
+      requestedPath: filePath,
+    }));
+  } catch (error) {
+    const response = workspacePanelTargetErrorResponse(error);
+    return response ?? NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid path' }, { status: 400 });
+  }
 
   try {
     const stat = await fs.stat(runtimePath);
