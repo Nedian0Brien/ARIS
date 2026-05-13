@@ -844,6 +844,7 @@ export async function appendSessionMessage(input: {
 
 export async function submitUserPrompt(input: {
   sessionId: string;
+  runtimeSessionId?: string;
   title?: string;
   text: string;
   meta?: Record<string, unknown>;
@@ -856,6 +857,7 @@ export async function submitUserPrompt(input: {
         method: 'POST',
         body: JSON.stringify({
           sessionId: input.sessionId,
+          ...(input.runtimeSessionId ? { runtimeSessionId: input.runtimeSessionId } : {}),
           type: 'message',
           title: input.title,
           text: input.text,

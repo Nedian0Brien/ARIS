@@ -101,3 +101,26 @@ export async function ensureWorktree(
 
   return worktreePath;
 }
+
+export async function removeWorktree(
+  projectPath: string,
+  branch: string | undefined,
+): Promise<void> {
+  if (!branch) {
+    return;
+  }
+
+  const safeBranch = sanitizeBranchName(branch);
+  const worktreePath = join(projectPath, WORKTREES_DIR, safeBranch);
+  if (!existsSync(worktreePath)) {
+    return;
+  }
+
+  try {
+    await execFileAsync('git', ['worktree', 'remove', worktreePath], {
+      cwd: projectPath,
+    });
+  } catch (error) {
+    throw new Error(`WORKTREE_REMOVE_FAILED: ${formatGitError(error)}`);
+  }
+}

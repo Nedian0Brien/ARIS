@@ -7,6 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const schema = readFileSync(resolve(__dirname, '../prisma/schema.prisma'), 'utf8');
 const projectWorkspaces = readFileSync(resolve(__dirname, '../lib/happy/projectWorkspaces.ts'), 'utf8');
 const workspaceRoute = readFileSync(resolve(__dirname, '../app/api/projects/[projectId]/workspace/route.ts'), 'utf8');
+const homePageClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
 
 describe('workspace panel runtime linkage', () => {
   it('persists panel runtime/worktree metadata as first-class WorkspacePanel rows', () => {
@@ -34,5 +35,16 @@ describe('workspace panel runtime linkage', () => {
     expect(workspaceRoute).toContain('panelRuntime');
     expect(workspaceRoute).toContain('runtimeSessionId');
     expect(workspaceRoute).toContain('worktreePath');
+  });
+
+  it('creates and repairs panel runtime sessions from the workspace PATCH boundary', () => {
+    expect(workspaceRoute).toContain('ensureProjectWorkspacePanelRuntimes');
+    expect(workspaceRoute).toContain('repairPanelRuntimes');
+  });
+
+  it('routes parallel panel agent state through the panel runtime session', () => {
+    expect(homePageClient).toContain('useSessionRuntime(runtimeSessionId, chat.id, true)');
+    expect(homePageClient).toContain('workspacePanelId: panelId');
+    expect(homePageClient).toContain('runtimeSessionId: runtimeSessionId !== projectId ? runtimeSessionId : undefined');
   });
 });

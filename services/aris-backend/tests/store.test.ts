@@ -7,11 +7,12 @@ vi.mock('../src/runtime/worktreeManager.js', async () => {
   return {
     ...actual,
     ensureWorktree: vi.fn().mockResolvedValue('/projects/app/.worktrees/parallel/panel-one'),
+    removeWorktree: vi.fn().mockResolvedValue(undefined),
   };
 });
 
 import { RuntimeStore } from '../src/store.js';
-import { ensureWorktree } from '../src/runtime/worktreeManager.js';
+import { ensureWorktree, removeWorktree } from '../src/runtime/worktreeManager.js';
 
 function buildRuntimeStore(input: {
   delegate: Record<string, unknown>;
@@ -31,6 +32,8 @@ function buildRuntimeStore(input: {
 beforeEach(() => {
   vi.mocked(ensureWorktree).mockReset();
   vi.mocked(ensureWorktree).mockResolvedValue('/projects/app/.worktrees/parallel/panel-one');
+  vi.mocked(removeWorktree).mockReset();
+  vi.mocked(removeWorktree).mockResolvedValue(undefined);
 });
 
 describe('RuntimeStore.createSession', () => {
@@ -113,6 +116,32 @@ describe('RuntimeStore.isSessionRunning', () => {
     await expect(store.isSessionRunning('session-1', 'chat-1')).resolves.toBe(true);
     expect(runtimeExecutor.isSessionRunning).toHaveBeenCalledWith('session-1', 'chat-1');
     expect(delegate.isSessionRunning).toHaveBeenCalledWith('session-1', 'chat-1');
+  });
+});
+
+describe('RuntimeStore.applySessionAction', () => {
+  it('removes a branch worktree when a runtime session is killed', async () => {
+    const delegate = {
+      getSession: vi.fn().mockResolvedValue({
+        id: 'runtime-panel-1',
+        metadata: {
+          path: '/projects/app',
+          branch: 'aris/panel/project-1/panel-1',
+        },
+      }),
+      applySessionAction: vi.fn().mockResolvedValue({
+        accepted: true,
+        message: 'KILL acknowledged',
+        at: '2026-05-13T00:00:00.000Z',
+      }),
+    };
+    const store = buildRuntimeStore({ delegate });
+
+    await expect(store.applySessionAction('runtime-panel-1', 'kill')).resolves.toMatchObject({
+      accepted: true,
+    });
+
+    expect(removeWorktree).toHaveBeenCalledWith('/projects/app', 'aris/panel/project-1/panel-1');
   });
 });
 
@@ -225,6 +254,51 @@ describe('RuntimeStore.appendChatEvent', () => {
     });
 
     expect(runtimeExecutor.triggerPersistedUserMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('RuntimeStore.submitChatUserPrompt', () => {
+  it('records the user prompt on the project session while triggering the panel runtime session', async () => {
+    const createdEvent = {
+      id: 'event-1',
+      sessionId: 'project-1',
+      type: 'message',
+      title: 'User Instruction',
+      text: 'run in panel',
+      createdAt: '2026-05-13T00:00:00.000Z',
+      meta: {
+        role: 'user',
+        chatId: 'chat-1',
+      },
+    };
+    const delegate = {
+      appendChatEvent: vi.fn().mockResolvedValue(createdEvent),
+    };
+    const runtimeExecutor = {
+      triggerPersistedUserMessage: vi.fn().mockResolvedValue(undefined),
+    };
+    const store = buildRuntimeStore({ delegate, runtimeExecutor });
+
+    await expect(store.submitChatUserPrompt('chat-1', {
+      sessionId: 'project-1',
+      runtimeSessionId: 'runtime-panel-1',
+      type: 'message',
+      title: 'User Instruction',
+      text: 'run in panel',
+      meta: { role: 'user', chatId: 'chat-1' },
+    })).resolves.toEqual(createdEvent);
+
+    expect(delegate.appendChatEvent).toHaveBeenCalledWith('chat-1', expect.objectContaining({
+      sessionId: 'project-1',
+    }));
+    expect(runtimeExecutor.triggerPersistedUserMessage).toHaveBeenCalledWith('runtime-panel-1', expect.objectContaining({
+      text: 'run in panel',
+      meta: expect.objectContaining({
+        chatId: 'chat-1',
+        runtimeSessionId: 'runtime-panel-1',
+        runtimePersistenceSessionId: 'project-1',
+      }),
+    }));
   });
 });
 

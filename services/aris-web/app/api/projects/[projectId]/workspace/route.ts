@@ -3,6 +3,7 @@ import { requireApiUser } from '@/lib/auth/guard';
 import { listProjectChats } from '@/lib/happy/projectChats';
 import { getProjectWorkspace, saveProjectWorkspace } from '@/lib/happy/projectWorkspaces';
 import type { ProjectWorkspacePanelRuntimePatch } from '@/lib/happy/projectWorkspaces';
+import { ensureProjectWorkspacePanelRuntimes } from '@/lib/happy/workspacePanelRuntimes';
 import type { ProjectParallelPanelTreeState } from '@/app/projectParallelPanels';
 
 function normalizeOptionalString(value: unknown): string | null | undefined {
@@ -81,15 +82,28 @@ export async function PATCH(
     const body = (await request.json().catch(() => ({}))) as {
       layout?: ProjectParallelPanelTreeState | null;
       panelRuntime?: unknown;
+      repairPanelRuntimes?: boolean;
     };
     const chats = await listProjectChats({ projectId, userId: auth.user.id, ensureDefault: false });
     const validChatIds = new Set(chats.map((chat) => chat.id));
-    const workspace = await saveProjectWorkspace({
+    const savedWorkspace = await saveProjectWorkspace({
       userId: auth.user.id,
       projectId,
       layout: body.layout ?? null,
       validChatIds,
       panelRuntime: normalizePanelRuntime(body.panelRuntime),
+    });
+    if (savedWorkspace.layout) {
+      await ensureProjectWorkspacePanelRuntimes({
+        userId: auth.user.id,
+        projectId,
+        repairStale: body.repairPanelRuntimes === true,
+      });
+    }
+    const workspace = await getProjectWorkspace({
+      userId: auth.user.id,
+      projectId,
+      validChatIds,
     });
     return NextResponse.json({ workspace });
   } catch (error) {

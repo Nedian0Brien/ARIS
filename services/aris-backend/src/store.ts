@@ -14,7 +14,7 @@ import type {
 } from './types.js';
 import { RuntimeCore } from './runtime/runtimeCore.js';
 import { PrismaRuntimeStore } from './runtime/prismaStore.js';
-import { computeWorktreePath, ensureWorktree } from './runtime/worktreeManager.js';
+import { computeWorktreePath, ensureWorktree, removeWorktree } from './runtime/worktreeManager.js';
 
 type RuntimeBackend = 'mock' | 'prisma';
 const execAsync = promisify(exec);
@@ -52,6 +52,7 @@ type AppendMessageInput = {
 
 type AppendChatEventInput = {
   sessionId: string;
+  runtimeSessionId?: string;
   runId?: string;
   type: string;
   title?: string;
@@ -702,11 +703,22 @@ export class RuntimeStore {
       source: 'mutation',
     });
     if (this.runtimeExecutor) {
-      await this.runtimeExecutor.triggerPersistedUserMessage(promptInput.sessionId, {
+      const runtimeSessionId = typeof input.runtimeSessionId === 'string' && input.runtimeSessionId.trim().length > 0
+        ? input.runtimeSessionId.trim()
+        : promptInput.sessionId;
+      await this.runtimeExecutor.triggerPersistedUserMessage(runtimeSessionId, {
         type: promptInput.type,
         title: promptInput.title,
         text: promptInput.text,
-        meta: promptInput.meta,
+        meta: {
+          ...(promptInput.meta ?? {}),
+          ...(runtimeSessionId !== promptInput.sessionId
+            ? {
+                runtimeSessionId,
+                runtimePersistenceSessionId: promptInput.sessionId,
+              }
+            : {}),
+        },
       });
     }
     return created;
@@ -789,6 +801,9 @@ export class RuntimeStore {
   }
 
   async applySessionAction(sessionId: string, action: SessionAction, chatId?: string) {
+    const sessionForCleanup = action === 'kill'
+      ? await this.delegate.getSession(sessionId).catch(() => null)
+      : null;
     if (this.runtimeExecutor) {
       if (action === 'retry' || action === 'resume') {
         const result = await this.delegate.applySessionAction(sessionId, action, chatId);
@@ -804,6 +819,7 @@ export class RuntimeStore {
       if (action === 'kill') {
         await this.runtimeExecutor.applySessionAction(sessionId, 'abort');
         const result = await this.delegate.applySessionAction(sessionId, action, chatId);
+        await this.cleanupKilledSessionWorktree(sessionForCleanup);
         this.emitRealtimeChannel({ type: 'session.action', sessionId, ...(chatId ? { chatId } : {}), action });
         return result;
       }
@@ -813,8 +829,22 @@ export class RuntimeStore {
       return result;
     }
     const result = await this.delegate.applySessionAction(sessionId, action, chatId);
+    if (action === 'kill') {
+      await this.cleanupKilledSessionWorktree(sessionForCleanup);
+    }
     this.emitRealtimeChannel({ type: 'session.action', sessionId, ...(chatId ? { chatId } : {}), action });
     return result;
+  }
+
+  private async cleanupKilledSessionWorktree(session: RuntimeSession | null): Promise<void> {
+    const branch = typeof session?.metadata.branch === 'string' && session.metadata.branch.trim().length > 0
+      ? session.metadata.branch.trim()
+      : null;
+    if (!session || !branch) {
+      return;
+    }
+    const projectPath = this.resolveExecutionCwd(session.metadata.path);
+    await removeWorktree(projectPath, branch).catch(() => undefined);
   }
 
   async isSessionRunning(sessionId: string, chatId?: string) {

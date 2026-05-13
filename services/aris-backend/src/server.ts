@@ -72,6 +72,7 @@ const appendMessageSchema = z.object({
 
 const appendChatEventSchema = z.object({
   sessionId: z.string().min(1),
+  runtimeSessionId: z.string().min(1).optional(),
   runId: z.string().min(1).optional(),
   type: z.string().min(1),
   title: z.string().min(1).optional(),
@@ -739,11 +740,23 @@ export function buildServer(config: ServerConfig) {
       if (!supportsChatScopedRuntime(session)) {
         return reply.code(409).send({ error: 'Legacy sessions are read-only for chat-scoped runtime writes.' });
       }
+      if (parsed.data.runtimeSessionId && parsed.data.runtimeSessionId !== parsed.data.sessionId) {
+        const runtimeSession = await store.getSession(parsed.data.runtimeSessionId);
+        if (!runtimeSession) {
+          return reply.code(404).send({ error: 'Runtime session not found' });
+        }
+        if (!supportsChatScopedRuntime(runtimeSession)) {
+          return reply.code(409).send({ error: 'Legacy runtime sessions are read-only for chat-scoped runtime writes.' });
+        }
+      }
       const event = await store.submitChatUserPrompt(chatId, parsed.data);
       return reply.code(201).send({ event });
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
         return reply.code(404).send({ error: 'Session not found' });
+      }
+      if (error instanceof Error && error.message === 'RUNTIME_SESSION_NOT_FOUND') {
+        return reply.code(404).send({ error: 'Runtime session not found' });
       }
       if (error instanceof Error && error.message === 'CHAT_NOT_FOUND') {
         return reply.code(404).send({ error: 'Chat not found' });

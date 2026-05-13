@@ -5,6 +5,7 @@ import {
   serializeProjectPanelState,
   type ProjectParallelPanelTreeState,
 } from '@/app/projectParallelPanels';
+import { cleanupWorkspacePanelRuntimes } from '@/lib/happy/workspacePanelRuntimes';
 
 const DEFAULT_WORKSPACE_TITLE = 'Default workspace';
 
@@ -116,6 +117,11 @@ export async function syncWorkspacePanelsForLayout(input: {
   panelRuntime?: Record<string, ProjectWorkspacePanelRuntimePatch>;
 }): Promise<ProjectWorkspacePanelPayload[]> {
   if (!input.layout) {
+    const removedRows = await prisma.workspacePanel.findMany({
+      where: { workspaceId: input.workspaceId },
+      select: { runtimeSessionId: true },
+    });
+    await cleanupWorkspacePanelRuntimes(removedRows);
     await prisma.workspacePanel.deleteMany({
       where: { workspaceId: input.workspaceId },
     });
@@ -124,6 +130,14 @@ export async function syncWorkspacePanelsForLayout(input: {
 
   const panels = Object.values(input.layout.panels);
   const panelIds = panels.map((panel) => panel.id);
+  const removedRows = await prisma.workspacePanel.findMany({
+    where: {
+      workspaceId: input.workspaceId,
+      panelId: { notIn: panelIds },
+    },
+    select: { runtimeSessionId: true },
+  });
+  await cleanupWorkspacePanelRuntimes(removedRows);
   await prisma.workspacePanel.deleteMany({
     where: {
       workspaceId: input.workspaceId,

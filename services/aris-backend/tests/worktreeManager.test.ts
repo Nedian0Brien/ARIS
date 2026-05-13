@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { resolveWorktreePath, ensureWorktree, sanitizeBranchName, computeWorktreePath } from '../src/runtime/worktreeManager.js';
+import { resolveWorktreePath, ensureWorktree, removeWorktree, sanitizeBranchName, computeWorktreePath } from '../src/runtime/worktreeManager.js';
 
 function initGitRepo(projectPath: string) {
   execFileSync('git', ['init'], { cwd: projectPath, stdio: 'ignore' });
@@ -103,5 +103,26 @@ describe('ensureWorktree', () => {
     await expect(ensureWorktree(projectPath, 'parallel/fails')).rejects.toThrow(
       'WORKTREE_CREATE_FAILED: fatal: not a git repository',
     );
+  });
+});
+
+describe('removeWorktree', () => {
+  it('removes a clean branch-backed worktree', async () => {
+    const projectPath = mkdtempSync(join(tmpdir(), 'aris-worktree-remove-'));
+    initGitRepo(projectPath);
+    const worktreePath = await ensureWorktree(projectPath, 'parallel/remove-me');
+
+    await expect(removeWorktree(projectPath, 'parallel/remove-me')).resolves.toBeUndefined();
+    expect(existsSync(worktreePath)).toBe(false);
+  });
+
+  it('does not force-remove a dirty worktree', async () => {
+    const projectPath = mkdtempSync(join(tmpdir(), 'aris-worktree-dirty-'));
+    initGitRepo(projectPath);
+    const worktreePath = await ensureWorktree(projectPath, 'parallel/dirty');
+    writeFileSync(join(worktreePath, 'dirty.txt'), 'uncommitted\n');
+
+    await expect(removeWorktree(projectPath, 'parallel/dirty')).rejects.toThrow('WORKTREE_REMOVE_FAILED');
+    expect(existsSync(worktreePath)).toBe(true);
   });
 });

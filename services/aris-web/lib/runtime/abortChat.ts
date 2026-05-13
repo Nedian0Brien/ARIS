@@ -7,6 +7,7 @@ export type AbortChatInput = {
 
 export type AbortProjectChatInput = {
   projectId: string;
+  runtimeSessionId?: string | null;
   chatId?: string | null;
 };
 
@@ -46,6 +47,9 @@ export async function abortActiveChat({ sessionId, chatId }: AbortChatInput): Pr
   return abortChatViaRuntimePath(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/actions`, chatId);
 }
 
-export async function abortProjectChat({ projectId, chatId }: AbortProjectChatInput): Promise<AbortChatResult> {
-  return abortChatViaRuntimePath(buildProjectRuntimeActionPath(projectId), chatId);
+export async function abortProjectChat({ projectId, runtimeSessionId, chatId }: AbortProjectChatInput): Promise<AbortChatResult> {
+  const targetRuntimeSessionId = typeof runtimeSessionId === 'string' && runtimeSessionId.trim()
+    ? runtimeSessionId.trim()
+    : projectId;
+  return abortChatViaRuntimePath(buildProjectRuntimeActionPath(targetRuntimeSessionId), chatId);
 }

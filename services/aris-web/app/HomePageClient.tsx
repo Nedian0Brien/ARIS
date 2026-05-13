@@ -115,6 +115,14 @@ type ProjectChatDragPayload = {
 type ProjectPanelNodeDragPayload = ProjectChatDragPayload & {
   panelId: string;
 };
+type ProjectWorkspacePanelRuntime = {
+  panelId: string;
+  chatId: string;
+  runtimeSessionId: string | null;
+  branch: string | null;
+  worktreePath: string | null;
+};
+type ProjectWorkspacePanelRuntimeMap = Record<string, ProjectWorkspacePanelRuntime>;
 type ProjectChatDragStartHandler = (
   event: DragEvent<HTMLElement>,
   projectId: string,
@@ -702,27 +710,54 @@ async function createProjectChat(
 async function fetchProjectWorkspaceLayout(
   projectId: string,
   validChatIds: Set<string>,
-): Promise<ProjectParallelPanelTreeState | null> {
+): Promise<{ layout: ProjectParallelPanelTreeState | null; panelRuntime: ProjectWorkspacePanelRuntimeMap }> {
   const response = await fetch(withAppBasePath(buildProjectWorkspacePath(projectId)), { cache: 'no-store' });
-  if (!response.ok) return null;
+  if (!response.ok) return { layout: null, panelRuntime: {} };
   const body = (await response.json().catch(() => ({}))) as {
     workspace?: {
       layout?: ProjectParallelPanelTreeState | null;
+      panels?: ProjectWorkspacePanelRuntime[];
     };
   };
   const layout = body.workspace?.layout ?? null;
-  return layout ? parseProjectPanelState(JSON.stringify(layout), validChatIds) : null;
+  const panels = Array.isArray(body.workspace?.panels) ? body.workspace.panels : [];
+  const panelRuntime = panels.reduce<ProjectWorkspacePanelRuntimeMap>((acc, panel) => {
+    if (panel && typeof panel.panelId === 'string' && validChatIds.has(panel.chatId)) {
+      acc[panel.panelId] = panel;
+    }
+    return acc;
+  }, {});
+  return {
+    layout: layout ? parseProjectPanelState(JSON.stringify(layout), validChatIds) : null,
+    panelRuntime,
+  };
 }
 
 async function saveProjectWorkspaceLayout(
   projectId: string,
   layout: ProjectParallelPanelTreeState | null,
-): Promise<void> {
-  await fetch(withAppBasePath(buildProjectWorkspacePath(projectId)), {
+  options: { repairPanelRuntimes?: boolean } = {},
+): Promise<ProjectWorkspacePanelRuntimeMap> {
+  const response = await fetch(withAppBasePath(buildProjectWorkspacePath(projectId)), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ layout }),
+    body: JSON.stringify({ layout, ...(options.repairPanelRuntimes ? { repairPanelRuntimes: true } : {}) }),
   });
+  const body = (await response.json().catch(() => ({}))) as {
+    workspace?: {
+      panels?: ProjectWorkspacePanelRuntime[];
+    };
+  };
+  if (!response.ok) {
+    throw new Error('Workspace layout 저장에 실패했습니다.');
+  }
+  const panels = Array.isArray(body.workspace?.panels) ? body.workspace.panels : [];
+  return panels.reduce<ProjectWorkspacePanelRuntimeMap>((acc, panel) => {
+    if (panel && typeof panel.panelId === 'string') {
+      acc[panel.panelId] = panel;
+    }
+    return acc;
+  }, {});
 }
 
 function navigateTo(path: string) {
@@ -2664,7 +2699,9 @@ function ProjectParallelPanelTree({
   onPanelDragEnd,
   onPanelDragStart,
   onPanelDrop,
+  onRepairPanelRuntime,
   onResize,
+  panelRuntime,
   panelState,
   recentPreview,
   session,
@@ -2678,7 +2715,9 @@ function ProjectParallelPanelTree({
   onPanelDragEnd: () => void;
   onPanelDragStart: ProjectPanelNodeDragStartHandler;
   onPanelDrop: ProjectPanelDropHandler;
+  onRepairPanelRuntime: (panelId: string) => void;
   onResize: (leftAnchorId: string, rightAnchorId: string, ratio: number) => void;
+  panelRuntime: ProjectWorkspacePanelRuntimeMap;
   panelState: ProjectParallelPanelTreeState;
   recentPreview: string;
   session: SessionSummary;
@@ -2714,8 +2753,10 @@ function ProjectParallelPanelTree({
         onPanelDragEnd={onPanelDragEnd}
         onPanelDragStart={(event) => onPanelDragStart(event, node.panelId, panelChat)}
         onPanelDrop={(edge, event) => onPanelDrop(node.panelId, edge, event)}
+        onRepairPanelRuntime={() => onRepairPanelRuntime(node.panelId)}
         panelId={node.panelId}
         panelLabel={`PANEL ${collectProjectPanelIds(panelState.layout).indexOf(node.panelId) + 1}`}
+        panelRuntime={panelRuntime[node.panelId] ?? null}
         recentPreview={recentPreview}
         session={session}
         showClose={Object.keys(panelState.panels).length > 1}
@@ -2740,7 +2781,9 @@ function ProjectParallelPanelTree({
           onPanelDragEnd={onPanelDragEnd}
           onPanelDragStart={onPanelDragStart}
           onPanelDrop={onPanelDrop}
+          onRepairPanelRuntime={onRepairPanelRuntime}
           onResize={onResize}
+          panelRuntime={panelRuntime}
           panelState={panelState}
           recentPreview={recentPreview}
           session={session}
@@ -2764,7 +2807,9 @@ function ProjectParallelPanelTree({
           onPanelDragEnd={onPanelDragEnd}
           onPanelDragStart={onPanelDragStart}
           onPanelDrop={onPanelDrop}
+          onRepairPanelRuntime={onRepairPanelRuntime}
           onResize={onResize}
+          panelRuntime={panelRuntime}
           panelState={panelState}
           recentPreview={recentPreview}
           session={session}
@@ -2784,8 +2829,10 @@ function ProjectParallelChatPane({
   onPanelDragEnd,
   onPanelDragStart,
   onPanelDrop,
+  onRepairPanelRuntime,
   panelId,
   panelLabel,
+  panelRuntime,
   recentPreview,
   session,
   showClose,
@@ -2799,8 +2846,10 @@ function ProjectParallelChatPane({
   onPanelDragEnd: () => void;
   onPanelDragStart: (event: DragEvent<HTMLElement>) => void;
   onPanelDrop: (edge: ProjectParallelPanelDropEdge, event: DragEvent<HTMLElement>) => void;
+  onRepairPanelRuntime: () => void;
   panelId: string;
   panelLabel: string;
+  panelRuntime: ProjectWorkspacePanelRuntime | null;
   recentPreview: string;
   session: SessionSummary;
   showClose: boolean;
@@ -2822,7 +2871,9 @@ function ProjectParallelChatPane({
   const frameRef = useRef<HTMLElement | null>(null);
   const activeAgent: SessionSummary['agent'] = selectedProvider;
   const activeModelLabel = selectedModel || chat.model || modelLabel;
-  const { isRunning: runtimeRunning } = useSessionRuntime(projectId, chat.id, true);
+  const runtimeSessionId = panelRuntime?.runtimeSessionId ?? projectId;
+  const runtimeNeedsRepair = !panelRuntime?.runtimeSessionId || !panelRuntime.worktreePath;
+  const { isRunning: runtimeRunning } = useSessionRuntime(runtimeSessionId, chat.id, true);
   const visibleEvents = events.slice(-40);
   const hasRuntimeEvents = visibleEvents.length > 0;
   const projectRunActive = runtimeRunning || isSubmitting;
@@ -2925,6 +2976,7 @@ function ProjectParallelChatPane({
         meta: {
           role: 'user',
           chatId: chat.id,
+          workspacePanelId: panelId,
           agent: selectedProvider,
           model: activeModelLabel,
           mode: composerMode,
@@ -2969,7 +3021,11 @@ function ProjectParallelChatPane({
     if (isAborting || !projectRunActive) return;
     setIsAborting(true);
     try {
-      await abortProjectChat({ projectId, chatId: chat.id });
+      await abortProjectChat({
+        projectId,
+        runtimeSessionId: runtimeSessionId !== projectId ? runtimeSessionId : undefined,
+        chatId: chat.id,
+      });
     } catch (abortError) {
       setError(abortError instanceof Error ? abortError.message : '에이전트 실행 중단에 실패했습니다.');
     } finally {
@@ -3033,6 +3089,17 @@ function ProjectParallelChatPane({
         </button>
         <strong title={chat.title}>{chat.title}</strong>
         {runtimeRunning && <em>running</em>}
+        {runtimeNeedsRepair && (
+          <button
+            type="button"
+            className="pc-parallel__frame-action"
+            onClick={onRepairPanelRuntime}
+            aria-label="Repair panel runtime"
+            title="Repair panel runtime"
+          >
+            <RefreshCcw size={13} />
+          </button>
+        )}
         {showClose && (
           <button type="button" className="pc-parallel__frame-action" onClick={onClosePanel} aria-label="Close panel">
             <X size={13} />
@@ -3206,6 +3273,7 @@ function ProjectChatSurface({
   const [previewDevice, setPreviewDevice] = useState<'1200' | '768' | '390'>('1200');
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [parallelPanelState, setParallelPanelState] = useState<ProjectParallelPanelTreeState | null>(null);
+  const [parallelPanelRuntime, setParallelPanelRuntime] = useState<ProjectWorkspacePanelRuntimeMap>({});
   const [parallelSurfaceDropEdge, setParallelSurfaceDropEdge] = useState<ProjectParallelPanelDropEdge | null>(null);
   const [parallelLayoutHydrated, setParallelLayoutHydrated] = useState(false);
   const activeWorkspacePanelId = parallelPanelState?.activePanelId ?? null;
@@ -3390,6 +3458,11 @@ function ProjectChatSurface({
     const remainingPanels = nextState ? Object.values(nextState.panels) : [];
     const remainingSingleChatId = remainingPanels.length <= 1 ? remainingPanels[0]?.chatId ?? null : null;
     setParallelPanelState(remainingPanels.length <= 1 ? null : nextState);
+    setParallelPanelRuntime((current) => {
+      const nextRuntime = { ...current };
+      delete nextRuntime[panelId];
+      return remainingPanels.length <= 1 ? {} : nextRuntime;
+    });
     setParallelSurfaceDropEdge(null);
     if (remainingSingleChatId) onChatOpen(remainingSingleChatId);
   }, [onChatOpen, parallelPanelState]);
@@ -3449,6 +3522,7 @@ function ProjectChatSurface({
   const handleCloseProjectParallelChats = useCallback(() => {
     const activePanel = parallelPanelState?.panels[parallelPanelState.activePanelId] ?? null;
     setParallelPanelState(null);
+    setParallelPanelRuntime({});
     setParallelSurfaceDropEdge(null);
     if (activePanel?.chatId) onChatOpen(activePanel.chatId);
   }, [onChatOpen, parallelPanelState]);
@@ -3456,6 +3530,7 @@ function ProjectChatSurface({
   useEffect(() => {
     setParallelLayoutHydrated(false);
     setParallelPanelState(null);
+    setParallelPanelRuntime({});
     setParallelSurfaceDropEdge(null);
   }, [parallelLayoutStorageKey]);
 
@@ -3466,12 +3541,14 @@ function ProjectChatSurface({
     const validChatIds = new Set(chats.map((chat) => chat.id));
     const hydrateWorkspaceLayout = async () => {
       const serverRestored = await fetchProjectWorkspaceLayout(projectId, validChatIds).catch(() => null);
-      const localRestored = serverRestored ?? parseProjectPanelState(
+      const serverLayout = serverRestored?.layout ?? null;
+      const localRestored = serverLayout ?? parseProjectPanelState(
         readLocalStorage(parallelLayoutStorageKey),
         validChatIds,
       );
       if (cancelled) return;
       setParallelLayoutHydrated(true);
+      setParallelPanelRuntime(serverRestored?.panelRuntime ?? {});
 
       if (localRestored && Object.keys(localRestored.panels).length > 1) {
         setParallelPanelState(localRestored);
@@ -3492,13 +3569,23 @@ function ProjectChatSurface({
 
     if (parallelPanelState && Object.keys(parallelPanelState.panels).length > 1) {
       writeLocalStorage(parallelLayoutStorageKey, serializeProjectPanelState(parallelPanelState));
-      void saveProjectWorkspaceLayout(projectId, parallelPanelState).catch(() => undefined);
+      void saveProjectWorkspaceLayout(projectId, parallelPanelState)
+        .then((panelRuntime) => setParallelPanelRuntime(panelRuntime))
+        .catch(() => undefined);
       return;
     }
 
     removeLocalStorage(parallelLayoutStorageKey);
+    setParallelPanelRuntime({});
     void saveProjectWorkspaceLayout(projectId, null).catch(() => undefined);
   }, [parallelLayoutHydrated, parallelLayoutStorageKey, parallelPanelState, projectId, surfaceMode]);
+
+  const handleRepairProjectParallelPanelRuntime = useCallback((panelId: string) => {
+    if (!parallelPanelState?.panels[panelId]) return;
+    void saveProjectWorkspaceLayout(projectId, parallelPanelState, { repairPanelRuntimes: true })
+      .then((panelRuntime) => setParallelPanelRuntime(panelRuntime))
+      .catch(() => setError('패널 runtime을 복구하지 못했습니다.'));
+  }, [parallelPanelState, projectId]);
 
   useEffect(() => () => {
     if (workspaceCloseTimerRef.current !== null) {
@@ -3998,7 +4085,9 @@ function ProjectChatSurface({
               onPanelDragEnd={handleProjectParallelPanelDragEnd}
               onPanelDragStart={handleProjectParallelPanelDragStart}
               onPanelDrop={handleProjectParallelPanelDrop}
+              onRepairPanelRuntime={handleRepairProjectParallelPanelRuntime}
               onResize={handleProjectParallelResize}
+              panelRuntime={parallelPanelRuntime}
               panelState={parallelPanelState}
               recentPreview={recentPreview}
               session={session}

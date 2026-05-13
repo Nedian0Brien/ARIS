@@ -10,6 +10,13 @@ import {
 import { getUserModelSettings } from '@/lib/settings/providerPreferences';
 import { readChatImageAttachments } from '@/lib/chatImageAttachments';
 import { getHostHomeDir } from '@/lib/fs/pathResolver';
+import { ensureProjectWorkspacePanelRuntimes } from '@/lib/happy/workspacePanelRuntimes';
+import {
+  readWorkspacePanelIdFromRecord,
+  resolveWorkspacePanelExecutionTarget,
+  type WorkspacePanelExecutionTarget,
+  WorkspacePanelExecutionTargetError,
+} from '@/lib/workspacePanels/executionTarget';
 
 const CHAT_IMAGE_ASSET_ROOT = path.join(getHostHomeDir(), '.aris', 'chat-assets');
 
@@ -52,6 +59,31 @@ function normalizeImageAttachments(sessionId: string, meta: Record<string, unkno
       previewUrl: `/api/runtime/sessions/${encodeURIComponent(sessionSegment)}/assets/images?path=${encodeURIComponent(resolvedPath)}`,
     }];
   });
+}
+
+function workspacePanelTargetErrorResponse(error: unknown): NextResponse | null {
+  if (!(error instanceof WorkspacePanelExecutionTargetError)) return null;
+  if (error.code === 'PROJECT_NOT_FOUND') {
+    return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다.' }, { status: 404 });
+  }
+  return NextResponse.json({ error: '워크스페이스 패널을 찾을 수 없습니다.' }, { status: 404 });
+}
+
+async function resolveWorkspacePanelExecutionTargetWithRuntime(input: {
+  userId: string;
+  projectId: string;
+  workspacePanelId: string | null;
+}): Promise<WorkspacePanelExecutionTarget | null> {
+  if (!input.workspacePanelId) return null;
+  let target = await resolveWorkspacePanelExecutionTarget(input);
+  if (target.source === 'workspace-panel' && target.runtimeSessionId === input.projectId) {
+    await ensureProjectWorkspacePanelRuntimes({
+      userId: input.userId,
+      projectId: input.projectId,
+    });
+    target = await resolveWorkspacePanelExecutionTarget(input);
+  }
+  return target;
 }
 
 export async function GET(
@@ -208,9 +240,21 @@ export async function POST(
       }
     }
 
+    const workspacePanelId = readWorkspacePanelIdFromRecord(meta);
+    const target = await resolveWorkspacePanelExecutionTargetWithRuntime({
+      userId: auth.user.id,
+      projectId: sessionId,
+      workspacePanelId,
+    });
+    if (target && target.runtimeSessionId !== sessionId) {
+      meta.runtimeSessionId = target.runtimeSessionId;
+      meta.workspacePanelId = target.workspacePanelId;
+    }
+
     const event = role === 'user' && type === 'message'
       ? await submitUserPrompt({
           sessionId,
+          runtimeSessionId: target?.runtimeSessionId === sessionId ? undefined : target?.runtimeSessionId,
           title: body.title,
           text: body.text,
           meta,
@@ -227,6 +271,8 @@ export async function POST(
     if (error instanceof HappyHttpError && [401, 403, 404].includes(error.status)) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
+    const response = workspacePanelTargetErrorResponse(error);
+    if (response) return response;
     const message = error instanceof Error ? error.message : 'Failed to send message';
     return NextResponse.json({ error: message }, { status: 500 });
   }

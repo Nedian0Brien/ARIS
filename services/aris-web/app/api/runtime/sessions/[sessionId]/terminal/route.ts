@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
 import { runChatTerminalCommand, HappyHttpError } from '@/lib/happy/client';
+import { ensureProjectWorkspacePanelRuntimes } from '@/lib/happy/workspacePanelRuntimes';
 import {
   readWorkspacePanelIdFromRecord,
   resolveWorkspacePanelExecutionTarget,
+  type WorkspacePanelExecutionTarget,
   WorkspacePanelExecutionTargetError,
 } from '@/lib/workspacePanels/executionTarget';
 
@@ -13,6 +15,22 @@ function workspacePanelTargetErrorResponse(error: unknown): NextResponse | null 
     return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다.' }, { status: 404 });
   }
   return NextResponse.json({ error: '워크스페이스 패널을 찾을 수 없습니다.' }, { status: 404 });
+}
+
+async function resolveWorkspacePanelExecutionTargetWithRuntime(input: {
+  userId: string;
+  projectId: string;
+  workspacePanelId: string | null;
+}): Promise<WorkspacePanelExecutionTarget> {
+  let target = await resolveWorkspacePanelExecutionTarget(input);
+  if (input.workspacePanelId && target.source === 'workspace-panel' && target.runtimeSessionId === input.projectId) {
+    await ensureProjectWorkspacePanelRuntimes({
+      userId: input.userId,
+      projectId: input.projectId,
+    });
+    target = await resolveWorkspacePanelExecutionTarget(input);
+  }
+  return target;
 }
 
 export async function POST(
@@ -44,7 +62,7 @@ export async function POST(
   }
 
   try {
-    const target = await resolveWorkspacePanelExecutionTarget({
+    const target = await resolveWorkspacePanelExecutionTargetWithRuntime({
       userId: auth.user.id,
       projectId: sessionId,
       workspacePanelId: readWorkspacePanelIdFromRecord(body),
