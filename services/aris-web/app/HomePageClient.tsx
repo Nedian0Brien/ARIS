@@ -58,7 +58,14 @@ import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientThe
 import type { AuthenticatedUser } from '@/lib/auth/types';
 import { readLocalStorage, removeLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
 import type { SessionChat, SessionStatus, SessionSummary, UiEvent } from '@/lib/happy/types';
-import { abortActiveChat } from '@/lib/runtime/abortChat';
+import { abortProjectChat } from '@/lib/runtime/abortChat';
+import {
+  buildProjectChatCollectionPath,
+  buildProjectChatDetailPath,
+  buildProjectRuntimeEventsPath,
+  buildProjectRuntimeTerminalPath,
+  buildProjectWorkspacePath,
+} from '@/lib/projectRuntimeAdapter';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
 import { useWorkspaceFiles, type WorkspaceFileItem } from '@/lib/hooks/useWorkspaceFiles';
 import {
@@ -101,7 +108,7 @@ type ProjectRunIndicator = {
 };
 type ProjectChatSurfaceMode = 'full' | 'panel';
 type ProjectChatDragPayload = {
-  sessionId: string;
+  projectId: string;
   chatId: string;
   title: string;
 };
@@ -110,7 +117,7 @@ type ProjectPanelNodeDragPayload = ProjectChatDragPayload & {
 };
 type ProjectChatDragStartHandler = (
   event: DragEvent<HTMLElement>,
-  sessionId: string,
+  projectId: string,
   chat: Pick<SessionChat, 'id' | 'title'>,
 ) => void;
 type ProjectPanelNodeDragStartHandler = (
@@ -537,10 +544,10 @@ function deriveProjectTokenLabel(session: SessionSummary, index: number): string
   return `${total.toFixed(1)}k`;
 }
 
-function buildProjectDetailPath(sessionId: string, view: ProjectView = 'chats', chatId?: string | null): string {
+function buildProjectDetailPath(projectId: string, view: ProjectView = 'chats', chatId?: string | null): string {
   const params = new URLSearchParams();
   params.set('tab', 'project');
-  params.set('project', sessionId);
+  params.set('project', projectId);
   if (view !== 'chats') {
     params.set('view', view);
   }
@@ -552,11 +559,11 @@ function buildProjectDetailPath(sessionId: string, view: ProjectView = 'chats', 
 
 function writeProjectChatDragPayload(
   event: DragEvent<HTMLElement>,
-  sessionId: string,
+  projectId: string,
   chat: Pick<SessionChat, 'id' | 'title'>,
 ) {
   const payload = JSON.stringify({
-    sessionId,
+    projectId,
     chatId: chat.id,
     title: chat.title,
   } satisfies ProjectChatDragPayload);
@@ -569,12 +576,12 @@ function writeProjectChatDragPayload(
 
 function writeProjectPanelNodeDragPayload(
   event: DragEvent<HTMLElement>,
-  sessionId: string,
+  projectId: string,
   panelId: string,
   chat: Pick<SessionChat, 'id' | 'title'>,
 ) {
   const payload = JSON.stringify({
-    sessionId,
+    projectId,
     panelId,
     chatId: chat.id,
     title: chat.title,
@@ -597,19 +604,20 @@ function readProjectChatDragPayload(event: DragEvent<HTMLElement>): ProjectChatD
     const rawPayload = event.dataTransfer.getData(PROJECT_CHAT_DRAG_MIME)
       || event.dataTransfer.getData(PROJECT_CHAT_DRAG_JSON_MIME)
       || event.dataTransfer.getData('text/plain');
-    const parsed = JSON.parse(rawPayload) as Partial<ProjectChatDragPayload>;
+    const parsed = JSON.parse(rawPayload) as Partial<ProjectChatDragPayload> & { sessionId?: unknown };
+    const parsedProjectId = typeof parsed.projectId === 'string' ? parsed.projectId : parsed.sessionId;
     if (
-      typeof parsed.sessionId !== 'string'
+      typeof parsedProjectId !== 'string'
       || typeof parsed.chatId !== 'string'
       || typeof parsed.title !== 'string'
-      || !parsed.sessionId.trim()
+      || !parsedProjectId.trim()
       || !parsed.chatId.trim()
     ) {
       return null;
     }
 
     return {
-      sessionId: parsed.sessionId,
+      projectId: parsedProjectId,
       chatId: parsed.chatId,
       title: parsed.title,
     };
@@ -625,13 +633,14 @@ function readProjectPanelNodeDragPayload(event: DragEvent<HTMLElement>): Project
 
   try {
     const rawPayload = event.dataTransfer.getData(PROJECT_PANEL_NODE_DRAG_MIME);
-    const parsed = JSON.parse(rawPayload) as Partial<ProjectPanelNodeDragPayload>;
+    const parsed = JSON.parse(rawPayload) as Partial<ProjectPanelNodeDragPayload> & { sessionId?: unknown };
+    const parsedProjectId = typeof parsed.projectId === 'string' ? parsed.projectId : parsed.sessionId;
     if (
-      typeof parsed.sessionId !== 'string'
+      typeof parsedProjectId !== 'string'
       || typeof parsed.panelId !== 'string'
       || typeof parsed.chatId !== 'string'
       || typeof parsed.title !== 'string'
-      || !parsed.sessionId.trim()
+      || !parsedProjectId.trim()
       || !parsed.panelId.trim()
       || !parsed.chatId.trim()
     ) {
@@ -639,7 +648,7 @@ function readProjectPanelNodeDragPayload(event: DragEvent<HTMLElement>): Project
     }
 
     return {
-      sessionId: parsed.sessionId,
+      projectId: parsedProjectId,
       panelId: parsed.panelId,
       chatId: parsed.chatId,
       title: parsed.title,
@@ -668,8 +677,8 @@ function createProjectPanelId(): string {
   return `pcp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-async function createProjectSessionChat(
-  sessionId: string,
+async function createProjectChat(
+  projectId: string,
   input: {
     title?: string;
     agent?: SessionSummary['agent'];
@@ -678,7 +687,7 @@ async function createProjectSessionChat(
     modelReasoningEffort?: SessionChat['modelReasoningEffort'];
   },
 ): Promise<SessionChat> {
-  const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`), {
+  const response = await fetch(withAppBasePath(buildProjectChatCollectionPath(projectId)), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -688,6 +697,32 @@ async function createProjectSessionChat(
     throw new Error(body.error ?? '새 채팅을 만들지 못했습니다.');
   }
   return body.chat;
+}
+
+async function fetchProjectWorkspaceLayout(
+  projectId: string,
+  validChatIds: Set<string>,
+): Promise<ProjectParallelPanelTreeState | null> {
+  const response = await fetch(withAppBasePath(buildProjectWorkspacePath(projectId)), { cache: 'no-store' });
+  if (!response.ok) return null;
+  const body = (await response.json().catch(() => ({}))) as {
+    workspace?: {
+      layout?: ProjectParallelPanelTreeState | null;
+    };
+  };
+  const layout = body.workspace?.layout ?? null;
+  return layout ? parseProjectPanelState(JSON.stringify(layout), validChatIds) : null;
+}
+
+async function saveProjectWorkspaceLayout(
+  projectId: string,
+  layout: ProjectParallelPanelTreeState | null,
+): Promise<void> {
+  await fetch(withAppBasePath(buildProjectWorkspacePath(projectId)), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ layout }),
+  });
 }
 
 function navigateTo(path: string) {
@@ -745,11 +780,11 @@ function Sidebar({
   activeTab: TabType;
   activeProjectId: string | null;
   activeProjectChatId: string | null;
-  onProjectChatOpen: (sessionId: string, chatId: string) => void;
+  onProjectChatOpen: (projectId: string, chatId: string) => void;
   onProjectChatDragEnd: () => void;
   onProjectChatDragStart: ProjectChatDragStartHandler;
   onTabChange: (tab: TabType) => void;
-  onProjectOpen: (sessionId: string, view?: ProjectView) => void;
+  onProjectOpen: (projectId: string, view?: ProjectView) => void;
   sessions: SessionSummary[];
   user: AuthenticatedUser;
 }) {
@@ -797,7 +832,7 @@ function Sidebar({
     async function loadActiveProjectChats() {
       setIsLoadingProjectChats(true);
       try {
-        const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(projectId)}/chats`), { cache: 'no-store' });
+        const response = await fetch(withAppBasePath(buildProjectChatCollectionPath(projectId)), { cache: 'no-store' });
         const body = (await response.json().catch(() => ({}))) as { chats?: SessionChat[] };
         if (!cancelled && response.ok) {
           setActiveProjectChats(body.chats ?? []);
@@ -883,7 +918,10 @@ function Sidebar({
                           type="button"
                           className={`m-sb__chat-child${activeProjectChatId === chat.id ? ' m-sb__chat-child--active' : ''}`}
                           draggable
-                          onDragStart={(event) => onProjectChatDragStart(event, session.id, chat)}
+                          onDragStart={(event) => {
+                            const projectId = session.id;
+                            onProjectChatDragStart(event, projectId, chat);
+                          }}
                           onDragEnd={onProjectChatDragEnd}
                           onClick={() => onProjectChatOpen(session.id, chat.id)}
                         >
@@ -1443,7 +1481,7 @@ function HomeSurface({
   user,
 }: {
   metrics: RuntimeMetrics | null;
-  onProjectOpen: (sessionId: string, view?: ProjectView, chatId?: string | null) => void;
+  onProjectOpen: (projectId: string, view?: ProjectView, chatId?: string | null) => void;
   sessions: SessionSummary[];
   user: AuthenticatedUser;
 }) {
@@ -1546,27 +1584,32 @@ function HomeSurface({
         <button type="button" onClick={() => navigateTo('/?tab=project')}>All chats</button>
       </div>
       <section className="home-feed" aria-label="Recent Chat">
-        {recentChats.length > 0 ? recentChats.map((chat: HomeRecentChat) => (
-          <button
-            key={chat.id}
-            type="button"
-            className="home-feed-row"
-            data-chat-href={buildProjectDetailPath(chat.sessionId, 'chat', chat.id)}
-            onClick={() => onProjectOpen(chat.sessionId, 'chat', chat.id)}
-          >
-            <span className={`home-feed-avatar ${homeFeedAvatarClass(chat.agent)}`}>
-              {(chat.agent[0] || 'C').toUpperCase()}
-            </span>
-            <span className="home-feed-body">
-              <span className="home-feed-head">
-                <span className="home-feed-actor">{chatTitle(chat)}</span>
-                <span className="home-feed-proj">{chat.sessionName}</span>
-                <span className="home-feed-time">{formatRelativeTime(chatActivityAt(chat))}</span>
+        {recentChats.length > 0 ? recentChats.map((chat: HomeRecentChat) => {
+          const chatProjectId = 'projectId' in chat && typeof chat.projectId === 'string'
+            ? chat.projectId
+            : chat.sessionId;
+          return (
+            <button
+              key={chat.id}
+              type="button"
+              className="home-feed-row"
+              data-chat-href={buildProjectDetailPath(chatProjectId, 'chat', chat.id)}
+              onClick={() => onProjectOpen(chatProjectId, 'chat', chat.id)}
+            >
+              <span className={`home-feed-avatar ${homeFeedAvatarClass(chat.agent)}`}>
+                {(chat.agent[0] || 'C').toUpperCase()}
               </span>
-              <span className="home-feed-text">{chatPreviewText(chat)}</span>
-            </span>
-          </button>
-        )) : (
+              <span className="home-feed-body">
+                <span className="home-feed-head">
+                  <span className="home-feed-actor">{chatTitle(chat)}</span>
+                  <span className="home-feed-proj">{chat.sessionName}</span>
+                  <span className="home-feed-time">{formatRelativeTime(chatActivityAt(chat))}</span>
+                </span>
+                <span className="home-feed-text">{chatPreviewText(chat)}</span>
+              </span>
+            </button>
+          );
+        }) : (
           <div className="home-feed-row home-feed-row--empty">
             <span className="home-feed-avatar home-feed-avatar--u">{(user.email[0] || 'U').toUpperCase()}</span>
             <span className="home-feed-body">
@@ -1699,7 +1742,7 @@ function ProjectDetailSurface({
     setHeaderCreateError(null);
     try {
       const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);
-      const createdChat = await createProjectSessionChat(session.id, {
+      const createdChat = await createProjectChat(session.id, {
         title: `Chat ${Math.max(1, totalChats + 1)}`,
         agent: session.agent,
         model: projectModelInput,
@@ -2763,6 +2806,7 @@ function ProjectParallelChatPane({
   showClose: boolean;
   tokenLabel: string;
 }) {
+  const projectId = session.id;
   const [events, setEvents] = useState<UiEvent[]>([]);
   const [prompt, setPrompt] = useState('');
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
@@ -2778,7 +2822,7 @@ function ProjectParallelChatPane({
   const frameRef = useRef<HTMLElement | null>(null);
   const activeAgent: SessionSummary['agent'] = selectedProvider;
   const activeModelLabel = selectedModel || chat.model || modelLabel;
-  const { isRunning: runtimeRunning } = useSessionRuntime(session.id, chat.id, true);
+  const { isRunning: runtimeRunning } = useSessionRuntime(projectId, chat.id, true);
   const visibleEvents = events.slice(-40);
   const hasRuntimeEvents = visibleEvents.length > 0;
   const projectRunActive = runtimeRunning || isSubmitting;
@@ -2827,7 +2871,7 @@ function ProjectParallelChatPane({
         if (chat.isDefault) {
           params.set('includeUnassigned', 'true');
         }
-        const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events?${params.toString()}`), { cache: 'no-store' });
+        const response = await fetch(withAppBasePath(buildProjectRuntimeEventsPath(projectId, params)), { cache: 'no-store' });
         const body = (await response.json().catch(() => ({}))) as { events?: UiEvent[]; error?: string };
         if (!response.ok) {
           throw new Error(body.error ?? '채팅 이벤트를 불러오지 못했습니다.');
@@ -2855,7 +2899,7 @@ function ProjectParallelChatPane({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [chat.id, chat.isDefault, session.id]);
+  }, [chat.id, chat.isDefault, projectId]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -2866,7 +2910,7 @@ function ProjectParallelChatPane({
     setError(null);
     try {
       const isTerminalMode = composerMode === 'terminal';
-      const endpoint = withAppBasePath(isTerminalMode ? `/api/runtime/sessions/${encodeURIComponent(session.id)}/terminal` : `/api/runtime/sessions/${encodeURIComponent(session.id)}/events`);
+      const endpoint = withAppBasePath(isTerminalMode ? buildProjectRuntimeTerminalPath(projectId) : buildProjectRuntimeEventsPath(projectId));
       const payload = isTerminalMode ? {
         chatId: chat.id,
         command: text,
@@ -2902,7 +2946,7 @@ function ProjectParallelChatPane({
       const latestEvent = submittedEvents[submittedEvents.length - 1] as UiEvent;
       setPrompt('');
       setEvents((previous) => [...previous, ...submittedEvents]);
-      void fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats/${encodeURIComponent(chat.id)}`), {
+      void fetch(withAppBasePath(buildProjectChatDetailPath(projectId, chat.id)), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2924,20 +2968,20 @@ function ProjectParallelChatPane({
     if (isAborting || !projectRunActive) return;
     setIsAborting(true);
     try {
-      await abortActiveChat({ sessionId: session.id, chatId: chat.id });
+      await abortProjectChat({ projectId, chatId: chat.id });
     } catch (abortError) {
       setError(abortError instanceof Error ? abortError.message : '에이전트 실행 중단에 실패했습니다.');
     } finally {
       setIsAborting(false);
       setIsSubmitting(false);
     }
-  }, [chat.id, isAborting, projectRunActive, session.id]);
+  }, [chat.id, isAborting, projectId, projectRunActive]);
 
   const isCompatiblePanelDrop = useCallback((event: DragEvent<HTMLElement>) => {
     if (!hasProjectChatDragPayload(event)) return false;
     const panelPayload = readProjectPanelNodeDragPayload(event);
-    return !(panelPayload?.sessionId === session.id && panelPayload.panelId === panelId);
-  }, [panelId, session.id]);
+    return !(panelPayload?.projectId === projectId && panelPayload.panelId === panelId);
+  }, [panelId, projectId]);
 
   const handlePanelDragOver = useCallback((event: DragEvent<HTMLElement>) => {
     if (!isCompatiblePanelDrop(event)) return;
@@ -3124,6 +3168,7 @@ function ProjectChatSurface({
   surfaceMode: ProjectChatSurfaceMode;
   tokenLabel: string;
 }) {
+  const projectId = session.id;
   const [chats, setChats] = useState<SessionChat[]>([]);
   const [events, setEvents] = useState<UiEvent[]>([]);
   const [prompt, setPrompt] = useState('');
@@ -3136,7 +3181,7 @@ function ProjectChatSurface({
   const [projectRunNowMs, setProjectRunNowMs] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
   const activeChat = selectedChatId ? chats.find((chat) => chat.id === selectedChatId) ?? null : null;
-  const { isRunning: runtimeRunning } = useSessionRuntime(session.id, selectedChatId, Boolean(selectedChatId));
+  const { isRunning: runtimeRunning } = useSessionRuntime(projectId, selectedChatId, Boolean(selectedChatId));
   const runtimeModelLabel = activeChat?.model ?? modelLabel;
   const runtimeAgent = activeChat?.agent ?? session.agent;
   const timelineRef = useRef<HTMLDivElement | null>(null);
@@ -3181,9 +3226,9 @@ function ProjectChatSurface({
     ?? activeChat?.lastActivityAt
     ?? session.lastActivityAt
     ?? new Date().toISOString();
-  const projectChatRoute = `/?tab=project&project=${session.id}&view=chat${selectedChatId ? `&chat=${selectedChatId}` : ''}`;
+  const projectChatRoute = `/?tab=project&project=${projectId}&view=chat${selectedChatId ? `&chat=${selectedChatId}` : ''}`;
   const previewTarget = `aris.lawdigest.cloud${projectChatRoute}`;
-  const parallelLayoutStorageKey = useMemo(() => createProjectPanelLayoutStorageKey(session.id), [session.id]);
+  const parallelLayoutStorageKey = useMemo(() => createProjectPanelLayoutStorageKey(projectId), [projectId]);
   const prototypeRef = useRef<HTMLDivElement | null>(null);
   const composerWrapRef = useRef<HTMLElement | null>(null);
   const workspaceFiles = useWorkspaceFiles('/workspace');
@@ -3304,7 +3349,7 @@ function ProjectChatSurface({
     const panelPayload = readProjectPanelNodeDragPayload(event);
     const chatPayload = readProjectChatDragPayload(event);
     const payload = panelPayload ?? chatPayload;
-    if (!payload || payload.sessionId !== session.id) return;
+    if (!payload || payload.projectId !== projectId) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -3317,12 +3362,12 @@ function ProjectChatSurface({
       }
       return applyProjectChatDropToPanel(current, targetPanelId, payload.chatId, edge, createProjectPanelId) ?? current;
     });
-  }, [clearParallelProjectDropState, session.id]);
+  }, [clearParallelProjectDropState, projectId]);
 
   const handleProjectParallelPanelDragStart = useCallback<ProjectPanelNodeDragStartHandler>((event, panelId, chat) => {
-    writeProjectPanelNodeDragPayload(event, session.id, panelId, chat);
+    writeProjectPanelNodeDragPayload(event, projectId, panelId, chat);
     setParallelSurfaceDropEdge(null);
-  }, [session.id]);
+  }, [projectId]);
 
   const handleProjectParallelPanelDragEnd = useCallback(() => {
     clearParallelProjectDropState();
@@ -3357,7 +3402,7 @@ function ProjectChatSurface({
       return;
     }
     const payload = readProjectChatDragPayload(event);
-    if (!payload || payload.sessionId !== session.id) {
+    if (!payload || payload.projectId !== projectId) {
       return;
     }
     event.preventDefault();
@@ -3388,7 +3433,7 @@ function ProjectChatSurface({
       createProjectPanelId,
     );
     setParallelPanelState(nextState);
-  }, [chats, clearParallelProjectDropState, onChatOpen, parallelPanelState, selectedChatId, session.id, surfaceMode]);
+  }, [chats, clearParallelProjectDropState, onChatOpen, parallelPanelState, selectedChatId, projectId, surfaceMode]);
   const handleProjectParallelSurfaceDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
     const relatedTarget = event.relatedTarget;
     if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
@@ -3412,31 +3457,43 @@ function ProjectChatSurface({
   useEffect(() => {
     if (surfaceMode !== 'full' || isLoadingChats || parallelLayoutHydrated) return;
 
+    let cancelled = false;
     const validChatIds = new Set(chats.map((chat) => chat.id));
-    const restored = parseProjectPanelState(
-      readLocalStorage(parallelLayoutStorageKey),
-      validChatIds,
-    );
-    setParallelLayoutHydrated(true);
+    const hydrateWorkspaceLayout = async () => {
+      const serverRestored = await fetchProjectWorkspaceLayout(projectId, validChatIds).catch(() => null);
+      const localRestored = serverRestored ?? parseProjectPanelState(
+        readLocalStorage(parallelLayoutStorageKey),
+        validChatIds,
+      );
+      if (cancelled) return;
+      setParallelLayoutHydrated(true);
 
-    if (restored && Object.keys(restored.panels).length > 1) {
-      setParallelPanelState(restored);
-      return;
-    }
+      if (localRestored && Object.keys(localRestored.panels).length > 1) {
+        setParallelPanelState(localRestored);
+        return;
+      }
 
-    removeLocalStorage(parallelLayoutStorageKey);
-  }, [chats, isLoadingChats, parallelLayoutHydrated, parallelLayoutStorageKey, surfaceMode]);
+      removeLocalStorage(parallelLayoutStorageKey);
+    };
+
+    void hydrateWorkspaceLayout();
+    return () => {
+      cancelled = true;
+    };
+  }, [chats, isLoadingChats, parallelLayoutHydrated, parallelLayoutStorageKey, projectId, surfaceMode]);
 
   useEffect(() => {
     if (surfaceMode !== 'full' || !parallelLayoutHydrated) return;
 
     if (parallelPanelState && Object.keys(parallelPanelState.panels).length > 1) {
       writeLocalStorage(parallelLayoutStorageKey, serializeProjectPanelState(parallelPanelState));
+      void saveProjectWorkspaceLayout(projectId, parallelPanelState).catch(() => undefined);
       return;
     }
 
     removeLocalStorage(parallelLayoutStorageKey);
-  }, [parallelLayoutHydrated, parallelLayoutStorageKey, parallelPanelState, surfaceMode]);
+    void saveProjectWorkspaceLayout(projectId, null).catch(() => undefined);
+  }, [parallelLayoutHydrated, parallelLayoutStorageKey, parallelPanelState, projectId, surfaceMode]);
 
   useEffect(() => () => {
     if (workspaceCloseTimerRef.current !== null) {
@@ -3554,7 +3611,7 @@ function ProjectChatSurface({
       setIsLoadingChats(true);
       setError(null);
       try {
-        const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats`), { cache: 'no-store' });
+        const response = await fetch(withAppBasePath(buildProjectChatCollectionPath(projectId)), { cache: 'no-store' });
         const body = (await response.json().catch(() => ({}))) as { chats?: SessionChat[]; error?: string };
         if (!response.ok) {
           throw new Error(body.error ?? '채팅 목록을 불러오지 못했습니다.');
@@ -3575,7 +3632,7 @@ function ProjectChatSurface({
     return () => {
       cancelled = true;
     };
-  }, [session.id]);
+  }, [projectId]);
 
   useEffect(() => {
     if (!selectedChatId) {
@@ -3596,7 +3653,7 @@ function ProjectChatSurface({
         if (activeChat?.isDefault) {
           params.set('includeUnassigned', 'true');
         }
-        const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events?${params.toString()}`), { cache: 'no-store' });
+        const response = await fetch(withAppBasePath(buildProjectRuntimeEventsPath(projectId, params)), { cache: 'no-store' });
         const body = (await response.json().catch(() => ({}))) as { events?: UiEvent[]; error?: string };
         if (!response.ok) {
           throw new Error(body.error ?? '채팅 이벤트를 불러오지 못했습니다.');
@@ -3624,7 +3681,7 @@ function ProjectChatSurface({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeChat?.isDefault, selectedChatId, session.id]);
+  }, [activeChat?.isDefault, selectedChatId, projectId]);
 
   useEffect(() => {
     const latestLifecycle = readLatestProjectRunLifecycle(events);
@@ -3678,7 +3735,7 @@ function ProjectChatSurface({
   const createChat = async (): Promise<SessionChat | null> => {
     setError(null);
     const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);
-    const createdChat = await createProjectSessionChat(session.id, {
+    const createdChat = await createProjectChat(projectId, {
       title: '새 채팅',
       agent: selectedProvider,
       model: projectModelInput,
@@ -3718,7 +3775,7 @@ function ProjectChatSurface({
       const firstPromptTitle = shouldAutoRenameFromFirstPrompt
         ? buildChatTitleFromFirstPrompt(text)
         : null;
-      const endpoint = withAppBasePath(isTerminalMode ? `/api/runtime/sessions/${encodeURIComponent(session.id)}/terminal` : `/api/runtime/sessions/${encodeURIComponent(session.id)}/events`);
+      const endpoint = withAppBasePath(isTerminalMode ? buildProjectRuntimeTerminalPath(projectId) : buildProjectRuntimeEventsPath(projectId));
       const payload = isTerminalMode ? {
         chatId: chat.id,
         command: text,
@@ -3768,7 +3825,7 @@ function ProjectChatSurface({
             }
           : item
       )));
-      void fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats/${encodeURIComponent(chat.id)}`), {
+      void fetch(withAppBasePath(buildProjectChatDetailPath(projectId, chat.id)), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3793,7 +3850,7 @@ function ProjectChatSurface({
     if (!projectRunActive || !selectedChatId) return;
     setIsAborting(true);
     try {
-      await abortActiveChat({ sessionId: session.id, chatId: activeChat?.id ?? selectedChatId });
+      await abortProjectChat({ projectId, chatId: activeChat?.id ?? selectedChatId });
       showTransientFeedback('Stop 요청을 보냈습니다');
     } catch (abortError) {
       setError(abortError instanceof Error ? abortError.message : '에이전트 실행 중단에 실패했습니다.');
@@ -3801,7 +3858,7 @@ function ProjectChatSurface({
       setIsAborting(false);
       setIsSubmitting(false);
     }
-  }, [activeChat?.id, isAborting, projectRunActive, selectedChatId, session.id]);
+  }, [activeChat?.id, isAborting, projectId, projectRunActive, selectedChatId]);
 
   const handleComposerModeChange = (mode: ComposerMode) => {
     setComposerMode(mode);
@@ -4480,10 +4537,10 @@ function ProjectSurface({
   sessions,
 }: {
   onBackToProjects: () => void;
-  onProjectChatOpen: (sessionId: string, chatId: string) => void;
+  onProjectChatOpen: (projectId: string, chatId: string) => void;
   onProjectChatDragEnd: () => void;
   onProjectChatDragStart: ProjectChatDragStartHandler;
-  onProjectOpen: (sessionId: string, view?: ProjectView) => void;
+  onProjectOpen: (projectId: string, view?: ProjectView) => void;
   onProjectViewChange: (view: ProjectView) => void;
   projectView: ProjectView;
   projectChatDragActive: boolean;
@@ -4868,12 +4925,12 @@ export default function HomePageWrapper({
     window.history.replaceState(null, '', withAppBasePath(`/?tab=${tab}`));
   };
 
-  const handleProjectOpen = (sessionId: string, view: ProjectView = 'chats', chatId?: string | null) => {
+  const handleProjectOpen = (projectId: string, view: ProjectView = 'chats', chatId?: string | null) => {
     setActiveTab('project');
-    setSelectedProjectId(sessionId);
+    setSelectedProjectId(projectId);
     setSelectedProjectView(view);
     setSelectedProjectChatId(view === 'chat' ? chatId ?? null : null);
-    window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(sessionId, view, chatId)));
+    window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(projectId, view, chatId)));
   };
 
   const handleProjectViewChange = (view: ProjectView) => {
@@ -4884,12 +4941,12 @@ export default function HomePageWrapper({
     window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(selectedProjectId, view)));
   };
 
-  const handleProjectChatOpen = (sessionId: string, chatId: string) => {
+  const handleProjectChatOpen = (projectId: string, chatId: string) => {
     setActiveTab('project');
-    setSelectedProjectId(sessionId);
+    setSelectedProjectId(projectId);
     setSelectedProjectView('chat');
     setSelectedProjectChatId(chatId);
-    window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(sessionId, 'chat', chatId)));
+    window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(projectId, 'chat', chatId)));
   };
 
   const handleBackToProjects = () => {
@@ -4899,8 +4956,8 @@ export default function HomePageWrapper({
     setSelectedProjectChatId(null);
     window.history.pushState(null, '', withAppBasePath('/?tab=project'));
   };
-  const handleProjectChatDragStart = useCallback<ProjectChatDragStartHandler>((event, sessionId, chat) => {
-    writeProjectChatDragPayload(event, sessionId, chat);
+  const handleProjectChatDragStart = useCallback<ProjectChatDragStartHandler>((event, projectId, chat) => {
+    writeProjectChatDragPayload(event, projectId, chat);
     setProjectChatDragActive(true);
   }, []);
   const handleProjectChatDragEnd = useCallback(() => {

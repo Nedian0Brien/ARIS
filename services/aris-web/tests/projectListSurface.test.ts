@@ -50,15 +50,15 @@ describe('project list surface', () => {
 
   it('routes project card clicks to the IA project detail instead of the legacy session screen', () => {
     expect(homeClient).toContain("type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';");
-    expect(homeClient).toContain("function buildProjectDetailPath(sessionId: string, view: ProjectView = 'chats', chatId?: string | null)");
+    expect(homeClient).toContain("function buildProjectDetailPath(projectId: string, view: ProjectView = 'chats', chatId?: string | null)");
     expect(homeClient).toContain("params.set('tab', 'project');");
-    expect(homeClient).toContain("params.set('project', sessionId);");
+    expect(homeClient).toContain("params.set('project', projectId);");
     expect(homeClient).toContain("if (view === 'chat' && chatId) {");
     expect(homeClient).toContain("params.set('chat', chatId);");
     expect(homeClient).toContain('data-project-href={buildProjectDetailPath(session.id)}');
     expect(homeClient).toContain('onClick={() => onProjectOpen(session.id)}');
     expect(homeClient).toContain('onProjectOpen(session.id);');
-    expect(homeClient).toContain("window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(sessionId, view, chatId)))");
+    expect(homeClient).toContain("window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(projectId, view, chatId)))");
     expect(homeClient).toContain('selectedProjectId={selectedProjectId}');
     expect(homeClient).not.toContain('navigateTo(`/sessions/${session.id}`)');
   });
@@ -85,10 +85,10 @@ describe('project list surface', () => {
     expect(homeClient).toContain("onClick={() => onChatOpen(chat.id)}");
     expect(homeClient).toContain("onProjectChatOpen(session.id, chat.id)");
     expect(homeClient).toContain("setSelectedProjectView('chat');");
-    expect(homeClient).toContain("buildProjectDetailPath(sessionId, 'chat', chatId)");
+    expect(homeClient).toContain("buildProjectDetailPath(projectId, 'chat', chatId)");
     expect(homeClient).toContain("params.set('view', view);");
-    expect(homeClient).toContain('fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats`)');
-    expect(homeClient).toContain('fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events?${params.toString()}`)');
+    expect(homeClient).toContain('fetch(withAppBasePath(buildProjectChatCollectionPath(projectId))');
+    expect(homeClient).toContain('fetch(withAppBasePath(buildProjectRuntimeEventsPath(projectId, params))');
     expect(homeClient).toContain('pc-chat-empty-state');
     expect(homeClient).not.toContain('seed-history-primary');
     expect(homeClient).not.toContain('seed-context');
@@ -103,16 +103,16 @@ describe('project list surface', () => {
     const chatSurfaceStart = homeClient.indexOf('function ProjectChatSurface({');
     const detailSource = homeClient.slice(detailStart, chatSurfaceStart);
 
-    expect(homeClient).toContain('async function createProjectSessionChat(');
+    expect(homeClient).toContain('async function createProjectChat(');
     expect(homeClient).toContain("const DEFAULT_CODE_SERVER_BASE_URL = 'https://lawdigest.cloud/';");
     expect(homeClient).toContain('process.env.NEXT_PUBLIC_CODE_SERVER_BASE_URL');
     expect(homeClient).toContain('function buildCodeServerFolderUrl(projectPath: string): string');
-    expect(homeClient).toContain('fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`)');
+    expect(homeClient).toContain('fetch(withAppBasePath(buildProjectChatCollectionPath(projectId))');
     expect(detailSource).toContain('const [isCreatingHeaderChat, setIsCreatingHeaderChat] = useState(false);');
     expect(detailSource).toContain('const [settingsModalOpen, setSettingsModalOpen] = useState(false);');
     expect(detailSource).toContain('const handleProjectHeaderNewChat = async () => {');
     expect(detailSource).toContain('const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);');
-    expect(detailSource).toContain('const createdChat = await createProjectSessionChat(session.id, {');
+    expect(detailSource).toContain('const createdChat = await createProjectChat(session.id, {');
     expect(detailSource).toContain('title: `Chat ${Math.max(1, totalChats + 1)}`,');
     expect(detailSource).toContain('onProjectChatOpen(createdChat.id);');
     expect(detailSource).toContain('className="proj-head__actions"');
@@ -250,7 +250,7 @@ describe('project list surface', () => {
     const submitSource = homeClient.slice(submitStart, submitEnd);
 
     expect(submitSource).toContain("const isTerminalMode = composerMode === 'terminal';");
-    expect(submitSource).toContain("const endpoint = withAppBasePath(isTerminalMode ? `/api/runtime/sessions/${encodeURIComponent(session.id)}/terminal`");
+    expect(submitSource).toContain('const endpoint = withAppBasePath(isTerminalMode ? buildProjectRuntimeTerminalPath(projectId) : buildProjectRuntimeEventsPath(projectId));');
     expect(submitSource).toContain('command: text,');
     expect(submitSource).toContain("const body = (await response.json().catch(() => ({}))) as { event?: UiEvent; events?: UiEvent[]; error?: string };");
     expect(submitSource).toContain('const submittedEvents = isTerminalMode');

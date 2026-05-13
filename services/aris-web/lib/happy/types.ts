@@ -26,6 +26,8 @@ export type SessionSummary = {
   recentChats?: SessionChat[];
 };
 
+export type ProjectSummary = SessionSummary;
+
 export type SessionChat = {
   id: string;
   sessionId: string;
@@ -47,6 +49,10 @@ export type SessionChat = {
   lastActivityAt: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ProjectChat = SessionChat & {
+  projectId: string;
 };
 
 export type ChatImageAttachment = {

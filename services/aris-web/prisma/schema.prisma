@@ -25,6 +25,7 @@ model User {
   auditLogs    AuditLog[]
   preferences  UiPreference?
   workspaces   Workspace[]
+  projectWorkspaces ProjectWorkspace[]
   sessionMetadata SessionMetadata[]
   sessionChats SessionChat[]
   trustedDevices TrustedDevice[]
@@ -45,6 +46,21 @@ model Workspace {
 
   @@unique([userId, path])
   @@index([userId, updatedAt])
+}
+
+model ProjectWorkspace {
+  id            String   @id @default(cuid())
+  userId        String
+  projectId     String
+  title         String   @default("Default workspace")
+  layoutJson    Json?
+  activePanelId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId, title])
+  @@index([userId, projectId, updatedAt])
 }
 
 model SessionMetadata {
