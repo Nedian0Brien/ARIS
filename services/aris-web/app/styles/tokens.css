@@ -206,6 +206,33 @@
   --accent-docker: #0a4f82;
   --accent-docker-bg: rgba(36, 150, 237, 0.2);
 
+  /* Action card cmd tones (single source: lib/cmd/cmdToneMap.ts) */
+  --tone-read-fg:    #6B3FB5;  --tone-read-bg:    #F1ECFE;
+  --tone-write-fg:   #087A3A;  --tone-write-bg:   #E7F7EE;
+  --tone-edit-fg:    #0F7E5E;  --tone-edit-bg:    #DAF1E5;
+  --tone-shell-fg:   #B85C00;  --tone-shell-bg:   #FFF1E0;
+  --tone-list-fg:    #0E7490;  --tone-list-bg:    #DCF6FF;
+  --tone-glob-fg:    #0369A1;  --tone-glob-bg:    #DBEEFF;
+  --tone-search-fg:  #BE185D;  --tone-search-bg:  #FFE4F0;
+  --tone-net-fg:     #0F5BAF;  --tone-net-bg:     #DAE8FB;
+  --tone-pkg-fg:     #C2410C;  --tone-pkg-bg:     #FFE6D5;
+  --tone-build-fg:   #4338CA;  --tone-build-bg:   #E6E7FF;
+  --tone-test-fg:    #BE123C;  --tone-test-bg:    #FFE4E6;
+  --tone-git-fg:     #A0361D;  --tone-git-bg:     #FFE2D4;
+  --tone-docker-fg:  #0A4F82;  --tone-docker-bg:  #D9E8F8;
+  --tone-destroy-fg: #C22A1F;  --tone-destroy-bg: #FCE5E2;
+  --tone-think-fg:   #0B6E8A;  --tone-think-bg:   #D7F2FB;
+  --tone-todo-fg:    #7A5C00;  --tone-todo-bg:    #FFF1B8;
+  --tone-agent-fg:   #3F3D6E;  --tone-agent-bg:   #E8E7F4;
+  --tone-cmd-fg:     #4A4F58;  --tone-cmd-bg:     #EBEDF1;
+
+  /* Syntax-highlight tokens for ToolRow command bodies */
+  --syn-cmd:  var(--text-primary);
+  --syn-flag: var(--text-tertiary);
+  --syn-str:  #087A3A;
+  --syn-op:   #1E50DB;
+  --syn-num:  #B85C00;
+
   --agent-claude-accent: var(--agent-claude);
   --agent-codex-accent: var(--agent-codex);
   --agent-gemini-accent: var(--agent-gemini);
@@ -329,6 +356,31 @@ html[data-theme='dark'] {
   --accent-git-bg: rgba(240, 80, 50, 0.26);
   --accent-docker: #7cc5ff;
   --accent-docker-bg: rgba(36, 150, 237, 0.26);
+
+  --tone-read-fg:    #C4A4F0;  --tone-read-bg:    rgba(139,92,246,0.22);
+  --tone-write-fg:   #5BD89A;  --tone-write-bg:   rgba(16,185,129,0.22);
+  --tone-edit-fg:    #4DD0A4;  --tone-edit-bg:    rgba(13,200,150,0.22);
+  --tone-shell-fg:   #F9B969;  --tone-shell-bg:   rgba(245,158,11,0.20);
+  --tone-list-fg:    #7BD4E8;  --tone-list-bg:    rgba(34,211,238,0.20);
+  --tone-glob-fg:    #7AB5FA;  --tone-glob-bg:    rgba(59,130,246,0.22);
+  --tone-search-fg:  #F58CC2;  --tone-search-bg:  rgba(236,72,153,0.22);
+  --tone-net-fg:     #84B7F4;  --tone-net-bg:     rgba(59,130,246,0.20);
+  --tone-pkg-fg:     #FB923C;  --tone-pkg-bg:     rgba(234,88,12,0.22);
+  --tone-build-fg:   #A5A4F4;  --tone-build-bg:   rgba(99,102,241,0.22);
+  --tone-test-fg:    #F47B92;  --tone-test-bg:    rgba(225,29,72,0.22);
+  --tone-git-fg:     #FF8D6C;  --tone-git-bg:     rgba(240,80,50,0.24);
+  --tone-docker-fg:  #7CC5FF;  --tone-docker-bg:  rgba(36,150,237,0.22);
+  --tone-destroy-fg: #F38484;  --tone-destroy-bg: rgba(239,68,68,0.22);
+  --tone-think-fg:   #75D4EA;  --tone-think-bg:   rgba(34,211,238,0.18);
+  --tone-todo-fg:    #F4D266;  --tone-todo-bg:    rgba(250,204,21,0.18);
+  --tone-agent-fg:   #B7B4ED;  --tone-agent-bg:   rgba(139,92,246,0.18);
+  --tone-cmd-fg:     #AFB4BE;  --tone-cmd-bg:     rgba(255,255,255,0.06);
+
+  --syn-cmd:  var(--text-primary);
+  --syn-flag: var(--text-tertiary);
+  --syn-str:  #5BD89A;
+  --syn-op:   #8FA8FF;
+  --syn-num:  #F9B969;
 
   --chart-track: #323640;
   --bottom-nav-bg: rgba(14, 16, 21, 0.78);

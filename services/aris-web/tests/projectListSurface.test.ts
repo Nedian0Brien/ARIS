@@ -5,6 +5,12 @@ import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
+const projectChatSurface = readFileSync(resolve(__dirname, '../components/project-chat/ProjectChatSurface.tsx'), 'utf8');
+const projectActionCard = readFileSync(resolve(__dirname, '../components/project-chat/ProjectActionCard.tsx'), 'utf8');
+const projectRunStatusChip = readFileSync(resolve(__dirname, '../components/project-chat/ProjectRunStatusChip.tsx'), 'utf8');
+const projectChatEventsHelper = readFileSync(resolve(__dirname, '../components/project-chat/helpers/projectChatEvents.ts'), 'utf8');
+const actionMarksHelper = readFileSync(resolve(__dirname, '../components/project-chat/helpers/actionMarks.tsx'), 'utf8');
+const commandTokensHelper = readFileSync(resolve(__dirname, '../components/project-chat/helpers/commandTokens.tsx'), 'utf8');
 const uiCss = readFileSync(resolve(__dirname, '../app/styles/ui.css'), 'utf8');
 const terminalRoute = readFileSync(resolve(__dirname, '../app/api/runtime/sessions/[sessionId]/terminal/route.ts'), 'utf8');
 
@@ -76,26 +82,29 @@ describe('project list surface', () => {
   });
 
   it('keeps project chat inside the IA project route instead of opening the legacy session route', () => {
-    expect(homeClient).toContain('function ProjectChatSurface({');
-    expect(homeClient).toContain('data-project-chat-list');
-    expect(homeClient).toContain('data-project-chat-screen');
+    expect(projectChatSurface).toContain('export function ProjectChatSurface({');
+    expect(projectChatSurface).toContain('data-project-chat-list');
+    expect(projectChatSurface).toContain('data-project-chat-screen');
     expect(homeClient).toContain('m-main-scroll--project-chat-detail');
     expect(homeClient).toContain("onClick={() => onProjectOpen(session.id, 'chats')}");
     expect(homeClient).toContain("onClick={() => onProjectViewChange('chats')}");
-    expect(homeClient).toContain("onClick={() => onChatOpen(chat.id)}");
+    expect(projectChatSurface).toContain("onClick={() => onChatOpen(chat.id)}");
     expect(homeClient).toContain("onProjectChatOpen(session.id, chat.id)");
     expect(homeClient).toContain("setSelectedProjectView('chat');");
     expect(homeClient).toContain("buildProjectDetailPath(sessionId, 'chat', chatId)");
     expect(homeClient).toContain("params.set('view', view);");
-    expect(homeClient).toContain('fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats`)');
-    expect(homeClient).toContain('fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events?${params.toString()}`)');
-    expect(homeClient).toContain('pc-chat-empty-state');
+    expect(projectChatSurface).toContain('fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats`)');
+    expect(projectChatSurface).toContain('fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events?${params.toString()}`)');
+    expect(projectChatSurface).toContain('pc-chat-empty-state');
     expect(homeClient).not.toContain('seed-history-primary');
+    expect(projectChatSurface).not.toContain('seed-history-primary');
     expect(homeClient).not.toContain('seed-context');
-    expect(homeClient).not.toContain('Read · project context');
-    expect(homeClient).not.toContain('project-context.snapshot');
-    expect(homeClient).not.toContain('프로젝트 컨텍스트를 먼저 확인하겠습니다.');
+    expect(projectChatSurface).not.toContain('seed-context');
+    expect(projectChatSurface).not.toContain('Read · project context');
+    expect(projectChatSurface).not.toContain('project-context.snapshot');
+    expect(projectChatSurface).not.toContain('프로젝트 컨텍스트를 먼저 확인하겠습니다.');
     expect(homeClient).not.toContain('/sessions/${session.id}');
+    expect(projectChatSurface).not.toContain('/sessions/${session.id}');
   });
 
   it('wires the project detail header actions to IDE, settings, and real chat creation', () => {
@@ -147,106 +156,117 @@ describe('project list surface', () => {
   });
 
   it('wires the prototype chat controls to real project-chat state', () => {
-    expect(homeClient).toContain("type ComposerMode = 'agent' | 'plan' | 'terminal';");
-    expect(homeClient).toContain("type WorkspaceTab = 'run' | 'files' | 'terminal' | 'context';");
-    expect(homeClient).toContain("type PreviewState = 'closed' | 'open' | 'dock';");
-    expect(homeClient).toContain('const [composerMode, setComposerMode] = useState<ComposerMode>');
-    expect(homeClient).toContain('const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>');
-    expect(homeClient).toContain('const [workspaceOpen, setWorkspaceOpen] = useState(true);');
-    expect(homeClient).toContain('const [previewState, setPreviewState] = useState<PreviewState>');
-    expect(homeClient).toContain('const [modelSelectorOpen, setModelSelectorOpen] = useState(false);');
-    expect(homeClient).toContain("type ExpandedTurnState = string | null | '__none__';");
-    expect(homeClient).toContain('const [expandedTurnId, setExpandedTurnId] = useState<ExpandedTurnState>');
-    expect(homeClient).toContain("expandedTurnId === '__none__'");
-    expect(homeClient).toContain("visibleExpandedTurnId === item.id ? '__none__' : item.id");
-    expect(homeClient).toContain('void copyToClipboard');
-    expect(homeClient).toContain("setComposerMode(mode)");
-    expect(homeClient).toContain("setWorkspaceTab(tab)");
-    expect(homeClient).toContain('const openWorkspacePanel = useCallback(() => {');
-    expect(homeClient).toContain('const closeWorkspacePanel = useCallback(() => {');
-    expect(homeClient).toContain("setPreviewState('open')");
-    expect(homeClient).toContain("setPreviewState('dock')");
-    expect(homeClient).toContain('data-preview-overlay');
-    expect(homeClient).toContain('className={`ms${modelSelectorOpen ?');
-    expect(homeClient).toContain("body: JSON.stringify({");
-    expect(homeClient).toContain("mode: composerMode");
+    expect(projectChatSurface).toContain("type ComposerMode = 'agent' | 'plan' | 'terminal';");
+    expect(projectChatSurface).toContain("type WorkspaceTab = 'run' | 'files' | 'terminal' | 'context';");
+    expect(projectChatSurface).toContain("type PreviewState = 'closed' | 'open' | 'dock';");
+    expect(projectChatSurface).toContain('const [composerMode, setComposerMode] = useState<ComposerMode>');
+    expect(projectChatSurface).toContain('const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>');
+    expect(projectChatSurface).toContain('const [workspaceOpen, setWorkspaceOpen] = useState(true);');
+    expect(projectChatSurface).toContain('const [previewState, setPreviewState] = useState<PreviewState>');
+    expect(projectChatSurface).toContain('const [modelSelectorOpen, setModelSelectorOpen] = useState(false);');
+    expect(projectChatSurface).toContain("type ExpandedTurnState = string | null | '__none__';");
+    expect(projectChatSurface).toContain('const [expandedTurnId, setExpandedTurnId] = useState<ExpandedTurnState>');
+    expect(projectChatSurface).toContain("expandedTurnId === '__none__'");
+    expect(projectChatSurface).toContain("visibleExpandedTurnId === item.id ? '__none__' : item.id");
+    expect(projectChatSurface).toContain('void copyToClipboard');
+    expect(projectChatSurface).toContain("setComposerMode(mode)");
+    expect(projectChatSurface).toContain("setWorkspaceTab(tab)");
+    expect(projectChatSurface).toContain('const openWorkspacePanel = useCallback(() => {');
+    expect(projectChatSurface).toContain('const closeWorkspacePanel = useCallback(() => {');
+    expect(projectChatSurface).toContain("setPreviewState('open')");
+    expect(projectChatSurface).toContain("setPreviewState('dock')");
+    expect(projectChatSurface).toContain('data-preview-overlay');
+    expect(projectChatSurface).toContain('className={`ms${modelSelectorOpen ?');
+    expect(projectChatSurface).toContain("body: JSON.stringify({");
+    expect(projectChatSurface).toContain("mode: composerMode");
   });
 
   it('renders project chat action events through a dedicated action-card branch', () => {
-    expect(homeClient).toContain('function isProjectActionEvent(event: UiEvent): boolean');
-    expect(homeClient).toContain('function isProjectRunStatusEvent(event: UiEvent): boolean');
-    expect(homeClient).toContain('function resolveProjectRunIndicator(');
-    expect(homeClient).toContain('function ProjectRunStatusChip({ event }: { event: UiEvent })');
-    expect(homeClient).toContain('function ProjectActionCard({');
-    expect(homeClient).toContain('function GitActionMark({ size = 12 }: { size?: number })');
-    expect(homeClient).toContain('function DockerActionMark({ size = 12 }: { size?: number })');
-    expect(homeClient).toContain("if (kind === 'file_read') return { Icon: FileSearch, label: 'Read', tone: 'read' };");
-    expect(homeClient).toContain("if (kind === 'file_write') return { Icon: FilePenLine, label: 'Write', tone: 'write' };");
-    expect(homeClient).toContain("if (kind === 'file_list') return { Icon: FolderTree, label: 'List', tone: 'list' };");
-    expect(homeClient).toContain("if (kind === 'think') return { Icon: Brain, label: 'Thinking', tone: 'think' };");
-    expect(homeClient).toContain("if (kind === 'git_execution') return { Icon: GitActionMark, label: 'Git', tone: 'git' };");
-    expect(homeClient).toContain("if (kind === 'docker_execution') return { Icon: DockerActionMark, label: 'Docker', tone: 'docker' };");
-    expect(homeClient).toContain("return { Icon: TerminalSquare, label: 'Run', tone: 'run' };");
-    expect(homeClient).toContain('function renderCommandTokens(command: string)');
-    expect(homeClient).toContain('function commandTokenClass(token: string, tokenIndex: number): string');
-    expect(homeClient).toContain('const actionEvent = !isUser && !isTerminal && isProjectActionEvent(item);');
-    expect(homeClient).toContain('const runStatusEvent = !isUser && !isTerminal && isProjectRunStatusEvent(item);');
-    expect(homeClient).toContain('if (runStatusEvent) {');
-    expect(homeClient).toContain('className={`msg msg--run-status');
-    expect(homeClient).toContain('<ProjectRunStatusChip event={event} />');
-    expect(homeClient).toContain('className="pc-run-status__icon" aria-hidden="true"><Icon size={12} /></span>');
-    expect(homeClient).toContain('if (actionEvent) {');
-    expect(homeClient).toContain('data-project-action-card');
-    expect(homeClient).toContain('className="pc-action-stack"');
-    expect(homeClient).toContain('className="pc-action-card"');
-    expect(homeClient).toContain('className="pc-action-card__kind"');
-    expect(homeClient).toContain('className="pc-action-card__primary"');
-    expect(homeClient).toContain('className="pc-action-card__cmd"');
-    expect(homeClient).toContain('aria-label={primary}>{renderCommandTokens(primary)}</span>');
-    expect(homeClient).toContain('className="pc-action-connector" aria-hidden="true" />');
-    expect(homeClient).toContain('className="pc-action-result"');
-    expect(homeClient).toContain('className="pc-action-result__body"');
-    expect(homeClient).toContain("handleCopy(eventCommand(event), 'Action command')");
-    expect(homeClient).not.toContain('const toolLike = !isUser && isToolLikeEvent(item);');
+    // Event classifier and run-indicator helpers now live in helpers/projectChatEvents.ts.
+    expect(projectChatEventsHelper).toContain('export function isProjectActionEvent(event: UiEvent): boolean');
+    expect(projectChatEventsHelper).toContain('export function isProjectRunStatusEvent(event: UiEvent): boolean');
+    expect(projectChatSurface).toContain('function resolveProjectRunIndicator(');
+
+    // ProjectRunStatusChip and ProjectActionCard are now standalone components.
+    expect(projectRunStatusChip).toContain('export function ProjectRunStatusChip({ event }: { event: UiEvent })');
+    expect(projectActionCard).toContain('export function ProjectActionCard({');
+
+    // Inline brand marks moved to helpers/actionMarks.tsx.
+    expect(actionMarksHelper).toContain('export function GitActionMark({ size = 12 }: { size?: number })');
+    expect(actionMarksHelper).toContain('export function DockerActionMark({ size = 12 }: { size?: number })');
+
+    // Per-kind icon/label/tone mapping lives in helpers/projectChatEvents.ts.
+    expect(projectChatEventsHelper).toContain("if (kind === 'file_read') return { Icon: FileSearch, label: 'Read', tone: 'read' };");
+    expect(projectChatEventsHelper).toContain("if (kind === 'file_write') return { Icon: FilePenLine, label: 'Write', tone: 'write' };");
+    expect(projectChatEventsHelper).toContain("if (kind === 'file_list') return { Icon: FolderTree, label: 'List', tone: 'list' };");
+    expect(projectChatEventsHelper).toContain("if (kind === 'think') return { Icon: Brain, label: 'Thinking', tone: 'think' };");
+    expect(projectChatEventsHelper).toContain("if (kind === 'git_execution') return { Icon: GitActionMark, label: 'Git', tone: 'git' };");
+    expect(projectChatEventsHelper).toContain("if (kind === 'docker_execution') return { Icon: DockerActionMark, label: 'Docker', tone: 'docker' };");
+    expect(projectChatEventsHelper).toContain("return { Icon: TerminalSquare, label: 'Run', tone: 'run' };");
+
+    // Command-token rendering moved to helpers/commandTokens.tsx.
+    expect(commandTokensHelper).toContain('export function renderCommandTokens(command: string)');
+    expect(commandTokensHelper).toContain('export function commandTokenClass(token: string, tokenIndex: number): string');
+
+    // ProjectChatSurface routes events through dedicated run-status and action-card branches.
+    expect(projectChatSurface).toContain('const runStatusEvent = !isUser && !isTerminal && isProjectRunStatusEvent(item);');
+    expect(projectChatSurface).toContain('if (runStatusEvent) {');
+    expect(projectChatSurface).toContain('className={`msg msg--run-status');
+    expect(projectChatSurface).toContain('<ProjectRunStatusChip event={item} />');
+    expect(projectRunStatusChip).toContain('className="pc-run-status__icon" aria-hidden="true"><Icon size={12} /></span>');
+    expect(projectChatSurface).toContain("if (d.kind === 'action') {");
+    expect(projectChatSurface).toContain('<ProjectActionCard');
+
+    // The action-card JSX (stack/card/connector/result) is owned by ProjectActionCard.tsx.
+    expect(projectActionCard).toContain('data-project-action-card');
+    expect(projectActionCard).toContain('className="pc-action-stack"');
+    expect(projectActionCard).toContain('className="pc-action-card"');
+    expect(projectActionCard).toContain('className="pc-action-connector" aria-hidden="true" />');
+    expect(projectActionCard).toContain('className="pc-action-result"');
+    expect(projectActionCard).toContain('className="pc-action-result__body"');
+
+    // Action commands still copy through the shared handler.
+    expect(projectChatSurface).toContain("handleCopy(eventCommand(item), 'Action command')");
+    expect(projectChatSurface).not.toContain('const toolLike = !isUser && isToolLikeEvent(item);');
   });
 
   it('surfaces the active project chat run with a spinner and elapsed timer', () => {
-    expect(homeClient).toContain("import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';");
-    expect(homeClient).toContain('const [submittedRunStartedAt, setSubmittedRunStartedAt] = useState<string | null>(null);');
-    expect(homeClient).toContain('const [runtimeRunStartedAt, setRuntimeRunStartedAt] = useState<string | null>(null);');
-    expect(homeClient).toContain('const [projectRunNowMs, setProjectRunNowMs] = useState(() => Date.now());');
-    expect(homeClient).toContain('const { isRunning: runtimeRunning } = useSessionRuntime(');
-    expect(homeClient).toContain('const activeRunStartedAt = submittedRunStartedAt ?? runtimeRunStartedAt;');
-    expect(homeClient).toContain('const projectRunIndicator = resolveProjectRunIndicator({');
-    expect(homeClient).toContain('runtimeRunning,');
-    expect(homeClient).toContain('const localStartAfterLatestLifecycle =');
-    expect(homeClient).toContain('startedAt: activeRunStartedAt,');
-    expect(homeClient).toContain('setSubmittedRunStartedAt(submittedAt);');
-    expect(homeClient).toContain('if (!runtimeRunning) {');
-    expect(homeClient).toContain('setRuntimeRunStartedAt(null);');
-    expect(homeClient).toContain('setRuntimeRunStartedAt((current) => lifecycleStartedAt ?? current ?? submittedRunStartedAt ?? new Date().toISOString());');
-    expect(homeClient).toContain('setSubmittedRunStartedAt(null);');
-    expect(homeClient).toContain('const projectRunActive = Boolean(projectRunIndicator);');
-    expect(homeClient).toContain('<span className="ch__running-indicator" role="status" aria-live="polite" data-tone={projectRunIndicator.tone}>');
-    expect(homeClient).toContain('<span className="ch__running-spinner" aria-hidden="true" />');
-    expect(homeClient).toContain('{projectRunIndicator.label}');
-    expect(homeClient).toContain('<time className="ch__running-elapsed" dateTime={projectRunIndicator.startedAt}>');
-    expect(homeClient).toContain('{formatElapsedDuration(projectRunIndicator.startedAt, projectRunNowMs)}');
-    expect(homeClient).toContain('{projectRunActive ? (');
-    expect(homeClient).toContain('disabled={isAborting}');
-    expect(homeClient).toContain('disabled={!projectRunActive}');
+    expect(projectChatSurface).toContain("import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';");
+    expect(projectChatSurface).toContain('const [submittedRunStartedAt, setSubmittedRunStartedAt] = useState<string | null>(null);');
+    expect(projectChatSurface).toContain('const [runtimeRunStartedAt, setRuntimeRunStartedAt] = useState<string | null>(null);');
+    expect(projectChatSurface).toContain('const [projectRunNowMs, setProjectRunNowMs] = useState(() => Date.now());');
+    expect(projectChatSurface).toContain('const { isRunning: runtimeRunning } = useSessionRuntime(');
+    expect(projectChatSurface).toContain('const activeRunStartedAt = submittedRunStartedAt ?? runtimeRunStartedAt;');
+    expect(projectChatSurface).toContain('const projectRunIndicator = resolveProjectRunIndicator({');
+    expect(projectChatSurface).toContain('runtimeRunning,');
+    expect(projectChatSurface).toContain('const localStartAfterLatestLifecycle =');
+    expect(projectChatSurface).toContain('startedAt: activeRunStartedAt,');
+    expect(projectChatSurface).toContain('setSubmittedRunStartedAt(submittedAt);');
+    expect(projectChatSurface).toContain('if (!runtimeRunning) {');
+    expect(projectChatSurface).toContain('setRuntimeRunStartedAt(null);');
+    expect(projectChatSurface).toContain('setRuntimeRunStartedAt((current) => lifecycleStartedAt ?? current ?? submittedRunStartedAt ?? new Date().toISOString());');
+    expect(projectChatSurface).toContain('setSubmittedRunStartedAt(null);');
+    expect(projectChatSurface).toContain('const projectRunActive = Boolean(projectRunIndicator);');
+    expect(projectChatSurface).toContain('<span className="ch__running-indicator" role="status" aria-live="polite" data-tone={projectRunIndicator.tone}>');
+    expect(projectChatSurface).toContain('<span className="ch__running-spinner" aria-hidden="true" />');
+    expect(projectChatSurface).toContain('{projectRunIndicator.label}');
+    expect(projectChatSurface).toContain('<time className="ch__running-elapsed" dateTime={projectRunIndicator.startedAt}>');
+    expect(projectChatSurface).toContain('{formatElapsedDuration(projectRunIndicator.startedAt, projectRunNowMs)}');
+    expect(projectChatSurface).toContain('{projectRunActive ? (');
+    expect(projectChatSurface).toContain('disabled={isAborting}');
+    expect(projectChatSurface).toContain('disabled={!projectRunActive}');
   });
 
   it('renders project chat text replies through the shared markdown renderer', () => {
-    expect(homeClient).toContain("import { MarkdownContent } from './sessions/[sessionId]/chat-screen/center-pane/renderers/MarkdownContent';");
-    expect(homeClient).toContain('<div className="msg__text"><MarkdownContent body={getEventText(item)} /></div>');
-    expect(homeClient).toContain('<div className="chturn__agent-text"><MarkdownContent body={item.agentText} /></div>');
+    expect(projectChatSurface).toContain("import { MarkdownContent } from '@/app/sessions/[sessionId]/chat-screen/center-pane/renderers/MarkdownContent';");
+    expect(projectChatSurface).toContain('<div className="msg__text"><MarkdownContent body={getEventText(item)} /></div>');
+    expect(projectChatSurface).toContain('<div className="chturn__agent-text"><MarkdownContent body={item.agentText} /></div>');
   });
 
   it('routes Terminal composer submissions through the command execution endpoint', () => {
-    const submitStart = homeClient.indexOf('const handleSubmit = async');
-    const submitEnd = homeClient.indexOf('const projectShellClasses =', submitStart);
-    const submitSource = homeClient.slice(submitStart, submitEnd);
+    const submitStart = projectChatSurface.indexOf('const handleSubmit = async');
+    const submitEnd = projectChatSurface.indexOf('const handleStopActiveChat', submitStart);
+    const submitSource = projectChatSurface.slice(submitStart, submitEnd);
 
     expect(submitSource).toContain("const isTerminalMode = composerMode === 'terminal';");
     expect(submitSource).toContain("const endpoint = withAppBasePath(isTerminalMode ? `/api/runtime/sessions/${encodeURIComponent(session.id)}/terminal`");
@@ -257,13 +277,13 @@ describe('project list surface', () => {
   });
 
   it('renders Terminal command output as a Terminal timeline response with its own avatar', () => {
-    expect(homeClient).toContain("function readEventRole(event: UiEvent): 'user' | 'agent' | 'terminal'");
-    expect(homeClient).toContain("if (event.meta?.role === 'terminal') return 'terminal';");
-    expect(homeClient).toContain('const isTerminal = role === \'terminal\';');
-    expect(homeClient).toContain('data-terminal-response');
-    expect(homeClient).toContain('className="msg__terminal-command"');
-    expect(homeClient).toContain('<Terminal size={14} />');
-    expect(homeClient).toContain("{isUser ? 'You' : isTerminal ? 'Terminal' : agentLabel(activeAgent, activeModelLabel)}");
+    expect(projectChatEventsHelper).toContain("function readEventRole(event: UiEvent): 'user' | 'agent' | 'terminal'");
+    expect(projectChatEventsHelper).toContain("if (event.meta?.role === 'terminal') return 'terminal';");
+    expect(projectChatSurface).toContain('const isTerminal = role === \'terminal\';');
+    expect(projectChatSurface).toContain('data-terminal-response');
+    expect(projectChatSurface).toContain('className="msg__terminal-command"');
+    expect(projectChatSurface).toContain('<Terminal size={14} />');
+    expect(projectChatSurface).toContain("{isUser ? 'You' : isTerminal ? 'Terminal' : agentLabel(activeAgent, activeModelLabel)}");
     expect(cssBlock('.pc-proto .msg__avatar--terminal')).toContain('background: var(--n-900);');
     expect(cssBlock('.pc-proto .msg__terminal-output')).toContain('font-family: var(--font-mono);');
   });
@@ -282,10 +302,10 @@ describe('project list surface', () => {
 
   it('uses the prototype workspace panel icon and toggle wiring in the chat header', () => {
     const marker = 'className="ch__action ch__action--ws"';
-    const markerIndex = homeClient.indexOf(marker);
-    const workspaceAction = homeClient.slice(
-      homeClient.lastIndexOf('<button', markerIndex),
-      homeClient.indexOf('</button>', markerIndex) + '</button>'.length,
+    const markerIndex = projectChatSurface.indexOf(marker);
+    const workspaceAction = projectChatSurface.slice(
+      projectChatSurface.lastIndexOf('<button', markerIndex),
+      projectChatSurface.indexOf('</button>', markerIndex) + '</button>'.length,
     );
 
     expect(workspaceAction).toContain(marker);
@@ -297,31 +317,31 @@ describe('project list surface', () => {
     expect(workspaceAction).toContain('ref={workspaceToggleRef}');
     expect(workspaceAction).toContain('<PanelRight size={14} />');
     expect(workspaceAction).not.toContain('PanelsTopLeft');
-    expect(homeClient).toContain('const toggleWorkspacePanel = () => {');
-    expect(homeClient).toContain('if (workspaceOpen) {');
-    expect(homeClient).toContain('closeWorkspacePanel();');
-    expect(homeClient).toContain('openWorkspacePanel();');
-    expect(homeClient).toContain('<div className="ws__title ws-pane__title"><PanelRight size={14} />Workspace</div>');
+    expect(projectChatSurface).toContain('const toggleWorkspacePanel = () => {');
+    expect(projectChatSurface).toContain('if (workspaceOpen) {');
+    expect(projectChatSurface).toContain('closeWorkspacePanel();');
+    expect(projectChatSurface).toContain('openWorkspacePanel();');
+    expect(projectChatSurface).toContain('<div className="ws__title ws-pane__title"><PanelRight size={14} />Workspace</div>');
   });
 
   it('shows the workspace panel from the header toggle on compact project chat layouts', () => {
-    expect(homeClient).toContain('data-workspace-ready={workspaceLayoutReady ? \'true\' : \'false\'}');
-    expect(homeClient).toContain("window.matchMedia('(max-width: 1100px)')");
-    expect(homeClient).toContain('const defaultWorkspaceOpen = () => !window.matchMedia');
-    expect(homeClient).toContain('setWorkspaceLayoutReady(true);');
-    expect(homeClient).not.toContain('setWorkspaceLayoutReady(false);');
-    expect(homeClient).toContain("const [workspaceDrawerPhase, setWorkspaceDrawerPhase] = useState<'idle' | 'closing'>('idle');");
-    expect(homeClient).toContain("data-workspace={workspaceDrawerPhase === 'closing' ? 'closing' : workspaceOpen ? 'open' : 'closed'}");
-    expect(homeClient).toContain('const closeWorkspacePanel = useCallback(() => {');
-    expect(homeClient).toContain("setWorkspaceDrawerPhase('closing');");
-    expect(homeClient).toContain('const workspaceRef = useRef<HTMLElement | null>(null);');
-    expect(homeClient).toContain('const workspaceToggleRef = useRef<HTMLButtonElement | null>(null);');
-    expect(homeClient).toContain('const handleWorkspaceOutsideClick = (event: PointerEvent) => {');
-    expect(homeClient).toContain("document.addEventListener('pointerdown', handleWorkspaceOutsideClick);");
-    expect(homeClient).toContain('const handleWorkspaceEscape = (event: KeyboardEvent) => {');
-    expect(homeClient).toContain("event.key !== 'Escape'");
-    expect(homeClient).toContain("document.addEventListener('keydown', handleWorkspaceEscape);");
-    expect(homeClient).toContain('<aside ref={workspaceRef} className="shell__workspace ws ws-pane"');
+    expect(projectChatSurface).toContain('data-workspace-ready={workspaceLayoutReady ? \'true\' : \'false\'}');
+    expect(projectChatSurface).toContain("window.matchMedia('(max-width: 1100px)')");
+    expect(projectChatSurface).toContain('const defaultWorkspaceOpen = () => !window.matchMedia');
+    expect(projectChatSurface).toContain('setWorkspaceLayoutReady(true);');
+    expect(projectChatSurface).not.toContain('setWorkspaceLayoutReady(false);');
+    expect(projectChatSurface).toContain("const [workspaceDrawerPhase, setWorkspaceDrawerPhase] = useState<'idle' | 'closing'>('idle');");
+    expect(projectChatSurface).toContain("data-workspace={workspaceDrawerPhase === 'closing' ? 'closing' : workspaceOpen ? 'open' : 'closed'}");
+    expect(projectChatSurface).toContain('const closeWorkspacePanel = useCallback(() => {');
+    expect(projectChatSurface).toContain("setWorkspaceDrawerPhase('closing');");
+    expect(projectChatSurface).toContain('const workspaceRef = useRef<HTMLElement | null>(null);');
+    expect(projectChatSurface).toContain('const workspaceToggleRef = useRef<HTMLButtonElement | null>(null);');
+    expect(projectChatSurface).toContain('const handleWorkspaceOutsideClick = (event: PointerEvent) => {');
+    expect(projectChatSurface).toContain("document.addEventListener('pointerdown', handleWorkspaceOutsideClick);");
+    expect(projectChatSurface).toContain('const handleWorkspaceEscape = (event: KeyboardEvent) => {');
+    expect(projectChatSurface).toContain("event.key !== 'Escape'");
+    expect(projectChatSurface).toContain("document.addEventListener('keydown', handleWorkspaceEscape);");
+    expect(projectChatSurface).toContain('<aside ref={workspaceRef} className="shell__workspace ws ws-pane"');
     expect(uiCss).toContain('.pc-proto[data-workspace-ready="true"][data-workspace="open"] .shell__workspace');
     expect(uiCss).toContain('.pc-proto[data-workspace-ready="true"][data-workspace="closing"] .shell__workspace');
     expect(uiCss).toContain('top: 0;\n    right: 0;\n    bottom: 0;');
@@ -337,10 +357,10 @@ describe('project list surface', () => {
   });
 
   it('matches the workspace panel header to the chat-screen-v1 prototype', () => {
-    expect(homeClient).toContain('<div className="ws__head ws-pane__header">');
-    expect(homeClient).toContain('<div className="ws__title ws-pane__title"><PanelRight size={14} />Workspace</div>');
-    expect(homeClient).toContain('<div className="ws__actions ws-pane__actions">');
-    expect(homeClient).toContain('className="ws__action ws-pane__action btn btn--ghost btn--icon btn--sm"');
+    expect(projectChatSurface).toContain('<div className="ws__head ws-pane__header">');
+    expect(projectChatSurface).toContain('<div className="ws__title ws-pane__title"><PanelRight size={14} />Workspace</div>');
+    expect(projectChatSurface).toContain('<div className="ws__actions ws-pane__actions">');
+    expect(projectChatSurface).toContain('className="ws__action ws-pane__action btn btn--ghost btn--icon btn--sm"');
     expect(uiCss).toContain('.pc-proto .ws-pane__header {');
     expect(uiCss).toContain('height: 52px;');
     expect(uiCss).toContain('padding: 0 var(--sp-8);');
@@ -351,15 +371,15 @@ describe('project list surface', () => {
   });
 
   it('matches the workspace panel top navigation to the chat-screen-v1 prototype', () => {
-    expect(homeClient).toContain('File as FileIcon,');
-    expect(homeClient).toContain('Clock,');
-    expect(homeClient).toContain('<button type="button" className="ws__tab" data-tab="run" aria-pressed={workspaceTab === \'run\'} onClick={() => activateWorkspaceTab(\'run\')}><Clock size={12} />Run</button>');
-    expect(homeClient).toContain('<button type="button" className="ws__tab" data-tab="files" aria-pressed={workspaceTab === \'files\'} onClick={() => activateWorkspaceTab(\'files\')}><FileIcon size={12} />Files</button>');
-    expect(homeClient).not.toContain('<span className="ws__tab-badge">{fileCount}</span>');
-    expect(homeClient).toContain('<button type="button" className="ws__tab" data-tab="terminal" aria-pressed={workspaceTab === \'terminal\'} onClick={() => activateWorkspaceTab(\'terminal\')}><Terminal size={12} />Terminal</button>');
-    expect(homeClient).toContain('<button type="button" className="ws__tab" data-tab="context" aria-pressed={workspaceTab === \'context\'} onClick={() => activateWorkspaceTab(\'context\')}><PanelsTopLeft size={12} />Context</button>');
-    expect(homeClient).not.toContain('<Terminal size={12} />Term</button>');
-    expect(homeClient).not.toContain('<Database size={12} />Ctx</button>');
+    expect(projectChatSurface).toContain('File as FileIcon,');
+    expect(projectChatSurface).toContain('Clock,');
+    expect(projectChatSurface).toContain('<button type="button" className="ws__tab" data-tab="run" aria-pressed={workspaceTab === \'run\'} onClick={() => activateWorkspaceTab(\'run\')}><Clock size={12} />Run</button>');
+    expect(projectChatSurface).toContain('<button type="button" className="ws__tab" data-tab="files" aria-pressed={workspaceTab === \'files\'} onClick={() => activateWorkspaceTab(\'files\')}><FileIcon size={12} />Files</button>');
+    expect(projectChatSurface).not.toContain('<span className="ws__tab-badge">{fileCount}</span>');
+    expect(projectChatSurface).toContain('<button type="button" className="ws__tab" data-tab="terminal" aria-pressed={workspaceTab === \'terminal\'} onClick={() => activateWorkspaceTab(\'terminal\')}><Terminal size={12} />Terminal</button>');
+    expect(projectChatSurface).toContain('<button type="button" className="ws__tab" data-tab="context" aria-pressed={workspaceTab === \'context\'} onClick={() => activateWorkspaceTab(\'context\')}><PanelsTopLeft size={12} />Context</button>');
+    expect(projectChatSurface).not.toContain('<Terminal size={12} />Term</button>');
+    expect(projectChatSurface).not.toContain('<Database size={12} />Ctx</button>');
     expect(uiCss).toContain('padding: 0 var(--sp-4);');
     expect(uiCss).toContain('background: var(--surface);');
     expect(uiCss).toContain('border-bottom: 2px solid transparent;');
@@ -370,20 +390,20 @@ describe('project list surface', () => {
   });
 
   it('keeps the workspace metrics while restyling run details as chat-screen-v1 cards', () => {
-    expect(homeClient).toContain('<div className="run-summary">');
-    expect(homeClient).toContain('<span className="run-summary__label">Steps</span>');
-    expect(homeClient).toContain('<span className="run-summary__label">Tokens</span>');
-    expect(homeClient).toContain('<span className="run-summary__label">Activity</span>');
-    expect(homeClient).toContain('className="ws-card ws-card--run"');
-    expect(homeClient).toContain('className="chist ws-card ws-card--history"');
-    expect(homeClient).toContain('className="ws-card__head"');
-    expect(homeClient).toContain('className="ws-card__title">Run ·');
-    expect(homeClient).toContain('className="ws-card__meta"');
-    expect(homeClient).toContain('className="run-step ws-run-step"');
-    expect(homeClient).toContain('className="run-step__dot ws-run-step__dot run-step__dot--done ws-run-step__dot--done"');
-    expect(homeClient).toContain('className="run-step__body ws-run-step__body"');
-    expect(homeClient).toContain('className="run-step__time ws-run-step__time"');
-    expect(homeClient).toContain('className="ws-empty-state"');
+    expect(projectChatSurface).toContain('<div className="run-summary">');
+    expect(projectChatSurface).toContain('<span className="run-summary__label">Steps</span>');
+    expect(projectChatSurface).toContain('<span className="run-summary__label">Tokens</span>');
+    expect(projectChatSurface).toContain('<span className="run-summary__label">Activity</span>');
+    expect(projectChatSurface).toContain('className="ws-card ws-card--run"');
+    expect(projectChatSurface).toContain('className="chist ws-card ws-card--history"');
+    expect(projectChatSurface).toContain('className="ws-card__head"');
+    expect(projectChatSurface).toContain('className="ws-card__title">Run ·');
+    expect(projectChatSurface).toContain('className="ws-card__meta"');
+    expect(projectChatSurface).toContain('className="run-step ws-run-step"');
+    expect(projectChatSurface).toContain('className="run-step__dot ws-run-step__dot run-step__dot--done ws-run-step__dot--done"');
+    expect(projectChatSurface).toContain('className="run-step__body ws-run-step__body"');
+    expect(projectChatSurface).toContain('className="run-step__time ws-run-step__time"');
+    expect(projectChatSurface).toContain('className="ws-empty-state"');
     expect(uiCss).toContain('.pc-proto .ws-card {');
     expect(uiCss).toContain('.pc-proto .ws-card__head {');
     expect(uiCss).toContain('.pc-proto .ws-run-step {');
@@ -392,16 +412,16 @@ describe('project list surface', () => {
   });
 
   it('renders functional workspace panes instead of one static Run panel', () => {
-    expect(homeClient).toContain("workspaceTab === 'run'");
-    expect(homeClient).toContain("workspaceTab === 'files'");
-    expect(homeClient).toContain("workspaceTab === 'terminal'");
-    expect(homeClient).toContain("workspaceTab === 'context'");
-    expect(homeClient).toContain('data-pane="run"');
-    expect(homeClient).toContain('data-pane="files"');
-    expect(homeClient).toContain('data-pane="terminal"');
-    expect(homeClient).toContain('data-pane="context"');
-    expect(homeClient).toContain('data-preview-dock');
-    expect(homeClient).toContain('data-copy-feedback');
+    expect(projectChatSurface).toContain("workspaceTab === 'run'");
+    expect(projectChatSurface).toContain("workspaceTab === 'files'");
+    expect(projectChatSurface).toContain("workspaceTab === 'terminal'");
+    expect(projectChatSurface).toContain("workspaceTab === 'context'");
+    expect(projectChatSurface).toContain('data-pane="run"');
+    expect(projectChatSurface).toContain('data-pane="files"');
+    expect(projectChatSurface).toContain('data-pane="terminal"');
+    expect(projectChatSurface).toContain('data-pane="context"');
+    expect(projectChatSurface).toContain('data-preview-dock');
+    expect(projectChatSurface).toContain('data-copy-feedback');
   });
 
   it('keeps project chats nested under the selected project in the redesigned sidebar', () => {
@@ -530,12 +550,12 @@ describe('project list surface', () => {
   });
 
   it('keeps the docked preview above the composer instead of overlapping it', () => {
-    expect(homeClient).toContain('const prototypeRef = useRef<HTMLDivElement | null>(null);');
-    expect(homeClient).toContain('const composerWrapRef = useRef<HTMLElement | null>(null);');
-    expect(homeClient).toContain("prototypeNode.style.setProperty('--pc-composer-height'");
-    expect(homeClient).toContain('const composerObserver = new ResizeObserver(syncComposerHeight);');
-    expect(homeClient).toContain('ref={prototypeRef}');
-    expect(homeClient).toContain('<footer ref={composerWrapRef} className="cmp-wrap">');
+    expect(projectChatSurface).toContain('const prototypeRef = useRef<HTMLDivElement | null>(null);');
+    expect(projectChatSurface).toContain('const composerWrapRef = useRef<HTMLElement | null>(null);');
+    expect(projectChatSurface).toContain("prototypeNode.style.setProperty('--pc-composer-height'");
+    expect(projectChatSurface).toContain('const composerObserver = new ResizeObserver(syncComposerHeight);');
+    expect(projectChatSurface).toContain('ref={prototypeRef}');
+    expect(projectChatSurface).toContain('<footer ref={composerWrapRef} className="cmp-wrap">');
 
     const dockWrap = cssBlock('.pc-proto .preview-dock-wrap');
     expect(uiCss).toContain('--pc-composer-height: 226px;');

@@ -3600,15 +3600,20 @@ html[data-theme='dark'] .pc-proto .pc-action-stack {
 
 .pc-proto .pc-action-card__cmd {
   display: block;
+  width: 100%;
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: pre;
+  white-space: nowrap;
   color: var(--text-tertiary);
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.35;
+}
+.pc-proto .pc-action-card__cmd > .pc-action-token,
+.pc-proto .pc-action-card__cmd > span {
+  white-space: nowrap;
 }
 
 .pc-proto .pc-action-token--bin {
@@ -3638,6 +3643,8 @@ html[data-theme='dark'] .pc-proto .pc-action-stack {
   color: var(--text-primary);
   font-weight: 700;
 }
+
+.pc-proto .pc-action-token--str { color: var(--syn-str); }
 
 .pc-proto .pc-action-card__path {
   display: block;
@@ -3729,6 +3736,14 @@ html[data-theme='dark'] .pc-proto .pc-action-stack {
   border-color: var(--border-default);
   background: var(--surface-sunken);
 }
+
+/* === Density variants on the existing pc-action-card === */
+/* Default density keeps existing layout — no rule needed beyond data-density="default" placeholder */
+.pc-proto .pc-action-card[data-density="expanded"] .pc-action-card__primary { display: none; }
+/* In expanded mode the cmd-badge carries the label; the legacy __primary text is hidden. */
+
+/* Hide the legacy kind-icon span when the new CmdBadge is shown alongside */
+.pc-proto .pc-action-card[data-density][data-density] .pc-action-card__kind { display: none; }
 
 .pc-proto .thinking,
 .pc-proto .tool {
@@ -5836,6 +5851,204 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
 
 @keyframes pc-spin {
   to { transform: rotate(360deg); }
+}
+
+/* === Action card badge (cmd-tone-driven) === */
+.pc-proto .cmd-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2.5px 8px 2.5px 7px;
+  border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+  font-family: var(--font-mono); letter-spacing: 0.01em;
+  line-height: 1; white-space: nowrap;
+  position: relative; flex-shrink: 0; vertical-align: middle;
+  background: var(--tone-bg); color: var(--tone-fg);
+  border: 0;
+}
+.pc-proto .cmd-badge[data-clickable="true"] {
+  cursor: pointer;
+  transition: transform var(--t-fast), box-shadow var(--t-fast);
+}
+.pc-proto .cmd-badge[data-clickable="true"]:hover,
+.pc-proto .cmd-badge[data-clickable="true"]:focus-visible {
+  transform: translateY(-1px); box-shadow: var(--shadow-sm); z-index: 30; outline: 0;
+}
+.pc-proto .cmd-badge[data-open="true"] {
+  box-shadow: 0 0 0 2px var(--b-500), var(--shadow-sm); z-index: 30;
+}
+
+.pc-proto .cmd-badge[data-tone="read"]    { --tone-fg: var(--tone-read-fg);    --tone-bg: var(--tone-read-bg); }
+.pc-proto .cmd-badge[data-tone="write"]   { --tone-fg: var(--tone-write-fg);   --tone-bg: var(--tone-write-bg); }
+.pc-proto .cmd-badge[data-tone="edit"]    { --tone-fg: var(--tone-edit-fg);    --tone-bg: var(--tone-edit-bg); }
+.pc-proto .cmd-badge[data-tone="shell"]   { --tone-fg: var(--tone-shell-fg);   --tone-bg: var(--tone-shell-bg); }
+.pc-proto .cmd-badge[data-tone="list"]    { --tone-fg: var(--tone-list-fg);    --tone-bg: var(--tone-list-bg); }
+.pc-proto .cmd-badge[data-tone="glob"]    { --tone-fg: var(--tone-glob-fg);    --tone-bg: var(--tone-glob-bg); }
+.pc-proto .cmd-badge[data-tone="search"]  { --tone-fg: var(--tone-search-fg);  --tone-bg: var(--tone-search-bg); }
+.pc-proto .cmd-badge[data-tone="net"]     { --tone-fg: var(--tone-net-fg);     --tone-bg: var(--tone-net-bg); }
+.pc-proto .cmd-badge[data-tone="pkg"]     { --tone-fg: var(--tone-pkg-fg);     --tone-bg: var(--tone-pkg-bg); }
+.pc-proto .cmd-badge[data-tone="build"]   { --tone-fg: var(--tone-build-fg);   --tone-bg: var(--tone-build-bg); }
+.pc-proto .cmd-badge[data-tone="test"]    { --tone-fg: var(--tone-test-fg);    --tone-bg: var(--tone-test-bg); }
+.pc-proto .cmd-badge[data-tone="git"]     { --tone-fg: var(--tone-git-fg);     --tone-bg: var(--tone-git-bg); }
+.pc-proto .cmd-badge[data-tone="docker"]  { --tone-fg: var(--tone-docker-fg);  --tone-bg: var(--tone-docker-bg); }
+.pc-proto .cmd-badge[data-tone="destroy"] { --tone-fg: var(--tone-destroy-fg); --tone-bg: var(--tone-destroy-bg); }
+.pc-proto .cmd-badge[data-tone="think"]   { --tone-fg: var(--tone-think-fg);   --tone-bg: var(--tone-think-bg); }
+.pc-proto .cmd-badge[data-tone="todo"]    { --tone-fg: var(--tone-todo-fg);    --tone-bg: var(--tone-todo-bg); }
+.pc-proto .cmd-badge[data-tone="agent"]   { --tone-fg: var(--tone-agent-fg);   --tone-bg: var(--tone-agent-bg); }
+.pc-proto .cmd-badge[data-tone="cmd"]     { --tone-fg: var(--tone-cmd-fg);     --tone-bg: var(--tone-cmd-bg); }
+
+.pc-proto .cmd-badge[data-running="true"]::after {
+  content: ''; position: absolute; inset: -3px; border-radius: 999px;
+  border: 1.5px dashed currentColor; opacity: 0.6; pointer-events: none;
+  animation: cmdBadgePulse 1.6s ease-out infinite;
+}
+@keyframes cmdBadgePulse {
+  0%   { opacity: 0.55; transform: scale(0.92); }
+  100% { opacity: 0;    transform: scale(1.10); }
+}
+.pc-proto .cmd-badge[data-error="true"]::before {
+  content: ''; position: absolute; top: -2px; right: -2px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--danger-fg); border: 2px solid var(--surface);
+}
+
+/* === File chip === */
+.pc-proto .cmd-file-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 6px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  font-family: var(--font-mono); font-size: 10.8px;
+  color: var(--text-primary);
+  line-height: 1.35;
+  max-width: 36ch;
+  cursor: pointer; vertical-align: middle; flex-shrink: 0;
+}
+.pc-proto .cmd-file-chip:hover { background: var(--surface-hover); border-color: var(--border-default); }
+.pc-proto .cmd-file-chip:focus-visible { outline: 2px solid var(--b-500); outline-offset: 1px; }
+.pc-proto .cmd-file-chip:disabled { cursor: default; opacity: 0.85; }
+.pc-proto .cmd-file-chip__name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.pc-proto .cmd-file-chip[data-variant="code"]   svg { color: var(--tone-read-fg); }
+.pc-proto .cmd-file-chip[data-variant="folder"] svg { color: var(--b-500); }
+.pc-proto .cmd-file-chip[data-variant="config"] svg { color: var(--warning-fg); }
+.pc-proto .cmd-file-chip[data-variant="shell"]  svg { color: var(--success-fg); }
+.pc-proto .cmd-file-chip[data-variant="other"]  svg { color: var(--text-tertiary); }
+
+/* === Density toggle (4-way header control) === */
+.pc-proto .cmd-density-toggle {
+  display: inline-flex; align-items: center;
+  background: var(--surface); border: 1px solid var(--border-default);
+  border-radius: 999px; padding: 3px; gap: 2px;
+}
+.pc-proto .cmd-density-toggle button {
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  background: transparent; border: 0; padding: 5px 12px; border-radius: 999px;
+  cursor: pointer; transition: all var(--t-fast);
+}
+.pc-proto .cmd-density-toggle button:hover { color: var(--text-primary); }
+.pc-proto .cmd-density-toggle button[aria-selected="true"] {
+  background: var(--surface-sunken); color: var(--b-600);
+  box-shadow: inset 0 0 0 1px rgba(47,107,255,0.36);
+}
+
+/* === Chat header context menu dropdown === */
+.pc-proto .ch-context-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 240px;
+  background: var(--surface);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 12px 32px rgba(15,17,23,0.16), 0 0 0 1px rgba(15,17,23,0.06);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pc-proto .ch-context-menu__section { display: flex; flex-direction: column; gap: 4px; }
+.pc-proto .ch-context-menu__label {
+  padding: 4px 10px 2px;
+  font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+}
+.pc-proto .ch-density-menu { display: flex; flex-direction: column; gap: 2px; }
+.pc-proto .ch-density-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text-primary);
+  text-align: left;
+  transition: background var(--t-fast);
+}
+.pc-proto .ch-density-menu__item:hover,
+.pc-proto .ch-density-menu__item:focus-visible {
+  background: var(--surface-sunken);
+  outline: 0;
+}
+.pc-proto .ch-density-menu__item.is-active { background: var(--surface-sunken); }
+
+.pc-proto .ch-density-menu__icon {
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+.pc-proto .ch-density-menu__item.is-active .ch-density-menu__icon {
+  color: var(--b-600);
+}
+
+.pc-proto .ch-density-menu__main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.pc-proto .ch-density-menu__label { font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
+.pc-proto .ch-density-menu__hint {
+  font-size: 10.8px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.pc-proto .ch-density-menu__check {
+  width: 16px; height: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--b-600);
+  flex-shrink: 0;
+}
+
+/* === Minimal stack (consecutive action grouping) === */
+.pc-proto .cmd-mini-stack { display: flex; flex-direction: column; gap: 6px; }
+.pc-proto .cmd-mini-stack__row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; padding: 4px 0; }
+.pc-proto .cmd-mini-stack__label {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--text-tertiary); margin-left: 8px; font-family: var(--font-mono);
+}
+.pc-proto .cmd-mini-stack__inline { margin-top: 6px; }
+.pc-proto .cmd-mini-badge-wrap { position: relative; }
+
+/* Hover popover for minimal badges */
+.pc-proto .cmd-mini-pop {
+  position: absolute; bottom: calc(100% + 8px); left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface); border: 1px solid var(--border-default);
+  border-radius: 6px; padding: 8px 12px; display: grid; gap: 4px;
+  min-width: 240px; max-width: 420px;
+  box-shadow: 0 8px 24px rgba(15,17,23,0.12), 0 0 0 1px rgba(15,17,23,0.06);
+  z-index: 50; white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity var(--t-fast);
+}
+.pc-proto .cmd-mini-badge-wrap:hover .cmd-mini-pop,
+.pc-proto .cmd-mini-badge-wrap:focus-within .cmd-mini-pop { opacity: 1; }
+.pc-proto .cmd-mini-pop__meta {
+  font-size: 10.5px; color: var(--text-tertiary); font-family: var(--font-mono);
 }
 
 .files-head {

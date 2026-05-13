@@ -1,0 +1,1583 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARIS · Action Card Density · v3 (cmd tones + file chips + syntax)</title>
+<style>
+/* ============================================================
+ *  Tokens — synced with design/chat-prototype.html (redesign baseline)
+ * ============================================================ */
+:root {
+  --font-sans: 'Inter', 'Pretendard Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+
+  --n-0:#FFFFFF; --n-50:#F7F8FA; --n-100:#EEF0F4; --n-200:#E0E4EB; --n-300:#C7CCD6;
+  --n-400:#A5ACB8; --n-500:#7E8592; --n-600:#5D6472; --n-700:#444A57; --n-800:#2C313B;
+  --n-900:#1A1D25; --n-950:#0F1117;
+
+  --b-500:#2F6BFF; --b-600:#1E50DB;
+
+  --success-fg:#087A3A; --danger-fg:#C22A1F; --warning-fg:#B85C00;
+
+  --surface:#FFFFFF; --surface-raised:#FFFFFF; --surface-sunken:#F7F8FA;
+  --surface-hover:#EEF0F4; --surface-active:#E0E4EB;
+
+  --text-primary:#0F1117; --text-secondary:#4A4F58; --text-tertiary:#7E8592; --text-disabled:#A5ACB8;
+
+  --border-subtle:#EEF0F4; --border-default:#E0E4EB; --border-strong:#C7CCD6;
+
+  --sp-1:2px; --sp-2:4px; --sp-3:6px; --sp-4:8px; --sp-5:12px; --sp-6:16px;
+  --sp-8:20px; --sp-10:24px; --sp-12:32px; --sp-14:40px; --sp-16:48px;
+
+  --r-xs:3px; --r-sm:4px; --r-md:6px; --r-lg:10px; --r-xl:14px; --r-full:999px;
+
+  --shadow-xs:0 1px 2px rgba(15,17,23,0.04), 0 0 0 1px rgba(15,17,23,0.04);
+  --shadow-sm:0 1px 2px rgba(15,17,23,0.06), 0 1px 3px rgba(15,17,23,0.06);
+  --shadow-md:0 4px 6px rgba(15,17,23,0.05), 0 2px 4px rgba(15,17,23,0.06);
+  --shadow-popover: 0 8px 24px rgba(15,17,23,0.12), 0 0 0 1px rgba(15,17,23,0.06);
+
+  --t-fast:120ms cubic-bezier(0.16,1,0.3,1);
+  --t-base:180ms cubic-bezier(0.16,1,0.3,1);
+
+  /* Tone palette */
+  --tone-read-fg:#6B3FB5;     --tone-read-bg:#F1ECFE;
+  --tone-write-fg:#087A3A;    --tone-write-bg:#E7F7EE;
+  --tone-edit-fg:#0F7E5E;     --tone-edit-bg:#DAF1E5;
+  --tone-shell-fg:#B85C00;    --tone-shell-bg:#FFF1E0;
+  --tone-list-fg:#0E7490;     --tone-list-bg:#DCF6FF;
+  --tone-glob-fg:#0369A1;     --tone-glob-bg:#DBEEFF;
+  --tone-search-fg:#BE185D;   --tone-search-bg:#FFE4F0;
+  --tone-net-fg:#0F5BAF;      --tone-net-bg:#DAE8FB;
+  --tone-pkg-fg:#C2410C;      --tone-pkg-bg:#FFE6D5;
+  --tone-build-fg:#4338CA;    --tone-build-bg:#E6E7FF;
+  --tone-test-fg:#BE123C;     --tone-test-bg:#FFE4E6;
+  --tone-git-fg:#A0361D;      --tone-git-bg:#FFE2D4;
+  --tone-docker-fg:#0A4F82;   --tone-docker-bg:#D9E8F8;
+  --tone-destroy-fg:#C22A1F;  --tone-destroy-bg:#FCE5E2;
+  --tone-think-fg:#0B6E8A;    --tone-think-bg:#D7F2FB;
+  --tone-todo-fg:#7A5C00;     --tone-todo-bg:#FFF1B8;
+  --tone-agent-fg:#3F3D6E;    --tone-agent-bg:#E8E7F4;
+  --tone-cmd-fg:#4A4F58;    --tone-cmd-bg:#EBEDF1;
+
+  /* Syntax highlight tokens (chat-prototype 의 .cb-* 와 매칭) */
+  --syn-cmd:#0F1117;       /* command name */
+  --syn-flag:#7E8592;      /* --flag */
+  --syn-str:#087A3A;       /* "string" */
+  --syn-op:#1E50DB;        /* | && > */
+  --syn-num:#B85C00;       /* numeric */
+}
+
+html[data-theme='dark'] {
+  --surface:#14171D; --surface-raised:#1C2029; --surface-sunken:#0F1117;
+  --surface-hover:#2C313B; --surface-active:#3B4150;
+  --text-primary:#F7F8FA; --text-secondary:#C7CCD6; --text-tertiary:#8B92A0; --text-disabled:#5D6472;
+  --border-subtle:#2C313B; --border-default:#3B4150; --border-strong:#5D6472;
+
+  --shadow-xs: 0 0 0 1px rgba(255,255,255,0.04);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-popover: 0 8px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06);
+
+  --tone-read-fg:#C4A4F0;     --tone-read-bg:rgba(139,92,246,0.22);
+  --tone-write-fg:#5BD89A;    --tone-write-bg:rgba(16,185,129,0.22);
+  --tone-edit-fg:#4DD0A4;     --tone-edit-bg:rgba(13,200,150,0.22);
+  --tone-shell-fg:#F9B969;    --tone-shell-bg:rgba(245,158,11,0.20);
+  --tone-list-fg:#7BD4E8;     --tone-list-bg:rgba(34,211,238,0.20);
+  --tone-glob-fg:#7AB5FA;     --tone-glob-bg:rgba(59,130,246,0.22);
+  --tone-search-fg:#F58CC2;   --tone-search-bg:rgba(236,72,153,0.22);
+  --tone-net-fg:#84B7F4;      --tone-net-bg:rgba(59,130,246,0.20);
+  --tone-pkg-fg:#FB923C;      --tone-pkg-bg:rgba(234,88,12,0.22);
+  --tone-build-fg:#A5A4F4;    --tone-build-bg:rgba(99,102,241,0.22);
+  --tone-test-fg:#F47B92;     --tone-test-bg:rgba(225,29,72,0.22);
+  --tone-git-fg:#FF8D6C;      --tone-git-bg:rgba(240,80,50,0.24);
+  --tone-docker-fg:#7CC5FF;   --tone-docker-bg:rgba(36,150,237,0.22);
+  --tone-destroy-fg:#F38484;  --tone-destroy-bg:rgba(239,68,68,0.22);
+  --tone-think-fg:#75D4EA;    --tone-think-bg:rgba(34,211,238,0.18);
+  --tone-todo-fg:#F4D266;     --tone-todo-bg:rgba(250,204,21,0.18);
+  --tone-agent-fg:#B7B4ED;    --tone-agent-bg:rgba(139,92,246,0.18);
+  --tone-cmd-fg:#AFB4BE;    --tone-cmd-bg:rgba(255,255,255,0.06);
+
+  --syn-cmd:#F7F8FA;
+  --syn-flag:#8B92A0;
+  --syn-str:#5BD89A;
+  --syn-op:#8FA8FF;
+  --syn-num:#F9B969;
+}
+
+/* ============================================================
+ *  Reset & base
+ * ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100%; }
+body {
+  font-family: var(--font-sans);
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+svg { display: block; flex-shrink: 0; }
+
+.ico  { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.ico--xs { width:11px; height:11px; }
+.ico--sm { width:12px; height:12px; }
+.ico--lg { width:18px; height:18px; }
+
+/* ============================================================
+ *  Layout shell
+ * ============================================================ */
+.page { max-width: 1240px; margin: 0 auto; padding: var(--sp-16) var(--sp-12) var(--sp-16); }
+.page-header {
+  display:flex; align-items:flex-end; justify-content:space-between;
+  gap: var(--sp-10);
+  padding-bottom: var(--sp-8);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--sp-12);
+}
+.page-eyebrow { font-size:11px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color: var(--b-600); margin: 0 0 var(--sp-4); }
+.page-title { font-size:28px; font-weight:700; letter-spacing:-0.02em; margin:0; }
+.page-subtitle { margin: var(--sp-4) 0 0; color: var(--text-secondary); font-size:14px; max-width:680px; line-height:1.55; }
+.page-subtitle strong { color: var(--text-primary); font-weight:600; }
+.page-subtitle .inlinecode {
+  font-family: var(--font-mono); background: var(--surface);
+  padding: 1px 5px; border-radius: var(--r-xs);
+  border: 1px solid var(--border-subtle); font-size: 12px;
+}
+
+.section { margin-top: var(--sp-14); }
+.section-header { display:flex; align-items:baseline; gap: var(--sp-5); margin-bottom: var(--sp-6); }
+.section-title { font-size:17px; font-weight:700; letter-spacing:-0.01em; margin:0; }
+.section-sub { font-size:13px; color: var(--text-tertiary); }
+.scenarioLegend { display:flex; gap: var(--sp-5); flex-wrap:wrap; font-size:12px; color: var(--text-tertiary); margin-top: var(--sp-3); }
+.scenarioLegend code {
+  background: var(--surface); border:1px solid var(--border-subtle);
+  padding: 1px 6px; border-radius: var(--r-sm);
+  font-family: var(--font-mono); color: var(--text-secondary); font-size:11px;
+}
+
+/* ============================================================
+ *  Density toggle
+ * ============================================================ */
+.density-toggle {
+  display:inline-flex; align-items:center;
+  background: var(--surface); border:1px solid var(--border-default);
+  border-radius: var(--r-full); padding:3px; gap:2px;
+  box-shadow: var(--shadow-xs);
+}
+.density-toggle button {
+  font-size:12px; font-weight:600; color: var(--text-secondary);
+  padding: 5px 12px; border-radius: var(--r-full);
+  display:inline-flex; align-items:center; gap: 5px;
+  transition: all var(--t-fast);
+}
+.density-toggle button:hover { color: var(--text-primary); }
+.density-toggle button.is-active {
+  background: var(--surface-sunken);
+  color: var(--b-600);
+  box-shadow: inset 0 0 0 1px rgba(47,107,255,0.36);
+}
+.density-toggle .dot { width:5px; height:5px; border-radius:50%; background:currentColor; opacity:.8; }
+
+/* ============================================================
+ *  Command badge
+ * ============================================================ */
+.cmd-badge {
+  display:inline-flex; align-items:center; gap: 5px;
+  padding: 2.5px 8px 2.5px 7px;
+  border-radius: var(--r-full);
+  font-size: 11px; font-weight: 700;
+  font-family: var(--font-mono); letter-spacing: 0.01em;
+  line-height: 1; white-space: nowrap;
+  position: relative; flex-shrink: 0;
+  vertical-align: middle;
+}
+.cmd-badge .ico { width:11px; height:11px; stroke-width:2; }
+
+.t-read    { color: var(--tone-read-fg);    background: var(--tone-read-bg); }
+.t-write   { color: var(--tone-write-fg);   background: var(--tone-write-bg); }
+.t-edit    { color: var(--tone-edit-fg);    background: var(--tone-edit-bg); }
+.t-shell   { color: var(--tone-shell-fg);   background: var(--tone-shell-bg); }
+.t-list    { color: var(--tone-list-fg);    background: var(--tone-list-bg); }
+.t-glob    { color: var(--tone-glob-fg);    background: var(--tone-glob-bg); }
+.t-search  { color: var(--tone-search-fg);  background: var(--tone-search-bg); }
+.t-net     { color: var(--tone-net-fg);     background: var(--tone-net-bg); }
+.t-pkg     { color: var(--tone-pkg-fg);     background: var(--tone-pkg-bg); }
+.t-build   { color: var(--tone-build-fg);   background: var(--tone-build-bg); }
+.t-test    { color: var(--tone-test-fg);    background: var(--tone-test-bg); }
+.t-git     { color: var(--tone-git-fg);     background: var(--tone-git-bg); }
+.t-docker  { color: var(--tone-docker-fg);  background: var(--tone-docker-bg); }
+.t-destroy { color: var(--tone-destroy-fg); background: var(--tone-destroy-bg); }
+.t-think   { color: var(--tone-think-fg);   background: var(--tone-think-bg); }
+.t-todo    { color: var(--tone-todo-fg);    background: var(--tone-todo-bg); }
+.t-agent   { color: var(--tone-agent-fg);   background: var(--tone-agent-bg); }
+.t-cmd   { color: var(--tone-cmd-fg);   background: var(--tone-cmd-bg); }
+
+.cmd-badge.is-running::after {
+  content:''; position:absolute; inset:-3px; border-radius: var(--r-full);
+  border: 1.5px dashed currentColor; opacity:.6;
+  animation: badgePulse 1.6s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes badgePulse {
+  0% { opacity: .55; transform: scale(0.92); }
+  100% { opacity: 0; transform: scale(1.10); }
+}
+.cmd-badge.is-error::before {
+  content:''; position:absolute; top:-2px; right:-2px;
+  width:7px; height:7px; border-radius:50%;
+  background: var(--danger-fg);
+  border: 2px solid var(--surface);
+}
+html[data-theme='dark'] .cmd-badge.is-error::before { border-color: var(--surface-sunken); }
+
+/* ============================================================
+ *  File chip (pre-redesign 패턴 복귀)
+ * ============================================================ */
+.file-chip {
+  display: inline-flex; align-items: center; vertical-align: middle;
+  gap: 4px;
+  padding: 1px 6px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-xs);
+  font-family: var(--font-mono); font-size: 10.8px;
+  color: var(--text-primary);
+  cursor: pointer; line-height: 1.35;
+  max-width: 36ch;
+}
+html[data-theme='dark'] .file-chip { background: rgba(255,255,255,0.04); }
+.file-chip:hover { background: var(--surface-hover); border-color: var(--border-default); }
+.file-chip .ico { width: 11px; height: 11px; color: var(--b-500); }
+.file-chip--folder .ico { color: var(--b-500); }
+.file-chip--code   .ico { color: var(--accent-violet, var(--tone-read-fg)); }
+.file-chip--config .ico { color: var(--warning-fg); }
+.file-chip--shell  .ico { color: var(--success-fg); }
+.file-chip__name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0;
+}
+
+/* ============================================================
+ *  Syntax highlight tokens (chat-prototype redesign)
+ * ============================================================ */
+.cmd-tok      { display: inline; }
+.cmd-tok-cmd  { color: var(--syn-cmd);  font-weight: 600; }
+.cmd-tok-flag { color: var(--syn-flag); }
+.cmd-tok-str  { color: var(--syn-str); }
+.cmd-tok-op   { color: var(--syn-op);   font-weight: 600; }
+.cmd-tok-num  { color: var(--syn-num); }
+.cmd-tok-path { color: var(--text-secondary); }
+.cmd-prep     { color: var(--text-tertiary); font-style: normal; }
+
+/* ============================================================
+ *  TOOL row
+ * ============================================================ */
+.tool {
+  display:flex; align-items:center; gap: var(--sp-4);
+  padding: 6px 10px 6px 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  font-size:12px; max-width: 640px;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.tool:hover { background: var(--surface-sunken); border-color: var(--border-default); cursor: pointer; }
+
+.tool__body {
+  flex:1; min-width:0;
+  display:flex; align-items:center; gap: 6px;
+  font-family: var(--font-mono); font-size: 11.4px;
+  color: var(--text-secondary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tool__body > * { flex-shrink: 0; }
+.tool__body .cmd-prep { margin: 0 1px; }
+
+.tool__meta {
+  font-size: 10.5px; color: var(--text-tertiary);
+  font-family: var(--font-mono); flex-shrink: 0;
+}
+.tool__caret { color: var(--text-tertiary); flex-shrink: 0; transition: transform var(--t-fast); }
+.tool.tool--expanded .tool__caret { transform: rotate(90deg); color: var(--b-600); }
+
+.tool-wrap { display: flex; flex-direction: column; gap: 0; max-width: 720px; }
+.tool-wrap .tool { max-width: none; }
+.tool-wrap.is-expanded .tool {
+  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+}
+.tool__result {
+  display: none;
+  border: 1px solid var(--border-subtle); border-top: 0;
+  border-bottom-left-radius: var(--r-md); border-bottom-right-radius: var(--r-md);
+  background: var(--surface-sunken);
+  padding: var(--sp-5) var(--sp-6);
+  font-family: var(--font-mono); font-size: 11.5px; line-height: 1.55;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  max-height: 360px; overflow: auto;
+}
+.tool-wrap.is-expanded .tool__result { display: block; }
+.tool__result--error { color: var(--danger-fg); }
+
+.tool__result--diff { padding: var(--sp-4) var(--sp-5); display: grid; gap: 1px; }
+.tool-wrap:not(.is-expanded) .tool__result--diff { display: none; }
+.tool-wrap.is-expanded .tool__result--diff { display: grid; }
+.diff-line   { display: block; padding: 0 var(--sp-3); border-radius: 2px; }
+.diff-line--add  { color: var(--success-fg); background: rgba(8,122,58,0.07); }
+.diff-line--del  { color: var(--danger-fg);  background: rgba(194,42,31,0.07); }
+.diff-line--hunk { color: var(--b-600); font-weight: 600; }
+.diff-line--ctx  { color: var(--text-secondary); }
+.diff-summary {
+  display:inline-flex; gap: 6px;
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--text-tertiary); flex-shrink: 0;
+}
+.diff-summary .add { color: var(--success-fg); }
+.diff-summary .del { color: var(--danger-fg); }
+
+/* ============================================================
+ *  Minimal stack
+ * ============================================================ */
+.cmd-stack { display: flex; flex-direction: column; gap: var(--sp-3); }
+.cmd-stack__row {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) 0;
+}
+.cmd-stack__row .cmd-badge { cursor: pointer; transition: transform var(--t-fast), box-shadow var(--t-fast); }
+.cmd-stack__row .cmd-badge:hover,
+.cmd-stack__row .cmd-badge:focus-visible { transform: translateY(-1px); box-shadow: var(--shadow-sm); z-index: 30; }
+.cmd-stack__row .cmd-badge.is-open { box-shadow: 0 0 0 2px var(--b-500), var(--shadow-sm); z-index: 30; }
+.cmd-stack__label {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.04em; color: var(--text-tertiary);
+  margin-left: var(--sp-4);
+  font-family: var(--font-mono);
+}
+.cmd-stack__label .accent { color: var(--b-600); }
+.cmd-stack__label .warn   { color: var(--warning-fg); }
+.cmd-stack__label .err    { color: var(--danger-fg); }
+.cmd-stack__inline { display: none; margin-top: var(--sp-3); }
+.cmd-stack__inline.is-open { display: block; }
+
+/* Hover popover for minimal badge */
+.cmd-pop {
+  position: absolute;
+  bottom: calc(100% + 8px); left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  padding: var(--sp-4) var(--sp-5);
+  display: grid; gap: 4px;
+  min-width: 240px; max-width: 420px;
+  box-shadow: var(--shadow-popover);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--t-fast), transform var(--t-base);
+  z-index: 50; white-space: nowrap;
+  color: var(--text-primary);
+  text-align: left;
+  font-family: var(--font-sans); font-weight: 400;
+  letter-spacing: normal;
+  cursor: default;
+}
+.cmd-stack__row .cmd-badge:hover .cmd-pop,
+.cmd-stack__row .cmd-badge:focus-visible .cmd-pop { opacity: 1; transform: translateX(-50%) translateY(0); }
+.cmd-pop__cmd {
+  font-family: var(--font-mono); font-size: 11.3px;
+  color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis;
+  display: flex; align-items: center; gap: 5px;
+}
+.cmd-pop__cmd > * { flex-shrink: 0; }
+.cmd-pop__meta { font-size: 10.5px; color: var(--text-tertiary); font-family: var(--font-mono); }
+.cmd-pop::after {
+  content:''; position:absolute; top: 100%; left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 8px; height: 8px;
+  background: var(--surface);
+  border-right: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
+  margin-top: -4px;
+}
+
+/* ============================================================
+ *  Compare grid
+ * ============================================================ */
+.compareCard {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  padding: var(--sp-6) var(--sp-8) var(--sp-8);
+  box-shadow: var(--shadow-xs);
+}
+.compareGrid {
+  display: grid;
+  grid-template-columns: 110px minmax(0,1fr) minmax(0,1.8fr) minmax(0,2.2fr);
+  gap: 6px var(--sp-6);
+  align-items: stretch;
+}
+.compareGrid .col-head {
+  font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: var(--sp-4) 0 var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--sp-3);
+}
+.compareGrid .row-label {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-secondary);
+  align-self: center;
+  padding-right: var(--sp-5);
+  font-family: var(--font-mono);
+}
+.compareGrid .row-label small {
+  display:block; font-size: 10.5px; font-weight: 500;
+  color: var(--text-tertiary); margin-top: 2px;
+}
+.compareGrid .cell {
+  padding: var(--sp-3) 0; display: flex; align-items: center; min-height: 44px;
+  min-width: 0;
+}
+.compareGrid .cell-expanded { align-items: flex-start; padding-top: var(--sp-4); padding-bottom: var(--sp-4); }
+.compareGrid .row-divider { grid-column: 1 / -1; height: 1px; background: var(--border-subtle); margin: 2px 0; }
+
+/* ============================================================
+ *  Flow simulation
+ * ============================================================ */
+.flowFrame {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-xs);
+}
+.flowTabs { display: flex; padding: 0 var(--sp-6); border-bottom: 1px solid var(--border-subtle); background: var(--surface); }
+.flowTab {
+  font-size: 12.5px; font-weight: 600;
+  color: var(--text-secondary);
+  padding: 12px 14px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all var(--t-fast);
+}
+.flowTab:hover { color: var(--text-primary); }
+.flowTab.is-active { color: var(--b-600); border-bottom-color: var(--b-500); }
+.flowTab .badge { margin-left: 6px; font-size: 10px; font-weight: 500; color: var(--text-tertiary); }
+.flowBody { padding: var(--sp-8) var(--sp-10) var(--sp-10); background: var(--surface-sunken); }
+
+.msg { display: grid; grid-template-columns: 28px 1fr; gap: var(--sp-4); margin: var(--sp-4) 0; }
+.msg--user { grid-template-columns: 1fr; justify-items: end; }
+.msg__avatar {
+  width: 28px; height: 28px; border-radius: var(--r-md);
+  display: grid; place-items: center;
+  font-size: 12px; font-weight: 700;
+  background: linear-gradient(135deg, #f0c5a8 0%, #CB6D4B 100%);
+  color: #2a1208;
+}
+.msg__body { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; max-width: 760px; }
+.msg__header { display: flex; gap: var(--sp-4); align-items: baseline; font-size: 11.5px; }
+.msg__name { font-weight: 700; color: var(--text-secondary); }
+.msg__time { font-family: var(--font-mono); color: var(--text-tertiary); font-size: 10.5px; }
+.msg__text { font-size: 13.2px; line-height: 1.6; color: var(--text-primary); }
+.msg__text code { font-family: var(--font-mono); font-size: 11.5px; background: var(--surface-hover); padding: 1px 5px; border-radius: var(--r-xs); }
+.msg__text strong { font-weight: 600; }
+.msg__bubble {
+  background: var(--surface); border: 1px solid var(--border-subtle);
+  padding: var(--sp-4) var(--sp-5); border-radius: var(--r-lg);
+  font-size: 13px; max-width: 520px;
+}
+
+/* ============================================================
+ *  Tone mapping grid
+ * ============================================================ */
+.toneGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  padding: var(--sp-6) var(--sp-8);
+  box-shadow: var(--shadow-xs);
+}
+@media (max-width: 980px) { .toneGrid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .toneGrid { grid-template-columns: 1fr; } }
+.toneCell {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-3) var(--sp-4);
+  align-items: center;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-sunken);
+}
+.toneCell .cmd-badge { grid-column: 1; }
+.toneCell .desc {
+  grid-column: 2;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  display: flex; flex-wrap: wrap; gap: 4px;
+  line-height: 1.4;
+}
+.toneCell .desc span {
+  display: inline-block;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  padding: 1px 5px; border-radius: var(--r-xs);
+  font-size: 10.8px; color: var(--text-secondary);
+}
+.toneCell .role {
+  grid-column: 1 / -1;
+  font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-tertiary); margin-top: -2px;
+}
+
+/* ============================================================
+ *  Rules card
+ * ============================================================ */
+.rulesCard {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  padding: var(--sp-8) var(--sp-10);
+  box-shadow: var(--shadow-xs);
+  font-size: 13.3px; line-height: 1.7;
+  color: var(--text-secondary);
+}
+.rulesCard h3 {
+  font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text-primary); margin: 0 0 var(--sp-3);
+}
+.rulesCard h3:not(:first-child) { margin-top: var(--sp-6); }
+.rulesCard ul { margin: 0; padding-left: 1.2em; }
+.rulesCard li { margin: 4px 0; }
+.rulesCard strong { color: var(--text-primary); font-weight: 600; }
+.rulesCard code {
+  font-family: var(--font-mono); font-size: 11.5px;
+  background: var(--surface-sunken);
+  padding: 1px 6px; border-radius: var(--r-xs);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+.rulesCard__col { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-10); }
+@media (max-width: 880px) { .rulesCard__col { grid-template-columns: 1fr; } }
+
+.theme-switch {
+  position: fixed; top: 14px; right: 14px;
+  background: var(--surface); border: 1px solid var(--border-default);
+  border-radius: var(--r-full); padding: 5px 11px;
+  font-size: 11px; font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer; z-index: 200;
+  box-shadow: var(--shadow-xs);
+}
+.theme-switch:hover { color: var(--text-primary); }
+
+</style>
+</head>
+<body>
+
+<button class="theme-switch" id="themeSwitch">🌗 theme</button>
+
+<main class="page">
+
+  <!-- ========================= HEADER ========================= -->
+  <header class="page-header">
+    <div>
+      <p class="page-eyebrow">ARIS · Chat UI · Density · v3</p>
+      <h1 class="page-title">Action Card 밀도 — 명령어 + 파일 칩 + 신택스</h1>
+      <p class="page-subtitle">
+        <strong>kind 분류 폐기</strong>, Bash 첫 토큰(<span class="inlinecode">git</span> · <span class="inlinecode">npm</span> · <span class="inlinecode">sed</span> · …) 또는 agent 도구 이름을 직접 표시.
+        파일 인자는 <strong>파일 칩</strong>으로, 나머지 명령어는 <strong>신택스 하이라이팅</strong> 처리.
+        매핑은 Section D의 단일 테이블.
+      </p>
+    </div>
+    <div class="density-toggle" role="tablist" aria-label="기본 밀도 모드 선택">
+      <button class="is-active" data-density="auto"><span class="dot"></span>자동</button>
+      <button data-density="expanded">확장</button>
+      <button data-density="default">기본</button>
+      <button data-density="minimal">최소</button>
+    </div>
+  </header>
+
+  <!-- ========================= SECTION A — Mode comparison ========================= -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">A. 모드별 단일 카드 비교</h2>
+      <span class="section-sub">파일 인자 = 파일 칩 · 명령어 토큰 = 신택스 하이라이팅</span>
+    </div>
+
+    <div class="compareCard">
+      <div class="compareGrid">
+        <div class="col-head">Command</div>
+        <div class="col-head">최소형 (배지)</div>
+        <div class="col-head">기본형</div>
+        <div class="col-head">확장형</div>
+
+        <!-- ============ Read ============ -->
+        <div class="row-label">Read<small>agent tool</small></div>
+        <div class="cell">
+          <span class="cmd-badge t-read" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Read
+          </span>
+        </div>
+        <div class="cell">
+          <div class="tool">
+            <span class="cmd-badge t-read"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Read</span>
+            <div class="tool__body">
+              <span class="file-chip file-chip--code" title="services/aris-web/app/sessions/[sessionId]/ChatInterface.tsx">
+                <svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                <span class="file-chip__name">ChatInterface.tsx</span>
+              </span>
+              <span class="tool__meta">L1–80</span>
+            </div>
+            <span class="tool__meta">0.1s</span>
+            <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+        <div class="cell cell-expanded">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="cmd-badge t-read"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Read</span>
+              <div class="tool__body">
+                <span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">ChatInterface.tsx</span></span>
+                <span class="tool__meta">L1–80</span>
+              </div>
+              <span class="tool__meta">0.1s</span>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <pre class="tool__result">  1  'use client';
+  2
+  3  import React, { useEffect, useMemo, useRef, useState } from 'react';
+  4  import { useRouter } from 'next/navigation';
+  5  import { ChatTimeline } from './chat-screen/center-pane/ChatTimeline';
+… (+2 891 more lines)</pre>
+          </div>
+        </div>
+        <div class="row-divider"></div>
+
+        <!-- ============ Write ============ -->
+        <div class="row-label">Write<small>agent tool</small></div>
+        <div class="cell">
+          <span class="cmd-badge t-write" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Write
+          </span>
+        </div>
+        <div class="cell">
+          <div class="tool">
+            <span class="cmd-badge t-write"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Write</span>
+            <div class="tool__body">
+              <span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">ActionEventCard.tsx</span></span>
+              <span class="diff-summary"><span class="add">+14</span><span class="del">-3</span></span>
+            </div>
+            <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+        <div class="cell cell-expanded">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="cmd-badge t-write"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Write</span>
+              <div class="tool__body">
+                <span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">ActionEventCard.tsx</span></span>
+                <span class="diff-summary"><span class="add">+14</span><span class="del">-3</span></span>
+              </div>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <pre class="tool__result tool__result--diff"><span class="diff-line diff-line--hunk">@@ -42,7 +42,18 @@</span><span class="diff-line diff-line--ctx">  if (!expanded) {</span><span class="diff-line diff-line--ctx">    return (</span><span class="diff-line diff-line--del">-     &lt;div className={styles.actionCompact}&gt;</span><span class="diff-line diff-line--add">+     &lt;div className={`${styles.actionCompact} ${styles[densityClass]}`}&gt;</span><span class="diff-line diff-line--add">+       {density === 'minimal' &amp;&amp; (</span><span class="diff-line diff-line--add">+         &lt;span className={styles.cmdBadge} /&gt;</span><span class="diff-line diff-line--add">+       )}</span></pre>
+          </div>
+        </div>
+        <div class="row-divider"></div>
+
+        <!-- ============ Glob ============ -->
+        <div class="row-label">Glob<small>agent tool</small></div>
+        <div class="cell">
+          <span class="cmd-badge t-glob" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="13" cy="13" r="2"/><path d="M15 15l2.2 2.2"/></svg>Glob
+          </span>
+        </div>
+        <div class="cell">
+          <div class="tool">
+            <span class="cmd-badge t-glob"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="13" cy="13" r="2"/><path d="M15 15l2.2 2.2"/></svg>Glob</span>
+            <div class="tool__body">
+              <span class="cmd-tok-str">**/*.tsx</span>
+              <span class="cmd-prep">in</span>
+              <span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">services/aris-web</span></span>
+            </div>
+            <span class="tool__meta">28 files</span>
+            <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+        <div class="cell cell-expanded">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="cmd-badge t-glob"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="13" cy="13" r="2"/><path d="M15 15l2.2 2.2"/></svg>Glob</span>
+              <div class="tool__body">
+                <span class="cmd-tok-str">**/*.tsx</span>
+                <span class="cmd-prep">in</span>
+                <span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">services/aris-web</span></span>
+              </div>
+              <span class="tool__meta">28 files</span>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <pre class="tool__result">services/aris-web/app/page.tsx
+services/aris-web/app/sessions/[sessionId]/page.tsx
+services/aris-web/app/sessions/[sessionId]/ChatInterface.tsx
+services/aris-web/app/sessions/[sessionId]/CustomizationSidebar.tsx
+… (+24 more)</pre>
+          </div>
+        </div>
+        <div class="row-divider"></div>
+
+        <!-- ============ Grep ============ -->
+        <div class="row-label">Grep<small>agent tool</small></div>
+        <div class="cell">
+          <span class="cmd-badge t-search" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Grep
+          </span>
+        </div>
+        <div class="cell">
+          <div class="tool">
+            <span class="cmd-badge t-search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Grep</span>
+            <div class="tool__body">
+              <span class="cmd-tok-str">"renderEventPayload"</span>
+              <span class="cmd-prep">in</span>
+              <span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">services/aris-web</span></span>
+            </div>
+            <span class="tool__meta">3 matches</span>
+            <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+        <div class="cell cell-expanded">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="cmd-badge t-search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Grep</span>
+              <div class="tool__body">
+                <span class="cmd-tok-str">"renderEventPayload"</span>
+                <span class="cmd-prep">in</span>
+                <span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">services/aris-web</span></span>
+              </div>
+              <span class="tool__meta">3 matches</span>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <pre class="tool__result">services/aris-web/app/sessions/[sessionId]/chat-screen/center-pane/renderers/ActionEventCard.tsx:129
+services/aris-web/app/sessions/[sessionId]/chat-screen/center-pane/ChatTimeline.tsx:305
+services/aris-web/app/sessions/[sessionId]/chat-screen/center-pane/ChatTimeline.tsx:379</pre>
+          </div>
+        </div>
+        <div class="row-divider"></div>
+
+        <!-- ============ git ============ -->
+        <div class="row-label">git<small>shell · first token</small></div>
+        <div class="cell">
+          <span class="cmd-badge t-git" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><circle cx="6" cy="18" r="2"/><path d="M6 8v8M8 18h2a4 4 0 0 0 4-4V8"/></svg>git
+          </span>
+        </div>
+        <div class="cell">
+          <div class="tool">
+            <span class="cmd-badge t-git"><svg class="ico" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><circle cx="6" cy="18" r="2"/><path d="M6 8v8M8 18h2a4 4 0 0 0 4-4V8"/></svg>git</span>
+            <div class="tool__body">
+              <span class="cmd-tok-cmd">git</span>
+              <span>commit</span>
+              <span class="cmd-tok-flag">-m</span>
+              <span class="cmd-tok-str">"fix: density toggle keyboard focus"</span>
+            </div>
+            <span class="tool__meta">0.4s</span>
+            <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+        <div class="cell cell-expanded">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="cmd-badge t-git"><svg class="ico" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><circle cx="6" cy="18" r="2"/><path d="M6 8v8M8 18h2a4 4 0 0 0 4-4V8"/></svg>git</span>
+              <div class="tool__body">
+                <span class="cmd-tok-cmd">git</span>
+                <span>commit</span>
+                <span class="cmd-tok-flag">-m</span>
+                <span class="cmd-tok-str">"fix: density toggle keyboard focus"</span>
+              </div>
+              <span class="tool__meta">0.4s</span>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <pre class="tool__result">[codex/action-card-density-prototype 8f24aa1] fix: density toggle keyboard focus
+ 1 file changed, 6 insertions(+), 2 deletions(-)</pre>
+          </div>
+        </div>
+        <div class="row-divider"></div>
+
+        <!-- ============ npm ============ -->
+        <div class="row-label">npm<small>shell · first token</small></div>
+        <div class="cell">
+          <span class="cmd-badge t-pkg" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>npm
+          </span>
+        </div>
+        <div class="cell">
+          <div class="tool">
+            <span class="cmd-badge t-pkg"><svg class="ico" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>npm</span>
+            <div class="tool__body">
+              <span class="cmd-tok-cmd">npm</span>
+              <span>test</span>
+              <span class="cmd-tok-op">--</span>
+              <span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">chat-screen/center-pane</span></span>
+            </div>
+            <span class="tool__meta">2.41s</span>
+            <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+        <div class="cell cell-expanded">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="cmd-badge t-pkg"><svg class="ico" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>npm</span>
+              <div class="tool__body">
+                <span class="cmd-tok-cmd">npm</span>
+                <span>test</span>
+                <span class="cmd-tok-op">--</span>
+                <span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">chat-screen/center-pane</span></span>
+              </div>
+              <span class="tool__meta">2.41s</span>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <pre class="tool__result">PASS  __tests__/center-pane/ChatTimeline.test.tsx
+  ✓ renders agent message bubble (24ms)
+  ✓ collapses consecutive action events into stack (18ms)
+  ✓ preserves expand state across density changes (9ms)
+
+Tests:       3 passed, 3 total
+Time:        2.41s</pre>
+          </div>
+        </div>
+        <div class="row-divider"></div>
+
+        <!-- ============ sed ============ -->
+        <div class="row-label">sed<small>shell · first token</small></div>
+        <div class="cell">
+          <span class="cmd-badge t-edit" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>sed
+          </span>
+        </div>
+        <div class="cell">
+          <div class="tool">
+            <span class="cmd-badge t-edit"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>sed</span>
+            <div class="tool__body">
+              <span class="cmd-tok-cmd">sed</span>
+              <span class="cmd-tok-flag">-i</span>
+              <span class="cmd-tok-str">'s/kindChip/cmdBadge/g'</span>
+              <span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">ActionEventCard.tsx</span></span>
+            </div>
+            <span class="tool__meta">0.1s</span>
+            <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+        <div class="cell cell-expanded">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="cmd-badge t-edit"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>sed</span>
+              <div class="tool__body">
+                <span class="cmd-tok-cmd">sed</span>
+                <span class="cmd-tok-flag">-i</span>
+                <span class="cmd-tok-str">'s/kindChip/cmdBadge/g'</span>
+                <span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">ActionEventCard.tsx</span></span>
+              </div>
+              <span class="tool__meta">0.1s</span>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <pre class="tool__result">(no output · exit 0)</pre>
+          </div>
+        </div>
+        <div class="row-divider"></div>
+
+        <!-- ============ cat (with pipe) ============ -->
+        <div class="row-label">cat | head<small>shell · pipe</small></div>
+        <div class="cell">
+          <span class="cmd-badge t-read" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>cat
+          </span>
+        </div>
+        <div class="cell">
+          <div class="tool">
+            <span class="cmd-badge t-read"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>cat</span>
+            <div class="tool__body">
+              <span class="cmd-tok-cmd">cat</span>
+              <span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">middleware.ts</span></span>
+              <span class="cmd-tok-op">|</span>
+              <span class="cmd-tok-cmd">head</span>
+              <span class="cmd-tok-flag">-20</span>
+            </div>
+            <span class="tool__meta">0.0s · +1 piped</span>
+            <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+        <div class="cell cell-expanded">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="cmd-badge t-read"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>cat</span>
+              <div class="tool__body">
+                <span class="cmd-tok-cmd">cat</span>
+                <span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">middleware.ts</span></span>
+                <span class="cmd-tok-op">|</span>
+                <span class="cmd-tok-cmd">head</span>
+                <span class="cmd-tok-flag">-20</span>
+              </div>
+              <span class="tool__meta">0.0s</span>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <pre class="tool__result">import { NextRequest, NextResponse } from 'next/server';
+import { verifySession } from '@/lib/auth/session';
+
+export async function middleware(req: NextRequest) {
+  const session = await verifySession(req);
+  …</pre>
+          </div>
+        </div>
+        <div class="row-divider"></div>
+
+        <!-- ============ docker (running) ============ -->
+        <div class="row-label">docker<small>shell · running</small></div>
+        <div class="cell">
+          <span class="cmd-badge t-docker is-running" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="9" width="14" height="9" rx="1"/><path d="M17 13h3.5L22 11l-1.5-1H17M3 13l3-3M9 13l3-3"/></svg>docker
+          </span>
+        </div>
+        <div class="cell">
+          <div class="tool">
+            <span class="cmd-badge t-docker is-running"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="9" width="14" height="9" rx="1"/><path d="M17 13h3.5L22 11l-1.5-1H17M3 13l3-3M9 13l3-3"/></svg>docker</span>
+            <div class="tool__body">
+              <span class="cmd-tok-cmd">docker</span>
+              <span>compose up</span>
+              <span class="cmd-tok-flag">-d</span>
+              <span>aris-web-blue</span>
+            </div>
+            <span class="tool__meta">…</span>
+          </div>
+        </div>
+        <div class="cell cell-expanded">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="cmd-badge t-docker is-running"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="9" width="14" height="9" rx="1"/><path d="M17 13h3.5L22 11l-1.5-1H17M3 13l3-3M9 13l3-3"/></svg>docker</span>
+              <div class="tool__body">
+                <span class="cmd-tok-cmd">docker</span>
+                <span>compose up</span>
+                <span class="cmd-tok-flag">-d</span>
+                <span>aris-web-blue</span>
+              </div>
+              <span class="tool__meta">…</span>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <pre class="tool__result">[+] Pulling 2/6
+ ⠹ aris-web-blue Pulling
+ ⠹ db Pulling
+ …</pre>
+          </div>
+        </div>
+        <div class="row-divider"></div>
+
+        <!-- ============ rm (error) ============ -->
+        <div class="row-label">rm<small>shell · error</small></div>
+        <div class="cell">
+          <span class="cmd-badge t-destroy is-error" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>rm
+          </span>
+        </div>
+        <div class="cell">
+          <div class="tool">
+            <span class="cmd-badge t-destroy is-error"><svg class="ico" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>rm</span>
+            <div class="tool__body">
+              <span class="cmd-tok-cmd">rm</span>
+              <span class="cmd-tok-flag">-rf</span>
+              <span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">services/aris-web/.next/cache</span></span>
+            </div>
+            <span class="tool__meta">exit 1</span>
+            <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+        <div class="cell cell-expanded">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="cmd-badge t-destroy is-error"><svg class="ico" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>rm</span>
+              <div class="tool__body">
+                <span class="cmd-tok-cmd">rm</span>
+                <span class="cmd-tok-flag">-rf</span>
+                <span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">services/aris-web/.next/cache</span></span>
+              </div>
+              <span class="tool__meta">exit 1</span>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <pre class="tool__result tool__result--error">rm: cannot remove 'services/aris-web/.next/cache': Permission denied
+exit code 1</pre>
+          </div>
+        </div>
+        <div class="row-divider"></div>
+
+        <!-- ============ Think ============ -->
+        <div class="row-label">Think<small>agent thought</small></div>
+        <div class="cell">
+          <span class="cmd-badge t-think" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M9.5 2A4.5 4.5 0 0 0 5 6.5v0a4 4 0 0 0-2 7.5v0a4 4 0 0 0 2 7.5v0a4.5 4.5 0 0 0 4.5 0V2zM14.5 2A4.5 4.5 0 0 1 19 6.5v0a4 4 0 0 1 2 7.5v0a4 4 0 0 1-2 7.5v0a4.5 4.5 0 0 1-4.5 0V2z"/></svg>Think
+          </span>
+        </div>
+        <div class="cell">
+          <div class="tool">
+            <span class="cmd-badge t-think"><svg class="ico" viewBox="0 0 24 24"><path d="M9.5 2A4.5 4.5 0 0 0 5 6.5v0a4 4 0 0 0-2 7.5v0a4 4 0 0 0 2 7.5v0a4.5 4.5 0 0 0 4.5 0V2zM14.5 2A4.5 4.5 0 0 1 19 6.5v0a4 4 0 0 1 2 7.5v0a4 4 0 0 1-2 7.5v0a4.5 4.5 0 0 1-4.5 0V2z"/></svg>Think</span>
+            <div class="tool__body" style="font-family: var(--font-sans); font-weight: 500; color: var(--text-primary);">
+              Searching for the auth middleware definition…
+            </div>
+            <span class="tool__meta">0.8s</span>
+            <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+        <div class="cell cell-expanded">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="cmd-badge t-think"><svg class="ico" viewBox="0 0 24 24"><path d="M9.5 2A4.5 4.5 0 0 0 5 6.5v0a4 4 0 0 0-2 7.5v0a4 4 0 0 0 2 7.5v0a4.5 4.5 0 0 0 4.5 0V2zM14.5 2A4.5 4.5 0 0 1 19 6.5v0a4 4 0 0 1 2 7.5v0a4 4 0 0 1-2 7.5v0a4.5 4.5 0 0 1-4.5 0V2z"/></svg>Think</span>
+              <div class="tool__body" style="font-family: var(--font-sans); font-weight: 500; color: var(--text-primary);">Searching for the auth middleware definition</div>
+              <span class="tool__meta">0.8s</span>
+              <svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <pre class="tool__result" style="font-family: var(--font-sans); white-space: pre-wrap;">사용자가 "auth middleware 어디 있어?"라고 물었다.
+프로젝트 구조상 services/aris-backend/src/middleware/ 또는 services/aris-web/middleware.ts에 있을 가능성이 높다.
+먼저 두 후보를 모두 검색해보자.</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="scenarioLegend">
+      <span>토큰 색상: <span class="cmd-tok-cmd">command</span> · <span class="cmd-tok-flag">--flag</span> · <span class="cmd-tok-str">"string"</span> · <span class="cmd-tok-op">| &amp;&amp; &gt;</span> · 파일 경로는 <code style="font-family:var(--font-mono)">file-chip</code></span>
+    </p>
+  </section>
+
+  <!-- ========================= SECTION B — Flow simulation ========================= -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">B. 채팅 흐름 시뮬레이션</h2>
+      <span class="section-sub">실제 도구 호출 시퀀스 (파일 칩 + 신택스 적용)</span>
+    </div>
+
+    <div class="flowFrame" style="margin-top: var(--sp-5);">
+      <div class="flowTabs" role="tablist">
+        <button class="flowTab" data-tab="expanded">확장형</button>
+        <button class="flowTab" data-tab="default">기본형</button>
+        <button class="flowTab" data-tab="minimal">최소형</button>
+        <button class="flowTab is-active" data-tab="auto">자동<span class="badge">권장</span></button>
+      </div>
+
+      <!-- ============ Default ============ -->
+      <div class="flowBody" data-tab-body="default" style="display:none;">
+        <div class="msg msg--user"><div class="msg__body" style="align-items:flex-end;"><div class="msg__bubble">@auth middleware 어디서 정의되는지 확인해서 로깅 추가해줘</div></div></div>
+        <div class="msg">
+          <span class="msg__avatar">C</span>
+          <div class="msg__body">
+            <div class="msg__header"><span class="msg__name">Claude · 4.7</span><span class="msg__time">10:24</span></div>
+            <div class="msg__text"><p>확인하겠습니다. 먼저 후보 위치를 살펴볼게요.</p></div>
+
+            <div class="tool"><span class="cmd-badge t-read"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Read</span><div class="tool__body"><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">services/aris-web/middleware.ts</span></span></div><span class="tool__meta">0.1s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="tool"><span class="cmd-badge t-read"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Read</span><div class="tool__body"><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">services/aris-web/lib/auth/session.ts</span></span></div><span class="tool__meta">0.1s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="tool"><span class="cmd-badge t-read"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Read</span><div class="tool__body"><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">services/aris-backend/src/middleware/auth.ts</span></span></div><span class="tool__meta">0.1s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="tool"><span class="cmd-badge t-write"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Write</span><div class="tool__body"><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">middleware.ts</span></span><span class="diff-summary"><span class="add">+5</span><span class="del">-0</span></span></div><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="tool"><span class="cmd-badge t-write"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Write</span><div class="tool__body"><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">auth.ts</span></span><span class="diff-summary"><span class="add">+3</span><span class="del">-0</span></span></div><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="tool"><span class="cmd-badge t-pkg"><svg class="ico" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>npm</span><div class="tool__body"><span class="cmd-tok-cmd">npm</span><span>test</span><span class="cmd-tok-op">--</span><span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">chat-screen</span></span></div><span class="tool__meta">2.4s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+
+            <div class="msg__text"><p>두 middleware에 모두 로깅을 추가했습니다. 이제 실제 요청 로그를 한번 살펴볼까요?</p></div>
+
+            <div class="tool"><span class="cmd-badge t-list"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>ls</span><div class="tool__body"><span class="cmd-tok-cmd">ls</span><span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">logs/2026/05/12/</span></span></div><span class="tool__meta">0.0s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="tool"><span class="cmd-badge t-read"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>cat</span><div class="tool__body"><span class="cmd-tok-cmd">cat</span><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">chat-claude-c8f4-t31-parsed.ndjson</span></span><span class="cmd-tok-op">|</span><span class="cmd-tok-cmd">head</span><span class="cmd-tok-flag">-20</span></div><span class="tool__meta">0.1s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="tool"><span class="cmd-badge t-search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>grep</span><div class="tool__body"><span class="cmd-tok-cmd">grep</span><span class="cmd-tok-flag">-h</span><span class="cmd-tok-str">"auth"</span><span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">logs/.../chat-*.ndjson</span></span><span class="cmd-tok-op">|</span><span class="cmd-tok-cmd">head</span></div><span class="tool__meta">0.3s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="tool"><span class="cmd-badge t-shell is-running"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8l3 3-3 3M13 14h4"/></svg>tail</span><div class="tool__body"><span class="cmd-tok-cmd">tail</span><span class="cmd-tok-flag">-f</span><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">chat-claude-c8f4-t31-parsed.ndjson</span></span></div><span class="tool__meta">…</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ Expanded ============ -->
+      <div class="flowBody" data-tab-body="expanded" style="display:none;">
+        <div class="msg msg--user"><div class="msg__body" style="align-items:flex-end;"><div class="msg__bubble">@auth middleware 어디서 정의되는지 확인해서 로깅 추가해줘</div></div></div>
+        <div class="msg">
+          <span class="msg__avatar">C</span>
+          <div class="msg__body">
+            <div class="msg__header"><span class="msg__name">Claude · 4.7</span><span class="msg__time">10:24</span></div>
+            <div class="msg__text"><p>확인하겠습니다. 먼저 후보 위치를 살펴볼게요.</p></div>
+
+            <div class="tool-wrap is-expanded">
+              <div class="tool"><span class="cmd-badge t-read"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Read</span><div class="tool__body"><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">services/aris-web/middleware.ts</span></span></div><span class="tool__meta">0.1s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+              <pre class="tool__result">  1  import { NextRequest, NextResponse } from 'next/server';
+  2  import { verifySession } from '@/lib/auth/session';
+  3
+  4  export async function middleware(req: NextRequest) {
+  5    const session = await verifySession(req);
+… (+58 more lines)</pre>
+            </div>
+            <div class="tool-wrap is-expanded">
+              <div class="tool"><span class="cmd-badge t-write"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Write</span><div class="tool__body"><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">middleware.ts</span></span><span class="diff-summary"><span class="add">+5</span><span class="del">-0</span></span></div><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+              <pre class="tool__result tool__result--diff"><span class="diff-line diff-line--hunk">@@ -4,6 +4,11 @@</span><span class="diff-line diff-line--ctx">export async function middleware(req: NextRequest) {</span><span class="diff-line diff-line--add">+ console.log('[auth] middleware enter', { path: req.nextUrl.pathname });</span><span class="diff-line diff-line--ctx">  const session = await verifySession(req);</span><span class="diff-line diff-line--add">+ console.log('[auth] session', { ok: !!session, userId: session?.userId });</span></pre>
+            </div>
+            <div class="tool-wrap is-expanded">
+              <div class="tool"><span class="cmd-badge t-pkg"><svg class="ico" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>npm</span><div class="tool__body"><span class="cmd-tok-cmd">npm</span><span>test</span><span class="cmd-tok-op">--</span><span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">chat-screen</span></span></div><span class="tool__meta">2.4s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+              <pre class="tool__result">PASS  __tests__/center-pane/ChatTimeline.test.tsx
+  ✓ renders agent message bubble (24ms)
+  ✓ collapses consecutive action events into stack (18ms)
+
+Tests:       2 passed</pre>
+            </div>
+
+            <div class="msg__text"><p>(생략 — 확장형은 모든 카드에 동일한 result panel을 가집니다.)</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ Minimal ============ -->
+      <div class="flowBody" data-tab-body="minimal" style="display:none;">
+        <div class="msg msg--user"><div class="msg__body" style="align-items:flex-end;"><div class="msg__bubble">@auth middleware 어디서 정의되는지 확인해서 로깅 추가해줘</div></div></div>
+        <div class="msg">
+          <span class="msg__avatar">C</span>
+          <div class="msg__body">
+            <div class="msg__header"><span class="msg__name">Claude · 4.7</span><span class="msg__time">10:24</span></div>
+            <div class="msg__text"><p>확인하겠습니다. 먼저 후보 위치를 살펴볼게요.</p></div>
+
+            <div class="cmd-stack">
+              <div class="cmd-stack__row" data-stack="flow-1">
+                <span class="cmd-badge t-read" data-idx="0" tabindex="0">
+                  <svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Read
+                  <div class="cmd-pop"><div class="cmd-pop__cmd"><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">services/aris-web/middleware.ts</span></span></div><div class="cmd-pop__meta">완료 · 0.1s · 64 lines</div></div>
+                </span>
+                <span class="cmd-badge t-read" data-idx="1" tabindex="0">
+                  <svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Read
+                  <div class="cmd-pop"><div class="cmd-pop__cmd"><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">lib/auth/session.ts</span></span></div><div class="cmd-pop__meta">완료 · 0.1s</div></div>
+                </span>
+                <span class="cmd-badge t-read" data-idx="2" tabindex="0">
+                  <svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Read
+                  <div class="cmd-pop"><div class="cmd-pop__cmd"><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">middleware/auth.ts</span></span></div><div class="cmd-pop__meta">완료 · 0.1s</div></div>
+                </span>
+                <span class="cmd-badge t-write" data-idx="3" tabindex="0">
+                  <svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Write
+                  <div class="cmd-pop"><div class="cmd-pop__cmd"><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">middleware.ts</span></span><span class="diff-summary"><span class="add">+5</span><span class="del">-0</span></span></div><div class="cmd-pop__meta">완료 · 0.3s</div></div>
+                </span>
+                <span class="cmd-badge t-write" data-idx="4" tabindex="0">
+                  <svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Write
+                  <div class="cmd-pop"><div class="cmd-pop__cmd"><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">auth.ts</span></span><span class="diff-summary"><span class="add">+3</span><span class="del">-0</span></span></div><div class="cmd-pop__meta">완료 · 0.3s</div></div>
+                </span>
+                <span class="cmd-badge t-pkg" data-idx="5" tabindex="0">
+                  <svg class="ico" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>npm
+                  <div class="cmd-pop"><div class="cmd-pop__cmd"><span class="cmd-tok-cmd">npm</span><span>test</span><span class="cmd-tok-op">--</span><span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">chat-screen</span></span></div><div class="cmd-pop__meta">완료 · 2.4s · 3 passed</div></div>
+                </span>
+                <span class="cmd-stack__label">6 actions · <span class="accent">all done</span></span>
+              </div>
+              <div class="cmd-stack__inline" data-inline-for="flow-1">
+                <div class="tool-wrap is-expanded">
+                  <div class="tool">
+                    <span class="cmd-badge t-read"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Read</span>
+                    <div class="tool__body"><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">services/aris-web/middleware.ts</span></span></div>
+                    <span class="tool__meta">0.1s</span>
+                    <button class="tool__caret" aria-label="닫기"><svg class="ico ico--sm" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+                  </div>
+                  <pre class="tool__result">  1  import { NextRequest, NextResponse } from 'next/server';
+  2  import { verifySession } from '@/lib/auth/session';
+… (+58 more lines)</pre>
+                </div>
+              </div>
+            </div>
+
+            <div class="msg__text"><p>두 middleware에 모두 로깅을 추가했습니다. 빌드도 정상이에요.</p></div>
+
+            <div class="cmd-stack">
+              <div class="cmd-stack__row">
+                <span class="cmd-badge t-list" tabindex="0">
+                  <svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>ls
+                  <div class="cmd-pop"><div class="cmd-pop__cmd"><span class="cmd-tok-cmd">ls</span><span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">logs/2026/05/12/</span></span></div><div class="cmd-pop__meta">완료 · 3 entries</div></div>
+                </span>
+                <span class="cmd-badge t-read" tabindex="0">
+                  <svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>cat
+                  <div class="cmd-pop"><div class="cmd-pop__cmd"><span class="cmd-tok-cmd">cat</span><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">parsed.ndjson</span></span><span class="cmd-tok-op">|</span><span>head</span></div><div class="cmd-pop__meta">완료 · 0.1s</div></div>
+                </span>
+                <span class="cmd-badge t-search" tabindex="0">
+                  <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>grep
+                  <div class="cmd-pop"><div class="cmd-pop__cmd"><span class="cmd-tok-cmd">grep</span><span class="cmd-tok-str">"auth"</span><span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">logs/.../chat-*.ndjson</span></span></div><div class="cmd-pop__meta">완료 · 0.3s · 12 matches</div></div>
+                </span>
+                <span class="cmd-badge t-shell is-running" tabindex="0">
+                  <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8l3 3-3 3M13 14h4"/></svg>tail
+                  <div class="cmd-pop"><div class="cmd-pop__cmd"><span class="cmd-tok-cmd">tail</span><span class="cmd-tok-flag">-f</span><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">parsed.ndjson</span></span></div><div class="cmd-pop__meta">실행 중 · 00:14</div></div>
+                </span>
+                <span class="cmd-stack__label">4 actions · <span class="warn">1 실행 중</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ Auto ============ -->
+      <div class="flowBody" data-tab-body="auto">
+        <div class="msg msg--user"><div class="msg__body" style="align-items:flex-end;"><div class="msg__bubble">@auth middleware 어디서 정의되는지 확인해서 로깅 추가해줘</div></div></div>
+
+        <div class="msg">
+          <span class="msg__avatar">C</span>
+          <div class="msg__body">
+            <div class="msg__header"><span class="msg__name">Claude · 4.7</span><span class="msg__time">10:24</span></div>
+            <div class="msg__text"><p>확인하겠습니다. 먼저 후보 위치를 살펴볼게요.</p></div>
+
+            <div class="cmd-stack">
+              <div class="cmd-stack__row">
+                <span class="cmd-badge t-read" tabindex="0"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Read</span>
+                <span class="cmd-badge t-read" tabindex="0"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Read</span>
+                <span class="cmd-badge t-read" tabindex="0"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Read</span>
+                <span class="cmd-badge t-write" tabindex="0"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Write</span>
+                <span class="cmd-badge t-write" tabindex="0"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Write</span>
+                <span class="cmd-badge t-pkg" tabindex="0"><svg class="ico" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>npm</span>
+                <span class="cmd-stack__label">6 actions · <span class="accent">all done</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="msg">
+          <span class="msg__avatar">C</span>
+          <div class="msg__body">
+            <div class="msg__header"><span class="msg__name">Claude · 4.7</span><span class="msg__time">10:25</span></div>
+            <div class="msg__text"><p>두 middleware에 모두 로깅을 추가했습니다. 이제 실제 요청 로그를 한번 살펴볼까요?</p></div>
+
+            <div class="cmd-stack">
+              <div class="cmd-stack__row">
+                <span class="cmd-badge t-list" tabindex="0"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>ls</span>
+                <span class="cmd-badge t-read" tabindex="0"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>cat</span>
+                <span class="cmd-badge t-read" tabindex="0"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>cat</span>
+                <span class="cmd-stack__label">3 actions</span>
+              </div>
+            </div>
+
+            <!-- recent finished → default -->
+            <div class="tool"><span class="cmd-badge t-search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>grep</span><div class="tool__body"><span class="cmd-tok-cmd">grep</span><span class="cmd-tok-flag">-h</span><span class="cmd-tok-str">"auth"</span><span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">logs/.../chat-*.ndjson</span></span><span class="cmd-tok-op">|</span><span class="cmd-tok-cmd">head</span></div><span class="tool__meta">0.3s</span><svg class="ico ico--sm tool__caret" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+
+            <!-- running → expanded -->
+            <div class="tool-wrap is-expanded">
+              <div class="tool"><span class="cmd-badge t-shell is-running"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8l3 3-3 3M13 14h4"/></svg>tail</span><div class="tool__body"><span class="cmd-tok-cmd">tail</span><span class="cmd-tok-flag">-f</span><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">chat-claude-c8f4-t31-parsed.ndjson</span></span></div><span class="tool__meta">…</span></div>
+              <pre class="tool__result">실행 중…
+{"loggedAt":"10:25:02","stage":"agent_action","payload":{"kind":"file_read",...}}
+{"loggedAt":"10:25:04","stage":"agent_action","payload":{"kind":"file_read",...}}</pre>
+            </div>
+          </div>
+        </div>
+
+        <p class="scenarioLegend" style="margin-top: var(--sp-6);">
+          <span>자동 규칙:
+            <code>실행 중 → 확장</code> ·
+            <code>가장 최근 완료 1 → 기본</code> ·
+            <code>그 외 → 최소(stack)</code> ·
+            <code>에러는 거리 무관 기본 이상</code></span>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================= SECTION C — Interactions ========================= -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">C. 인터랙션 — hover &amp; 인라인 확장</h2>
+      <span class="section-sub">최소형 stack에서 hover 시 미리보기(파일 칩+신택스), 클릭 시 인라인 확장</span>
+    </div>
+
+    <div class="flowFrame" style="padding: var(--sp-10) var(--sp-12);">
+      <div class="cmd-stack">
+        <div class="cmd-stack__row" id="interactiveStack">
+          <span class="cmd-badge t-read" data-mini="0" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>cat
+            <div class="cmd-pop"><div class="cmd-pop__cmd"><span class="cmd-tok-cmd">cat</span><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">middleware.ts</span></span></div><div class="cmd-pop__meta">완료 · 0.0s · 64 lines</div></div>
+          </span>
+          <span class="cmd-badge t-edit" data-mini="1" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>sed
+            <div class="cmd-pop"><div class="cmd-pop__cmd"><span class="cmd-tok-cmd">sed</span><span class="cmd-tok-flag">-i</span><span class="cmd-tok-str">'s/kindChip/cmdBadge/g'</span><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">ActionEventCard.tsx</span></span></div><div class="cmd-pop__meta">완료 · 0.1s</div></div>
+          </span>
+          <span class="cmd-badge t-search" data-mini="2" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>grep
+            <div class="cmd-pop"><div class="cmd-pop__cmd"><span class="cmd-tok-cmd">grep</span><span class="cmd-tok-flag">-rn</span><span class="cmd-tok-str">"kindChip"</span><span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">services/aris-web</span></span></div><div class="cmd-pop__meta">완료 · 0.2s · 4 matches</div></div>
+          </span>
+          <span class="cmd-badge t-pkg" data-mini="3" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>npm
+            <div class="cmd-pop"><div class="cmd-pop__cmd"><span class="cmd-tok-cmd">npm</span><span>test</span><span class="cmd-tok-op">--</span><span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">chat-screen</span></span></div><div class="cmd-pop__meta">완료 · 2.4s · 3 passed</div></div>
+          </span>
+          <span class="cmd-badge t-destroy is-error" data-mini="4" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>rm
+            <div class="cmd-pop"><div class="cmd-pop__cmd"><span class="cmd-tok-cmd">rm</span><span class="cmd-tok-flag">-rf</span><span class="file-chip file-chip--folder"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="file-chip__name">.next/cache</span></span></div><div class="cmd-pop__meta">실패 · exit 1 · Permission denied</div></div>
+          </span>
+          <span class="cmd-badge t-git" data-mini="5" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><circle cx="6" cy="18" r="2"/><path d="M6 8v8M8 18h2a4 4 0 0 0 4-4V8"/></svg>git
+            <div class="cmd-pop"><div class="cmd-pop__cmd"><span class="cmd-tok-cmd">git</span><span>commit</span><span class="cmd-tok-flag">-m</span><span class="cmd-tok-str">"fix: density"</span></div><div class="cmd-pop__meta">완료 · 1 file · +6 / -2</div></div>
+          </span>
+          <span class="cmd-badge t-shell is-running" data-mini="6" tabindex="0">
+            <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8l3 3-3 3M13 14h4"/></svg>tail
+            <div class="cmd-pop"><div class="cmd-pop__cmd"><span class="cmd-tok-cmd">tail</span><span class="cmd-tok-flag">-f</span><span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">parsed.ndjson</span></span></div><div class="cmd-pop__meta">실행 중 · 00:14</div></div>
+          </span>
+          <span class="cmd-stack__label">7 actions · <span class="warn">1 실행 중</span> · <span class="err">1 실패</span></span>
+        </div>
+
+        <div class="cmd-stack__inline" id="inlinePanel">
+          <div class="tool-wrap is-expanded">
+            <div class="tool">
+              <span class="cmd-badge t-edit"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>sed</span>
+              <div class="tool__body">
+                <span class="cmd-tok-cmd">sed</span>
+                <span class="cmd-tok-flag">-i</span>
+                <span class="cmd-tok-str">'s/kindChip/cmdBadge/g'</span>
+                <span class="file-chip file-chip--code"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="file-chip__name">ActionEventCard.tsx</span></span>
+              </div>
+              <span class="tool__meta">0.1s</span>
+              <button class="tool__caret" id="closeInline" aria-label="닫기"><svg class="ico ico--sm" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+            </div>
+            <pre class="tool__result">(no output · exit 0)</pre>
+          </div>
+        </div>
+      </div>
+
+      <p class="scenarioLegend" style="margin-top: var(--sp-8);">
+        <span><code>hover</code> 위쪽 popover 미리보기 ·
+        <code>click</code> 인라인 확장 토글 ·
+        <code>is-error</code> 빨간 corner 점 ·
+        <code>is-running</code> 점선 ring 펄스</span>
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= SECTION D — Tone mapping ========================= -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">D. 명령어 → tone 매핑</h2>
+      <span class="section-sub">아래 표가 단일 진실 소스 (Single source of truth)</span>
+    </div>
+
+    <div class="toneGrid">
+
+      <div class="toneCell">
+        <span class="cmd-badge t-read"><svg class="ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Read</span>
+        <div class="desc"><span>cat</span><span>head</span><span>tail</span><span>less</span><span>more</span><span>view</span></div>
+        <div class="role">읽기 · 내용 노출</div>
+      </div>
+
+      <div class="toneCell">
+        <span class="cmd-badge t-write"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Write</span>
+        <div class="desc"><span>echo &gt;</span><span>tee</span><span>printf &gt;</span></div>
+        <div class="role">파일 생성 · 덮어쓰기</div>
+      </div>
+
+      <div class="toneCell">
+        <span class="cmd-badge t-edit"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Edit</span>
+        <div class="desc"><span>sed</span><span>awk</span><span>patch</span><span>vim</span><span>MultiEdit</span></div>
+        <div class="role">기존 파일 부분 수정</div>
+      </div>
+
+      <div class="toneCell">
+        <span class="cmd-badge t-shell"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8l3 3-3 3M13 14h4"/></svg>shell</span>
+        <div class="desc"><span>bash</span><span>sh</span><span>zsh</span><span>tail -f</span><span>watch</span><span>nohup</span></div>
+        <div class="role">셸 (분류 어려운 fallback)</div>
+      </div>
+
+      <div class="toneCell">
+        <span class="cmd-badge t-list"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>ls</span>
+        <div class="desc"><span>ls</span><span>tree</span><span>find</span><span>pwd</span></div>
+        <div class="role">파일/디렉터리 나열</div>
+      </div>
+
+      <div class="toneCell">
+        <span class="cmd-badge t-glob"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="13" cy="13" r="2"/><path d="M15 15l2.2 2.2"/></svg>Glob</span>
+        <div class="desc"><span>Glob</span><span>fd</span></div>
+        <div class="role">패턴 매칭 파일 검색</div>
+      </div>
+
+      <div class="toneCell">
+        <span class="cmd-badge t-search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Grep</span>
+        <div class="desc"><span>grep</span><span>rg</span><span>ripgrep</span><span>ack</span><span>Grep</span><span>WebSearch</span></div>
+        <div class="role">텍스트/내용 검색</div>
+      </div>
+
+      <div class="toneCell">
+        <span class="cmd-badge t-net"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>curl</span>
+        <div class="desc"><span>curl</span><span>wget</span><span>http</span><span>WebFetch</span><span>ssh</span><span>scp</span></div>
+        <div class="role">네트워크 호출</div>
+      </div>
+
+      <div class="toneCell">
+        <span class="cmd-badge t-pkg"><svg class="ico" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>npm</span>
+        <div class="desc"><span>npm</span><span>yarn</span><span>pnpm</span><span>npx</span><span>cargo</span><span>pip</span><span>uv</span></div>
+        <div class="role">패키지 매니저</div>
+      </div>
+
+      <div class="toneCell">
+        <span class="cmd-badge t-build"><svg class="ico" viewBox="0 0 24 24"><path d="M12 2L4 6v6c0 5 3.5 9.5 8 10 4.5-.5 8-5 8-10V6l-8-4z"/><path d="M9 12l2 2 4-4"/></svg>tsc</span>
+        <div class="desc"><span>tsc</span><span>eslint</span><span>prettier</span><span>biome</span><span>webpack</span><span>vite</span></div>
+        <div class="role">빌드 · 타입체크 · lint</div>
+      </div>
+
+      <div class="toneCell">
+        <span class="cmd-badge t-test"><svg class="ico" viewBox="0 0 24 24"><path d="M9 2v6.5a2 2 0 0 1-.34 1.12L3.4 18.4A1 1 0 0 0 4.23 20h15.54a1 1 0 0 0 .83-1.6l-5.26-8.78a2 2 0 0 1-.34-1.12V2"/><path d="M7 2h10"/></svg>test</span>
+        <div class="desc"><span>vitest</span><span>jest</span><span>pytest</span><span>playwright</span><span>cypress</span></div>
+        <div class="role">테스트 러너</div>
+      </div>
+
+      <div class="toneCell">
+        <span class="cmd-badge t-git"><svg class="ico" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><circle cx="6" cy="18" r="2"/><path d="M6 8v8M8 18h2a4 4 0 0 0 4-4V8"/></svg>git</span>
+        <div class="desc"><span>git</span><span>gh</span><span>jj</span></div>
+        <div class="role">VCS</div>
+      </div>
+
+      <div class="toneCell">
+        <span class="cmd-badge t-docker"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="9" width="14" height="9" rx="1"/><path d="M17 13h3.5L22 11l-1.5-1H17M3 13l3-3M9 13l3-3"/></svg>docker</span>
+        <div class="desc"><span>docker</span><span>kubectl</span><span>podman</span><span>compose</span></div>
+        <div class="role">컨테이너 · 오케스트레이션</div>
+      </div>
+
+      <div class="toneCell">
+        <span class="cmd-badge t-destroy"><svg class="ico" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>rm</span>
+        <div class="desc"><span>rm</span><span>rmdir</span><span>kill</span><span>pkill</span><span>truncate</span></div>
+        <div class="role">파괴적 명령 — 시각적 경고 톤</div>
+      </div>
+
+      <div class="toneCell">
+        <span class="cmd-badge t-think"><svg class="ico" viewBox="0 0 24 24"><path d="M9.5 2A4.5 4.5 0 0 0 5 6.5v0a4 4 0 0 0-2 7.5v0a4 4 0 0 0 2 7.5v0a4.5 4.5 0 0 0 4.5 0V2zM14.5 2A4.5 4.5 0 0 1 19 6.5v0a4 4 0 0 1 2 7.5v0a4 4 0 0 1-2 7.5v0a4.5 4.5 0 0 1-4.5 0V2z"/></svg>Think</span>
+        <div class="desc"><span>thought</span><span>think</span><span>commentary</span></div>
+        <div class="role">에이전트 내부 사고</div>
+      </div>
+
+      <div class="toneCell">
+        <span class="cmd-badge t-todo"><svg class="ico" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>TodoWrite</span>
+        <div class="desc"><span>TodoWrite</span></div>
+        <div class="role">작업 관리 / 메타</div>
+      </div>
+
+      <div class="toneCell">
+        <span class="cmd-badge t-agent"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Task</span>
+        <div class="desc"><span>Task</span><span>SubAgent</span></div>
+        <div class="role">서브에이전트 위임</div>
+      </div>
+
+      <div class="toneCell">
+        <span class="cmd-badge t-cmd"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7l4 4-4 4"/><path d="M12 17h8"/></svg>cmd</span>
+        <div class="desc"><span>mv</span><span>cp</span><span>mkdir</span><span>touch</span><span>chmod</span><span>chown</span><span>ps</span><span>any unknown</span></div>
+        <div class="role">기본 fallback</div>
+      </div>
+
+    </div>
+
+    <p class="scenarioLegend" style="margin-top: var(--sp-5);">
+      <span>이 매핑은 코드의 단일 객체(예: <code>cmd-tone-map.ts</code>)로 관리. 새 명령어가 등장하면 <code>cmd</code>로 fallback되며 추후 매핑에 추가.</span>
+    </p>
+  </section>
+
+  <!-- ========================= SECTION E — Rules ========================= -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">E. 구현 규칙</h2>
+      <span class="section-sub">시안 적용 시 따라야 할 행동 규칙</span>
+    </div>
+    <div class="rulesCard">
+      <div class="rulesCard__col">
+        <div>
+          <h3>명령어 파싱</h3>
+          <ul>
+            <li><strong>Agent-level 도구</strong> (<code>Read</code>·<code>Write</code>·<code>Edit</code>·<code>Glob</code>·<code>Grep</code>·<code>WebFetch</code>·<code>WebSearch</code>·<code>Task</code>·<code>TodoWrite</code>·<code>Think</code>): 도구 이름을 그대로 표시.</li>
+            <li><strong>Bash</strong>: 첫 토큰 추출 — 선행 env var/<code>sudo</code>/<code>cd</code>/<code>time</code>/<code>env</code> 건너뛰기. <code>&amp;&amp;</code>/<code>||</code>/<code>;</code> 의 첫 segment의 첫 명령. 파이프(<code>|</code>) 첫 명령 사용 + meta에 <code>+N piped</code>.</li>
+            <li><strong>매핑 미스</strong> → <code>cmd</code> 톤으로 fallback. 명령어 텍스트는 그대로 노출.</li>
+          </ul>
+
+          <h3>파일 칩 (file-chip)</h3>
+          <ul>
+            <li>인자에서 <strong>파일/디렉터리 경로</strong>로 보이는 토큰(<code>./</code>, <code>/</code> 포함, 또는 확장자 매칭)을 <code>.file-chip</code> 으로 wrap.</li>
+            <li>아이콘은 <code>folder</code>(끝이 <code>/</code>) · <code>code</code>(<code>.tsx/.ts/.js/.py</code> 등) · <code>config</code>(<code>.json/.yml/.toml/.env</code>) · <code>shell</code>(<code>.sh</code>) 으로 분기.</li>
+            <li>chip 클릭 = 워크스페이스 파일 오픈 (<code>dispatchWorkspaceFileOpen</code>). hover 시 full path tooltip.</li>
+          </ul>
+
+          <h3>신택스 토큰</h3>
+          <ul>
+            <li><code>cmd-tok-cmd</code> — 첫 명령 토큰 (primary 색)</li>
+            <li><code>cmd-tok-flag</code> — <code>--flag</code> / <code>-f</code> (tertiary)</li>
+            <li><code>cmd-tok-str</code> — <code>"..."</code> · <code>'...'</code> (success-fg green)</li>
+            <li><code>cmd-tok-op</code> — <code>|</code> <code>&amp;&amp;</code> <code>||</code> <code>&gt;</code> <code>&lt;</code> (b-600 blue)</li>
+            <li><code>cmd-tok-num</code> — 숫자 (warning-fg amber)</li>
+          </ul>
+        </div>
+        <div>
+          <h3>모드 결정</h3>
+          <ul>
+            <li><strong>전역 기본값</strong> — 4-way 토글(<code>자동/확장/기본/최소</code>).</li>
+            <li><strong>카드별 override</strong> — 어떤 모드에서도 클릭하면 일시적으로 확장. 다시 클릭하면 닫힘.</li>
+          </ul>
+
+          <h3>자동 모드</h3>
+          <ul>
+            <li><strong>실행 중</strong> → 확장형</li>
+            <li><strong>가장 최근 완료 1</strong> → 기본형</li>
+            <li><strong>그 이전</strong> → 최소형 (stack 그룹화)</li>
+            <li><strong>에러</strong> → 거리 무관 기본형 이상</li>
+          </ul>
+
+          <h3>최소형 stack</h3>
+          <ul>
+            <li>사이에 텍스트가 없는 연속 액션은 자동으로 한 row stack에 묶임.</li>
+            <li>배지에 명령어 짧은 이름 (Bash 첫 토큰 또는 agent 도구 이름).</li>
+            <li>tone color로 명령어 카테고리, <code>is-running</code>·<code>is-error</code>로 상태.</li>
+            <li>row 우측에 "<code>N actions · 상태 요약</code>" 라벨.</li>
+            <li>hover popover에 <strong>파일 칩 + 신택스 highlighting</strong>이 포함된 명령어 미리보기.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+document.getElementById('themeSwitch')?.addEventListener('click', () => {
+  const html = document.documentElement;
+  html.setAttribute('data-theme', html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+});
+
+const densityMap = { auto:'auto', expanded:'expanded', default:'default', minimal:'minimal' };
+document.querySelectorAll('.density-toggle button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.density-toggle button').forEach(b => b.classList.remove('is-active'));
+    btn.classList.add('is-active');
+    const target = densityMap[btn.dataset.density];
+    document.querySelectorAll('.flowTab').forEach(t => t.classList.toggle('is-active', t.dataset.tab === target));
+    document.querySelectorAll('.flowBody').forEach(b => { b.style.display = b.dataset.tabBody === target ? '' : 'none'; });
+  });
+});
+
+document.querySelectorAll('.flowTab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.flowTab').forEach(t => t.classList.remove('is-active'));
+    tab.classList.add('is-active');
+    const target = tab.dataset.tab;
+    document.querySelectorAll('.flowBody').forEach(b => { b.style.display = b.dataset.tabBody === target ? '' : 'none'; });
+  });
+});
+
+const inlinePanel = document.getElementById('inlinePanel');
+document.querySelectorAll('#interactiveStack [data-mini]').forEach((badge) => {
+  badge.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = badge.classList.contains('is-open');
+    document.querySelectorAll('#interactiveStack [data-mini]').forEach(i => i.classList.remove('is-open'));
+    if (isOpen) inlinePanel?.classList.remove('is-open');
+    else { badge.classList.add('is-open'); inlinePanel?.classList.add('is-open'); }
+  });
+});
+document.getElementById('closeInline')?.addEventListener('click', () => {
+  document.querySelectorAll('#interactiveStack [data-mini]').forEach(i => i.classList.remove('is-open'));
+  inlinePanel?.classList.remove('is-open');
+});
+
+document.querySelectorAll('[data-stack="flow-1"] [data-idx]').forEach((badge) => {
+  badge.addEventListener('click', () => {
+    const panel = document.querySelector('[data-inline-for="flow-1"]');
+    if (!panel) return;
+    const wasOpen = badge.classList.contains('is-open');
+    document.querySelectorAll('[data-stack="flow-1"] [data-idx]').forEach(i => i.classList.remove('is-open'));
+    if (wasOpen) panel.classList.remove('is-open');
+    else { badge.classList.add('is-open'); panel.classList.add('is-open'); }
+  });
+});
+</script>
+</body>
+</html>
