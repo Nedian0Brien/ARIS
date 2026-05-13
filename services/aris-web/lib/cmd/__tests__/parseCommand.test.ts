@@ -11,11 +11,15 @@ describe('parseShellCommand', () => {
   it('skips leading env-var assignments', () => {
     expect(parseShellCommand('NODE_ENV=production FOO=bar npm start').head).toBe('npm');
   });
-  it('skips sudo/cd/time/env prefixes', () => {
+  it('skips sudo/cd/time/env/rtk prefixes', () => {
     expect(parseShellCommand('sudo rm -rf /tmp/x').head).toBe('rm');
     expect(parseShellCommand('cd services/aris-web && npm test').head).toBe('npm');
     expect(parseShellCommand('time npm test').head).toBe('npm');
     expect(parseShellCommand('env NODE_ENV=prod npm start').head).toBe('npm');
+    // rtk (Rust Token Killer) is a Claude Code hook wrapper; transparent to user intent.
+    expect(parseShellCommand('rtk git status').head).toBe('git');
+    expect(parseShellCommand('rtk npm test -- foo').tone).toBe('pkg');
+    expect(parseShellCommand('rtk cat services/aris-web/middleware.ts').tone).toBe('read');
   });
   it('uses first segment for && / || / ;', () => {
     expect(parseShellCommand('git add . && git commit -m "foo"').head).toBe('git');

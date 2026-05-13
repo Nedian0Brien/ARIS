@@ -1,7 +1,13 @@
 import type { CmdToken, FileArg, ParsedCommand } from './types';
 import { resolveCmdTone } from './cmdToneMap';
 
-const PREFIX_NAMES = new Set(['sudo', 'cd', 'time', 'env']);
+/**
+ * Command prefixes that wrap the actual command (transparent to the user's intent).
+ * `rtk` is the Rust Token Killer proxy installed via Claude Code hook — every Bash
+ * call gets rewritten to `rtk <real-cmd>`. Without skipping, every badge would show
+ * up as the fallback `cmd` tone instead of git/npm/cat/etc.
+ */
+const PREFIX_NAMES = new Set(['sudo', 'cd', 'time', 'env', 'rtk']);
 
 function isEnvAssign(tok: string): boolean { return /^[A-Z_][A-Z0-9_]*=/.test(tok); }
 function isFlag(tok: string): boolean { return /^-{1,2}[A-Za-z0-9_-]+/.test(tok); }
