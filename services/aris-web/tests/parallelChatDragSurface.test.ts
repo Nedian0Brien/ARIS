@@ -127,6 +127,7 @@ describe('project parallel chat drag surface', () => {
     expect(projectChatSurface).toContain('onTogglePanelWorkspace');
     expect(projectChatSurface).toContain('className="ch__action ch__action--ws pc-parallel__frame-workspace"');
     expect(projectChatSurface).toContain('data-workspace-toggle="true"');
+    expect(projectChatSurface).toContain('onPointerDown={(event) => {');
     expect(projectChatSurface).toContain('isWorkspaceActive={workspaceOpen && panelState.activePanelId === node.panelId}');
     expect(projectChatSurface).not.toContain('className="pc-parallel__bar-actions"');
     expect(uiCss).toContain('.pc-parallel__frame-workspace');

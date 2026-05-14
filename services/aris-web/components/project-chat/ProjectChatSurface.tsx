@@ -1398,6 +1398,9 @@ function ProjectParallelChatPane({
           aria-pressed={isWorkspaceActive}
           aria-label={`${chat.title} workspace 열기`}
           title="Workspace"
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
           onClick={(event) => {
             event.stopPropagation();
             onTogglePanelWorkspace();
