@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const tokensCss = readFileSync(resolve(__dirname, '../app/styles/tokens.css'), 'utf8');
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
+const askArisSurface = readFileSync(resolve(__dirname, '../components/ask/AskArisSurface.tsx'), 'utf8');
 const uiCss = readFileSync(resolve(__dirname, '../app/styles/ui.css'), 'utf8');
 const header = readFileSync(resolve(__dirname, '../components/layout/Header.tsx'), 'utf8');
 const bottomNav = readFileSync(resolve(__dirname, '../components/layout/BottomNav.tsx'), 'utf8');
@@ -49,8 +50,6 @@ describe('ARIS design-system-v1 implementation', () => {
       'className="home-orb"',
       'className="home-strip"',
       'home-proj__chats${className',
-      'className="ask-search"',
-      'className="ask-sug"',
       'className="proj-list-wrap"',
       'className="proj-list-toolbar"',
       'className="proj-list-grid"',
@@ -58,6 +57,14 @@ describe('ARIS design-system-v1 implementation', () => {
       'className="files-preview"',
     ].forEach((classFragment) => {
       expect(homeClient).toContain(classFragment);
+    });
+
+    [
+      'className="ask-search',
+      'className="ask-sug"',
+      'ask-layout',
+    ].forEach((classFragment) => {
+      expect(askArisSurface).toContain(classFragment);
     });
 
     [

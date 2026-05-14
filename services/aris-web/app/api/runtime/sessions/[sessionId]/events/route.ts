@@ -10,6 +10,7 @@ import {
 import { getUserModelSettings } from '@/lib/settings/providerPreferences';
 import { readChatImageAttachments } from '@/lib/chatImageAttachments';
 import { getHostHomeDir } from '@/lib/fs/pathResolver';
+import { extractKnowledgeAssetsForChat } from '@/lib/ask/knowledge';
 import { ensureProjectWorkspacePanelRuntimes } from '@/lib/happy/workspacePanelRuntimes';
 import {
   readWorkspacePanelIdFromRecord,
@@ -269,6 +270,19 @@ export async function POST(
           text: body.text,
           meta,
         });
+    const knowledgeChatId = typeof meta.chatId === 'string' && meta.chatId.trim().length > 0
+      ? meta.chatId.trim()
+      : null;
+    if (knowledgeChatId) {
+      try {
+        await extractKnowledgeAssetsForChat({
+          userId: auth.user.id,
+          chatId: knowledgeChatId,
+        });
+      } catch {
+        // Ask ARIS 후보 추출 실패는 채팅 이벤트 저장을 막지 않는다.
+      }
+    }
     return NextResponse.json({ event });
   } catch (error) {
     if (error instanceof HappyHttpError && [401, 403, 404].includes(error.status)) {

@@ -12,6 +12,49 @@ enum UserRole {
   viewer
 }
 
+enum KnowledgeAssetKind {
+  decision
+  task_outcome
+  command_recipe
+  debug_case
+  deployment_record
+  project_memory
+  user_preference
+  external_note
+}
+
+enum KnowledgeAssetStatus {
+  candidate
+  confirmed
+  dismissed
+}
+
+enum KnowledgeAssetScope {
+  global
+  project
+  chat
+}
+
+enum KnowledgeSensitivity {
+  normal
+  redacted
+  sensitive
+}
+
+enum KnowledgeSourceType {
+  session_chat_event
+  session_run
+  chat
+  project
+  external
+}
+
+enum AskMessageRole {
+  user
+  assistant
+  system
+}
+
 model User {
   id           String       @id @default(cuid())
   email        String       @unique
@@ -28,6 +71,8 @@ model User {
   workspaces   Workspace[]
   sessionMetadata SessionMetadata[]
   chats         Chat[]
+  knowledgeAssets KnowledgeAsset[]
+  askThreads    AskThread[]
   trustedDevices TrustedDevice[]
   emailTokens    EmailVerificationToken[]
 }
@@ -38,6 +83,7 @@ model Project {
   path        String
   alias       String?
   isPinned    Boolean  @default(false)
+  includeInAskIndex Boolean @default(true)
   lastReadAt  DateTime?
   panelLayoutJson Json?
   createdAt   DateTime @default(now())
@@ -108,6 +154,7 @@ model Chat {
   title          String
   isPinned       Boolean  @default(false)
   isDefault      Boolean  @default(false)
+  includeInAskIndex Boolean @default(true)
   threadId       String?
   model          String?
   geminiMode     String?
@@ -167,6 +214,77 @@ model SessionChatEvent {
   @@unique([chatId, seq])
   @@index([sessionId, chatId, seq])
   @@index([chatId, createdAt])
+}
+
+model KnowledgeAsset {
+  id          String                 @id @default(cuid())
+  userId      String
+  kind        KnowledgeAssetKind
+  title       String
+  summary     String
+  body        String
+  status      KnowledgeAssetStatus   @default(candidate)
+  scope       KnowledgeAssetScope    @default(chat)
+  projectId   String?
+  chatId      String?
+  runId       String?
+  confidence  Float                  @default(0.5)
+  sensitivity KnowledgeSensitivity   @default(normal)
+  tags        String[]               @default([])
+  dedupeKey   String?                @unique
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceRefs  KnowledgeSourceRef[]
+
+  @@index([userId, status, kind, updatedAt])
+  @@index([userId, projectId, updatedAt])
+  @@index([chatId])
+}
+
+model KnowledgeSourceRef {
+  id         String              @id @default(cuid())
+  assetId    String
+  sourceType KnowledgeSourceType
+  sourceId   String
+  projectId  String?
+  chatId     String?
+  runId      String?
+  eventSeq   Int?
+  label      String?
+  snippet    String?
+  createdAt  DateTime            @default(now())
+  asset      KnowledgeAsset      @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, sourceType, sourceId])
+  @@index([sourceType, sourceId])
+  @@index([chatId, eventSeq])
+}
+
+model AskThread {
+  id        String       @id @default(cuid())
+  userId    String
+  title     String       @default("Ask ARIS")
+  status    String       @default("active")
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  AskMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+model AskMessage {
+  id        String         @id @default(cuid())
+  threadId  String
+  role      AskMessageRole
+  content   String
+  sources   Json?
+  meta      Json?
+  createdAt DateTime       @default(now())
+  thread    AskThread      @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
 }
 
 model EmailVerificationToken {
