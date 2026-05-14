@@ -157,7 +157,7 @@ describe('project list surface', () => {
 
   it('wires the prototype chat controls to real project-chat state', () => {
     expect(projectChatSurface).toContain("type ComposerMode = 'agent' | 'plan' | 'terminal';");
-    expect(projectChatSurface).toContain("type WorkspaceTab = 'run' | 'files' | 'terminal' | 'context';");
+    expect(projectChatSurface).toContain("type WorkspaceTab = 'run' | 'files' | 'git' | 'terminal' | 'context';");
     expect(projectChatSurface).toContain("type PreviewState = 'closed' | 'open' | 'dock';");
     expect(projectChatSurface).toContain('const [composerMode, setComposerMode] = useState<ComposerMode>');
     expect(projectChatSurface).toContain('const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>');
@@ -376,6 +376,7 @@ describe('project list surface', () => {
     expect(projectChatSurface).toContain('Clock,');
     expect(projectChatSurface).toContain('<button type="button" className="ws__tab" data-tab="run" aria-pressed={workspaceTab === \'run\'} onClick={() => activateWorkspaceTab(\'run\')}><Clock size={12} />Run</button>');
     expect(projectChatSurface).toContain('<button type="button" className="ws__tab" data-tab="files" aria-pressed={workspaceTab === \'files\'} onClick={() => activateWorkspaceTab(\'files\')}><FileIcon size={12} />Files</button>');
+    expect(projectChatSurface).toContain('<button type="button" className="ws__tab" data-tab="git" aria-pressed={workspaceTab === \'git\'} onClick={() => activateWorkspaceTab(\'git\')}><GitActionMark size={12} />Git</button>');
     expect(projectChatSurface).not.toContain('<span className="ws__tab-badge">{fileCount}</span>');
     expect(projectChatSurface).toContain('<button type="button" className="ws__tab" data-tab="terminal" aria-pressed={workspaceTab === \'terminal\'} onClick={() => activateWorkspaceTab(\'terminal\')}><Terminal size={12} />Terminal</button>');
     expect(projectChatSurface).toContain('<button type="button" className="ws__tab" data-tab="context" aria-pressed={workspaceTab === \'context\'} onClick={() => activateWorkspaceTab(\'context\')}><PanelsTopLeft size={12} />Context</button>');

@@ -77,23 +77,30 @@ describe('project parallel chat drag surface', () => {
   });
 
   it('makes the split chat layout fill the project chat viewport instead of leaving blank space under the composer', () => {
-    const splitChatViewportBlock = cssBlock('.m-main-scroll--project-chat-detail .pc-proto .pc-parallel');
+    const splitChatViewportBlock = cssBlock('.pc-parallel');
     expect(splitChatViewportBlock).toContain('height: 100%;');
     expect(splitChatViewportBlock).toContain('min-height: 0;');
+    expect(uiCss).toContain('.pc-parallel-shell');
+    expect(cssBlock('.pc-parallel__frames')).toContain('overflow: hidden;');
+    expect(cssBlock('.pc-parallel-chat')).toContain('overflow: hidden;');
     expect(cssBlock('.pc-proto .pc-parallel .cmp-wrap')).toContain('padding: var(--sp-4);');
-    expect(cssBlock('.pc-proto .pc-parallel .cmp__input')).toContain('min-height: 48px;');
-    expect(cssBlock('.pc-proto .pc-parallel .cmp__input')).toContain('max-height: 140px;');
+    expect(cssBlock('.pc-proto .pc-parallel .cmp-wrap')).toContain('flex-shrink: 0;');
+    expect(cssBlock('.pc-proto .pc-parallel .cmp__input')).toContain('min-height: 44px;');
+    expect(cssBlock('.pc-proto .pc-parallel .cmp__input')).toContain('max-height: 112px;');
   });
 
-  it('opens panel-scoped Files and Git tools without leaving the parallel layout', () => {
-    expect(projectChatSurface).toContain("type ProjectParallelPanelTool = 'chat' | 'files' | 'git';");
+  it('routes panel-scoped Files and Git through the existing workspace drawer', () => {
     expect(projectChatSurface).toContain('workspacePanelId: panelId');
+    expect(projectChatSurface).toContain('workspacePanelId: activeWorkspacePanelId');
     expect(projectChatSurface).toContain('useWorkspaceFiles');
     expect(projectChatSurface).toContain('fetchProjectPanelGitOverview');
-    expect(projectChatSurface).toContain('pc-parallel-tool');
-    expect(projectChatSurface).not.toContain(`handleCloseProjectParallelChats();
-                onChatOpen(chatId);
-                activateWorkspaceTab('files');`);
+    expect(projectChatSurface).toContain('pc-parallel-workspace');
+    expect(projectChatSurface).toContain('onOpenPanelWorkspaceTab');
+    expect(projectChatSurface).toContain("data-tab=\"git\"");
+    expect(projectChatSurface).toContain("data-pane=\"git\"");
+    expect(projectChatSurface).not.toContain("type ProjectParallelPanelTool = 'chat' | 'files' | 'git';");
+    expect(projectChatSurface).not.toContain('aria-label="Open panel files"');
+    expect(projectChatSurface).not.toContain('aria-label="Open panel Git"');
   });
 
   it('communicates that closing a panel preserves the underlying chat', () => {
