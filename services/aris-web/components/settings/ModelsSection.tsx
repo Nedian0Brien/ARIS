@@ -31,44 +31,121 @@ import {
   type OpenAiCatalogItem,
   type ProviderId,
 } from '@/lib/settings/providerModels';
+import { ProviderLogo } from '@/components/ui/ProviderLogo';
 import styles from './ModelsSection.module.css';
 
 type Feedback = { ok: boolean; msg: string } | null;
 type CatalogItem = OpenAiCatalogItem | ClaudeCatalogItem | GeminiCatalogItem;
+type ProviderRecord<T> = Record<ProviderId, T>;
 
-const PROVIDER_OPTIONS: Array<{
+type ProviderConfig = {
   id: ProviderId;
   label: string;
-  initials: string;
   keyLabel: string;
   keyPlaceholder: string;
   catalogHint: string;
-}> = [
+  catalogEndpoint: string;
+  keyEndpoint: string;
+  selectionDefaults: readonly string[];
+  /** When true, the provider exposes a manual "add model id" affordance (Codex-style escape hatch). */
+  supportsManualModelId?: boolean;
+  /** When true, the provider exposes the Gemini-specific default mode selector. */
+  supportsGeminiModes?: boolean;
+  /** Label shown on the "apply preset" toolbar button. */
+  applyPresetLabel: string;
+  /** Human-readable secret name for error messages. */
+  keyDisplayName: string;
+  /** Defaults section copy. */
+  defaultsTitle: string;
+  defaultsSubtitle: string;
+};
+
+/**
+ * Single source of truth for which providers Settings → Models knows about.
+ * Adding a new provider (e.g. OpenCode) is intended to require only:
+ *   1. extend the `ProviderId` union in `lib/settings/providerModels.ts`
+ *   2. add an SVG to `PROVIDER_ICON_SVGS` in `components/ui/ProviderLogo.tsx`
+ *   3. add an entry below
+ *   4. add the matching server API routes
+ * No JSX or state branching inside this component should hard-code provider ids.
+ */
+const PROVIDERS: readonly ProviderConfig[] = [
   {
     id: 'codex',
     label: 'Codex',
-    initials: 'OA',
     keyLabel: 'OpenAI API Key',
     keyPlaceholder: 'sk-...',
     catalogHint: 'OpenAI /v1/models 카탈로그',
+    catalogEndpoint: '/api/settings/models/catalog/openai',
+    keyEndpoint: '/api/settings/openai-key',
+    selectionDefaults: [],
+    supportsManualModelId: true,
+    applyPresetLabel: '카탈로그 전체 적용',
+    keyDisplayName: 'OpenAI API',
+    defaultsTitle: 'Codex 기본 실행값',
+    defaultsSubtitle: '새 Codex 채팅의 초기 모델을 정의합니다. 브라우저의 마지막 선택이 있으면 그쪽이 우선합니다.',
   },
   {
     id: 'claude',
     label: 'Claude',
-    initials: 'AN',
     keyLabel: 'Anthropic API Key',
     keyPlaceholder: 'sk-ant-...',
     catalogHint: 'Anthropic /v1/models 카탈로그',
+    catalogEndpoint: '/api/settings/models/catalog/claude',
+    keyEndpoint: '/api/settings/claude-key',
+    selectionDefaults: DEFAULT_CLAUDE_MODEL_SELECTIONS,
+    applyPresetLabel: '권장 세트 적용',
+    keyDisplayName: 'Anthropic API',
+    defaultsTitle: 'Claude 기본 실행값',
+    defaultsSubtitle: '새 Claude 채팅의 초기 모델을 정의합니다.',
   },
   {
     id: 'gemini',
     label: 'Gemini',
-    initials: 'GO',
     keyLabel: 'Google AI Studio API Key',
     keyPlaceholder: 'AIza...',
     catalogHint: 'Google AI /v1beta/models 카탈로그',
+    catalogEndpoint: '/api/settings/models/catalog/gemini',
+    keyEndpoint: '/api/settings/gemini-key',
+    selectionDefaults: DEFAULT_GEMINI_MODEL_SELECTIONS,
+    supportsGeminiModes: true,
+    applyPresetLabel: '권장 세트 적용',
+    keyDisplayName: 'Google AI Studio API',
+    defaultsTitle: 'Gemini 기본 실행값',
+    defaultsSubtitle: '새 Gemini 채팅의 초기 모델과 모드를 정의합니다. ACP capability는 다시 조회하지 않습니다.',
   },
 ];
+
+const PROVIDER_IDS = PROVIDERS.map((p) => p.id) as ProviderId[];
+
+function emptyByProvider<T>(factory: (id: ProviderId) => T): ProviderRecord<T> {
+  return PROVIDER_IDS.reduce((acc, id) => {
+    acc[id] = factory(id);
+    return acc;
+  }, {} as ProviderRecord<T>);
+}
+
+function initialSelections(): ProviderRecord<string[]> {
+  return emptyByProvider((id) => {
+    const config = PROVIDERS.find((p) => p.id === id);
+    return config ? [...config.selectionDefaults] : [];
+  });
+}
+
+function initialDefaults(): ProviderRecord<string> {
+  return emptyByProvider((id) => {
+    const config = PROVIDERS.find((p) => p.id === id);
+    if (!config) return '';
+    return config.selectionDefaults[0] ?? '';
+  });
+}
+
+function isApiKeyConfigured(secrets: ModelSettingsResponse['secrets'], id: ProviderId): boolean {
+  if (id === 'codex') return secrets.openAiApiKeyConfigured;
+  if (id === 'claude') return secrets.claudeApiKeyConfigured;
+  if (id === 'gemini') return secrets.geminiApiKeyConfigured;
+  return false;
+}
 
 const DEFAULT_MODEL_SETTINGS: ModelSettingsResponse = {
   providers: {
@@ -86,147 +163,130 @@ const DEFAULT_MODEL_SETTINGS: ModelSettingsResponse = {
 
 export function ModelsSection() {
   const [modelSettings, setModelSettings] = useState<ModelSettingsResponse>(DEFAULT_MODEL_SETTINGS);
-  const [activeProvider, setActiveProvider] = useState<ProviderId>('codex');
+  const [activeProvider, setActiveProvider] = useState<ProviderId>(PROVIDER_IDS[0]);
 
-  // Codex 상태
-  const [codexCatalogItems, setCodexCatalogItems] = useState<OpenAiCatalogItem[]>([]);
-  const [selectedCodexModelIds, setSelectedCodexModelIds] = useState<string[]>([]);
-  const [selectedCodexDefaultModelId, setSelectedCodexDefaultModelId] = useState<string>('');
-  const [codexModelSaving, setCodexModelSaving] = useState(false);
-  const [codexModelFeedback, setCodexModelFeedback] = useState<Feedback>(null);
-  const [codexCatalogLoading, setCodexCatalogLoading] = useState(false);
-  const [codexCatalogError, setCodexCatalogError] = useState<string | null>(null);
-  const [codexKeySaving, setCodexKeySaving] = useState(false);
-  const [codexKeyDeleting, setCodexKeyDeleting] = useState(false);
-  const [codexKeyFeedback, setCodexKeyFeedback] = useState<Feedback>(null);
+  // ── Per-provider state, all keyed by ProviderId ─────────────────────────
+  const [catalogItems, setCatalogItems] = useState<ProviderRecord<CatalogItem[]>>(() => emptyByProvider(() => []));
+  const [selectedModelIds, setSelectedModelIds] = useState<ProviderRecord<string[]>>(initialSelections);
+  const [defaultModelIds, setDefaultModelIds] = useState<ProviderRecord<string>>(initialDefaults);
+  const [catalogLoading, setCatalogLoading] = useState<ProviderRecord<boolean>>(() => emptyByProvider(() => false));
+  const [catalogError, setCatalogError] = useState<ProviderRecord<string | null>>(() => emptyByProvider(() => null));
+  const [modelSaving, setModelSaving] = useState<ProviderRecord<boolean>>(() => emptyByProvider(() => false));
+  const [modelFeedback, setModelFeedback] = useState<ProviderRecord<Feedback>>(() => emptyByProvider(() => null));
+  const [keySaving, setKeySaving] = useState<ProviderRecord<boolean>>(() => emptyByProvider(() => false));
+  const [keyDeleting, setKeyDeleting] = useState<ProviderRecord<boolean>>(() => emptyByProvider(() => false));
+  const [keyFeedback, setKeyFeedback] = useState<ProviderRecord<Feedback>>(() => emptyByProvider(() => null));
 
-  // Claude 상태
-  const [claudeCatalogItems, setClaudeCatalogItems] = useState<ClaudeCatalogItem[]>([]);
-  const [selectedClaudeModelIds, setSelectedClaudeModelIds] = useState<string[]>([...DEFAULT_CLAUDE_MODEL_SELECTIONS]);
-  const [claudeModelSaving, setClaudeModelSaving] = useState(false);
-  const [claudeModelFeedback, setClaudeModelFeedback] = useState<Feedback>(null);
-  const [claudeCatalogLoading, setClaudeCatalogLoading] = useState(false);
-  const [claudeCatalogError, setClaudeCatalogError] = useState<string | null>(null);
-  const [claudeKeySaving, setClaudeKeySaving] = useState(false);
-  const [claudeKeyDeleting, setClaudeKeyDeleting] = useState(false);
-  const [claudeKeyFeedback, setClaudeKeyFeedback] = useState<Feedback>(null);
+  // ── Gemini-specific default mode (capability-gated below) ───────────────
+  const [geminiDefaultModeId, setGeminiDefaultModeId] = useState<string>(DEFAULT_GEMINI_MODE_ID);
 
-  // Gemini 상태
-  const [geminiCatalogItems, setGeminiCatalogItems] = useState<GeminiCatalogItem[]>([]);
-  const [selectedGeminiModelIds, setSelectedGeminiModelIds] = useState<string[]>([...DEFAULT_GEMINI_MODEL_SELECTIONS]);
-  const [selectedGeminiDefaultModelId, setSelectedGeminiDefaultModelId] = useState<string>(DEFAULT_GEMINI_MODEL_SELECTIONS[0]);
-  const [selectedGeminiDefaultModeId, setSelectedGeminiDefaultModeId] = useState<string>(DEFAULT_GEMINI_MODE_ID);
-  const [geminiModelSaving, setGeminiModelSaving] = useState(false);
-  const [geminiModelFeedback, setGeminiModelFeedback] = useState<Feedback>(null);
-  const [geminiCatalogLoading, setGeminiCatalogLoading] = useState(false);
-  const [geminiCatalogError, setGeminiCatalogError] = useState<string | null>(null);
-  const [geminiKeySaving, setGeminiKeySaving] = useState(false);
-  const [geminiKeyDeleting, setGeminiKeyDeleting] = useState(false);
-  const [geminiKeyFeedback, setGeminiKeyFeedback] = useState<Feedback>(null);
-
-  // UI-local
+  // ── UI-local ─────────────────────────────────────────────────────────────
   const [keyEditing, setKeyEditing] = useState(false);
   const [keyDraft, setKeyDraft] = useState('');
   const [query, setQuery] = useState('');
   const [manualModelId, setManualModelId] = useState('');
   const deferredQuery = useDeferredValue(query);
 
-  const syncCodexSelection = useCallback((settings: ModelSettingsResponse) => {
-    const persisted = settings.providers.codex.selectedModelIds;
-    const nextSelected = persisted.length > 0 ? persisted : [];
-    setSelectedCodexModelIds(nextSelected);
-    setSelectedCodexDefaultModelId(settings.providers.codex.defaultModelId ?? nextSelected[0] ?? '');
+  // ── Per-provider state setter helpers.
+  //   Each takes (id, value) and merges into the record; the type-narrow
+  //   `value` argument keeps consumers terse without resorting to a generic
+  //   helper, whose inference TypeScript narrows to literal types.
+  const setCatalogFor = useCallback((id: ProviderId, items: CatalogItem[]) => {
+    setCatalogItems((prev) => ({ ...prev, [id]: items }));
+  }, []);
+  const setSelectedFor = useCallback((id: ProviderId, ids: string[]) => {
+    setSelectedModelIds((prev) => ({ ...prev, [id]: ids }));
+  }, []);
+  const setDefaultFor = useCallback((id: ProviderId, modelId: string) => {
+    setDefaultModelIds((prev) => ({ ...prev, [id]: modelId }));
+  }, []);
+  const setCatalogLoadingFor = useCallback((id: ProviderId, value: boolean) => {
+    setCatalogLoading((prev) => ({ ...prev, [id]: value }));
+  }, []);
+  const setCatalogErrorFor = useCallback((id: ProviderId, value: string | null) => {
+    setCatalogError((prev) => ({ ...prev, [id]: value }));
+  }, []);
+  const setModelSavingFor = useCallback((id: ProviderId, value: boolean) => {
+    setModelSaving((prev) => ({ ...prev, [id]: value }));
+  }, []);
+  const setModelFeedbackFor = useCallback((id: ProviderId, value: Feedback) => {
+    setModelFeedback((prev) => ({ ...prev, [id]: value }));
+  }, []);
+  const setKeySavingFor = useCallback((id: ProviderId, value: boolean) => {
+    setKeySaving((prev) => ({ ...prev, [id]: value }));
+  }, []);
+  const setKeyDeletingFor = useCallback((id: ProviderId, value: boolean) => {
+    setKeyDeleting((prev) => ({ ...prev, [id]: value }));
+  }, []);
+  const setKeyFeedbackFor = useCallback((id: ProviderId, value: Feedback) => {
+    setKeyFeedback((prev) => ({ ...prev, [id]: value }));
   }, []);
 
-  const syncClaudeSelection = useCallback((settings: ModelSettingsResponse) => {
-    const persisted = settings.providers.claude.selectedModelIds;
-    setSelectedClaudeModelIds(persisted.length > 0 ? persisted : [...DEFAULT_CLAUDE_MODEL_SELECTIONS]);
+  // ── Sync from server response ────────────────────────────────────────────
+  const syncFromResponse = useCallback((settings: ModelSettingsResponse) => {
+    const nextSelections = initialSelections();
+    const nextDefaults = initialDefaults();
+    for (const config of PROVIDERS) {
+      const persisted = settings.providers[config.id].selectedModelIds;
+      const nextSelected = persisted.length > 0 ? persisted : [...config.selectionDefaults];
+      nextSelections[config.id] = nextSelected;
+      const persistedDefault = settings.providers[config.id].defaultModelId;
+      nextDefaults[config.id] = persistedDefault ?? nextSelected[0] ?? '';
+    }
+    setSelectedModelIds(nextSelections);
+    setDefaultModelIds(nextDefaults);
+    setGeminiDefaultModeId(settings.providers.gemini.defaultModeId ?? DEFAULT_GEMINI_MODE_ID);
   }, []);
 
-  const syncGeminiSelection = useCallback((settings: ModelSettingsResponse) => {
-    const persisted = settings.providers.gemini.selectedModelIds;
-    const nextSelected = persisted.length > 0 ? persisted : [...DEFAULT_GEMINI_MODEL_SELECTIONS];
-    setSelectedGeminiModelIds(nextSelected);
-    setSelectedGeminiDefaultModelId(settings.providers.gemini.defaultModelId ?? nextSelected[0] ?? DEFAULT_GEMINI_MODEL_SELECTIONS[0]);
-    setSelectedGeminiDefaultModeId(settings.providers.gemini.defaultModeId ?? DEFAULT_GEMINI_MODE_ID);
-  }, []);
-
+  // ── Fetchers ─────────────────────────────────────────────────────────────
   const loadModelSettings = useCallback(async (): Promise<ModelSettingsResponse | null> => {
     try {
       const response = await fetch('/api/settings/models');
       const data = await response.json().catch(() => null);
-      if (!response.ok || !data) {
-        throw new Error('모델 설정을 불러오지 못했습니다.');
-      }
+      if (!response.ok || !data) throw new Error('모델 설정을 불러오지 못했습니다.');
       setModelSettings(data);
-      syncCodexSelection(data);
-      syncClaudeSelection(data);
-      syncGeminiSelection(data);
+      syncFromResponse(data);
       return data;
     } catch (error) {
-      setCodexModelFeedback({
+      setModelFeedbackFor('codex', {
         ok: false,
         msg: error instanceof Error ? error.message : '모델 설정을 불러오지 못했습니다.',
       });
       return null;
     }
-  }, [syncClaudeSelection, syncCodexSelection, syncGeminiSelection]);
+  }, [syncFromResponse, setModelFeedbackFor]);
 
-  const loadCodexCatalog = useCallback(async () => {
-    setCodexCatalogLoading(true);
-    setCodexCatalogError(null);
+  const loadCatalog = useCallback(async (id: ProviderId) => {
+    const config = PROVIDERS.find((p) => p.id === id);
+    if (!config) return;
+    setCatalogLoadingFor(id, true);
+    setCatalogErrorFor(id, null);
     try {
-      const response = await fetch('/api/settings/models/catalog/openai');
+      const response = await fetch(config.catalogEndpoint);
       const data = await response.json().catch(() => null);
-      if (!response.ok || !data) throw new Error('모델 카탈로그를 불러오지 못했습니다.');
-      setCodexCatalogItems(Array.isArray(data.items) ? data.items : []);
+      if (!response.ok || !data) throw new Error(`${config.label} 모델 카탈로그를 불러오지 못했습니다.`);
+      setCatalogFor(id, Array.isArray(data.items) ? data.items : []);
     } catch (error) {
-      setCodexCatalogItems([]);
-      setCodexCatalogError(error instanceof Error ? error.message : '모델 카탈로그를 불러오지 못했습니다.');
+      setCatalogFor(id, []);
+      setCatalogErrorFor(
+        id,
+        error instanceof Error ? error.message : `${config.label} 모델 카탈로그를 불러오지 못했습니다.`,
+      );
     } finally {
-      setCodexCatalogLoading(false);
+      setCatalogLoadingFor(id, false);
     }
-  }, []);
-
-  const loadClaudeCatalog = useCallback(async () => {
-    setClaudeCatalogLoading(true);
-    setClaudeCatalogError(null);
-    try {
-      const response = await fetch('/api/settings/models/catalog/claude');
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data) throw new Error('Claude 모델 카탈로그를 불러오지 못했습니다.');
-      setClaudeCatalogItems(Array.isArray(data.items) ? data.items : []);
-    } catch (error) {
-      setClaudeCatalogItems([]);
-      setClaudeCatalogError(error instanceof Error ? error.message : 'Claude 모델 카탈로그를 불러오지 못했습니다.');
-    } finally {
-      setClaudeCatalogLoading(false);
-    }
-  }, []);
-
-  const loadGeminiCatalog = useCallback(async () => {
-    setGeminiCatalogLoading(true);
-    setGeminiCatalogError(null);
-    try {
-      const response = await fetch('/api/settings/models/catalog/gemini');
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data) throw new Error('Gemini 모델 카탈로그를 불러오지 못했습니다.');
-      setGeminiCatalogItems(Array.isArray(data.items) ? data.items : []);
-    } catch (error) {
-      setGeminiCatalogItems([]);
-      setGeminiCatalogError(error instanceof Error ? error.message : 'Gemini 모델 카탈로그를 불러오지 못했습니다.');
-    } finally {
-      setGeminiCatalogLoading(false);
-    }
-  }, []);
+  }, [setCatalogFor, setCatalogErrorFor, setCatalogLoadingFor]);
 
   useEffect(() => {
     void loadModelSettings().then((settings) => {
-      if (settings?.secrets.openAiApiKeyConfigured) void loadCodexCatalog();
-      if (settings?.secrets.claudeApiKeyConfigured) void loadClaudeCatalog();
-      if (settings?.secrets.geminiApiKeyConfigured) void loadGeminiCatalog();
+      if (!settings) return;
+      for (const config of PROVIDERS) {
+        if (isApiKeyConfigured(settings.secrets, config.id)) {
+          void loadCatalog(config.id);
+        }
+      }
     });
-  }, [loadClaudeCatalog, loadCodexCatalog, loadGeminiCatalog, loadModelSettings]);
+  }, [loadCatalog, loadModelSettings]);
 
   // Reset transient UI when provider changes
   useEffect(() => {
@@ -236,372 +296,239 @@ export function ModelsSection() {
     setManualModelId('');
   }, [activeProvider]);
 
-  // Codex key handlers
-  const handleSaveCodexKey = useCallback(async (apiKey: string) => {
+  // ── API key save/delete (generic over provider) ──────────────────────────
+  const handleSaveKey = useCallback(async (id: ProviderId, apiKey: string) => {
+    const config = PROVIDERS.find((p) => p.id === id);
+    if (!config) return;
     if (apiKey.trim().length < 20) {
-      setCodexKeyFeedback({ ok: false, msg: '유효한 OpenAI API 키를 입력해 주세요.' });
+      setKeyFeedbackFor(id, { ok: false, msg: `유효한 ${config.keyDisplayName} 키를 입력해 주세요.` });
       return;
     }
-    setCodexKeySaving(true);
-    setCodexKeyFeedback(null);
+    setKeySavingFor(id, true);
+    setKeyFeedbackFor(id, null);
     try {
-      const response = await fetch('/api/settings/openai-key', {
+      const response = await fetch(config.keyEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiKey }),
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'OpenAI API 키 저장에 실패했습니다.');
-      setCodexKeyFeedback({ ok: true, msg: 'OpenAI API 키가 저장되었습니다.' });
-      const settings = await loadModelSettings();
-      if (settings?.secrets.openAiApiKeyConfigured) await loadCodexCatalog();
-    } catch (error) {
-      setCodexKeyFeedback({ ok: false, msg: error instanceof Error ? error.message : 'OpenAI API 키 저장에 실패했습니다.' });
-    } finally {
-      setCodexKeySaving(false);
-    }
-  }, [loadModelSettings, loadCodexCatalog]);
-
-  const handleDeleteCodexKey = useCallback(async () => {
-    setCodexKeyDeleting(true);
-    setCodexKeyFeedback(null);
-    try {
-      const response = await fetch('/api/settings/openai-key', { method: 'DELETE' });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'OpenAI API 키 제거에 실패했습니다.');
-      setCodexCatalogItems([]);
-      setCodexCatalogError(null);
-      setCodexKeyFeedback({ ok: true, msg: '등록된 OpenAI API 키를 제거했습니다.' });
-      await loadModelSettings();
-    } catch (error) {
-      setCodexKeyFeedback({ ok: false, msg: error instanceof Error ? error.message : 'OpenAI API 키 제거에 실패했습니다.' });
-    } finally {
-      setCodexKeyDeleting(false);
-    }
-  }, [loadModelSettings]);
-
-  // Claude key handlers
-  const handleSaveClaudeKey = useCallback(async (apiKey: string) => {
-    if (apiKey.trim().length < 20) {
-      setClaudeKeyFeedback({ ok: false, msg: '유효한 Anthropic API 키를 입력해 주세요.' });
-      return;
-    }
-    setClaudeKeySaving(true);
-    setClaudeKeyFeedback(null);
-    try {
-      const response = await fetch('/api/settings/claude-key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Anthropic API 키 저장에 실패했습니다.');
-      setClaudeKeyFeedback({ ok: true, msg: 'Anthropic API 키가 저장되었습니다.' });
-      const settings = await loadModelSettings();
-      if (settings?.secrets.claudeApiKeyConfigured) await loadClaudeCatalog();
-    } catch (error) {
-      setClaudeKeyFeedback({ ok: false, msg: error instanceof Error ? error.message : 'Anthropic API 키 저장에 실패했습니다.' });
-    } finally {
-      setClaudeKeySaving(false);
-    }
-  }, [loadModelSettings, loadClaudeCatalog]);
-
-  const handleDeleteClaudeKey = useCallback(async () => {
-    setClaudeKeyDeleting(true);
-    setClaudeKeyFeedback(null);
-    try {
-      const response = await fetch('/api/settings/claude-key', { method: 'DELETE' });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Anthropic API 키 제거에 실패했습니다.');
-      setClaudeCatalogItems([]);
-      setClaudeCatalogError(null);
-      setClaudeKeyFeedback({ ok: true, msg: '등록된 Anthropic API 키를 제거했습니다.' });
-      await loadModelSettings();
-    } catch (error) {
-      setClaudeKeyFeedback({ ok: false, msg: error instanceof Error ? error.message : 'Anthropic API 키 제거에 실패했습니다.' });
-    } finally {
-      setClaudeKeyDeleting(false);
-    }
-  }, [loadModelSettings]);
-
-  // Gemini key handlers
-  const handleSaveGeminiKey = useCallback(async (apiKey: string) => {
-    if (apiKey.trim().length < 20) {
-      setGeminiKeyFeedback({ ok: false, msg: '유효한 Google AI Studio API 키를 입력해 주세요.' });
-      return;
-    }
-    setGeminiKeySaving(true);
-    setGeminiKeyFeedback(null);
-    try {
-      const response = await fetch('/api/settings/gemini-key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Google AI Studio API 키 저장에 실패했습니다.');
-      setGeminiKeyFeedback({ ok: true, msg: 'Google AI Studio API 키가 저장되었습니다.' });
-      const settings = await loadModelSettings();
-      if (settings?.secrets.geminiApiKeyConfigured) await loadGeminiCatalog();
-    } catch (error) {
-      setGeminiKeyFeedback({ ok: false, msg: error instanceof Error ? error.message : 'Google AI Studio API 키 저장에 실패했습니다.' });
-    } finally {
-      setGeminiKeySaving(false);
-    }
-  }, [loadGeminiCatalog, loadModelSettings]);
-
-  const handleDeleteGeminiKey = useCallback(async () => {
-    setGeminiKeyDeleting(true);
-    setGeminiKeyFeedback(null);
-    try {
-      const response = await fetch('/api/settings/gemini-key', { method: 'DELETE' });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Google AI Studio API 키 제거에 실패했습니다.');
-      setGeminiCatalogItems([]);
-      setGeminiCatalogError(null);
-      setGeminiKeyFeedback({ ok: true, msg: '등록된 Google AI Studio API 키를 제거했습니다.' });
-      await loadModelSettings();
-    } catch (error) {
-      setGeminiKeyFeedback({ ok: false, msg: error instanceof Error ? error.message : 'Google AI Studio API 키 제거에 실패했습니다.' });
-    } finally {
-      setGeminiKeyDeleting(false);
-    }
-  }, [loadModelSettings]);
-
-  // Model toggles
-  const handleToggleCodexModel = useCallback((modelId: string) => {
-    setSelectedCodexModelIds((prev) => {
-      if (prev.includes(modelId)) {
-        const next = prev.filter((item) => item !== modelId);
-        setSelectedCodexDefaultModelId((current) => (current === modelId ? (next[0] ?? '') : current));
-        return next;
+      if (!response.ok) {
+        throw new Error(typeof (data as Record<string, unknown>).error === 'string'
+          ? String((data as Record<string, unknown>).error)
+          : `${config.keyDisplayName} 키 저장에 실패했습니다.`);
       }
-      const next = [...prev, modelId];
-      const order = new Map(codexCatalogItems.map((item, index) => [item.id, index]));
-      next.sort((left, right) => (order.get(left) ?? Number.MAX_SAFE_INTEGER) - (order.get(right) ?? Number.MAX_SAFE_INTEGER));
-      setSelectedCodexDefaultModelId((current) => current || next[0] || '');
-      return next;
-    });
-  }, [codexCatalogItems]);
+      setKeyFeedbackFor(id, { ok: true, msg: `${config.keyDisplayName} 키가 저장되었습니다.` });
+      const settings = await loadModelSettings();
+      if (settings && isApiKeyConfigured(settings.secrets, id)) {
+        await loadCatalog(id);
+      }
+    } catch (error) {
+      setKeyFeedbackFor(id, {
+        ok: false,
+        msg: error instanceof Error ? error.message : `${config.keyDisplayName} 키 저장에 실패했습니다.`,
+      });
+    } finally {
+      setKeySavingFor(id, false);
+    }
+  }, [loadModelSettings, loadCatalog, setKeyFeedbackFor, setKeySavingFor]);
 
-  const handleApplyRecommendedCodexModels = useCallback(() => {
-    if (codexCatalogItems.length === 0) {
-      setCodexModelFeedback({ ok: false, msg: '먼저 OpenAI 모델 카탈로그를 불러와 주세요.' });
+  const handleDeleteKey = useCallback(async (id: ProviderId) => {
+    const config = PROVIDERS.find((p) => p.id === id);
+    if (!config) return;
+    setKeyDeletingFor(id, true);
+    setKeyFeedbackFor(id, null);
+    try {
+      const response = await fetch(config.keyEndpoint, { method: 'DELETE' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof (data as Record<string, unknown>).error === 'string'
+          ? String((data as Record<string, unknown>).error)
+          : `${config.keyDisplayName} 키 제거에 실패했습니다.`);
+      }
+      setCatalogFor(id, []);
+      setCatalogErrorFor(id, null);
+      setKeyFeedbackFor(id, { ok: true, msg: `등록된 ${config.keyDisplayName} 키를 제거했습니다.` });
+      await loadModelSettings();
+    } catch (error) {
+      setKeyFeedbackFor(id, {
+        ok: false,
+        msg: error instanceof Error ? error.message : `${config.keyDisplayName} 키 제거에 실패했습니다.`,
+      });
+    } finally {
+      setKeyDeletingFor(id, false);
+    }
+  }, [loadModelSettings, setCatalogFor, setCatalogErrorFor, setKeyDeletingFor, setKeyFeedbackFor]);
+
+  // ── Model selection toggles (generic) ────────────────────────────────────
+  const handleToggleModel = useCallback((id: ProviderId, modelId: string) => {
+    setSelectedModelIds((prev) => {
+      const current = prev[id];
+      if (current.includes(modelId)) {
+        const next = current.filter((m) => m !== modelId);
+        setDefaultModelIds((prevDefaults) => {
+          if (prevDefaults[id] !== modelId) return prevDefaults;
+          return { ...prevDefaults, [id]: next[0] ?? '' };
+        });
+        return { ...prev, [id]: next };
+      }
+      const next = [...current, modelId];
+      const order = new Map(catalogItems[id].map((item, index) => [item.id, index]));
+      next.sort(
+        (left, right) =>
+          (order.get(left) ?? Number.MAX_SAFE_INTEGER) - (order.get(right) ?? Number.MAX_SAFE_INTEGER),
+      );
+      setDefaultModelIds((prevDefaults) => {
+        if (prevDefaults[id]) return prevDefaults;
+        return { ...prevDefaults, [id]: modelId };
+      });
+      return { ...prev, [id]: next };
+    });
+  }, [catalogItems]);
+
+  const handleApplyRecommended = useCallback((id: ProviderId) => {
+    const config = PROVIDERS.find((p) => p.id === id);
+    if (!config) return;
+    const items = catalogItems[id];
+    if (id === 'codex') {
+      if (items.length === 0) {
+        setModelFeedbackFor(id, { ok: false, msg: '먼저 OpenAI 모델 카탈로그를 불러와 주세요.' });
+        return;
+      }
+      const catalogModelIds = items.map((item) => item.id);
+      const catalogModelIdSet = new Set(catalogModelIds);
+      const manualModelIds = selectedModelIds[id].filter((modelId) => !catalogModelIdSet.has(modelId));
+      const nextSelected = [...catalogModelIds, ...manualModelIds];
+      setSelectedFor(id, nextSelected);
+      setDefaultModelIds((prev) => ({
+        ...prev,
+        [id]: prev[id] && nextSelected.includes(prev[id]) ? prev[id] : (nextSelected[0] ?? ''),
+      }));
       return;
     }
-    const catalogModelIds = codexCatalogItems.map((item) => item.id);
-    const catalogModelIdSet = new Set(catalogModelIds);
-    const manualModelIds = selectedCodexModelIds.filter((modelId) => !catalogModelIdSet.has(modelId));
-    const nextSelected = [...catalogModelIds, ...manualModelIds];
-    setSelectedCodexModelIds(nextSelected);
-    setSelectedCodexDefaultModelId((current) => (current && nextSelected.includes(current) ? current : (nextSelected[0] ?? '')));
-  }, [codexCatalogItems, selectedCodexModelIds]);
+    const available = new Set(items.map((item) => item.id));
+    const recommended = config.selectionDefaults.filter((modelId) => available.has(modelId));
+    const nextSelected =
+      items.length === 0
+        ? [...config.selectionDefaults]
+        : recommended.length > 0
+          ? [...recommended]
+          : [...config.selectionDefaults];
+    setSelectedFor(id, nextSelected);
+    setDefaultModelIds((prev) => ({ ...prev, [id]: nextSelected[0] ?? config.selectionDefaults[0] ?? '' }));
+  }, [catalogItems, selectedModelIds, setSelectedFor, setModelFeedbackFor]);
 
-  const handleAddCodexManualModel = useCallback((rawModelId: string) => {
+  // ── Manual model id (Codex / supportsManualModelId only) ─────────────────
+  const handleAddManualModel = useCallback((id: ProviderId, rawModelId: string) => {
+    const config = PROVIDERS.find((p) => p.id === id);
+    if (!config?.supportsManualModelId) return false;
     const normalizedModelId = sanitizeManualModelId(rawModelId);
     if (!normalizedModelId) {
-      setCodexModelFeedback({
+      setModelFeedbackFor(id, {
         ok: false,
         msg: '모델명은 영문자/숫자로 시작하고 점(.), 밑줄(_), 하이픈(-), 콜론(:)만 포함할 수 있습니다.',
       });
       return false;
     }
     let duplicate = false;
-    setSelectedCodexModelIds((prev) => {
-      if (prev.includes(normalizedModelId)) {
+    setSelectedModelIds((prev) => {
+      const current = prev[id];
+      if (current.includes(normalizedModelId)) {
         duplicate = true;
         return prev;
       }
-      setSelectedCodexDefaultModelId((current) => current || normalizedModelId);
-      return [...prev, normalizedModelId];
+      setDefaultModelIds((prevDefaults) => ({ ...prevDefaults, [id]: prevDefaults[id] || normalizedModelId }));
+      return { ...prev, [id]: [...current, normalizedModelId] };
     });
     if (duplicate) {
-      setCodexModelFeedback({ ok: false, msg: '이미 선택 목록에 있는 모델입니다.' });
+      setModelFeedbackFor(id, { ok: false, msg: '이미 선택 목록에 있는 모델입니다.' });
       return false;
     }
-    setCodexModelFeedback({ ok: true, msg: `${normalizedModelId} 모델을 추가했습니다. 저장을 누르면 반영됩니다.` });
+    setModelFeedbackFor(id, {
+      ok: true,
+      msg: `${normalizedModelId} 모델을 추가했습니다. 저장을 누르면 반영됩니다.`,
+    });
     return true;
-  }, []);
+  }, [setModelFeedbackFor]);
 
-  const handleRemoveCodexManualModel = useCallback((modelId: string) => {
-    setSelectedCodexModelIds((prev) => {
-      if (!prev.includes(modelId)) return prev;
-      const next = prev.filter((item) => item !== modelId);
-      setSelectedCodexDefaultModelId((current) => (current === modelId ? (next[0] ?? '') : current));
-      return next;
+  const handleRemoveManualModel = useCallback((id: ProviderId, modelId: string) => {
+    setSelectedModelIds((prev) => {
+      const current = prev[id];
+      if (!current.includes(modelId)) return prev;
+      const next = current.filter((m) => m !== modelId);
+      setDefaultModelIds((prevDefaults) => ({
+        ...prevDefaults,
+        [id]: prevDefaults[id] === modelId ? (next[0] ?? '') : prevDefaults[id],
+      }));
+      return { ...prev, [id]: next };
     });
-    setCodexModelFeedback({ ok: true, msg: `${modelId} 모델을 목록에서 제거했습니다. 저장을 누르면 반영됩니다.` });
-  }, []);
-
-  const handleCodexModelSave = useCallback(async () => {
-    if (selectedCodexModelIds.length === 0) {
-      setCodexModelFeedback({ ok: false, msg: '최소 1개 이상의 Codex 모델을 선택해 주세요.' });
-      return;
-    }
-    setCodexModelSaving(true);
-    setCodexModelFeedback(null);
-    try {
-      const response = await fetch('/api/settings/models', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          providers: {
-            codex: { selectedModelIds: selectedCodexModelIds, defaultModelId: selectedCodexDefaultModelId },
-          },
-        }),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data) throw new Error('사용할 Codex 모델 목록을 저장하지 못했습니다.');
-      setModelSettings(data);
-      syncCodexSelection(data);
-      setCodexModelFeedback({ ok: true, msg: 'Codex 사용할 모델 목록이 저장되었습니다.' });
-    } catch (error) {
-      setCodexModelFeedback({ ok: false, msg: error instanceof Error ? error.message : 'Codex 모델 목록 저장에 실패했습니다.' });
-    } finally {
-      setCodexModelSaving(false);
-    }
-  }, [selectedCodexDefaultModelId, selectedCodexModelIds, syncCodexSelection]);
-
-  const handleToggleClaudeModel = useCallback((modelId: string) => {
-    setSelectedClaudeModelIds((prev) => {
-      if (prev.includes(modelId)) return prev.filter((item) => item !== modelId);
-      const next = [...prev, modelId];
-      const order = new Map(claudeCatalogItems.map((item, index) => [item.id, index]));
-      next.sort((left, right) => (order.get(left) ?? Number.MAX_SAFE_INTEGER) - (order.get(right) ?? Number.MAX_SAFE_INTEGER));
-      return next;
+    setModelFeedbackFor(id, {
+      ok: true,
+      msg: `${modelId} 모델을 목록에서 제거했습니다. 저장을 누르면 반영됩니다.`,
     });
-  }, [claudeCatalogItems]);
+  }, [setModelFeedbackFor]);
 
-  const handleApplyRecommendedClaudeModels = useCallback(() => {
-    if (claudeCatalogItems.length === 0) {
-      setSelectedClaudeModelIds([...DEFAULT_CLAUDE_MODEL_SELECTIONS]);
+  // ── Save selection ───────────────────────────────────────────────────────
+  const handleSetDefaultModel = useCallback((id: ProviderId, modelId: string) => {
+    setDefaultFor(id, modelId);
+  }, [setDefaultFor]);
+
+  const handleModelSave = useCallback(async (id: ProviderId) => {
+    const config = PROVIDERS.find((p) => p.id === id);
+    if (!config) return;
+    const currentSelected = selectedModelIds[id];
+    if (currentSelected.length === 0) {
+      setModelFeedbackFor(id, { ok: false, msg: `최소 1개 이상의 ${config.label} 모델을 선택해 주세요.` });
       return;
     }
-    const available = new Set(claudeCatalogItems.map((item) => item.id));
-    const recommended = DEFAULT_CLAUDE_MODEL_SELECTIONS.filter((modelId) => available.has(modelId));
-    setSelectedClaudeModelIds(recommended.length > 0 ? [...recommended] : [...DEFAULT_CLAUDE_MODEL_SELECTIONS]);
-  }, [claudeCatalogItems]);
-
-  const handleClaudeModelSave = useCallback(async () => {
-    if (selectedClaudeModelIds.length === 0) {
-      setClaudeModelFeedback({ ok: false, msg: '최소 1개 이상의 Claude 모델을 선택해 주세요.' });
-      return;
-    }
-    setClaudeModelSaving(true);
-    setClaudeModelFeedback(null);
+    setModelSavingFor(id, true);
+    setModelFeedbackFor(id, null);
     try {
-      const response = await fetch('/api/settings/models', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providers: { claude: { selectedModelIds: selectedClaudeModelIds } } }),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data) throw new Error('사용할 Claude 모델 목록을 저장하지 못했습니다.');
-      setModelSettings(data);
-      syncClaudeSelection(data);
-      setClaudeModelFeedback({ ok: true, msg: 'Claude 사용할 모델 목록이 저장되었습니다.' });
-    } catch (error) {
-      setClaudeModelFeedback({ ok: false, msg: error instanceof Error ? error.message : 'Claude 모델 목록 저장에 실패했습니다.' });
-    } finally {
-      setClaudeModelSaving(false);
-    }
-  }, [selectedClaudeModelIds, syncClaudeSelection]);
-
-  const handleToggleGeminiModel = useCallback((modelId: string) => {
-    setSelectedGeminiModelIds((prev) => {
-      if (prev.includes(modelId)) {
-        const next = prev.filter((item) => item !== modelId);
-        setSelectedGeminiDefaultModelId((current) => (current === modelId ? (next[0] ?? DEFAULT_GEMINI_MODEL_SELECTIONS[0]) : current));
-        return next;
+      const providerPayload: Record<string, unknown> = {
+        selectedModelIds: currentSelected,
+        defaultModelId: defaultModelIds[id] || currentSelected[0] || null,
+      };
+      if (config.supportsGeminiModes) {
+        providerPayload.defaultModeId = geminiDefaultModeId;
       }
-      const next = [...prev, modelId];
-      const order = new Map(geminiCatalogItems.map((item, index) => [item.id, index]));
-      next.sort((left, right) => (order.get(left) ?? Number.MAX_SAFE_INTEGER) - (order.get(right) ?? Number.MAX_SAFE_INTEGER));
-      setSelectedGeminiDefaultModelId((current) => current || next[0] || DEFAULT_GEMINI_MODEL_SELECTIONS[0]);
-      return next;
-    });
-  }, [geminiCatalogItems]);
-
-  const handleApplyRecommendedGeminiModels = useCallback(() => {
-    if (geminiCatalogItems.length === 0) {
-      setSelectedGeminiModelIds([...DEFAULT_GEMINI_MODEL_SELECTIONS]);
-      setSelectedGeminiDefaultModelId(DEFAULT_GEMINI_MODEL_SELECTIONS[0]);
-      return;
-    }
-    const available = new Set(geminiCatalogItems.map((item) => item.id));
-    const recommended = DEFAULT_GEMINI_MODEL_SELECTIONS.filter((modelId) => available.has(modelId));
-    const nextSelected = recommended.length > 0 ? [...recommended] : [...DEFAULT_GEMINI_MODEL_SELECTIONS];
-    setSelectedGeminiModelIds(nextSelected);
-    setSelectedGeminiDefaultModelId(nextSelected[0] ?? DEFAULT_GEMINI_MODEL_SELECTIONS[0]);
-  }, [geminiCatalogItems]);
-
-  const handleGeminiModelSave = useCallback(async () => {
-    if (selectedGeminiModelIds.length === 0) {
-      setGeminiModelFeedback({ ok: false, msg: '최소 1개 이상의 Gemini 모델을 선택해 주세요.' });
-      return;
-    }
-    setGeminiModelSaving(true);
-    setGeminiModelFeedback(null);
-    try {
       const response = await fetch('/api/settings/models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          providers: {
-            gemini: {
-              selectedModelIds: selectedGeminiModelIds,
-              defaultModelId: selectedGeminiDefaultModelId,
-              defaultModeId: selectedGeminiDefaultModeId,
-            },
-          },
-        }),
+        body: JSON.stringify({ providers: { [id]: providerPayload } }),
       });
       const data = await response.json().catch(() => null);
-      if (!response.ok || !data) throw new Error('사용할 Gemini 모델 목록을 저장하지 못했습니다.');
+      if (!response.ok || !data) throw new Error(`사용할 ${config.label} 모델 목록을 저장하지 못했습니다.`);
       setModelSettings(data);
-      syncGeminiSelection(data);
-      setGeminiModelFeedback({ ok: true, msg: 'Gemini 사용할 모델 목록이 저장되었습니다.' });
+      syncFromResponse(data);
+      setModelFeedbackFor(id, { ok: true, msg: `${config.label} 사용할 모델 목록이 저장되었습니다.` });
     } catch (error) {
-      setGeminiModelFeedback({ ok: false, msg: error instanceof Error ? error.message : 'Gemini 모델 목록 저장에 실패했습니다.' });
+      setModelFeedbackFor(id, {
+        ok: false,
+        msg: error instanceof Error ? error.message : `${config.label} 모델 목록 저장에 실패했습니다.`,
+      });
     } finally {
-      setGeminiModelSaving(false);
+      setModelSavingFor(id, false);
     }
-  }, [selectedGeminiDefaultModelId, selectedGeminiDefaultModeId, selectedGeminiModelIds, syncGeminiSelection]);
+  }, [defaultModelIds, geminiDefaultModeId, selectedModelIds, setModelFeedbackFor, setModelSavingFor, syncFromResponse]);
 
-  // ── Active provider derivation ────────────────────────────────────────
-  const isCodex = activeProvider === 'codex';
-  const isClaude = activeProvider === 'claude';
-  const isGemini = activeProvider === 'gemini';
-  const activeMeta = PROVIDER_OPTIONS.find((option) => option.id === activeProvider) ?? PROVIDER_OPTIONS[0];
+  // ── Derived for the active provider ──────────────────────────────────────
+  const activeConfig = PROVIDERS.find((p) => p.id === activeProvider) ?? PROVIDERS[0];
+  const activeHasApiKey = isApiKeyConfigured(modelSettings.secrets, activeProvider);
+  const activeKeySaving = keySaving[activeProvider];
+  const activeKeyDeleting = keyDeleting[activeProvider];
+  const activeKeyFeedback = keyFeedback[activeProvider];
+  const activeCatalogItems = catalogItems[activeProvider];
+  const activeSelectedModelIds = selectedModelIds[activeProvider];
+  const activeDefaultModelId = defaultModelIds[activeProvider];
+  const activeCatalogLoading = catalogLoading[activeProvider];
+  const activeCatalogError = catalogError[activeProvider];
+  const activeModelSaving = modelSaving[activeProvider];
+  const activeModelFeedback = modelFeedback[activeProvider];
 
-  const activeHasApiKey = isCodex
-    ? modelSettings.secrets.openAiApiKeyConfigured
-    : isClaude
-      ? modelSettings.secrets.claudeApiKeyConfigured
-      : modelSettings.secrets.geminiApiKeyConfigured;
-
-  const activeKeySaving = isCodex ? codexKeySaving : isClaude ? claudeKeySaving : geminiKeySaving;
-  const activeKeyDeleting = isCodex ? codexKeyDeleting : isClaude ? claudeKeyDeleting : geminiKeyDeleting;
-  const activeKeyFeedback = isCodex ? codexKeyFeedback : isClaude ? claudeKeyFeedback : geminiKeyFeedback;
-  const handleActiveKeySave = isCodex ? handleSaveCodexKey : isClaude ? handleSaveClaudeKey : handleSaveGeminiKey;
-  const handleActiveKeyDelete = isCodex ? handleDeleteCodexKey : isClaude ? handleDeleteClaudeKey : handleDeleteGeminiKey;
-
-  const activeCatalogItems: CatalogItem[] = isCodex ? codexCatalogItems : isClaude ? claudeCatalogItems : geminiCatalogItems;
-  const activeSelectedModelIds = isCodex ? selectedCodexModelIds : isClaude ? selectedClaudeModelIds : selectedGeminiModelIds;
-  const codexCatalogModelIdSet = new Set(codexCatalogItems.map((item) => item.id));
-  const manualCodexModelIds = selectedCodexModelIds.filter((modelId) => !codexCatalogModelIdSet.has(modelId));
-  const activeCatalogLoading = isCodex ? codexCatalogLoading : isClaude ? claudeCatalogLoading : geminiCatalogLoading;
-  const activeModelSaving = isCodex ? codexModelSaving : isClaude ? claudeModelSaving : geminiModelSaving;
-  const activeCatalogError = isCodex ? codexCatalogError : isClaude ? claudeCatalogError : geminiCatalogError;
-  const activeModelFeedback = isCodex ? codexModelFeedback : isClaude ? claudeModelFeedback : geminiModelFeedback;
-  const handleActiveToggle = isCodex ? handleToggleCodexModel : isClaude ? handleToggleClaudeModel : handleToggleGeminiModel;
-  const handleActiveRefresh = isCodex ? loadCodexCatalog : isClaude ? loadClaudeCatalog : loadGeminiCatalog;
-  const handleActiveModelSave = isCodex ? handleCodexModelSave : isClaude ? handleClaudeModelSave : handleGeminiModelSave;
-  const handleActiveApplyRecommended = isCodex
-    ? handleApplyRecommendedCodexModels
-    : isClaude
-      ? handleApplyRecommendedClaudeModels
-      : handleApplyRecommendedGeminiModels;
+  const activeCatalogModelIdSet = new Set(activeCatalogItems.map((item) => item.id));
+  const manualSelectedModelIds = activeConfig.supportsManualModelId
+    ? activeSelectedModelIds.filter((modelId) => !activeCatalogModelIdSet.has(modelId))
+    : [];
 
   // Filtered catalog rows
   const filteredCatalog = useMemo(() => {
@@ -629,17 +556,20 @@ export function ModelsSection() {
     }
   }, [activeKeyFeedback]);
 
-  const applyPresetLabel = isCodex ? '카탈로그 전체 적용' : '권장 세트 적용';
   const selectedCount = activeSelectedModelIds.length;
+  const hasDefaultsToShow = activeSelectedModelIds.length > 0;
 
-  const codexDefaultRows = isCodex && selectedCodexModelIds.length > 0;
-  const geminiDefaultRows = isGemini && selectedGeminiModelIds.length > 0;
+  // Default-model dropdown options for the active provider
+  const defaultModelOptions = useMemo(() => {
+    // Preserve the order in which models were selected.
+    return [...activeSelectedModelIds];
+  }, [activeSelectedModelIds]);
 
   return (
     <div className={styles.section}>
       {/* ─── Provider segmented control ─── */}
       <div className={styles.providerStrip} role="tablist" aria-label="Model provider">
-        {PROVIDER_OPTIONS.map((provider) => {
+        {PROVIDERS.map((provider) => {
           const active = provider.id === activeProvider;
           return (
             <button
@@ -647,11 +577,15 @@ export function ModelsSection() {
               type="button"
               role="tab"
               aria-selected={active}
+              aria-pressed={active}
+              aria-label={provider.label}
               data-provider={provider.id}
               className={`${styles.providerPill} ${active ? styles.providerPillActive : ''}`}
               onClick={() => setActiveProvider(provider.id)}
             >
-              <span className={styles.providerInitials} aria-hidden>{provider.initials}</span>
+              <span className={styles.providerLogoWrap} aria-hidden>
+                <ProviderLogo provider={provider.id} className={styles.providerLogo} />
+              </span>
               <span className={styles.providerName}>{provider.label}</span>
             </button>
           );
@@ -661,12 +595,17 @@ export function ModelsSection() {
       {/* ─── Credentials section ─── */}
       <SectionGroup
         eyebrow="Credentials"
-        title={`${activeMeta.label} API Key`}
+        title={
+          <span className={styles.titleWithLogo}>
+            <ProviderLogo provider={activeProvider} className={styles.titleLogo} />
+            <span>{activeConfig.label} API Key</span>
+          </span>
+        }
         subtitle="AES-256-GCM 암호화 · 워크스페이스 스코프 · 카탈로그 조회 전용"
       >
         <Row
           leadingIcon={<KeyMaskIcon hasKey={activeHasApiKey} />}
-          label={activeMeta.keyLabel}
+          label={activeConfig.keyLabel}
           description={
             activeHasApiKey
               ? '키가 등록되어 있습니다. 갱신하려면 새 키를 입력하세요.'
@@ -689,7 +628,7 @@ export function ModelsSection() {
                 <button
                   type="button"
                   className={`${styles.linkButton} ${styles.linkButtonDanger}`}
-                  onClick={() => { void handleActiveKeyDelete(); }}
+                  onClick={() => { void handleDeleteKey(activeProvider); }}
                   disabled={activeKeySaving || activeKeyDeleting}
                 >
                   <Trash2 size={12} aria-hidden /> 제거
@@ -718,13 +657,13 @@ export function ModelsSection() {
                   spellCheck={false}
                   value={keyDraft}
                   onChange={(event) => setKeyDraft(event.target.value)}
-                  placeholder={activeMeta.keyPlaceholder}
+                  placeholder={activeConfig.keyPlaceholder}
                 />
                 <div className={styles.inlineActions}>
                   <button
                     type="button"
                     className={styles.primaryButton}
-                    onClick={() => { void handleActiveKeySave(keyDraft); }}
+                    onClick={() => { void handleSaveKey(activeProvider, keyDraft); }}
                     disabled={activeKeySaving || keyDraft.trim().length < 20}
                   >
                     {activeKeySaving ? '저장 중…' : '저장'}
@@ -751,8 +690,13 @@ export function ModelsSection() {
       {/* ─── Catalog section ─── */}
       <SectionGroup
         eyebrow="Catalog"
-        title={`${activeMeta.label} Models`}
-        subtitle={activeMeta.catalogHint}
+        title={
+          <span className={styles.titleWithLogo}>
+            <ProviderLogo provider={activeProvider} className={styles.titleLogo} />
+            <span>{activeConfig.label} Models</span>
+          </span>
+        }
+        subtitle={activeConfig.catalogHint}
         trailing={
           <div className={styles.toolbar}>
             <div className={styles.searchWrap}>
@@ -769,7 +713,7 @@ export function ModelsSection() {
             <button
               type="button"
               className={styles.linkButton}
-              onClick={() => { void handleActiveRefresh(); }}
+              onClick={() => { void loadCatalog(activeProvider); }}
               disabled={!activeHasApiKey || activeCatalogLoading}
             >
               {activeCatalogLoading ? (
@@ -782,15 +726,15 @@ export function ModelsSection() {
             <button
               type="button"
               className={styles.linkButton}
-              onClick={handleActiveApplyRecommended}
+              onClick={() => handleApplyRecommended(activeProvider)}
               disabled={!activeHasApiKey}
             >
-              {applyPresetLabel}
+              {activeConfig.applyPresetLabel}
             </button>
             <button
               type="button"
               className={styles.primaryButton}
-              onClick={() => { void handleActiveModelSave(); }}
+              onClick={() => { void handleModelSave(activeProvider); }}
               disabled={!activeHasApiKey || activeModelSaving || selectedCount === 0}
             >
               {activeModelSaving ? '저장 중…' : `선택 저장 (${selectedCount})`}
@@ -800,7 +744,7 @@ export function ModelsSection() {
       >
         {!activeHasApiKey ? (
           <EmptyRow
-            title={`${activeMeta.label} API 키를 먼저 등록해 주세요`}
+            title={`${activeConfig.label} API 키를 먼저 등록해 주세요`}
             description="키 등록 후 카탈로그가 자동으로 로드됩니다."
           />
         ) : activeCatalogLoading ? (
@@ -812,18 +756,14 @@ export function ModelsSection() {
         ) : (
           filteredCatalog.map((item) => {
             const selected = activeSelectedModelIds.includes(item.id);
-            const isDefault = isCodex
-              ? item.id === selectedCodexDefaultModelId
-              : isGemini
-                ? item.id === selectedGeminiDefaultModelId
-                : false;
+            const isDefault = activeDefaultModelId === item.id;
             return (
               <ModelRow
                 key={item.id}
                 item={item}
                 selected={selected}
                 isDefault={isDefault}
-                onToggle={() => handleActiveToggle(item.id)}
+                onToggle={() => handleToggleModel(activeProvider, item.id)}
               />
             );
           })
@@ -834,19 +774,19 @@ export function ModelsSection() {
         ) : null}
       </SectionGroup>
 
-      {/* ─── Codex manual additions ─── */}
-      {isCodex ? (
+      {/* ─── Manual additions (capability-gated) ─── */}
+      {activeConfig.supportsManualModelId ? (
         <SectionGroup
           eyebrow="Manual"
           title="수동 추가 모델"
-          subtitle="OpenAI 카탈로그에 아직 보이지 않는 모델도 직접 추가할 수 있습니다."
+          subtitle={`${activeConfig.label} 카탈로그에 아직 보이지 않는 모델도 직접 추가할 수 있습니다.`}
         >
           <Row
-            label={<label htmlFor="codex-manual-id" className={styles.inlineLabel}>모델 ID 추가</label>}
+            label={<label htmlFor="provider-manual-id" className={styles.inlineLabel}>모델 ID 추가</label>}
             description={
               <div className={styles.inlineEditor}>
                 <input
-                  id="codex-manual-id"
+                  id="provider-manual-id"
                   className={styles.input}
                   type="text"
                   value={manualModelId}
@@ -855,7 +795,7 @@ export function ModelsSection() {
                     if (event.key === 'Enter') {
                       event.preventDefault();
                       const trimmed = manualModelId.trim();
-                      if (trimmed && handleAddCodexManualModel(trimmed)) setManualModelId('');
+                      if (trimmed && handleAddManualModel(activeProvider, trimmed)) setManualModelId('');
                     }
                   }}
                   placeholder="예: gpt-5.5"
@@ -867,7 +807,7 @@ export function ModelsSection() {
                     className={styles.primaryButton}
                     onClick={() => {
                       const trimmed = manualModelId.trim();
-                      if (trimmed && handleAddCodexManualModel(trimmed)) setManualModelId('');
+                      if (trimmed && handleAddManualModel(activeProvider, trimmed)) setManualModelId('');
                     }}
                     disabled={!activeHasApiKey || !manualModelId.trim()}
                   >
@@ -878,8 +818,8 @@ export function ModelsSection() {
             }
           />
 
-          {manualCodexModelIds.length > 0 ? (
-            manualCodexModelIds.map((modelId) => (
+          {manualSelectedModelIds.length > 0 ? (
+            manualSelectedModelIds.map((modelId) => (
               <Row
                 key={modelId}
                 leadingIcon={<DotIcon />}
@@ -889,7 +829,7 @@ export function ModelsSection() {
                   <button
                     type="button"
                     className={`${styles.linkButton} ${styles.linkButtonDanger}`}
-                    onClick={() => handleRemoveCodexManualModel(modelId)}
+                    onClick={() => handleRemoveManualModel(activeProvider, modelId)}
                   >
                     <X size={12} aria-hidden /> 제거
                   </button>
@@ -897,80 +837,63 @@ export function ModelsSection() {
               />
             ))
           ) : (
-            <Row
-              description="수동 추가된 모델이 없습니다."
-            />
+            <Row description="수동 추가된 모델이 없습니다." />
           )}
         </SectionGroup>
       ) : null}
 
-      {/* ─── Codex defaults ─── */}
-      {codexDefaultRows ? (
+      {/* ─── Defaults section (every provider with selections) ─── */}
+      {hasDefaultsToShow ? (
         <SectionGroup
           eyebrow="Defaults"
-          title="Codex 기본 실행값"
-          subtitle="새 Codex 채팅의 초기 모델을 정의합니다. 브라우저의 마지막 선택이 있으면 그쪽이 우선합니다."
+          title={
+            <span className={styles.titleWithLogo}>
+              <ProviderLogo provider={activeProvider} className={styles.titleLogo} />
+              <span>{activeConfig.defaultsTitle}</span>
+            </span>
+          }
+          subtitle={activeConfig.defaultsSubtitle}
         >
           <Row
-            label={<label htmlFor="codex-default-model" className={styles.inlineLabel}>기본 모델</label>}
-            description="선택 목록 중 하나를 새 채팅의 초기 모델로 사용합니다."
+            label={<label htmlFor="provider-default-model" className={styles.inlineLabel}>기본 모델</label>}
+            description="ProjectChatSurface 모델 selector가 비어있을 때 사용됩니다."
             trailing={
               <select
-                id="codex-default-model"
+                id="provider-default-model"
                 className={styles.select}
-                value={selectedCodexDefaultModelId}
-                onChange={(event) => setSelectedCodexDefaultModelId(event.target.value)}
-                disabled={selectedCodexModelIds.length === 0}
+                value={activeDefaultModelId}
+                onChange={(event) => handleSetDefaultModel(activeProvider, event.target.value)}
+                disabled={defaultModelOptions.length === 0}
+                aria-label={`${activeConfig.label} 기본 모델 선택`}
               >
-                {selectedCodexModelIds.map((modelId) => (
+                {defaultModelOptions.length === 0 ? (
+                  <option value="">선택된 모델이 없습니다</option>
+                ) : null}
+                {defaultModelOptions.map((modelId) => (
                   <option key={modelId} value={modelId}>{modelId}</option>
                 ))}
               </select>
             }
           />
-        </SectionGroup>
-      ) : null}
-
-      {/* ─── Gemini defaults ─── */}
-      {geminiDefaultRows ? (
-        <SectionGroup
-          eyebrow="Defaults"
-          title="Gemini 기본 실행값"
-          subtitle="새 Gemini 채팅의 초기 모델과 모드를 정의합니다. ACP capability는 다시 조회하지 않습니다."
-        >
-          <Row
-            label={<label htmlFor="gemini-default-model" className={styles.inlineLabel}>기본 모델</label>}
-            description="새 Gemini 채팅이 이 모델로 시작합니다."
-            trailing={
-              <select
-                id="gemini-default-model"
-                className={styles.select}
-                value={selectedGeminiDefaultModelId}
-                onChange={(event) => setSelectedGeminiDefaultModelId(event.target.value)}
-                disabled={selectedGeminiModelIds.length === 0}
-              >
-                {selectedGeminiModelIds.map((modelId) => (
-                  <option key={modelId} value={modelId}>{modelId}</option>
-                ))}
-              </select>
-            }
-          />
-          <Row
-            label={<label htmlFor="gemini-default-mode" className={styles.inlineLabel}>기본 모드</label>}
-            description="새 Gemini 채팅의 추론 모드 초기값."
-            trailing={
-              <select
-                id="gemini-default-mode"
-                className={styles.select}
-                value={selectedGeminiDefaultModeId}
-                onChange={(event) => setSelectedGeminiDefaultModeId(event.target.value)}
-              >
-                {GEMINI_MODE_SELECTION_OPTIONS.map((mode) => (
-                  <option key={mode.id} value={mode.id}>{mode.label}</option>
-                ))}
-              </select>
-            }
-          />
+          {activeConfig.supportsGeminiModes ? (
+            <Row
+              label={<label htmlFor="provider-default-mode" className={styles.inlineLabel}>기본 모드</label>}
+              description="새 Gemini 채팅의 추론 모드 초기값."
+              trailing={
+                <select
+                  id="provider-default-mode"
+                  className={styles.select}
+                  value={geminiDefaultModeId}
+                  onChange={(event) => setGeminiDefaultModeId(event.target.value)}
+                  aria-label="Gemini 기본 모드 선택"
+                >
+                  {GEMINI_MODE_SELECTION_OPTIONS.map((mode) => (
+                    <option key={mode.id} value={mode.id}>{mode.label}</option>
+                  ))}
+                </select>
+              }
+            />
+          ) : null}
         </SectionGroup>
       ) : null}
     </div>
@@ -989,12 +912,13 @@ function SectionGroup({
   children,
 }: {
   eyebrow: string;
-  title: string;
+  title: ReactNode;
   subtitle?: string;
   trailing?: ReactNode;
   children: ReactNode;
 }) {
-  const headingId = `settings-section-${eyebrow.toLowerCase()}-${title.replace(/\s+/g, '-').toLowerCase()}`;
+  const titleKey = typeof title === 'string' ? title : eyebrow;
+  const headingId = `settings-section-${eyebrow.toLowerCase()}-${titleKey.replace(/\s+/g, '-').toLowerCase()}`;
   return (
     <section className={styles.group} aria-labelledby={headingId}>
       <header className={styles.groupHead}>
