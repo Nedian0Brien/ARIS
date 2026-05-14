@@ -764,6 +764,11 @@ export function ModelsSection() {
                 selected={selected}
                 isDefault={isDefault}
                 onToggle={() => handleToggleModel(activeProvider, item.id)}
+                onSetDefault={
+                  selected && !isDefault
+                    ? () => handleSetDefaultModel(activeProvider, item.id)
+                    : undefined
+                }
               />
             );
           })
@@ -842,8 +847,10 @@ export function ModelsSection() {
         </SectionGroup>
       ) : null}
 
-      {/* ─── Defaults section (every provider with selections) ─── */}
-      {hasDefaultsToShow ? (
+      {/* ─── Defaults section ─── always rendered once the API key exists so
+            users see the picker (and its empty-state hint) even before they
+            enable any models. */}
+      {activeHasApiKey ? (
         <SectionGroup
           eyebrow="Defaults"
           title={
@@ -856,17 +863,23 @@ export function ModelsSection() {
         >
           <Row
             label={<label htmlFor="provider-default-model" className={styles.inlineLabel}>기본 모델</label>}
-            description="ProjectChatSurface 모델 selector가 비어있을 때 사용됩니다."
+            description={
+              hasDefaultsToShow
+                ? (activeDefaultModelId
+                    ? `현재: ${activeDefaultModelId}`
+                    : 'ProjectChatSurface 모델 selector가 비어있을 때 사용됩니다.')
+                : '활성화된 모델이 없습니다 — 카탈로그에서 모델을 켜세요.'
+            }
             trailing={
               <select
                 id="provider-default-model"
                 className={styles.select}
                 value={activeDefaultModelId}
                 onChange={(event) => handleSetDefaultModel(activeProvider, event.target.value)}
-                disabled={defaultModelOptions.length === 0}
+                disabled={!hasDefaultsToShow}
                 aria-label={`${activeConfig.label} 기본 모델 선택`}
               >
-                {defaultModelOptions.length === 0 ? (
+                {!hasDefaultsToShow ? (
                   <option value="">선택된 모델이 없습니다</option>
                 ) : null}
                 {defaultModelOptions.map((modelId) => (
@@ -964,18 +977,30 @@ function ModelRow({
   selected,
   isDefault,
   onToggle,
+  onSetDefault,
 }: {
   item: CatalogItem;
   selected: boolean;
   isDefault: boolean;
   onToggle: () => void;
+  /** When provided, renders an inline "기본으로 설정" affordance in the trailing slot. */
+  onSetDefault?: () => void;
 }) {
+  // Outer is a role=button div (not <button>) so we can nest a real action
+  // button for "set as default" without producing invalid <button>-in-<button>.
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       className={`${styles.row} ${styles.rowInteractive} ${selected ? styles.rowSelected : ''}`}
       aria-pressed={selected}
       onClick={onToggle}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onToggle();
+        }
+      }}
     >
       <span className={styles.checkbox} aria-hidden>
         {selected ? <Check size={12} strokeWidth={3} /> : null}
@@ -993,11 +1018,24 @@ function ModelRow({
         </div>
       </div>
       <div className={styles.rowTrailing}>
+        {onSetDefault ? (
+          <button
+            type="button"
+            className={styles.linkButton}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSetDefault();
+            }}
+            aria-label={`${item.id}을(를) 기본 모델로 설정`}
+          >
+            기본으로 설정
+          </button>
+        ) : null}
         <span className={styles.timestamp}>
           {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : '—'}
         </span>
       </div>
-    </button>
+    </div>
   );
 }
 
