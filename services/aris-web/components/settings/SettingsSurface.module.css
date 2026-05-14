@@ -1,25 +1,35 @@
-/* Settings shell — flat, list-led layout aligned to the redesigned home-feed language.
- * No card chrome. No drop shadows. Hairline borders only.
+/* Settings — 2-column panels (sticky left rail + independently scrolling right pane).
+ * No card chrome. Hairline dividers only. Designed to scale to many future sections.
  */
 
 .shell {
   display: flex;
-  flex-direction: column;
-  min-height: 100%;
+  flex-direction: row;
+  height: 100%;
+  min-height: 0;
   background: var(--canvas);
   color: var(--text-primary);
+  overflow: hidden;
 }
 
-/* ── Editorial hero, sits flush against the surface ── */
-.hero {
+/* ── Left rail ─────────────────────────────────────────────── */
+.rail {
+  flex: 0 0 auto;
+  width: 260px;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
-  padding: var(--sp-20) var(--sp-20) var(--sp-12);
+  background: var(--surface);
+  border-right: 1px solid var(--border-subtle);
+  overflow-y: auto;
+}
+
+.railHeader {
+  padding: var(--sp-12) var(--sp-8) var(--sp-8);
   border-bottom: 1px solid var(--border-subtle);
 }
 
 .eyebrow {
+  display: block;
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
   font-weight: 700;
@@ -29,133 +39,216 @@
 }
 
 .title {
-  margin: var(--sp-1) 0 0;
-  font-size: var(--text-h1);
+  margin: var(--sp-2) 0 0;
+  font-size: var(--text-h2);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
   color: var(--text-primary);
-  letter-spacing: -0.02em;
 }
 
-.lede {
-  margin: var(--sp-3) 0 0;
-  max-width: 60ch;
-  font-size: var(--text-body);
-  line-height: 1.6;
-  color: var(--text-secondary);
-}
-
-/* ── Top tab strip ── mirrors .proj-tab structurally with extra hint text */
-.tabs {
+.nav {
   display: flex;
+  flex-direction: column;
+  padding: var(--sp-4) var(--sp-3);
   gap: var(--sp-1);
-  padding: 0 var(--sp-20);
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface);
-  overflow-x: auto;
-  scrollbar-width: none;
 }
 
-.tabs::-webkit-scrollbar { display: none; }
-
-.tab {
+.navItem {
   position: relative;
-  display: inline-flex;
-  align-items: baseline;
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-6) var(--sp-6) var(--sp-6);
+  width: 100%;
+  padding: var(--sp-3) var(--sp-4);
   background: transparent;
   border: 0;
+  border-radius: var(--r-md);
   font: inherit;
   font-size: var(--text-sm);
-  font-weight: 500;
   color: var(--text-secondary);
+  text-align: left;
   cursor: pointer;
-  white-space: nowrap;
+  transition: background-color var(--t-fast), color var(--t-fast);
+}
+
+.navItem:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.navItem:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--b-500) 38%, transparent);
+}
+
+.navIcon {
+  color: var(--text-tertiary);
   transition: color var(--t-fast);
 }
 
-.tab:hover:not(.tabActive) {
-  color: var(--text-primary);
+.navBody {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
 }
 
-.tab:focus-visible {
-  outline: none;
-  color: var(--text-primary);
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--b-500) 32%, transparent);
-  border-radius: var(--r-xs);
-}
-
-.tabIcon {
-  align-self: center;
-  color: var(--text-tertiary);
-}
-
-.tabActive {
-  color: var(--text-primary);
+.navLabel {
   font-weight: 600;
+  letter-spacing: -0.005em;
+  color: inherit;
 }
 
-.tabActive .tabIcon {
+.navHint {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.navItemActive {
+  background: var(--surface-active);
+  color: var(--text-primary);
+}
+
+.navItemActive .navIcon {
   color: var(--b-600);
 }
 
-.tabActive::after {
+.navItemActive::before {
   content: '';
   position: absolute;
-  left: var(--sp-6);
-  right: var(--sp-6);
-  bottom: -1px;
-  height: 2px;
+  left: -3px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 3px;
   background: var(--b-600);
-  border-radius: 2px;
 }
 
-.tabLabel {
-  letter-spacing: -0.005em;
+/* ── Right pane ────────────────────────────────────────────── */
+.pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--canvas);
 }
 
-.tabHint {
+.paneHeader {
+  padding: var(--sp-16) var(--sp-16) var(--sp-8);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.paneEyebrow {
+  display: block;
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-tertiary);
 }
 
-/* ── Body slot ── */
-.body {
-  min-width: 0;
+.paneTitle {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--text-h1);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.paneBody {
+  flex: 1;
   display: flex;
   flex-direction: column;
 }
 
-/* ── Tablet ── */
-@media (max-width: 920px) {
-  .hero {
-    padding: var(--sp-12) var(--sp-12) var(--sp-10);
+/* ── Tablet ────────────────────────────────────────────────── */
+@media (max-width: 960px) {
+  .rail {
+    width: 220px;
   }
 
-  .title {
+  .paneHeader {
+    padding: var(--sp-12) var(--sp-12) var(--sp-6);
+  }
+
+  .paneTitle {
     font-size: var(--text-h2);
-  }
-
-  .tabs {
-    padding: 0 var(--sp-12);
-  }
-
-  .tabHint {
-    display: none;
   }
 }
 
-/* ── Mobile ── */
-@media (max-width: 600px) {
-  .hero {
-    padding: var(--sp-10) var(--sp-8) var(--sp-8);
+/* ── Mobile: stack rail above pane, nav becomes chip row ───── */
+@media (max-width: 720px) {
+  .shell {
+    flex-direction: column;
+    overflow-y: auto;
   }
 
-  .tabs {
-    padding: 0 var(--sp-8);
+  .rail {
+    width: 100%;
+    flex: 0 0 auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-subtle);
+    overflow-y: visible;
+  }
+
+  .railHeader {
+    padding: var(--sp-10) var(--sp-8) var(--sp-6);
+  }
+
+  .title {
+    font-size: var(--text-h3);
+  }
+
+  .nav {
+    flex-direction: row;
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-8) var(--sp-6);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .nav::-webkit-scrollbar { display: none; }
+
+  .navItem {
+    flex: 0 0 auto;
+    grid-template-columns: 16px auto;
+    padding: var(--sp-2) var(--sp-4);
+    border-radius: var(--r-full);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .navItemActive {
+    background: var(--surface-active);
+    border-color: var(--b-600);
+  }
+
+  .navItemActive::before {
+    display: none;
+  }
+
+  .navHint {
+    display: none;
+  }
+
+  .pane {
+    overflow: visible;
+    flex: 1 1 auto;
+  }
+
+  .paneHeader {
+    padding: var(--sp-8) var(--sp-8) var(--sp-4);
   }
 }
