@@ -48,6 +48,8 @@ import type { SessionChat, SessionStatus, SessionSummary, UiEvent } from '@/lib/
 import { readLocalStorage, removeLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
 import { abortProjectChat } from '@/lib/runtime/abortChat';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
+import { useProviderModels } from '@/lib/settings/useProviderModels';
+import { BUILTIN_FALLBACK_BY_PROVIDER, fallbackDefaultForProvider } from '@/lib/happy/modelPolicyClient';
 import { useWorkspaceFiles, type WorkspaceFileItem } from '@/lib/hooks/useWorkspaceFiles';
 import {
   buildProjectChatCollectionPath,
@@ -174,23 +176,6 @@ type ProjectPanelDropHandler = (
 // Local constants (duplicated from HomePageClient.tsx; cleanup out of scope)
 // ---------------------------------------------------------------------------
 const WORKSPACE_DRAWER_CLOSE_MS = 160;
-
-const MODEL_OPTIONS: Record<ModelProvider, Array<{ name: string; meta: string }>> = {
-  claude: [
-    { name: 'Opus 4.7', meta: '200k · 1M context · reasoning' },
-    { name: 'Sonnet 4.6', meta: '200k context · balanced' },
-    { name: 'Haiku 4.5', meta: '200k context · fast' },
-  ],
-  codex: [
-    { name: 'GPT-5.5', meta: '200k context · reasoning' },
-    { name: 'GPT-5', meta: '128k context' },
-    { name: 'GPT-5 mini', meta: '128k context · fast' },
-  ],
-  gemini: [
-    { name: 'Gemini 3 Pro', meta: '2M context · reasoning' },
-    { name: 'Gemini 3 Flash', meta: '1M context · fast' },
-  ],
-};
 
 const PROVIDER_LABELS: Record<ModelProvider, string> = {
   claude: 'Claude',
@@ -688,7 +673,9 @@ function ProjectChatComposer({
   onVoice,
   placeholder = '에이전트에게 무엇이든 요청하세요... Shift Enter 줄바꿈 · Cmd Enter 전송',
   prompt,
+  providerOptions,
   selectedEffort,
+  selectedModelId,
   selectedProvider,
 }: {
   activeModelLabel: string;
@@ -712,7 +699,9 @@ function ProjectChatComposer({
   onVoice: () => void;
   placeholder?: string;
   prompt: string;
+  providerOptions: Record<ModelProvider, Array<{ id: string; label: string; meta?: string }>>;
   selectedEffort: ReasoningEffort;
+  selectedModelId: string;
   selectedProvider: ModelProvider;
 }) {
   return (
@@ -774,18 +763,18 @@ function ProjectChatComposer({
           <div className="ms__list-wrap">
             {(['claude', 'codex', 'gemini'] as ModelProvider[]).map((provider) => (
               <div key={provider} className="ms__group" data-provider={provider} data-active={selectedProvider === provider ? '' : undefined}>
-                {MODEL_OPTIONS[provider].map((model) => (
+                {providerOptions[provider].map((option) => (
                   <button
-                    key={model.name}
+                    key={option.id}
                     type="button"
                     className="ms__item"
-                    aria-pressed={selectedProvider === provider && activeModelLabel === model.name}
-                    onClick={() => onModelSelect(provider, model.name)}
+                    aria-pressed={selectedProvider === provider && selectedModelId === option.id}
+                    onClick={() => onModelSelect(provider, option.id)}
                   >
                     <span className="ms__item-check" />
                     <span className="ms__item-body">
-                      <span className="ms__item-name">{model.name}</span>
-                      <span className="ms__item-meta">{model.meta}</span>
+                      <span className="ms__item-name">{option.label}</span>
+                      <span className="ms__item-meta">{option.meta ?? ''}</span>
                     </span>
                   </button>
                 ))}
@@ -1102,7 +1091,35 @@ function ProjectParallelChatPane({
   const [composerMode, setComposerMode] = useState<ComposerMode>('agent');
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<ModelProvider>(() => providerFromAgent(chat.agent ?? session.agent));
-  const [selectedModel, setSelectedModel] = useState(chat.model ?? modelLabel);
+  const { data: panelModelSettings } = useProviderModels();
+
+  const panelProviderOptions = useMemo<Record<ModelProvider, Array<{ id: string; label: string; meta?: string }>>>(() => {
+    const toOptions = (providerId: ModelProvider): Array<{ id: string; label: string; meta?: string }> => {
+      const p = panelModelSettings?.providers?.[providerId];
+      const selected = (p?.selectedModelIds ?? []).map((id) => ({ id, label: id }));
+      const legacy = (panelModelSettings?.legacyCustomModels?.[providerId] ?? '').trim();
+      const legacyOption = legacy ? [{ id: legacy, label: legacy, meta: 'custom' }] : [];
+      const merged = [...selected, ...legacyOption];
+      if (merged.length > 0) return merged;
+      return BUILTIN_FALLBACK_BY_PROVIDER[providerId].map((id) => ({ id, label: id, meta: 'builtin' }));
+    };
+    if (!panelModelSettings) return {
+      claude: BUILTIN_FALLBACK_BY_PROVIDER.claude.map((id) => ({ id, label: id, meta: 'builtin' })),
+      codex: BUILTIN_FALLBACK_BY_PROVIDER.codex.map((id) => ({ id, label: id, meta: 'builtin' })),
+      gemini: BUILTIN_FALLBACK_BY_PROVIDER.gemini.map((id) => ({ id, label: id, meta: 'builtin' })),
+    };
+    return { claude: toOptions('claude'), codex: toOptions('codex'), gemini: toOptions('gemini') };
+  }, [panelModelSettings]);
+
+  const [selectedModelId, setSelectedModelId] = useState<string>(() => chat.model ?? fallbackDefaultForProvider(providerFromAgent(chat.agent ?? session.agent)));
+
+  const activeOption = useMemo(() => {
+    const list = panelProviderOptions[selectedProvider] ?? [];
+    return list.find((o) => o.id === selectedModelId) ?? { id: selectedModelId, label: selectedModelId || (chat.model ?? modelLabel), meta: undefined };
+  }, [panelProviderOptions, selectedProvider, selectedModelId, chat.model, modelLabel]);
+
+  const activeModelLabel = activeOption.label;
+
   const [selectedEffort, setSelectedEffort] = useState<ReasoningEffort>(() => normalizeReasoningEffort(chat.modelReasoningEffort));
   const [dropEdge, setDropEdge] = useState<ProjectParallelPanelDropEdge | null>(null);
   const [panelTool, setPanelTool] = useState<ProjectParallelPanelTool>('chat');
@@ -1111,7 +1128,6 @@ function ProjectParallelChatPane({
   const [gitError, setGitError] = useState<string | null>(null);
   const frameRef = useRef<HTMLElement | null>(null);
   const activeAgent: SessionSummary['agent'] = selectedProvider;
-  const activeModelLabel = selectedModel || chat.model || modelLabel;
   const runtimeSessionId = panelRuntime?.runtimeSessionId ?? projectId;
   const { isRunning: runtimeRunning } = useSessionRuntime(runtimeSessionId, chat.id, true);
   const runtimeBadge = resolvePanelRuntimeBadge(panelRuntime, runtimeRunning, panelRuntimeError);
@@ -1130,10 +1146,27 @@ function ProjectParallelChatPane({
     setComposerMode('agent');
     setModelSelectorOpen(false);
     setSelectedProvider(providerFromAgent(chat.agent ?? session.agent));
-    setSelectedModel(chat.model ?? modelLabel);
+    setSelectedModelId(chat.model ?? fallbackDefaultForProvider(providerFromAgent(chat.agent ?? session.agent)));
     setSelectedEffort(normalizeReasoningEffort(chat.modelReasoningEffort));
     setPanelTool('chat');
   }, [chat.agent, chat.id, chat.model, chat.modelReasoningEffort, modelLabel, session.agent]);
+
+  useEffect(() => {
+    if (chat?.model) {
+      setSelectedModelId(chat.model);
+      return;
+    }
+    const provider = providerFromAgent(chat.agent ?? session.agent);
+    const def = panelModelSettings?.providers?.[provider]?.defaultModelId;
+    if (def) {
+      setSelectedModelId(def);
+      return;
+    }
+    const firstOption = panelProviderOptions[provider]?.[0]?.id;
+    if (firstOption) {
+      setSelectedModelId(firstOption);
+    }
+  }, [chat?.id, chat?.model, chat?.agent, session.agent, panelModelSettings, panelProviderOptions]);
 
   useEffect(() => {
     if (panelTool !== 'git') return;
@@ -1160,14 +1193,15 @@ function ProjectParallelChatPane({
 
   const handleComposerProviderSelect = (provider: ModelProvider) => {
     setSelectedProvider(provider);
-    setSelectedModel(MODEL_OPTIONS[provider][0]?.name ?? activeModelLabel);
+    const firstId = panelProviderOptions[provider]?.[0]?.id ?? fallbackDefaultForProvider(provider);
+    setSelectedModelId(firstId);
     const allowedEfforts = PROVIDER_EFFORTS[provider];
     setSelectedEffort((current) => allowedEfforts.includes(current) ? current : allowedEfforts.at(-1) ?? 'High');
   };
 
-  const handleComposerModelSelect = (provider: ModelProvider, modelName: string) => {
+  const handleComposerModelSelect = (provider: ModelProvider, modelId: string) => {
     setSelectedProvider(provider);
-    setSelectedModel(modelName);
+    setSelectedModelId(modelId);
     setModelSelectorOpen(false);
   };
 
@@ -1232,7 +1266,7 @@ function ProjectParallelChatPane({
         chatId: chat.id,
         command: text,
         agent: selectedProvider,
-        model: activeModelLabel,
+        model: selectedModelId,
         modelReasoningEffort: serializeReasoningEffort(selectedEffort),
         workspacePanelId: panelId,
       } : {
@@ -1244,7 +1278,7 @@ function ProjectParallelChatPane({
           chatId: chat.id,
           workspacePanelId: panelId,
           agent: selectedProvider,
-          model: activeModelLabel,
+          model: selectedModelId,
           mode: composerMode,
           modelReasoningEffort: serializeReasoningEffort(selectedEffort),
           workspaceTab: 'run',
@@ -1596,7 +1630,9 @@ function ProjectParallelChatPane({
           onVoice={() => setError('Voice input is not available in this workspace')}
           placeholder={`${agentLabel(activeAgent, activeModelLabel)}에게 요청하세요... Shift Enter 줄바꿈 · Cmd Enter 전송`}
           prompt={prompt}
+          providerOptions={panelProviderOptions}
           selectedEffort={selectedEffort}
+          selectedModelId={selectedModelId}
           selectedProvider={selectedProvider}
         />
       </div>
@@ -1664,7 +1700,31 @@ export function ProjectChatSurface({
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<ModelProvider>(() => providerFromAgent(runtimeAgent));
-  const [selectedModel, setSelectedModel] = useState(runtimeModelLabel);
+  const { data: modelSettings } = useProviderModels();
+  const providerOptions = useMemo<Record<ModelProvider, Array<{ id: string; label: string; meta?: string }>>>(() => {
+    const toOptions = (providerId: ModelProvider): Array<{ id: string; label: string; meta?: string }> => {
+      const p = modelSettings?.providers?.[providerId];
+      const selected = (p?.selectedModelIds ?? []).map((id) => ({ id, label: id }));
+      const legacy = (modelSettings?.legacyCustomModels?.[providerId] ?? '').trim();
+      const legacyOption = legacy ? [{ id: legacy, label: legacy, meta: 'custom' }] : [];
+      const merged = [...selected, ...legacyOption];
+      if (merged.length > 0) return merged;
+      return BUILTIN_FALLBACK_BY_PROVIDER[providerId].map((id) => ({ id, label: id, meta: 'builtin' }));
+    };
+    if (!modelSettings) {
+      return {
+        claude: BUILTIN_FALLBACK_BY_PROVIDER.claude.map((id) => ({ id, label: id, meta: 'builtin' })),
+        codex: BUILTIN_FALLBACK_BY_PROVIDER.codex.map((id) => ({ id, label: id, meta: 'builtin' })),
+        gemini: BUILTIN_FALLBACK_BY_PROVIDER.gemini.map((id) => ({ id, label: id, meta: 'builtin' })),
+      };
+    }
+    return { claude: toOptions('claude'), codex: toOptions('codex'), gemini: toOptions('gemini') };
+  }, [modelSettings]);
+  const [selectedModelId, setSelectedModelId] = useState<string>(() => {
+    if (activeChat?.model) return activeChat.model;
+    const provider = providerFromAgent(runtimeAgent);
+    return fallbackDefaultForProvider(provider);
+  });
   const [selectedEffort, setSelectedEffort] = useState<ReasoningEffort>(() => normalizeReasoningEffort(activeChat?.modelReasoningEffort));
   const [expandedTurnId, setExpandedTurnId] = useState<ExpandedTurnState>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
@@ -1679,7 +1739,11 @@ export function ProjectChatSurface({
   const [parallelLayoutHydrated, setParallelLayoutHydrated] = useState(false);
   const activeWorkspacePanelId = parallelPanelState?.activePanelId ?? null;
   const visibleEvents = events.slice(-40);
-  const activeModelLabel = selectedModel || runtimeModelLabel;
+  const activeOption = useMemo(() => {
+    const list = providerOptions[selectedProvider] ?? [];
+    return list.find((o) => o.id === selectedModelId) ?? { id: selectedModelId, label: selectedModelId, meta: undefined };
+  }, [providerOptions, selectedProvider, selectedModelId]);
+  const activeModelLabel = activeOption.label || runtimeModelLabel;
   const activeAgent: SessionSummary['agent'] = selectedProvider;
   const userTurns = visibleEvents.filter((item) => readEventRole(item) === 'user');
   const representativeAgentEvent = visibleEvents.find((item) => readEventRole(item) !== 'user');
@@ -2083,13 +2147,29 @@ export function ProjectChatSurface({
     setPreviewState('dock');
     setModelSelectorOpen(false);
     setSelectedProvider(providerFromAgent(runtimeAgent));
-    setSelectedModel(runtimeModelLabel);
     setSelectedEffort(normalizeReasoningEffort(activeChat?.modelReasoningEffort));
     setExpandedTurnId(null);
     setCopyFeedback(null);
     setSelectedWorkspaceFile('HomePageClient.tsx');
     setDraftTerminalCommand('npm test -- --run tests/projectListSurface.test.ts');
-  }, [activeChat?.modelReasoningEffort, runtimeAgent, runtimeModelLabel, selectedChatId, setWorkspacePanelImmediate, surfaceMode]);
+  }, [activeChat?.modelReasoningEffort, runtimeAgent, selectedChatId, setWorkspacePanelImmediate, surfaceMode]);
+
+  useEffect(() => {
+    if (activeChat?.model) {
+      setSelectedModelId(activeChat.model);
+      return;
+    }
+    const provider = providerFromAgent(runtimeAgent);
+    const def = modelSettings?.providers?.[provider]?.defaultModelId;
+    if (def) {
+      setSelectedModelId(def);
+      return;
+    }
+    const firstOption = providerOptions[provider]?.[0]?.id;
+    if (firstOption) {
+      setSelectedModelId(firstOption);
+    }
+  }, [activeChat?.id, activeChat?.model, runtimeAgent, modelSettings, providerOptions]);
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 1100px)');
@@ -2271,7 +2351,9 @@ export function ProjectChatSurface({
 
   const createChat = async (): Promise<SessionChat | null> => {
     setError(null);
-    const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);
+    const projectModelInput = normalizeProjectChatModelInput(
+      selectedModelId || session.model || session.metadata?.runtimeModel,
+    );
     const createdChat = await createProjectChat(projectId, {
       title: '새 채팅',
       agent: selectedProvider,
@@ -2317,7 +2399,7 @@ export function ProjectChatSurface({
         chatId: chat.id,
         command: text,
         agent: selectedProvider,
-        model: activeModelLabel,
+        model: selectedModelId,
         modelReasoningEffort: serializeReasoningEffort(selectedEffort),
       } : {
         type: 'message',
@@ -2327,7 +2409,7 @@ export function ProjectChatSurface({
           role: 'user',
           chatId: chat.id,
           agent: selectedProvider,
-          model: activeModelLabel,
+          model: selectedModelId,
           mode: composerMode,
           modelReasoningEffort: serializeReasoningEffort(selectedEffort),
           workspaceTab,
@@ -2350,6 +2432,7 @@ export function ProjectChatSurface({
       const latestEventAt = latestEvent.timestamp || submittedAt;
       setPrompt('');
       setEvents((previous) => [...previous, ...submittedEvents]);
+      const shouldPersistModel = Boolean(selectedModelId) && chat.model !== selectedModelId;
       setChats((previous) => previous.map((item) => (
         item.id === chat.id
           ? {
@@ -2359,6 +2442,7 @@ export function ProjectChatSurface({
               latestEventIsUser: !isTerminalMode,
               lastActivityAt: latestEventAt,
               ...(firstPromptTitle ? { title: firstPromptTitle } : {}),
+              ...(shouldPersistModel ? { model: selectedModelId } : {}),
             }
           : item
       )));
@@ -2374,6 +2458,24 @@ export function ProjectChatSurface({
           ...(firstPromptTitle ? { title: firstPromptTitle } : {}),
         }),
       });
+      if (shouldPersistModel) {
+        void fetch(
+          withAppBasePath(
+            `/api/runtime/sessions/${encodeURIComponent(session.id)}/chats/${encodeURIComponent(chat.id)}`,
+          ),
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              model: selectedModelId,
+              modelReasoningEffort: serializeReasoningEffort(selectedEffort),
+            }),
+          },
+        ).catch(() => {
+          /* non-fatal */
+        });
+      }
     } catch (submitError) {
       setSubmittedRunStartedAt(null);
       setError(submitError instanceof Error ? submitError.message : '메시지 전송에 실패했습니다.');
@@ -2813,7 +2915,8 @@ export function ProjectChatSurface({
                       aria-pressed={selectedProvider === provider}
                       onClick={() => {
                         setSelectedProvider(provider);
-                        setSelectedModel(MODEL_OPTIONS[provider][0]?.name ?? activeModelLabel);
+                        const firstId = providerOptions[provider]?.[0]?.id ?? fallbackDefaultForProvider(provider);
+                        setSelectedModelId(firstId);
                         const allowedEfforts = PROVIDER_EFFORTS[provider];
                         if (!allowedEfforts.includes(selectedEffort)) {
                           setSelectedEffort(allowedEfforts.at(-1) ?? 'High');
@@ -2828,23 +2931,23 @@ export function ProjectChatSurface({
                 <div className="ms__list-wrap">
                   {(['claude', 'codex', 'gemini'] as ModelProvider[]).map((provider) => (
                     <div key={provider} className="ms__group" data-provider={provider} data-active={selectedProvider === provider ? '' : undefined}>
-                      {MODEL_OPTIONS[provider].map((model) => (
+                      {providerOptions[provider].map((option) => (
                         <button
-                          key={model.name}
+                          key={option.id}
                           type="button"
                           className="ms__item"
-                          aria-pressed={selectedProvider === provider && activeModelLabel === model.name}
+                          aria-pressed={selectedProvider === provider && selectedModelId === option.id}
                           onClick={() => {
                             setSelectedProvider(provider);
-                            setSelectedModel(model.name);
+                            setSelectedModelId(option.id);
                             setModelSelectorOpen(false);
-                            showTransientFeedback(`${model.name} selected`);
+                            showTransientFeedback(`${option.label} selected`);
                           }}
                         >
                           <span className="ms__item-check" />
                           <span className="ms__item-body">
-                            <span className="ms__item-name">{model.name}</span>
-                            <span className="ms__item-meta">{model.meta}</span>
+                            <span className="ms__item-name">{option.label}</span>
+                            <span className="ms__item-meta">{option.meta ?? ''}</span>
                           </span>
                         </button>
                       ))}
