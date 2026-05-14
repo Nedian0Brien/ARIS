@@ -108,10 +108,16 @@
 }
 
 /* ── Shared popover panel ──────────────────────────────────── */
+/* Both popovers anchor to both sides so they fit exactly within the
+ * sidebar footer's horizontal bounds (footer width minus 16px). This
+ * prevents the popover from spilling past the sidebar's right edge on
+ * narrow sidebars. */
 .panel {
   position: absolute;
+  left: 8px;
+  right: 8px;
   bottom: calc(100% + 6px);
-  min-width: 232px;
+  min-width: 0;
   background: var(--surface-elevated, var(--surface));
   color: var(--text-primary);
   border: 1px solid var(--line);
@@ -123,11 +129,10 @@
   flex-direction: column;
   gap: 2px;
 }
-.accountPanel { left: 8px; }
-.contextPanel {
-  right: 8px;
-  min-width: 200px;
-}
+/* Modifiers retained for future per-popover tuning (e.g., portal-based
+ * positioning). They intentionally inherit base anchoring for now. */
+.accountPanel {}
+.contextPanel {}
 
 /* ── Menu items / sections ─────────────────────────────────── */
 .item {
