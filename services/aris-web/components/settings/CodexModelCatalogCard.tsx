@@ -232,34 +232,43 @@ export function CodexModelCatalogCard({
     }
   };
 
+  const headingId = `settings-catalog-${activeProvider}-title`;
+
   return (
-    <section className={`${styles.card} ${themeClass}`}>
+    <section
+      className={`${styles.card} ${themeClass}`}
+      role="region"
+      aria-labelledby={headingId}
+    >
       <div className={styles.hero}>
         <div className={styles.header}>
           <div className={styles.titleWrap}>
-            <div className={styles.eyebrow}>
-              <Bot size={14} />
+            <span className={styles.eyebrow}>
+              <Bot size={12} aria-hidden />
               Provider Catalog
-            </div>
-            <h3 className={styles.title}>사용할 모델 목록</h3>
+            </span>
+            <h2 id={headingId} className={styles.title}>Model Catalog</h2>
             <p className={styles.description}>
               {isActiveProvider
-                ? `${providerTitle} 계정에서 실제 조회한 모델만 표시합니다. 버전 그룹을 먼저 고른 뒤 실제 모델을 선택하는 2단계 브라우저로 구성했습니다.`
+                ? `${providerTitle} 계정에서 실제 조회한 모델만 표시합니다. 버전 그룹을 먼저 고른 뒤 실제 모델을 선택하는 2단계 브라우저입니다.`
                 : `${providerTitle}용 모델 카탈로그 UI는 이 위치에 연결됩니다. 현재는 provider 전환 구조와 플레이스홀더만 준비된 상태입니다.`}
             </p>
           </div>
 
-          <div className={styles.providerRail} aria-label="제공자 범위">
+          <div className={styles.providerRail} role="tablist" aria-label="Provider scope">
             {providerOptions.map((provider) => {
               const active = provider.id === activeProvider;
+              const toneClass = styles[`provider${provider.label}Tone` as keyof typeof styles];
               return (
                 <button
                   key={provider.id}
                   type="button"
-                  className={`${styles.providerButton} ${active ? styles.providerButtonActive : ''} ${styles[`provider${provider.label}Tone` as keyof typeof styles]}`}
+                  role="tab"
+                  aria-selected={active}
+                  className={`${styles.providerButton} ${active ? styles.providerButtonActive : ''} ${toneClass}`}
                   onClick={() => onProviderChange(provider.id)}
                 >
-                  {active ? <CheckCircle2 size={14} /> : null}
+                  <span className={styles.providerDot} aria-hidden />
                   {provider.label}
                 </button>
               );
