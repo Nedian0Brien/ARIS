@@ -22,49 +22,55 @@ const ITEMS: NavItem[] = [
 
 export function SettingsSurface() {
   const [section, setSection] = useState<Section>('models');
+  const activeItem = ITEMS.find((item) => item.id === section) ?? ITEMS[0];
 
   return (
     <div className={styles.shell}>
-      <header className={styles.hero}>
-        <span className={styles.eyebrow}>Workspace · Runtime Settings</span>
-        <h1 className={styles.title}>Settings</h1>
-        <p className={styles.lede}>
-          Provider credentials, model catalogs, and terminal access. Keys are stored encrypted and stay
-          scoped to this workspace.
-        </p>
-      </header>
+      <aside className={styles.rail} aria-label="Settings navigation">
+        <header className={styles.railHeader}>
+          <span className={styles.eyebrow}>Workspace</span>
+          <h1 className={styles.title}>Settings</h1>
+        </header>
+        <nav className={styles.nav} role="tablist" aria-orientation="vertical">
+          {ITEMS.map(({ id, label, hint, Icon }) => {
+            const isActive = section === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                id={`settings-tab-${id}`}
+                aria-controls={`settings-panel-${id}`}
+                aria-selected={isActive}
+                aria-current={isActive ? 'page' : undefined}
+                className={`${styles.navItem} ${isActive ? styles.navItemActive : ''}`}
+                onClick={() => setSection(id)}
+              >
+                <Icon size={16} aria-hidden className={styles.navIcon} />
+                <span className={styles.navBody}>
+                  <span className={styles.navLabel}>{label}</span>
+                  <span className={styles.navHint}>{hint}</span>
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
 
-      <nav className={styles.tabs} aria-label="Settings sub-navigation" role="tablist">
-        {ITEMS.map(({ id, label, hint, Icon }) => {
-          const isActive = section === id;
-          return (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              id={`settings-tab-${id}`}
-              aria-controls={`settings-panel-${id}`}
-              aria-selected={isActive}
-              aria-current={isActive ? 'page' : undefined}
-              className={`${styles.tab} ${isActive ? styles.tabActive : ''}`}
-              onClick={() => setSection(id)}
-            >
-              <Icon size={14} aria-hidden className={styles.tabIcon} />
-              <span className={styles.tabLabel}>{label}</span>
-              <span className={styles.tabHint}>{hint}</span>
-            </button>
-          );
-        })}
-      </nav>
-
-      <div
-        className={styles.body}
+      <main
+        className={styles.pane}
         role="tabpanel"
         id={`settings-panel-${section}`}
         aria-labelledby={`settings-tab-${section}`}
       >
-        {section === 'models' ? <ModelsSection /> : <SshSection />}
-      </div>
+        <header className={styles.paneHeader}>
+          <span className={styles.paneEyebrow}>{activeItem.hint}</span>
+          <h2 className={styles.paneTitle}>{activeItem.label}</h2>
+        </header>
+        <div className={styles.paneBody}>
+          {section === 'models' ? <ModelsSection /> : <SshSection />}
+        </div>
+      </main>
     </div>
   );
 }
