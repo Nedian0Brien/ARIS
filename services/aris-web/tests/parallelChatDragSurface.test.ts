@@ -122,6 +122,17 @@ describe('project parallel chat drag surface', () => {
     expect(projectChatSurface).not.toContain('aria-label="Open panel Git"');
   });
 
+  it('places the workspace drawer toggle on each parallel panel header', () => {
+    expect(projectChatSurface).toContain('handleToggleProjectParallelPanelWorkspace');
+    expect(projectChatSurface).toContain('onTogglePanelWorkspace');
+    expect(projectChatSurface).toContain('className="ch__action ch__action--ws pc-parallel__frame-workspace"');
+    expect(projectChatSurface).toContain('data-workspace-toggle="true"');
+    expect(projectChatSurface).toContain('isWorkspaceActive={workspaceOpen && panelState.activePanelId === node.panelId}');
+    expect(projectChatSurface).not.toContain('className="pc-parallel__bar-actions"');
+    expect(uiCss).toContain('.pc-parallel__frame-workspace');
+    expect(cssBlock('.pc-parallel__frame-head strong')).toContain('flex: 1 1 auto;');
+  });
+
   it('communicates that closing a panel preserves the underlying chat', () => {
     expect(projectChatSurface).toContain('Close panel; chat stays in the list');
     expect(projectChatSurface).toContain('패널만 닫힙니다');

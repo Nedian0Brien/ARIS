@@ -917,6 +917,7 @@ function ProjectParallelPanelTree({
   node,
   onClosePanel,
   onOpenPanelWorkspaceTab,
+  onTogglePanelWorkspace,
   onPanelActivate,
   onPanelDragEnd,
   onPanelDragStart,
@@ -929,12 +930,14 @@ function ProjectParallelPanelTree({
   recentPreview,
   session,
   tokenLabel,
+  workspaceOpen,
 }: {
   chats: SessionChat[];
   modelLabel: string;
   node: ProjectParallelPanelNode;
   onClosePanel: (panelId: string) => void;
   onOpenPanelWorkspaceTab: (panelId: string, tab: WorkspaceTab) => void;
+  onTogglePanelWorkspace: (panelId: string) => void;
   onPanelActivate: (panelId: string) => void;
   onPanelDragEnd: () => void;
   onPanelDragStart: ProjectPanelNodeDragStartHandler;
@@ -947,6 +950,7 @@ function ProjectParallelPanelTree({
   recentPreview: string;
   session: SessionSummary;
   tokenLabel: string;
+  workspaceOpen: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -974,6 +978,7 @@ function ProjectParallelPanelTree({
         modelLabel={modelLabel}
         onClosePanel={() => onClosePanel(node.panelId)}
         onOpenPanelWorkspaceTab={(tab) => onOpenPanelWorkspaceTab(node.panelId, tab)}
+        onTogglePanelWorkspace={() => onTogglePanelWorkspace(node.panelId)}
         onPanelActivate={() => onPanelActivate(node.panelId)}
         onPanelDragEnd={onPanelDragEnd}
         onPanelDragStart={(event) => onPanelDragStart(event, node.panelId, panelChat)}
@@ -986,6 +991,7 @@ function ProjectParallelPanelTree({
         recentPreview={recentPreview}
         session={session}
         showClose={Object.keys(panelState.panels).length > 1}
+        isWorkspaceActive={workspaceOpen && panelState.activePanelId === node.panelId}
         tokenLabel={tokenLabel}
       />
     );
@@ -1009,6 +1015,7 @@ function ProjectParallelPanelTree({
           node={node.children[0]}
           onClosePanel={onClosePanel}
           onOpenPanelWorkspaceTab={onOpenPanelWorkspaceTab}
+          onTogglePanelWorkspace={onTogglePanelWorkspace}
           onPanelActivate={onPanelActivate}
           onPanelDragEnd={onPanelDragEnd}
           onPanelDragStart={onPanelDragStart}
@@ -1021,6 +1028,7 @@ function ProjectParallelPanelTree({
           recentPreview={recentPreview}
           session={session}
           tokenLabel={tokenLabel}
+          workspaceOpen={workspaceOpen}
         />
       </div>
       <ProjectParallelResizeDivider
@@ -1037,6 +1045,7 @@ function ProjectParallelPanelTree({
           node={node.children[1]}
           onClosePanel={onClosePanel}
           onOpenPanelWorkspaceTab={onOpenPanelWorkspaceTab}
+          onTogglePanelWorkspace={onTogglePanelWorkspace}
           onPanelActivate={onPanelActivate}
           onPanelDragEnd={onPanelDragEnd}
           onPanelDragStart={onPanelDragStart}
@@ -1049,6 +1058,7 @@ function ProjectParallelPanelTree({
           recentPreview={recentPreview}
           session={session}
           tokenLabel={tokenLabel}
+          workspaceOpen={workspaceOpen}
         />
       </div>
     </div>
@@ -1061,6 +1071,7 @@ function ProjectParallelChatPane({
   modelLabel,
   onClosePanel,
   onOpenPanelWorkspaceTab,
+  onTogglePanelWorkspace,
   onPanelActivate,
   onPanelDragEnd,
   onPanelDragStart,
@@ -1073,6 +1084,7 @@ function ProjectParallelChatPane({
   recentPreview,
   session,
   showClose,
+  isWorkspaceActive,
   tokenLabel,
 }: {
   chat: SessionChat;
@@ -1080,6 +1092,7 @@ function ProjectParallelChatPane({
   modelLabel: string;
   onClosePanel: () => void;
   onOpenPanelWorkspaceTab: (tab: WorkspaceTab) => void;
+  onTogglePanelWorkspace: () => void;
   onPanelActivate: () => void;
   onPanelDragEnd: () => void;
   onPanelDragStart: (event: DragEvent<HTMLElement>) => void;
@@ -1092,6 +1105,7 @@ function ProjectParallelChatPane({
   recentPreview: string;
   session: SessionSummary;
   showClose: boolean;
+  isWorkspaceActive: boolean;
   tokenLabel: string;
 }) {
   const projectId = session.id;
@@ -1377,6 +1391,20 @@ function ProjectParallelChatPane({
         >
           {runtimeBadge.label}
         </span>
+        <button
+          type="button"
+          className="ch__action ch__action--ws pc-parallel__frame-workspace"
+          data-workspace-toggle="true"
+          aria-pressed={isWorkspaceActive}
+          aria-label={`${chat.title} workspace 열기`}
+          title="Workspace"
+          onClick={(event) => {
+            event.stopPropagation();
+            onTogglePanelWorkspace();
+          }}
+        >
+          <PanelRight size={14} />
+        </button>
         {runtimeNeedsRepair && (
           <button
             type="button"
@@ -1785,6 +1813,23 @@ export function ProjectChatSurface({
     activateWorkspaceTab(tab);
   }, [activateWorkspaceTab, handleProjectParallelPanelActivate]);
 
+  const handleToggleProjectParallelPanelWorkspace = useCallback((panelId: string) => {
+    if (workspaceOpen && parallelPanelState?.activePanelId === panelId) {
+      closeWorkspacePanel();
+      return;
+    }
+
+    handleProjectParallelPanelActivate(panelId);
+    activateWorkspaceTab(workspaceTab);
+  }, [
+    activateWorkspaceTab,
+    closeWorkspacePanel,
+    handleProjectParallelPanelActivate,
+    parallelPanelState?.activePanelId,
+    workspaceOpen,
+    workspaceTab,
+  ]);
+
   const handleProjectParallelPanelDrop = useCallback<ProjectPanelDropHandler>((targetPanelId, edge, event) => {
     const panelPayload = readProjectPanelNodeDragPayload(event);
     const chatPayload = readProjectChatDragPayload(event);
@@ -2032,6 +2077,7 @@ export function ProjectChatSurface({
       if (!window.matchMedia('(max-width: 1100px)').matches) return;
       const target = event.target;
       if (!(target instanceof Node)) return;
+      if (target instanceof Element && target.closest('[data-workspace-toggle="true"]')) return;
       if (workspaceRef.current?.contains(target)) return;
       if (workspaceToggleRef.current?.contains(target)) return;
       closeWorkspacePanel();
@@ -2658,20 +2704,6 @@ export function ProjectChatSurface({
                 <span className="pc-parallel__eyebrow">Parallel workspace</span>
                 <strong>{Object.keys(parallelPanelState.panels).length} chats</strong>
               </div>
-              <div className="pc-parallel__bar-actions">
-                <button
-                  ref={workspaceToggleRef}
-                  id="wsToggle"
-                  type="button"
-                  className="ch__action ch__action--ws"
-                  aria-pressed={workspaceOpen}
-                  aria-label="Toggle workspace"
-                  title="Workspace"
-                  onClick={toggleWorkspacePanel}
-                >
-                  <PanelRight size={14} />
-                </button>
-              </div>
             </div>
             <div className="pc-parallel__frames">
               <ProjectParallelPanelTree
@@ -2680,6 +2712,7 @@ export function ProjectChatSurface({
                 node={parallelPanelState.layout}
                 onClosePanel={handleCloseProjectParallelPanel}
                 onOpenPanelWorkspaceTab={handleOpenProjectParallelPanelWorkspaceTab}
+                onTogglePanelWorkspace={handleToggleProjectParallelPanelWorkspace}
                 onPanelActivate={handleProjectParallelPanelActivate}
                 onPanelDragEnd={handleProjectParallelPanelDragEnd}
                 onPanelDragStart={handleProjectParallelPanelDragStart}
@@ -2692,6 +2725,7 @@ export function ProjectChatSurface({
                 recentPreview={recentPreview}
                 session={session}
                 tokenLabel={tokenLabel}
+                workspaceOpen={workspaceOpen}
               />
             </div>
           </div>
@@ -2866,6 +2900,7 @@ export function ProjectChatSurface({
                 id="wsToggle"
                 ref={workspaceToggleRef}
                 className="ch__action ch__action--ws"
+                data-workspace-toggle="true"
                 aria-pressed={workspaceOpen}
                 aria-label="Toggle workspace"
                 title="Workspace"
