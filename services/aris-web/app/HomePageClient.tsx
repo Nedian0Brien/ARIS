@@ -50,6 +50,7 @@ import {
 } from 'lucide-react';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { SidebarFooterMenu } from '@/components/layout/SidebarFooterMenu';
+import { SidebarResizer } from '@/components/layout/SidebarResizer';
 import { SettingsSurface } from '@/components/settings/SettingsSurface';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import { ProviderLogo, type ProviderLogoProvider } from '@/components/ui/ProviderLogo';
@@ -62,6 +63,7 @@ import type { SessionChat, SessionStatus, SessionSummary, UiEvent } from '@/lib/
 import { buildProjectChatCollectionPath } from '@/lib/projectRuntimeAdapter';
 import { abortActiveChat } from '@/lib/runtime/abortChat';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
+import { useSidebarWidth } from '@/lib/hooks/useSidebarWidth';
 import { useWorkspaceFiles, type WorkspaceFileItem } from '@/lib/hooks/useWorkspaceFiles';
 import {
   buildChatTitleFromFirstPrompt,
@@ -2276,6 +2278,7 @@ export default function HomePageWrapper({
   const [selectedProjectChatId, setSelectedProjectChatId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<RuntimeMetrics | null>(null);
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
+  const [sidebarWidth, setSidebarWidth] = useSidebarWidth();
 
   useEffect(() => {
     const mode = readThemeMode();
@@ -2448,7 +2451,10 @@ export default function HomePageWrapper({
   };
 
   return (
-    <div className={`app-shell app-shell-ia${shouldShowBottomNav ? '' : ' app-shell-ia--chat-screen'}${projectSurfaceMode === 'panel' ? ' app-shell-ia--project-panel' : ''}`}>
+    <div
+      className={`app-shell app-shell-ia${shouldShowBottomNav ? '' : ' app-shell-ia--chat-screen'}${projectSurfaceMode === 'panel' ? ' app-shell-ia--project-panel' : ''}`}
+      style={{ '--m-sb-width': `${sidebarWidth}px` } as React.CSSProperties}
+    >
       <div className="aris-ia-shell">
         <Sidebar
           activeProjectChatId={selectedProjectChatId}
@@ -2462,6 +2468,7 @@ export default function HomePageWrapper({
           themeMode={themeMode}
           onThemeChange={changeThemeMode}
         />
+        <SidebarResizer width={sidebarWidth} onWidthChange={setSidebarWidth} />
         <main className="m-main">
           <Topbar
             activeTab={activeTab}
