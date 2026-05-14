@@ -93,8 +93,8 @@ describe('project list surface', () => {
     expect(homeClient).toContain("setSelectedProjectView('chat');");
     expect(homeClient).toContain("buildProjectDetailPath(sessionId, 'chat', chatId)");
     expect(homeClient).toContain("params.set('view', view);");
-    expect(projectChatSurface).toContain('fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats`)');
-    expect(projectChatSurface).toContain('fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events?${params.toString()}`)');
+    expect(projectChatSurface).toContain('fetch(withAppBasePath(buildProjectChatCollectionPath(projectId))');
+    expect(projectChatSurface).toContain('fetch(withAppBasePath(buildProjectRuntimeEventsPath(projectId, params))');
     expect(projectChatSurface).toContain('pc-chat-empty-state');
     expect(homeClient).not.toContain('seed-history-primary');
     expect(projectChatSurface).not.toContain('seed-history-primary');
@@ -109,19 +109,19 @@ describe('project list surface', () => {
 
   it('wires the project detail header actions to IDE, settings, and real chat creation', () => {
     const detailStart = homeClient.indexOf('function ProjectDetailSurface({');
-    const chatSurfaceStart = homeClient.indexOf('function ProjectChatSurface({');
-    const detailSource = homeClient.slice(detailStart, chatSurfaceStart);
+    const projectSurfaceStart = homeClient.indexOf('function ProjectSurface({');
+    const detailSource = homeClient.slice(detailStart, projectSurfaceStart);
 
-    expect(homeClient).toContain('async function createProjectSessionChat(');
+    expect(homeClient).toContain('async function createProjectChat(');
     expect(homeClient).toContain("const DEFAULT_CODE_SERVER_BASE_URL = 'https://lawdigest.cloud/';");
     expect(homeClient).toContain('process.env.NEXT_PUBLIC_CODE_SERVER_BASE_URL');
     expect(homeClient).toContain('function buildCodeServerFolderUrl(projectPath: string): string');
-    expect(homeClient).toContain('fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`)');
+    expect(homeClient).toContain('fetch(withAppBasePath(buildProjectChatCollectionPath(projectId))');
     expect(detailSource).toContain('const [isCreatingHeaderChat, setIsCreatingHeaderChat] = useState(false);');
     expect(detailSource).toContain('const [settingsModalOpen, setSettingsModalOpen] = useState(false);');
     expect(detailSource).toContain('const handleProjectHeaderNewChat = async () => {');
     expect(detailSource).toContain('const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);');
-    expect(detailSource).toContain('const createdChat = await createProjectSessionChat(session.id, {');
+    expect(detailSource).toContain('const createdChat = await createProjectChat(session.id, {');
     expect(detailSource).toContain('title: `Chat ${Math.max(1, totalChats + 1)}`,');
     expect(detailSource).toContain('onProjectChatOpen(createdChat.id);');
     expect(detailSource).toContain('className="proj-head__actions"');
@@ -142,8 +142,8 @@ describe('project list surface', () => {
 
   it('renders the project overview secondary card as real recent chats', () => {
     const detailStart = homeClient.indexOf('function ProjectDetailSurface({');
-    const chatSurfaceStart = homeClient.indexOf('function ProjectChatSurface({');
-    const detailSource = homeClient.slice(detailStart, chatSurfaceStart);
+    const projectSurfaceStart = homeClient.indexOf('function ProjectSurface({');
+    const detailSource = homeClient.slice(detailStart, projectSurfaceStart);
 
     expect(detailSource).toContain('Recent chats');
     expect(detailSource).toContain('className="proj-card proj-card--recent-chats"');
@@ -264,12 +264,13 @@ describe('project list surface', () => {
   });
 
   it('routes Terminal composer submissions through the command execution endpoint', () => {
-    const submitStart = projectChatSurface.indexOf('const handleSubmit = async');
+    const surfaceStart = projectChatSurface.indexOf('export function ProjectChatSurface({');
+    const submitStart = projectChatSurface.indexOf('const handleSubmit = async', surfaceStart);
     const submitEnd = projectChatSurface.indexOf('const handleStopActiveChat', submitStart);
     const submitSource = projectChatSurface.slice(submitStart, submitEnd);
 
     expect(submitSource).toContain("const isTerminalMode = composerMode === 'terminal';");
-    expect(submitSource).toContain("const endpoint = withAppBasePath(isTerminalMode ? `/api/runtime/sessions/${encodeURIComponent(session.id)}/terminal`");
+    expect(submitSource).toContain('const endpoint = withAppBasePath(isTerminalMode ? buildProjectRuntimeTerminalPath(projectId) : buildProjectRuntimeEventsPath(projectId));');
     expect(submitSource).toContain('command: text,');
     expect(submitSource).toContain("const body = (await response.json().catch(() => ({}))) as { event?: UiEvent; events?: UiEvent[]; error?: string };");
     expect(submitSource).toContain('const submittedEvents = isTerminalMode');
@@ -566,7 +567,7 @@ describe('project list surface', () => {
   it('keeps the project chat prototype practical on mobile viewports', () => {
     expect(homeClient).toContain("const shouldShowBottomNav = !(activeTab === 'project' && selectedProjectView === 'chat');");
     expect(homeClient).toContain('{shouldShowBottomNav && <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />}');
-    expect(homeClient).toContain("className={`app-shell app-shell-ia${shouldShowBottomNav ? '' : ' app-shell-ia--chat-screen'}`}");
+    expect(homeClient).toContain("className={`app-shell app-shell-ia${shouldShowBottomNav ? '' : ' app-shell-ia--chat-screen'}${projectSurfaceMode === 'panel' ? ' app-shell-ia--project-panel' : ''}`}");
     expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.app-shell-ia--chat-screen\s*\{[^}]*padding-bottom:\s*0;/s);
     expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.app-shell-ia--chat-screen \.aris-ia-shell\s*\{[^}]*min-height:\s*var\(--app-vh,\s*100dvh\);/s);
     expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto\s*\{[^}]*min-height:\s*calc\(var\(--app-vh,\s*100dvh\) - 48px\);/s);

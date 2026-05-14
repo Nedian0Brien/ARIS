@@ -203,6 +203,7 @@ export function ChatInterface({
   initialModelSettings = null,
   initialShowWorkspaceHome = false,
   initialShowChatEntryLoading = false,
+  surfaceMode = 'full',
 }: {
   sessionId: string;
   initialEvents: UiEvent[];
@@ -219,6 +220,7 @@ export function ChatInterface({
   initialModelSettings?: ModelSettingsResponse | null;
   initialShowWorkspaceHome?: boolean;
   initialShowChatEntryLoading?: boolean;
+  surfaceMode?: 'full' | 'parallel-panel';
 }) {
   const router = useRouter();
   const centerHeaderRef = useRef<HTMLElement>(null);
@@ -246,7 +248,8 @@ export function ChatInterface({
     initialModelSettings,
     initialShowWorkspaceHome,
   });
-  const { isLeader: isSessionSyncLeader } = useSessionSyncLeader(sessionId);
+  const sessionSyncScopeKey = surfaceMode === 'parallel-panel' ? activeChatIdResolved : null;
+  const { isLeader: isSessionSyncLeader } = useSessionSyncLeader(sessionId, sessionSyncScopeKey);
   const {
     activeChatRuntimeUi,
     chatRuntimeUiByChat,
@@ -2689,6 +2692,8 @@ export function ChatInterface({
         isChatSidebarOpen ? styles.chatShellSidebarOpen : styles.chatShellSidebarClosed
       } ${isMobileLayout ? styles.chatShellMobileScroll : ''} ${
         isLeftSidebarOverlayLayout ? styles.chatShellLeftOverlay : ''
+      } ${
+        surfaceMode === 'parallel-panel' ? styles.chatShellParallelPanel : ''
       }`}
       ref={chatShellRef}
     >

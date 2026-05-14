@@ -1,3 +1,6 @@
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildServer } from '../src/server.js';
 
@@ -68,6 +71,40 @@ describe('aris-backend API', () => {
     expect(messagesResponse.statusCode).toBe(200);
     const messagesPayload = messagesResponse.json() as { messages: unknown[] };
     expect(Array.isArray(messagesPayload.messages)).toBe(true);
+
+    await app.close();
+  });
+
+  it('returns a session creation error when branch worktree creation fails', async () => {
+    const app = buildServer({
+      RUNTIME_API_TOKEN: TOKEN,
+      DEFAULT_PROJECT_PATH: '/tmp/project',
+      LOG_LEVEL: 'silent',
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: {
+        ...authHeader(),
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        path: '/tmp/project',
+        flavor: 'codex',
+        branch: 'parallel/fails',
+      }),
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect((response.json() as { error?: string }).error).toContain('WORKTREE_CREATE_FAILED');
+
+    const sessionsResponse = await app.inject({
+      method: 'GET',
+      url: '/v1/sessions',
+      headers: authHeader(),
+    });
+    expect((sessionsResponse.json() as { sessions: unknown[] }).sessions).toHaveLength(0);
 
     await app.close();
   });
@@ -315,6 +352,75 @@ describe('aris-backend API', () => {
         kind: 'terminal_result',
         exitCode: 0,
         command: 'printf aris-terminal',
+      }),
+    }));
+
+    await app.close();
+  });
+
+  it('executes terminal commands in a panel runtime session while recording events on the project chat', async () => {
+    const app = buildServer({
+      RUNTIME_API_TOKEN: TOKEN,
+      DEFAULT_PROJECT_PATH: '/tmp',
+      LOG_LEVEL: 'silent',
+    });
+    const projectDir = await mkdtemp(join(tmpdir(), 'aris-project-'));
+    const panelDir = await mkdtemp(join(tmpdir(), 'aris-panel-runtime-'));
+
+    const projectResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: {
+        ...authHeader(),
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        path: projectDir,
+        flavor: 'claude',
+      }),
+    });
+    const runtimeResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: {
+        ...authHeader(),
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        path: panelDir,
+        flavor: 'claude',
+      }),
+    });
+    expect(projectResponse.statusCode).toBe(201);
+    expect(runtimeResponse.statusCode).toBe(201);
+    const projectSessionId = (projectResponse.json() as { session: { id: string } }).session.id;
+    const runtimeSessionId = (runtimeResponse.json() as { session: { id: string } }).session.id;
+
+    const terminalResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/chats/chat-1/terminal/commands',
+      headers: {
+        ...authHeader(),
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        sessionId: projectSessionId,
+        runtimeSessionId,
+        command: 'pwd',
+      }),
+    });
+
+    expect(terminalResponse.statusCode).toBe(201);
+    const terminalPayload = terminalResponse.json() as {
+      events?: Array<{ sessionId?: string; text?: string; meta?: { chatId?: string; runtimeSessionId?: string; execCwd?: string } }>;
+    };
+    expect(terminalPayload.events?.[0]).toEqual(expect.objectContaining({
+      sessionId: projectSessionId,
+      text: expect.stringContaining(panelDir),
+      meta: expect.objectContaining({
+        chatId: 'chat-1',
+        runtimeSessionId,
+        execCwd: panelDir,
       }),
     }));
 

@@ -57,6 +57,7 @@ import { withAppBasePath } from '@/lib/routing/appPath';
 import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
 import type { AuthenticatedUser } from '@/lib/auth/types';
 import type { SessionChat, SessionStatus, SessionSummary, UiEvent } from '@/lib/happy/types';
+import { buildProjectChatCollectionPath } from '@/lib/projectRuntimeAdapter';
 import { abortActiveChat } from '@/lib/runtime/abortChat';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
 import { useWorkspaceFiles, type WorkspaceFileItem } from '@/lib/hooks/useWorkspaceFiles';
@@ -78,7 +79,11 @@ import { renderCommandTokens, commandTokenClass } from '@/components/project-cha
 import { GitActionMark, DockerActionMark } from '@/components/project-chat/helpers/actionMarks';
 import { ProjectRunStatusChip } from '@/components/project-chat/ProjectRunStatusChip';
 import { ProjectActionCard } from '@/components/project-chat/ProjectActionCard';
-import { ProjectChatSurface } from '@/components/project-chat/ProjectChatSurface';
+import {
+  ProjectChatSurface,
+  writeProjectChatDragPayload,
+  type ProjectChatSurfaceMode,
+} from '@/components/project-chat/ProjectChatSurface';
 
 type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';
 type ComposerMode = 'agent' | 'plan' | 'terminal';
@@ -515,8 +520,8 @@ function buildProjectDetailPath(sessionId: string, view: ProjectView = 'chats', 
   return `/?${params.toString()}`;
 }
 
-async function createProjectSessionChat(
-  sessionId: string,
+async function createProjectChat(
+  projectId: string,
   input: {
     title?: string;
     agent?: SessionSummary['agent'];
@@ -525,7 +530,7 @@ async function createProjectSessionChat(
     modelReasoningEffort?: SessionChat['modelReasoningEffort'];
   },
 ): Promise<SessionChat> {
-  const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`), {
+  const response = await fetch(withAppBasePath(buildProjectChatCollectionPath(projectId)), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -640,7 +645,7 @@ function Sidebar({
     async function loadActiveProjectChats() {
       setIsLoadingProjectChats(true);
       try {
-        const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(projectId)}/chats`), { cache: 'no-store' });
+        const response = await fetch(withAppBasePath(buildProjectChatCollectionPath(projectId)), { cache: 'no-store' });
         const body = (await response.json().catch(() => ({}))) as { chats?: SessionChat[] };
         if (!cancelled && response.ok) {
           setActiveProjectChats(body.chats ?? []);
@@ -725,6 +730,8 @@ function Sidebar({
                           key={chat.id}
                           type="button"
                           className={`m-sb__chat-child${activeProjectChatId === chat.id ? ' m-sb__chat-child--active' : ''}`}
+                          draggable
+                          onDragStart={(event) => writeProjectChatDragPayload(event, session.id, chat)}
                           onClick={() => onProjectChatOpen(session.id, chat.id)}
                         >
                           <span className="m-sb__chat-branch" />
@@ -1488,6 +1495,7 @@ function ProjectDetailSurface({
   projectView,
   selectedChatId,
   session,
+  surfaceMode,
 }: {
   index: number;
   onBackToProjects: () => void;
@@ -1496,6 +1504,7 @@ function ProjectDetailSurface({
   projectView: ProjectView;
   selectedChatId: string | null;
   session: SessionSummary;
+  surfaceMode: ProjectChatSurfaceMode;
 }) {
   const projectName = displayProjectName(session);
   const projectPath = displayProjectPath(session);
@@ -1531,7 +1540,7 @@ function ProjectDetailSurface({
     setHeaderCreateError(null);
     try {
       const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);
-      const createdChat = await createProjectSessionChat(session.id, {
+      const createdChat = await createProjectChat(session.id, {
         title: `Chat ${Math.max(1, totalChats + 1)}`,
         agent: session.agent,
         model: projectModelInput,
@@ -1558,6 +1567,7 @@ function ProjectDetailSurface({
           recentPreview={recentPreview}
           selectedChatId={selectedChatId}
           session={session}
+          surfaceMode={surfaceMode}
           tokenLabel={tokenLabel}
         />
       </div>
@@ -1710,6 +1720,7 @@ function ProjectDetailSurface({
             recentPreview={recentPreview}
             selectedChatId={selectedChatId}
             session={session}
+            surfaceMode={surfaceMode}
             tokenLabel={tokenLabel}
           />
         ) : projectView === 'files' ? (
@@ -1971,6 +1982,7 @@ function ProjectSurface({
   selectedChatId,
   selectedProjectId,
   sessions,
+  surfaceMode,
 }: {
   onBackToProjects: () => void;
   onProjectChatOpen: (sessionId: string, chatId: string) => void;
@@ -1980,6 +1992,7 @@ function ProjectSurface({
   selectedChatId: string | null;
   selectedProjectId: string | null;
   sessions: SessionSummary[];
+  surfaceMode: ProjectChatSurfaceMode;
 }) {
   const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
@@ -2010,6 +2023,7 @@ function ProjectSurface({
         onProjectViewChange={onProjectViewChange}
         projectView={projectView}
         selectedChatId={selectedChatId}
+        surfaceMode={surfaceMode}
       />
     );
   }
@@ -2272,6 +2286,7 @@ export default function HomePageWrapper({
   browserRootPath: string;
 }) {
   const searchParams = useSearchParams();
+  const projectSurfaceMode: ProjectChatSurfaceMode = searchParams.get('surface') === 'panel' ? 'panel' : 'full';
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedProjectView, setSelectedProjectView] = useState<ProjectView>('chats');
@@ -2396,6 +2411,7 @@ export default function HomePageWrapper({
           selectedChatId={selectedProjectChatId}
           selectedProjectId={selectedProjectId}
           sessions={sessions}
+          surfaceMode={projectSurfaceMode}
         />
       );
     }
@@ -2414,7 +2430,7 @@ export default function HomePageWrapper({
   };
 
   return (
-    <div className={`app-shell app-shell-ia${shouldShowBottomNav ? '' : ' app-shell-ia--chat-screen'}`}>
+    <div className={`app-shell app-shell-ia${shouldShowBottomNav ? '' : ' app-shell-ia--chat-screen'}${projectSurfaceMode === 'panel' ? ' app-shell-ia--project-panel' : ''}`}>
       <div className="aris-ia-shell">
         <Sidebar
           activeProjectChatId={selectedProjectChatId}

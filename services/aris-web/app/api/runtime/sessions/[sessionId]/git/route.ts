@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
-import { listSessions } from '@/lib/happy/client';
 import {
   getGitSidebarDiff,
   getGitSidebarOverview,
@@ -8,17 +7,22 @@ import {
   type GitActionName,
   type GitDiffScope,
 } from '@/lib/git/sidebar';
+import {
+  readWorkspacePanelIdFromRecord,
+  readWorkspacePanelIdFromSearchParams,
+  resolveWorkspacePanelExecutionTarget,
+  WorkspacePanelExecutionTargetError,
+} from '@/lib/workspacePanels/executionTarget';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-async function resolveSessionProjectPath(userId: string, sessionId: string): Promise<string> {
-  const sessions = await listSessions(userId);
-  const target = sessions.find((session) => session.id === sessionId);
-  if (!target) {
-    throw new Error('워크스페이스 세션을 찾을 수 없습니다.');
+function workspacePanelTargetErrorResponse(error: unknown): NextResponse | null {
+  if (!(error instanceof WorkspacePanelExecutionTargetError)) return null;
+  if (error.code === 'PROJECT_NOT_FOUND') {
+    return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다.' }, { status: 404 });
   }
-  return target.projectName;
+  return NextResponse.json({ error: '워크스페이스 패널을 찾을 수 없습니다.' }, { status: 404 });
 }
 
 export async function GET(
@@ -36,8 +40,13 @@ export async function GET(
 
   try {
     const { sessionId } = await context.params;
-    const projectPath = await resolveSessionProjectPath(auth.user.id, sessionId);
     const url = new URL(request.url);
+    const target = await resolveWorkspacePanelExecutionTarget({
+      userId: auth.user.id,
+      projectId: sessionId,
+      workspacePanelId: readWorkspacePanelIdFromSearchParams(url.searchParams),
+    });
+    const projectPath = target.executionPath;
     const kind = (url.searchParams.get('kind') ?? 'overview').trim();
 
     if (kind === 'overview') {
@@ -67,6 +76,8 @@ export async function GET(
 
     return NextResponse.json({ error: `Unsupported kind: ${kind}` }, { status: 400 });
   } catch (error) {
+    const response = workspacePanelTargetErrorResponse(error);
+    if (response) return response;
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Git 정보를 불러오지 못했습니다.',
@@ -91,12 +102,19 @@ export async function POST(
 
   try {
     const { sessionId } = await context.params;
-    const projectPath = await resolveSessionProjectPath(auth.user.id, sessionId);
     const body = await request.json() as {
       action?: string;
       paths?: string[];
       message?: string;
+      workspacePanelId?: string;
+      panelId?: string;
     };
+    const target = await resolveWorkspacePanelExecutionTarget({
+      userId: auth.user.id,
+      projectId: sessionId,
+      workspacePanelId: readWorkspacePanelIdFromRecord(body),
+    });
+    const projectPath = target.executionPath;
 
     const action = (body.action ?? '').trim() as GitActionName;
     const supportedActions: GitActionName[] = ['stage', 'unstage', 'commit', 'fetch', 'pull', 'push'];
@@ -112,6 +130,8 @@ export async function POST(
 
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
+    const response = workspacePanelTargetErrorResponse(error);
+    if (response) return response;
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Git 작업을 완료하지 못했습니다.',

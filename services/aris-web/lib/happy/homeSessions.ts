@@ -1,4 +1,4 @@
-import type { SessionChat as PrismaSessionChat } from '@prisma/client';
+import type { Chat as PrismaChat } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import { buildSessionChatMeta } from '@/lib/happy/chatStatsHelpers';
 import type { SessionChat, SessionSummary } from '@/lib/happy/types';
@@ -11,10 +11,10 @@ function normalizeModelReasoningEffort(input: string | null): SessionChat['model
   return null;
 }
 
-function toSessionChat(record: PrismaSessionChat): SessionChat {
+function toSessionChat(record: PrismaChat): SessionChat {
   return {
     id: record.id,
-    sessionId: record.sessionId,
+    sessionId: record.projectId,
     agent: resolveAgentFlavor(record.agent),
     model: record.model,
     geminiMode: record.geminiMode,
@@ -47,13 +47,13 @@ export async function enrichSessionsWithRecentChats(
   }
 
   const [perSessionGroupBy, recentChatGroups] = await Promise.all([
-    prisma.sessionChat.groupBy({
-      by: ['sessionId', 'agent'],
-      where: { userId, sessionId: { in: sessionIds } },
+    prisma.chat.groupBy({
+      by: ['projectId', 'agent'],
+      where: { userId, projectId: { in: sessionIds } },
       _count: { id: true },
     }),
-    Promise.all(sessionIds.map((sessionId) => prisma.sessionChat.findMany({
-      where: { userId, sessionId },
+    Promise.all(sessionIds.map((sessionId) => prisma.chat.findMany({
+      where: { userId, projectId: sessionId },
       orderBy: [{ lastActivityAt: 'desc' }, { createdAt: 'desc' }],
       take: Math.max(0, Math.floor(recentPerSession)),
     }))),
@@ -64,9 +64,9 @@ export async function enrichSessionsWithRecentChats(
 
   for (const group of recentChatGroups) {
     for (const chat of group) {
-      const entry = recentChatsBySession.get(chat.sessionId) ?? [];
+      const entry = recentChatsBySession.get(chat.projectId) ?? [];
       entry.push(toSessionChat(chat));
-      recentChatsBySession.set(chat.sessionId, entry);
+      recentChatsBySession.set(chat.projectId, entry);
     }
   }
 

@@ -98,6 +98,7 @@ import type {
   RuntimeSession,
   SessionAction,
 } from '../types.js';
+import { computeWorktreePath } from './worktreeManager.js';
 
 const execFileAsync = promisify(execFile);
 const AGENT_COMMAND_TIMEOUT_MS = 120_000;
@@ -167,6 +168,7 @@ type HappyRuntimeCreateInput = {
   model?: string;
   status?: SessionStatusValue;
   riskScore?: number;
+  branch?: string;
 };
 
 type HappyRuntimeAppendInput = {
@@ -321,6 +323,7 @@ function buildProviderRuntimeSession<TFlavor extends ProviderRuntimeFlavor>(
       path: session.metadata.path,
       approvalPolicy: session.metadata.approvalPolicy,
       ...(session.metadata.model ? { model: session.metadata.model } : {}),
+      ...(session.metadata.branch ? { branch: session.metadata.branch } : {}),
     },
   };
 }
@@ -358,6 +361,7 @@ function normalizeMetadata(raw: unknown): {
   path: string;
   approvalPolicy: ApprovalPolicy;
   model?: string;
+  branch?: string;
   status?: string;
 } {
   if (!raw) {
@@ -384,6 +388,7 @@ function normalizeMetadata(raw: unknown): {
     path: normalizePath(record?.path ?? record?.projectPath),
     approvalPolicy: normalizeApprovalPolicy(record?.approvalPolicy, DEFAULT_APPROVAL_POLICY),
     model: normalizeModel(record?.model ?? record?.modelName),
+    branch: asString(record?.branch, ''),
     status: asString(record?.status, ''),
   };
 }
@@ -590,6 +595,7 @@ function toRuntimeSession(raw: HappyBackendSession): RuntimeSession {
       path: metadata.path,
       approvalPolicy: metadata.approvalPolicy,
       ...(metadata.model ? { model: metadata.model } : {}),
+      ...(metadata.branch ? { branch: metadata.branch } : {}),
     },
     state: {
       status: normalizeStatus(metadata.status || asRecord(raw.metadata)?.status, raw.active),
@@ -1529,7 +1535,7 @@ export class RuntimeCore {
     return [];
   }
 
-  resolveExecutionCwd(cwdHint?: string): string {
+  resolveExecutionCwd(cwdHint?: string, branch?: string): string {
     const raw = typeof cwdHint === 'string' ? cwdHint.trim() : '';
     if (!raw) {
       throw new Error('Session project path is empty. Create the session again with a valid path.');
@@ -1549,6 +1555,13 @@ export class RuntimeCore {
 
     for (const candidate of candidates) {
       if (candidate && existsSync(candidate)) {
+        if (branch) {
+          const worktreePath = computeWorktreePath(candidate, branch);
+          if (existsSync(worktreePath)) {
+            return worktreePath;
+          }
+          throw new Error(`Session worktree path not found on backend host: ${worktreePath}`);
+        }
         return candidate;
       }
     }
@@ -1560,6 +1573,7 @@ export class RuntimeCore {
     agent: RuntimeAgent,
     command: AgentCommand | ClaudeLaunchCommand,
     cwdHint?: string,
+    branch?: string,
     signal?: AbortSignal,
     handlers?: {
       onAction?: (action: ParsedAgentActionEvent) => Promise<void>;
@@ -1574,7 +1588,7 @@ export class RuntimeCore {
     threadId?: string;
     protocolEnvelopes?: SessionProtocolEnvelope[];
   }> {
-    const safeCwd = this.resolveExecutionCwd(cwdHint);
+    const safeCwd = this.resolveExecutionCwd(cwdHint, branch);
     const mergedPath = `${process.env.PATH || ''}:${AGENT_EXTRA_PATHS}`;
     const { CLAUDECODE: _cc, ...spawnEnv } = process.env;
     const timeoutMs = resolveAgentCommandTimeoutMs(agent);
@@ -2115,6 +2129,7 @@ export class RuntimeCore {
     approvalPolicy: ApprovalPolicy,
     model?: string,
     cwdHint?: string,
+    branch?: string,
     signal?: AbortSignal,
     resumeTarget?: ClaudeResumeTarget | string,
     handlers?: {
@@ -2134,7 +2149,7 @@ export class RuntimeCore {
     if (!command) {
       throw new Error(`Unsupported agent flavor: ${agent}`);
     }
-    return this.runAgentCommand(agent, command, cwdHint, signal, handlers);
+    return this.runAgentCommand(agent, command, cwdHint, branch, signal, handlers);
   }
 
   private async runGeminiAcpTurn(input: {
@@ -2149,7 +2164,7 @@ export class RuntimeCore {
     onPermission?: (request: ProviderPermissionRequest, meta: { threadId: string }) => Promise<PermissionDecision>;
     onText?: (event: ProviderTextEvent, meta: { threadId: string }) => Promise<void>;
   }) {
-    const safeCwd = this.resolveExecutionCwd(input.session.metadata.path);
+    const safeCwd = this.resolveExecutionCwd(input.session.metadata.path, input.session.metadata.branch);
     return runGeminiAcpTurn({
       cwd: safeCwd,
       prompt: input.prompt,
@@ -2238,6 +2253,8 @@ export class RuntimeCore {
       turnId?: string;
       command?: string;
       reason?: string;
+      runtimeSessionId?: string;
+      runtimePersistenceSessionId?: string;
     } = {},
   ): Promise<void> {
     try {
@@ -2251,6 +2268,8 @@ export class RuntimeCore {
           ...(meta.agent ? { agent: meta.agent } : {}),
           ...(meta.model ? { model: meta.model } : {}),
           ...(meta.threadId ? { threadId: meta.threadId } : {}),
+          ...(meta.runtimeSessionId ? { runtimeSessionId: meta.runtimeSessionId } : {}),
+          ...(meta.runtimePersistenceSessionId ? { runtimePersistenceSessionId: meta.runtimePersistenceSessionId } : {}),
           streamEvent: 'run_status',
           ...buildRunLifecycleMeta({
             status,
@@ -2288,6 +2307,7 @@ export class RuntimeCore {
       geminiMode?: string;
       customModel?: string;
       modelReasoningEffort?: ModelReasoningEffort;
+      persistenceSessionId?: string;
     } = {},
   ): Promise<void> {
     const flavor = context.agent && context.agent !== 'unknown'
@@ -2300,6 +2320,15 @@ export class RuntimeCore {
     const scopedChatId = typeof context.chatId === 'string' && context.chatId.trim().length > 0
       ? context.chatId.trim()
       : undefined;
+    const persistenceSessionId = typeof context.persistenceSessionId === 'string' && context.persistenceSessionId.trim().length > 0
+      ? context.persistenceSessionId.trim()
+      : session.id;
+    const runtimePersistenceMeta = persistenceSessionId !== session.id
+      ? {
+        runtimeSessionId: session.id,
+        runtimePersistenceSessionId: persistenceSessionId,
+      }
+      : {};
     if (flavor === 'gemini') {
       this.clearGeminiRealtimePartialsForScope({
         sessionId: session.id,
@@ -2403,9 +2432,10 @@ export class RuntimeCore {
       };
     }
 
-    await this.appendRunLifecycleEvent(session.id, 'run_started', {
+    await this.appendRunLifecycleEvent(persistenceSessionId, 'run_started', {
       ...(scopedChatId ? { chatId: scopedChatId } : {}),
       requestedPath: session.metadata.path,
+      ...runtimePersistenceMeta,
       agent: flavor,
       ...(selectedModel ? { model: selectedModel } : {}),
       ...(selectedGeminiMode ? { geminiMode: selectedGeminiMode } : {}),
@@ -2458,12 +2488,22 @@ export class RuntimeCore {
         body: string;
         meta: Record<string, unknown>;
         options?: { type?: string; title?: string };
-      }) => this.appendAgentMessage(session.id, projection.body, projection.meta, projection.options);
+      }) => this.appendAgentMessage(
+        persistenceSessionId,
+        projection.body,
+        { ...projection.meta, ...runtimePersistenceMeta },
+        projection.options,
+      );
       const persistGeminiProjection = async (projection: {
         body: string;
         meta: Record<string, unknown>;
         options?: { type?: string; title?: string };
-      }) => this.appendAgentMessage(session.id, projection.body, projection.meta, projection.options);
+      }) => this.appendAgentMessage(
+        persistenceSessionId,
+        projection.body,
+        { ...projection.meta, ...runtimePersistenceMeta },
+        projection.options,
+      );
       const appendNonCodexAction = async (
         action: ParsedAgentActionEvent,
         indexSeed: number,
@@ -2482,10 +2522,11 @@ export class RuntimeCore {
           return;
         }
 
-        await this.appendAgentMessage(session.id, body, {
+        await this.appendAgentMessage(persistenceSessionId, body, {
           ...(scopedChatId ? { chatId: scopedChatId } : {}),
           requestedPath: session.metadata.path,
           execCwd: cwd,
+          ...runtimePersistenceMeta,
           actionType: action.actionType,
           normalizedActionKind: action.actionType,
           command: action.command,
@@ -2537,7 +2578,7 @@ export class RuntimeCore {
           );
         }
       } else {
-        const nonCodexCwd = this.resolveExecutionCwd(session.metadata.path);
+        const nonCodexCwd = this.resolveExecutionCwd(session.metadata.path, session.metadata.branch);
         claudeMessageQueue = isClaude
           ? new ClaudeMessageQueue(
             {
@@ -2627,6 +2668,7 @@ export class RuntimeCore {
               'claude',
               command,
               cwdHint,
+              session.metadata.branch,
               signal,
               {
                 onAction,
@@ -2839,6 +2881,7 @@ export class RuntimeCore {
             session.metadata.approvalPolicy,
             selectedModel,
             session.metadata.path,
+            session.metadata.branch,
             controller.signal,
             preferredThreadId ? { id: preferredThreadId, mode: 'resume' } : undefined,
             {
@@ -3014,10 +3057,11 @@ export class RuntimeCore {
           });
           await geminiMessageQueue.flush();
         } else {
-          await this.appendAgentMessage(session.id, finalAgentOutput, {
+          await this.appendAgentMessage(persistenceSessionId, finalAgentOutput, {
             ...(scopedChatId ? { chatId: scopedChatId } : {}),
             requestedPath: session.metadata.path,
             execCwd: response.cwd,
+            ...runtimePersistenceMeta,
             ...buildSessionHintMeta({ eventType: 'text' }),
             streamEvent: 'agent_message',
             agent: flavor,
@@ -3027,10 +3071,11 @@ export class RuntimeCore {
           });
         }
       }
-      await this.appendRunLifecycleEvent(session.id, 'completed', {
+      await this.appendRunLifecycleEvent(persistenceSessionId, 'completed', {
         ...(scopedChatId ? { chatId: scopedChatId } : {}),
         requestedPath: session.metadata.path,
         execCwd: response.cwd,
+        ...runtimePersistenceMeta,
         agent: flavor,
         ...(selectedModel ? { model: selectedModel } : {}),
         ...(response.threadId ? { threadId: response.threadId } : {}),
@@ -3043,9 +3088,10 @@ export class RuntimeCore {
         this.codexThreads.delete(buildCodexThreadCacheKey(session.id, scopedChatId));
       }
       if (isAbortFailure(error) || controller.signal.aborted) {
-        await this.appendRunLifecycleEvent(session.id, 'aborted', {
+        await this.appendRunLifecycleEvent(persistenceSessionId, 'aborted', {
           ...(scopedChatId ? { chatId: scopedChatId } : {}),
           requestedPath: session.metadata.path,
+          ...runtimePersistenceMeta,
           agent: flavor,
           ...(selectedModel ? { model: selectedModel } : {}),
         });
@@ -3053,9 +3099,10 @@ export class RuntimeCore {
       }
       const message = error instanceof Error ? error.message : 'Unknown runtime error';
       try {
-        await this.appendAgentMessage(session.id, `에이전트 실행 오류: ${message}`, {
+        await this.appendAgentMessage(persistenceSessionId, `에이전트 실행 오류: ${message}`, {
           ...(scopedChatId ? { chatId: scopedChatId } : {}),
           requestedPath: session.metadata.path,
+          ...runtimePersistenceMeta,
           model: selectedModel,
           error: true,
         });
@@ -3063,9 +3110,10 @@ export class RuntimeCore {
         const persistMessage = persistError instanceof Error ? persistError.message : 'Unknown persist error';
         console.error(`failed to persist agent error message: ${persistMessage}`);
       }
-      await this.appendRunLifecycleEvent(session.id, 'failed', {
+      await this.appendRunLifecycleEvent(persistenceSessionId, 'failed', {
         ...(scopedChatId ? { chatId: scopedChatId } : {}),
         requestedPath: session.metadata.path,
+        ...runtimePersistenceMeta,
         agent: flavor,
         ...(selectedModel ? { model: selectedModel } : {}),
       });
@@ -3112,7 +3160,7 @@ export class RuntimeCore {
       throw new Error('SESSION_NOT_FOUND');
     }
     return inspectGeminiAcpSessionCapabilities({
-      cwd: this.resolveExecutionCwd(session.metadata.path),
+      cwd: this.resolveExecutionCwd(session.metadata.path, session.metadata.branch),
     });
   }
 
@@ -3124,6 +3172,7 @@ export class RuntimeCore {
       path: input.path,
       approvalPolicy,
       ...(model ? { model } : {}),
+      ...(input.branch ? { branch: input.branch } : {}),
       status: input.status ?? 'idle',
     });
 
@@ -3368,6 +3417,9 @@ export class RuntimeCore {
     const threadId = typeof input.meta?.threadId === 'string' && input.meta.threadId.trim().length > 0
       ? input.meta.threadId.trim()
       : undefined;
+    const persistenceSessionId = typeof input.meta?.runtimePersistenceSessionId === 'string' && input.meta.runtimePersistenceSessionId.trim().length > 0
+      ? input.meta.runtimePersistenceSessionId.trim()
+      : undefined;
     const requestedAgent = normalizeAgent(input.meta?.agent);
     const requestedModel = normalizeModel(input.meta?.model);
     const requestedGeminiMode = normalizeGeminiMode(input.meta?.geminiMode);
@@ -3384,6 +3436,7 @@ export class RuntimeCore {
       ...(requestedGeminiMode ? { geminiMode: requestedGeminiMode } : {}),
       ...(customModel ? { customModel } : {}),
       ...(modelReasoningEffort ? { modelReasoningEffort } : {}),
+      ...(persistenceSessionId ? { persistenceSessionId } : {}),
     });
   }
 

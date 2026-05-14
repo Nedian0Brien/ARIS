@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { requireApiUser } from '@/lib/auth/guard';
-import { getDefaultBrowseRoot, resolveFsPath } from '@/lib/fs/pathResolver';
+import { getDefaultBrowseRoot } from '@/lib/fs/pathResolver';
+import { resolveFsRequestPath, workspacePanelTargetErrorResponse } from '@/lib/fs/requestPath';
 
 export async function GET(request: NextRequest) {
   const auth = await requireApiUser(request);
@@ -16,7 +17,18 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const dirPath = searchParams.get('path');
-  const { visiblePath, runtimePath } = resolveFsPath(dirPath);
+  let resolvedPath: Awaited<ReturnType<typeof resolveFsRequestPath>>;
+  try {
+    resolvedPath = await resolveFsRequestPath({
+      request,
+      userId: auth.user.id,
+      requestedPath: dirPath,
+    });
+  } catch (error) {
+    const response = workspacePanelTargetErrorResponse(error);
+    return response ?? NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid path' }, { status: 400 });
+  }
+  const { visiblePath, runtimePath, rootPath } = resolvedPath;
 
   try {
     const stat = await fs.stat(runtimePath);
@@ -46,7 +58,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ 
       currentPath: visiblePath, 
-      parentPath: visiblePath === getDefaultBrowseRoot() ? null : path.dirname(visiblePath),
+      parentPath: visiblePath === rootPath || visiblePath === getDefaultBrowseRoot() ? null : path.dirname(visiblePath),
       directories: items // 유지 호환성 또는 items로 클라이언트에서 처리. 일단 items를 보내지만 하위호환을 위해 items로 대체.
     });
   } catch {

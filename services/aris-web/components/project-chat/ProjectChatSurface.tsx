@@ -1,6 +1,17 @@
 'use client';
 
-import React, { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import React, {
+  type CSSProperties,
+  type DragEvent,
+  type FormEvent,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   AlertCircle,
   ArrowDown,
@@ -34,9 +45,35 @@ import { ProviderLogo, type ProviderLogoProvider } from '@/components/ui/Provide
 import { isTerminalRunStatus, readUiEventRunStatus } from '@/lib/happy/chatRuntime';
 import { withAppBasePath } from '@/lib/routing/appPath';
 import type { SessionChat, SessionStatus, SessionSummary, UiEvent } from '@/lib/happy/types';
-import { abortActiveChat } from '@/lib/runtime/abortChat';
+import { readLocalStorage, removeLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
+import { abortProjectChat } from '@/lib/runtime/abortChat';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
 import { useWorkspaceFiles, type WorkspaceFileItem } from '@/lib/hooks/useWorkspaceFiles';
+import {
+  buildProjectChatCollectionPath,
+  buildProjectChatDetailPath,
+  buildProjectRuntimeEventsPath,
+  buildProjectRuntimeTerminalPath,
+  buildProjectWorkspacePath,
+} from '@/lib/projectRuntimeAdapter';
+import {
+  applyProjectChatDropToPanel,
+  closeProjectPanel,
+  collectProjectPanelIds,
+  computeProjectPanelDropEdge,
+  createProjectPanelLayoutStorageKey,
+  createProjectPanelTree,
+  findFirstProjectPanelId,
+  moveProjectPanelNode,
+  parseProjectPanelState,
+  pruneProjectPanelStateByChatIds,
+  resizeProjectPanelSplit,
+  serializeProjectPanelState,
+  type ProjectParallelPanelDropEdge,
+  type ProjectParallelPanelNode,
+  type ProjectParallelPanelSplitDirection,
+  type ProjectParallelPanelTreeState,
+} from '@/app/projectParallelPanels';
 import {
   buildChatTitleFromFirstPrompt,
   formatElapsedDuration,
@@ -49,6 +86,7 @@ import {
   isProjectRunStatusEvent,
   eventCommand,
 } from '@/components/project-chat/helpers/projectChatEvents';
+import { GitActionMark } from '@/components/project-chat/helpers/actionMarks';
 import { ProjectRunStatusChip } from '@/components/project-chat/ProjectRunStatusChip';
 import { ProjectActionCard } from '@/components/project-chat/ProjectActionCard';
 import { useDensityStore } from './cmd-display/densityStore';
@@ -70,6 +108,67 @@ type ProjectRunIndicator = {
   startedAt: string;
   tone: 'submitting' | 'running' | 'approval' | 'aborting';
 };
+export type ProjectChatSurfaceMode = 'full' | 'panel';
+type ProjectParallelPanelTool = 'chat' | 'files' | 'git';
+type ProjectChatDragPayload = {
+  projectId: string;
+  chatId: string;
+  title: string;
+};
+type ProjectPanelNodeDragPayload = ProjectChatDragPayload & {
+  panelId: string;
+};
+type ProjectWorkspacePanelRuntime = {
+  panelId: string;
+  chatId: string;
+  runtimeSessionId: string | null;
+  branch: string | null;
+  worktreePath: string | null;
+};
+type ProjectWorkspacePanelRuntimeMap = Record<string, ProjectWorkspacePanelRuntime>;
+type ProjectPanelRuntimeErrors = Record<string, string>;
+type ProjectPanelRuntimeBadge = {
+  label: string;
+  detail: string;
+  tone: 'ready' | 'running' | 'pending' | 'error';
+};
+type ProjectPanelGitFile = {
+  path: string;
+  indexStatus: string;
+  workTreeStatus: string;
+  staged: boolean;
+  unstaged: boolean;
+  untracked: boolean;
+  conflicted: boolean;
+};
+type ProjectPanelGitOverview = {
+  workspacePath: string;
+  branch: string | null;
+  upstreamBranch: string | null;
+  ahead: number;
+  behind: number;
+  isClean: boolean;
+  stagedCount: number;
+  unstagedCount: number;
+  untrackedCount: number;
+  conflictedCount: number;
+  files: ProjectPanelGitFile[];
+};
+export type ProjectChatDragStartHandler = (
+  event: DragEvent<HTMLElement>,
+  projectId: string,
+  chat: Pick<SessionChat, 'id' | 'title'>,
+) => void;
+type ProjectPanelNodeDragStartHandler = (
+  event: DragEvent<HTMLElement>,
+  panelId: string,
+  chat: Pick<SessionChat, 'id' | 'title'>,
+) => void;
+type ProjectPanelDropHandler = (
+  targetPanelId: string,
+  edge: ProjectParallelPanelDropEdge,
+  event: DragEvent<HTMLElement>,
+) => void;
 
 // ---------------------------------------------------------------------------
 // Local constants (duplicated from HomePageClient.tsx; cleanup out of scope)
@@ -112,6 +211,9 @@ const COMPOSER_MODE_COPY: Record<ComposerMode, string> = {
 };
 
 const PROJECT_ACTIVE_RUN_STATUSES = new Set(['run_started', 'turn_started', 'model_normalized']);
+export const PROJECT_CHAT_DRAG_MIME = 'application/x-aris-project-chat';
+export const PROJECT_CHAT_DRAG_JSON_MIME = 'application/json';
+const PROJECT_PANEL_NODE_DRAG_MIME = 'application/x-aris-project-panel-node';
 
 // ---------------------------------------------------------------------------
 // Local helpers (duplicated from HomePageClient.tsx; cleanup out of scope)
@@ -197,8 +299,128 @@ function projectStatusBadgeClass(status: SessionStatus): string {
   return 'badge--neutral';
 }
 
-async function createProjectSessionChat(
-  sessionId: string,
+export function writeProjectChatDragPayload(
+  event: DragEvent<HTMLElement>,
+  projectId: string,
+  chat: Pick<SessionChat, 'id' | 'title'>,
+) {
+  const payload = JSON.stringify({
+    projectId,
+    chatId: chat.id,
+    title: chat.title,
+  } satisfies ProjectChatDragPayload);
+
+  event.dataTransfer.effectAllowed = 'copyMove';
+  event.dataTransfer.setData(PROJECT_CHAT_DRAG_MIME, payload);
+  event.dataTransfer.setData(PROJECT_CHAT_DRAG_JSON_MIME, payload);
+  event.dataTransfer.setData('text/plain', payload);
+}
+
+function writeProjectPanelNodeDragPayload(
+  event: DragEvent<HTMLElement>,
+  projectId: string,
+  panelId: string,
+  chat: Pick<SessionChat, 'id' | 'title'>,
+) {
+  const payload = JSON.stringify({
+    projectId,
+    panelId,
+    chatId: chat.id,
+    title: chat.title,
+  } satisfies ProjectPanelNodeDragPayload);
+
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData(PROJECT_PANEL_NODE_DRAG_MIME, payload);
+  event.dataTransfer.setData(PROJECT_CHAT_DRAG_MIME, payload);
+  event.dataTransfer.setData(PROJECT_CHAT_DRAG_JSON_MIME, payload);
+  event.dataTransfer.setData('text/plain', payload);
+}
+
+function readProjectChatDragPayload(event: DragEvent<HTMLElement>): ProjectChatDragPayload | null {
+  const types = Array.from(event.dataTransfer.types);
+  if (!types.includes(PROJECT_CHAT_DRAG_MIME) && !types.includes(PROJECT_CHAT_DRAG_JSON_MIME) && !types.includes('text/plain')) {
+    return null;
+  }
+
+  try {
+    const rawPayload = event.dataTransfer.getData(PROJECT_CHAT_DRAG_MIME)
+      || event.dataTransfer.getData(PROJECT_CHAT_DRAG_JSON_MIME)
+      || event.dataTransfer.getData('text/plain');
+    const parsed = JSON.parse(rawPayload) as Partial<ProjectChatDragPayload> & { sessionId?: unknown };
+    const parsedProjectId = typeof parsed.projectId === 'string' ? parsed.projectId : parsed.sessionId;
+    if (
+      typeof parsedProjectId !== 'string'
+      || typeof parsed.chatId !== 'string'
+      || typeof parsed.title !== 'string'
+      || !parsedProjectId.trim()
+      || !parsed.chatId.trim()
+    ) {
+      return null;
+    }
+
+    return {
+      projectId: parsedProjectId,
+      chatId: parsed.chatId,
+      title: parsed.title,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readProjectPanelNodeDragPayload(event: DragEvent<HTMLElement>): ProjectPanelNodeDragPayload | null {
+  if (!Array.from(event.dataTransfer.types).includes(PROJECT_PANEL_NODE_DRAG_MIME)) {
+    return null;
+  }
+
+  try {
+    const rawPayload = event.dataTransfer.getData(PROJECT_PANEL_NODE_DRAG_MIME);
+    const parsed = JSON.parse(rawPayload) as Partial<ProjectPanelNodeDragPayload> & { sessionId?: unknown };
+    const parsedProjectId = typeof parsed.projectId === 'string' ? parsed.projectId : parsed.sessionId;
+    if (
+      typeof parsedProjectId !== 'string'
+      || typeof parsed.panelId !== 'string'
+      || typeof parsed.chatId !== 'string'
+      || typeof parsed.title !== 'string'
+      || !parsedProjectId.trim()
+      || !parsed.panelId.trim()
+      || !parsed.chatId.trim()
+    ) {
+      return null;
+    }
+
+    return {
+      projectId: parsedProjectId,
+      panelId: parsed.panelId,
+      chatId: parsed.chatId,
+      title: parsed.title,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function hasProjectChatDragPayload(event: DragEvent<HTMLElement>): boolean {
+  const types = Array.from(event.dataTransfer.types);
+  return types.includes(PROJECT_CHAT_DRAG_MIME)
+    || types.includes(PROJECT_CHAT_DRAG_JSON_MIME)
+    || types.includes(PROJECT_PANEL_NODE_DRAG_MIME);
+}
+
+function resolveProjectParallelDropEdge(event: DragEvent<HTMLElement>): ProjectParallelPanelDropEdge {
+  const rect = event.currentTarget.getBoundingClientRect();
+  return computeProjectPanelDropEdge(event.clientX, event.clientY, rect);
+}
+
+function createProjectPanelId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `pcp-${crypto.randomUUID()}`;
+  }
+  return `pcp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function createProjectChat(
+  projectId: string,
   input: {
     title?: string;
     agent?: SessionSummary['agent'];
@@ -207,7 +429,7 @@ async function createProjectSessionChat(
     modelReasoningEffort?: SessionChat['modelReasoningEffort'];
   },
 ): Promise<SessionChat> {
-  const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`), {
+  const response = await fetch(withAppBasePath(buildProjectChatCollectionPath(projectId)), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -217,6 +439,126 @@ async function createProjectSessionChat(
     throw new Error(body.error ?? '새 채팅을 만들지 못했습니다.');
   }
   return body.chat;
+}
+
+async function fetchProjectWorkspaceLayout(
+  projectId: string,
+  validChatIds: Set<string>,
+): Promise<{
+  layout: ProjectParallelPanelTreeState | null;
+  panelRuntime: ProjectWorkspacePanelRuntimeMap;
+  panelRuntimeErrors: ProjectPanelRuntimeErrors;
+}> {
+  const response = await fetch(withAppBasePath(buildProjectWorkspacePath(projectId)), { cache: 'no-store' });
+  if (!response.ok) return { layout: null, panelRuntime: {}, panelRuntimeErrors: {} };
+  const body = (await response.json().catch(() => ({}))) as {
+    workspace?: {
+      layout?: ProjectParallelPanelTreeState | null;
+      panels?: ProjectWorkspacePanelRuntime[];
+    };
+  };
+  const layout = body.workspace?.layout ?? null;
+  const panels = Array.isArray(body.workspace?.panels) ? body.workspace.panels : [];
+  const panelRuntime = panels.reduce<ProjectWorkspacePanelRuntimeMap>((acc, panel) => {
+    if (panel && typeof panel.panelId === 'string' && validChatIds.has(panel.chatId)) {
+      acc[panel.panelId] = panel;
+    }
+    return acc;
+  }, {});
+  return {
+    layout: layout ? parseProjectPanelState(JSON.stringify(layout), validChatIds) : null,
+    panelRuntime,
+    panelRuntimeErrors: {},
+  };
+}
+
+async function saveProjectWorkspaceLayout(
+  projectId: string,
+  layout: ProjectParallelPanelTreeState | null,
+  options: { repairPanelRuntimes?: boolean } = {},
+): Promise<{ panelRuntime: ProjectWorkspacePanelRuntimeMap; panelRuntimeErrors: ProjectPanelRuntimeErrors }> {
+  const response = await fetch(withAppBasePath(buildProjectWorkspacePath(projectId)), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ layout, ...(options.repairPanelRuntimes ? { repairPanelRuntimes: true } : {}) }),
+  });
+  const body = (await response.json().catch(() => ({}))) as {
+    workspace?: {
+      panels?: ProjectWorkspacePanelRuntime[];
+    };
+    panelRuntimeErrors?: ProjectPanelRuntimeErrors;
+    error?: string;
+  };
+  if (!response.ok) {
+    throw new Error(body.error ?? 'Workspace layout 저장에 실패했습니다.');
+  }
+  const panels = Array.isArray(body.workspace?.panels) ? body.workspace.panels : [];
+  return {
+    panelRuntime: panels.reduce<ProjectWorkspacePanelRuntimeMap>((acc, panel) => {
+      if (panel && typeof panel.panelId === 'string') {
+        acc[panel.panelId] = panel;
+      }
+      return acc;
+    }, {}),
+    panelRuntimeErrors: body.panelRuntimeErrors && typeof body.panelRuntimeErrors === 'object'
+      ? body.panelRuntimeErrors
+      : {},
+  };
+}
+
+async function fetchProjectPanelGitOverview(projectId: string, panelId: string): Promise<ProjectPanelGitOverview> {
+  const params = new URLSearchParams();
+  params.set('kind', 'overview');
+  params.set('workspacePanelId', panelId);
+  const response = await fetch(
+    withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(projectId)}/git?${params.toString()}`),
+    { cache: 'no-store' },
+  );
+  const body = (await response.json().catch(() => ({}))) as ProjectPanelGitOverview & { error?: string };
+  if (!response.ok) {
+    throw new Error(body.error ?? 'Git 정보를 불러오지 못했습니다.');
+  }
+  return body;
+}
+
+function resolvePanelRuntimeBadge(
+  panelRuntime: ProjectWorkspacePanelRuntime | null,
+  runtimeRunning: boolean,
+  panelRuntimeError: string | null,
+): ProjectPanelRuntimeBadge {
+  if (panelRuntimeError) {
+    return {
+      label: 'runtime 생성 실패',
+      detail: panelRuntimeError,
+      tone: 'error',
+    };
+  }
+  if (runtimeRunning) {
+    return {
+      label: 'running',
+      detail: panelRuntime?.branch ?? panelRuntime?.runtimeSessionId ?? 'panel runtime',
+      tone: 'running',
+    };
+  }
+  if (!panelRuntime?.runtimeSessionId) {
+    return {
+      label: 'runtime pending',
+      detail: '패널 runtime/worktree 생성 대기',
+      tone: 'pending',
+    };
+  }
+  if (!panelRuntime.worktreePath) {
+    return {
+      label: 'worktree missing',
+      detail: panelRuntime.branch ?? panelRuntime.runtimeSessionId,
+      tone: 'error',
+    };
+  }
+  return {
+    label: 'ready',
+    detail: panelRuntime.branch ?? panelRuntime.worktreePath,
+    tone: 'ready',
+  };
 }
 
 function readEventRole(event: UiEvent): 'user' | 'agent' | 'terminal' {
@@ -324,6 +666,946 @@ function resolveProjectRunIndicator({
   return null;
 }
 
+function ProjectChatComposer({
+  activeModelLabel,
+  composerMode,
+  composerWrapRef,
+  error,
+  isAborting,
+  isRunning,
+  modelSelectorOpen,
+  onAddContext,
+  onAttachFile,
+  onComposerModeChange,
+  onEffortSelect,
+  onMentionProject,
+  onModelSelect,
+  onModelSelectorOpenChange,
+  onPromptChange,
+  onProviderSelect,
+  onStop,
+  onSubmit,
+  onVoice,
+  placeholder = '에이전트에게 무엇이든 요청하세요... Shift Enter 줄바꿈 · Cmd Enter 전송',
+  prompt,
+  selectedEffort,
+  selectedProvider,
+}: {
+  activeModelLabel: string;
+  composerMode: ComposerMode;
+  composerWrapRef?: RefObject<HTMLElement | null>;
+  error: string | null;
+  isAborting: boolean;
+  isRunning: boolean;
+  modelSelectorOpen: boolean;
+  onAddContext: () => void;
+  onAttachFile: () => void;
+  onComposerModeChange: (mode: ComposerMode) => void;
+  onEffortSelect: (effort: ReasoningEffort) => void;
+  onMentionProject: () => void;
+  onModelSelect: (provider: ModelProvider, modelName: string) => void;
+  onModelSelectorOpenChange: (open: boolean) => void;
+  onPromptChange: (value: string) => void;
+  onProviderSelect: (provider: ModelProvider) => void;
+  onStop: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onVoice: () => void;
+  placeholder?: string;
+  prompt: string;
+  selectedEffort: ReasoningEffort;
+  selectedProvider: ModelProvider;
+}) {
+  return (
+    <footer ref={composerWrapRef} className="cmp-wrap">
+      <form className="cmp" onSubmit={onSubmit}>
+        <div className="cmp__top">
+          <div className="cmp-mode" role="tablist" aria-label="Mode">
+            {(['agent', 'plan', 'terminal'] as ComposerMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className="cmp-mode__pill"
+                data-mode={mode}
+                aria-pressed={composerMode === mode}
+                onClick={() => onComposerModeChange(mode)}
+              >
+                <span className="cmp-mode__pill-dot" />
+                {COMPOSER_MODE_COPY[mode]}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="cmp-ctx"
+            aria-label="Current model"
+            aria-expanded={modelSelectorOpen}
+            onClick={() => onModelSelectorOpenChange(!modelSelectorOpen)}
+          >
+            <span className={`cmp-ctx__logo cmp-ctx__logo--${selectedProvider}`}>
+              <ProviderLogo provider={selectedProvider} />
+            </span>
+            <span className="cmp-ctx__name">{activeModelLabel}</span>
+            <span className="cmp-ctx__effort">{selectedEffort}</span>
+            <ChevronRight size={12} />
+          </button>
+        </div>
+        <div className={`ms${modelSelectorOpen ? ' ms--open' : ''}`} role="dialog" aria-label="Model selector">
+          <div className="ms__eyebrow-row">
+            <span className="ms__eyebrow">Model</span>
+            <button type="button" className="ms__close" aria-label="Close model selector" onClick={() => onModelSelectorOpenChange(false)}>
+              <X size={12} />
+            </button>
+          </div>
+          <div className="ms__providers" role="tablist">
+            {(['claude', 'codex', 'gemini'] as ModelProvider[]).map((provider) => (
+              <button
+                key={provider}
+                type="button"
+                className="ms__provider"
+                data-provider={provider}
+                aria-pressed={selectedProvider === provider}
+                onClick={() => onProviderSelect(provider)}
+              >
+                <ProviderLogo provider={provider} />
+                <span className="ms__provider-label">{PROVIDER_LABELS[provider]}</span>
+              </button>
+            ))}
+          </div>
+          <div className="ms__list-wrap">
+            {(['claude', 'codex', 'gemini'] as ModelProvider[]).map((provider) => (
+              <div key={provider} className="ms__group" data-provider={provider} data-active={selectedProvider === provider ? '' : undefined}>
+                {MODEL_OPTIONS[provider].map((model) => (
+                  <button
+                    key={model.name}
+                    type="button"
+                    className="ms__item"
+                    aria-pressed={selectedProvider === provider && activeModelLabel === model.name}
+                    onClick={() => onModelSelect(provider, model.name)}
+                  >
+                    <span className="ms__item-check" />
+                    <span className="ms__item-body">
+                      <span className="ms__item-name">{model.name}</span>
+                      <span className="ms__item-meta">{model.meta}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+          <div className="ms__footer">
+            <span className="ms__eyebrow">Effort</span>
+            <div className="ms__effort-chips" role="tablist" aria-label="Reasoning effort">
+              {(['Low', 'Medium', 'High', 'XHigh', 'Max'] as ReasoningEffort[]).map((effort) => {
+                const disabled = !PROVIDER_EFFORTS[selectedProvider].includes(effort);
+                return (
+                  <button
+                    key={effort}
+                    type="button"
+                    className={`ms__effort-chip${disabled ? ' ms__effort-chip--disabled' : ''}`}
+                    aria-pressed={selectedEffort === effort}
+                    disabled={disabled}
+                    onClick={() => onEffortSelect(effort)}
+                  >
+                    {effort}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <textarea
+          className="cmp__input"
+          value={prompt}
+          onChange={(event) => onPromptChange(event.target.value)}
+          placeholder={placeholder}
+          rows={2}
+        />
+        <div className="cmp__toolbar">
+          <div className="cmp__tools">
+            <button type="button" className="cmp__tool" aria-label="Add" onClick={onAddContext}><Plus size={15} /></button>
+            <button type="button" className="cmp__tool" aria-label="Attach file" onClick={onAttachFile}>
+              <Paperclip size={15} />
+            </button>
+            <button type="button" className="cmp__tool" aria-label="Mention" onClick={onMentionProject}>
+              <AtSign size={15} />
+            </button>
+            <button type="button" className="cmp__tool" aria-label="Voice" onClick={onVoice}>
+              <Mic size={15} />
+            </button>
+          </div>
+          <div className="cmp__right">
+            <span className="cmp__hint"><span className="kbd">⌘</span><span className="kbd">↵</span><span>{isRunning ? 'running' : 'send'}</span></span>
+            {isRunning ? (
+              <button
+                type="button"
+                className={`cmp__send cmp__send--running${isAborting ? ' cmp__send--aborting' : ''}`}
+                disabled={isAborting}
+                aria-label="Stop generation"
+                onClick={onStop}
+              >
+                {isAborting ? 'Stopping...' : 'Stop'}
+                <Square size={11} />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="cmp__send"
+                disabled={!prompt.trim()}
+                aria-label="Send message"
+              >
+                Send
+                <Send size={13} />
+              </button>
+            )}
+          </div>
+        </div>
+      </form>
+      {error && <div className="pc-chat-error" role="alert">{error}</div>}
+    </footer>
+  );
+}
+
+function ProjectParallelDropOverlay({ edge }: { edge: ProjectParallelPanelDropEdge }) {
+  return (
+    <div className="pc-parallel-drop-overlay" aria-hidden="true">
+      <div className="pc-parallel-drop-overlay__target" data-edge={edge} />
+    </div>
+  );
+}
+
+function ProjectParallelResizeDivider({
+  containerRef,
+  direction,
+  leftAnchorId,
+  onResize,
+  rightAnchorId,
+}: {
+  containerRef: RefObject<HTMLDivElement | null>;
+  direction: ProjectParallelPanelSplitDirection;
+  leftAnchorId: string;
+  onResize: (leftAnchorId: string, rightAnchorId: string, ratio: number) => void;
+  rightAnchorId: string;
+}) {
+  const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+
+    const updateRatio = (clientX: number, clientY: number) => {
+      const rawRatio = direction === 'horizontal'
+        ? (clientX - rect.left) / rect.width
+        : (clientY - rect.top) / rect.height;
+      onResize(leftAnchorId, rightAnchorId, rawRatio);
+    };
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      updateRatio(moveEvent.clientX, moveEvent.clientY);
+    };
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    updateRatio(event.clientX, event.clientY);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp, { once: true });
+  }, [containerRef, direction, leftAnchorId, onResize, rightAnchorId]);
+
+  return (
+    <div
+      className="pc-parallel__divider"
+      data-direction={direction}
+      onPointerDown={handlePointerDown}
+      role="separator"
+      tabIndex={0}
+      aria-orientation={direction === 'horizontal' ? 'vertical' : 'horizontal'}
+    />
+  );
+}
+
+function ProjectParallelPanelTree({
+  chats,
+  modelLabel,
+  node,
+  onClosePanel,
+  onPanelDragEnd,
+  onPanelDragStart,
+  onPanelDrop,
+  onRepairPanelRuntime,
+  onResize,
+  panelRuntimeErrors,
+  panelRuntime,
+  panelState,
+  recentPreview,
+  session,
+  tokenLabel,
+}: {
+  chats: SessionChat[];
+  modelLabel: string;
+  node: ProjectParallelPanelNode;
+  onClosePanel: (panelId: string) => void;
+  onPanelDragEnd: () => void;
+  onPanelDragStart: ProjectPanelNodeDragStartHandler;
+  onPanelDrop: ProjectPanelDropHandler;
+  onRepairPanelRuntime: (panelId: string) => void;
+  onResize: (leftAnchorId: string, rightAnchorId: string, ratio: number) => void;
+  panelRuntimeErrors: ProjectPanelRuntimeErrors;
+  panelRuntime: ProjectWorkspacePanelRuntimeMap;
+  panelState: ProjectParallelPanelTreeState;
+  recentPreview: string;
+  session: SessionSummary;
+  tokenLabel: string;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  if (node.type === 'leaf') {
+    const panel = panelState.panels[node.panelId] ?? null;
+    const panelChat = panel ? chats.find((candidate) => candidate.id === panel.chatId) ?? null : null;
+    if (!panel || !panelChat) {
+      return (
+        <article className="pc-parallel__frame pc-parallel__frame--missing">
+          <div className="pc-chat-empty-state" role="status">
+            <div className="pc-chat-empty-state__title">패널 채팅을 찾지 못했습니다.</div>
+            <div className="pc-chat-empty-state__meta">이 패널은 닫을 수 있고, 채팅 목록은 보존됩니다.</div>
+            <button type="button" className="pc-parallel__frame-action" onClick={() => onClosePanel(node.panelId)} aria-label="Close panel">
+              <X size={13} />
+            </button>
+          </div>
+        </article>
+      );
+    }
+
+    return (
+      <ProjectParallelChatPane
+        chat={panelChat}
+        isActivePanel={panelState.activePanelId === node.panelId}
+        modelLabel={modelLabel}
+        onClosePanel={() => onClosePanel(node.panelId)}
+        onPanelDragEnd={onPanelDragEnd}
+        onPanelDragStart={(event) => onPanelDragStart(event, node.panelId, panelChat)}
+        onPanelDrop={(edge, event) => onPanelDrop(node.panelId, edge, event)}
+        onRepairPanelRuntime={() => onRepairPanelRuntime(node.panelId)}
+        panelId={node.panelId}
+        panelLabel={`PANEL ${collectProjectPanelIds(panelState.layout).indexOf(node.panelId) + 1}`}
+        panelRuntime={panelRuntime[node.panelId] ?? null}
+        panelRuntimeError={panelRuntimeErrors[node.panelId] ?? null}
+        recentPreview={recentPreview}
+        session={session}
+        showClose={Object.keys(panelState.panels).length > 1}
+        tokenLabel={tokenLabel}
+      />
+    );
+  }
+
+  const direction: ProjectParallelPanelSplitDirection = node.type === 'hsplit' ? 'horizontal' : 'vertical';
+  const leftAnchorId = findFirstProjectPanelId(node.children[0]);
+  const rightAnchorId = findFirstProjectPanelId(node.children[1]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="pc-parallel__split"
+      data-direction={direction}
+      style={{ '--pc-parallel-ratio': node.ratio } as CSSProperties}
+    >
+      <div className="pc-parallel__split-pane pc-parallel__split-pane--first">
+        <ProjectParallelPanelTree
+          chats={chats}
+          modelLabel={modelLabel}
+          node={node.children[0]}
+          onClosePanel={onClosePanel}
+          onPanelDragEnd={onPanelDragEnd}
+          onPanelDragStart={onPanelDragStart}
+          onPanelDrop={onPanelDrop}
+          onRepairPanelRuntime={onRepairPanelRuntime}
+          onResize={onResize}
+          panelRuntimeErrors={panelRuntimeErrors}
+          panelRuntime={panelRuntime}
+          panelState={panelState}
+          recentPreview={recentPreview}
+          session={session}
+          tokenLabel={tokenLabel}
+        />
+      </div>
+      <ProjectParallelResizeDivider
+        containerRef={containerRef}
+        direction={direction}
+        leftAnchorId={leftAnchorId}
+        onResize={onResize}
+        rightAnchorId={rightAnchorId}
+      />
+      <div className="pc-parallel__split-pane pc-parallel__split-pane--second">
+        <ProjectParallelPanelTree
+          chats={chats}
+          modelLabel={modelLabel}
+          node={node.children[1]}
+          onClosePanel={onClosePanel}
+          onPanelDragEnd={onPanelDragEnd}
+          onPanelDragStart={onPanelDragStart}
+          onPanelDrop={onPanelDrop}
+          onRepairPanelRuntime={onRepairPanelRuntime}
+          onResize={onResize}
+          panelRuntimeErrors={panelRuntimeErrors}
+          panelRuntime={panelRuntime}
+          panelState={panelState}
+          recentPreview={recentPreview}
+          session={session}
+          tokenLabel={tokenLabel}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ProjectParallelChatPane({
+  chat,
+  isActivePanel,
+  modelLabel,
+  onClosePanel,
+  onPanelDragEnd,
+  onPanelDragStart,
+  onPanelDrop,
+  onRepairPanelRuntime,
+  panelId,
+  panelLabel,
+  panelRuntime,
+  panelRuntimeError,
+  recentPreview,
+  session,
+  showClose,
+  tokenLabel,
+}: {
+  chat: SessionChat;
+  isActivePanel: boolean;
+  modelLabel: string;
+  onClosePanel: () => void;
+  onPanelDragEnd: () => void;
+  onPanelDragStart: (event: DragEvent<HTMLElement>) => void;
+  onPanelDrop: (edge: ProjectParallelPanelDropEdge, event: DragEvent<HTMLElement>) => void;
+  onRepairPanelRuntime: () => void;
+  panelId: string;
+  panelLabel: string;
+  panelRuntime: ProjectWorkspacePanelRuntime | null;
+  panelRuntimeError: string | null;
+  recentPreview: string;
+  session: SessionSummary;
+  showClose: boolean;
+  tokenLabel: string;
+}) {
+  const projectId = session.id;
+  const [events, setEvents] = useState<UiEvent[]>([]);
+  const [prompt, setPrompt] = useState('');
+  const [isLoadingEvents, setIsLoadingEvents] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAborting, setIsAborting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [composerMode, setComposerMode] = useState<ComposerMode>('agent');
+  const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<ModelProvider>(() => providerFromAgent(chat.agent ?? session.agent));
+  const [selectedModel, setSelectedModel] = useState(chat.model ?? modelLabel);
+  const [selectedEffort, setSelectedEffort] = useState<ReasoningEffort>(() => normalizeReasoningEffort(chat.modelReasoningEffort));
+  const [dropEdge, setDropEdge] = useState<ProjectParallelPanelDropEdge | null>(null);
+  const [panelTool, setPanelTool] = useState<ProjectParallelPanelTool>('chat');
+  const [gitOverview, setGitOverview] = useState<ProjectPanelGitOverview | null>(null);
+  const [gitLoading, setGitLoading] = useState(false);
+  const [gitError, setGitError] = useState<string | null>(null);
+  const frameRef = useRef<HTMLElement | null>(null);
+  const activeAgent: SessionSummary['agent'] = selectedProvider;
+  const activeModelLabel = selectedModel || chat.model || modelLabel;
+  const runtimeSessionId = panelRuntime?.runtimeSessionId ?? projectId;
+  const { isRunning: runtimeRunning } = useSessionRuntime(runtimeSessionId, chat.id, true);
+  const runtimeBadge = resolvePanelRuntimeBadge(panelRuntime, runtimeRunning, panelRuntimeError);
+  const runtimeNeedsRepair = runtimeBadge.tone === 'pending' || runtimeBadge.tone === 'error';
+  const panelFiles = useWorkspaceFiles('/workspace', {
+    projectId,
+    workspacePanelId: panelId,
+  });
+  const visibleEvents = events.slice(-40);
+  const hasRuntimeEvents = visibleEvents.length > 0;
+  const projectRunActive = runtimeRunning || isSubmitting;
+
+  useEffect(() => {
+    setPrompt('');
+    setError(null);
+    setComposerMode('agent');
+    setModelSelectorOpen(false);
+    setSelectedProvider(providerFromAgent(chat.agent ?? session.agent));
+    setSelectedModel(chat.model ?? modelLabel);
+    setSelectedEffort(normalizeReasoningEffort(chat.modelReasoningEffort));
+    setPanelTool('chat');
+  }, [chat.agent, chat.id, chat.model, chat.modelReasoningEffort, modelLabel, session.agent]);
+
+  useEffect(() => {
+    if (panelTool !== 'git') return;
+    let cancelled = false;
+    setGitLoading(true);
+    setGitError(null);
+    void fetchProjectPanelGitOverview(projectId, panelId)
+      .then((overview) => {
+        if (!cancelled) setGitOverview(overview);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setGitError(error instanceof Error ? error.message : 'Git 정보를 불러오지 못했습니다.');
+          setGitOverview(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setGitLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [panelId, panelTool, projectId]);
+
+  const handleComposerProviderSelect = (provider: ModelProvider) => {
+    setSelectedProvider(provider);
+    setSelectedModel(MODEL_OPTIONS[provider][0]?.name ?? activeModelLabel);
+    const allowedEfforts = PROVIDER_EFFORTS[provider];
+    setSelectedEffort((current) => allowedEfforts.includes(current) ? current : allowedEfforts.at(-1) ?? 'High');
+  };
+
+  const handleComposerModelSelect = (provider: ModelProvider, modelName: string) => {
+    setSelectedProvider(provider);
+    setSelectedModel(modelName);
+    setModelSelectorOpen(false);
+  };
+
+  const handleMentionProject = () => {
+    setPrompt((value) => `${value}${value.endsWith(' ') || value.length === 0 ? '' : ' '}@${displayProjectName(session)} `);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadEvents = async (showLoading: boolean) => {
+      if (showLoading) {
+        setIsLoadingEvents(true);
+      }
+      try {
+        const params = new URLSearchParams();
+        params.set('limit', '40');
+        params.set('chatId', chat.id);
+        if (chat.isDefault) {
+          params.set('includeUnassigned', 'true');
+        }
+        const response = await fetch(withAppBasePath(buildProjectRuntimeEventsPath(projectId, params)), { cache: 'no-store' });
+        const body = (await response.json().catch(() => ({}))) as { events?: UiEvent[]; error?: string };
+        if (!response.ok) {
+          throw new Error(body.error ?? '채팅 이벤트를 불러오지 못했습니다.');
+        }
+        if (!cancelled) {
+          setEvents(body.events ?? []);
+          setError(null);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : '채팅 이벤트를 불러오지 못했습니다.');
+        }
+      } finally {
+        if (!cancelled && showLoading) {
+          setIsLoadingEvents(false);
+        }
+      }
+    };
+
+    void loadEvents(true);
+    const intervalId = window.setInterval(() => {
+      void loadEvents(false);
+    }, 3500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [chat.id, chat.isDefault, projectId]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const text = prompt.trim();
+    if (!text || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const isTerminalMode = composerMode === 'terminal';
+      const endpoint = withAppBasePath(isTerminalMode ? buildProjectRuntimeTerminalPath(projectId) : buildProjectRuntimeEventsPath(projectId));
+      const payload = isTerminalMode ? {
+        chatId: chat.id,
+        command: text,
+        agent: selectedProvider,
+        model: activeModelLabel,
+        modelReasoningEffort: serializeReasoningEffort(selectedEffort),
+        workspacePanelId: panelId,
+      } : {
+        type: 'message',
+        title: 'User Instruction',
+        text,
+        meta: {
+          role: 'user',
+          chatId: chat.id,
+          workspacePanelId: panelId,
+          agent: selectedProvider,
+          model: activeModelLabel,
+          mode: composerMode,
+          modelReasoningEffort: serializeReasoningEffort(selectedEffort),
+          workspaceTab: 'run',
+        },
+      };
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const body = (await response.json().catch(() => ({}))) as { event?: UiEvent; events?: UiEvent[]; error?: string };
+      const submittedEvents = isTerminalMode
+        ? body.events ?? []
+        : body.event ? [body.event] : [];
+      if (!response.ok || submittedEvents.length === 0) {
+        throw new Error(body.error ?? '메시지 전송에 실패했습니다.');
+      }
+      const latestEvent = submittedEvents[submittedEvents.length - 1] as UiEvent;
+      setPrompt('');
+      setEvents((previous) => [...previous, ...submittedEvents]);
+      void fetch(withAppBasePath(buildProjectChatDetailPath(projectId, chat.id)), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          touchActivity: true,
+          latestPreview: isTerminalMode ? `$ ${text}` : text,
+          latestEventId: latestEvent.id,
+          latestEventAt: latestEvent.timestamp,
+          latestEventIsUser: !isTerminalMode,
+        }),
+      });
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : '메시지 전송에 실패했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleStopParallelChat = useCallback(async () => {
+    if (isAborting || !projectRunActive) return;
+    setIsAborting(true);
+    try {
+      await abortProjectChat({
+        projectId,
+        runtimeSessionId: runtimeSessionId !== projectId ? runtimeSessionId : undefined,
+        chatId: chat.id,
+      });
+    } catch (abortError) {
+      setError(abortError instanceof Error ? abortError.message : '에이전트 실행 중단에 실패했습니다.');
+    } finally {
+      setIsAborting(false);
+      setIsSubmitting(false);
+    }
+  }, [chat.id, isAborting, projectId, projectRunActive, runtimeSessionId]);
+
+  const isCompatiblePanelDrop = useCallback((event: DragEvent<HTMLElement>) => {
+    if (!hasProjectChatDragPayload(event)) return false;
+    const panelPayload = readProjectPanelNodeDragPayload(event);
+    return !(panelPayload?.projectId === projectId && panelPayload.panelId === panelId);
+  }, [panelId, projectId]);
+
+  const handlePanelDragOver = useCallback((event: DragEvent<HTMLElement>) => {
+    if (!isCompatiblePanelDrop(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = Array.from(event.dataTransfer.types).includes(PROJECT_PANEL_NODE_DRAG_MIME) ? 'move' : 'copy';
+    const rect = frameRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setDropEdge(computeProjectPanelDropEdge(event.clientX, event.clientY, rect));
+  }, [isCompatiblePanelDrop]);
+
+  const handlePanelDragLeave = useCallback((event: DragEvent<HTMLElement>) => {
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && frameRef.current?.contains(relatedTarget)) return;
+    setDropEdge(null);
+  }, []);
+
+  const handlePanelDrop = useCallback((event: DragEvent<HTMLElement>) => {
+    if (!isCompatiblePanelDrop(event)) return;
+    const rect = frameRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const edge = computeProjectPanelDropEdge(event.clientX, event.clientY, rect);
+    setDropEdge(null);
+    onPanelDrop(edge, event);
+  }, [isCompatiblePanelDrop, onPanelDrop]);
+
+  return (
+    <article
+      ref={frameRef}
+      className={`pc-parallel__frame${isActivePanel ? ' pc-parallel__frame--active' : ''}`}
+      data-panel-id={panelId}
+      onDragOver={handlePanelDragOver}
+      onDragLeave={handlePanelDragLeave}
+      onDrop={handlePanelDrop}
+    >
+      <header className="pc-parallel__frame-head">
+        <button
+          type="button"
+          className="pc-parallel__frame-grip"
+          draggable
+          onDragStart={onPanelDragStart}
+          onDragEnd={onPanelDragEnd}
+          aria-label={`${chat.title} 패널 이동`}
+          title="패널 이동"
+        >
+          <PanelsTopLeft size={13} />
+          <span>{panelLabel}</span>
+        </button>
+        <strong title={chat.title}>{chat.title}</strong>
+        <span
+          className="pc-parallel__runtime-badge"
+          data-tone={runtimeBadge.tone}
+          title={runtimeBadge.detail}
+        >
+          {runtimeBadge.label}
+        </span>
+        <button
+          type="button"
+          className="pc-parallel__frame-action"
+          onClick={() => setPanelTool(panelTool === 'files' ? 'chat' : 'files')}
+          aria-pressed={panelTool === 'files'}
+          aria-label="Open panel files"
+          title="Open panel files"
+        >
+          <FileText size={13} />
+        </button>
+        <button
+          type="button"
+          className="pc-parallel__frame-action"
+          onClick={() => setPanelTool(panelTool === 'git' ? 'chat' : 'git')}
+          aria-pressed={panelTool === 'git'}
+          aria-label="Open panel Git"
+          title="Open panel Git"
+        >
+          <GitActionMark size={13} />
+        </button>
+        {runtimeNeedsRepair && (
+          <button
+            type="button"
+            className="pc-parallel__frame-action"
+            onClick={onRepairPanelRuntime}
+            aria-label="Repair panel runtime"
+            title="Repair panel runtime"
+          >
+            <RefreshCcw size={13} />
+          </button>
+        )}
+        {showClose && (
+          <button
+            type="button"
+            className="pc-parallel__frame-action"
+            onClick={onClosePanel}
+            aria-label="Close panel; chat stays in the list"
+            title="패널만 닫힙니다. 채팅은 목록에 남습니다."
+          >
+            <X size={13} />
+          </button>
+        )}
+      </header>
+      <div className="pc-parallel-chat">
+        <div className="pc-parallel-chat__timeline" hidden={panelTool !== 'chat'}>
+          {isLoadingEvents && <div className="pc-chat-loading">Loading messages...</div>}
+          {panelRuntimeError && (
+            <div className="pc-chat-error" role="alert">runtime 생성 실패: {panelRuntimeError}</div>
+          )}
+          {!isLoadingEvents && !hasRuntimeEvents && (
+            <div className="pc-chat-empty-state" role="status">
+              <div className="pc-chat-empty-state__title">아직 메시지가 없습니다.</div>
+              <div className="pc-chat-empty-state__meta">{recentPreview}</div>
+            </div>
+          )}
+          {visibleEvents.map((item) => {
+            const role = readEventRole(item);
+            const isUser = role === 'user';
+            const isTerminal = role === 'terminal';
+            const snippet = item.parsed?.snippets?.[0];
+            if (!isUser && !isTerminal && isProjectRunStatusEvent(item)) {
+              return (
+                <div key={item.id} className="msg msg--run-status">
+                  <ProjectRunStatusChip event={item} />
+                </div>
+              );
+            }
+            if (!isUser && !isTerminal && isProjectActionEvent(item)) {
+              return (
+                <div key={item.id} className="msg msg--action">
+                  <ProjectActionCard
+                    event={item}
+                    density="expanded"
+                    isRunning={false}
+                    isError={false}
+                    onCopy={() => { void copyToClipboard(eventCommand(item)); }}
+                  />
+                </div>
+              );
+            }
+            return (
+              <div key={item.id} className="msg">
+                <span className={`msg__avatar ${isUser ? 'msg__avatar--user' : isTerminal ? 'msg__avatar--terminal' : agentAvatarClass(activeAgent)}`}>
+                  {isUser ? 'U' : isTerminal ? <Terminal size={14} /> : <ProviderLogo provider={providerFromAgent(activeAgent)} />}
+                </span>
+                <div className="msg__body">
+                  <div className="msg__header">
+                    <span className="msg__name">{isUser ? 'You' : isTerminal ? 'Terminal' : agentLabel(activeAgent, activeModelLabel)}</span>
+                    <span className="msg__time">{formatRelativeTime(item.timestamp)}</span>
+                  </div>
+                  {isTerminal ? (
+                    <div className="msg__terminal-output" data-terminal-response>
+                      <div className="msg__terminal-command">$ {terminalCommand(item)}</div>
+                      <pre>{terminalOutput(item)}</pre>
+                    </div>
+                  ) : (
+                    <>
+                      <div className={isUser ? 'msg__bubble' : 'msg__text'}><MarkdownContent body={getEventText(item)} /></div>
+                      {snippet && (
+                        <div className="code">
+                          <div className="code__head">
+                            <div className="code__head-left">
+                              <span className="code__lang">{snippet.language || 'txt'}</span>
+                              <span>generated snippet</span>
+                            </div>
+                            <button type="button" className="code__copy" onClick={() => { void copyToClipboard(snippet.code); }}>Copy</button>
+                          </div>
+                          <pre className="code__body">{snippet.code}</pre>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {panelTool === 'files' && (
+          <div className="pc-parallel-tool" data-tool="files">
+            <div className="pc-parallel-tool__head">
+              <span><FileText size={13} />Files</span>
+              <span className="pc-parallel-tool__path" title={panelFiles.currentPath}>{panelFiles.currentPath}</span>
+              <button
+                type="button"
+                className="pc-parallel__frame-action"
+                aria-label="Refresh panel files"
+                onClick={() => panelFiles.refresh()}
+                disabled={panelFiles.loading}
+              >
+                <RefreshCcw size={12} />
+              </button>
+            </div>
+            <div className="pc-parallel-tool__body">
+              {panelFiles.parentPath && (
+                <button type="button" className="pc-panel-file" onClick={() => panelFiles.goUp()}>
+                  <FolderOpen size={13} />
+                  <span>..</span>
+                  <em>parent</em>
+                </button>
+              )}
+              {panelFiles.loading && panelFiles.items.length === 0 && <div className="pc-parallel-tool__empty">Loading files...</div>}
+              {panelFiles.error && <div className="pc-chat-error" role="alert">{panelFiles.error}</div>}
+              {!panelFiles.loading && !panelFiles.error && panelFiles.items.length === 0 && (
+                <div className="pc-parallel-tool__empty">빈 디렉터리</div>
+              )}
+              {panelFiles.items.map((file) => (
+                <button
+                  key={file.path}
+                  type="button"
+                  className="pc-panel-file"
+                  onClick={() => {
+                    if (file.isDirectory) {
+                      panelFiles.cdInto(file);
+                    } else {
+                      setPanelTool('chat');
+                      setPrompt((value) => value || `@${file.path} `);
+                    }
+                  }}
+                >
+                  {file.isDirectory ? <FolderOpen size={13} /> : <FileText size={13} />}
+                  <span>{file.name}</span>
+                  <em>{file.isDirectory ? 'dir' : 'file'}</em>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {panelTool === 'git' && (
+          <div className="pc-parallel-tool" data-tool="git">
+            <div className="pc-parallel-tool__head">
+              <span><GitActionMark size={13} />Git</span>
+              <span className="pc-parallel-tool__path" title={gitOverview?.workspacePath ?? panelRuntime?.worktreePath ?? ''}>
+                {gitOverview?.branch ?? panelRuntime?.branch ?? 'branch pending'}
+              </span>
+              <button
+                type="button"
+                className="pc-parallel__frame-action"
+                aria-label="Refresh panel Git"
+                onClick={() => {
+                  setGitLoading(true);
+                  setGitError(null);
+                  void fetchProjectPanelGitOverview(projectId, panelId)
+                    .then(setGitOverview)
+                    .catch((error) => setGitError(error instanceof Error ? error.message : 'Git 정보를 불러오지 못했습니다.'))
+                    .finally(() => setGitLoading(false));
+                }}
+                disabled={gitLoading}
+              >
+                <RefreshCcw size={12} />
+              </button>
+            </div>
+            <div className="pc-panel-git-summary">
+              <span data-tone={gitOverview?.isClean ? 'ready' : 'pending'}>{gitOverview?.isClean ? 'clean' : 'dirty'}</span>
+              <span>staged {gitOverview?.stagedCount ?? 0}</span>
+              <span>changed {gitOverview?.unstagedCount ?? 0}</span>
+              <span>untracked {gitOverview?.untrackedCount ?? 0}</span>
+              <span>ahead {gitOverview?.ahead ?? 0} / behind {gitOverview?.behind ?? 0}</span>
+            </div>
+            <div className="pc-parallel-tool__body">
+              {gitLoading && <div className="pc-parallel-tool__empty">Loading Git status...</div>}
+              {gitError && <div className="pc-chat-error" role="alert">{gitError}</div>}
+              {!gitLoading && !gitError && gitOverview?.files.length === 0 && (
+                <div className="pc-parallel-tool__empty">변경된 파일이 없습니다.</div>
+              )}
+              {gitOverview?.files.slice(0, 30).map((file) => (
+                <div key={`${file.path}:${file.indexStatus}:${file.workTreeStatus}`} className="pc-panel-git-file">
+                  <span>{file.indexStatus}{file.workTreeStatus}</span>
+                  <strong title={file.path}>{file.path}</strong>
+                  <em>{file.conflicted ? 'conflict' : file.untracked ? 'new' : file.staged ? 'staged' : 'modified'}</em>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <ProjectChatComposer
+          activeModelLabel={activeModelLabel}
+          composerMode={composerMode}
+          error={error}
+          isAborting={isAborting}
+          isRunning={projectRunActive}
+          modelSelectorOpen={modelSelectorOpen}
+          onAddContext={() => setError(null)}
+          onAttachFile={() => setPanelTool('files')}
+          onComposerModeChange={setComposerMode}
+          onEffortSelect={setSelectedEffort}
+          onMentionProject={handleMentionProject}
+          onModelSelect={handleComposerModelSelect}
+          onModelSelectorOpenChange={setModelSelectorOpen}
+          onPromptChange={setPrompt}
+          onProviderSelect={handleComposerProviderSelect}
+          onStop={() => { void handleStopParallelChat(); }}
+          onSubmit={handleSubmit}
+          onVoice={() => setError('Voice input is not available in this workspace')}
+          placeholder={`${agentLabel(activeAgent, activeModelLabel)}에게 요청하세요... Shift Enter 줄바꿈 · Cmd Enter 전송`}
+          prompt={prompt}
+          selectedEffort={selectedEffort}
+          selectedProvider={selectedProvider}
+        />
+      </div>
+      <div className="pc-parallel-chat__meta">{tokenLabel}</div>
+      {dropEdge && <ProjectParallelDropOverlay edge={dropEdge} />}
+    </article>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // ProjectChatSurface
 // ---------------------------------------------------------------------------
@@ -337,6 +1619,7 @@ export function ProjectChatSurface({
   recentPreview,
   selectedChatId,
   session,
+  surfaceMode = 'full',
   tokenLabel,
 }: {
   fileCount: number;
@@ -348,8 +1631,10 @@ export function ProjectChatSurface({
   recentPreview: string;
   selectedChatId: string | null;
   session: SessionSummary;
+  surfaceMode?: ProjectChatSurfaceMode;
   tokenLabel: string;
 }) {
+  const projectId = session.id;
   const [chats, setChats] = useState<SessionChat[]>([]);
   const [events, setEvents] = useState<UiEvent[]>([]);
   const [prompt, setPrompt] = useState('');
@@ -362,7 +1647,7 @@ export function ProjectChatSurface({
   const [projectRunNowMs, setProjectRunNowMs] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
   const activeChat = selectedChatId ? chats.find((chat) => chat.id === selectedChatId) ?? null : null;
-  const { isRunning: runtimeRunning } = useSessionRuntime(session.id, selectedChatId, Boolean(selectedChatId));
+  const { isRunning: runtimeRunning } = useSessionRuntime(projectId, selectedChatId, Boolean(selectedChatId));
   const runtimeModelLabel = activeChat?.model ?? modelLabel;
   const runtimeAgent = activeChat?.agent ?? session.agent;
   const timelineRef = useRef<HTMLDivElement | null>(null);
@@ -387,6 +1672,12 @@ export function ProjectChatSurface({
   const [draftTerminalCommand, setDraftTerminalCommand] = useState('npm test -- --run tests/projectListSurface.test.ts');
   const [previewDevice, setPreviewDevice] = useState<'1200' | '768' | '390'>('1200');
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [parallelPanelState, setParallelPanelState] = useState<ProjectParallelPanelTreeState | null>(null);
+  const [parallelPanelRuntime, setParallelPanelRuntime] = useState<ProjectWorkspacePanelRuntimeMap>({});
+  const [parallelPanelRuntimeErrors, setParallelPanelRuntimeErrors] = useState<ProjectPanelRuntimeErrors>({});
+  const [parallelSurfaceDropEdge, setParallelSurfaceDropEdge] = useState<ProjectParallelPanelDropEdge | null>(null);
+  const [parallelLayoutHydrated, setParallelLayoutHydrated] = useState(false);
+  const activeWorkspacePanelId = parallelPanelState?.activePanelId ?? null;
   const visibleEvents = events.slice(-40);
   const activeModelLabel = selectedModel || runtimeModelLabel;
   const activeAgent: SessionSummary['agent'] = selectedProvider;
@@ -406,11 +1697,15 @@ export function ProjectChatSurface({
     ?? activeChat?.lastActivityAt
     ?? session.lastActivityAt
     ?? new Date().toISOString();
-  const projectChatRoute = `/?tab=project&project=${session.id}&view=chat${selectedChatId ? `&chat=${selectedChatId}` : ''}`;
+  const projectChatRoute = `/?tab=project&project=${projectId}&view=chat${selectedChatId ? `&chat=${selectedChatId}` : ''}`;
   const previewTarget = `aris.lawdigest.cloud${projectChatRoute}`;
+  const parallelLayoutStorageKey = useMemo(() => createProjectPanelLayoutStorageKey(projectId), [projectId]);
   const prototypeRef = useRef<HTMLDivElement | null>(null);
   const composerWrapRef = useRef<HTMLElement | null>(null);
-  const workspaceFiles = useWorkspaceFiles('/workspace');
+  const workspaceFiles = useWorkspaceFiles('/workspace', {
+    projectId,
+    workspacePanelId: activeWorkspacePanelId,
+  });
   const densityFor = useDensityStore((s) => s.densityFor);
   const terminalSnippets = [
     { id: 'test', name: 'test target', cmd: 'npm test -- --run tests/projectListSurface.test.ts', tag: 'test' },
@@ -444,7 +1739,7 @@ export function ProjectChatSurface({
     });
   };
 
-  const defaultWorkspaceOpen = () => !window.matchMedia('(max-width: 1100px)').matches;
+  const defaultWorkspaceOpen = () => !window.matchMedia('(max-width: 1100px)').matches && surfaceMode === 'full';
 
   const clearWorkspaceCloseTimer = useCallback(() => {
     if (workspaceCloseTimerRef.current === null) return;
@@ -520,6 +1815,204 @@ export function ProjectChatSurface({
   const visibleExpandedTurnId = expandedTurnId === '__none__'
     ? null
     : expandedTurnId ?? defaultExpandedTurnId;
+  const clearParallelProjectDropState = useCallback(() => {
+    setParallelSurfaceDropEdge(null);
+  }, []);
+
+  const handleProjectParallelPanelDrop = useCallback<ProjectPanelDropHandler>((targetPanelId, edge, event) => {
+    const panelPayload = readProjectPanelNodeDragPayload(event);
+    const chatPayload = readProjectChatDragPayload(event);
+    const payload = panelPayload ?? chatPayload;
+    if (!payload || payload.projectId !== projectId) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    clearParallelProjectDropState();
+
+    setParallelPanelState((current) => {
+      if (!current) return current;
+      if (panelPayload) {
+        return moveProjectPanelNode(current, panelPayload.panelId, targetPanelId, edge) ?? current;
+      }
+      return applyProjectChatDropToPanel(current, targetPanelId, payload.chatId, edge, createProjectPanelId) ?? current;
+    });
+  }, [clearParallelProjectDropState, projectId]);
+
+  const handleProjectParallelPanelDragStart = useCallback<ProjectPanelNodeDragStartHandler>((event, panelId, chat) => {
+    writeProjectPanelNodeDragPayload(event, projectId, panelId, chat);
+    setParallelSurfaceDropEdge(null);
+  }, [projectId]);
+
+  const handleProjectParallelPanelDragEnd = useCallback(() => {
+    clearParallelProjectDropState();
+  }, [clearParallelProjectDropState]);
+
+  const handleProjectParallelResize = useCallback((leftAnchorId: string, rightAnchorId: string, ratio: number) => {
+    setParallelPanelState((current) => (
+      current ? resizeProjectPanelSplit(current, leftAnchorId, rightAnchorId, ratio) : current
+    ));
+  }, []);
+
+  const handleCloseProjectParallelPanel = useCallback((panelId: string) => {
+    if (!parallelPanelState) return;
+    const nextState = closeProjectPanel(parallelPanelState, panelId);
+    const remainingPanels = nextState ? Object.values(nextState.panels) : [];
+    const remainingSingleChatId = remainingPanels.length <= 1 ? remainingPanels[0]?.chatId ?? null : null;
+    setParallelPanelState(remainingPanels.length <= 1 ? null : nextState);
+    setParallelPanelRuntime((current) => {
+      const nextRuntime = { ...current };
+      delete nextRuntime[panelId];
+      return remainingPanels.length <= 1 ? {} : nextRuntime;
+    });
+    setParallelPanelRuntimeErrors((current) => {
+      const nextRuntimeErrors = { ...current };
+      delete nextRuntimeErrors[panelId];
+      return remainingPanels.length <= 1 ? {} : nextRuntimeErrors;
+    });
+    setParallelSurfaceDropEdge(null);
+    if (remainingSingleChatId) onChatOpen(remainingSingleChatId);
+  }, [onChatOpen, parallelPanelState]);
+
+  const handleProjectParallelSurfaceDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (surfaceMode !== 'full' || parallelPanelState || !hasProjectChatDragPayload(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setParallelSurfaceDropEdge(resolveProjectParallelDropEdge(event));
+  }, [parallelPanelState, surfaceMode]);
+
+  const handleProjectParallelSurfaceDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (surfaceMode !== 'full' || parallelPanelState) {
+      return;
+    }
+    const payload = readProjectChatDragPayload(event);
+    if (!payload || payload.projectId !== projectId) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const edge = resolveProjectParallelDropEdge(event);
+    clearParallelProjectDropState();
+
+    if (edge === 'center') {
+      onChatOpen(payload.chatId);
+      return;
+    }
+
+    const draggedChatId = payload.chatId;
+    const baseChatId = selectedChatId && selectedChatId !== draggedChatId
+      ? selectedChatId
+      : chats.find((chat) => chat.id !== draggedChatId)?.id ?? null;
+    if (!baseChatId || !chats.some((chat) => chat.id === draggedChatId)) {
+      onChatOpen(draggedChatId);
+      return;
+    }
+
+    const baseState = createProjectPanelTree(baseChatId, createProjectPanelId);
+    const nextState = applyProjectChatDropToPanel(
+      baseState,
+      baseState.activePanelId,
+      draggedChatId,
+      edge,
+      createProjectPanelId,
+    );
+    setParallelPanelState(nextState);
+  }, [chats, clearParallelProjectDropState, onChatOpen, parallelPanelState, selectedChatId, projectId, surfaceMode]);
+
+  const handleProjectParallelSurfaceDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
+      return;
+    }
+    setParallelSurfaceDropEdge(null);
+  }, []);
+
+  const handleCloseProjectParallelChats = useCallback(() => {
+    const activePanel = parallelPanelState?.panels[parallelPanelState.activePanelId] ?? null;
+    setParallelPanelState(null);
+    setParallelPanelRuntime({});
+    setParallelPanelRuntimeErrors({});
+    setParallelSurfaceDropEdge(null);
+    if (activePanel?.chatId) onChatOpen(activePanel.chatId);
+  }, [onChatOpen, parallelPanelState]);
+
+  useEffect(() => {
+    setParallelLayoutHydrated(false);
+    setParallelPanelState(null);
+    setParallelPanelRuntime({});
+    setParallelPanelRuntimeErrors({});
+    setParallelSurfaceDropEdge(null);
+  }, [parallelLayoutStorageKey]);
+
+  useEffect(() => {
+    if (surfaceMode !== 'full' || isLoadingChats || parallelLayoutHydrated) return;
+
+    let cancelled = false;
+    const validChatIds = new Set(chats.map((chat) => chat.id));
+    const hydrateWorkspaceLayout = async () => {
+      const serverRestored = await fetchProjectWorkspaceLayout(projectId, validChatIds).catch(() => null);
+      const serverLayout = serverRestored?.layout ?? null;
+      const localRestored = serverLayout ?? parseProjectPanelState(
+        readLocalStorage(parallelLayoutStorageKey),
+        validChatIds,
+      );
+      if (cancelled) return;
+      setParallelLayoutHydrated(true);
+      setParallelPanelRuntime(serverRestored?.panelRuntime ?? {});
+      setParallelPanelRuntimeErrors(serverRestored?.panelRuntimeErrors ?? {});
+
+      if (localRestored && Object.keys(localRestored.panels).length > 1) {
+        setParallelPanelState(localRestored);
+        return;
+      }
+
+      removeLocalStorage(parallelLayoutStorageKey);
+    };
+
+    void hydrateWorkspaceLayout();
+    return () => {
+      cancelled = true;
+    };
+  }, [chats, isLoadingChats, parallelLayoutHydrated, parallelLayoutStorageKey, projectId, surfaceMode]);
+
+  useEffect(() => {
+    if (surfaceMode !== 'full' || !parallelLayoutHydrated) return;
+
+    if (parallelPanelState && Object.keys(parallelPanelState.panels).length > 1) {
+      writeLocalStorage(parallelLayoutStorageKey, serializeProjectPanelState(parallelPanelState));
+      void saveProjectWorkspaceLayout(projectId, parallelPanelState)
+        .then(({ panelRuntime, panelRuntimeErrors }) => {
+          setParallelPanelRuntime(panelRuntime);
+          setParallelPanelRuntimeErrors(panelRuntimeErrors);
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : 'Workspace layout 저장에 실패했습니다.';
+          setParallelPanelRuntimeErrors(Object.fromEntries(
+            Object.keys(parallelPanelState.panels).map((panelId) => [panelId, message]),
+          ));
+        });
+      return;
+    }
+
+    removeLocalStorage(parallelLayoutStorageKey);
+    setParallelPanelRuntime({});
+    setParallelPanelRuntimeErrors({});
+    void saveProjectWorkspaceLayout(projectId, null).catch(() => undefined);
+  }, [parallelLayoutHydrated, parallelLayoutStorageKey, parallelPanelState, projectId, surfaceMode]);
+
+  const handleRepairProjectParallelPanelRuntime = useCallback((panelId: string) => {
+    if (!parallelPanelState?.panels[panelId]) return;
+    void saveProjectWorkspaceLayout(projectId, parallelPanelState, { repairPanelRuntimes: true })
+      .then(({ panelRuntime, panelRuntimeErrors }) => {
+        setParallelPanelRuntime(panelRuntime);
+        setParallelPanelRuntimeErrors(panelRuntimeErrors);
+      })
+      .catch((error) => setParallelPanelRuntimeErrors((current) => ({
+        ...current,
+        [panelId]: error instanceof Error ? error.message : '패널 runtime을 복구하지 못했습니다.',
+      })));
+  }, [parallelPanelState, projectId]);
 
   useEffect(() => {
     if (!contextMenuOpen) return;
@@ -579,6 +2072,10 @@ export function ProjectChatSurface({
   }, [closeWorkspacePanel, workspaceDrawerPhase, workspaceOpen]);
 
   useEffect(() => {
+    if (surfaceMode === 'panel') {
+      setParallelPanelState(null);
+      setParallelSurfaceDropEdge(null);
+    }
     setComposerMode('agent');
     setWorkspaceTab('run');
     setWorkspacePanelImmediate(defaultWorkspaceOpen());
@@ -592,7 +2089,7 @@ export function ProjectChatSurface({
     setCopyFeedback(null);
     setSelectedWorkspaceFile('HomePageClient.tsx');
     setDraftTerminalCommand('npm test -- --run tests/projectListSurface.test.ts');
-  }, [activeChat?.modelReasoningEffort, runtimeAgent, runtimeModelLabel, selectedChatId, setWorkspacePanelImmediate]);
+  }, [activeChat?.modelReasoningEffort, runtimeAgent, runtimeModelLabel, selectedChatId, setWorkspacePanelImmediate, surfaceMode]);
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 1100px)');
@@ -651,7 +2148,7 @@ export function ProjectChatSurface({
       setIsLoadingChats(true);
       setError(null);
       try {
-        const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats`), { cache: 'no-store' });
+        const response = await fetch(withAppBasePath(buildProjectChatCollectionPath(projectId)), { cache: 'no-store' });
         const body = (await response.json().catch(() => ({}))) as { chats?: SessionChat[]; error?: string };
         if (!response.ok) {
           throw new Error(body.error ?? '채팅 목록을 불러오지 못했습니다.');
@@ -672,7 +2169,7 @@ export function ProjectChatSurface({
     return () => {
       cancelled = true;
     };
-  }, [session.id]);
+  }, [projectId]);
 
   useEffect(() => {
     if (!selectedChatId) {
@@ -693,7 +2190,7 @@ export function ProjectChatSurface({
         if (activeChat?.isDefault) {
           params.set('includeUnassigned', 'true');
         }
-        const response = await fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/events?${params.toString()}`), { cache: 'no-store' });
+        const response = await fetch(withAppBasePath(buildProjectRuntimeEventsPath(projectId, params)), { cache: 'no-store' });
         const body = (await response.json().catch(() => ({}))) as { events?: UiEvent[]; error?: string };
         if (!response.ok) {
           throw new Error(body.error ?? '채팅 이벤트를 불러오지 못했습니다.');
@@ -721,7 +2218,7 @@ export function ProjectChatSurface({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeChat?.isDefault, selectedChatId, session.id]);
+  }, [activeChat?.isDefault, selectedChatId, projectId]);
 
   useEffect(() => {
     const latestLifecycle = readLatestProjectRunLifecycle(events);
@@ -759,10 +2256,23 @@ export function ProjectChatSurface({
     };
   }, [projectRunIndicator?.startedAt]);
 
+  useEffect(() => {
+    if (!parallelPanelState) return;
+    const chatIds = new Set(chats.map((chat) => chat.id));
+    setParallelPanelState((current) => (
+      current
+        ? (() => {
+            const pruned = pruneProjectPanelStateByChatIds(current, chatIds);
+            return pruned && Object.keys(pruned.panels).length > 1 ? pruned : null;
+          })()
+        : current
+    ));
+  }, [chats, parallelPanelState]);
+
   const createChat = async (): Promise<SessionChat | null> => {
     setError(null);
     const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);
-    const createdChat = await createProjectSessionChat(session.id, {
+    const createdChat = await createProjectChat(projectId, {
       title: '새 채팅',
       agent: selectedProvider,
       model: projectModelInput,
@@ -802,7 +2312,7 @@ export function ProjectChatSurface({
       const firstPromptTitle = shouldAutoRenameFromFirstPrompt
         ? buildChatTitleFromFirstPrompt(text)
         : null;
-      const endpoint = withAppBasePath(isTerminalMode ? `/api/runtime/sessions/${encodeURIComponent(session.id)}/terminal` : `/api/runtime/sessions/${encodeURIComponent(session.id)}/events`);
+      const endpoint = withAppBasePath(isTerminalMode ? buildProjectRuntimeTerminalPath(projectId) : buildProjectRuntimeEventsPath(projectId));
       const payload = isTerminalMode ? {
         chatId: chat.id,
         command: text,
@@ -852,7 +2362,7 @@ export function ProjectChatSurface({
             }
           : item
       )));
-      void fetch(withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(session.id)}/chats/${encodeURIComponent(chat.id)}`), {
+      void fetch(withAppBasePath(buildProjectChatDetailPath(projectId, chat.id)), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -877,7 +2387,7 @@ export function ProjectChatSurface({
     if (!projectRunActive || !selectedChatId) return;
     setIsAborting(true);
     try {
-      await abortActiveChat({ sessionId: session.id, chatId: activeChat?.id ?? selectedChatId });
+      await abortProjectChat({ projectId, chatId: activeChat?.id ?? selectedChatId });
       showTransientFeedback('Stop 요청을 보냈습니다');
     } catch (abortError) {
       setError(abortError instanceof Error ? abortError.message : '에이전트 실행 중단에 실패했습니다.');
@@ -885,7 +2395,7 @@ export function ProjectChatSurface({
       setIsAborting(false);
       setIsSubmitting(false);
     }
-  }, [activeChat?.id, isAborting, projectRunActive, selectedChatId, session.id]);
+  }, [activeChat?.id, isAborting, projectId, projectRunActive, selectedChatId]);
 
   // -------------------------------------------------------------------------
   // Density-aware action rendering
@@ -1067,6 +2577,9 @@ export function ProjectChatSurface({
                 key={chat.id}
                 type="button"
                 className="pc-chat-card"
+                draggable
+                onDragStart={(event) => writeProjectChatDragPayload(event, projectId, chat)}
+                onDragEnd={clearParallelProjectDropState}
                 onClick={() => onChatOpen(chat.id)}
               >
                 <span className="pc-chat-card__head">
@@ -1116,11 +2629,53 @@ export function ProjectChatSurface({
       className="pc-proto"
       data-project-chat-screen
       data-mode={composerMode}
+      data-surface={surfaceMode}
       data-workspace={workspaceDrawerPhase === 'closing' ? 'closing' : workspaceOpen ? 'open' : 'closed'}
       data-workspace-ready={workspaceLayoutReady ? 'true' : 'false'}
       data-ws-tab={workspaceTab}
       data-preview={previewState}
+      onDragOver={handleProjectParallelSurfaceDragOver}
+      onDragLeave={handleProjectParallelSurfaceDragLeave}
+      onDrop={handleProjectParallelSurfaceDrop}
     >
+      {surfaceMode === 'full' && !parallelPanelState && parallelSurfaceDropEdge && (
+        <ProjectParallelDropOverlay edge={parallelSurfaceDropEdge} />
+      )}
+      {surfaceMode === 'full' && parallelPanelState ? (
+        <div className="pc-parallel">
+          <div className="pc-parallel__bar">
+            <div>
+              <span className="pc-parallel__eyebrow">Parallel workspace</span>
+              <strong>{Object.keys(parallelPanelState.panels).length} chats</strong>
+            </div>
+            <div className="pc-parallel__bar-actions">
+              <button type="button" className="pc-parallel__bar-btn" onClick={handleCloseProjectParallelChats}>
+                단일 채팅으로 돌아가기
+              </button>
+            </div>
+          </div>
+          <div className="pc-parallel__frames">
+            <ProjectParallelPanelTree
+              chats={chats}
+              modelLabel={modelLabel}
+              node={parallelPanelState.layout}
+              onClosePanel={handleCloseProjectParallelPanel}
+              onPanelDragEnd={handleProjectParallelPanelDragEnd}
+              onPanelDragStart={handleProjectParallelPanelDragStart}
+              onPanelDrop={handleProjectParallelPanelDrop}
+              onRepairPanelRuntime={handleRepairProjectParallelPanelRuntime}
+              onResize={handleProjectParallelResize}
+              panelRuntimeErrors={parallelPanelRuntimeErrors}
+              panelRuntime={parallelPanelRuntime}
+              panelState={parallelPanelState}
+              recentPreview={recentPreview}
+              session={session}
+              tokenLabel={tokenLabel}
+            />
+          </div>
+        </div>
+      ) : (
+      <>
       <div className="shell">
         <main className="shell__main">
           <header className="ch">
@@ -1702,6 +3257,8 @@ export function ProjectChatSurface({
           </button>
         </div>
       </div>
+      </>
+      )}
       {copyFeedback && <div className="pc-toast" data-copy-feedback role="status">{copyFeedback}</div>}
     </div>
   );

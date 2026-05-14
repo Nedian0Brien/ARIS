@@ -43,6 +43,23 @@ export function mapWorkspacePathToHost(input: string): string {
   return normalized;
 }
 
+function normalizeWorkspaceVisiblePath(input?: string | null): string {
+  const raw = typeof input === 'string' ? input.replace(/\\/g, '/').trim() : '';
+  if (!raw || raw === '/') {
+    return WORKSPACE_ROOT;
+  }
+
+  if (path.isAbsolute(raw)) {
+    const normalized = stripTrailingSlashes(path.posix.normalize(raw));
+    if (normalized === WORKSPACE_ROOT || normalized.startsWith(`${WORKSPACE_ROOT}/`)) {
+      return normalized;
+    }
+    throw new Error(`패널 파일 조회는 ${WORKSPACE_ROOT} 경로만 사용할 수 있습니다.`);
+  }
+
+  return stripTrailingSlashes(path.posix.normalize(path.posix.join(WORKSPACE_ROOT, raw)));
+}
+
 export function normalizeVisiblePath(input?: string | null): string {
   const raw = typeof input === 'string' ? input.replace(/\\/g, '/').trim() : '';
   if (!raw || raw === '/') {
@@ -76,8 +93,36 @@ export function assertAllowedPath(input: string): string {
   throw new Error(`허용되지 않은 경로입니다: ${normalized}`);
 }
 
-export function resolveFsPath(input?: string | null): { visiblePath: string; runtimePath: string } {
+function assertInsideRoot(input: string, root: string): string {
+  const normalized = normalizeAbsolutePath(input);
+  const normalizedRoot = normalizeAbsolutePath(root);
+  if (normalized === normalizedRoot || normalized.startsWith(`${normalizedRoot}/`)) {
+    return normalized;
+  }
+  throw new Error(`허용되지 않은 패널 경로입니다: ${normalized}`);
+}
+
+function mapWorkspacePathToExecutionRoot(visiblePath: string, executionRoot: string): string {
+  const normalizedRoot = assertAllowedPath(executionRoot);
+  const normalizedVisiblePath = normalizeWorkspaceVisiblePath(visiblePath);
+  if (normalizedVisiblePath === WORKSPACE_ROOT) {
+    return normalizedRoot;
+  }
+  const relativePath = normalizedVisiblePath.slice(`${WORKSPACE_ROOT}/`.length);
+  return assertInsideRoot(path.join(normalizedRoot, relativePath), normalizedRoot);
+}
+
+export function resolveFsPath(
+  input?: string | null,
+  options: { executionRoot?: string | null } = {},
+): { visiblePath: string; runtimePath: string; rootPath: string } {
+  if (options.executionRoot?.trim()) {
+    const visiblePath = normalizeWorkspaceVisiblePath(input);
+    const runtimePath = mapWorkspacePathToExecutionRoot(visiblePath, options.executionRoot);
+    return { visiblePath, runtimePath, rootPath: WORKSPACE_ROOT };
+  }
+
   const visiblePath = normalizeVisiblePath(input);
   const runtimePath = assertAllowedPath(visiblePath);
-  return { visiblePath, runtimePath };
+  return { visiblePath, runtimePath, rootPath: getDefaultBrowseRoot() };
 }

@@ -55,16 +55,20 @@ function dedupeSessionsByWorkspacePath(sessions: SessionSummary[]): SessionSumma
   const byPath = new Map<string, SessionSummary>();
   for (const session of sessions) {
     const path = normalizeWorkspacePath(session.projectName);
-    const existing = byPath.get(path);
+    const branch = typeof session.branch === 'string' && session.branch.trim()
+      ? session.branch.trim()
+      : '';
+    const dedupeKey = branch ? `${path}#${branch}` : path;
+    const existing = byPath.get(dedupeKey);
     if (!existing) {
-      byPath.set(path, session);
+      byPath.set(dedupeKey, session);
       continue;
     }
 
     const existingAt = toActivityEpoch(existing.lastActivityAt);
     const candidateAt = toActivityEpoch(session.lastActivityAt);
     if (candidateAt > existingAt || (candidateAt === existingAt && session.id > existing.id)) {
-      byPath.set(path, session);
+      byPath.set(dedupeKey, session);
     }
   }
   return [...byPath.values()];
@@ -667,6 +671,24 @@ export async function createSession(input: {
   return normalizeSessions([session])[0];
 }
 
+export async function getSessionDetail(sessionId: string, userId?: string): Promise<SessionDetail> {
+  const raw = await fetchHappy(`/v1/sessions/${encodeURIComponent(sessionId)}`);
+  const obj = asObject(raw);
+  const session = obj?.session ?? raw;
+  const sessionDetail = normalizeSessionDetail(session);
+
+  if (userId) {
+    const workspace = await getWorkspaceById(userId, sessionId);
+    if (workspace) {
+      sessionDetail.alias = workspace.alias || null;
+      sessionDetail.isPinned = workspace.isPinned;
+      sessionDetail.lastReadAt = workspace.lastReadAt?.toISOString() ?? null;
+    }
+  }
+
+  return sessionDetail;
+}
+
 export async function updateSessionApprovalPolicy(
   sessionId: string,
   approvalPolicy: ApprovalPolicy,
@@ -822,6 +844,7 @@ export async function appendSessionMessage(input: {
 
 export async function submitUserPrompt(input: {
   sessionId: string;
+  runtimeSessionId?: string;
   title?: string;
   text: string;
   meta?: Record<string, unknown>;
@@ -834,6 +857,7 @@ export async function submitUserPrompt(input: {
         method: 'POST',
         body: JSON.stringify({
           sessionId: input.sessionId,
+          ...(input.runtimeSessionId ? { runtimeSessionId: input.runtimeSessionId } : {}),
           type: 'message',
           title: input.title,
           text: input.text,
@@ -862,6 +886,7 @@ export async function submitUserPrompt(input: {
 
 export async function runChatTerminalCommand(input: {
   sessionId: string;
+  runtimeSessionId?: string;
   chatId: string;
   command: string;
 }): Promise<UiEvent[]> {
@@ -869,6 +894,7 @@ export async function runChatTerminalCommand(input: {
     method: 'POST',
     body: JSON.stringify({
       sessionId: input.sessionId,
+      ...(input.runtimeSessionId ? { runtimeSessionId: input.runtimeSessionId } : {}),
       command: input.command,
     }),
   });

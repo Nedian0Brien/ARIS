@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { abortActiveChat } from '@/lib/runtime/abortChat';
+import { abortActiveChat, abortProjectChat } from '@/lib/runtime/abortChat';
 
 describe('abortActiveChat', () => {
   const originalFetch = globalThis.fetch;
@@ -29,6 +29,19 @@ describe('abortActiveChat', () => {
     expect(init.headers).toEqual({ 'Content-Type': 'application/json' });
     expect(JSON.parse(init.body as string)).toEqual({ action: 'abort', chatId: 'chat-9' });
     expect(result).toEqual({ accepted: true, message: 'ok' });
+  });
+
+  it('POSTs project aborts through the project runtime adapter', async () => {
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ result: { accepted: true, message: 'ok' } }),
+    });
+
+    await abortProjectChat({ projectId: 'project/a b', chatId: 'chat-1' });
+
+    const [url, init] = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(url).toBe('/api/runtime/sessions/project%2Fa%20b/actions');
+    expect(JSON.parse(init.body as string)).toEqual({ action: 'abort', chatId: 'chat-1' });
   });
 
   it('omits chatId when blank', async () => {

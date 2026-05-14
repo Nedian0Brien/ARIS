@@ -14,7 +14,7 @@ import type {
 } from './types.js';
 import { RuntimeCore } from './runtime/runtimeCore.js';
 import { PrismaRuntimeStore } from './runtime/prismaStore.js';
-import { computeWorktreePath, ensureWorktree } from './runtime/worktreeManager.js';
+import { computeWorktreePath, ensureWorktree, removeWorktree } from './runtime/worktreeManager.js';
 
 type RuntimeBackend = 'mock' | 'prisma';
 const execAsync = promisify(exec);
@@ -52,6 +52,7 @@ type AppendMessageInput = {
 
 type AppendChatEventInput = {
   sessionId: string;
+  runtimeSessionId?: string;
   runId?: string;
   type: string;
   title?: string;
@@ -61,6 +62,7 @@ type AppendChatEventInput = {
 
 type RunTerminalCommandInput = {
   sessionId: string;
+  runtimeSessionId?: string;
   command: string;
 };
 
@@ -601,15 +603,11 @@ export class RuntimeStore {
   }
 
   async createSession(input: CreateSessionInput) {
-    const session = await this.delegate.createSession(input);
-
     if (input.branch) {
-      ensureWorktree(session.metadata.path, input.branch).catch((error) => {
-        process.stderr.write(
-          `[worktree] failed to ensure worktree for branch "${input.branch}": ${error instanceof Error ? error.message : String(error)}\n`,
-        );
-      });
+      await ensureWorktree(input.path, input.branch);
     }
+
+    const session = await this.delegate.createSession(input);
 
     this.emitRealtimeChannel({
       type: 'session.created',
@@ -705,11 +703,22 @@ export class RuntimeStore {
       source: 'mutation',
     });
     if (this.runtimeExecutor) {
-      await this.runtimeExecutor.triggerPersistedUserMessage(promptInput.sessionId, {
+      const runtimeSessionId = typeof input.runtimeSessionId === 'string' && input.runtimeSessionId.trim().length > 0
+        ? input.runtimeSessionId.trim()
+        : promptInput.sessionId;
+      await this.runtimeExecutor.triggerPersistedUserMessage(runtimeSessionId, {
         type: promptInput.type,
         title: promptInput.title,
         text: promptInput.text,
-        meta: promptInput.meta,
+        meta: {
+          ...(promptInput.meta ?? {}),
+          ...(runtimeSessionId !== promptInput.sessionId
+            ? {
+                runtimeSessionId,
+                runtimePersistenceSessionId: promptInput.sessionId,
+              }
+            : {}),
+        },
       });
     }
     return created;
@@ -721,18 +730,29 @@ export class RuntimeStore {
       throw new Error('COMMAND_REQUIRED');
     }
 
-    const session = await this.delegate.getSession(input.sessionId);
-    if (!session) {
+    const persistenceSession = await this.delegate.getSession(input.sessionId);
+    if (!persistenceSession) {
       throw new Error('SESSION_NOT_FOUND');
+    }
+    const runtimeSessionId = typeof input.runtimeSessionId === 'string' && input.runtimeSessionId.trim().length > 0
+      ? input.runtimeSessionId.trim()
+      : input.sessionId;
+    const executionSession = runtimeSessionId === input.sessionId
+      ? persistenceSession
+      : await this.delegate.getSession(runtimeSessionId);
+    if (!executionSession) {
+      throw new Error('RUNTIME_SESSION_NOT_FOUND');
     }
 
     const startedAt = new Date().toISOString();
     let stdout = '';
     let stderr = '';
     let exitCode = 0;
+    let cwd = '';
     try {
+      cwd = this.resolveExecutionCwd(executionSession.metadata.path, executionSession.metadata.branch);
       const result = await execAsync(command, {
-        cwd: session.metadata.path,
+        cwd,
         timeout: TERMINAL_COMMAND_TIMEOUT_MS,
         maxBuffer: TERMINAL_COMMAND_MAX_BUFFER,
         shell: '/bin/bash',
@@ -764,6 +784,8 @@ export class RuntimeStore {
         completedAt: new Date().toISOString(),
         exitCode,
         command,
+        execCwd: cwd,
+        ...(runtimeSessionId !== input.sessionId ? { runtimeSessionId } : {}),
       },
     });
   }
@@ -779,6 +801,9 @@ export class RuntimeStore {
   }
 
   async applySessionAction(sessionId: string, action: SessionAction, chatId?: string) {
+    const sessionForCleanup = action === 'kill'
+      ? await this.delegate.getSession(sessionId).catch(() => null)
+      : null;
     if (this.runtimeExecutor) {
       if (action === 'retry' || action === 'resume') {
         const result = await this.delegate.applySessionAction(sessionId, action, chatId);
@@ -794,6 +819,7 @@ export class RuntimeStore {
       if (action === 'kill') {
         await this.runtimeExecutor.applySessionAction(sessionId, 'abort');
         const result = await this.delegate.applySessionAction(sessionId, action, chatId);
+        await this.cleanupKilledSessionWorktree(sessionForCleanup);
         this.emitRealtimeChannel({ type: 'session.action', sessionId, ...(chatId ? { chatId } : {}), action });
         return result;
       }
@@ -803,8 +829,22 @@ export class RuntimeStore {
       return result;
     }
     const result = await this.delegate.applySessionAction(sessionId, action, chatId);
+    if (action === 'kill') {
+      await this.cleanupKilledSessionWorktree(sessionForCleanup);
+    }
     this.emitRealtimeChannel({ type: 'session.action', sessionId, ...(chatId ? { chatId } : {}), action });
     return result;
+  }
+
+  private async cleanupKilledSessionWorktree(session: RuntimeSession | null): Promise<void> {
+    const branch = typeof session?.metadata.branch === 'string' && session.metadata.branch.trim().length > 0
+      ? session.metadata.branch.trim()
+      : null;
+    if (!session || !branch) {
+      return;
+    }
+    const projectPath = this.resolveExecutionCwd(session.metadata.path);
+    await removeWorktree(projectPath, branch).catch(() => undefined);
   }
 
   async isSessionRunning(sessionId: string, chatId?: string) {
@@ -951,13 +991,13 @@ export class RuntimeStore {
   }
 
   resolveExecutionCwd(cwdHint?: string, branch?: string): string {
-    if (branch && cwdHint) {
-      return computeWorktreePath(cwdHint, branch);
-    }
-    if ('resolveExecutionCwd' in this.delegate && typeof this.delegate.resolveExecutionCwd === 'function') {
-      return (this.delegate as any).resolveExecutionCwd(cwdHint);
-    }
-    return cwdHint || '';
+    const basePath = (() => {
+      if ('resolveExecutionCwd' in this.delegate && typeof this.delegate.resolveExecutionCwd === 'function') {
+        return (this.delegate as any).resolveExecutionCwd(cwdHint);
+      }
+      return cwdHint || '';
+    })();
+    return branch ? computeWorktreePath(basePath, branch) : basePath;
   }
 }
 

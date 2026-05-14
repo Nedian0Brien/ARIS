@@ -76,7 +76,7 @@ export type ProviderCommandExecutor<TCommand extends ProviderLaunchCommand = Pro
 }) => Promise<ProviderCliResult>;
 
 export type ProviderRuntimeSession<TFlavor extends ProviderRuntimeFlavor = ProviderRuntimeFlavor> = Pick<RuntimeSession, 'id'> & {
-  metadata: Pick<RuntimeSession['metadata'], 'path' | 'approvalPolicy'> & {
+  metadata: Pick<RuntimeSession['metadata'], 'path' | 'approvalPolicy' | 'branch'> & {
     flavor: TFlavor;
     model?: string;
     mode?: string;

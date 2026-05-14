@@ -1019,6 +1019,8 @@ export function normalizeSessions(raw: unknown): SessionSummary[] {
     const state = asRecord(rec?.state);
     const status = asString(state?.status, asString(rec?.status, 'unknown'));
     const model = asNullableString(metadata?.model ?? rec?.model);
+    const branch = asNullableString(metadata?.branch ?? rec?.branch);
+    const runtimeModel = asNullableString(metadata?.runtimeModel ?? rec?.runtimeModel);
 
     return {
       id: asString(rec?.id ?? rec?.sessionId, `unknown-${idx}`),
@@ -1028,7 +1030,12 @@ export function normalizeSessions(raw: unknown): SessionSummary[] {
       ...(model ? { model } : {}),
       riskScore: asNumber(rec?.riskScore, status === 'error' ? 90 : 20),
       projectName: asString(metadata?.path ?? rec?.projectName, 'unknown-project'),
+      ...(branch ? { branch } : {}),
       approvalPolicy: normalizeApprovalPolicy(asString(metadata?.approvalPolicy ?? rec?.approvalPolicy, 'on-request')),
+      metadata: {
+        ...(runtimeModel ? { runtimeModel } : {}),
+        ...(branch ? { branch } : {}),
+      },
     };
   });
 }
@@ -1038,12 +1045,15 @@ export function normalizeSessionDetail(raw: unknown): SessionDetail {
   const metadata = asRecord(rec?.metadata);
   const state = asRecord(rec?.state);
   const model = asNullableString(metadata?.model ?? rec?.model);
+  const branch = asNullableString(metadata?.branch ?? rec?.branch);
 
   return {
     id: asString(rec?.id ?? rec?.sessionId, 'unknown'),
     agent: normalizeAgent(asString(metadata?.flavor ?? rec?.flavor, 'unknown')),
     status: normalizeStatus(asString(state?.status ?? rec?.status, 'unknown')),
     projectName: asString(metadata?.path ?? rec?.projectName, 'unknown-project'),
+    ...(branch ? { branch } : {}),
+    hostPath: asNullableString(rec?.hostPath),
     ...(model ? { model } : {}),
     lastActivityAt: asNullableString(rec?.updatedAt ?? rec?.lastActivityAt),
     approvalPolicy: normalizeApprovalPolicy(asString(metadata?.approvalPolicy ?? rec?.approvalPolicy, 'on-request')),

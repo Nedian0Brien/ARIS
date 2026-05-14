@@ -12,17 +12,21 @@ export type SessionSummary = {
   lastReadAt?: string | null;
   riskScore: number;
   projectName: string;
+  branch?: string | null;
   approvalPolicy?: ApprovalPolicy;
   alias?: string | null;
   isPinned?: boolean;
   metadata?: {
     runtimeModel?: string;
+    branch?: string | null;
   };
   // 채팅 집계 (API route에서 주입, happy 서버에서 오지 않음)
   chatAgentCounts?: { claude: number; codex: number; gemini: number; unknown: number };
   totalChats?: number;
   recentChats?: SessionChat[];
 };
+
+export type ProjectSummary = SessionSummary;
 
 export type SessionChat = {
   id: string;
@@ -46,6 +50,12 @@ export type SessionChat = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type Chat = SessionChat & {
+  projectId: string;
+};
+
+export type ProjectChat = Chat;
 
 export type ChatImageAttachment = {
   assetId: string;
@@ -124,6 +134,8 @@ export type SessionDetail = {
   agent: SessionSummary['agent'];
   status: SessionStatus;
   projectName: string;
+  branch?: string | null;
+  hostPath?: string | null;
   model?: string | null;
   lastActivityAt: string | null;
   lastReadAt?: string | null;

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { requireApiUser } from '@/lib/auth/guard';
-import { resolveFsPath } from '@/lib/fs/pathResolver';
+import { resolveFsRequestPath } from '@/lib/fs/requestPath';
 
 export async function GET(request: NextRequest) {
   const auth = await requireApiUser(request);
@@ -24,7 +24,11 @@ export async function GET(request: NextRequest) {
 
   let fromRuntimePath: string;
   try {
-    const resolved = resolveFsPath(fromFile);
+    const resolved = await resolveFsRequestPath({
+      request,
+      userId: auth.user.id,
+      requestedPath: fromFile,
+    });
     fromRuntimePath = resolved.runtimePath;
   } catch {
     return NextResponse.json({ resolvedPath: null });

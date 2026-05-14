@@ -21,6 +21,11 @@ export type WorkspaceFilesApi = {
   refresh: () => void;
 };
 
+type WorkspaceFilesOptions = {
+  projectId?: string | null;
+  workspacePanelId?: string | null;
+};
+
 type ListResponse = {
   currentPath?: string;
   parentPath?: string | null;
@@ -42,7 +47,20 @@ function normalizeItem(raw: unknown): WorkspaceFileItem | null {
   };
 }
 
-export function useWorkspaceFiles(initialPath: string): WorkspaceFilesApi {
+function appendWorkspacePanelParams(url: URLSearchParams, options: WorkspaceFilesOptions): void {
+  const projectId = typeof options.projectId === 'string' ? options.projectId.trim() : '';
+  if (!projectId) return;
+  url.set('projectId', projectId);
+  const workspacePanelId = typeof options.workspacePanelId === 'string' ? options.workspacePanelId.trim() : '';
+  if (workspacePanelId) {
+    url.set('workspacePanelId', workspacePanelId);
+  }
+}
+
+export function useWorkspaceFiles(
+  initialPath: string,
+  options: WorkspaceFilesOptions = {},
+): WorkspaceFilesApi {
   const [currentPath, setCurrentPath] = useState(initialPath);
   const [parentPath, setParentPath] = useState<string | null>(null);
   const [items, setItems] = useState<WorkspaceFileItem[]>([]);
@@ -58,8 +76,10 @@ export function useWorkspaceFiles(initialPath: string): WorkspaceFilesApi {
 
     (async () => {
       try {
-        const url = `/api/fs/list?path=${encodeURIComponent(currentPath)}`;
-        const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+        const params = new URLSearchParams();
+        params.set('path', currentPath);
+        appendWorkspacePanelParams(params, options);
+        const response = await fetch(`/api/fs/list?${params.toString()}`, { cache: 'no-store', signal: controller.signal });
         const body = (await response.json().catch(() => ({}))) as ListResponse;
         if (cancelled) return;
 
@@ -89,7 +109,7 @@ export function useWorkspaceFiles(initialPath: string): WorkspaceFilesApi {
       cancelled = true;
       controller.abort();
     };
-  }, [currentPath, refreshKey]);
+  }, [currentPath, options.projectId, options.workspacePanelId, refreshKey]);
 
   const cdInto = useCallback((item: WorkspaceFileItem) => {
     if (item.isDirectory) {
