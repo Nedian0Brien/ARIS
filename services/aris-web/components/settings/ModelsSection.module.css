@@ -93,13 +93,14 @@
 
 .groupHead {
   display: flex;
-  align-items: flex-start;
-  gap: var(--sp-12);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-4);
   margin-bottom: var(--sp-8);
+  min-width: 0;
 }
 
 .groupHeadText {
-  flex: 1;
   min-width: 0;
 }
 
@@ -112,6 +113,8 @@
   text-transform: uppercase;
   color: var(--text-tertiary);
   margin-bottom: var(--sp-2);
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .groupTitle {
@@ -120,6 +123,8 @@
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.01em;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .groupSubtitle {
@@ -128,12 +133,16 @@
   line-height: 1.55;
   color: var(--text-secondary);
   max-width: 70ch;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .groupTrailing {
   display: flex;
   align-items: center;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  min-width: 0;
 }
 
 /* ── Row list ── home-feed-row scaled up */
@@ -624,6 +633,22 @@
   to { transform: rotate(360deg); }
 }
 
+/* ── Toolbar: always wrap-friendly + search grows to fill row ── */
+.toolbar {
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.searchWrap {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.searchInput {
+  width: 100%;
+  min-width: 0;
+}
+
 /* ── Tablet ── */
 @media (max-width: 920px) {
   .group {
@@ -632,26 +657,6 @@
 
   .providerStrip {
     padding: var(--sp-6) var(--sp-12);
-  }
-
-  .groupHead {
-    flex-direction: column;
-    gap: var(--sp-4);
-  }
-
-  .groupTrailing {
-    width: 100%;
-  }
-
-  .toolbar {
-    justify-content: flex-start;
-    width: 100%;
-  }
-
-  .searchInput {
-    flex: 1;
-    width: auto;
-    min-width: 0;
   }
 }
 
