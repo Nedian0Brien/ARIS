@@ -50,6 +50,7 @@ import {
 } from 'lucide-react';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { SidebarFooterMenu } from '@/components/layout/SidebarFooterMenu';
+import { SettingsSurface } from '@/components/settings/SettingsSurface';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import { ProviderLogo, type ProviderLogoProvider } from '@/components/ui/ProviderLogo';
 import { isChatEmpty, selectRecentChats, selectRecentProjects, type HomeRecentChat } from './homeProjects';
@@ -2432,7 +2433,7 @@ export default function HomePageWrapper({
       );
     }
     if (activeTab === 'files') return <FilesSurface browserRootPath={browserRootPath} />;
-    if (activeTab === 'settings') return <div data-test="settings-placeholder">Settings (placeholder — Task 2.4 will replace)</div>;
+    if (activeTab === 'settings') return <SettingsSurface />;
     return <HomeSurface metrics={metrics} onProjectOpen={handleProjectOpen} sessions={sessions} user={user} />;
   })();
 
