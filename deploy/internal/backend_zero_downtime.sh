@@ -81,6 +81,12 @@ prepare_pm2_runtime_dir() {
   ln -sfn "${SHARED_REPO_ROOT}/services/aris-backend/node_modules" "${runtime_dir}/node_modules"
 }
 
+if [[ "$runtime_backend" == "prisma" ]]; then
+  export DATABASE_URL="$(read_env_value "$ENV_FILE" "DATABASE_URL")"
+  echo "[deploy:backend-zd] generating backend Prisma client"
+  (cd "$BACKEND_DIR" && PATH="$(dirname "$(which node)"):$PATH" npm exec prisma generate)
+fi
+
 echo "[deploy:backend-zd] building backend"
 PATH="$(dirname "$(which node)"):$PATH" npm --prefix "$BACKEND_DIR" run build
 

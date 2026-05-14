@@ -25,7 +25,7 @@ model Session {
 
 model SessionChat {
   id                   String   @id
-  sessionId            String
+  sessionId            String   @map("projectId")
   userId               String
   agent                String
   title                String
@@ -49,8 +49,9 @@ model SessionChat {
   runs   SessionRun[]
   events SessionChatEvent[]
 
-  @@index([sessionId, userId, isPinned, lastActivityAt])
-  @@index([userId, updatedAt])
+  @@index([sessionId, userId, isPinned, lastActivityAt], map: "Chat_projectId_userId_isPinned_lastActivityAt_idx")
+  @@index([userId, updatedAt], map: "Chat_userId_updatedAt_idx")
+  @@map("Chat")
 }
 
 model SessionRun {

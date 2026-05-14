@@ -209,7 +209,7 @@ function logRuntimeEventsWarning(message, details = {}) {
 }
 
 async function getStoredLocalPreviewPanel(userId, sessionId, panelId) {
-  const workspace = await prisma.workspace.findFirst({
+  const project = await prisma.project.findFirst({
     where: {
       id: sessionId,
       userId,
@@ -219,7 +219,7 @@ async function getStoredLocalPreviewPanel(userId, sessionId, panelId) {
     },
   });
 
-  const layout = workspace?.panelLayoutJson;
+  const layout = project?.panelLayoutJson;
   const panels = Array.isArray(layout?.panels) ? layout.panels : [];
   const panel = panels.find((candidate) => candidate?.id === panelId && candidate?.type === 'preview');
   if (!panel) {
@@ -238,14 +238,14 @@ async function getStoredLocalPreviewPanel(userId, sessionId, panelId) {
 }
 
 async function canAccessWorkspace(userId, sessionId) {
-  const workspace = await prisma.workspace.findFirst({
+  const project = await prisma.project.findFirst({
     where: {
       id: sessionId,
       userId,
     },
     select: { id: true },
   });
-  return Boolean(workspace);
+  return Boolean(project);
 }
 
 async function resolveLocalPreviewTarget(userId, reqUrl) {
