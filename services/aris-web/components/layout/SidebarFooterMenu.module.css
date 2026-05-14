@@ -1,24 +1,66 @@
 .root { position: relative; }
 
-.trigger {
+/* ── Footer row: account trigger + small context trigger ─────── */
+.row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+}
+
+.accountTrigger {
+  flex: 1 1 auto;
   display: grid;
-  grid-template-columns: 28px 1fr 14px;
+  grid-template-columns: 28px 1fr;
   gap: 10px;
   align-items: center;
-  width: 100%;
-  padding: 8px 10px;
+  min-width: 0;
+  padding: 6px 8px;
   border-radius: 10px;
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-primary);
   cursor: pointer;
+  text-align: left;
 }
-.trigger:hover { background: var(--surface-hover); }
-.trigger[aria-expanded='true'] {
+.accountTrigger:hover { background: var(--surface-hover); }
+.accountTrigger:focus-visible {
+  outline: 2px solid var(--primary, #2f6bff);
+  outline-offset: -2px;
+}
+.accountTrigger[aria-expanded='true'] {
   background: var(--surface-hover);
   border-color: var(--line);
 }
 
+.contextTrigger {
+  flex: 0 0 32px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  align-self: center;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.contextTrigger:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.contextTrigger:focus-visible {
+  outline: 2px solid var(--primary, #2f6bff);
+  outline-offset: -2px;
+}
+.contextTrigger[aria-expanded='true'] {
+  background: var(--surface-hover);
+  border-color: var(--line);
+  color: var(--text-primary);
+}
+
+/* ── Account trigger interior ──────────────────────────────── */
 .avatar {
   width: 28px;
   height: 28px;
@@ -58,14 +100,10 @@
   color: var(--text-tertiary);
   font-family: var(--font-mono, ui-monospace, monospace);
 }
-.chev {
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-}
 
+/* ── Shared popover panel ──────────────────────────────────── */
 .panel {
   position: absolute;
-  left: 8px;
   bottom: calc(100% + 6px);
   min-width: 232px;
   background: var(--surface-elevated, var(--surface));
@@ -79,7 +117,13 @@
   flex-direction: column;
   gap: 2px;
 }
+.accountPanel { left: 8px; }
+.contextPanel {
+  right: 8px;
+  min-width: 200px;
+}
 
+/* ── Menu items / sections ─────────────────────────────────── */
 .item {
   display: inline-flex;
   align-items: center;
@@ -102,6 +146,12 @@
   outline-offset: -2px;
 }
 
+.divider {
+  height: 1px;
+  background: var(--line);
+  margin: 4px 6px;
+}
+
 .section {
   padding: 8px 4px 4px;
   margin-top: 4px;
@@ -114,46 +164,100 @@
   text-transform: uppercase;
   color: var(--text-tertiary);
   margin: 0 0 6px;
-  padding: 0 6px;
+  padding: 0 8px;
 }
 
+/* ── Account list row (current account read-only) ──────────── */
+.accountRow {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--surface-hover);
+}
+.avatarSmall {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #ffb74d, #f57c00);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+.accountInfo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.accountEmail {
+  font-size: var(--text-xs, 12px);
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.accountRole {
+  font-size: var(--text-2xs, 11px);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.accountCheck {
+  color: var(--success-fg, #16a34a);
+  flex-shrink: 0;
+}
+
+/* ── Theme: vertical radio list ────────────────────────────── */
+.themeColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .themeRow {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-}
-.themeChip {
-  display: inline-flex;
-  flex-direction: column;
+  grid-template-columns: 18px 1fr 14px;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 8px 4px;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
   border-radius: 8px;
-  border: 1px solid var(--line);
   background: transparent;
+  border: 1px solid transparent;
   color: var(--text-primary);
   font: inherit;
-  font-size: var(--text-2xs, 11px);
+  font-size: var(--text-sm, 13px);
   line-height: 1;
-  min-height: 52px;
+  text-align: left;
   cursor: pointer;
 }
-.themeChip:hover { background: var(--surface-hover); }
-.themeChip:focus-visible {
+.themeRow:hover { background: var(--surface-hover); }
+.themeRow:focus-visible {
   outline: 2px solid var(--primary, #2f6bff);
   outline-offset: -2px;
 }
-.themeChipActive {
+.themeRowActive {
   background: var(--surface-active, var(--surface-hover));
   border-color: var(--line-strong, var(--line));
-  color: var(--text-primary);
+}
+.themeIcon { color: var(--text-tertiary); }
+.themeRowActive .themeIcon { color: var(--text-primary); }
+.themeLabel {
+  letter-spacing: -0.005em;
+}
+.themeCheck {
+  color: var(--primary, #2f6bff);
+  justify-self: end;
 }
 
+/* ── Sign out ──────────────────────────────────────────────── */
 .signoutForm {
-  margin: 4px 0 0;
-  padding-top: 4px;
-  border-top: 1px solid var(--line);
+  margin: 0;
 }
 .signout { color: var(--danger-fg, #ef4444); }
 .signout:hover { background: var(--danger-bg, rgba(239, 68, 68, 0.08)); }

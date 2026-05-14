@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { LogOut, Settings, Sun, Moon, Monitor, MoreHorizontal } from 'lucide-react';
+import { Check, LogOut, MoreHorizontal, Monitor, Moon, Settings, Sun, UserCog } from 'lucide-react';
 import { withAppBasePath } from '@/lib/routing/appPath';
 import type { ThemeMode } from '@/lib/theme/clientTheme';
 import styles from './SidebarFooterMenu.module.css';
@@ -13,6 +13,8 @@ interface Props {
   onOpenSettings: () => void;
 }
 
+type ActivePopover = 'account' | 'context' | null;
+
 const THEME_ITEMS: Array<{ mode: ThemeMode; label: string; Icon: typeof Sun }> = [
   { mode: 'light', label: '라이트', Icon: Sun },
   { mode: 'dark', label: '다크', Icon: Moon },
@@ -20,53 +22,113 @@ const THEME_ITEMS: Array<{ mode: ThemeMode; label: string; Icon: typeof Sun }> =
 ];
 
 export function SidebarFooterMenu({ user, themeMode, onThemeChange, onOpenSettings }: Props) {
-  const [open, setOpen] = useState(false);
+  const [activePopover, setActivePopover] = useState<ActivePopover>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const userInitial = (user.email?.trim()?.[0] ?? 'A').toUpperCase();
+  const accountName = user.email.split('@')[0] || 'ARIS';
 
   useEffect(() => {
-    if (!open) return;
+    if (activePopover === null) return;
     const onClick = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(e.target as Node)) setActivePopover(null);
     };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setActivePopover(null);
+    };
     window.addEventListener('mousedown', onClick);
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('mousedown', onClick);
       window.removeEventListener('keydown', onKey);
     };
-  }, [open]);
+  }, [activePopover]);
+
+  const toggle = (next: 'account' | 'context') => {
+    setActivePopover((current) => (current === next ? null : next));
+  };
 
   return (
     <div className={styles.root} ref={rootRef}>
-      <button
-        type="button"
-        className={styles.trigger}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className={styles.avatar}>{userInitial}</span>
-        <span className={styles.identity}>
-          <span className={styles.name}>{user.email.split('@')[0] || 'ARIS'}</span>
-          <span className={styles.meta}>{user.role}</span>
-        </span>
-        <MoreHorizontal size={14} className={styles.chev} />
-      </button>
-      {open && (
-        <div className={styles.panel} role="menu" aria-label="사용자 메뉴">
+      <div className={styles.row}>
+        <button
+          type="button"
+          className={styles.accountTrigger}
+          aria-haspopup="menu"
+          aria-expanded={activePopover === 'account'}
+          aria-controls="sidebar-footer-account-panel"
+          onClick={() => toggle('account')}
+        >
+          <span className={styles.avatar}>{userInitial}</span>
+          <span className={styles.identity}>
+            <span className={styles.name}>{accountName}</span>
+            <span className={styles.meta}>{user.role}</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          className={styles.contextTrigger}
+          aria-label="환경 메뉴"
+          aria-haspopup="menu"
+          aria-expanded={activePopover === 'context'}
+          aria-controls="sidebar-footer-context-panel"
+          onClick={() => toggle('context')}
+        >
+          <MoreHorizontal size={16} aria-hidden />
+        </button>
+      </div>
+
+      {activePopover === 'account' && (
+        <div
+          id="sidebar-footer-account-panel"
+          className={`${styles.panel} ${styles.accountPanel}`}
+          role="menu"
+          aria-label="계정 메뉴"
+        >
+          <div className={styles.sectionLabel}>Account List</div>
+          <div className={styles.accountRow} role="presentation">
+            <span className={styles.avatarSmall} aria-hidden>{userInitial}</span>
+            <span className={styles.accountInfo}>
+              <span className={styles.accountEmail}>{user.email}</span>
+              <span className={styles.accountRole}>{user.role}</span>
+            </span>
+            <Check size={14} className={styles.accountCheck} aria-label="현재 계정" />
+          </div>
+          <div className={styles.divider} role="presentation" />
           <button
             type="button"
             role="menuitem"
             className={styles.item}
-            onClick={() => { setOpen(false); onOpenSettings(); }}
+            onClick={() => { setActivePopover(null); onOpenSettings(); }}
           >
-            <Settings size={14} /> Settings
+            <UserCog size={14} aria-hidden /> Account Settings
+          </button>
+          <div className={styles.divider} role="presentation" />
+          <form action={withAppBasePath('/api/auth/logout')} method="POST" className={styles.signoutForm}>
+            <button type="submit" role="menuitem" className={`${styles.item} ${styles.signout}`}>
+              <LogOut size={14} aria-hidden /> Sign Out
+            </button>
+          </form>
+        </div>
+      )}
+
+      {activePopover === 'context' && (
+        <div
+          id="sidebar-footer-context-panel"
+          className={`${styles.panel} ${styles.contextPanel}`}
+          role="menu"
+          aria-label="환경 메뉴"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className={styles.item}
+            onClick={() => { setActivePopover(null); onOpenSettings(); }}
+          >
+            <Settings size={14} aria-hidden /> Settings
           </button>
           <div className={styles.section} role="group" aria-label="테마">
             <div className={styles.sectionLabel}>테마</div>
-            <div className={styles.themeRow}>
+            <div className={styles.themeColumn}>
               {THEME_ITEMS.map(({ mode, label, Icon }) => {
                 const active = themeMode === mode;
                 return (
@@ -75,20 +137,17 @@ export function SidebarFooterMenu({ user, themeMode, onThemeChange, onOpenSettin
                     type="button"
                     role="menuitemradio"
                     aria-checked={active}
-                    className={`${styles.themeChip}${active ? ' ' + styles.themeChipActive : ''}`}
+                    className={`${styles.themeRow} ${active ? styles.themeRowActive : ''}`}
                     onClick={() => onThemeChange(mode)}
                   >
-                    <Icon size={12} /> {label}
+                    <Icon size={14} aria-hidden className={styles.themeIcon} />
+                    <span className={styles.themeLabel}>{label}</span>
+                    {active ? <Check size={14} aria-hidden className={styles.themeCheck} /> : null}
                   </button>
                 );
               })}
             </div>
           </div>
-          <form action={withAppBasePath('/api/auth/logout')} method="POST" className={styles.signoutForm}>
-            <button type="submit" role="menuitem" className={`${styles.item} ${styles.signout}`}>
-              <LogOut size={14} /> Sign out
-            </button>
-          </form>
         </div>
       )}
     </div>
