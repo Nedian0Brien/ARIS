@@ -5,7 +5,7 @@ import { FolderTree, Home, MessageSquareText, PanelsTopLeft } from 'lucide-react
 import { primeAutoHideScrollState, reduceAutoHideScrollState } from './mobileScrollAutoHide';
 import { useSessionScrollOrchestrator } from '@/app/_legacy/sessions/[sessionId]/useSessionScrollOrchestrator';
 
-export type TabType = 'home' | 'ask' | 'project' | 'files';
+export type TabType = 'home' | 'ask' | 'project' | 'files' | 'settings';
 
 interface BottomNavProps {
   activeTab: TabType;
