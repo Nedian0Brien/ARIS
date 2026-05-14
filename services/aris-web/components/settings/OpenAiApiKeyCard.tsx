@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CheckCircle2, KeyRound, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
+import { CheckCircle2, Info, KeyRound, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
 import type { ProviderId } from '@/lib/settings/providerModels';
 import styles from './OpenAiApiKeyCard.module.css';
 
@@ -74,42 +74,58 @@ export function OpenAiApiKeyCard({
         ? 'Gemini 실행 인자에 미주입'
         : '런타임 분리';
 
+  const headingId = `settings-apikey-${activeProvider}-title`;
+
   return (
-    <section className={`${styles.card} ${themeClass}`}>
+    <section
+      className={`${styles.card} ${themeClass}`}
+      role="region"
+      aria-labelledby={headingId}
+    >
       <div className={styles.inner}>
         <div className={styles.header}>
           <div className={styles.titleWrap}>
-            <div className={styles.eyebrow}>
-              <KeyRound size={14} />
+            <span className={styles.eyebrow}>
+              <KeyRound size={12} aria-hidden />
               Provider Credentials
-            </div>
-            <h3 className={styles.title}>Model Provider API Keys</h3>
+            </span>
+            <h2 id={headingId} className={styles.title}>API Key</h2>
             <p className={styles.description}>
-              공급자별 API 키를 분리 저장합니다. 키는 AES-256-GCM으로 암호화되며 런타임
-              에이전트 실행 경로에 주입하지 않고 설정 탭 카탈로그 조회에만 사용합니다.
+              공급자별 API 키를 분리 저장합니다. AES-256-GCM으로 암호화되며, 런타임 에이전트 실행 경로에는
+              주입하지 않고 카탈로그 조회에만 사용합니다.
             </p>
           </div>
           {isActiveProvider ? (
-            <div className={`${styles.statusPill} ${hasKey ? styles.statusActive : styles.statusInactive}`}>
-              {hasKey ? '등록됨' : '미등록'}
+            <div
+              className={`${styles.statusPill} ${hasKey ? styles.statusActive : styles.statusInactive}`}
+              role="status"
+              aria-live="polite"
+            >
+              <span className={styles.statusPillDot} aria-hidden />
+              {hasKey ? 'Connected' : 'Not configured'}
             </div>
           ) : (
             <div className={`${styles.statusPill} ${styles.statusPlanned}`}>
+              <span className={styles.statusPillDot} aria-hidden />
               Placeholder
             </div>
           )}
         </div>
 
-        <div className={styles.providerRail} aria-label="모델 공급자 선택">
+        <div className={styles.providerRail} role="tablist" aria-label="Model provider">
           {providerOptions.map((provider) => {
             const active = provider.id === activeProvider;
+            const toneClass = styles[`provider${provider.label}Tone` as keyof typeof styles];
             return (
               <button
                 key={provider.id}
                 type="button"
-                className={`${styles.providerButton} ${active ? styles.providerButtonActive : ''} ${styles[`provider${provider.label}Tone` as keyof typeof styles]}`}
+                role="tab"
+                aria-selected={active}
+                className={`${styles.providerButton} ${active ? styles.providerButtonActive : ''} ${toneClass}`}
                 onClick={() => onProviderChange(provider.id)}
               >
+                <span className={styles.providerDot} aria-hidden />
                 {provider.label}
               </button>
             );
@@ -118,17 +134,17 @@ export function OpenAiApiKeyCard({
 
         {isActiveProvider ? (
           <>
-            <div className={styles.securityGrid}>
+            <div className={styles.securityGrid} aria-label="Key security details">
               <div className={styles.securityItem}>
-                <span className={styles.securityLabel}>보관 방식</span>
+                <span className={styles.securityLabel}>Storage</span>
                 <span className={styles.securityValue}>AES-256-GCM 암호화</span>
               </div>
               <div className={styles.securityItem}>
-                <span className={styles.securityLabel}>사용 범위</span>
-                <span className={styles.securityValue}>설정 탭 모델 카탈로그 조회 전용</span>
+                <span className={styles.securityLabel}>Scope</span>
+                <span className={styles.securityValue}>설정 탭 카탈로그 조회 전용</span>
               </div>
               <div className={styles.securityItem}>
-                <span className={styles.securityLabel}>런타임 분리</span>
+                <span className={styles.securityLabel}>Runtime</span>
                 <span className={styles.securityValue}>{runtimeLabel}</span>
               </div>
             </div>
@@ -136,14 +152,17 @@ export function OpenAiApiKeyCard({
             <div className={styles.form}>
               {hasKey ? (
                 <div className={styles.keySet}>
-                  <CheckCircle2 size={14} />
-                  키가 등록되어 있습니다.
+                  <CheckCircle2 size={14} aria-hidden />
+                  키가 등록되어 있습니다. 새 키를 입력하면 교체됩니다.
                 </div>
               ) : null}
               <div>
-                <label className={styles.label}>{keyLabel}</label>
+                <label className={styles.label} htmlFor={`${activeProvider}-api-key-input`}>
+                  {keyLabel}
+                </label>
                 <div className={styles.inputRow}>
                   <input
+                    id={`${activeProvider}-api-key-input`}
                     className={styles.input}
                     type="password"
                     autoComplete="off"
@@ -161,24 +180,34 @@ export function OpenAiApiKeyCard({
                   onClick={() => { void onSave(apiKey); }}
                   disabled={saving || deleting || apiKey.trim().length < 20}
                 >
-                  {hasKey ? <Sparkles size={16} /> : <ShieldCheck size={16} />}
+                  {hasKey ? <Sparkles size={14} aria-hidden /> : <ShieldCheck size={14} aria-hidden />}
                   {saving ? '저장 중...' : hasKey ? '키 갱신' : '키 등록'}
                 </button>
-                <button
-                  type="button"
-                  className={styles.ghostButton}
-                  onClick={() => { void onDelete(); }}
-                  disabled={!hasKey || saving || deleting}
-                >
-                  {hasKey ? <Trash2 size={16} /> : <CheckCircle2 size={16} />}
-                  {deleting ? '삭제 중...' : '등록 제거'}
-                </button>
+                {hasKey ? (
+                  <button
+                    type="button"
+                    className={`${styles.ghostButton} ${styles.dangerButton}`}
+                    onClick={() => { void onDelete(); }}
+                    disabled={saving || deleting}
+                  >
+                    <Trash2 size={14} aria-hidden />
+                    {deleting ? '제거 중...' : '키 제거'}
+                  </button>
+                ) : null}
                 {feedback ? (
                   <span className={`${styles.feedback} ${feedback.ok ? styles.feedbackOk : styles.feedbackErr}`}>
                     {feedback.msg}
                   </span>
                 ) : null}
               </div>
+            </div>
+
+            <div className={styles.hint}>
+              <Info size={14} className={styles.hintIcon} aria-hidden />
+              <span>
+                키는 워크스페이스 계정에 종속되어 다른 사용자와 공유되지 않습니다. 카탈로그 새로고침 시에만
+                재호출됩니다.
+              </span>
             </div>
           </>
         ) : (
