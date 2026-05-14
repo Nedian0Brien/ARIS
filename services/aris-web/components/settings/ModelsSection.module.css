@@ -15,8 +15,8 @@
  * Three pills, full-width, accent underline on active.
  */
 .providerStrip {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 0;
   padding: var(--sp-8) var(--sp-20);
   border-bottom: 1px solid var(--border-subtle);
@@ -26,6 +26,8 @@
 .providerPill {
   position: relative;
   display: inline-flex;
+  flex: 1 1 0;
+  min-width: 96px;
   align-items: center;
   justify-content: center;
   gap: var(--sp-3);
@@ -58,25 +60,46 @@
   border-bottom-color: var(--b-600);
 }
 
-.providerInitials {
-  display: inline-grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0;
-  color: #fff;
+/* Inactive: logo in muted tertiary; active: logo in brand-tinted ink */
+.providerLogoWrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--text-tertiary);
+  transition: color var(--t-fast);
 }
 
-.providerPill[data-provider='codex'] .providerInitials { background: var(--agent-codex); }
-.providerPill[data-provider='claude'] .providerInitials { background: var(--agent-claude); }
-.providerPill[data-provider='gemini'] .providerInitials { background: var(--agent-gemini); }
+.providerPillActive .providerLogoWrap {
+  color: var(--text-primary);
+}
+
+/* Tint the logo with brand colors when the corresponding provider is active. */
+.providerPill[data-provider='codex'].providerPillActive .providerLogoWrap { color: var(--agent-codex); }
+.providerPill[data-provider='claude'].providerPillActive .providerLogoWrap { color: var(--agent-claude); }
+.providerPill[data-provider='gemini'].providerPillActive .providerLogoWrap { color: var(--agent-gemini); }
+
+.providerLogo {
+  font-size: 18px;
+}
 
 .providerName {
   letter-spacing: -0.005em;
+}
+
+/* Title rows that mount a logo inline with the heading. */
+.titleWithLogo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.titleLogo {
+  font-size: 22px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 /* ── Section group ── */
@@ -668,6 +691,20 @@
 
   .providerStrip {
     padding: var(--sp-4) var(--sp-8);
+  }
+
+  .providerPill {
+    min-width: 56px;
+    padding: var(--sp-4) var(--sp-3);
+  }
+
+  /* Logo-only pills below 600px to keep the rail breathing room for N>3 providers. */
+  .providerName {
+    display: none;
+  }
+
+  .titleLogo {
+    font-size: 18px;
   }
 
   .row {
