@@ -1,5 +1,6 @@
-/* Settings — 2-column panels (sticky left rail + independently scrolling right pane).
- * No card chrome. Hairline dividers only. Designed to scale to many future sections.
+/* Settings — minimal 2-column shell inspired by Claude.ai settings.
+ * Plain title at top of rail, label-only nav with subtle active pill.
+ * Right pane scrolls independently.
  */
 
 .shell {
@@ -15,51 +16,34 @@
 /* ── Left rail ─────────────────────────────────────────────── */
 .rail {
   flex: 0 0 auto;
-  width: 260px;
+  width: 232px;
   display: flex;
   flex-direction: column;
+  padding: var(--sp-10) var(--sp-4) var(--sp-6);
   background: var(--surface);
   border-right: 1px solid var(--border-subtle);
   overflow-y: auto;
 }
 
-.railHeader {
-  padding: var(--sp-12) var(--sp-8) var(--sp-8);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.eyebrow {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-}
-
 .title {
-  margin: var(--sp-2) 0 0;
+  margin: 0 var(--sp-3) var(--sp-6);
   font-size: var(--text-h2);
   font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.015em;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
   color: var(--text-primary);
 }
 
 .nav {
   display: flex;
   flex-direction: column;
-  padding: var(--sp-4) var(--sp-3);
-  gap: var(--sp-1);
+  gap: 2px;
 }
 
 .navItem {
-  position: relative;
-  display: grid;
-  grid-template-columns: 18px 1fr;
+  display: inline-flex;
   align-items: center;
-  gap: var(--sp-3);
+  gap: var(--sp-2);
   width: 100%;
   padding: var(--sp-3) var(--sp-4);
   background: transparent;
@@ -67,6 +51,7 @@
   border-radius: var(--r-md);
   font: inherit;
   font-size: var(--text-sm);
+  font-weight: 500;
   color: var(--text-secondary);
   text-align: left;
   cursor: pointer;
@@ -80,56 +65,28 @@
 
 .navItem:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--b-500) 38%, transparent);
-}
-
-.navIcon {
-  color: var(--text-tertiary);
-  transition: color var(--t-fast);
-}
-
-.navBody {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  line-height: 1.25;
-}
-
-.navLabel {
-  font-weight: 600;
-  letter-spacing: -0.005em;
-  color: inherit;
-}
-
-.navHint {
-  margin-top: 2px;
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  letter-spacing: 0.04em;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--b-500) 36%, transparent);
 }
 
 .navItemActive {
   background: var(--surface-active);
   color: var(--text-primary);
+  font-weight: 600;
 }
 
-.navItemActive .navIcon {
-  color: var(--b-600);
+.navLabel {
+  letter-spacing: -0.005em;
 }
 
-.navItemActive::before {
-  content: '';
-  position: absolute;
-  left: -3px;
-  top: 8px;
-  bottom: 8px;
-  width: 3px;
-  border-radius: 3px;
-  background: var(--b-600);
+.navBadge {
+  margin-left: auto;
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-full);
+  background: var(--surface-hover);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
 }
 
 /* ── Right pane ────────────────────────────────────────────── */
@@ -145,43 +102,36 @@
 }
 
 .paneHeader {
-  padding: var(--sp-16) var(--sp-16) var(--sp-8);
+  padding: var(--sp-12) var(--sp-12) var(--sp-6);
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.paneEyebrow {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-}
-
 .paneTitle {
-  margin: var(--sp-2) 0 0;
+  margin: 0;
   font-size: var(--text-h1);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: 1.15;
   letter-spacing: -0.02em;
   color: var(--text-primary);
+  word-break: keep-all;
 }
 
 .paneBody {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 /* ── Tablet ────────────────────────────────────────────────── */
 @media (max-width: 960px) {
   .rail {
-    width: 220px;
+    width: 200px;
+    padding: var(--sp-8) var(--sp-3) var(--sp-5);
   }
 
   .paneHeader {
-    padding: var(--sp-12) var(--sp-12) var(--sp-6);
+    padding: var(--sp-10) var(--sp-10) var(--sp-5);
   }
 
   .paneTitle {
@@ -189,7 +139,7 @@
   }
 }
 
-/* ── Mobile: stack rail above pane, nav becomes chip row ───── */
+/* ── Mobile: rail collapses to horizontal scrolling chip row ── */
 @media (max-width: 720px) {
   .shell {
     flex-direction: column;
@@ -199,32 +149,29 @@
   .rail {
     width: 100%;
     flex: 0 0 auto;
+    padding: var(--sp-6) var(--sp-6) var(--sp-3);
     border-right: 0;
     border-bottom: 1px solid var(--border-subtle);
     overflow-y: visible;
   }
 
-  .railHeader {
-    padding: var(--sp-10) var(--sp-8) var(--sp-6);
-  }
-
   .title {
+    margin: 0 0 var(--sp-4);
     font-size: var(--text-h3);
   }
 
   .nav {
     flex-direction: row;
     gap: var(--sp-2);
-    padding: var(--sp-3) var(--sp-8) var(--sp-6);
     overflow-x: auto;
     scrollbar-width: none;
+    padding-bottom: var(--sp-2);
   }
 
   .nav::-webkit-scrollbar { display: none; }
 
   .navItem {
     flex: 0 0 auto;
-    grid-template-columns: 16px auto;
     padding: var(--sp-2) var(--sp-4);
     border-radius: var(--r-full);
     border: 1px solid var(--border-subtle);
@@ -235,20 +182,12 @@
     border-color: var(--b-600);
   }
 
-  .navItemActive::before {
-    display: none;
-  }
-
-  .navHint {
-    display: none;
-  }
-
   .pane {
     overflow: visible;
     flex: 1 1 auto;
   }
 
   .paneHeader {
-    padding: var(--sp-8) var(--sp-8) var(--sp-4);
+    padding: var(--sp-6) var(--sp-6) var(--sp-3);
   }
 }
