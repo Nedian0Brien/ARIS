@@ -2394,12 +2394,13 @@ export function ProjectChatSurface({
       const firstPromptTitle = shouldAutoRenameFromFirstPrompt
         ? buildChatTitleFromFirstPrompt(text)
         : null;
+      const modelToSend = selectedModelId || fallbackDefaultForProvider(selectedProvider) || '';
       const endpoint = withAppBasePath(isTerminalMode ? buildProjectRuntimeTerminalPath(projectId) : buildProjectRuntimeEventsPath(projectId));
       const payload = isTerminalMode ? {
         chatId: chat.id,
         command: text,
         agent: selectedProvider,
-        model: selectedModelId,
+        model: modelToSend,
         modelReasoningEffort: serializeReasoningEffort(selectedEffort),
       } : {
         type: 'message',
@@ -2409,7 +2410,7 @@ export function ProjectChatSurface({
           role: 'user',
           chatId: chat.id,
           agent: selectedProvider,
-          model: selectedModelId,
+          model: modelToSend,
           mode: composerMode,
           modelReasoningEffort: serializeReasoningEffort(selectedEffort),
           workspaceTab,
@@ -2432,7 +2433,7 @@ export function ProjectChatSurface({
       const latestEventAt = latestEvent.timestamp || submittedAt;
       setPrompt('');
       setEvents((previous) => [...previous, ...submittedEvents]);
-      const shouldPersistModel = Boolean(selectedModelId) && chat.model !== selectedModelId;
+      const shouldPersistModel = !!chat && !!modelToSend && chat.model !== modelToSend;
       setChats((previous) => previous.map((item) => (
         item.id === chat.id
           ? {
@@ -2442,7 +2443,7 @@ export function ProjectChatSurface({
               latestEventIsUser: !isTerminalMode,
               lastActivityAt: latestEventAt,
               ...(firstPromptTitle ? { title: firstPromptTitle } : {}),
-              ...(shouldPersistModel ? { model: selectedModelId } : {}),
+              ...(shouldPersistModel ? { model: modelToSend } : {}),
             }
           : item
       )));
@@ -2456,26 +2457,9 @@ export function ProjectChatSurface({
           latestEventAt,
           latestEventIsUser: !isTerminalMode,
           ...(firstPromptTitle ? { title: firstPromptTitle } : {}),
+          ...(shouldPersistModel ? { model: modelToSend, modelReasoningEffort: serializeReasoningEffort(selectedEffort) } : {}),
         }),
       });
-      if (shouldPersistModel) {
-        void fetch(
-          withAppBasePath(
-            `/api/runtime/sessions/${encodeURIComponent(session.id)}/chats/${encodeURIComponent(chat.id)}`,
-          ),
-          {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              model: selectedModelId,
-              modelReasoningEffort: serializeReasoningEffort(selectedEffort),
-            }),
-          },
-        ).catch(() => {
-          /* non-fatal */
-        });
-      }
     } catch (submitError) {
       setSubmittedRunStartedAt(null);
       setError(submitError instanceof Error ? submitError.message : '메시지 전송에 실패했습니다.');
