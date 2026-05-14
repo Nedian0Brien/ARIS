@@ -658,34 +658,38 @@ export function ModelsSection() {
           <div className={styles.subCardBody}>
             <div className={styles.field}>
               <label className={styles.label} htmlFor="gemini-default-model">기본 모델</label>
-              <select
-                id="gemini-default-model"
-                className={styles.select}
-                value={selectedGeminiDefaultModelId}
-                onChange={(event) => setSelectedGeminiDefaultModelId(event.target.value)}
-                disabled={selectedGeminiModelIds.length === 0}
-              >
-                {selectedGeminiModelIds.map((modelId) => (
-                  <option key={modelId} value={modelId}>
-                    {modelId}
-                  </option>
-                ))}
-              </select>
+              <div className={styles.selectWrap}>
+                <select
+                  id="gemini-default-model"
+                  className={styles.select}
+                  value={selectedGeminiDefaultModelId}
+                  onChange={(event) => setSelectedGeminiDefaultModelId(event.target.value)}
+                  disabled={selectedGeminiModelIds.length === 0}
+                >
+                  {selectedGeminiModelIds.map((modelId) => (
+                    <option key={modelId} value={modelId}>
+                      {modelId}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className={styles.field}>
               <label className={styles.label} htmlFor="gemini-default-mode">기본 모드</label>
-              <select
-                id="gemini-default-mode"
-                className={styles.select}
-                value={selectedGeminiDefaultModeId}
-                onChange={(event) => setSelectedGeminiDefaultModeId(event.target.value)}
-              >
-                {GEMINI_MODE_SELECTION_OPTIONS.map((mode) => (
-                  <option key={mode.id} value={mode.id}>
-                    {mode.label}
-                  </option>
-                ))}
-              </select>
+              <div className={styles.selectWrap}>
+                <select
+                  id="gemini-default-mode"
+                  className={styles.select}
+                  value={selectedGeminiDefaultModeId}
+                  onChange={(event) => setSelectedGeminiDefaultModeId(event.target.value)}
+                >
+                  {GEMINI_MODE_SELECTION_OPTIONS.map((mode) => (
+                    <option key={mode.id} value={mode.id}>
+                      {mode.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className={styles.hint}>
               <Info size={14} className={styles.hintIcon} aria-hidden />
@@ -715,19 +719,21 @@ export function ModelsSection() {
           <div className={styles.subCardBody}>
             <div className={styles.field}>
               <label className={styles.label} htmlFor="codex-default-model">기본 모델</label>
-              <select
-                id="codex-default-model"
-                className={styles.select}
-                value={selectedCodexDefaultModelId}
-                onChange={(event) => setSelectedCodexDefaultModelId(event.target.value)}
-                disabled={selectedCodexModelIds.length === 0}
-              >
-                {selectedCodexModelIds.map((modelId) => (
-                  <option key={modelId} value={modelId}>
-                    {modelId}
-                  </option>
-                ))}
-              </select>
+              <div className={styles.selectWrap}>
+                <select
+                  id="codex-default-model"
+                  className={styles.select}
+                  value={selectedCodexDefaultModelId}
+                  onChange={(event) => setSelectedCodexDefaultModelId(event.target.value)}
+                  disabled={selectedCodexModelIds.length === 0}
+                >
+                  {selectedCodexModelIds.map((modelId) => (
+                    <option key={modelId} value={modelId}>
+                      {modelId}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className={styles.hint}>
               <Info size={14} className={styles.hintIcon} aria-hidden />

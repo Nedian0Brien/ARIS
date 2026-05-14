@@ -82,18 +82,44 @@
   letter-spacing: 0.02em;
 }
 
+.selectWrap {
+  position: relative;
+  display: block;
+}
+
+.selectWrap::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: var(--sp-6);
+  width: 16px;
+  height: 16px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  background-color: var(--text-tertiary);
+  -webkit-mask-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='black' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+          mask-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='black' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+          mask-size: contain;
+  transition: background-color var(--t-fast);
+}
+
+.selectWrap:focus-within::after {
+  background-color: var(--primary);
+}
+
 .select {
   appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
   width: 100%;
   padding: var(--sp-4) var(--sp-8);
   padding-right: var(--sp-16);
   border-radius: var(--r-md);
   border: 1px solid var(--border-default);
-  background-color: var(--surface);
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23666c77' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: right var(--sp-6) center;
-  background-size: 16px;
+  background: var(--surface);
   color: var(--text-primary);
   font-size: var(--text-sm);
   font-family: var(--font-sans);
