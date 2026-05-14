@@ -30,6 +30,8 @@ const THEME_ITEMS: Array<{ mode: ThemeMode; label: string; Icon: typeof Sun }> =
 ];
 
 const POPOVER_GAP = 6;
+const POPOVER_MIN_WIDTH = 240; // mirrors .panel min-width in module css
+const VIEWPORT_PADDING = 8;
 
 export function SidebarFooterMenu({ user, themeMode, onThemeChange, onOpenSettings }: Props) {
   const [activePopover, setActivePopover] = useState<ActivePopover>(null);
@@ -51,18 +53,29 @@ export function SidebarFooterMenu({ user, themeMode, onThemeChange, onOpenSettin
     const trigger = next === 'account' ? accountTriggerRef.current : contextTriggerRef.current;
     if (!trigger) return null;
     const rect = trigger.getBoundingClientRect();
+    const top = rect.top - POPOVER_GAP;
+
     if (next === 'account') {
-      return {
-        top: rect.top - POPOVER_GAP,
-        left: rect.left,
-        anchorSide: 'left' as AnchorSide,
-      };
+      // Anchor at trigger's left, extending right. Clamp so it doesn't
+      // overflow the viewport's right edge on narrow displays.
+      const maxLeft = window.innerWidth - POPOVER_MIN_WIDTH - VIEWPORT_PADDING;
+      const left = Math.max(VIEWPORT_PADDING, Math.min(rect.left, maxLeft));
+      return { top, left, anchorSide: 'left' as AnchorSide };
     }
-    return {
-      top: rect.top - POPOVER_GAP,
-      right: window.innerWidth - rect.right,
-      anchorSide: 'right' as AnchorSide,
-    };
+
+    // Context popover: prefer right-anchor (popover extends LEFT from
+    // trigger's right edge). When the trigger sits too close to the
+    // viewport's left edge (narrow sidebar), that would push the popover
+    // off-screen to the left — flip to a left-anchor (extends RIGHT from
+    // trigger's left edge).
+    const wouldOverflowLeft = rect.right - POPOVER_MIN_WIDTH < VIEWPORT_PADDING;
+    if (wouldOverflowLeft) {
+      const maxLeft = window.innerWidth - POPOVER_MIN_WIDTH - VIEWPORT_PADDING;
+      const left = Math.max(VIEWPORT_PADDING, Math.min(rect.left, maxLeft));
+      return { top, left, anchorSide: 'left' as AnchorSide };
+    }
+    const right = Math.max(VIEWPORT_PADDING, window.innerWidth - rect.right);
+    return { top, right, anchorSide: 'right' as AnchorSide };
   }, []);
 
   useLayoutEffect(() => {
