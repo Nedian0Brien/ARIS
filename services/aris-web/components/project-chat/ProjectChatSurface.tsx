@@ -1894,15 +1894,6 @@ export function ProjectChatSurface({
     setParallelSurfaceDropEdge(null);
   }, []);
 
-  const handleCloseProjectParallelChats = useCallback(() => {
-    const activePanel = parallelPanelState?.panels[parallelPanelState.activePanelId] ?? null;
-    setParallelPanelState(null);
-    setParallelPanelRuntime({});
-    setParallelPanelRuntimeErrors({});
-    setParallelSurfaceDropEdge(null);
-    if (activePanel?.chatId) onChatOpen(activePanel.chatId);
-  }, [onChatOpen, parallelPanelState]);
-
   useEffect(() => {
     setParallelLayoutHydrated(false);
     setParallelPanelState(null);
@@ -2679,9 +2670,6 @@ export function ProjectChatSurface({
                   onClick={toggleWorkspacePanel}
                 >
                   <PanelRight size={14} />
-                </button>
-                <button type="button" className="pc-parallel__bar-btn" onClick={handleCloseProjectParallelChats}>
-                  단일 채팅으로 돌아가기
                 </button>
               </div>
             </div>
