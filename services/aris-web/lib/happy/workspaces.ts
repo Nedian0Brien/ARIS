@@ -28,9 +28,24 @@ function toActivityEpoch(value: string | null | undefined): number {
   return parsed;
 }
 
+function sessionBranch(session: SessionSummary): string | null {
+  const directBranch = typeof session.branch === 'string' ? session.branch.trim() : '';
+  if (directBranch) return directBranch;
+  const metadataBranch = typeof session.metadata?.branch === 'string' ? session.metadata.branch.trim() : '';
+  return metadataBranch || null;
+}
+
+export function isProjectSessionSummary(session: SessionSummary): boolean {
+  return sessionBranch(session) === null;
+}
+
+export function filterProjectSessionSummaries(sessions: SessionSummary[]): SessionSummary[] {
+  return sessions.filter(isProjectSessionSummary);
+}
+
 function dedupeSessionsByPath(sessions: SessionSummary[]): SessionSummary[] {
   const byPath = new Map<string, SessionSummary>();
-  for (const session of sessions) {
+  for (const session of filterProjectSessionSummaries(sessions)) {
     const normalizedPath = normalizeWorkspacePath(session.projectName);
     const current = byPath.get(normalizedPath);
     if (!current) {

@@ -450,10 +450,21 @@ async function fetchProjectWorkspaceLayout(
     return acc;
   }, {});
   return {
-    layout: layout ? parseProjectPanelState(JSON.stringify(layout), validChatIds) : null,
+    layout: parseProjectPanelApiState(layout, validChatIds),
     panelRuntime,
     panelRuntimeErrors: {},
   };
+}
+
+function parseProjectPanelApiState(
+  layout: ProjectParallelPanelTreeState | ({ version?: number } & Partial<ProjectParallelPanelTreeState>) | null,
+  validChatIds: Set<string>,
+): ProjectParallelPanelTreeState | null {
+  if (!layout || typeof layout !== 'object') return null;
+  const payload = 'version' in layout
+    ? layout
+    : { version: 1, ...layout };
+  return parseProjectPanelState(JSON.stringify(payload), validChatIds);
 }
 
 async function saveProjectWorkspaceLayout(
@@ -1817,19 +1828,11 @@ export function ProjectChatSurface({
   }, [activateWorkspaceTab, handleProjectParallelPanelActivate]);
 
   const handleToggleProjectParallelPanelWorkspace = useCallback((panelId: string) => {
-    if (workspaceOpen && parallelPanelState?.activePanelId === panelId) {
-      closeWorkspacePanel();
-      return;
-    }
-
     handleProjectParallelPanelActivate(panelId);
     activateWorkspaceTab(workspaceTab);
   }, [
     activateWorkspaceTab,
-    closeWorkspacePanel,
     handleProjectParallelPanelActivate,
-    parallelPanelState?.activePanelId,
-    workspaceOpen,
     workspaceTab,
   ]);
 

@@ -28,6 +28,8 @@ describe('project workspace API boundary', () => {
     expect(projectChatSurface).toContain('buildProjectWorkspacePath(projectId)');
     expect(projectChatSurface).toContain('fetchProjectWorkspaceLayout');
     expect(projectChatSurface).toContain('saveProjectWorkspaceLayout');
+    expect(projectChatSurface).toContain('parseProjectPanelApiState(layout, validChatIds)');
+    expect(projectChatSurface).toContain('const payload = \'version\' in layout');
     expect(projectChatSurface).toContain('readLocalStorage(parallelLayoutStorageKey)');
   });
 });
