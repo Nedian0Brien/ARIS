@@ -78,15 +78,34 @@ describe('project parallel chat drag surface', () => {
 
   it('makes the split chat layout fill the project chat viewport instead of leaving blank space under the composer', () => {
     const splitChatViewportBlock = cssBlock('.pc-parallel');
+    const framesBlock = cssBlock('.pc-parallel__frames');
+    const frameBlock = cssBlock('.pc-parallel__frame');
+    const parallelChatBlock = cssBlock('.pc-parallel-chat');
+    const timelineBlock = cssBlock('.pc-parallel-chat__timeline');
+    const composerWrapBlock = cssBlock('.pc-proto .pc-parallel .cmp-wrap');
     expect(splitChatViewportBlock).toContain('height: 100%;');
     expect(splitChatViewportBlock).toContain('min-height: 0;');
     expect(uiCss).toContain('.pc-parallel-shell');
-    expect(cssBlock('.pc-parallel__frames')).toContain('overflow: hidden;');
-    expect(cssBlock('.pc-parallel-chat')).toContain('overflow: hidden;');
-    expect(cssBlock('.pc-proto .pc-parallel .cmp-wrap')).toContain('padding: var(--sp-4);');
-    expect(cssBlock('.pc-proto .pc-parallel .cmp-wrap')).toContain('flex-shrink: 0;');
+    expect(framesBlock).toContain('height: 100%;');
+    expect(framesBlock).toContain('overflow: hidden;');
+    expect(frameBlock).toContain('align-self: stretch;');
+    expect(frameBlock).toContain('width: 100%;');
+    expect(frameBlock).toContain('height: 100%;');
+    expect(parallelChatBlock).toContain('max-height: 100%;');
+    expect(parallelChatBlock).toContain('overflow: hidden;');
+    expect(timelineBlock).toContain('overflow-y: auto;');
+    expect(timelineBlock).toContain('overscroll-behavior: contain;');
+    expect(composerWrapBlock).toContain('align-self: end;');
+    expect(composerWrapBlock).toContain('min-height: 0;');
+    expect(composerWrapBlock).toContain('padding: var(--sp-4);');
     expect(cssBlock('.pc-proto .pc-parallel .cmp__input')).toContain('min-height: 44px;');
     expect(cssBlock('.pc-proto .pc-parallel .cmp__input')).toContain('max-height: 112px;');
+  });
+
+  it('does not expose a parallel workspace level return-to-single-chat action', () => {
+    expect(projectChatSurface).not.toContain('단일 채팅으로 돌아가기');
+    expect(projectChatSurface).not.toContain('handleCloseProjectParallelChats');
+    expect(uiCss).not.toContain('.pc-parallel__bar-btn');
   });
 
   it('routes panel-scoped Files and Git through the existing workspace drawer', () => {
