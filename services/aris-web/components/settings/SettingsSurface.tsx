@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Cpu, KeyRound, Settings2 } from 'lucide-react';
+import { Cpu, KeyRound } from 'lucide-react';
 import { ModelsSection } from './ModelsSection';
 import { SshSection } from './SshSection';
 import styles from './SettingsSurface.module.css';
@@ -22,65 +22,48 @@ const ITEMS: NavItem[] = [
 
 export function SettingsSurface() {
   const [section, setSection] = useState<Section>('models');
-  const active = ITEMS.find((item) => item.id === section) ?? ITEMS[0];
 
   return (
     <div className={styles.shell}>
       <header className={styles.hero}>
-        <span className={styles.heroEyebrow}>
-          <Settings2 size={12} aria-hidden />
-          Workspace · Runtime Settings
-        </span>
-        <h1 className={styles.heroTitle}>Settings</h1>
-        <p className={styles.heroDescription}>
-          Provider credentials, model catalogs, and terminal access all live here. Keys are stored
-          encrypted and stay scoped to this workspace.
+        <span className={styles.eyebrow}>Workspace · Runtime Settings</span>
+        <h1 className={styles.title}>Settings</h1>
+        <p className={styles.lede}>
+          Provider credentials, model catalogs, and terminal access. Keys are stored encrypted and stay
+          scoped to this workspace.
         </p>
       </header>
 
-      <div className={styles.layout}>
-        <nav
-          className={styles.nav}
-          aria-label="Settings sub-navigation"
-          role="tablist"
-          aria-orientation="vertical"
-        >
-          <span className={styles.navHeader}>Sections</span>
-          {ITEMS.map(({ id, label, Icon }) => {
-            const isActive = section === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                id={`settings-tab-${id}`}
-                aria-controls={`settings-panel-${id}`}
-                aria-selected={isActive}
-                aria-current={isActive ? 'page' : undefined}
-                className={`${styles.navItem}${isActive ? ' ' + styles.navItemActive : ''}`}
-                onClick={() => setSection(id)}
-              >
-                <span className={styles.navIcon} aria-hidden>
-                  <Icon size={16} />
-                </span>
-                {label}
-              </button>
-            );
-          })}
-          <div className={styles.navHint}>
-            <strong>{active.label}</strong>
-            {active.hint}
-          </div>
-        </nav>
+      <nav className={styles.tabs} aria-label="Settings sub-navigation" role="tablist">
+        {ITEMS.map(({ id, label, hint, Icon }) => {
+          const isActive = section === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              id={`settings-tab-${id}`}
+              aria-controls={`settings-panel-${id}`}
+              aria-selected={isActive}
+              aria-current={isActive ? 'page' : undefined}
+              className={`${styles.tab} ${isActive ? styles.tabActive : ''}`}
+              onClick={() => setSection(id)}
+            >
+              <Icon size={14} aria-hidden className={styles.tabIcon} />
+              <span className={styles.tabLabel}>{label}</span>
+              <span className={styles.tabHint}>{hint}</span>
+            </button>
+          );
+        })}
+      </nav>
 
-        <div
-          className={styles.body}
-          role="tabpanel"
-          id={`settings-panel-${section}`}
-          aria-labelledby={`settings-tab-${section}`}
-        >
-          {section === 'models' ? <ModelsSection /> : <SshSection />}
-        </div>
+      <div
+        className={styles.body}
+        role="tabpanel"
+        id={`settings-panel-${section}`}
+        aria-labelledby={`settings-tab-${section}`}
+      >
+        {section === 'models' ? <ModelsSection /> : <SshSection />}
       </div>
     </div>
   );
