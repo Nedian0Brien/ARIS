@@ -10,43 +10,70 @@
   border-radius: 10px;
   background: transparent;
   border: 1px solid transparent;
-  color: var(--m-sb-text, rgba(255, 255, 255, 0.92));
+  color: var(--text-primary);
   cursor: pointer;
 }
-.trigger:hover { background: var(--m-sb-hover, rgba(255, 255, 255, 0.04)); }
+.trigger:hover { background: var(--surface-hover); }
+.trigger[aria-expanded='true'] {
+  background: var(--surface-hover);
+  border-color: var(--line);
+}
 
 .avatar {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--m-sb-avatar, #2b2b2b);
-  font-size: 12px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #ffb74d, #f57c00);
   color: #fff;
+  font-size: var(--text-xs, 12px);
+  font-weight: 600;
+  flex-shrink: 0;
 }
 .identity {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   min-width: 0;
+  overflow: hidden;
 }
-.name { font-size: 12.5px; font-weight: 600; line-height: 1.2; }
-.meta { font-size: 10.5px; opacity: 0.6; line-height: 1.2; margin-top: 2px; }
-.chev { opacity: 0.55; }
+.name {
+  font-size: var(--text-xs, 12px);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.meta {
+  font-size: var(--text-2xs, 11px);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.chev {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
 
 .panel {
   position: absolute;
   left: 8px;
   bottom: calc(100% + 6px);
   min-width: 232px;
-  background: var(--m-sb-panel-bg, #14141a);
-  color: var(--m-sb-panel-text, rgba(255, 255, 255, 0.94));
-  border: 1px solid var(--m-sb-panel-border, rgba(255, 255, 255, 0.1));
-  border-radius: 10px;
+  background: var(--surface-elevated, var(--surface));
+  color: var(--text-primary);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 10px);
   padding: 6px;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-md, 0 18px 40px rgba(0, 0, 0, 0.18));
   z-index: 40;
   display: flex;
   flex-direction: column;
@@ -62,33 +89,34 @@
   border-radius: 8px;
   background: transparent;
   border: none;
-  color: var(--m-sb-panel-text, rgba(255, 255, 255, 0.94));
+  color: var(--text-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--text-sm, 13px);
   line-height: 1.2;
   text-align: left;
   cursor: pointer;
 }
-.item:hover { background: rgba(255, 255, 255, 0.06); }
+.item:hover { background: var(--surface-hover); }
 .item:focus-visible {
-  outline: 2px solid rgba(120, 170, 255, 0.6);
+  outline: 2px solid var(--primary, #2f6bff);
   outline-offset: -2px;
 }
 
 .section {
   padding: 8px 4px 4px;
   margin-top: 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--line);
 }
 .sectionLabel {
-  font-size: 10.5px;
+  font-size: var(--text-2xs, 11px);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  opacity: 0.55;
+  color: var(--text-tertiary);
   margin: 0 0 6px;
   padding: 0 6px;
 }
+
 .themeRow {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -102,29 +130,30 @@
   gap: 4px;
   padding: 8px 4px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--line);
   background: transparent;
-  color: var(--m-sb-panel-text, rgba(255, 255, 255, 0.94));
+  color: var(--text-primary);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--text-2xs, 11px);
   line-height: 1;
   min-height: 52px;
   cursor: pointer;
 }
-.themeChip:hover { background: rgba(255, 255, 255, 0.04); }
+.themeChip:hover { background: var(--surface-hover); }
 .themeChip:focus-visible {
-  outline: 2px solid rgba(120, 170, 255, 0.6);
+  outline: 2px solid var(--primary, #2f6bff);
   outline-offset: -2px;
 }
 .themeChipActive {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.22);
+  background: var(--surface-active, var(--surface-hover));
+  border-color: var(--line-strong, var(--line));
+  color: var(--text-primary);
 }
 
 .signoutForm {
   margin: 4px 0 0;
   padding-top: 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--line);
 }
-.signout { color: #ff8585; }
-.signout:hover { background: rgba(255, 100, 100, 0.08); }
+.signout { color: var(--danger-fg, #ef4444); }
+.signout:hover { background: var(--danger-bg, rgba(239, 68, 68, 0.08)); }
