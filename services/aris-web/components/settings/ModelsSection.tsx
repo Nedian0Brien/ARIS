@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Cpu, Settings2 } from 'lucide-react';
+import { Cpu, Info, SlidersHorizontal } from 'lucide-react';
 import { OpenAiApiKeyCard } from '@/components/settings/OpenAiApiKeyCard';
 import { CodexModelCatalogCard } from '@/components/settings/CodexModelCatalogCard';
 import {
@@ -16,7 +16,7 @@ import {
   type OpenAiCatalogItem,
   type ProviderId,
 } from '@/lib/settings/providerModels';
-import styles from '@/app/SettingsTab.module.css';
+import styles from './ModelsSection.module.css';
 
 type Feedback = { ok: boolean; msg: string } | null;
 
@@ -607,61 +607,60 @@ export function ModelsSection() {
       : handleApplyRecommendedGeminiModels;
 
   return (
-    <div className={`animate-in ${styles.settingsShell}`}>
-      <div className={styles.hero}>
-        <div className={styles.heroEyebrow}>
-          <Settings2 size={14} />
-          Runtime Settings
-        </div>
-        <h2 className={styles.heroTitle}>모델 카탈로그를 한 화면에서 관리</h2>
-        <p className={styles.heroDescription}>
-          OpenAI(Codex), Anthropic(Claude), Google AI Studio(Gemini) 모델 선택은 동적 카탈로그 기반으로 관리합니다.
-        </p>
-      </div>
+    <div className={styles.section}>
+      <OpenAiApiKeyCard
+        providerOptions={PROVIDER_OPTIONS}
+        activeProvider={activeProvider}
+        onProviderChange={setActiveProvider}
+        hasKey={activeKeyHasKey}
+        saving={activeKeySaving}
+        deleting={activeKeyDeleting}
+        feedback={activeKeyFeedback}
+        onSave={handleActiveKeySave}
+        onDelete={handleActiveKeyDelete}
+      />
 
-      <div className={styles.stack}>
-        <OpenAiApiKeyCard
-          providerOptions={PROVIDER_OPTIONS}
-          activeProvider={activeProvider}
-          onProviderChange={setActiveProvider}
-          hasKey={activeKeyHasKey}
-          saving={activeKeySaving}
-          deleting={activeKeyDeleting}
-          feedback={activeKeyFeedback}
-          onSave={handleActiveKeySave}
-          onDelete={handleActiveKeyDelete}
-        />
+      <CodexModelCatalogCard
+        providerOptions={PROVIDER_OPTIONS}
+        activeProvider={activeProvider}
+        onProviderChange={setActiveProvider}
+        hasApiKey={activeHasApiKey}
+        items={activeCatalogItems}
+        selectedModelIds={activeSelectedModelIds}
+        manualModelIds={isCodex ? manualCodexModelIds : []}
+        loading={activeCatalogLoading}
+        saving={activeModelSaving}
+        error={activeCatalogError}
+        feedback={activeModelFeedback}
+        onToggle={handleActiveToggle}
+        onAddManualModel={isCodex ? handleAddCodexManualModel : undefined}
+        onRemoveManualModel={isCodex ? handleRemoveCodexManualModel : undefined}
+        onRefresh={handleActiveRefresh}
+        onSave={handleActiveModelSave}
+        onApplyRecommended={handleActiveApplyRecommended}
+      />
 
-        <CodexModelCatalogCard
-          providerOptions={PROVIDER_OPTIONS}
-          activeProvider={activeProvider}
-          onProviderChange={setActiveProvider}
-          hasApiKey={activeHasApiKey}
-          items={activeCatalogItems}
-          selectedModelIds={activeSelectedModelIds}
-          manualModelIds={isCodex ? manualCodexModelIds : []}
-          loading={activeCatalogLoading}
-          saving={activeModelSaving}
-          error={activeCatalogError}
-          feedback={activeModelFeedback}
-          onToggle={handleActiveToggle}
-          onAddManualModel={isCodex ? handleAddCodexManualModel : undefined}
-          onRemoveManualModel={isCodex ? handleRemoveCodexManualModel : undefined}
-          onRefresh={handleActiveRefresh}
-          onSave={handleActiveModelSave}
-          onApplyRecommended={handleActiveApplyRecommended}
-        />
-
-        {activeProvider === 'gemini' && (
-          <div className={styles.section}>
-            <div className={styles.sectionTitle}>
-              <Cpu size={16} />
-              Gemini 기본 실행값
+      {activeProvider === 'gemini' && (
+        <section
+          className={styles.subCard}
+          role="region"
+          aria-labelledby="gemini-defaults-title"
+        >
+          <header className={styles.subCardHeader}>
+            <span className={styles.subCardIcon} aria-hidden>
+              <SlidersHorizontal size={16} />
+            </span>
+            <div>
+              <h3 id="gemini-defaults-title" className={styles.subCardTitle}>Gemini 기본 실행값</h3>
+              <p className={styles.subCardSubtitle}>새 Gemini 채팅의 초기 모델과 모드를 정의합니다.</p>
             </div>
+          </header>
+          <div className={styles.subCardBody}>
             <div className={styles.field}>
-              <label className={styles.label}>기본 모델</label>
+              <label className={styles.label} htmlFor="gemini-default-model">기본 모델</label>
               <select
-                className={styles.input}
+                id="gemini-default-model"
+                className={styles.select}
                 value={selectedGeminiDefaultModelId}
                 onChange={(event) => setSelectedGeminiDefaultModelId(event.target.value)}
                 disabled={selectedGeminiModelIds.length === 0}
@@ -674,9 +673,10 @@ export function ModelsSection() {
               </select>
             </div>
             <div className={styles.field}>
-              <label className={styles.label}>기본 모드</label>
+              <label className={styles.label} htmlFor="gemini-default-mode">기본 모드</label>
               <select
-                className={styles.input}
+                id="gemini-default-mode"
+                className={styles.select}
                 value={selectedGeminiDefaultModeId}
                 onChange={(event) => setSelectedGeminiDefaultModeId(event.target.value)}
               >
@@ -687,22 +687,37 @@ export function ModelsSection() {
                 ))}
               </select>
             </div>
-            <p className={styles.keyHint}>
-              새 Gemini 채팅은 여기서 저장한 기본 모델과 모드로 시작합니다. 채팅 화면에서는 ACP capability를 다시 조회하지 않습니다.
-            </p>
-          </div>
-        )}
-
-        {activeProvider === 'codex' && (
-          <div className={styles.section}>
-            <div className={styles.sectionTitle}>
-              <Cpu size={16} />
-              Codex 기본 실행값
+            <div className={styles.hint}>
+              <Info size={14} className={styles.hintIcon} aria-hidden />
+              <span>
+                새 Gemini 채팅은 여기서 저장한 기본 모델과 모드로 시작합니다. 채팅 화면에서는 ACP capability를 다시 조회하지 않습니다.
+              </span>
             </div>
+          </div>
+        </section>
+      )}
+
+      {activeProvider === 'codex' && (
+        <section
+          className={styles.subCard}
+          role="region"
+          aria-labelledby="codex-defaults-title"
+        >
+          <header className={styles.subCardHeader}>
+            <span className={styles.subCardIcon} aria-hidden>
+              <Cpu size={16} />
+            </span>
+            <div>
+              <h3 id="codex-defaults-title" className={styles.subCardTitle}>Codex 기본 실행값</h3>
+              <p className={styles.subCardSubtitle}>새 Codex 채팅의 초기 모델을 정의합니다.</p>
+            </div>
+          </header>
+          <div className={styles.subCardBody}>
             <div className={styles.field}>
-              <label className={styles.label}>기본 모델</label>
+              <label className={styles.label} htmlFor="codex-default-model">기본 모델</label>
               <select
-                className={styles.input}
+                id="codex-default-model"
+                className={styles.select}
                 value={selectedCodexDefaultModelId}
                 onChange={(event) => setSelectedCodexDefaultModelId(event.target.value)}
                 disabled={selectedCodexModelIds.length === 0}
@@ -714,12 +729,15 @@ export function ModelsSection() {
                 ))}
               </select>
             </div>
-            <p className={styles.keyHint}>
-              새 Codex 채팅은 현재 브라우저의 마지막 모델 선택을 우선 사용하고, 캐시가 없거나 더 이상 선택 목록에 없으면 여기서 저장한 기본 모델로 시작합니다.
-            </p>
+            <div className={styles.hint}>
+              <Info size={14} className={styles.hintIcon} aria-hidden />
+              <span>
+                새 Codex 채팅은 현재 브라우저의 마지막 모델 선택을 우선 사용하고, 캐시가 없거나 더 이상 선택 목록에 없으면 여기서 저장한 기본 모델로 시작합니다.
+              </span>
+            </div>
           </div>
-        )}
-      </div>
+        </section>
+      )}
     </div>
   );
 }
