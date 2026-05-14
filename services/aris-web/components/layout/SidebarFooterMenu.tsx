@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, LogOut, MoreHorizontal, Monitor, Moon, Settings, Sun, UserCog } from 'lucide-react';
 import { withAppBasePath } from '@/lib/routing/appPath';
 import type { ThemeMode } from '@/lib/theme/clientTheme';
@@ -14,6 +15,13 @@ interface Props {
 }
 
 type ActivePopover = 'account' | 'context' | null;
+type AnchorSide = 'left' | 'right';
+interface PopoverPosition {
+  top: number;
+  left?: number;
+  right?: number;
+  anchorSide: AnchorSide;
+}
 
 const THEME_ITEMS: Array<{ mode: ThemeMode; label: string; Icon: typeof Sun }> = [
   { mode: 'light', label: '라이트', Icon: Sun },
@@ -21,16 +29,68 @@ const THEME_ITEMS: Array<{ mode: ThemeMode; label: string; Icon: typeof Sun }> =
   { mode: 'system', label: '시스템', Icon: Monitor },
 ];
 
+const POPOVER_GAP = 6;
+
 export function SidebarFooterMenu({ user, themeMode, onThemeChange, onOpenSettings }: Props) {
   const [activePopover, setActivePopover] = useState<ActivePopover>(null);
+  const [position, setPosition] = useState<PopoverPosition | null>(null);
+  const [mounted, setMounted] = useState(false);
+
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const accountTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const contextTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
   const userInitial = (user.email?.trim()?.[0] ?? 'A').toUpperCase();
   const accountName = user.email.split('@')[0] || 'ARIS';
+
+  useEffect(() => { setMounted(true); }, []);
+
+  const computePosition = useCallback((next: ActivePopover) => {
+    if (next === null) return null;
+    const trigger = next === 'account' ? accountTriggerRef.current : contextTriggerRef.current;
+    if (!trigger) return null;
+    const rect = trigger.getBoundingClientRect();
+    if (next === 'account') {
+      return {
+        top: rect.top - POPOVER_GAP,
+        left: rect.left,
+        anchorSide: 'left' as AnchorSide,
+      };
+    }
+    return {
+      top: rect.top - POPOVER_GAP,
+      right: window.innerWidth - rect.right,
+      anchorSide: 'right' as AnchorSide,
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (activePopover === null) {
+      setPosition(null);
+      return;
+    }
+    setPosition(computePosition(activePopover));
+  }, [activePopover, computePosition]);
+
+  useEffect(() => {
+    if (activePopover === null) return;
+    const update = () => setPosition(computePosition(activePopover));
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [activePopover, computePosition]);
 
   useEffect(() => {
     if (activePopover === null) return;
     const onClick = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setActivePopover(null);
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setActivePopover(null);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setActivePopover(null);
@@ -47,43 +107,10 @@ export function SidebarFooterMenu({ user, themeMode, onThemeChange, onOpenSettin
     setActivePopover((current) => (current === next ? null : next));
   };
 
-  return (
-    <div className={styles.root} ref={rootRef}>
-      <div className={styles.row}>
-        <button
-          type="button"
-          className={styles.accountTrigger}
-          aria-haspopup="menu"
-          aria-expanded={activePopover === 'account'}
-          aria-controls="sidebar-footer-account-panel"
-          onClick={() => toggle('account')}
-        >
-          <span className={styles.avatar}>{userInitial}</span>
-          <span className={styles.identity}>
-            <span className={styles.name}>{accountName}</span>
-            <span className={styles.meta}>{user.role}</span>
-          </span>
-        </button>
-        <button
-          type="button"
-          className={styles.contextTrigger}
-          aria-label="환경 메뉴"
-          aria-haspopup="menu"
-          aria-expanded={activePopover === 'context'}
-          aria-controls="sidebar-footer-context-panel"
-          onClick={() => toggle('context')}
-        >
-          <MoreHorizontal size={16} aria-hidden />
-        </button>
-      </div>
-
-      {activePopover === 'account' && (
-        <div
-          id="sidebar-footer-account-panel"
-          className={`${styles.panel} ${styles.accountPanel}`}
-          role="menu"
-          aria-label="계정 메뉴"
-        >
+  const renderPanelContent = () => {
+    if (activePopover === 'account') {
+      return (
+        <>
           <div className={styles.sectionLabel}>Account List</div>
           <div className={styles.accountRow} role="presentation">
             <span className={styles.avatarSmall} aria-hidden>{userInitial}</span>
@@ -108,16 +135,12 @@ export function SidebarFooterMenu({ user, themeMode, onThemeChange, onOpenSettin
               <LogOut size={14} aria-hidden /> Sign Out
             </button>
           </form>
-        </div>
-      )}
-
-      {activePopover === 'context' && (
-        <div
-          id="sidebar-footer-context-panel"
-          className={`${styles.panel} ${styles.contextPanel}`}
-          role="menu"
-          aria-label="환경 메뉴"
-        >
+        </>
+      );
+    }
+    if (activePopover === 'context') {
+      return (
+        <>
           <button
             type="button"
             role="menuitem"
@@ -148,8 +171,65 @@ export function SidebarFooterMenu({ user, themeMode, onThemeChange, onOpenSettin
               })}
             </div>
           </div>
-        </div>
-      )}
+        </>
+      );
+    }
+    return null;
+  };
+
+  const panelStyle: React.CSSProperties | undefined = position
+    ? position.anchorSide === 'left'
+      ? { top: position.top, left: position.left, transform: 'translateY(-100%)' }
+      : { top: position.top, right: position.right, transform: 'translateY(-100%)' }
+    : undefined;
+
+  return (
+    <div className={styles.root} ref={rootRef}>
+      <div className={styles.row}>
+        <button
+          ref={accountTriggerRef}
+          type="button"
+          className={styles.accountTrigger}
+          aria-haspopup="menu"
+          aria-expanded={activePopover === 'account'}
+          aria-controls="sidebar-footer-account-panel"
+          onClick={() => toggle('account')}
+        >
+          <span className={styles.avatar}>{userInitial}</span>
+          <span className={styles.identity}>
+            <span className={styles.name}>{accountName}</span>
+            <span className={styles.meta}>{user.role}</span>
+          </span>
+        </button>
+        <button
+          ref={contextTriggerRef}
+          type="button"
+          className={styles.contextTrigger}
+          aria-label="환경 메뉴"
+          aria-haspopup="menu"
+          aria-expanded={activePopover === 'context'}
+          aria-controls="sidebar-footer-context-panel"
+          onClick={() => toggle('context')}
+        >
+          <MoreHorizontal size={16} aria-hidden />
+        </button>
+      </div>
+
+      {mounted && activePopover !== null && position
+        ? createPortal(
+            <div
+              ref={panelRef}
+              id={activePopover === 'account' ? 'sidebar-footer-account-panel' : 'sidebar-footer-context-panel'}
+              className={`${styles.panel} ${activePopover === 'account' ? styles.accountPanel : styles.contextPanel}`}
+              role="menu"
+              aria-label={activePopover === 'account' ? '계정 메뉴' : '환경 메뉴'}
+              style={panelStyle}
+            >
+              {renderPanelContent()}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

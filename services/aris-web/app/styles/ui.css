@@ -323,7 +323,8 @@
 
 .aris-ia-shell {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: var(--m-sb-width, 240px) minmax(0, 1fr);
+  position: relative;
   min-height: var(--app-vh, 100dvh);
   background: var(--canvas);
   color: var(--text-primary);
