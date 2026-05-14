@@ -134,6 +134,16 @@ describe('project parallel chat drag surface', () => {
     expect(cssBlock('.pc-parallel__frame-head strong')).toContain('flex: 1 1 auto;');
   });
 
+  it('opens the panel workspace drawer from panel header buttons instead of toggling it closed', () => {
+    const marker = 'const handleToggleProjectParallelPanelWorkspace = useCallback((panelId: string) => {';
+    const start = projectChatSurface.indexOf(marker);
+    const block = projectChatSurface.slice(start, projectChatSurface.indexOf('  const handleProjectParallelPanelDrop', start));
+
+    expect(block).toContain('handleProjectParallelPanelActivate(panelId);');
+    expect(block).toContain('activateWorkspaceTab(workspaceTab);');
+    expect(block).not.toContain('closeWorkspacePanel();');
+  });
+
   it('communicates that closing a panel preserves the underlying chat', () => {
     expect(projectChatSurface).toContain('Close panel; chat stays in the list');
     expect(projectChatSurface).toContain('패널만 닫힙니다');

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
 import { listSessions, createSession } from '@/lib/happy/client';
-import { syncWorkspacesForUser } from '@/lib/happy/workspaces';
+import { filterProjectSessionSummaries, syncWorkspacesForUser } from '@/lib/happy/workspaces';
 
 function normalizeProjectPath(input: string): string {
   const normalized = input.replace(/\\/g, '/').trim();
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const projects = await listSessions(auth.user.id);
+    const projects = filterProjectSessionSummaries(await listSessions(auth.user.id));
     await syncWorkspacesForUser(auth.user.id, projects);
     return NextResponse.json({ projects });
   } catch (error) {
