@@ -86,6 +86,7 @@ import {
   writeProjectChatDragPayload,
   type ProjectChatSurfaceMode,
 } from '@/components/project-chat/ProjectChatSurface';
+import { AskArisSurface, buildRecentAsks } from '@/components/ask/AskArisSurface';
 
 type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';
 type ComposerMode = 'agent' | 'plan' | 'terminal';
@@ -141,13 +142,6 @@ type CmdConsoleLine = {
   kind: CmdConsoleOutputKind;
   caret: boolean;
 };
-
-const SUGGESTED_ASKS = [
-  'composer v2 디자인 결정 맥락 요약해줘',
-  '최근 일주일 동안 가장 많이 쓴 명령어는?',
-  'lawdigest 프로젝트 테스트 커버리지 현황',
-  'ChatInterface의 settle 루프 이슈 해결 방식',
-];
 
 const CMD_CONSOLE_MAX_LINES = 16;
 const WORKSPACE_DRAWER_CLOSE_MS = 160;
@@ -472,21 +466,6 @@ function ProjectRecentChatRows({
       )}
     </div>
   );
-}
-
-function buildRecentAsks(sessions: SessionSummary[]): Array<{ question: string; meta: string }> {
-  const source = sessions.slice(0, 3);
-  if (source.length === 0) {
-    return [
-      { question: 'composer v2 라이브 결정 뭐였지?', meta: 'recent · 8 msgs' },
-      { question: 'nvm Node 20 쓰는 이유?', meta: 'recent · 3 msgs' },
-      { question: 'deploy squash-merge 금지 배경', meta: 'recent · 5 msgs' },
-    ];
-  }
-  return source.map((session) => ({
-    question: `${displayProjectName(session)} 최근 결정 맥락`,
-    meta: `${formatRelativeTime(session.lastActivityAt)} · ${session.totalChats ?? 0} chats`,
-  }));
 }
 
 function projectStatusLabel(status: SessionStatus): string {
@@ -1407,64 +1386,6 @@ function HomeSurface({
             </span>
           </div>
         )}
-      </section>
-    </div>
-  );
-}
-
-function AskSurface({ sessions }: { sessions: SessionSummary[] }) {
-  const [query, setQuery] = useState('');
-  const recentAsks = buildRecentAsks(sessions);
-
-  return (
-    <div className="m-body">
-      <section className="ask" aria-labelledby="ask-title">
-        <div className="ask-empty">
-          <h1 id="ask-title" className="ask-title">무엇이든 물어보세요.</h1>
-          <p className="ask-sub">
-            프로젝트를 고르지 않아도 됩니다. 과거 채팅 전체가 컨텍스트 소스가 되고, 모델은 필요할 때 어떤 프로젝트에서 왔는지까지 인용합니다.
-          </p>
-          <form
-            className="ask-search"
-            onSubmit={(event) => {
-              event.preventDefault();
-            }}
-          >
-            <Search size={16} />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="지난 결정, 배포 맥락, 파일 변경 이유를 물어보세요."
-            />
-            <button type="submit" className="comp-v2__send">
-              <Send size={13} />
-              Ask
-            </button>
-          </form>
-          <div className="ask-eyebrow">Suggested</div>
-          <div className="ask-grid">
-            {SUGGESTED_ASKS.map((prompt, index) => {
-              const icons = [Check, Sparkles, Activity, AlertCircle];
-              const Icon = icons[index] ?? Check;
-              return (
-                <button key={prompt} type="button" className="ask-sug" onClick={() => setQuery(prompt)}>
-                  <span className="ask-sug__ico"><Icon size={12} /></span>
-                  {prompt}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div className="ask-recent">
-          <div className="ask-eyebrow">Recent asks</div>
-          {recentAsks.map((item) => (
-            <button key={item.question} type="button" className="ask-recent-item" onClick={() => setQuery(item.question)}>
-              <Clock3 size={14} />
-              <span className="ask-recent-item__q">{item.question}</span>
-              <span className="ask-recent-item__meta">{item.meta}</span>
-            </button>
-          ))}
-        </div>
       </section>
     </div>
   );
@@ -2416,7 +2337,15 @@ export default function HomePageWrapper({
   };
 
   const content = (() => {
-    if (activeTab === 'ask') return <AskSurface sessions={sessions} />;
+    if (activeTab === 'ask') {
+      return (
+        <AskArisSurface
+          browserRootPath={browserRootPath}
+          onProjectChatOpen={handleProjectChatOpen}
+          sessions={sessions}
+        />
+      );
+    }
     if (activeTab === 'project') {
       return (
         <ProjectSurface
