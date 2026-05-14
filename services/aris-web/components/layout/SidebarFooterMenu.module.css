@@ -1,4 +1,9 @@
-.root { position: relative; }
+.root {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+}
 
 /* ── Footer row: account trigger + small context trigger ─────── */
 .row {
@@ -40,6 +45,7 @@
   width: 32px;
   height: 32px;
   align-self: center;
+  margin-left: auto;
   border-radius: 8px;
   background: transparent;
   border: 1px solid transparent;
