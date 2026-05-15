@@ -81,6 +81,12 @@ type DetachedTailRecoveryInput = {
   isTailRestorePending?: boolean;
 };
 
+type LoadOlderFromScrollTopInput = {
+  scrollTop: number;
+  isBlocked: boolean;
+  thresholdPx?: number;
+};
+
 type PrependedAnchorScrollTopInput = {
   currentScrollTop: number;
   previousAnchorOffset: number;
@@ -303,6 +309,14 @@ export function shouldRecoverDetachedTailOnScroll(input: DetachedTailRecoveryInp
     return false;
   }
   return true;
+}
+
+export function shouldLoadOlderFromScrollTop(input: LoadOlderFromScrollTopInput): boolean {
+  if (input.isBlocked) {
+    return false;
+  }
+  const thresholdPx = input.thresholdPx ?? 96;
+  return input.scrollTop <= thresholdPx;
 }
 
 export function resolvePrependedAnchorScrollTop(input: PrependedAnchorScrollTopInput): number {

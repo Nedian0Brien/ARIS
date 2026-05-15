@@ -19,26 +19,27 @@ function readCssBlock(source: string, selector: string): string {
 }
 
 describe('chat mobile scroll ownership', () => {
-  it('keeps the mobile chat shell and timeline as contained scroll regions', () => {
+  it('keeps the mobile chat shell and timeline on the page-scroll model', () => {
     const chatShellMobileScroll = readCssBlock(chatInterfaceCss, '.chatShell.chatShellMobileScroll');
     const centerPanelMobileScroll = readCssBlock(chatInterfaceCss, '.centerPanel.centerPanelMobileScroll');
     const centerFrameMobileScroll = readCssBlock(chatInterfaceCss, '.centerFrame.centerFrameMobileScroll');
     const streamMobileScroll = readCssBlock(chatInterfaceCss, '.stream.streamMobileScroll');
 
-    expect(chatShellMobileScroll).toContain('overflow: hidden;');
+    expect(chatShellMobileScroll).toContain('overflow: visible;');
     expect(centerPanelMobileScroll).toContain('overflow: hidden;');
     expect(centerFrameMobileScroll).toContain('overflow: hidden;');
-    expect(streamMobileScroll).toContain('overflow-y: auto;');
-    expect(streamMobileScroll).not.toContain('overflow: visible;');
+    expect(streamMobileScroll).toContain('overflow: visible;');
+    expect(streamMobileScroll).not.toContain('overflow-y: auto;');
   });
 
-  it('drives chat tail restore through the stream instead of window scroll writes', () => {
-    expect(chatTailRestoreSource).toContain("source: 'tail:scrollConversationToBottom:stream'");
-    expect(chatTailRestoreSource).not.toContain('window.scrollTo(');
+  it('drives mobile chat tail restore through the page scroll owner', () => {
+    expect(chatTailRestoreSource).toContain("source: 'tail:scrollConversationToBottom:window'");
+    expect(chatTailRestoreSource).toContain('window.scrollTo(');
   });
 
-  it('avoids mobile window-scroll reads in the chat interface scroll sync path', () => {
-    expect(chatInterfaceSource).not.toContain('getWindowScrollTop()');
-    expect(chatInterfaceSource).not.toContain('isNearWindowBottom()');
+  it('uses mobile window-scroll reads for bottom state and top history pagination', () => {
+    expect(chatInterfaceSource).toContain('getWindowScrollTop()');
+    expect(chatInterfaceSource).toContain('isNearWindowBottom()');
+    expect(chatInterfaceSource).toContain('history:loadOlder:window-threshold');
   });
 });

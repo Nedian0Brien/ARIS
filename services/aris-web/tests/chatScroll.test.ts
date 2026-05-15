@@ -16,6 +16,7 @@ import {
   shouldAllowSystemScrollWrite,
   shouldBlockLoadOlder,
   shouldRecoverDetachedTailOnScroll,
+  shouldLoadOlderFromScrollTop,
   resolveMobileBottomLockState,
   resolvePrependedAnchorScrollTop,
   shouldUseManualScrollRestoration,
@@ -476,6 +477,32 @@ describe('chatScroll', () => {
     });
     it('allows when all conditions clear', () => {
       expect(shouldBlockLoadOlder({ isTailLayoutSettling: false, isLoadingOlder: false, hasMoreBefore: true })).toBe(false);
+    });
+  });
+
+  describe('shouldLoadOlderFromScrollTop', () => {
+    it('triggers older history loading when the user reaches the top threshold', () => {
+      expect(shouldLoadOlderFromScrollTop({
+        scrollTop: 96,
+        isBlocked: false,
+      })).toBe(true);
+
+      expect(shouldLoadOlderFromScrollTop({
+        scrollTop: 12,
+        isBlocked: false,
+      })).toBe(true);
+    });
+
+    it('does not trigger while history loading is blocked or the user is below the threshold', () => {
+      expect(shouldLoadOlderFromScrollTop({
+        scrollTop: 95,
+        isBlocked: true,
+      })).toBe(false);
+
+      expect(shouldLoadOlderFromScrollTop({
+        scrollTop: 97,
+        isBlocked: false,
+      })).toBe(false);
     });
   });
 
