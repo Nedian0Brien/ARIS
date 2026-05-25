@@ -107,6 +107,30 @@ describe('project list surface', () => {
     expect(projectChatSurface).not.toContain('/sessions/${session.id}');
   });
 
+  it('loads older project chat event pages from the timeline instead of replacing the visible window', () => {
+    expect(projectChatSurface).toContain('const PROJECT_CHAT_EVENT_PAGE_LIMIT = 40;');
+    expect(projectChatSurface).toContain("params.set('before', cursor.before);");
+    expect(projectChatSurface).toContain('const loadOlderEvents = useCallback(async () => {');
+    expect(projectChatSurface).toContain('setEvents((current) => mergeProjectChatEvents([...olderEvents, ...current]));');
+    expect(projectChatSurface).toContain('onScroll={handleTimelineScroll}');
+    expect(projectChatSurface).toContain('const visibleEvents = events;');
+    expect(projectChatSurface).not.toContain('const visibleEvents = events.slice(-40);');
+  });
+
+  it('keeps project chat keyboard send and preview defaults aligned with the redesigned composer', () => {
+    expect(projectChatSurface).toContain("event.key !== 'Enter' || event.shiftKey || (!event.metaKey && !event.ctrlKey)");
+    expect(projectChatSurface).toContain('event.currentTarget.form?.requestSubmit();');
+    expect(projectChatSurface).toContain("const [previewState, setPreviewState] = useState<PreviewState>('closed');");
+    expect(projectChatSurface).toContain("setPreviewState('closed');");
+  });
+
+  it('renders the jump-to-latest control only when the timeline has newer content below the viewport', () => {
+    expect(projectChatSurface).toContain('const PROJECT_CHAT_BOTTOM_THRESHOLD_PX = 96;');
+    expect(projectChatSurface).toContain('setShowJumpToLatest(distanceFromBottom > PROJECT_CHAT_BOTTOM_THRESHOLD_PX);');
+    expect(projectChatSurface).toContain('{showJumpToLatest && (');
+    expect(projectChatSurface).toContain('className="jb"');
+  });
+
   it('wires the project detail header actions to IDE, settings, and real chat creation', () => {
     const detailStart = homeClient.indexOf('function ProjectDetailSurface({');
     const projectSurfaceStart = homeClient.indexOf('function ProjectSurface({');
@@ -274,7 +298,7 @@ describe('project list surface', () => {
     expect(submitSource).toContain('command: text,');
     expect(submitSource).toContain("const body = (await response.json().catch(() => ({}))) as { event?: UiEvent; events?: UiEvent[]; error?: string };");
     expect(submitSource).toContain('const submittedEvents = isTerminalMode');
-    expect(submitSource).toContain('setEvents((previous) => [...previous, ...submittedEvents]);');
+    expect(submitSource).toContain('setEvents((previous) => mergeProjectChatEvents([...previous, ...submittedEvents]));');
   });
 
   it('renders Terminal command output as a Terminal timeline response with its own avatar', () => {

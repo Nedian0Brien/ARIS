@@ -44,7 +44,7 @@ import {
 import { ProviderLogo, type ProviderLogoProvider } from '@/components/ui/ProviderLogo';
 import { isTerminalRunStatus, readUiEventRunStatus } from '@/lib/happy/chatRuntime';
 import { withAppBasePath } from '@/lib/routing/appPath';
-import type { SessionChat, SessionStatus, SessionSummary, UiEvent } from '@/lib/happy/types';
+import type { SessionChat, SessionEventsPage, SessionStatus, SessionSummary, UiEvent } from '@/lib/happy/types';
 import { readLocalStorage, removeLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
 import { abortProjectChat } from '@/lib/runtime/abortChat';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
@@ -109,6 +109,11 @@ type ProjectRunIndicator = {
   label: string;
   startedAt: string;
   tone: 'submitting' | 'running' | 'approval' | 'aborting';
+};
+type ProjectChatEventsResponse = {
+  events?: UiEvent[];
+  page?: Partial<SessionEventsPage>;
+  error?: string;
 };
 export type ProjectChatSurfaceMode = 'full' | 'panel';
 type ProjectChatDragPayload = {
@@ -175,6 +180,9 @@ type ProjectPanelDropHandler = (
 // Local constants (duplicated from HomePageClient.tsx; cleanup out of scope)
 // ---------------------------------------------------------------------------
 const WORKSPACE_DRAWER_CLOSE_MS = 160;
+const PROJECT_CHAT_EVENT_PAGE_LIMIT = 40;
+const PROJECT_CHAT_LOAD_OLDER_THRESHOLD_PX = 80;
+const PROJECT_CHAT_BOTTOM_THRESHOLD_PX = 96;
 
 const PROVIDER_LABELS: Record<ModelProvider, string> = {
   claude: 'Claude',
@@ -576,6 +584,14 @@ function terminalOutput(event: UiEvent): string {
   return event.result?.preview || bodyOutput || getEventText(event) || '(no output)';
 }
 
+function mergeProjectChatEvents(events: UiEvent[]): UiEvent[] {
+  const dedup = new Map<string, UiEvent>();
+  for (const event of events) {
+    dedup.set(event.id, event);
+  }
+  return [...dedup.values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+}
+
 function agentLabel(agent: SessionSummary['agent'], model?: string | null): string {
   const provider = agent === 'claude' ? 'Claude' : agent === 'gemini' ? 'Gemini' : agent === 'codex' ? 'Codex' : 'Agent';
   return model ? `${provider} · ${model}` : provider;
@@ -714,6 +730,17 @@ function ProjectChatComposer({
   selectedModelId: string;
   selectedProvider: ModelProvider;
 }) {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey || (!event.metaKey && !event.ctrlKey)) {
+      return;
+    }
+    event.preventDefault();
+    if (isRunning || isAborting || !prompt.trim()) {
+      return;
+    }
+    event.currentTarget.form?.requestSubmit();
+  };
+
   return (
     <footer ref={composerWrapRef} className="cmp-wrap">
       <form className="cmp" onSubmit={onSubmit}>
@@ -816,6 +843,7 @@ function ProjectChatComposer({
           className="cmp__input"
           value={prompt}
           onChange={(event) => onPromptChange(event.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder={placeholder}
           rows={2}
         />
@@ -1166,7 +1194,7 @@ function ProjectParallelChatPane({
   const { isRunning: runtimeRunning } = useSessionRuntime(runtimeSessionId, chat.id, true);
   const runtimeBadge = resolvePanelRuntimeBadge(panelRuntime, runtimeRunning, panelRuntimeError);
   const runtimeNeedsRepair = runtimeBadge.tone === 'pending' || runtimeBadge.tone === 'error';
-  const visibleEvents = events.slice(-40);
+  const visibleEvents = events;
   const hasRuntimeEvents = visibleEvents.length > 0;
   const projectRunActive = runtimeRunning || isSubmitting;
 
@@ -1261,7 +1289,7 @@ function ProjectParallelChatPane({
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = prompt.trim();
-    if (!text || isSubmitting) return;
+    if (!text || isSubmitting || projectRunActive) return;
 
     setIsSubmitting(true);
     setError(null);
@@ -1580,9 +1608,11 @@ export function ProjectChatSurface({
   const projectId = session.id;
   const [chats, setChats] = useState<SessionChat[]>([]);
   const [events, setEvents] = useState<UiEvent[]>([]);
+  const [eventsPage, setEventsPage] = useState<Partial<SessionEventsPage> | null>(null);
   const [prompt, setPrompt] = useState('');
   const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const [isLoadingOlderEvents, setIsLoadingOlderEvents] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAborting, setIsAborting] = useState(false);
   const [submittedRunStartedAt, setSubmittedRunStartedAt] = useState<string | null>(null);
@@ -1594,6 +1624,10 @@ export function ProjectChatSurface({
   const runtimeModelLabel = activeChat?.model ?? modelLabel;
   const runtimeAgent = activeChat?.agent ?? session.agent;
   const timelineRef = useRef<HTMLDivElement | null>(null);
+  const eventsRef = useRef<UiEvent[]>([]);
+  const selectedChatIdRef = useRef<string | null>(selectedChatId);
+  const hasMoreBeforeRef = useRef(false);
+  const isLoadingOlderEventsRef = useRef(false);
   const workspaceRef = useRef<HTMLElement | null>(null);
   const workspaceToggleRef = useRef<HTMLButtonElement | null>(null);
   const workspaceCloseTimerRef = useRef<number | null>(null);
@@ -1602,7 +1636,7 @@ export function ProjectChatSurface({
   const [workspaceOpen, setWorkspaceOpen] = useState(true);
   const [workspaceDrawerPhase, setWorkspaceDrawerPhase] = useState<'idle' | 'closing'>('idle');
   const [workspaceLayoutReady, setWorkspaceLayoutReady] = useState(false);
-  const [previewState, setPreviewState] = useState<PreviewState>('dock');
+  const [previewState, setPreviewState] = useState<PreviewState>('closed');
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1639,6 +1673,7 @@ export function ProjectChatSurface({
   const [draftTerminalCommand, setDraftTerminalCommand] = useState('npm test -- --run tests/projectListSurface.test.ts');
   const [previewDevice, setPreviewDevice] = useState<'1200' | '768' | '390'>('1200');
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [parallelPanelState, setParallelPanelState] = useState<ProjectParallelPanelTreeState | null>(null);
   const [parallelPanelRuntime, setParallelPanelRuntime] = useState<ProjectWorkspacePanelRuntimeMap>({});
   const [parallelPanelRuntimeErrors, setParallelPanelRuntimeErrors] = useState<ProjectPanelRuntimeErrors>({});
@@ -1653,7 +1688,7 @@ export function ProjectChatSurface({
   const [workspaceGitOverview, setWorkspaceGitOverview] = useState<ProjectPanelGitOverview | null>(null);
   const [workspaceGitLoading, setWorkspaceGitLoading] = useState(false);
   const [workspaceGitError, setWorkspaceGitError] = useState<string | null>(null);
-  const visibleEvents = events.slice(-40);
+  const visibleEvents = events;
   const activeOption = useMemo(() => {
     const list = providerOptions[selectedProvider] ?? [];
     return list.find((o) => o.id === selectedModelId) ?? { id: selectedModelId, label: selectedModelId, meta: undefined };
@@ -1733,6 +1768,115 @@ export function ProjectChatSurface({
     void copyToClipboard(value).then((copied) => {
       showTransientFeedback(copied ? `${label} copied` : `${label} ready`);
     });
+  };
+
+  const updateJumpToLatestVisibility = useCallback(() => {
+    const node = timelineRef.current;
+    if (!node) {
+      setShowJumpToLatest(false);
+      return;
+    }
+    const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+    setShowJumpToLatest(distanceFromBottom > PROJECT_CHAT_BOTTOM_THRESHOLD_PX);
+  }, []);
+
+  const buildEventsParams = useCallback((cursor?: { before?: string; after?: string }) => {
+    const params = new URLSearchParams();
+    params.set('limit', String(PROJECT_CHAT_EVENT_PAGE_LIMIT));
+    if (selectedChatId) {
+      params.set('chatId', selectedChatId);
+    }
+    if (activeChat?.isDefault) {
+      params.set('includeUnassigned', 'true');
+    }
+    if (cursor?.before) {
+      params.set('before', cursor.before);
+    }
+    if (cursor?.after) {
+      params.set('after', cursor.after);
+    }
+    return params;
+  }, [activeChat?.isDefault, selectedChatId]);
+
+  const fetchEventsPage = useCallback(async (cursor?: { before?: string; after?: string }) => {
+    const response = await fetch(
+      withAppBasePath(buildProjectRuntimeEventsPath(projectId, buildEventsParams(cursor))),
+      { cache: 'no-store' },
+    );
+    const body = (await response.json().catch(() => ({}))) as ProjectChatEventsResponse;
+    if (!response.ok) {
+      throw new Error(body.error ?? '채팅 이벤트를 불러오지 못했습니다.');
+    }
+    return body;
+  }, [buildEventsParams, projectId]);
+
+  const loadOlderEvents = useCallback(async () => {
+    if (!selectedChatId || isLoadingOlderEventsRef.current || !hasMoreBeforeRef.current) {
+      return;
+    }
+
+    const oldestEventId = eventsRef.current[0]?.id;
+    if (!oldestEventId) {
+      setEventsPage((current) => ({ ...(current ?? {}), hasMoreBefore: false }));
+      return;
+    }
+
+    const timelineNode = timelineRef.current;
+    const previousScrollHeight = timelineNode?.scrollHeight ?? 0;
+    const previousScrollTop = timelineNode?.scrollTop ?? 0;
+    const loadingChatId = selectedChatId;
+    isLoadingOlderEventsRef.current = true;
+    setIsLoadingOlderEvents(true);
+    try {
+      const body = await fetchEventsPage({ before: oldestEventId });
+      if (selectedChatIdRef.current !== loadingChatId) {
+        return;
+      }
+      const olderEvents = body.events ?? [];
+      setEvents((current) => mergeProjectChatEvents([...olderEvents, ...current]));
+      setEventsPage((current) => ({ ...(current ?? {}), ...(body.page ?? {}) }));
+      window.requestAnimationFrame(() => {
+        const nextTimelineNode = timelineRef.current;
+        if (!nextTimelineNode || selectedChatIdRef.current !== loadingChatId) {
+          return;
+        }
+        const nextScrollHeight = nextTimelineNode.scrollHeight;
+        nextTimelineNode.scrollTop = nextScrollHeight - previousScrollHeight + previousScrollTop;
+        updateJumpToLatestVisibility();
+      });
+    } catch (loadError) {
+      if (selectedChatIdRef.current === loadingChatId) {
+        setError(loadError instanceof Error ? loadError.message : '이전 메시지를 불러오지 못했습니다.');
+      }
+    } finally {
+      if (selectedChatIdRef.current === loadingChatId) {
+        isLoadingOlderEventsRef.current = false;
+        setIsLoadingOlderEvents(false);
+      }
+    }
+  }, [fetchEventsPage, selectedChatId, updateJumpToLatestVisibility]);
+
+  const handleTimelineScroll = useCallback(() => {
+    updateJumpToLatestVisibility();
+    const node = timelineRef.current;
+    if (!node || node.scrollTop > PROJECT_CHAT_LOAD_OLDER_THRESHOLD_PX) {
+      return;
+    }
+    if (!hasMoreBeforeRef.current || isLoadingOlderEventsRef.current) {
+      return;
+    }
+    void loadOlderEvents();
+  }, [loadOlderEvents, updateJumpToLatestVisibility]);
+
+  const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey || (!event.metaKey && !event.ctrlKey)) {
+      return;
+    }
+    event.preventDefault();
+    if (!prompt.trim() || projectRunActive || isSubmitting) {
+      return;
+    }
+    event.currentTarget.form?.requestSubmit();
   };
 
   const defaultWorkspaceOpen = () => !window.matchMedia('(max-width: 1100px)').matches && surfaceMode === 'full';
@@ -2119,7 +2263,7 @@ export function ProjectChatSurface({
     setWorkspaceTab('run');
     setWorkspacePanelImmediate(defaultWorkspaceOpen());
     setWorkspaceLayoutReady(true);
-    setPreviewState('dock');
+    setPreviewState('closed');
     setModelSelectorOpen(false);
     setSelectedProvider(providerFromAgent(runtimeAgent));
     setSelectedEffort(normalizeReasoningEffort(activeChat?.modelReasoningEffort));
@@ -2198,6 +2342,25 @@ export function ProjectChatSurface({
   }, []);
 
   useEffect(() => {
+    eventsRef.current = events;
+    updateJumpToLatestVisibility();
+  }, [events, updateJumpToLatestVisibility]);
+
+  useEffect(() => {
+    selectedChatIdRef.current = selectedChatId;
+    isLoadingOlderEventsRef.current = false;
+    setIsLoadingOlderEvents(false);
+  }, [selectedChatId]);
+
+  useEffect(() => {
+    hasMoreBeforeRef.current = eventsPage?.hasMoreBefore === true;
+  }, [eventsPage?.hasMoreBefore]);
+
+  useEffect(() => {
+    isLoadingOlderEventsRef.current = isLoadingOlderEvents;
+  }, [isLoadingOlderEvents]);
+
+  useEffect(() => {
     let cancelled = false;
     async function loadChats() {
       setIsLoadingChats(true);
@@ -2229,51 +2392,51 @@ export function ProjectChatSurface({
   useEffect(() => {
     if (!selectedChatId) {
       setEvents([]);
+      setEventsPage(null);
       setSubmittedRunStartedAt(null);
+      setShowJumpToLatest(false);
       return;
     }
 
     let cancelled = false;
-    const loadEvents = async (showLoading: boolean) => {
-      if (showLoading) {
+    const loadEvents = async (mode: 'initial' | 'refresh') => {
+      const loadingChatId = selectedChatId;
+      const newestEventId = mode === 'refresh' ? eventsRef.current.at(-1)?.id : null;
+      if (mode === 'initial') {
         setIsLoadingEvents(true);
       }
       try {
-        const params = new URLSearchParams();
-        params.set('limit', '40');
-        params.set('chatId', selectedChatId);
-        if (activeChat?.isDefault) {
-          params.set('includeUnassigned', 'true');
-        }
-        const response = await fetch(withAppBasePath(buildProjectRuntimeEventsPath(projectId, params)), { cache: 'no-store' });
-        const body = (await response.json().catch(() => ({}))) as { events?: UiEvent[]; error?: string };
-        if (!response.ok) {
-          throw new Error(body.error ?? '채팅 이벤트를 불러오지 못했습니다.');
-        }
-        if (!cancelled) {
-          setEvents(body.events ?? []);
+        const body = await fetchEventsPage(newestEventId ? { after: newestEventId } : undefined);
+        if (!cancelled && selectedChatIdRef.current === loadingChatId) {
+          const nextEvents = body.events ?? [];
+          setEvents((current) => (
+            mode === 'refresh' && newestEventId
+              ? mergeProjectChatEvents([...current, ...nextEvents])
+              : mergeProjectChatEvents(nextEvents)
+          ));
+          setEventsPage((current) => ({ ...(current ?? {}), ...(body.page ?? {}) }));
           setError(null);
         }
       } catch (loadError) {
-        if (!cancelled) {
+        if (!cancelled && selectedChatIdRef.current === loadingChatId) {
           setError(loadError instanceof Error ? loadError.message : '채팅 이벤트를 불러오지 못했습니다.');
         }
       } finally {
-        if (!cancelled && showLoading) {
+        if (!cancelled && mode === 'initial') {
           setIsLoadingEvents(false);
         }
       }
     };
 
-    void loadEvents(true);
+    void loadEvents('initial');
     const intervalId = window.setInterval(() => {
-      void loadEvents(false);
+      void loadEvents('refresh');
     }, 3500);
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeChat?.isDefault, selectedChatId, projectId]);
+  }, [fetchEventsPage, selectedChatId]);
 
   useEffect(() => {
     const latestLifecycle = readLatestProjectRunLifecycle(events);
@@ -2352,7 +2515,7 @@ export function ProjectChatSurface({
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = prompt.trim();
-    if (!text || isSubmitting) return;
+    if (!text || isSubmitting || projectRunActive) return;
 
     setIsSubmitting(true);
     setError(null);
@@ -2407,7 +2570,7 @@ export function ProjectChatSurface({
       const latestEvent = submittedEvents[submittedEvents.length - 1] as UiEvent;
       const latestEventAt = latestEvent.timestamp || submittedAt;
       setPrompt('');
-      setEvents((previous) => [...previous, ...submittedEvents]);
+      setEvents((previous) => mergeProjectChatEvents([...previous, ...submittedEvents]));
       const shouldPersistModel = !!chat && !!modelToSend && chat.model !== modelToSend;
       setChats((previous) => previous.map((item) => (
         item.id === chat.id
@@ -2937,7 +3100,7 @@ export function ProjectChatSurface({
             </div>
           </header>
 
-          <div className="tl" ref={timelineRef}>
+          <div className="tl" ref={timelineRef} onScroll={handleTimelineScroll}>
             <div className="tl__container">
               <div className="tl__day">
                 <span className="tl__day-line" />
@@ -2945,6 +3108,7 @@ export function ProjectChatSurface({
                 <span className="tl__day-line" />
               </div>
 
+              {isLoadingOlderEvents && <div className="pc-chat-loading pc-chat-loading--older">Loading earlier messages...</div>}
               {isLoadingEvents && <div className="pc-chat-loading">Loading messages...</div>}
               {!isLoadingEvents && !hasRuntimeEvents && (
                 <div className="pc-chat-empty-state" role="status">
@@ -2958,7 +3122,8 @@ export function ProjectChatSurface({
               {rendered}
             </div>
 
-            <div className="jb-wrap">
+            {showJumpToLatest && (
+            <div className="jb-wrap" data-visible="true">
               <button
                 type="button"
                 className="jb"
@@ -2969,6 +3134,7 @@ export function ProjectChatSurface({
                 <ArrowDown size={15} />
               </button>
             </div>
+            )}
           </div>
 
           <footer ref={composerWrapRef} className="cmp-wrap">
@@ -3079,6 +3245,7 @@ export function ProjectChatSurface({
                 className="cmp__input"
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
+                onKeyDown={handleComposerKeyDown}
                 placeholder="에이전트에게 무엇이든 요청하세요... Shift Enter 줄바꿈 · Cmd Enter 전송"
                 rows={2}
               />
