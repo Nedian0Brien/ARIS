@@ -618,6 +618,7 @@ function Sidebar({
   const [projectChatsById, setProjectChatsById] = useState<Record<string, SessionChat[]>>({});
   const [visibleProjectChatCounts, setVisibleProjectChatCounts] = useState<Record<string, number>>({});
   const [loadingProjectChatIds, setLoadingProjectChatIds] = useState<Set<string>>(() => new Set());
+  const [creatingProjectChatIds, setCreatingProjectChatIds] = useState<Set<string>>(() => new Set());
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
   const [tipPosition, setTipPosition] = useState<{ top: number; left: number } | null>(null);
 
@@ -735,6 +736,45 @@ function Sidebar({
     });
   }
 
+  async function createSidebarProjectChat(session: SessionSummary) {
+    if (creatingProjectChatIds.has(session.id)) return;
+    setCreatingProjectChatIds((current) => new Set(current).add(session.id));
+    try {
+      const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);
+      const createdChat = await createProjectChat(session.id, {
+        title: `Chat ${Math.max(1, (session.totalChats ?? 0) + 1)}`,
+        agent: session.agent,
+        model: projectModelInput,
+        modelReasoningEffort: serializeReasoningEffort('High'),
+      });
+      setProjectChatsById((current) => {
+        const existingChats = current[session.id] ?? [];
+        return {
+          ...current,
+          [session.id]: [createdChat, ...existingChats.filter((chat) => chat.id !== createdChat.id)],
+        };
+      });
+      setExpandedProjectIds((current) => {
+        const next = new Set(current);
+        next.add(session.id);
+        return next;
+      });
+      setVisibleProjectChatCounts((current) => ({
+        ...current,
+        [session.id]: Math.max(current[session.id] ?? SIDEBAR_PROJECT_CHAT_PAGE_SIZE, SIDEBAR_PROJECT_CHAT_PAGE_SIZE),
+      }));
+      onProjectChatOpen(session.id, createdChat.id);
+    } catch {
+      return;
+    } finally {
+      setCreatingProjectChatIds((current) => {
+        const next = new Set(current);
+        next.delete(session.id);
+        return next;
+      });
+    }
+  }
+
   return (
     <aside className="m-sb" aria-label="ARIS navigation">
       <div className="m-sb__brand">
@@ -773,38 +813,64 @@ function Sidebar({
               const isProjectExpanded = expandedProjectIds.has(session.id);
               const childChats = projectChatsById[session.id] ?? [];
               const isLoadingProjectChats = loadingProjectChatIds.has(session.id);
+              const isCreatingProjectChat = creatingProjectChatIds.has(session.id);
               const visibleSidebarChatLimit = visibleProjectChatCounts[session.id] ?? SIDEBAR_PROJECT_CHAT_PAGE_SIZE;
               const visibleChatCount = session.totalChats ?? childChats.length;
               const hasMoreProjectChats = visibleChatCount > childChats.length;
+              const projectName = displayProjectName(session);
               return (
                 <div key={session.id} className={`m-sb__project-node${isProjectExpanded ? ' m-sb__project-node--open' : ''}`}>
                   <div className="m-sb__proj-row">
                     <button
                       type="button"
-                      className="m-sb__chat-toggle"
-                      aria-label={`${isProjectExpanded ? 'Collapse' : 'Expand'} ${displayProjectName(session)} chats`}
+                      className={`m-sb__proj m-sb__proj--${statusClass(session.status)}${isActiveProject ? ' m-sb__proj--active' : ''}`}
+                      aria-label={`${isProjectExpanded ? 'Collapse' : 'Expand'} ${projectName} chats`}
                       aria-expanded={isProjectExpanded}
                       onClick={() => toggleProjectChatGroup(session.id)}
-                    >
-                      <ChevronRight className={`m-sb__chat-toggle-icon${isProjectExpanded ? ' m-sb__chat-toggle-icon--open' : ''}`} size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      className={`m-sb__proj m-sb__proj--${statusClass(session.status)}${isActiveProject ? ' m-sb__proj--active' : ''}`}
-                      onClick={() => onProjectOpen(session.id)}
                       onMouseEnter={(event) => handleProjectTipShow(session, event)}
                       onMouseLeave={handleProjectTipHide}
                       onFocus={(event) => handleProjectTipShow(session, event)}
                       onBlur={handleProjectTipHide}
                       aria-describedby={hoveredProjectId === session.id ? 'sb-tip' : undefined}
                     >
+                      <ChevronRight className={`m-sb__chat-toggle-icon${isProjectExpanded ? ' m-sb__chat-toggle-icon--open' : ''}`} size={13} />
                       <span className="m-sb__proj-dot" />
-                      <span className="m-sb__proj-name">{displayProjectName(session)}</span>
+                      <span className="m-sb__proj-name">{projectName}</span>
                       <span className="m-sb__proj-count">{visibleChatCount}</span>
                     </button>
+                    <div className="m-sb__proj-actions" aria-label={`${projectName} actions`}>
+                      <button
+                        type="button"
+                        className="m-sb__proj-action"
+                        aria-label={`${projectName} 새 채팅`}
+                        title="새 채팅"
+                        disabled={isCreatingProjectChat}
+                        aria-busy={isCreatingProjectChat}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleProjectTipHide();
+                          void createSidebarProjectChat(session);
+                        }}
+                      >
+                        <Plus size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        className="m-sb__proj-action"
+                        aria-label={`${projectName} 프로젝트 화면 들어가기`}
+                        title="프로젝트 화면 들어가기"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleProjectTipHide();
+                          onProjectOpen(session.id);
+                        }}
+                      >
+                        <ExternalLink size={13} />
+                      </button>
+                    </div>
                   </div>
                   {isProjectExpanded && (
-                    <div className="m-sb__chat-children" aria-label={`${displayProjectName(session)} chats`}>
+                    <div className="m-sb__chat-children" aria-label={`${projectName} chats`}>
                       {childChats.slice(0, visibleSidebarChatLimit).map((chat) => (
                         <button
                           key={chat.id}

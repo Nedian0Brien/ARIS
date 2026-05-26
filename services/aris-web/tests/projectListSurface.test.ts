@@ -485,6 +485,20 @@ describe('project list surface', () => {
     expect(homeClient).toContain('aria-expanded={isProjectExpanded}');
   });
 
+  it('uses the sidebar project row for expand and exposes icon-only project actions', () => {
+    expect(homeClient).toContain('const [creatingProjectChatIds, setCreatingProjectChatIds] = useState<Set<string>>(() => new Set());');
+    expect(homeClient).toContain('async function createSidebarProjectChat(session: SessionSummary)');
+    expect(homeClient).toContain('onClick={() => toggleProjectChatGroup(session.id)}');
+    expect(homeClient).toContain('className="m-sb__proj-actions"');
+    expect(homeClient).toContain('aria-label={`${projectName} 새 채팅`}');
+    expect(homeClient).toContain('void createSidebarProjectChat(session);');
+    expect(homeClient).toContain('aria-label={`${projectName} 프로젝트 화면 들어가기`}');
+    expect(homeClient).toContain('onProjectOpen(session.id);');
+    expect(homeClient).not.toContain('className="m-sb__chat-toggle"');
+    expect(exactCssBlock('.m-sb__proj-row')).toContain('grid-template-columns: minmax(0, 1fr) auto;');
+    expect(exactCssBlock('.m-sb__proj-action')).toContain('width: 24px;');
+  });
+
   it('keeps sidebar project and chat rows height-stable when active selection changes', () => {
     expect(uiCss).toMatch(/\.m-sb__nav-item,\n\.m-sb__proj\s*\{[\s\S]*height:\s*30px;[\s\S]*line-height:\s*1;/);
     expect(exactCssBlock('.m-sb__proj-row')).toContain('height: 30px;');

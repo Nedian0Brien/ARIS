@@ -678,14 +678,20 @@ html[data-theme='dark'] .m-sb__proj--active {
 
 .m-sb__proj-row {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 2px;
   height: 30px;
   min-width: 0;
 }
 
-.m-sb__chat-toggle {
+.m-sb__proj-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.m-sb__proj-action {
   width: 24px;
   height: 28px;
   border-radius: var(--r-sm);
@@ -695,14 +701,20 @@ html[data-theme='dark'] .m-sb__proj--active {
   color: var(--text-tertiary);
 }
 
-.m-sb__chat-toggle:hover,
-.m-sb__chat-toggle:focus-visible {
+.m-sb__proj-action:hover,
+.m-sb__proj-action:focus-visible {
   background: var(--surface-hover);
   color: var(--text-primary);
   outline: none;
 }
 
+.m-sb__proj-action:disabled {
+  cursor: progress;
+  opacity: 0.56;
+}
+
 .m-sb__chat-toggle-icon {
+  flex-shrink: 0;
   transition: transform 140ms var(--ease-smooth);
 }
 
