@@ -460,13 +460,29 @@ describe('project list surface', () => {
 
   it('keeps project chats nested under the selected project in the redesigned sidebar', () => {
     expect(homeClient).toContain('activeProjectChatId: string | null;');
-    expect(homeClient).toContain('className={`m-sb__project-node${isActiveProject ?');
-    expect(homeClient).toContain('const visibleChatCount = isActiveProject && !isLoadingProjectChats');
+    expect(homeClient).toContain('className={`m-sb__project-node${isProjectExpanded ?');
+    expect(homeClient).toContain('const visibleChatCount = session.totalChats ?? childChats.length;');
     expect(homeClient).toContain('<span className="m-sb__proj-count">{visibleChatCount}</span>');
     expect(homeClient).toContain('className="m-sb__chat-children"');
     expect(homeClient).toContain("className={`m-sb__chat-child${activeProjectChatId === chat.id ? ' m-sb__chat-child--active' : ''}`}");
     expect(homeClient).toContain("onClick={() => onProjectChatOpen(session.id, chat.id)}");
     expect(homeClient).toContain("setSelectedProjectChatId(nextTab === 'project' && nextProjectView === 'chat' ? (searchParams.get('chat') ?? null) : null);");
+  });
+
+  it('lets multiple project sidebar chat groups expand independently and page in five chats at a time', () => {
+    expect(homeClient).toContain('const SIDEBAR_PROJECT_CHAT_PAGE_SIZE = 5;');
+    expect(homeClient).toContain('const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set());');
+    expect(homeClient).toContain('const [projectChatsById, setProjectChatsById] = useState<Record<string, SessionChat[]>>({});');
+    expect(homeClient).toContain('const [visibleProjectChatCounts, setVisibleProjectChatCounts] = useState<Record<string, number>>({});');
+    expect(homeClient).toContain('function toggleProjectChatGroup(sessionId: string)');
+    expect(homeClient).toContain('function showMoreProjectChats(sessionId: string)');
+    expect(homeClient).toContain("params.set('limit', String(limit));");
+    expect(homeClient).toContain('next[sessionId] = currentCount + SIDEBAR_PROJECT_CHAT_PAGE_SIZE;');
+    expect(homeClient).toContain('expandedProjectIds.has(session.id)');
+    expect(homeClient).toContain('childChats.slice(0, visibleSidebarChatLimit).map((chat) => (');
+    expect(homeClient).toContain('const hasMoreProjectChats = visibleChatCount > childChats.length;');
+    expect(homeClient).toContain('className="m-sb__chat-more"');
+    expect(homeClient).toContain('aria-expanded={isProjectExpanded}');
   });
 
   it('ships the project list CSS copied into the app stylesheet', () => {
@@ -504,6 +520,8 @@ describe('project list surface', () => {
       '.pc-proto .ws',
       '.m-sb__chat-children',
       '.m-sb__chat-child',
+      '.m-sb__chat-toggle',
+      '.m-sb__chat-more',
     ].forEach((selector) => {
       expect(uiCss).toContain(selector);
     });

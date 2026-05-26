@@ -17,11 +17,13 @@ export async function listProjectChats(input: {
   projectId: string;
   userId: string;
   ensureDefault?: boolean;
+  limit?: number;
 }): Promise<ProjectChat[]> {
   const chats = await listSessionChats({
     sessionId: input.projectId,
     userId: input.userId,
     ensureDefault: input.ensureDefault,
+    limit: input.limit,
   });
   return chats.map(toProjectChat);
 }

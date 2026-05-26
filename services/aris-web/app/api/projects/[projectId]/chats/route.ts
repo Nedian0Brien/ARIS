@@ -21,10 +21,13 @@ export async function GET(
 
   try {
     const { projectId } = await params;
+    const limitRaw = request.nextUrl.searchParams.get('limit');
+    const limit = limitRaw ? Math.max(1, Math.floor(Number(limitRaw))) : undefined;
     const chats = await listProjectChats({
       projectId,
       userId: auth.user.id,
       ensureDefault: true,
+      ...(Number.isFinite(limit) ? { limit } : {}),
     });
     return NextResponse.json({ chats });
   } catch (error) {

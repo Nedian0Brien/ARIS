@@ -153,6 +153,7 @@ const SUGGESTED_ASKS = [
 
 const CMD_CONSOLE_MAX_LINES = 16;
 const WORKSPACE_DRAWER_CLOSE_MS = 160;
+const SIDEBAR_PROJECT_CHAT_PAGE_SIZE = 5;
 const DEFAULT_CODE_SERVER_BASE_URL = 'https://lawdigest.cloud/';
 const CODE_SERVER_BASE_URL = process.env.NEXT_PUBLIC_CODE_SERVER_BASE_URL || DEFAULT_CODE_SERVER_BASE_URL;
 
@@ -610,11 +611,13 @@ function Sidebar({
   themeMode: ThemeMode;
   onThemeChange: (mode: ThemeMode) => void;
 }) {
-  const projects = sortSessions(sessions).slice(0, 6);
+  const projects = useMemo(() => sortSessions(sessions).slice(0, 6), [sessions]);
   const totalChats = sessions.reduce((sum, session) => sum + (session.totalChats ?? 0), 0);
   const userInitial = (user.email?.trim()?.[0] ?? 'A').toUpperCase();
-  const [activeProjectChats, setActiveProjectChats] = useState<SessionChat[]>([]);
-  const [isLoadingProjectChats, setIsLoadingProjectChats] = useState(false);
+  const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set());
+  const [projectChatsById, setProjectChatsById] = useState<Record<string, SessionChat[]>>({});
+  const [visibleProjectChatCounts, setVisibleProjectChatCounts] = useState<Record<string, number>>({});
+  const [loadingProjectChatIds, setLoadingProjectChatIds] = useState<Set<string>>(() => new Set());
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
   const [tipPosition, setTipPosition] = useState<{ top: number; left: number } | null>(null);
 
@@ -642,39 +645,95 @@ function Sidebar({
     { id: 'files', label: 'Files', Icon: FileText },
   ];
 
+  const loadProjectChats = useCallback(async (projectId: string, limit: number) => {
+    setLoadingProjectChatIds((current) => new Set(current).add(projectId));
+    try {
+      const params = new URLSearchParams();
+      params.set('limit', String(limit));
+      const response = await fetch(withAppBasePath(`${buildProjectChatCollectionPath(projectId)}?${params}`), { cache: 'no-store' });
+      const body = (await response.json().catch(() => ({}))) as { chats?: SessionChat[] };
+      if (response.ok) {
+        setProjectChatsById((current) => ({ ...current, [projectId]: body.chats ?? [] }));
+      }
+    } catch {
+      setProjectChatsById((current) => ({ ...current, [projectId]: current[projectId] ?? [] }));
+    } finally {
+      setLoadingProjectChatIds((current) => {
+        const next = new Set(current);
+        next.delete(projectId);
+        return next;
+      });
+    }
+  }, []);
+
   useEffect(() => {
     if (activeTab !== 'project' || !activeProjectId) {
-      setActiveProjectChats([]);
-      setIsLoadingProjectChats(false);
+      setLoadingProjectChatIds(new Set());
       return;
     }
 
-    const projectId = activeProjectId;
-    let cancelled = false;
-    async function loadActiveProjectChats() {
-      setIsLoadingProjectChats(true);
-      try {
-        const response = await fetch(withAppBasePath(buildProjectChatCollectionPath(projectId)), { cache: 'no-store' });
-        const body = (await response.json().catch(() => ({}))) as { chats?: SessionChat[] };
-        if (!cancelled && response.ok) {
-          setActiveProjectChats(body.chats ?? []);
-        }
-      } catch {
-        if (!cancelled) {
-          setActiveProjectChats([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoadingProjectChats(false);
-        }
-      }
-    }
-
-    void loadActiveProjectChats();
-    return () => {
-      cancelled = true;
-    };
+    setExpandedProjectIds((current) => {
+      if (current.has(activeProjectId)) return current;
+      const next = new Set(current);
+      next.add(activeProjectId);
+      return next;
+    });
+    setVisibleProjectChatCounts((current) => {
+      if (current[activeProjectId]) return current;
+      return { ...current, [activeProjectId]: SIDEBAR_PROJECT_CHAT_PAGE_SIZE };
+    });
   }, [activeProjectId, activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'project') return;
+
+    projects.forEach((session) => {
+      if (!expandedProjectIds.has(session.id) || loadingProjectChatIds.has(session.id)) {
+        return;
+      }
+
+      const visibleCount = visibleProjectChatCounts[session.id] ?? SIDEBAR_PROJECT_CHAT_PAGE_SIZE;
+      const loadedCount = projectChatsById[session.id]?.length ?? 0;
+      const totalCount = Math.max(session.totalChats ?? 0, SIDEBAR_PROJECT_CHAT_PAGE_SIZE);
+      const targetCount = Math.min(visibleCount, totalCount);
+      if (loadedCount >= targetCount) return;
+
+      void loadProjectChats(session.id, targetCount);
+    });
+  }, [
+    activeTab,
+    expandedProjectIds,
+    loadProjectChats,
+    loadingProjectChatIds,
+    projectChatsById,
+    projects,
+    visibleProjectChatCounts,
+  ]);
+
+  function toggleProjectChatGroup(sessionId: string) {
+    setExpandedProjectIds((current) => {
+      const next = new Set(current);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+    setVisibleProjectChatCounts((current) => {
+      if (current[sessionId]) return current;
+      return { ...current, [sessionId]: SIDEBAR_PROJECT_CHAT_PAGE_SIZE };
+    });
+  }
+
+  function showMoreProjectChats(sessionId: string) {
+    setVisibleProjectChatCounts((current) => {
+      const next = { ...current };
+      const currentCount = next[sessionId] ?? SIDEBAR_PROJECT_CHAT_PAGE_SIZE;
+      next[sessionId] = currentCount + SIDEBAR_PROJECT_CHAT_PAGE_SIZE;
+      return next;
+    });
+  }
 
   return (
     <aside className="m-sb" aria-label="ARIS navigation">
@@ -711,30 +770,42 @@ function Sidebar({
             ))
           : projects.map((session) => {
               const isActiveProject = activeProjectId === session.id;
-              const childChats = isActiveProject ? activeProjectChats : [];
-              const visibleChatCount = isActiveProject && !isLoadingProjectChats
-                ? childChats.length
-                : session.totalChats ?? 0;
+              const isProjectExpanded = expandedProjectIds.has(session.id);
+              const childChats = projectChatsById[session.id] ?? [];
+              const isLoadingProjectChats = loadingProjectChatIds.has(session.id);
+              const visibleSidebarChatLimit = visibleProjectChatCounts[session.id] ?? SIDEBAR_PROJECT_CHAT_PAGE_SIZE;
+              const visibleChatCount = session.totalChats ?? childChats.length;
+              const hasMoreProjectChats = visibleChatCount > childChats.length;
               return (
-                <div key={session.id} className={`m-sb__project-node${isActiveProject ? ' m-sb__project-node--open' : ''}`}>
-                  <button
-                    type="button"
-                    className={`m-sb__proj m-sb__proj--${statusClass(session.status)}${isActiveProject ? ' m-sb__proj--active' : ''}`}
-                    onClick={() => onProjectOpen(session.id)}
-                    onMouseEnter={(event) => handleProjectTipShow(session, event)}
-                    onMouseLeave={handleProjectTipHide}
-                    onFocus={(event) => handleProjectTipShow(session, event)}
-                    onBlur={handleProjectTipHide}
-                    aria-describedby={hoveredProjectId === session.id ? 'sb-tip' : undefined}
-                  >
-                    <span className="m-sb__proj-dot" />
-                    <span className="m-sb__proj-name">{displayProjectName(session)}</span>
-                    <span className="m-sb__proj-count">{visibleChatCount}</span>
-                  </button>
-                  {isActiveProject && (
+                <div key={session.id} className={`m-sb__project-node${isProjectExpanded ? ' m-sb__project-node--open' : ''}`}>
+                  <div className="m-sb__proj-row">
+                    <button
+                      type="button"
+                      className="m-sb__chat-toggle"
+                      aria-label={`${isProjectExpanded ? 'Collapse' : 'Expand'} ${displayProjectName(session)} chats`}
+                      aria-expanded={isProjectExpanded}
+                      onClick={() => toggleProjectChatGroup(session.id)}
+                    >
+                      <ChevronRight className={`m-sb__chat-toggle-icon${isProjectExpanded ? ' m-sb__chat-toggle-icon--open' : ''}`} size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      className={`m-sb__proj m-sb__proj--${statusClass(session.status)}${isActiveProject ? ' m-sb__proj--active' : ''}`}
+                      onClick={() => onProjectOpen(session.id)}
+                      onMouseEnter={(event) => handleProjectTipShow(session, event)}
+                      onMouseLeave={handleProjectTipHide}
+                      onFocus={(event) => handleProjectTipShow(session, event)}
+                      onBlur={handleProjectTipHide}
+                      aria-describedby={hoveredProjectId === session.id ? 'sb-tip' : undefined}
+                    >
+                      <span className="m-sb__proj-dot" />
+                      <span className="m-sb__proj-name">{displayProjectName(session)}</span>
+                      <span className="m-sb__proj-count">{visibleChatCount}</span>
+                    </button>
+                  </div>
+                  {isProjectExpanded && (
                     <div className="m-sb__chat-children" aria-label={`${displayProjectName(session)} chats`}>
-                      {isLoadingProjectChats && <div className="m-sb__chat-loading">Loading chats</div>}
-                      {!isLoadingProjectChats && childChats.slice(0, 8).map((chat) => (
+                      {childChats.slice(0, visibleSidebarChatLimit).map((chat) => (
                         <button
                           key={chat.id}
                           type="button"
@@ -748,10 +819,16 @@ function Sidebar({
                           <span className="m-sb__chat-time">{formatRelativeTime(chat.lastActivityAt)}</span>
                         </button>
                       ))}
+                      {isLoadingProjectChats && <div className="m-sb__chat-loading">Loading chats</div>}
                       {!isLoadingProjectChats && childChats.length === 0 && (
                         <button type="button" className="m-sb__chat-child m-sb__chat-child--empty" onClick={() => onProjectOpen(session.id, 'chats')}>
                           <span className="m-sb__chat-branch" />
                           <span className="m-sb__chat-title">No chats yet</span>
+                        </button>
+                      )}
+                      {!isLoadingProjectChats && hasMoreProjectChats && (
+                        <button type="button" className="m-sb__chat-more" onClick={() => showMoreProjectChats(session.id)}>
+                          더보기
                         </button>
                       )}
                     </div>

@@ -135,6 +135,7 @@ export async function listSessionChats(input: {
   sessionId: string;
   userId: string;
   ensureDefault?: boolean;
+  limit?: number;
 }): Promise<SessionChat[]> {
   if (input.ensureDefault ?? true) {
     const hasAny = await prisma.chat.findFirst({
@@ -162,6 +163,12 @@ export async function listSessionChats(input: {
       projectId: input.sessionId,
       userId: input.userId,
     },
+    orderBy: [
+      { isPinned: 'desc' },
+      { lastActivityAt: 'desc' },
+      { createdAt: 'desc' },
+    ],
+    ...(Number.isFinite(input.limit) ? { take: Math.max(1, Math.floor(Number(input.limit))) } : {}),
   });
 
   return sortChats(chats.map(toSessionChat));
