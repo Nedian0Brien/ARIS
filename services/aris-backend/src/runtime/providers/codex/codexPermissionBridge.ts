@@ -2,10 +2,11 @@
  * Codex permission bridge — pure functions for the app-server approval channel.
  *
  * The codex `app-server` process sends JSON-RPC requests to ARIS when it
- * needs user approval for a command, patch, or legacy MCP review. This
+ * needs user approval for a command, patch, legacy MCP review, or MCP tool
+ * elicitation. This
  * module owns:
  *   - Extracting structured approval data (key, command, reason, risk, and
- *     a decision mapper) from any of the four supported approval methods.
+ *     a decision mapper) from supported approval methods.
  *   - Mapping ARIS's internal `PermissionDecision` enum back to the
  *     channel-specific response token codex expects.
  *   - Narrowing the user-visible approval-policy enum down to the three
@@ -119,9 +120,30 @@ export function mapCodexDecisionForLegacyReview(decision: PermissionDecision): s
   return 'approved';
 }
 
+export type CodexMcpElicitationResult = {
+  action: 'accept' | 'accept_session' | 'decline';
+  content: Record<string, unknown> | null;
+};
+
+/** Map a permission decision to the response shape for `mcpServer/elicitation/request`. */
+export function mapCodexDecisionForMcpElicitation(decision: PermissionDecision): CodexMcpElicitationResult {
+  if (decision === 'allow_session') {
+    return { action: 'accept_session', content: {} };
+  }
+  if (decision === 'deny') {
+    return { action: 'decline', content: null };
+  }
+  return { action: 'accept', content: {} };
+}
+
 // ---------------------------------------------------------------------------
 // Approval-request extraction
 // ---------------------------------------------------------------------------
+
+function extractMcpToolName(message: string): string {
+  const match = message.match(/\btool\s+"([^"]+)"/i);
+  return match?.[1]?.trim() || 'tool';
+}
 
 /**
  * Result shape produced by `extractCodexAppServerApproval`.
@@ -136,6 +158,10 @@ export type CodexAppServerApprovalRequest = {
   reason: string;
   risk: PermissionRisk;
   mapDecision: (decision: PermissionDecision) => string;
+};
+
+export type CodexMcpElicitationApprovalRequest = Omit<CodexAppServerApprovalRequest, 'mapDecision'> & {
+  mapDecision: (decision: PermissionDecision) => CodexMcpElicitationResult;
 };
 
 /**
@@ -242,4 +268,31 @@ export function extractCodexAppServerApproval(input: {
   }
 
   return null;
+}
+
+export function extractCodexMcpElicitationApproval(input: {
+  method: string;
+  params: Record<string, unknown>;
+  requestIdKey: string;
+  sessionId: string;
+}): CodexMcpElicitationApprovalRequest | null {
+  const { method, params, requestIdKey, sessionId } = input;
+  if (method !== 'mcpServer/elicitation/request') {
+    return null;
+  }
+
+  const serverName = asString(params.serverName, 'mcp').trim() || 'mcp';
+  const message = asString(
+    params.message,
+    `Allow the ${serverName} MCP server to run a tool?`,
+  ).trim();
+  const toolName = extractMcpToolName(message);
+
+  return {
+    permissionKey: `${sessionId}:mcp:${serverName}:${toolName}:${requestIdKey}`,
+    command: `MCP ${serverName}.${toolName}`,
+    reason: message,
+    risk: 'medium',
+    mapDecision: mapCodexDecisionForMcpElicitation,
+  };
 }

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   extractCodexAppServerApproval,
+  extractCodexMcpElicitationApproval,
   mapCodexDecisionForCommandApproval,
   mapCodexDecisionForLegacyReview,
+  mapCodexDecisionForMcpElicitation,
   mapCodexDecisionForPatchApproval,
   normalizeCodexApprovalPolicy,
 } from '../src/runtime/providers/codex/codexPermissionBridge.js';
@@ -41,6 +43,14 @@ describe('mapCodexDecisionForLegacyReview', () => {
     expect(mapCodexDecisionForLegacyReview('allow')).toBe('approved');
     expect(mapCodexDecisionForLegacyReview('allow_session')).toBe('approved_for_session');
     expect(mapCodexDecisionForLegacyReview('deny')).toBe('denied');
+  });
+});
+
+describe('mapCodexDecisionForMcpElicitation', () => {
+  it('maps permission decisions to codex MCP elicitation results', () => {
+    expect(mapCodexDecisionForMcpElicitation('allow_once')).toEqual({ action: 'accept', content: {} });
+    expect(mapCodexDecisionForMcpElicitation('allow_session')).toEqual({ action: 'accept_session', content: {} });
+    expect(mapCodexDecisionForMcpElicitation('deny')).toEqual({ action: 'decline', content: null });
   });
 });
 
@@ -143,6 +153,36 @@ describe('extractCodexAppServerApproval — legacy applyPatchApproval', () => {
     expect(approval!.command).toBe('apply_patch (grant_root: /repo)');
     expect(approval!.risk).toBe('high');
     expect(approval!.mapDecision('allow')).toBe('approved');
+  });
+});
+
+describe('extractCodexMcpElicitationApproval', () => {
+  it('extracts MCP tool-call approvals from elicitation requests', () => {
+    const approval = extractCodexMcpElicitationApproval({
+      method: 'mcpServer/elicitation/request',
+      params: {
+        serverName: 'codegraph',
+        message: 'Allow the codegraph MCP server to run tool "codegraph_context"?',
+      },
+      requestIdKey: RID,
+      sessionId: SID,
+    });
+
+    expect(approval).not.toBeNull();
+    expect(approval!.permissionKey).toBe(`${SID}:mcp:codegraph:codegraph_context:${RID}`);
+    expect(approval!.command).toBe('MCP codegraph.codegraph_context');
+    expect(approval!.reason).toBe('Allow the codegraph MCP server to run tool "codegraph_context"?');
+    expect(approval!.risk).toBe('medium');
+    expect(approval!.mapDecision('allow_session')).toEqual({ action: 'accept_session', content: {} });
+  });
+
+  it('ignores non-elicitation methods', () => {
+    expect(extractCodexMcpElicitationApproval({
+      method: 'thread/started',
+      params: {},
+      requestIdKey: RID,
+      sessionId: SID,
+    })).toBeNull();
   });
 });
 

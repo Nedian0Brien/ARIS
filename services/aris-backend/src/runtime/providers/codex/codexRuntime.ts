@@ -56,6 +56,7 @@ import {
 } from './codexAppServerLifecycle.js';
 import {
   extractCodexAppServerApproval,
+  extractCodexMcpElicitationApproval,
   normalizeCodexApprovalPolicy,
 } from './codexPermissionBridge.js';
 import {
@@ -585,6 +586,23 @@ export async function runCodexAppServer(
         approval.reason,
         approval.risk,
         (decision) => sendJsonRpcResult(requestId, { decision: approval.mapDecision(decision) }),
+      );
+      return;
+    }
+
+    const mcpApproval = extractCodexMcpElicitationApproval({
+      method,
+      params,
+      requestIdKey,
+      sessionId: session.id,
+    });
+    if (mcpApproval) {
+      await registerPermissionResponder(
+        buildScopedPermissionKey(mcpApproval.permissionKey, chatId),
+        mcpApproval.command,
+        mcpApproval.reason,
+        mcpApproval.risk,
+        (decision) => sendJsonRpcResult(requestId, mcpApproval.mapDecision(decision)),
       );
       return;
     }
