@@ -185,6 +185,12 @@ const PROJECT_CHAT_EVENT_PAGE_LIMIT = 40;
 const PROJECT_CHAT_LOAD_OLDER_THRESHOLD_PX = 80;
 const PROJECT_CHAT_BOTTOM_THRESHOLD_PX = 96;
 
+function isProjectChatTimelineNearBottom(node: HTMLElement | null): boolean {
+  if (!node) return false;
+  const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+  return distanceFromBottom <= PROJECT_CHAT_BOTTOM_THRESHOLD_PX;
+}
+
 const PROVIDER_LABELS: Record<ModelProvider, string> = {
   claude: 'Claude',
   codex: 'Codex',
@@ -1629,6 +1635,7 @@ export function ProjectChatSurface({
   const eventsRef = useRef<UiEvent[]>([]);
   const selectedChatIdRef = useRef<string | null>(selectedChatId);
   const initialTailScrolledChatIdRef = useRef<string | null>(null);
+  const stickToLatestOnNextPaintRef = useRef(false);
   const hasMoreBeforeRef = useRef(false);
   const isLoadingOlderEventsRef = useRef(false);
   const workspaceRef = useRef<HTMLElement | null>(null);
@@ -2349,9 +2356,23 @@ export function ProjectChatSurface({
     updateJumpToLatestVisibility();
   }, [events, updateJumpToLatestVisibility]);
 
+  useLayoutEffect(() => {
+    if (!stickToLatestOnNextPaintRef.current) {
+      return;
+    }
+    stickToLatestOnNextPaintRef.current = false;
+    const node = timelineRef.current;
+    if (!node) {
+      return;
+    }
+    node.scrollTop = node.scrollHeight;
+    setShowJumpToLatest(false);
+  }, [events]);
+
   useEffect(() => {
     selectedChatIdRef.current = selectedChatId;
     initialTailScrolledChatIdRef.current = null;
+    stickToLatestOnNextPaintRef.current = false;
     setEventsForChatId(null);
     isLoadingOlderEventsRef.current = false;
     setIsLoadingOlderEvents(false);
@@ -2415,6 +2436,8 @@ export function ProjectChatSurface({
         const body = await fetchEventsPage(newestEventId ? { after: newestEventId } : undefined);
         if (!cancelled && selectedChatIdRef.current === loadingChatId) {
           const nextEvents = body.events ?? [];
+          const shouldFollowTail = mode === 'refresh' && isProjectChatTimelineNearBottom(timelineRef.current);
+          stickToLatestOnNextPaintRef.current = shouldFollowTail;
           setEvents((current) => (
             mode === 'refresh' && newestEventId
               ? mergeProjectChatEvents([...current, ...nextEvents])
