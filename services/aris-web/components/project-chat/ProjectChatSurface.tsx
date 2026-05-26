@@ -8,6 +8,7 @@ import React, {
   type RefObject,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -1608,6 +1609,7 @@ export function ProjectChatSurface({
   const projectId = session.id;
   const [chats, setChats] = useState<SessionChat[]>([]);
   const [events, setEvents] = useState<UiEvent[]>([]);
+  const [eventsForChatId, setEventsForChatId] = useState<string | null>(null);
   const [eventsPage, setEventsPage] = useState<Partial<SessionEventsPage> | null>(null);
   const [prompt, setPrompt] = useState('');
   const [isLoadingChats, setIsLoadingChats] = useState(true);
@@ -1626,6 +1628,7 @@ export function ProjectChatSurface({
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const eventsRef = useRef<UiEvent[]>([]);
   const selectedChatIdRef = useRef<string | null>(selectedChatId);
+  const initialTailScrolledChatIdRef = useRef<string | null>(null);
   const hasMoreBeforeRef = useRef(false);
   const isLoadingOlderEventsRef = useRef(false);
   const workspaceRef = useRef<HTMLElement | null>(null);
@@ -2348,6 +2351,8 @@ export function ProjectChatSurface({
 
   useEffect(() => {
     selectedChatIdRef.current = selectedChatId;
+    initialTailScrolledChatIdRef.current = null;
+    setEventsForChatId(null);
     isLoadingOlderEventsRef.current = false;
     setIsLoadingOlderEvents(false);
   }, [selectedChatId]);
@@ -2392,6 +2397,7 @@ export function ProjectChatSurface({
   useEffect(() => {
     if (!selectedChatId) {
       setEvents([]);
+      setEventsForChatId(null);
       setEventsPage(null);
       setSubmittedRunStartedAt(null);
       setShowJumpToLatest(false);
@@ -2414,6 +2420,9 @@ export function ProjectChatSurface({
               ? mergeProjectChatEvents([...current, ...nextEvents])
               : mergeProjectChatEvents(nextEvents)
           ));
+          if (mode === 'initial') {
+            setEventsForChatId(loadingChatId);
+          }
           setEventsPage((current) => ({ ...(current ?? {}), ...(body.page ?? {}) }));
           setError(null);
         }
@@ -2437,6 +2446,22 @@ export function ProjectChatSurface({
       window.clearInterval(intervalId);
     };
   }, [fetchEventsPage, selectedChatId]);
+
+  useLayoutEffect(() => {
+    if (!selectedChatId || eventsForChatId !== selectedChatId || isLoadingEvents) {
+      return;
+    }
+    if (initialTailScrolledChatIdRef.current === selectedChatId) {
+      return;
+    }
+    const node = timelineRef.current;
+    if (!node) {
+      return;
+    }
+    initialTailScrolledChatIdRef.current = selectedChatId;
+    node.scrollTop = node.scrollHeight;
+    setShowJumpToLatest(false);
+  }, [events.length, eventsForChatId, isLoadingEvents, selectedChatId]);
 
   useEffect(() => {
     const latestLifecycle = readLatestProjectRunLifecycle(events);
