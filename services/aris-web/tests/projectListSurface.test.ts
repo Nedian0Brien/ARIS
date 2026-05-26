@@ -152,7 +152,8 @@ describe('project list surface', () => {
     expect(detailSource).toContain('const [isCreatingHeaderChat, setIsCreatingHeaderChat] = useState(false);');
     expect(detailSource).toContain('const [settingsModalOpen, setSettingsModalOpen] = useState(false);');
     expect(detailSource).toContain('const handleProjectHeaderNewChat = async () => {');
-    expect(detailSource).toContain('const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);');
+    expect(detailSource).toContain('const projectModelInput = normalizeProjectChatModelInput(session.model);');
+    expect(detailSource).not.toContain('normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel)');
     expect(detailSource).toContain('const createdChat = await createProjectChat(session.id, {');
     expect(detailSource).toContain('title: `Chat ${Math.max(1, totalChats + 1)}`,');
     expect(detailSource).toContain('onProjectChatOpen(createdChat.id);');
@@ -307,6 +308,16 @@ describe('project list surface', () => {
     expect(submitSource).toContain("const body = (await response.json().catch(() => ({}))) as { event?: UiEvent; events?: UiEvent[]; error?: string };");
     expect(submitSource).toContain('const submittedEvents = isTerminalMode');
     expect(submitSource).toContain('setEvents((previous) => mergeProjectChatEvents([...previous, ...submittedEvents]));');
+  });
+
+  it('does not use runtime metadata as the model when creating a project chat', () => {
+    const surfaceStart = projectChatSurface.indexOf('export function ProjectChatSurface({');
+    const createChatStart = projectChatSurface.indexOf('const createChat = async', surfaceStart);
+    const createChatEnd = projectChatSurface.indexOf('const handleNewChat = async', createChatStart);
+    const createChatSource = projectChatSurface.slice(createChatStart, createChatEnd);
+
+    expect(createChatSource).toContain('selectedModelId || session.model');
+    expect(createChatSource).not.toContain('session.metadata?.runtimeModel');
   });
 
   it('renders Terminal command output as a Terminal timeline response with its own avatar', () => {

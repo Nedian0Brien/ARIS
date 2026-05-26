@@ -88,6 +88,7 @@ import {
   writeProjectChatDragPayload,
   type ProjectChatSurfaceMode,
 } from '@/components/project-chat/ProjectChatSurface';
+import { normalizeProjectChatModelInput } from '@/lib/happy/modelPolicyClient';
 
 type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';
 type ComposerMode = 'agent' | 'plan' | 'terminal';
@@ -245,13 +246,6 @@ function serializeReasoningEffort(value: ReasoningEffort): SessionChat['modelRea
   if (value === 'Medium') return 'medium';
   if (value === 'XHigh' || value === 'Max') return 'xhigh';
   return 'high';
-}
-
-function normalizeProjectChatModelInput(value: string | null | undefined): string | undefined {
-  const trimmed = value?.trim();
-  if (!trimmed) return undefined;
-  const canonical = trimmed === 'gpt-5-codex' ? 'gpt-5.3-codex' : trimmed;
-  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(canonical) ? canonical : undefined;
 }
 
 async function copyToClipboard(value: string): Promise<boolean> {
@@ -740,7 +734,7 @@ function Sidebar({
     if (creatingProjectChatIds.has(session.id)) return;
     setCreatingProjectChatIds((current) => new Set(current).add(session.id));
     try {
-      const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);
+      const projectModelInput = normalizeProjectChatModelInput(session.model);
       const createdChat = await createProjectChat(session.id, {
         title: `Chat ${Math.max(1, (session.totalChats ?? 0) + 1)}`,
         agent: session.agent,
@@ -1672,7 +1666,7 @@ function ProjectDetailSurface({
     setIsCreatingHeaderChat(true);
     setHeaderCreateError(null);
     try {
-      const projectModelInput = normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel);
+      const projectModelInput = normalizeProjectChatModelInput(session.model);
       const createdChat = await createProjectChat(session.id, {
         title: `Chat ${Math.max(1, totalChats + 1)}`,
         agent: session.agent,

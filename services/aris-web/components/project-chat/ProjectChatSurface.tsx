@@ -50,7 +50,11 @@ import { readLocalStorage, removeLocalStorage, writeLocalStorage } from '@/lib/b
 import { abortProjectChat } from '@/lib/runtime/abortChat';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
 import { useProviderModels } from '@/lib/settings/useProviderModels';
-import { BUILTIN_FALLBACK_BY_PROVIDER, fallbackDefaultForProvider } from '@/lib/happy/modelPolicyClient';
+import {
+  BUILTIN_FALLBACK_BY_PROVIDER,
+  fallbackDefaultForProvider,
+  normalizeProjectChatModelInput,
+} from '@/lib/happy/modelPolicyClient';
 import { useWorkspaceFiles, type WorkspaceFileItem } from '@/lib/hooks/useWorkspaceFiles';
 import {
   buildProjectChatCollectionPath,
@@ -228,13 +232,6 @@ function serializeReasoningEffort(value: ReasoningEffort): SessionChat['modelRea
   if (value === 'Medium') return 'medium';
   if (value === 'XHigh' || value === 'Max') return 'xhigh';
   return 'high';
-}
-
-function normalizeProjectChatModelInput(value: string | null | undefined): string | undefined {
-  const trimmed = value?.trim();
-  if (!trimmed) return undefined;
-  const canonical = trimmed === 'gpt-5-codex' ? 'gpt-5.3-codex' : trimmed;
-  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(canonical) ? canonical : undefined;
 }
 
 async function copyToClipboard(value: string): Promise<boolean> {
@@ -2515,7 +2512,7 @@ export function ProjectChatSurface({
   const createChat = async (): Promise<SessionChat | null> => {
     setError(null);
     const projectModelInput = normalizeProjectChatModelInput(
-      selectedModelId || session.model || session.metadata?.runtimeModel,
+      selectedModelId || session.model,
     );
     const createdChat = await createProjectChat(projectId, {
       title: '새 채팅',

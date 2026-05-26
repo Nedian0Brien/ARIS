@@ -9,3 +9,10 @@ export const BUILTIN_FALLBACK_BY_PROVIDER: Record<ClientProvider, string[]> = {
 export function fallbackDefaultForProvider(provider: ClientProvider): string {
   return BUILTIN_FALLBACK_BY_PROVIDER[provider][0];
 }
+
+export function normalizeProjectChatModelInput(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed || trimmed === 'chat-stream') return undefined;
+  const canonical = trimmed === 'gpt-5-codex' ? 'gpt-5.3-codex' : trimmed;
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(canonical) ? canonical : undefined;
+}
