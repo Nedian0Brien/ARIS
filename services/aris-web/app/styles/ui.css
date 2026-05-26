@@ -785,6 +785,11 @@ html[data-theme='dark'] .m-sb__chat-child--active {
   outline: none;
 }
 
+.m-sb__chat-more:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
 .m-sb__chat-branch {
   width: 6px;
   height: 6px;

@@ -492,6 +492,14 @@ describe('project list surface', () => {
     expect(exactCssBlock('.m-sb__chat-child--active')).not.toContain('font-weight');
   });
 
+  it('does not keep inserting sidebar loading rows for projects with fewer than five chats', () => {
+    expect(homeClient).toContain('const totalProjectChats = session.totalChats;');
+    expect(homeClient).toContain("const targetCount = typeof totalProjectChats === 'number' ? Math.min(visibleCount, totalProjectChats) : visibleCount;");
+    expect(homeClient).toContain('if (targetCount <= 0 || loadedCount >= targetCount) return;');
+    expect(homeClient).toContain('isLoadingProjectChats && childChats.length === 0');
+    expect(homeClient).toContain('childChats.length > 0 && hasMoreProjectChats');
+  });
+
   it('ships the project list CSS copied into the app stylesheet', () => {
     [
       '.proj-list-wrap',

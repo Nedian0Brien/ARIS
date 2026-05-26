@@ -694,9 +694,9 @@ function Sidebar({
 
       const visibleCount = visibleProjectChatCounts[session.id] ?? SIDEBAR_PROJECT_CHAT_PAGE_SIZE;
       const loadedCount = projectChatsById[session.id]?.length ?? 0;
-      const totalCount = Math.max(session.totalChats ?? 0, SIDEBAR_PROJECT_CHAT_PAGE_SIZE);
-      const targetCount = Math.min(visibleCount, totalCount);
-      if (loadedCount >= targetCount) return;
+      const totalProjectChats = session.totalChats;
+      const targetCount = typeof totalProjectChats === 'number' ? Math.min(visibleCount, totalProjectChats) : visibleCount;
+      if (targetCount <= 0 || loadedCount >= targetCount) return;
 
       void loadProjectChats(session.id, targetCount);
     });
@@ -819,16 +819,22 @@ function Sidebar({
                           <span className="m-sb__chat-time">{formatRelativeTime(chat.lastActivityAt)}</span>
                         </button>
                       ))}
-                      {isLoadingProjectChats && <div className="m-sb__chat-loading">Loading chats</div>}
+                      {isLoadingProjectChats && childChats.length === 0 && <div className="m-sb__chat-loading">Loading chats</div>}
                       {!isLoadingProjectChats && childChats.length === 0 && (
                         <button type="button" className="m-sb__chat-child m-sb__chat-child--empty" onClick={() => onProjectOpen(session.id, 'chats')}>
                           <span className="m-sb__chat-branch" />
                           <span className="m-sb__chat-title">No chats yet</span>
                         </button>
                       )}
-                      {!isLoadingProjectChats && hasMoreProjectChats && (
-                        <button type="button" className="m-sb__chat-more" onClick={() => showMoreProjectChats(session.id)}>
-                          더보기
+                      {childChats.length > 0 && hasMoreProjectChats && (
+                        <button
+                          type="button"
+                          className="m-sb__chat-more"
+                          disabled={isLoadingProjectChats}
+                          aria-busy={isLoadingProjectChats}
+                          onClick={() => showMoreProjectChats(session.id)}
+                        >
+                          {isLoadingProjectChats ? 'Loading chats' : '더보기'}
                         </button>
                       )}
                     </div>
