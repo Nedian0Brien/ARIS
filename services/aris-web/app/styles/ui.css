@@ -494,16 +494,34 @@ html[data-theme='dark'] .m-sb__nav-item:focus-visible svg {
   color: var(--text-accent);
 }
 
-.m-sb__nav-item--active,
-.m-sb__proj--active {
+.m-sb__nav-item--active {
   background: var(--b-50);
   color: var(--b-700);
   font-weight: 600;
 }
 
-html[data-theme='dark'] .m-sb__nav-item--active,
-html[data-theme='dark'] .m-sb__proj--active {
+html[data-theme='dark'] .m-sb__nav-item--active {
   background: var(--info-bg);
+  color: var(--info-fg);
+}
+
+.m-sb__proj-row--active {
+  background: var(--b-50);
+  border-radius: var(--r-sm);
+}
+
+.m-sb__proj--active,
+.m-sb__proj-row--active .m-sb__proj-action {
+  color: var(--b-700);
+  font-weight: 600;
+}
+
+html[data-theme='dark'] .m-sb__proj-row--active {
+  background: var(--info-bg);
+}
+
+html[data-theme='dark'] .m-sb__proj--active,
+html[data-theme='dark'] .m-sb__proj-row--active .m-sb__proj-action {
   color: var(--info-fg);
 }
 
@@ -526,35 +544,6 @@ html[data-theme='dark'] .m-sb__proj--active {
   text-transform: uppercase;
   color: var(--text-tertiary);
 }
-
-.m-sb__proj-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--n-300);
-  flex-shrink: 0;
-}
-
-.m-sb__proj--run .m-sb__proj-dot {
-  background: var(--b-500);
-  box-shadow: 0 0 0 3px rgba(47, 107, 255, 0.2);
-  animation: msb-pulse 1.6s infinite;
-}
-.m-sb__proj--done .m-sb__proj-dot {
-  background: var(--success-fg);
-  box-shadow: 0 0 0 3px rgba(8, 122, 58, 0.15);
-}
-.m-sb__proj--appr .m-sb__proj-dot {
-  background: var(--warning-fg);
-  box-shadow: 0 0 0 3px rgba(184, 92, 0, 0.22);
-  animation: msb-pulse 1.2s infinite;
-}
-.m-sb__proj--error .m-sb__proj-dot {
-  background: var(--danger-fg);
-  box-shadow: 0 0 0 3px rgba(180, 35, 24, 0.22);
-  animation: msb-pulse 1.2s infinite;
-}
-.m-sb__proj-dot { transition: background var(--t-fast), box-shadow var(--t-fast); }
 
 /* ============================================================
  *  Sidebar item hover tooltip (sb-tip)

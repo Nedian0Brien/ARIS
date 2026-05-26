@@ -499,6 +499,15 @@ describe('project list surface', () => {
     expect(exactCssBlock('.m-sb__proj-action')).toContain('width: 24px;');
   });
 
+  it('keeps project rows free of status dots and extends active background behind actions', () => {
+    expect(homeClient).not.toContain('m-sb__proj-dot');
+    expect(homeClient).toContain("className={`m-sb__proj-row${isActiveProject ? ' m-sb__proj-row--active' : ''}`}");
+    expect(homeClient).toContain("className={`m-sb__proj${isActiveProject ? ' m-sb__proj--active' : ''}`}");
+    expect(uiCss).not.toContain('.m-sb__proj-dot');
+    expect(exactCssBlock('.m-sb__proj-row--active')).toContain('background: var(--b-50);');
+    expect(uiCss).toContain(".m-sb__proj-row--active .m-sb__proj-action");
+  });
+
   it('keeps sidebar project and chat rows height-stable when active selection changes', () => {
     expect(uiCss).toMatch(/\.m-sb__nav-item,\n\.m-sb__proj\s*\{[\s\S]*height:\s*30px;[\s\S]*line-height:\s*1;/);
     expect(exactCssBlock('.m-sb__proj-row')).toContain('height: 30px;');

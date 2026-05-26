@@ -820,10 +820,10 @@ function Sidebar({
               const projectName = displayProjectName(session);
               return (
                 <div key={session.id} className={`m-sb__project-node${isProjectExpanded ? ' m-sb__project-node--open' : ''}`}>
-                  <div className="m-sb__proj-row">
+                  <div className={`m-sb__proj-row${isActiveProject ? ' m-sb__proj-row--active' : ''}`}>
                     <button
                       type="button"
-                      className={`m-sb__proj m-sb__proj--${statusClass(session.status)}${isActiveProject ? ' m-sb__proj--active' : ''}`}
+                      className={`m-sb__proj${isActiveProject ? ' m-sb__proj--active' : ''}`}
                       aria-label={`${isProjectExpanded ? 'Collapse' : 'Expand'} ${projectName} chats`}
                       aria-expanded={isProjectExpanded}
                       onClick={() => toggleProjectChatGroup(session.id)}
@@ -834,7 +834,6 @@ function Sidebar({
                       aria-describedby={hoveredProjectId === session.id ? 'sb-tip' : undefined}
                     >
                       <ChevronRight className={`m-sb__chat-toggle-icon${isProjectExpanded ? ' m-sb__chat-toggle-icon--open' : ''}`} size={13} />
-                      <span className="m-sb__proj-dot" />
                       <span className="m-sb__proj-name">{projectName}</span>
                       <span className="m-sb__proj-count">{visibleChatCount}</span>
                     </button>
