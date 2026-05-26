@@ -485,6 +485,13 @@ describe('project list surface', () => {
     expect(homeClient).toContain('aria-expanded={isProjectExpanded}');
   });
 
+  it('keeps sidebar project and chat rows height-stable when active selection changes', () => {
+    expect(uiCss).toMatch(/\.m-sb__nav-item,\n\.m-sb__proj\s*\{[\s\S]*height:\s*30px;[\s\S]*line-height:\s*1;/);
+    expect(exactCssBlock('.m-sb__proj-row')).toContain('height: 30px;');
+    expect(uiCss).toMatch(/\.m-sb__chat-child,\n\.m-sb__chat-loading,\n\.m-sb__chat-more\s*\{[\s\S]*height:\s*28px;[\s\S]*line-height:\s*1;/);
+    expect(exactCssBlock('.m-sb__chat-child--active')).not.toContain('font-weight');
+  });
+
   it('ships the project list CSS copied into the app stylesheet', () => {
     [
       '.proj-list-wrap',
