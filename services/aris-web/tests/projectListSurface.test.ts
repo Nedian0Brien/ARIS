@@ -131,6 +131,14 @@ describe('project list surface', () => {
     expect(projectChatSurface).toContain('className="jb"');
   });
 
+  it('starts an opened project chat at the latest loaded message', () => {
+    expect(projectChatSurface).toContain("useLayoutEffect(() => {");
+    expect(projectChatSurface).toContain('const [eventsForChatId, setEventsForChatId] = useState<string | null>(null);');
+    expect(projectChatSurface).toContain('initialTailScrolledChatIdRef.current = selectedChatId;');
+    expect(projectChatSurface).toContain('node.scrollTop = node.scrollHeight;');
+    expect(projectChatSurface).toContain('setEventsForChatId(loadingChatId);');
+  });
+
   it('wires the project detail header actions to IDE, settings, and real chat creation', () => {
     const detailStart = homeClient.indexOf('function ProjectDetailSurface({');
     const projectSurfaceStart = homeClient.indexOf('function ProjectSurface({');
