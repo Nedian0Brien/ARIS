@@ -139,6 +139,15 @@ describe('project list surface', () => {
     expect(projectChatSurface).toContain('setEventsForChatId(loadingChatId);');
   });
 
+  it('keeps following refreshed project chat events only while the timeline is already at the tail', () => {
+    expect(projectChatSurface).toContain('const stickToLatestOnNextPaintRef = useRef(false);');
+    expect(projectChatSurface).toContain('function isProjectChatTimelineNearBottom(node: HTMLElement | null): boolean {');
+    expect(projectChatSurface).toContain("const shouldFollowTail = mode === 'refresh' && isProjectChatTimelineNearBottom(timelineRef.current);");
+    expect(projectChatSurface).toContain('stickToLatestOnNextPaintRef.current = shouldFollowTail;');
+    expect(projectChatSurface).toContain('if (!stickToLatestOnNextPaintRef.current) {');
+    expect(projectChatSurface).toContain('stickToLatestOnNextPaintRef.current = false;');
+  });
+
   it('wires the project detail header actions to IDE, settings, and real chat creation', () => {
     const detailStart = homeClient.indexOf('function ProjectDetailSurface({');
     const projectSurfaceStart = homeClient.indexOf('function ProjectSurface({');
