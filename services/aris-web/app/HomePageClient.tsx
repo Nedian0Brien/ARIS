@@ -1616,6 +1616,7 @@ function AskSurface({ sessions }: { sessions: SessionSummary[] }) {
 
 function ProjectDetailSurface({
   index,
+  isOperator,
   onBackToProjects,
   onProjectChatOpen,
   onProjectViewChange,
@@ -1625,6 +1626,7 @@ function ProjectDetailSurface({
   surfaceMode,
 }: {
   index: number;
+  isOperator: boolean;
   onBackToProjects: () => void;
   onProjectChatOpen: (chatId: string) => void;
   onProjectViewChange: (view: ProjectView) => void;
@@ -1686,6 +1688,7 @@ function ProjectDetailSurface({
       <div className="m-main-scroll m-main-scroll--project-chat-detail">
         <ProjectChatSurface
           fileCount={fileCount}
+          isOperator={isOperator}
           modelLabel={modelLabel}
           onBackToChatList={() => onProjectViewChange('chats')}
           onChatOpen={onProjectChatOpen}
@@ -1839,6 +1842,7 @@ function ProjectDetailSurface({
         {projectView === 'chats' ? (
           <ProjectChatSurface
             fileCount={fileCount}
+            isOperator={isOperator}
             modelLabel={modelLabel}
             onBackToChatList={() => onProjectViewChange('chats')}
             onChatOpen={onProjectChatOpen}
@@ -2101,6 +2105,7 @@ function ProjectPlaceholderPanel({
 }
 
 function ProjectSurface({
+  isOperator,
   onBackToProjects,
   onProjectChatOpen,
   onProjectOpen,
@@ -2111,6 +2116,7 @@ function ProjectSurface({
   sessions,
   surfaceMode,
 }: {
+  isOperator: boolean;
   onBackToProjects: () => void;
   onProjectChatOpen: (sessionId: string, chatId: string) => void;
   onProjectOpen: (sessionId: string, view?: ProjectView) => void;
@@ -2145,6 +2151,7 @@ function ProjectSurface({
       <ProjectDetailSurface
         session={selectedProject}
         index={selectedIndex}
+        isOperator={isOperator}
         onBackToProjects={onBackToProjects}
         onProjectChatOpen={(chatId) => onProjectChatOpen(selectedProject.id, chatId)}
         onProjectViewChange={onProjectViewChange}
@@ -2565,6 +2572,7 @@ export default function HomePageWrapper({
     if (activeTab === 'project') {
       return (
         <ProjectSurface
+          isOperator={user.role === 'operator'}
           onBackToProjects={handleBackToProjects}
           onProjectChatOpen={handleProjectChatOpen}
           onProjectOpen={handleProjectOpen}
