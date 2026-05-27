@@ -44,10 +44,12 @@ import {
 } from 'lucide-react';
 import { ProviderLogo, type ProviderLogoProvider } from '@/components/ui/ProviderLogo';
 import { isTerminalRunStatus, readUiEventRunStatus } from '@/lib/happy/chatRuntime';
+import { hydratePersistedPermissions, mergeRenderablePermissions } from '@/lib/happy/permissions';
 import { withAppBasePath } from '@/lib/routing/appPath';
-import type { SessionChat, SessionEventsPage, SessionStatus, SessionSummary, UiEvent } from '@/lib/happy/types';
+import type { PermissionDecision, SessionChat, SessionEventsPage, SessionStatus, SessionSummary, UiEvent } from '@/lib/happy/types';
 import { readLocalStorage, removeLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
 import { abortProjectChat } from '@/lib/runtime/abortChat';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
 import { useProviderModels } from '@/lib/settings/useProviderModels';
 import {
@@ -96,6 +98,8 @@ import {
 import { GitActionMark } from '@/components/project-chat/helpers/actionMarks';
 import { ProjectRunStatusChip } from '@/components/project-chat/ProjectRunStatusChip';
 import { ProjectActionCard } from '@/components/project-chat/ProjectActionCard';
+import { ProjectPermissionRequestMessage } from '@/components/project-chat/ProjectPermissionRequestMessage';
+import { buildProjectChatTimelineItems } from '@/components/project-chat/permissionsTimeline';
 import { useDensityStore } from './cmd-display/densityStore';
 import { computeAutoDensity } from './cmd-display/densityRules';
 import { MiniStack, type MiniStackItem } from './cmd-display/MiniStack';
@@ -647,14 +651,18 @@ function resolveProjectRunStartedAt(events: UiEvent[], fallbackStartedAt: string
 
 function resolveProjectRunIndicator({
   events,
+  hasPendingPermission = false,
   isAborting,
   isSubmitting,
+  pendingPermissionStartedAt = null,
   runtimeRunning,
   startedAt,
 }: {
   events: UiEvent[];
+  hasPendingPermission?: boolean;
   isAborting: boolean;
   isSubmitting: boolean;
+  pendingPermissionStartedAt?: string | null;
   runtimeRunning: boolean;
   startedAt: string | null;
 }): ProjectRunIndicator | null {
@@ -671,6 +679,9 @@ function resolveProjectRunIndicator({
   }
   if (isSubmitting && resolvedStartedAt) {
     return { label: '요청 전송 중', startedAt: resolvedStartedAt, tone: 'submitting' };
+  }
+  if (hasPendingPermission) {
+    return { label: '승인 대기', startedAt: pendingPermissionStartedAt ?? resolvedStartedAt ?? new Date().toISOString(), tone: 'approval' };
   }
   if (latestStatus === 'waiting_for_approval' && resolvedStartedAt) {
     return { label: '승인 대기', startedAt: resolvedStartedAt, tone: 'approval' };
@@ -956,6 +967,7 @@ function ProjectParallelResizeDivider({
 
 function ProjectParallelPanelTree({
   chats,
+  isOperator,
   modelLabel,
   node,
   onClosePanel,
@@ -976,6 +988,7 @@ function ProjectParallelPanelTree({
   workspaceOpen,
 }: {
   chats: SessionChat[];
+  isOperator: boolean;
   modelLabel: string;
   node: ProjectParallelPanelNode;
   onClosePanel: (panelId: string) => void;
@@ -1017,6 +1030,7 @@ function ProjectParallelPanelTree({
     return (
       <ProjectParallelChatPane
         chat={panelChat}
+        isOperator={isOperator}
         isActivePanel={panelState.activePanelId === node.panelId}
         modelLabel={modelLabel}
         onClosePanel={() => onClosePanel(node.panelId)}
@@ -1054,6 +1068,7 @@ function ProjectParallelPanelTree({
       <div className="pc-parallel__split-pane pc-parallel__split-pane--first">
         <ProjectParallelPanelTree
           chats={chats}
+          isOperator={isOperator}
           modelLabel={modelLabel}
           node={node.children[0]}
           onClosePanel={onClosePanel}
@@ -1084,6 +1099,7 @@ function ProjectParallelPanelTree({
       <div className="pc-parallel__split-pane pc-parallel__split-pane--second">
         <ProjectParallelPanelTree
           chats={chats}
+          isOperator={isOperator}
           modelLabel={modelLabel}
           node={node.children[1]}
           onClosePanel={onClosePanel}
@@ -1111,6 +1127,7 @@ function ProjectParallelPanelTree({
 function ProjectParallelChatPane({
   chat,
   isActivePanel,
+  isOperator,
   modelLabel,
   onClosePanel,
   onOpenPanelWorkspaceTab,
@@ -1132,6 +1149,7 @@ function ProjectParallelChatPane({
 }: {
   chat: SessionChat;
   isActivePanel: boolean;
+  isOperator: boolean;
   modelLabel: string;
   onClosePanel: () => void;
   onOpenPanelWorkspaceTab: (tab: WorkspaceTab) => void;
@@ -1199,8 +1217,23 @@ function ProjectParallelChatPane({
   const runtimeBadge = resolvePanelRuntimeBadge(panelRuntime, runtimeRunning, panelRuntimeError);
   const runtimeNeedsRepair = runtimeBadge.tone === 'pending' || runtimeBadge.tone === 'error';
   const visibleEvents = events;
-  const hasRuntimeEvents = visibleEvents.length > 0;
-  const projectRunActive = runtimeRunning || isSubmitting;
+  const {
+    displayPermissions,
+    loadingPermissionId,
+    decidePermission,
+    error: permissionError,
+  } = usePermissions(runtimeSessionId, [], chat.id, chat.isDefault, true);
+  const persistedPermissions = useMemo(
+    () => hydratePersistedPermissions(visibleEvents),
+    [visibleEvents],
+  );
+  const displayPermissionTimelineItems = useMemo(
+    () => mergeRenderablePermissions(displayPermissions, persistedPermissions),
+    [displayPermissions, persistedPermissions],
+  );
+  const pendingPermissionStartedAt = displayPermissionTimelineItems.find((permission) => permission.state === 'pending')?.requestedAt ?? null;
+  const hasPendingPermission = Boolean(pendingPermissionStartedAt);
+  const projectRunActive = runtimeRunning || isSubmitting || hasPendingPermission;
 
   useEffect(() => {
     setPrompt('');
@@ -1403,6 +1436,15 @@ function ProjectParallelChatPane({
     onPanelDrop(edge, event);
   }, [isCompatiblePanelDrop, onPanelDrop]);
 
+  const panelTimelineItems = useMemo(
+    () => buildProjectChatTimelineItems(visibleEvents, displayPermissionTimelineItems),
+    [displayPermissionTimelineItems, visibleEvents],
+  );
+  const hasPanelTimelineItems = panelTimelineItems.length > 0;
+  const handlePanelPermissionDecision = useCallback((permissionId: string, decision: PermissionDecision) => {
+    void decidePermission(permissionId, decision);
+  }, [decidePermission]);
+
   return (
     <article
       ref={frameRef}
@@ -1480,13 +1522,32 @@ function ProjectParallelChatPane({
           {panelRuntimeError && (
             <div className="pc-chat-error" role="alert">runtime 생성 실패: {panelRuntimeError}</div>
           )}
-          {!isLoadingEvents && !hasRuntimeEvents && (
+          {permissionError && <div className="pc-chat-error" role="alert">{permissionError}</div>}
+          {!isLoadingEvents && !hasPanelTimelineItems && (
             <div className="pc-chat-empty-state" role="status">
               <div className="pc-chat-empty-state__title">아직 메시지가 없습니다.</div>
               <div className="pc-chat-empty-state__meta">{recentPreview}</div>
             </div>
           )}
-          {visibleEvents.map((item) => {
+          {panelTimelineItems.map((timelineItem) => {
+            if (timelineItem.type === 'permission') {
+              const permission = timelineItem.permission;
+              return (
+                <div key={permission.id} className="msg msg--permission">
+                  <ProjectPermissionRequestMessage
+                    permission={permission}
+                    disabled={!isOperator}
+                    loading={loadingPermissionId === permission.id}
+                    interactive={permission.availability === 'live'}
+                    pendingHint={permission.availability === 'live'
+                      ? null
+                      : '실시간 승인 세션을 찾을 수 없습니다. 같은 요청을 다시 실행해 주세요.'}
+                    onDecide={handlePanelPermissionDecision}
+                  />
+                </div>
+              );
+            }
+            const item = timelineItem.event;
             const role = readEventRole(item);
             const isUser = role === 'user';
             const isTerminal = role === 'terminal';
@@ -1586,6 +1647,7 @@ function ProjectParallelChatPane({
 // ---------------------------------------------------------------------------
 export function ProjectChatSurface({
   fileCount,
+  isOperator,
   modelLabel,
   onBackToChatList,
   onChatOpen,
@@ -1598,6 +1660,7 @@ export function ProjectChatSurface({
   tokenLabel,
 }: {
   fileCount: number;
+  isOperator: boolean;
   modelLabel: string;
   onBackToChatList: () => void;
   onChatOpen: (chatId: string) => void;
@@ -1626,6 +1689,12 @@ export function ProjectChatSurface({
   const [error, setError] = useState<string | null>(null);
   const activeChat = selectedChatId ? chats.find((chat) => chat.id === selectedChatId) ?? null : null;
   const { isRunning: runtimeRunning } = useSessionRuntime(projectId, selectedChatId, Boolean(selectedChatId));
+  const {
+    displayPermissions,
+    loadingPermissionId,
+    decidePermission,
+    error: permissionError,
+  } = usePermissions(projectId, [], selectedChatId, activeChat?.isDefault ?? false, Boolean(selectedChatId));
   const runtimeModelLabel = activeChat?.model ?? modelLabel;
   const runtimeAgent = activeChat?.agent ?? session.agent;
   const timelineRef = useRef<HTMLDivElement | null>(null);
@@ -1696,6 +1765,15 @@ export function ProjectChatSurface({
   const [workspaceGitLoading, setWorkspaceGitLoading] = useState(false);
   const [workspaceGitError, setWorkspaceGitError] = useState<string | null>(null);
   const visibleEvents = events;
+  const persistedPermissions = useMemo(
+    () => hydratePersistedPermissions(visibleEvents),
+    [visibleEvents],
+  );
+  const displayPermissionTimelineItems = useMemo(
+    () => mergeRenderablePermissions(displayPermissions, persistedPermissions),
+    [displayPermissions, persistedPermissions],
+  );
+  const pendingPermissionStartedAt = displayPermissionTimelineItems.find((permission) => permission.state === 'pending')?.requestedAt ?? null;
   const activeOption = useMemo(() => {
     const list = providerOptions[selectedProvider] ?? [];
     return list.find((o) => o.id === selectedModelId) ?? { id: selectedModelId, label: selectedModelId, meta: undefined };
@@ -1704,12 +1782,13 @@ export function ProjectChatSurface({
   const activeAgent: SessionSummary['agent'] = selectedProvider;
   const userTurns = visibleEvents.filter((item) => readEventRole(item) === 'user');
   const representativeAgentEvent = visibleEvents.find((item) => readEventRole(item) !== 'user');
-  const hasRuntimeEvents = visibleEvents.length > 0;
   const activeRunStartedAt = submittedRunStartedAt ?? runtimeRunStartedAt;
   const projectRunIndicator = resolveProjectRunIndicator({
     events,
+    hasPendingPermission: Boolean(pendingPermissionStartedAt),
     isAborting,
     isSubmitting,
+    pendingPermissionStartedAt,
     runtimeRunning,
     startedAt: activeRunStartedAt,
   });
@@ -2673,14 +2752,27 @@ export function ProjectChatSurface({
     | { kind: 'action'; density: 'expanded' | 'default' | 'minimal'; isRunning: boolean; isError: boolean }
     | { kind: 'other' };
 
-  const allActionIndexes = visibleEvents
+  const timelineEvents = useMemo(
+    () => buildProjectChatTimelineItems(visibleEvents, displayPermissionTimelineItems),
+    [displayPermissionTimelineItems, visibleEvents],
+  );
+  const renderableEvents = useMemo(
+    () => timelineEvents.flatMap((item) => item.type === 'event' ? [item.event] : []),
+    [timelineEvents],
+  );
+  const hasRuntimeEvents = timelineEvents.length > 0;
+  const handlePermissionDecision = useCallback((permissionId: string, decision: PermissionDecision) => {
+    void decidePermission(permissionId, decision);
+  }, [decidePermission]);
+
+  const allActionIndexes = renderableEvents
     .map((evt, i) => (isProjectActionEvent(evt) ? i : -1))
     .filter((i) => i >= 0);
 
-  const decisions: Decision[] = visibleEvents.map((item, idx) => {
+  const decisions: Decision[] = renderableEvents.map((item, idx) => {
     if (!isProjectActionEvent(item)) return { kind: 'other' };
     // isRunning: the last action event when runtime is still running.
-    const isLastAction = visibleEvents
+    const isLastAction = renderableEvents
       .slice(idx + 1)
       .every((later) => !isProjectActionEvent(later));
     const isRunning = runtimeRunning && isLastAction && !item.result?.preview;
@@ -2694,6 +2786,7 @@ export function ProjectChatSurface({
     const resolved = densityFor(item.id, auto);
     return { kind: 'action', density: resolved, isRunning, isError };
   });
+  const decisionByEventId = new Map(renderableEvents.map((item, index) => [item.id, decisions[index]]));
 
   const renderNonAction = (item: UiEvent) => {
     const role = readEventRole(item);
@@ -2775,8 +2868,29 @@ export function ProjectChatSurface({
     stackBuf = [];
   };
 
-  visibleEvents.forEach((item, i) => {
-    const d = decisions[i];
+  timelineEvents.forEach((timelineItem) => {
+    if (timelineItem.type === 'permission') {
+      flushStack();
+      const permission = timelineItem.permission;
+      rendered.push(
+        <div key={permission.id} className={`msg msg--permission${highlightedMessageId === permission.id ? ' msg--highlight' : ''}`}>
+          <ProjectPermissionRequestMessage
+            permission={permission}
+            disabled={!isOperator}
+            loading={loadingPermissionId === permission.id}
+            interactive={permission.availability === 'live'}
+            pendingHint={permission.availability === 'live'
+              ? null
+              : '실시간 승인 세션을 찾을 수 없습니다. 같은 요청을 다시 실행해 주세요.'}
+            onDecide={handlePermissionDecision}
+          />
+        </div>,
+      );
+      return;
+    }
+
+    const item = timelineItem.event;
+    const d = decisionByEventId.get(item.id) ?? { kind: 'other' };
     if (d.kind === 'action' && d.density === 'minimal') {
       stackBuf.push({ event: item, isRunning: d.isRunning, isError: d.isError });
       return;
@@ -2922,6 +3036,7 @@ export function ProjectChatSurface({
             <div className="pc-parallel__frames">
               <ProjectParallelPanelTree
                 chats={chats}
+                isOperator={isOperator}
                 modelLabel={modelLabel}
                 node={parallelPanelState.layout}
                 onClosePanel={handleCloseProjectParallelPanel}
@@ -3348,6 +3463,7 @@ export function ProjectChatSurface({
               </div>
             </form>
             {error && <div className="pc-chat-error" role="alert">{error}</div>}
+            {permissionError && <div className="pc-chat-error" role="alert">{permissionError}</div>}
           </footer>
         </main>
 

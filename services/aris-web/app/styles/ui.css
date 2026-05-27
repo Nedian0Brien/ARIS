@@ -3919,6 +3919,12 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   height: 14px;
 }
 
+.pc-proto .msg__avatar--permission {
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+  border: 1px solid color-mix(in srgb, var(--warning-fg) 28%, transparent);
+}
+
 .pc-proto .msg__avatar .provider-logo {
   width: 15px;
   height: 15px;
@@ -3996,6 +4002,147 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.pc-proto .msg--permission {
+  width: 100%;
+}
+
+.pc-proto .pc-permission {
+  width: min(680px, 100%);
+  padding: 12px;
+  border: 1px solid var(--warning-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warning-bg) 62%, var(--surface) 38%);
+  color: var(--text-primary);
+}
+
+.pc-proto .pc-permission[data-state="approved"] {
+  border-color: color-mix(in srgb, var(--success-fg) 28%, transparent);
+  background: color-mix(in srgb, var(--success-bg) 58%, var(--surface) 42%);
+}
+
+.pc-proto .pc-permission[data-state="denied"] {
+  border-color: color-mix(in srgb, var(--danger-fg) 24%, transparent);
+  background: color-mix(in srgb, var(--danger-bg) 52%, var(--surface) 48%);
+}
+
+.pc-proto .pc-permission__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+
+.pc-proto .pc-permission__risk,
+.pc-proto .pc-permission__state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: var(--r-full);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.pc-proto .pc-permission__risk {
+  background: var(--surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+}
+
+.pc-proto .pc-permission[data-risk="high"] .pc-permission__risk {
+  color: var(--danger-fg);
+  border-color: color-mix(in srgb, var(--danger-fg) 28%, transparent);
+}
+
+.pc-proto .pc-permission__state {
+  background: color-mix(in srgb, var(--warning-bg) 76%, var(--surface) 24%);
+  color: var(--warning-fg);
+}
+
+.pc-proto .pc-permission[data-state="approved"] .pc-permission__state {
+  background: color-mix(in srgb, var(--success-bg) 76%, var(--surface) 24%);
+  color: var(--success-fg);
+}
+
+.pc-proto .pc-permission[data-state="denied"] .pc-permission__state {
+  background: color-mix(in srgb, var(--danger-bg) 76%, var(--surface) 24%);
+  color: var(--danger-fg);
+}
+
+.pc-proto .pc-permission__command {
+  margin: 0 0 var(--sp-3);
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-default);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pc-proto .pc-permission__reason,
+.pc-proto .pc-permission__hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pc-proto .pc-permission__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+.pc-proto .pc-permission__button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.pc-proto .pc-permission__button:hover:not(:disabled),
+.pc-proto .pc-permission__button:focus-visible {
+  border-color: var(--border-strong);
+}
+
+.pc-proto .pc-permission__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.pc-proto .pc-permission__button--deny {
+  color: var(--danger-fg);
+}
+
+.pc-proto .pc-permission__button--once,
+.pc-proto .pc-permission__button--session {
+  background: var(--text-primary);
+  color: var(--surface);
+  border-color: var(--text-primary);
+}
+
+.pc-proto .pc-permission__decision {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .pc-proto .msg__attachments {
