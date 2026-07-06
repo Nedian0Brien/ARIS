@@ -163,6 +163,7 @@ interface RuntimeStoreBackend {
     newestCursorOffset?: bigint | null;
     status?: string;
   }): Promise<{ id: string; chatId?: string | null }>;
+  resolveProjectSessionIdByPath?(projectPath: string): Promise<string | null>;
   ensureImportedAgentChat?(input: {
     importId: string;
     arisSessionId: string;
@@ -719,6 +720,13 @@ export class RuntimeStore {
   async discoverImportedAgentSession(input: Parameters<NonNullable<RuntimeStoreBackend['discoverImportedAgentSession']>>[0]) {
     if (typeof this.delegate.discoverImportedAgentSession === 'function') {
       return this.delegate.discoverImportedAgentSession(input);
+    }
+    throw new Error('IMPORTED_AGENT_SESSION_NOT_SUPPORTED');
+  }
+
+  async resolveProjectSessionIdByPath(projectPath: string) {
+    if (typeof this.delegate.resolveProjectSessionIdByPath === 'function') {
+      return this.delegate.resolveProjectSessionIdByPath(projectPath);
     }
     throw new Error('IMPORTED_AGENT_SESSION_NOT_SUPPORTED');
   }

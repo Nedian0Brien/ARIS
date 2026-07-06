@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import type {
@@ -362,6 +363,27 @@ export class PrismaRuntimeStore {
       },
     });
     return row;
+  }
+
+  async resolveProjectSessionIdByPath(projectPath: string): Promise<string | null> {
+    const normalizedProjectPath = resolve(projectPath);
+    const primary = await this.db.session.findFirst({
+      where: {
+        path: normalizedProjectPath,
+        branch: null,
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true },
+    });
+    if (primary) {
+      return primary.id;
+    }
+    const fallback = await this.db.session.findFirst({
+      where: { path: normalizedProjectPath },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true },
+    });
+    return fallback?.id ?? null;
   }
 
   async ensureImportedAgentChat(input: EnsureImportedAgentChatInput): Promise<{ chatId: string }> {

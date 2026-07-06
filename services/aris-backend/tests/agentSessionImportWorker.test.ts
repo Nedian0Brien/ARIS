@@ -16,6 +16,7 @@ describe('agent session import worker', () => {
     ].join('\n'));
     const store = {
       discoverImportedAgentSession: vi.fn().mockResolvedValue({ id: 'import-1', chatId: null }),
+      resolveProjectSessionIdByPath: vi.fn(),
       ensureImportedAgentChat: vi.fn(),
       appendImportedAgentEvents: vi.fn(),
     };
@@ -53,6 +54,7 @@ describe('agent session import worker', () => {
     ].join('\n'));
     const store = {
       discoverImportedAgentSession: vi.fn().mockResolvedValue({ id: 'import-1', chatId: null }),
+      resolveProjectSessionIdByPath: vi.fn().mockResolvedValue('project-session-1'),
       ensureImportedAgentChat: vi.fn().mockResolvedValue({ chatId: 'chat-1' }),
       appendImportedAgentEvents: vi.fn().mockResolvedValue([{ id: 'event-1' }, { id: 'event-2' }]),
     };
@@ -73,7 +75,7 @@ describe('agent session import worker', () => {
     expect(result.importedEvents).toBe(2);
     expect(store.ensureImportedAgentChat).toHaveBeenCalledWith(expect.objectContaining({
       importId: 'import-1',
-      arisSessionId: '/home/ubuntu/project/ARIS',
+      arisSessionId: 'project-session-1',
       userId: 'user-1',
     }));
     expect(store.appendImportedAgentEvents).toHaveBeenCalledWith(expect.objectContaining({

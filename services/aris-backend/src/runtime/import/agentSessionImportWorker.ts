@@ -24,6 +24,7 @@ type ImportedAgentSessionStore = {
     newestCursorOffset?: bigint | null;
     status?: string;
   }): Promise<{ id: string; chatId?: string | null }>;
+  resolveProjectSessionIdByPath(projectPath: string): Promise<string | null>;
   ensureImportedAgentChat(input: {
     importId: string;
     arisSessionId: string;
@@ -178,11 +179,16 @@ export async function runAgentSessionImportOnce(options: AgentSessionImportRunOp
     if (!options.userId) {
       continue;
     }
+    const arisSessionId = await options.store.resolveProjectSessionIdByPath(normalizedProjectPath);
+    if (!arisSessionId) {
+      result.skipped += 1;
+      continue;
+    }
     const { chatId } = imported.chatId
       ? { chatId: imported.chatId }
       : await options.store.ensureImportedAgentChat({
           importId: imported.id,
-          arisSessionId: normalizedProjectPath,
+          arisSessionId,
           userId: options.userId,
           title: buildImportedChatTitle(parsed.provider),
         });

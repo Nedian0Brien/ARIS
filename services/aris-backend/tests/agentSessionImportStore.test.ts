@@ -14,6 +14,24 @@ function buildStoreWithMockDb(db: Record<string, unknown>): PrismaRuntimeStore {
 }
 
 describe('PrismaRuntimeStore imported agent sessions', () => {
+  it('resolves imported chats to the latest unbranched project session for the directory', async () => {
+    const session = {
+      findFirst: vi.fn()
+        .mockResolvedValueOnce({ id: 'project-session-1' }),
+    };
+    const store = buildStoreWithMockDb({ session });
+
+    await expect(store.resolveProjectSessionIdByPath('/home/ubuntu/project/ARIS')).resolves.toBe('project-session-1');
+    expect(session.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        path: '/home/ubuntu/project/ARIS',
+        branch: null,
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true },
+    }));
+  });
+
   it('creates a chat with provider thread id and links the import ledger', async () => {
     const importedAgentSession = {
       findUnique: vi.fn().mockResolvedValue({
