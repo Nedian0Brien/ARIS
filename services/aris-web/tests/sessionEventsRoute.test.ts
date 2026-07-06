@@ -5,6 +5,9 @@ const mocks = vi.hoisted(() => ({
   requireApiUser: vi.fn(),
   appendSessionMessage: vi.fn(),
   submitUserPrompt: vi.fn(),
+  getSessionEvents: vi.fn(),
+  getImportedAgentSessionState: vi.fn(),
+  importOlderAgentTranscript: vi.fn(),
   getUserModelSettings: vi.fn(),
   resolveRuntimeMessageModel: vi.fn(),
   normalizeSupportedAgent: vi.fn(),
@@ -19,7 +22,9 @@ vi.mock('@/lib/auth/guard', () => ({
 vi.mock('@/lib/happy/client', () => ({
   appendSessionMessage: mocks.appendSessionMessage,
   submitUserPrompt: mocks.submitUserPrompt,
-  getSessionEvents: vi.fn(),
+  getSessionEvents: mocks.getSessionEvents,
+  getImportedAgentSessionState: mocks.getImportedAgentSessionState,
+  importOlderAgentTranscript: mocks.importOlderAgentTranscript,
   HappyHttpError: class HappyHttpError extends Error {
     status: number;
 
@@ -48,7 +53,7 @@ vi.mock('@/lib/db/prisma', () => ({
   },
 }));
 
-import { POST } from '@/app/api/runtime/sessions/[sessionId]/events/route';
+import { GET, POST } from '@/app/api/runtime/sessions/[sessionId]/events/route';
 
 describe('session events route', () => {
   beforeEach(() => {
@@ -93,6 +98,49 @@ describe('session events route', () => {
       body: '이 채팅의 에이전트가 codex → claude로 변경되었습니다.',
       meta: { role: 'agent', streamEvent: 'agent_switched' },
     });
+    mocks.getSessionEvents.mockResolvedValue({
+      events: [],
+      page: {
+        hasMoreBefore: false,
+        hasMoreAfter: false,
+        oldestEventId: null,
+        newestEventId: null,
+        returnedCount: 0,
+        totalCount: 0,
+      },
+    });
+    mocks.getImportedAgentSessionState.mockResolvedValue(null);
+    mocks.importOlderAgentTranscript.mockResolvedValue({ events: [], hasMoreBefore: false });
+  });
+
+  it('marks imported chats as having older history on the initial events page', async () => {
+    mocks.getImportedAgentSessionState.mockResolvedValueOnce({ hasMoreBefore: true });
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/runtime/sessions/session-1/events?chatId=chat-1'),
+      { params: Promise.resolve({ sessionId: 'session-1' }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).page.hasMoreBefore).toBe(true);
+    expect(mocks.importOlderAgentTranscript).not.toHaveBeenCalled();
+  });
+
+  it('imports older transcript before recalculating a before page for imported chats', async () => {
+    mocks.getImportedAgentSessionState.mockResolvedValueOnce({ hasMoreBefore: true });
+    mocks.importOlderAgentTranscript.mockResolvedValueOnce({ events: [{ id: 'older-1' }], hasMoreBefore: false });
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/runtime/sessions/session-1/events?chatId=chat-1&before=event-2'),
+      { params: Promise.resolve({ sessionId: 'session-1' }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.importOlderAgentTranscript).toHaveBeenCalledWith('chat-1', { limitTurns: 3 });
+    expect(mocks.getSessionEvents).toHaveBeenCalledWith('session-1', expect.objectContaining({
+      before: 'event-2',
+      chatId: 'chat-1',
+    }));
   });
 
   it('preserves image attachments on user messages while normalizing model metadata', async () => {

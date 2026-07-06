@@ -1,0 +1,8 @@
+{"timestamp":"2026-07-07T00:00:00.000Z","type":"session_meta","payload":{"id":"codex-session-1","cwd":"/home/ubuntu/project/ARIS","originator":"Codex Desktop"}}
+{"timestamp":"2026-07-07T00:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"첫 번째 요청"}]}}
+{"timestamp":"2026-07-07T00:00:02.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"첫 번째 답변"}]}}
+{"timestamp":"2026-07-07T00:00:03.000Z","type":"response_item","payload":{"type":"tool_call","name":"shell","arguments":"cat secret"}}
+{"timestamp":"2026-07-07T00:00:04.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"두 번째 요청"}]}}
+{"timestamp":"2026-07-07T00:00:05.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"두 번째 답변"}]}}
+{"timestamp":"2026-07-07T00:00:06.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"세 번째 요청"}]}}
+{"timestamp":"2026-07-07T00:00:07.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"세 번째 답변"}]}}

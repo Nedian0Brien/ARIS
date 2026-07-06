@@ -94,6 +94,47 @@ model SessionChatEvent {
   @@index([chatId, createdAt])
 }
 
+model ImportedAgentSession {
+  id                 String   @id @default(cuid())
+  provider           String
+  providerSessionId  String
+  sourcePath         String
+  projectPath        String
+  arisSessionId      String?
+  chatId             String?
+  tailCursorOffset   BigInt?
+  oldestCursorOffset BigInt?
+  newestCursorOffset BigInt?
+  fileSize           BigInt   @default(0)
+  fileMtimeMs        BigInt   @default(0)
+  importedTurnCount  Int      @default(0)
+  importedEventCount Int      @default(0)
+  hasMoreBefore      Boolean  @default(true)
+  status             String   @default("discovered")
+  errorMessage       String?
+  lastScannedAt      DateTime?
+  lastImportedAt     DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([provider, sourcePath])
+  @@index([provider, providerSessionId])
+  @@index([status, lastScannedAt])
+  @@index([chatId])
+}
+
+model ImportedAgentEvent {
+  id             String   @id @default(cuid())
+  importId       String
+  sourceEventKey String
+  chatEventId    String?
+  sourceOffset   BigInt?
+  createdAt      DateTime @default(now())
+
+  @@unique([importId, sourceEventKey])
+  @@index([chatEventId])
+}
+
 model SessionMessage {
   id        String   @id @default(uuid())
   sessionId String

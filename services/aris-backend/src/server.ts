@@ -96,6 +96,10 @@ const terminalCommandSchema = z.object({
   command: z.string().trim().min(1),
 });
 
+const importOlderSchema = z.object({
+  limitTurns: z.number().int().positive().max(10).default(3),
+});
+
 type AppendMessageInput = z.infer<typeof appendMessageSchema>;
 
 type HappyBridgeAppendMessage = {
@@ -689,6 +693,41 @@ export function buildServer(config: ServerConfig) {
       return { events };
     } catch (error) {
       const message = toErrorMessage(error, 'Failed to list chat events');
+      return reply.code(502).send({ error: message });
+    }
+  });
+
+  app.get('/v1/chats/:chatId/import-state', async (request, reply) => {
+    try {
+      const { chatId } = request.params as { chatId: string };
+      const state = await store.getImportedAgentSessionState(chatId);
+      if (!state) {
+        return reply.code(404).send({ error: 'Imported agent session not found' });
+      }
+      return state;
+    } catch (error) {
+      const message = toErrorMessage(error, 'Failed to load imported agent session state');
+      return reply.code(502).send({ error: message });
+    }
+  });
+
+  app.post('/v1/chats/:chatId/import/older', async (request, reply) => {
+    const { chatId } = request.params as { chatId: string };
+    const parsed = importOlderSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid request body' });
+    }
+    try {
+      const result = await store.loadOlderImportedAgentEvents({
+        chatId,
+        limitTurns: parsed.data.limitTurns,
+      });
+      return result;
+    } catch (error) {
+      if (error instanceof Error && error.message === 'IMPORTED_AGENT_SESSION_NOT_FOUND') {
+        return reply.code(404).send({ error: 'Imported agent session not found' });
+      }
+      const message = toErrorMessage(error, 'Failed to import older agent transcript');
       return reply.code(502).send({ error: message });
     }
   });

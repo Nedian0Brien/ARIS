@@ -120,6 +120,7 @@ describe('happy alignment E2E', () => {
       agent: string,
       _command: unknown,
       cwdHint?: string,
+      _branch?: string,
       _signal?: AbortSignal,
       handlers?: {
         onAction?: (action: Record<string, unknown>) => Promise<void>;
@@ -325,6 +326,7 @@ describe('happy alignment E2E', () => {
       agent: string,
       _command: unknown,
       cwdHint?: string,
+      _branch?: string,
       _signal?: AbortSignal,
       handlers?: {
         onAction?: (action: Record<string, unknown>) => Promise<void>;

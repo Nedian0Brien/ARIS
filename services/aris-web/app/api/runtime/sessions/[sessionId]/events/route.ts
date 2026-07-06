@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'node:path';
 import { requireApiUser } from '@/lib/auth/guard';
-import { getSessionEvents, appendSessionMessage, submitUserPrompt, HappyHttpError } from '@/lib/happy/client';
+import {
+  getSessionEvents,
+  appendSessionMessage,
+  submitUserPrompt,
+  HappyHttpError,
+  getImportedAgentSessionState,
+  importOlderAgentTranscript,
+} from '@/lib/happy/client';
 import { prisma } from '@/lib/db/prisma';
 import {
   normalizeSupportedAgent,
@@ -115,6 +122,10 @@ export async function GET(
   }
 
   try {
+    const importState = chatId ? await getImportedAgentSessionState(chatId) : null;
+    if (chatId && before && importState?.hasMoreBefore === true) {
+      await importOlderAgentTranscript(chatId, { limitTurns: 3 });
+    }
     const { events, page } = await getSessionEvents(sessionId, {
       userId: auth.user.id,
       before,
@@ -123,7 +134,10 @@ export async function GET(
       chatId,
       includeUnassigned,
     });
-    return NextResponse.json({ events, page });
+    const pageWithImportState = chatId && !before && !after && importState?.hasMoreBefore === true
+      ? { ...page, hasMoreBefore: true }
+      : page;
+    return NextResponse.json({ events, page: pageWithImportState });
   } catch (error) {
     if (error instanceof HappyHttpError && [401, 403, 404].includes(error.status)) {
       return NextResponse.json({ error: error.message }, { status: error.status });
