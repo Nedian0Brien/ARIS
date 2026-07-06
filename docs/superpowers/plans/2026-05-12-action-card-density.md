@@ -1578,7 +1578,7 @@ Delete the original `function ProjectChatSurface(...)` block.
 cd /home/ubuntu/project/ARIS/.worktrees/action-card-density-impl
 DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env SKIP_DB_PREPARE=1 WEB_DEV_AUTO_PORT=1 WEB_DEV_PORT=2244 ./deploy/dev/run_web_dev_hot_reload.sh > /tmp/aris-dev-impl.log 2>&1 &
 until curl -fsS -o /dev/null http://127.0.0.1:2244/; do sleep 3; done
-echo "Dev: https://lawdigest.cloud/proxy/2244/?tab=project&project=<id>&view=chat&chat=<chatId>"
+echo "Dev: https://lawdigest.kr/proxy/2244/?tab=project&project=<id>&view=chat&chat=<chatId>"
 ```
 
 Open the dev URL with an active project chat and verify:
@@ -1602,8 +1602,8 @@ git commit -m "feat(project-chat): density-aware ProjectChatSurface + MiniStack 
 - [ ] **Step 1: Side-by-side compare v3 prototype vs live**
 
 ```
-https://lawdigest.cloud/proxy/2244/action-card-density-v3.html         ← v3 prototype
-https://lawdigest.cloud/proxy/2244/?tab=project&project=…&view=chat&chat=…  ← live
+https://lawdigest.kr/proxy/2244/action-card-density-v3.html         ← v3 prototype
+https://lawdigest.kr/proxy/2244/?tab=project&project=…&view=chat&chat=…  ← live
 ```
 
 - [ ] **Step 2: Run full test suite**
@@ -1649,7 +1649,7 @@ gh pr create --title "feat(project-chat): action card 밀도 모드 (확장/기�
 ## Test plan
 - [ ] `npx vitest run` 통과 (cmdToneMap + parseCommand + densityStore + densityRules 신규 TDD)
 - [ ] `npx tsc --noEmit` 0 errors
-- [ ] dev proxy(`https://lawdigest.cloud/proxy/2244/`) 시각 검증 (4-way 토글, MiniStack 그룹화, hover, 인라인 확장, 에러 corner-dot, running pulse)
+- [ ] dev proxy(`https://lawdigest.kr/proxy/2244/`) 시각 검증 (4-way 토글, MiniStack 그룹화, hover, 인라인 확장, 에러 corner-dot, running pulse)
 - [ ] v3 prototype과 시각 일치 확인
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)

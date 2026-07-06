@@ -391,7 +391,7 @@ cd /home/ubuntu/project/ARIS/.worktrees/agent-session-auto-import
 DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env SKIP_DB_PREPARE=1 WEB_DEV_AUTO_PORT=1 ./deploy/dev/run_web_dev_hot_reload.sh
 ```
 
-최종 보고에는 정확한 `https://lawdigest.cloud/proxy/<port>/` URL을 포함한다.
+최종 보고에는 정확한 `https://lawdigest.kr/proxy/<port>/` URL을 포함한다.
 
 - [ ] **Step 3: manual smoke**
 

@@ -30,6 +30,6 @@ DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/legacy/deploy_web_le
 
 - 운영 웹 검증 대상은 `http://localhost:3300`이 아니라 nginx가 연결한 실제 도메인 또는 활성 blue/green 슬롯 포트다.
 - 웹 배포 기본 경로는 blue/green 전환이며 legacy `aris-web` 단일 슬롯은 표준 경로가 아니다.
-- `https://lawdigest.cloud/proxy/<port>/`는 운영 배포 대상이 아니라 code-server dev proxy 대상이다.
+- `https://lawdigest.kr/proxy/<port>/`는 운영 배포 대상이 아니라 code-server dev proxy 대상이다.
 - 사용자가 정확한 URL을 제시하면 그 URL을 기준으로 smoke를 완료해야 한다.
 - 상세 절차, 헬스체크, 트러블슈팅, cron 예시는 `deploy/README.md`를 따른다.

@@ -154,7 +154,7 @@ describe('project list surface', () => {
     const detailSource = homeClient.slice(detailStart, projectSurfaceStart);
 
     expect(homeClient).toContain('async function createProjectChat(');
-    expect(homeClient).toContain("const DEFAULT_CODE_SERVER_BASE_URL = 'https://lawdigest.cloud/';");
+    expect(homeClient).toContain("const DEFAULT_CODE_SERVER_BASE_URL = 'https://lawdigest.kr/';");
     expect(homeClient).toContain('process.env.NEXT_PUBLIC_CODE_SERVER_BASE_URL');
     expect(homeClient).toContain('function buildCodeServerFolderUrl(projectPath: string): string');
     expect(homeClient).toContain('fetch(withAppBasePath(buildProjectChatCollectionPath(projectId))');

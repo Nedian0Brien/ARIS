@@ -4,7 +4,7 @@ _Last updated: 2026-05-01_
 
 ## 기준 화면
 
-- URL: `https://lawdigest.cloud/proxy/3309/?tab=project&project=04db3464-26cf-44ac-8b34-36037a30d5f3&view=chat&chat=cmocabpyo0007n04uieuzct8a`
+- URL: `https://lawdigest.kr/proxy/3309/?tab=project&project=04db3464-26cf-44ac-8b34-36037a30d5f3&view=chat&chat=cmocabpyo0007n04uieuzct8a`
 - 현재 작업 브랜치: `codex/chat-prototype-fidelity-fix-20260429`
 - 기준 컴포넌트: `services/aris-web/app/HomePageClient.tsx` 의 `ProjectChatSurface`
 - 기준 스타일: `services/aris-web/app/styles/ui.css` 의 `.pc-proto`

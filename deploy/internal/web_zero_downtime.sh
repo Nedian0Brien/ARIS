@@ -24,7 +24,7 @@ WEB_PRUNE_CACHE_UNTIL="${WEB_PRUNE_CACHE_UNTIL:-24h}"  # e.g. 24h, 168h
 WEB_PRUNE_CACHE_KEEP_STORAGE="${WEB_PRUNE_CACHE_KEEP_STORAGE:-8gb}"
 
 ARIS_WEB_IMAGE="${ARIS_WEB_IMAGE:-aris-stack-aris-web:latest}"
-NGINX_SITE="${ARIS_NGINX_SITE:-/etc/nginx/sites-available/aris.lawdigest.cloud}"
+NGINX_SITE="${ARIS_NGINX_SITE:-/etc/nginx/sites-available/aris.lawdigest.kr}"
 NGINX_SNIPPET="${ARIS_WEB_UPSTREAM_SNIPPET:-/etc/nginx/snippets/aris-web-upstream.conf}"
 
 cd "$ROOT_DIR"

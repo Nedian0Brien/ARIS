@@ -10,10 +10,10 @@
 - GitHub 이슈 본문에 백틱, `$()`, 따옴표가 포함될 수 있는 경우 전송 후 반드시 `gh issue view` 등으로 본문이 깨지지 않았는지 확인한다.
 - main 브랜치에 머지되더라도 배포 기준은 GitHub Actions 자동 배포가 아니라 공식 배포 스크립트다. 배포가 필요하면 `deploy/README.md` 기준으로 스크립트를 직접 실행하고, 그 결과를 사용자에게 최종 보고한다.
 - 직접 배포를 수행할 때는 반드시 deploy/README.md 문서를 참고한다.
-- 디자인 수정이나 기능 변경이 끝나면 production 배포 대신 dev proxy 서버를 먼저 열어 사용자가 직접 확인할 수 있게 한다. 외부 확인 URL은 `https://lawdigest.cloud/proxy/<WEB_DEV_PORT>/` 형식을 사용하며, trailing slash(`/`)를 포함한다.
+- 디자인 수정이나 기능 변경이 끝나면 production 배포 대신 dev proxy 서버를 먼저 열어 사용자가 직접 확인할 수 있게 한다. 외부 확인 URL은 `https://lawdigest.kr/proxy/<WEB_DEV_PORT>/` 형식을 사용하며, trailing slash(`/`)를 포함한다.
 - production 배포는 사용자가 명시적으로 배포를 지시한 시점에만 수행한다. main 머지, PR 병합, dev proxy 확인만으로 production 배포를 진행하지 않는다.
 - 소규모 UI/카피/CSS 수정은 fast path로 처리한다. 동일 화면의 연속 diff comment는 가능한 한 하나의 worktree, 하나의 PR, 하나의 dev proxy 확인으로 묶고, 검증은 `git diff --check`, 관련 targeted test, `tsc --noEmit` 중심으로 제한한다.
-- fast path에서도 사용자가 직접 볼 수 있도록 변경 worktree 기준 dev hot reload 서버를 띄운다. 기본 dev port는 `2233`으로 하고, 포트 충돌 시 `WEB_DEV_AUTO_PORT=1`로 다음 가용 포트를 자동 탐색한다. 최종 보고에는 정확한 dev proxy URL(예: `https://lawdigest.cloud/proxy/2233/`), commit, worktree 경로, 확인 범위를 포함한다.
+- fast path에서도 사용자가 직접 볼 수 있도록 변경 worktree 기준 dev hot reload 서버를 띄운다. 기본 dev port는 `2233`으로 하고, 포트 충돌 시 `WEB_DEV_AUTO_PORT=1`로 다음 가용 포트를 자동 탐색한다. 최종 보고에는 정확한 dev proxy URL(예: `https://lawdigest.kr/proxy/2233/`), commit, worktree 경로, 확인 범위를 포함한다.
 - fast path 최종 보고 템플릿은 아래 항목을 유지한다: `변경 요약`, `검증`, `dev proxy URL`, `commit`, `worktree`, `배포 여부`. production 배포를 하지 않은 경우 `배포 여부: production 배포 안 함`으로 명시한다.
 - 머지 과정에서 충돌이 발생한 경우 어떤 내용이 서로 충돌하는지 파악한 후 사용자에게 설명하고, 처리 방안 3가지를 제안한다.
 - 작업이 마무리되고 나면 후속 작업 5가지를 제안한다.

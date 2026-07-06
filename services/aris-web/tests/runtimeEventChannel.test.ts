@@ -13,11 +13,11 @@ describe('runtime event channel helpers', () => {
       includeUnassigned: true,
       location: {
         protocol: 'https:',
-        host: 'lawdigest.cloud',
+        host: 'lawdigest.kr',
       },
     });
 
-    expect(url).toBe('wss://lawdigest.cloud/ws/runtime/events/session%201?chatId=chat%2F1&includeUnassigned=1');
+    expect(url).toBe('wss://lawdigest.kr/ws/runtime/events/session%201?chatId=chat%2F1&includeUnassigned=1');
   });
 
   it('refreshes permissions only for permission broadcasts', () => {

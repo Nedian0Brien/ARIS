@@ -1333,7 +1333,7 @@ html[data-theme='dark'] .cmd-console__line__caret { background: var(--text-accen
   <!-- =============================== MAIN =============================== -->
   <div class="m-main">
     <div class="m-top">
-      <div class="m-top__left"><span class="m-top__title">Home</span><span class="m-top__crumb">aris.lawdigest.cloud</span></div>
+      <div class="m-top__left"><span class="m-top__title">Home</span><span class="m-top__crumb">aris.lawdigest.kr</span></div>
       <div style="display:flex;gap:2px">
         <button class="m-top__action" type="button" aria-label="Refresh"><svg class="ico ico--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M3.5 9a9 9 0 0 1 15-3.4L23 10M1 14l4.5 4.4A9 9 0 0 0 20.5 15"/></svg></button>
         <button class="m-top__action" type="button" aria-label="Settings"><svg class="ico ico--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
@@ -1647,7 +1647,7 @@ html[data-theme='dark'] .cmd-console__line__caret { background: var(--text-accen
     'prisma migrate deploy',
     'ssh aris-prod "tail -f logs/2026/04/25/*.ndjson"',
     'kubectl rollout status deploy/aris-web',
-    'curl https://api.aris.cloud/v1/agents | jq .',
+    'curl https://api.aris.kr/v1/agents | jq .',
     'rg --type ts "ChatInterface" services/aris-web',
     'docker compose up -d langfuse postgres',
     'aws s3 sync ./dist s3://aris-cdn/v3 --delete',
@@ -1657,7 +1657,7 @@ html[data-theme='dark'] .cmd-console__line__caret { background: var(--text-accen
     'tsc --noEmit -p tsconfig.json',
     'redis-cli --scan --pattern "session:*" | head',
     'aris session export --since 2026-04-20',
-    'open https://lawdigest.cloud/proxy/3307',
+    'open https://lawdigest.kr/proxy/3307',
     'find . -name "*.tsx" | xargs grep -l "useEffect" | wc -l',
     'turbo run build --filter aris-web',
     'pg_dump aris_dev > dump.sql',
