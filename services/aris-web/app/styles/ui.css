@@ -3192,6 +3192,17 @@ html[data-theme='dark'] .proj-list-card--new:focus-visible {
   border-left: 1px solid var(--border-subtle);
 }
 
+/* The parallel workspace aside also carries the .shell__workspace class, whose
+   `grid-area: workspace` (defined later, for the single-chat .shell grid) would
+   otherwise win by source order. .pc-parallel-shell has no such named area, so that
+   inherited placement pushes the aside into an implicit track and collapses the
+   side-by-side layout when the workspace opens. Scope + higher specificity here
+   auto-places it into the shell's second column; the mobile (<=1100px) overlay
+   drawer keeps working because .shell__workspace switches to position:absolute there. */
+.pc-proto .pc-parallel-shell .pc-parallel-workspace {
+  grid-area: auto;
+}
+
 .pc-proto[data-workspace="closed"] .pc-parallel-workspace {
   width: 0;
   min-width: 0;
