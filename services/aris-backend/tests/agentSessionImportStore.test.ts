@@ -32,6 +32,39 @@ describe('PrismaRuntimeStore imported agent sessions', () => {
     }));
   });
 
+  it('does not treat hidden native duplicates as owning chats', async () => {
+    const sessionChat = {
+      findFirst: vi.fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null),
+    };
+    const sessionChatEvent = {
+      findFirst: vi.fn().mockResolvedValue({ chatId: 'duplicate-chat-1' }),
+    };
+    const importedAgentSession = {
+      findFirst: vi.fn(),
+    };
+    const store = buildStoreWithMockDb({ sessionChat, sessionChatEvent, importedAgentSession });
+
+    await expect(store.findOwningChat('provider-session-1')).resolves.toBeNull();
+
+    expect(sessionChat.findFirst).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      where: {
+        threadId: 'provider-session-1',
+        parentChatId: null,
+        subagentStatus: null,
+      },
+    }));
+    expect(sessionChat.findFirst).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: {
+        id: 'duplicate-chat-1',
+        parentChatId: null,
+        subagentStatus: null,
+      },
+    }));
+    expect(importedAgentSession.findFirst).not.toHaveBeenCalled();
+  });
+
   it('creates a chat with provider thread id and links the import ledger', async () => {
     const importedAgentSession = {
       findUnique: vi.fn().mockResolvedValue({

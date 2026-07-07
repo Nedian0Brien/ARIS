@@ -408,7 +408,7 @@ export class PrismaRuntimeStore {
     // session (native chats — post-redesign — now persist threadId again; imported
     // chats always do).
     const byThread = await this.db.sessionChat.findFirst({
-      where: { threadId: trimmed, parentChatId: null },
+      where: { threadId: trimmed, parentChatId: null, subagentStatus: null },
       orderBy: { lastActivityAt: 'desc' },
       select: { id: true },
     });
@@ -424,7 +424,7 @@ export class PrismaRuntimeStore {
       });
       if (event?.chatId) {
         const chat = await this.db.sessionChat.findFirst({
-          where: { id: event.chatId, parentChatId: null },
+          where: { id: event.chatId, parentChatId: null, subagentStatus: null },
           select: { id: true },
         });
         chatId = chat?.id ?? null;
