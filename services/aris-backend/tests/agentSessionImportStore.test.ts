@@ -223,6 +223,57 @@ describe('PrismaRuntimeStore imported agent sessions', () => {
     }));
   });
 
+  it('syncs latest imported events from the source file after the stored cursor', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'aris-import-store-'));
+    const sourcePath = join(root, 'codex.jsonl');
+    await mkdir(root, { recursive: true });
+    const lines = [
+      '{"timestamp":"2026-07-07T00:00:00.000Z","type":"session_meta","payload":{"id":"codex-session-1","cwd":"/home/ubuntu/project/ARIS"}}',
+      '{"timestamp":"2026-07-07T00:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"첫 번째 요청"}]}}',
+      '{"timestamp":"2026-07-07T00:00:02.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"첫 번째 답변"}]}}',
+      '{"timestamp":"2026-07-07T00:00:03.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"새 요청"}]}}',
+      '{"timestamp":"2026-07-07T00:00:04.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"새 답변"}]}}',
+    ];
+    await writeFile(sourcePath, lines.join('\n'));
+    const firstTurnOffset = BigInt(lines[0].length + 1 + lines[1].length + 1 + lines[2].length + 1) - 1n;
+    const importedAgentSession = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'import-1',
+        provider: 'codex',
+        providerSessionId: 'codex-session-1',
+        sourcePath,
+        projectPath: '/home/ubuntu/project/ARIS',
+        arisSessionId: '/home/ubuntu/project/ARIS',
+        chatId: 'chat-1',
+        fileSize: BigInt(lines.join('\n').length - 1),
+        fileMtimeMs: 0n,
+        newestCursorOffset: firstTurnOffset,
+        hasMoreBefore: true,
+      }),
+      update: vi.fn().mockResolvedValue({ id: 'import-1' }),
+    };
+    const store = buildStoreWithMockDb({ importedAgentSession }) as PrismaRuntimeStore & {
+      appendImportedAgentEvents: ReturnType<typeof vi.fn>;
+    };
+    store.appendImportedAgentEvents = vi.fn().mockResolvedValue([{ id: 'event-new-1' }, { id: 'event-new-2' }]);
+
+    const result = await store.syncLatestImportedAgentEvents({ chatId: 'chat-1', limitEvents: 10 });
+
+    expect(result).toEqual({ events: [{ id: 'event-new-1' }, { id: 'event-new-2' }] });
+    expect(store.appendImportedAgentEvents).toHaveBeenCalledWith(expect.objectContaining({
+      importId: 'import-1',
+      provider: 'codex',
+      providerSessionId: 'codex-session-1',
+      sessionId: '/home/ubuntu/project/ARIS',
+      chatId: 'chat-1',
+      messages: [
+        expect.objectContaining({ text: '새 요청' }),
+        expect.objectContaining({ text: '새 답변' }),
+      ],
+      hasMoreBefore: true,
+    }));
+  });
+
   it('lists linked imported sessions that still have older transcript for backfill', async () => {
     const importedAgentSession = {
       findMany: vi.fn().mockResolvedValue([

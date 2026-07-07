@@ -109,6 +109,10 @@ const importOlderSchema = z.object({
   limitTurns: z.number().int().positive().max(10).default(3),
 });
 
+const importLatestSchema = z.object({
+  limitEvents: z.number().int().positive().max(200).optional(),
+});
+
 const importBackfillSchema = z.object({
   maxEvents: z.number().int().positive().max(1000).optional(),
   sessionLimit: z.number().int().positive().max(100).optional(),
@@ -772,6 +776,27 @@ export function buildServer(config: ServerConfig) {
         return reply.code(404).send({ error: 'Imported agent session not found' });
       }
       const message = toErrorMessage(error, 'Failed to import older agent transcript');
+      return reply.code(502).send({ error: message });
+    }
+  });
+
+  app.post('/v1/chats/:chatId/import/latest', async (request, reply) => {
+    const { chatId } = request.params as { chatId: string };
+    const parsed = importLatestSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid request body' });
+    }
+    try {
+      const result = await store.syncLatestImportedAgentEvents({
+        chatId,
+        limitEvents: parsed.data.limitEvents ?? config.ARIS_SESSION_IMPORT_MAX_EVENTS ?? 50,
+      });
+      return result;
+    } catch (error) {
+      if (error instanceof Error && error.message === 'IMPORTED_AGENT_SESSION_NOT_FOUND') {
+        return reply.code(404).send({ error: 'Imported agent session not found' });
+      }
+      const message = toErrorMessage(error, 'Failed to import latest agent transcript');
       return reply.code(502).send({ error: message });
     }
   });

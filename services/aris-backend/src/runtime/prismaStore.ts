@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -635,6 +635,67 @@ export class PrismaRuntimeStore {
       data: { hasMoreBefore },
     });
     return { events, hasMoreBefore };
+  }
+
+  async syncLatestImportedAgentEvents(input: { chatId: string; limitEvents: number }): Promise<{ events: RuntimeMessage[] }> {
+    const imported = await this.db.importedAgentSession.findFirst({
+      where: { chatId: input.chatId },
+    });
+    if (!imported || !imported.chatId || !imported.arisSessionId) {
+      throw new Error('IMPORTED_AGENT_SESSION_NOT_FOUND');
+    }
+    if (imported.newestCursorOffset === null || imported.newestCursorOffset === undefined) {
+      return { events: [] };
+    }
+    const sourceStat = await stat(imported.sourcePath);
+    const sourceSize = BigInt(sourceStat.size);
+    const sourceMtimeMs = BigInt(Math.floor(sourceStat.mtimeMs));
+    if (sourceSize === imported.fileSize && sourceMtimeMs === imported.fileMtimeMs) {
+      return { events: [] };
+    }
+    const cursor = imported.newestCursorOffset;
+    const contents = await readFile(imported.sourcePath, 'utf8');
+    const parsed = imported.provider === 'claude'
+      ? parseClaudeSessionLog(contents, {
+          sourcePath: imported.sourcePath,
+          fallbackSessionId: imported.providerSessionId,
+        })
+      : parseCodexSessionLog(contents, {
+          sourcePath: imported.sourcePath,
+          fallbackSessionId: imported.providerSessionId,
+        });
+    const selected = parsed.messages
+      .filter((message) => message.sourceOffset > cursor)
+      .slice(0, Math.max(1, input.limitEvents));
+    if (selected.length === 0) {
+      await this.db.importedAgentSession.update({
+        where: { id: imported.id },
+        data: {
+          fileSize: sourceSize,
+          fileMtimeMs: sourceMtimeMs,
+          lastScannedAt: new Date(),
+        },
+      });
+      return { events: [] };
+    }
+    const events = await this.appendImportedAgentEvents({
+      importId: imported.id,
+      provider: imported.provider === 'claude' ? 'claude' : 'codex',
+      providerSessionId: imported.providerSessionId,
+      sessionId: imported.arisSessionId,
+      chatId: imported.chatId,
+      messages: selected,
+      hasMoreBefore: imported.hasMoreBefore,
+    });
+    await this.db.importedAgentSession.update({
+      where: { id: imported.id },
+      data: {
+        fileSize: sourceSize,
+        fileMtimeMs: sourceMtimeMs,
+        lastScannedAt: new Date(),
+      },
+    });
+    return { events };
   }
 
   private async runRuntimeWriteMutationWithRetry<T>(

@@ -787,6 +787,19 @@ export async function importOlderAgentTranscript(
   };
 }
 
+export async function importLatestAgentTranscript(
+  chatId: string,
+  options: { limitEvents?: number } = {},
+): Promise<{ events: unknown[] }> {
+  const raw = await fetchHappy(`/v1/chats/${encodeURIComponent(chatId)}/import/latest`, {
+    method: 'POST',
+    body: JSON.stringify({ limitEvents: options.limitEvents }),
+  });
+  return {
+    events: extractArrayPayload(raw, 'events'),
+  };
+}
+
 type StreamSessionEventsOptions = {
   after?: string;
   limit?: number;
