@@ -112,6 +112,16 @@ module.exports = {
         DATABASE_URL: resolveEnvValue('DATABASE_URL', ''),
         DEFAULT_PROJECT_PATH: resolveEnvValue('DEFAULT_PROJECT_PATH', '/workspace'),
         HOST_PROJECTS_ROOT: resolveEnvValue('HOST_PROJECTS_ROOT', ''),
+        ARIS_SESSION_AUTO_IMPORT: resolveEnvValue('ARIS_SESSION_AUTO_IMPORT', '0'),
+        ARIS_SESSION_IMPORT_INTERVAL_MS: resolveEnvValue('ARIS_SESSION_IMPORT_INTERVAL_MS', '600000'),
+        ARIS_SESSION_IMPORT_LOOKBACK_DAYS: resolveEnvValue('ARIS_SESSION_IMPORT_LOOKBACK_DAYS', '7'),
+        ARIS_SESSION_IMPORT_MAX_FILES: resolveEnvValue('ARIS_SESSION_IMPORT_MAX_FILES', '20'),
+        ARIS_SESSION_IMPORT_MAX_BYTES: resolveEnvValue('ARIS_SESSION_IMPORT_MAX_BYTES', String(2 * 1024 * 1024)),
+        ARIS_SESSION_IMPORT_MAX_EVENTS: resolveEnvValue('ARIS_SESSION_IMPORT_MAX_EVENTS', '50'),
+        ARIS_SESSION_IMPORT_TAIL_TURNS: resolveEnvValue('ARIS_SESSION_IMPORT_TAIL_TURNS', '3'),
+        ARIS_SESSION_IMPORT_USER_ID: resolveEnvValue('ARIS_SESSION_IMPORT_USER_ID', ''),
+        ARIS_SESSION_BACKFILL_SESSION_LIMIT: resolveEnvValue('ARIS_SESSION_BACKFILL_SESSION_LIMIT', '10'),
+        ARIS_SESSION_BACKFILL_TURNS_PER_BATCH: resolveEnvValue('ARIS_SESSION_BACKFILL_TURNS_PER_BATCH', '3'),
       },
       // Note: We recommend managing RUNTIME_API_TOKEN in deploy/services env files or passing it during launch.
       // e.g. pm2 start deploy/ecosystem.config.cjs --env production
