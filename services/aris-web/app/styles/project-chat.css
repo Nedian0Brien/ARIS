@@ -3288,6 +3288,75 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
   backdrop-filter: blur(6px);
 }
 
+/* File preview modal (rendered via portal to document.body, so it sits outside .pc-proto) */
+.pc-file-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-8);
+  background: rgba(15, 17, 23, .44);
+  backdrop-filter: blur(6px);
+}
+
+.pc-file-preview-card {
+  display: flex;
+  flex-direction: column;
+  width: 92%;
+  max-width: 1040px;
+  height: 88%;
+  overflow: hidden;
+  background: var(--surface);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-xl);
+}
+
+.pc-file-preview-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  height: 100%;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.pc-file-preview-spin {
+  animation: pc-spin 1s linear infinite;
+}
+
+.pc-file-preview-blocked {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-8);
+}
+
+.pc-file-preview-blocked__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pc-file-preview-close {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-full);
+  color: var(--text-secondary);
+}
+
+.pc-file-preview-close:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
 .pc-proto[data-preview="open"] .overlay {
   display: flex;
 }
