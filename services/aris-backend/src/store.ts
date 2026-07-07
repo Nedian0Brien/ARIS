@@ -202,6 +202,7 @@ interface RuntimeStoreBackend {
   }>>;
   getImportedAgentSessionState?(chatId: string): Promise<{ hasMoreBefore: boolean } | null>;
   loadOlderImportedAgentEvents?(input: { chatId: string; limitTurns: number }): Promise<{ events: RuntimeMessage[]; hasMoreBefore: boolean }>;
+  syncLatestImportedAgentEvents?(input: { chatId: string; limitEvents: number }): Promise<{ events: RuntimeMessage[] }>;
   getLatestUserMessageForAction?(sessionId: string, chatId?: string): Promise<AppendMessageInput | null>;
   applySessionAction(sessionId: string, action: SessionAction, chatId?: string): Promise<{ accepted: boolean; message: string; at: string }>;
   isSessionRunning(sessionId: string, chatId?: string): Promise<boolean>;
@@ -796,6 +797,13 @@ export class RuntimeStore {
   async loadOlderImportedAgentEvents(input: { chatId: string; limitTurns: number }) {
     if (typeof this.delegate.loadOlderImportedAgentEvents === 'function') {
       return this.delegate.loadOlderImportedAgentEvents(input);
+    }
+    throw new Error('IMPORTED_AGENT_SESSION_NOT_SUPPORTED');
+  }
+
+  async syncLatestImportedAgentEvents(input: { chatId: string; limitEvents: number }) {
+    if (typeof this.delegate.syncLatestImportedAgentEvents === 'function') {
+      return this.delegate.syncLatestImportedAgentEvents(input);
     }
     throw new Error('IMPORTED_AGENT_SESSION_NOT_SUPPORTED');
   }

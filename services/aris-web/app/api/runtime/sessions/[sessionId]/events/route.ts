@@ -8,6 +8,7 @@ import {
   HappyHttpError,
   getImportedAgentSessionState,
   importOlderAgentTranscript,
+  importLatestAgentTranscript,
 } from '@/lib/happy/client';
 import { prisma } from '@/lib/db/prisma';
 import {
@@ -123,6 +124,9 @@ export async function GET(
 
   try {
     const importState = chatId ? await getImportedAgentSessionState(chatId) : null;
+    if (chatId && !before && !after && importState) {
+      await importLatestAgentTranscript(chatId);
+    }
     if (chatId && before && importState?.hasMoreBefore === true) {
       await importOlderAgentTranscript(chatId, { limitTurns: 3 });
     }
