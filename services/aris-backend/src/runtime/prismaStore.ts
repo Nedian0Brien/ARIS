@@ -778,7 +778,14 @@ export class PrismaRuntimeStore {
       ...(options.limit ? { take: options.limit } : {}),
     });
 
-    return rows.map((row: {
+    return rows.filter((row: {
+      meta: unknown;
+    }) => {
+      const meta = row.meta && typeof row.meta === 'object' && !Array.isArray(row.meta)
+        ? row.meta as Record<string, unknown>
+        : {};
+      return meta.importHidden !== true;
+    }).map((row: {
       id: string;
       sessionId: string;
       chatId: string;

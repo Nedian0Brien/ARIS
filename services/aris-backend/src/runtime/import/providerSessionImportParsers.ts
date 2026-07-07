@@ -185,6 +185,9 @@ export function parseClaudeSessionLog(contents: string, options: ParseOptions): 
     if (type !== 'user' && type !== 'assistant') {
       continue;
     }
+    if (record.isMeta === true) {
+      continue;
+    }
     providerSessionId = readString(record.sessionId) ?? readString(record.sessionid) ?? providerSessionId;
     projectPath = readString(record.cwd) ?? projectPath;
     const message = isRecord(record.message) ? record.message : record;

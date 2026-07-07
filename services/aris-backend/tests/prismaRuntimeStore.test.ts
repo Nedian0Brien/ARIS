@@ -450,7 +450,19 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
     const sessionChatEvent = {
       findMany: vi.fn().mockResolvedValue([
         {
-          id: 'event-2',
+          id: 'event-hidden',
+          sessionId: 'session-1',
+          chatId: 'chat-1',
+          runId: null,
+          type: 'message',
+          title: 'User Instruction',
+          text: 'provider meta instruction',
+          meta: { role: 'user', importHidden: true },
+          seq: 2,
+          createdAt: new Date('2026-04-13T00:00:00.000Z'),
+        },
+        {
+          id: 'event-3',
           sessionId: 'session-1',
           chatId: 'chat-1',
           runId: 'run-1',
@@ -458,7 +470,7 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
           title: 'Text Reply',
           text: '다음 응답',
           meta: { role: 'agent' },
-          seq: 2,
+          seq: 3,
           createdAt: new Date('2026-04-13T00:00:00.000Z'),
         },
       ]),
@@ -479,8 +491,8 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
     });
     expect(events).toEqual([
       expect.objectContaining({
-        id: 'event-2',
-        meta: expect.objectContaining({ seq: 2, chatId: 'chat-1', runId: 'run-1' }),
+        id: 'event-3',
+        meta: expect.objectContaining({ seq: 3, chatId: 'chat-1', runId: 'run-1' }),
       }),
     ]);
   });
