@@ -3,9 +3,27 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdtemp } from 'node:fs/promises';
 import { describe, expect, it, vi } from 'vitest';
-import { runAgentSessionImportOnce } from '../src/runtime/import/agentSessionImportWorker.js';
+import {
+  buildImportedChatTitle,
+  runAgentSessionImportOnce,
+} from '../src/runtime/import/agentSessionImportWorker.js';
 
 describe('agent session import worker', () => {
+  it('derives imported chat titles from the first real user turn', () => {
+    expect(buildImportedChatTitle('codex', [
+      {
+        role: 'user',
+        text: '# AGENTS.md instructions for /home/ubuntu/project/ARIS\n\n<INSTRUCTIONS>',
+        sourceEventKey: 'ctx',
+      },
+      {
+        role: 'user',
+        text: '백엔드 런타임 API에 연결할 수 없습니다. 정상화해',
+        sourceEventKey: 'user',
+      },
+    ])).toBe('백엔드 런타임 API에 연결할 수 없습니다. 정상화해');
+  });
+
   it('discovers matching Codex sessions without creating chats when no user id is configured', async () => {
     const root = await mkdtemp(join(tmpdir(), 'aris-import-worker-'));
     const sessionDir = join(root, '.codex/sessions/2026/07/07');
@@ -77,6 +95,7 @@ describe('agent session import worker', () => {
       importId: 'import-1',
       arisSessionId: 'project-session-1',
       userId: 'user-1',
+      title: '첫 번째 요청',
     }));
     expect(store.appendImportedAgentEvents).toHaveBeenCalledWith(expect.objectContaining({
       chatId: 'chat-1',
@@ -84,6 +103,7 @@ describe('agent session import worker', () => {
         expect.objectContaining({ text: '두 번째 요청' }),
         expect.objectContaining({ text: '두 번째 답변' }),
       ],
+      hasMoreBefore: true,
     }));
   });
 });

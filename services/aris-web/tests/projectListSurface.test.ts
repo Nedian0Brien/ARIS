@@ -113,6 +113,11 @@ describe('project list surface', () => {
     expect(projectChatSurface).toContain('const loadOlderEvents = useCallback(async () => {');
     expect(projectChatSurface).toContain('setEvents((current) => mergeProjectChatEvents([...olderEvents, ...current]));');
     expect(projectChatSurface).toContain('onScroll={handleTimelineScroll}');
+    expect(projectChatSurface).toContain('aria-label="이전 대화 더 불러오기"');
+    expect(projectChatSurface).toContain('이전 대화 불러오기');
+    expect(projectChatSurface).toContain('onClick={loadOlderEvents}');
+    expect(projectChatSurface).not.toContain('void loadOlderEvents();');
+    expect(uiCss).toContain('.tl__load-more-btn');
     expect(projectChatSurface).toContain('const visibleEvents = events;');
     expect(projectChatSurface).not.toContain('const visibleEvents = events.slice(-40);');
   });

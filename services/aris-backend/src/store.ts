@@ -177,6 +177,7 @@ interface RuntimeStoreBackend {
     sessionId: string;
     chatId: string;
     messages: ImportedProviderMessage[];
+    hasMoreBefore?: boolean;
   }): Promise<Array<{ id: string }>>;
   getImportedAgentSessionState?(chatId: string): Promise<{ hasMoreBefore: boolean } | null>;
   loadOlderImportedAgentEvents?(input: { chatId: string; limitTurns: number }): Promise<{ events: RuntimeMessage[]; hasMoreBefore: boolean }>;

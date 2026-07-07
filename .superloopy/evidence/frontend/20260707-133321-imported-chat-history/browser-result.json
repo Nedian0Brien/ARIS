@@ -1,0 +1,63 @@
+{
+  "url": "http://localhost:2234/?tab=project&project=acd06db6-bd7e-4fe1-a399-1f04e785e114&view=chat&chat=dbcad9a8-c5ab-44e7-a327-0ac3456e6336",
+  "chatTitle": "백엔드 런타임 API에 연결할 수 없습니다. 잠시 후 다시 시도해주세요. 이 오류가 뜬다. 백엔드가 내려가있는건지 확인해서 정상화해",
+  "results": [
+    {
+      "viewport": {
+        "name": "390",
+        "width": 390,
+        "height": 844
+      },
+      "currentUrl": "http://localhost:2234/?tab=project&project=acd06db6-bd7e-4fe1-a399-1f04e785e114&view=chat&chat=dbcad9a8-c5ab-44e7-a327-0ac3456e6336",
+      "titleVisible": true,
+      "loadOlderButtonVisible": false,
+      "expectedNoButtonForThisFullyImportedSession": true,
+      "hasHorizontalOverflow": false,
+      "pageMetrics": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "bodyScrollWidth": 390,
+        "bodyClientWidth": 390
+      },
+      "bodyText": "A\nARIS\nARIS\n백엔드 런타임 API에 연결할 수 없습니다. 잠시 후 다시 시도해주세요. 이 오류가 뜬다. 백엔드가 내려가있는건지 확인해서 정상화해\nPROJECT CHAT · 15H AGO\n아직 메시지가 없습니다.\n첫 요청을 보내면 이 채팅의 실제 이벤트만 표시됩니다.\nAgent\nPlan\nTerminal\ngpt-5.5\nHigh\nSend"
+    },
+    {
+      "viewport": {
+        "name": "768",
+        "width": 768,
+        "height": 1024
+      },
+      "currentUrl": "http://localhost:2234/?tab=project&project=acd06db6-bd7e-4fe1-a399-1f04e785e114&view=chat&chat=dbcad9a8-c5ab-44e7-a327-0ac3456e6336",
+      "titleVisible": true,
+      "loadOlderButtonVisible": false,
+      "expectedNoButtonForThisFullyImportedSession": true,
+      "hasHorizontalOverflow": false,
+      "pageMetrics": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "bodyScrollWidth": 768,
+        "bodyClientWidth": 768
+      },
+      "bodyText": "A\nARIS\nNew chat\nHome\nAsk ARIS\n49\nProject\nFiles\nPROJECTS\nARIS\n27\nubuntu\n11\nLawdigest\n6\nlive-preview-enhanced\n1\nairwards_dashboard\n0\nSynapseNote\n4\nP\nparkmj9260\nOPERATOR\nA\nARIS\nARIS\n백엔드 런타임 API에 연결할 수 없습니다. 잠시 후 다시 시도해주세요. 이 오류가 뜬다. 백엔드가 내려가있는건지 확인해서 정상화해\nidle\nCodex · gpt-5.5 · 318.6k · 213 files\nPROJECT CHAT · 15H AGO\nU\nYou\n15h ago\n\n<INSTRUCTIONS>\n@\nRTK.md\n\n\n\n\nGeneral Safety\n파괴적 작업(예: DB 삭제/재생성, 볼륨 초기화, 데이터베이스 드롭/퍼지, 컨테이너 삭제 등)은 사용자 승인 없이 실행하지 않는다.\nResearch Before Work\n작업을 시작하기 전에 사용자가 언급한 모든 대상(프로젝트, 파일, 페이지, 논문, URL, 서비스, 기능, 버그, UI 요소 등)을 목록화한다.\n각 대상에 대해 코드, 문서, 웹을 충분히 검색해 실제 위치, 현재 상태, 원본 의도, 최신 정보를 확인한다.\n로컬 코드나 문서만으로 근거가 부족하면 추측으로 진행하지 않는다. 웹 검색, 관련 저장소·공식 문서·배포 URL·원본 프로젝트를 확인한 뒤 작업한다.\n…\nU\nYou\n15h ago\n\n백엔드 런타임 API에 연결할 수 없습니다. 잠시 후 다시 시도해주세요. 이 오류가 뜬다. 백엔드가 내려가있는건지 확인해서 정상화해\n\nCodex · gpt-5.5\n15h ago\n\n이해한 내용: ARIS 화면에서 “백엔드 런타임 API에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.” 오류가 뜨고 있어서, 우선 실제 백엔드/런타임 연결 상태를 공식 디버깅 절차로 확인한 뒤 서비스가 내려갔거나 설정/프로세스 문제가 있으면 정상화하겠습니다. 먼저 관련 지침과 이전 맥락을 짧게 확인하고, 곧바로 런타임 상태를 보겠습니다.\n\nCodex · gpt-5.5\n15h ago\n\n사용 스킬: using-superpowers로 적용 규칙을 확인했고, 이건 운영 장애에 가까운 증상이므로 systematic-debugging 절차로 원인 확인부터 진행합니다. 이전 메모리에는 ARIS 런타임 장애 직접 기록은 거의 없고, 이 저장소는 공식 디버깅 스크립트를 우선 쓰는 현재 AG"
+    },
+    {
+      "viewport": {
+        "name": "1280",
+        "width": 1280,
+        "height": 900
+      },
+      "currentUrl": "http://localhost:2234/?tab=project&project=acd06db6-bd7e-4fe1-a399-1f04e785e114&view=chat&chat=dbcad9a8-c5ab-44e7-a327-0ac3456e6336",
+      "titleVisible": true,
+      "loadOlderButtonVisible": false,
+      "expectedNoButtonForThisFullyImportedSession": true,
+      "hasHorizontalOverflow": false,
+      "pageMetrics": {
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "bodyScrollWidth": 1280,
+        "bodyClientWidth": 1280
+      },
+      "bodyText": "A\nARIS\nNew chat\nHome\nAsk ARIS\n49\nProject\nFiles\nPROJECTS\nARIS\n27\nubuntu\n11\nLawdigest\n6\nlive-preview-enhanced\n1\nairwards_dashboard\n0\nSynapseNote\n4\nP\nparkmj9260\nOPERATOR\nA\nARIS\nARIS\n백엔드 런타임 API에 연결할 수 없습니다. 잠시 후 다시 시도해주세요. 이 오류가 뜬다. 백엔드가 내려가있는건지 확인해서 정상화해\nidle\nCodex · gpt-5.5 · 318.6k · 213 files\nPROJECT CHAT · 15H AGO\nU\nYou\n15h ago\n\n<INSTRUCTIONS>\n@\nRTK.md\n\n\n\n\nGeneral Safety\n파괴적 작업(예: DB 삭제/재생성, 볼륨 초기화, 데이터베이스 드롭/퍼지, 컨테이너 삭제 등)은 사용자 승인 없이 실행하지 않는다.\nResearch Before Work\n작업을 시작하기 전에 사용자가 언급한 모든 대상(프로젝트, 파일, 페이지, 논문, URL, 서비스, 기능, 버그, UI 요소 등)을 목록화한다.\n각 대상에 대해 코드, 문서, 웹을 충분히 검색해 실제 위치, 현재 상태, 원본 의도, 최신 정보를 확인한다.\n로컬 코드나 문서만으로 근거가 부족하면 추측으로 진행하지 않는다. 웹 검색, 관련 저장소·공식 문서·배포 URL·원본 프로젝트를 확인한 뒤 작업한다.\n…\nU\nYou\n15h ago\n\n백엔드 런타임 API에 연결할 수 없습니다. 잠시 후 다시 시도해주세요. 이 오류가 뜬다. 백엔드가 내려가있는건지 확인해서 정상화해\n\nCodex · gpt-5.5\n15h ago\n\n이해한 내용: ARIS 화면에서 “백엔드 런타임 API에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.” 오류가 뜨고 있어서, 우선 실제 백엔드/런타임 연결 상태를 공식 디버깅 절차로 확인한 뒤 서비스가 내려갔거나 설정/프로세스 문제가 있으면 정상화하겠습니다. 먼저 관련 지침과 이전 맥락을 짧게 확인하고, 곧바로 런타임 상태를 보겠습니다.\n\nCodex · gpt-5.5\n15h ago\n\n사용 스킬: using-superpowers로 적용 규칙을 확인했고, 이건 운영 장애에 가까운 증상이므로 systematic-debugging 절차로 원인 확인부터 진행합니다. 이전 메모리에는 ARIS 런타임 장애 직접 기록은 거의 없고, 이 저장소는 공식 디버깅 스크립트를 우선 쓰는 현재 AG"
+    }
+  ]
+}

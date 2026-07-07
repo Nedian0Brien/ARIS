@@ -190,7 +190,6 @@ type ProjectPanelDropHandler = (
 // ---------------------------------------------------------------------------
 const WORKSPACE_DRAWER_CLOSE_MS = 160;
 const PROJECT_CHAT_EVENT_PAGE_LIMIT = 40;
-const PROJECT_CHAT_LOAD_OLDER_THRESHOLD_PX = 80;
 const PROJECT_CHAT_BOTTOM_THRESHOLD_PX = 96;
 
 function isProjectChatTimelineNearBottom(node: HTMLElement | null): boolean {
@@ -1944,15 +1943,7 @@ export function ProjectChatSurface({
 
   const handleTimelineScroll = useCallback(() => {
     updateJumpToLatestVisibility();
-    const node = timelineRef.current;
-    if (!node || node.scrollTop > PROJECT_CHAT_LOAD_OLDER_THRESHOLD_PX) {
-      return;
-    }
-    if (!hasMoreBeforeRef.current || isLoadingOlderEventsRef.current) {
-      return;
-    }
-    void loadOlderEvents();
-  }, [loadOlderEvents, updateJumpToLatestVisibility]);
+  }, [updateJumpToLatestVisibility]);
 
   const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== 'Enter' || event.shiftKey || (!event.metaKey && !event.ctrlKey)) {
@@ -3268,6 +3259,20 @@ export function ProjectChatSurface({
                 <span className="tl__day-line" />
               </div>
 
+              {!isLoadingEvents && eventsPage?.hasMoreBefore === true && (
+                <div className="tl__load-more">
+                  <button
+                    type="button"
+                    className="tl__load-more-btn"
+                    onClick={loadOlderEvents}
+                    disabled={isLoadingOlderEvents}
+                    aria-label="이전 대화 더 불러오기"
+                  >
+                    <Clock3 size={14} />
+                    <span>{isLoadingOlderEvents ? '불러오는 중' : '이전 대화 불러오기'}</span>
+                  </button>
+                </div>
+              )}
               {isLoadingOlderEvents && <div className="pc-chat-loading pc-chat-loading--older">Loading earlier messages...</div>}
               {isLoadingEvents && <div className="pc-chat-loading">Loading messages...</div>}
               {!isLoadingEvents && !hasRuntimeEvents && (

@@ -38,6 +38,7 @@ type ImportedAgentSessionStore = {
     sessionId: string;
     chatId: string;
     messages: ImportedProviderMessage[];
+    hasMoreBefore?: boolean;
   }): Promise<Array<{ id: string }>>;
 };
 
@@ -138,8 +139,52 @@ function parseCandidate(candidate: CandidateFile, contents: string): ParsedProvi
   });
 }
 
-function buildImportedChatTitle(provider: ImportedAgentProvider): string {
+function isInjectedContextMessage(text: string): boolean {
+  const normalized = text.trim();
+  return normalized.startsWith('# AGENTS.md instructions')
+    || normalized.startsWith('<INSTRUCTIONS>')
+    || normalized.includes('\n<INSTRUCTIONS>')
+    || normalized.startsWith('We need answer')
+    || normalized.startsWith('We need respond')
+    || normalized.startsWith('We need inspect');
+}
+
+function normalizeImportedChatTitle(text: string): string {
+  const firstLine = text
+    .trim()
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.length > 0) ?? '';
+  if (firstLine.length <= 80) {
+    return firstLine;
+  }
+  return `${firstLine.slice(0, 77).trimEnd()}...`;
+}
+
+export function buildImportedChatTitle(
+  provider: ImportedAgentProvider,
+  messages: ImportedProviderMessage[],
+): string {
+  const firstUserMessage = messages.find((message) => (
+    message.role === 'user'
+    && message.text.trim().length > 0
+    && !isInjectedContextMessage(message.text)
+  ));
+  if (firstUserMessage) {
+    return normalizeImportedChatTitle(firstUserMessage.text);
+  }
   return provider === 'codex' ? 'Codex 가져온 대화' : 'Claude 가져온 대화';
+}
+
+function hasMessagesBeforeSelection(
+  messages: ImportedProviderMessage[],
+  selected: ImportedProviderMessage[],
+): boolean {
+  const firstSelectedOffset = selected.reduce<bigint | null>(
+    (min, message) => (min === null || message.sourceOffset < min ? message.sourceOffset : min),
+    null,
+  );
+  return firstSelectedOffset !== null && messages.some((message) => message.sourceOffset < firstSelectedOffset);
 }
 
 export async function runAgentSessionImportOnce(options: AgentSessionImportRunOptions): Promise<AgentSessionImportRunResult> {
@@ -190,7 +235,7 @@ export async function runAgentSessionImportOnce(options: AgentSessionImportRunOp
           importId: imported.id,
           arisSessionId,
           userId: options.userId,
-          title: buildImportedChatTitle(parsed.provider),
+          title: buildImportedChatTitle(parsed.provider, parsed.messages),
         });
     if (!imported.chatId) {
       result.linkedChats += 1;
@@ -203,6 +248,7 @@ export async function runAgentSessionImportOnce(options: AgentSessionImportRunOp
       sessionId: normalizedProjectPath,
       chatId,
       messages: tailMessages,
+      hasMoreBefore: hasMessagesBeforeSelection(parsed.messages, tailMessages),
     });
     result.importedEvents += events.length;
   }

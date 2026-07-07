@@ -76,6 +76,7 @@ type AppendImportedAgentEventsInput = {
   sessionId: string;
   chatId: string;
   messages: ImportedProviderMessage[];
+  hasMoreBefore?: boolean;
 };
 
 type CreatePermissionInput = {
@@ -534,7 +535,7 @@ export class PrismaRuntimeStore {
           importedTurnCount: { increment: newMessages.filter((message) => message.role === 'user').length },
           oldestCursorOffset: offsets.reduce((min, offset) => (offset < min ? offset : min), offsets[0]),
           newestCursorOffset: offsets.reduce((max, offset) => (offset > max ? offset : max), offsets[0]),
-          hasMoreBefore: offsets.some((offset) => offset > 0n),
+          hasMoreBefore: input.hasMoreBefore ?? offsets.some((offset) => offset > 0n),
           status: 'imported',
           lastImportedAt: new Date(),
         },

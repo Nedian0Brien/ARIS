@@ -126,6 +126,7 @@ describe('PrismaRuntimeStore imported agent sessions', () => {
       providerSessionId: 'codex-thread-1',
       sessionId: '/home/ubuntu/project/ARIS',
       chatId: 'chat-1',
+      hasMoreBefore: false,
       messages: [
         {
           role: 'user',
@@ -161,6 +162,9 @@ describe('PrismaRuntimeStore imported agent sessions', () => {
       }),
     }));
     expect(importedAgentEvent.create).toHaveBeenCalledTimes(1);
+    expect(importedAgentSession.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ hasMoreBefore: false }),
+    }));
     expect(sessionChat.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'chat-1' },
       data: expect.objectContaining({
