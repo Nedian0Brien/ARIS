@@ -845,11 +845,11 @@ html[data-theme='dark'] .m-theme-toggle__item--active {
 
 .m-main-scroll--project-chat-detail .pc-proto {
   height: 100%;
-  min-height: calc(100vh - 48px);
+  min-height: calc(var(--app-vh, 100dvh) - 48px);
 }
 
 .m-main-scroll--project-chat-detail .pc-proto .shell {
-  height: calc(100vh - 48px);
+  height: calc(var(--app-vh, 100dvh) - 48px);
   min-height: 0;
 }
 
