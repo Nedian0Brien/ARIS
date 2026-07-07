@@ -186,6 +186,61 @@ describe('RuntimeStore.appendChatEvent', () => {
     });
   });
 
+  it('broadcasts latest imported event syncs immediately to realtime channel subscribers', async () => {
+    const events = [
+      {
+        id: 'import-event-1',
+        sessionId: 'session-1',
+        type: 'message',
+        title: 'User Instruction',
+        text: 'new imported request',
+        createdAt: '2026-07-07T00:00:00.000Z',
+        meta: {
+          imported: true,
+          role: 'user',
+          chatId: 'chat-1',
+        },
+      },
+      {
+        id: 'import-event-2',
+        sessionId: 'session-1',
+        type: 'message',
+        title: 'Text Reply',
+        text: 'new imported reply',
+        createdAt: '2026-07-07T00:00:01.000Z',
+        meta: {
+          imported: true,
+          role: 'assistant',
+          chatId: 'chat-1',
+        },
+      },
+    ];
+    const delegate = {
+      syncLatestImportedAgentEvents: vi.fn().mockResolvedValue({ events }),
+    };
+    const store = buildRuntimeStore({ delegate });
+    const listener = vi.fn();
+
+    store.subscribeRealtimeChannel({ sessionId: 'session-1', chatId: 'chat-1' }, listener);
+    await store.syncLatestImportedAgentEvents({ chatId: 'chat-1', limitEvents: 10 });
+
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenNthCalledWith(1, {
+      type: 'event.appended',
+      sessionId: 'session-1',
+      chatId: 'chat-1',
+      event: events[0],
+      source: 'mutation',
+    });
+    expect(listener).toHaveBeenNthCalledWith(2, {
+      type: 'event.appended',
+      sessionId: 'session-1',
+      chatId: 'chat-1',
+      event: events[1],
+      source: 'mutation',
+    });
+  });
+
   it('does not wake an agent turn for terminal-authored command events', async () => {
     const delegate = {
       appendChatEvent: vi.fn().mockResolvedValue({

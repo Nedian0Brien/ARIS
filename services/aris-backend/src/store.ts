@@ -803,7 +803,19 @@ export class RuntimeStore {
 
   async syncLatestImportedAgentEvents(input: { chatId: string; limitEvents: number }) {
     if (typeof this.delegate.syncLatestImportedAgentEvents === 'function') {
-      return this.delegate.syncLatestImportedAgentEvents(input);
+      const result = await this.delegate.syncLatestImportedAgentEvents(input);
+      for (const event of result.events) {
+        if ('sessionId' in event && typeof event.sessionId === 'string') {
+          this.emitRealtimeChannel({
+            type: 'event.appended',
+            sessionId: event.sessionId,
+            chatId: input.chatId,
+            event,
+            source: 'mutation',
+          });
+        }
+      }
+      return result;
     }
     throw new Error('IMPORTED_AGENT_SESSION_NOT_SUPPORTED');
   }
