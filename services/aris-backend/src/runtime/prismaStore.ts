@@ -46,6 +46,10 @@ type ImportedAgentSessionRecord = {
   projectPath: string;
   arisSessionId?: string | null;
   chatId?: string | null;
+  fileSize?: bigint;
+  fileMtimeMs?: bigint;
+  oldestCursorOffset?: bigint | null;
+  newestCursorOffset?: bigint | null;
   hasMoreBefore: boolean;
 };
 
@@ -332,33 +336,37 @@ export class PrismaRuntimeStore {
 
   async discoverImportedAgentSession(input: DiscoverImportedAgentSessionInput): Promise<ImportedAgentSessionRecord> {
     const now = new Date();
-    const row = await this.db.importedAgentSession.upsert({
+    const existing = await this.db.importedAgentSession.findUnique({
       where: {
         provider_sourcePath: {
           provider: input.provider,
           sourcePath: input.sourcePath,
         },
       },
-      create: {
+    });
+    if (!existing) {
+      return this.db.importedAgentSession.create({
+        data: {
+          provider: input.provider,
+          providerSessionId: input.providerSessionId,
+          sourcePath: input.sourcePath,
+          projectPath: input.projectPath,
+          fileSize: input.fileSize ?? 0n,
+          fileMtimeMs: input.fileMtimeMs ?? 0n,
+          status: input.status ?? 'discovered',
+          lastScannedAt: now,
+        },
+      });
+    }
+    const row = await this.db.importedAgentSession.update({
+      where: { id: existing.id },
+      data: {
         provider: input.provider,
         providerSessionId: input.providerSessionId,
-        sourcePath: input.sourcePath,
         projectPath: input.projectPath,
         fileSize: input.fileSize ?? 0n,
         fileMtimeMs: input.fileMtimeMs ?? 0n,
-        oldestCursorOffset: input.oldestCursorOffset ?? null,
-        newestCursorOffset: input.newestCursorOffset ?? null,
-        status: input.status ?? 'discovered',
-        lastScannedAt: now,
-      },
-      update: {
-        providerSessionId: input.providerSessionId,
-        projectPath: input.projectPath,
-        fileSize: input.fileSize ?? 0n,
-        fileMtimeMs: input.fileMtimeMs ?? 0n,
-        ...(input.oldestCursorOffset !== undefined ? { oldestCursorOffset: input.oldestCursorOffset } : {}),
-        ...(input.newestCursorOffset !== undefined ? { newestCursorOffset: input.newestCursorOffset } : {}),
-        status: input.status ?? 'discovered',
+        status: existing.chatId ? existing.status : input.status ?? 'discovered',
         errorMessage: null,
         lastScannedAt: now,
       },
@@ -528,13 +536,24 @@ export class PrismaRuntimeStore {
         });
       }
       const offsets = newMessages.map((message) => message.sourceOffset);
+      const currentImport = await tx.importedAgentSession.findUnique({
+        where: { id: input.importId },
+        select: { importedEventCount: true, oldestCursorOffset: true, newestCursorOffset: true },
+      });
+      const minNewOffset = offsets.reduce((min, offset) => (offset < min ? offset : min), offsets[0]);
+      const maxNewOffset = offsets.reduce((max, offset) => (offset > max ? offset : max), offsets[0]);
+      const hasImportedRange = (currentImport?.importedEventCount ?? 0) > 0;
       await tx.importedAgentSession.update({
         where: { id: input.importId },
         data: {
           importedEventCount: { increment: createdRows.length },
           importedTurnCount: { increment: newMessages.filter((message) => message.role === 'user').length },
-          oldestCursorOffset: offsets.reduce((min, offset) => (offset < min ? offset : min), offsets[0]),
-          newestCursorOffset: offsets.reduce((max, offset) => (offset > max ? offset : max), offsets[0]),
+          oldestCursorOffset: hasImportedRange && currentImport?.oldestCursorOffset !== null && currentImport?.oldestCursorOffset !== undefined
+            ? (currentImport.oldestCursorOffset < minNewOffset ? currentImport.oldestCursorOffset : minNewOffset)
+            : minNewOffset,
+          newestCursorOffset: hasImportedRange && currentImport?.newestCursorOffset !== null && currentImport?.newestCursorOffset !== undefined
+            ? (currentImport.newestCursorOffset > maxNewOffset ? currentImport.newestCursorOffset : maxNewOffset)
+            : maxNewOffset,
           hasMoreBefore: input.hasMoreBefore ?? offsets.some((offset) => offset > 0n),
           status: 'imported',
           lastImportedAt: new Date(),
@@ -557,6 +576,21 @@ export class PrismaRuntimeStore {
       seq: row.seq,
       createdAt: row.createdAt,
     }));
+  }
+
+  async listImportedAgentSessionsForBackfill(input: { projectPath: string; limit: number }): Promise<ImportedAgentSessionRecord[]> {
+    return this.db.importedAgentSession.findMany({
+      where: {
+        projectPath: resolve(input.projectPath),
+        chatId: { not: null },
+        hasMoreBefore: true,
+      },
+      orderBy: [
+        { lastImportedAt: 'asc' },
+        { updatedAt: 'asc' },
+      ],
+      take: Math.max(1, input.limit),
+    });
   }
 
   async loadOlderImportedAgentEvents(input: { chatId: string; limitTurns: number }): Promise<{ events: RuntimeMessage[]; hasMoreBefore: boolean }> {

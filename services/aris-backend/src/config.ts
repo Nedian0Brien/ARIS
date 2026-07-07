@@ -14,7 +14,10 @@ const configSchema = z.object({
   ARIS_SESSION_IMPORT_LOOKBACK_DAYS: z.coerce.number().int().positive().default(7),
   ARIS_SESSION_IMPORT_MAX_FILES: z.coerce.number().int().positive().default(20),
   ARIS_SESSION_IMPORT_MAX_BYTES: z.coerce.number().int().positive().default(2 * 1024 * 1024),
+  ARIS_SESSION_IMPORT_MAX_EVENTS: z.coerce.number().int().positive().default(50),
   ARIS_SESSION_IMPORT_TAIL_TURNS: z.coerce.number().int().positive().default(3),
+  ARIS_SESSION_BACKFILL_SESSION_LIMIT: z.coerce.number().int().positive().default(10),
+  ARIS_SESSION_BACKFILL_TURNS_PER_BATCH: z.coerce.number().int().positive().default(3),
   ARIS_SESSION_IMPORT_USER_ID: z.string().trim().optional(),
 });
 

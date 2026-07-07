@@ -104,6 +104,7 @@ describe('PrismaRuntimeStore imported agent sessions', () => {
       update: vi.fn().mockResolvedValue({ id: 'chat-1' }),
     };
     const importedAgentSession = {
+      findUnique: vi.fn().mockResolvedValue({ importedEventCount: 1, oldestCursorOffset: 5n, newestCursorOffset: 10n }),
       update: vi.fn().mockResolvedValue({ id: 'import-1' }),
     };
     const db = {
@@ -163,7 +164,11 @@ describe('PrismaRuntimeStore imported agent sessions', () => {
     }));
     expect(importedAgentEvent.create).toHaveBeenCalledTimes(1);
     expect(importedAgentSession.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ hasMoreBefore: false }),
+      data: expect.objectContaining({
+        hasMoreBefore: false,
+        oldestCursorOffset: 5n,
+        newestCursorOffset: 20n,
+      }),
     }));
     expect(sessionChat.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'chat-1' },
@@ -215,6 +220,28 @@ describe('PrismaRuntimeStore imported agent sessions', () => {
         expect.objectContaining({ text: '첫 번째 요청' }),
         expect.objectContaining({ text: '첫 번째 답변' }),
       ],
+    }));
+  });
+
+  it('lists linked imported sessions that still have older transcript for backfill', async () => {
+    const importedAgentSession = {
+      findMany: vi.fn().mockResolvedValue([
+        { id: 'import-1', chatId: 'chat-1', hasMoreBefore: true },
+      ]),
+    };
+    const store = buildStoreWithMockDb({ importedAgentSession });
+
+    await expect(store.listImportedAgentSessionsForBackfill({
+      projectPath: '/home/ubuntu/project/ARIS',
+      limit: 5,
+    })).resolves.toEqual([{ id: 'import-1', chatId: 'chat-1', hasMoreBefore: true }]);
+    expect(importedAgentSession.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        projectPath: '/home/ubuntu/project/ARIS',
+        chatId: { not: null },
+        hasMoreBefore: true,
+      }),
+      take: 5,
     }));
   });
 });

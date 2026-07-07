@@ -23,7 +23,20 @@ type ImportedAgentSessionStore = {
     oldestCursorOffset?: bigint | null;
     newestCursorOffset?: bigint | null;
     status?: string;
-  }): Promise<{ id: string; chatId?: string | null }>;
+  }): Promise<{
+    id: string;
+    chatId?: string | null;
+    arisSessionId?: string | null;
+    provider: string;
+    providerSessionId: string;
+    sourcePath: string;
+    projectPath: string;
+    fileSize?: bigint;
+    fileMtimeMs?: bigint;
+    oldestCursorOffset?: bigint | null;
+    newestCursorOffset?: bigint | null;
+    hasMoreBefore: boolean;
+  }>;
   resolveProjectSessionIdByPath(projectPath: string): Promise<string | null>;
   ensureImportedAgentChat(input: {
     importId: string;
@@ -40,7 +53,21 @@ type ImportedAgentSessionStore = {
     messages: ImportedProviderMessage[];
     hasMoreBefore?: boolean;
   }): Promise<Array<{ id: string }>>;
+  listImportedAgentSessionsForBackfill?(input: {
+    projectPath: string;
+    limit: number;
+  }): Promise<Array<{
+    id: string;
+    chatId?: string | null;
+    hasMoreBefore: boolean;
+  }>>;
+  loadOlderImportedAgentEvents?(input: {
+    chatId: string;
+    limitTurns: number;
+  }): Promise<{ events: Array<{ id: string }>; hasMoreBefore: boolean }>;
 };
+
+export type AgentSessionImportMode = 'sync' | 'backfill';
 
 export type AgentSessionImportRunOptions = {
   store: ImportedAgentSessionStore;
@@ -52,12 +79,17 @@ export type AgentSessionImportRunOptions = {
   maxFiles: number;
   maxBytes: number;
   tailTurns: number;
+  mode?: AgentSessionImportMode;
+  maxEvents?: number;
+  backfillSessionLimit?: number;
+  backfillTurnsPerBatch?: number;
 };
 
 export type AgentSessionImportRunResult = {
   discovered: number;
   linkedChats: number;
   importedEvents: number;
+  backfilledEvents: number;
   skipped: number;
 };
 
@@ -187,16 +219,68 @@ function hasMessagesBeforeSelection(
   return firstSelectedOffset !== null && messages.some((message) => message.sourceOffset < firstSelectedOffset);
 }
 
+function selectNewerMessages(
+  messages: ImportedProviderMessage[],
+  cursor: bigint | null | undefined,
+  maxEvents: number,
+): ImportedProviderMessage[] {
+  if (cursor === null || cursor === undefined) {
+    return [];
+  }
+  return messages
+    .filter((message) => message.sourceOffset > cursor)
+    .slice(0, Math.max(0, maxEvents));
+}
+
+async function runBackfill(options: AgentSessionImportRunOptions, result: AgentSessionImportRunResult): Promise<void> {
+  if (typeof options.store.listImportedAgentSessionsForBackfill !== 'function'
+    || typeof options.store.loadOlderImportedAgentEvents !== 'function') {
+    return;
+  }
+  let remainingEvents = Math.max(0, options.maxEvents ?? 0);
+  if (remainingEvents <= 0) {
+    return;
+  }
+  const sessions = await options.store.listImportedAgentSessionsForBackfill({
+    projectPath: resolve(options.projectPath),
+    limit: Math.max(1, options.backfillSessionLimit ?? options.maxFiles),
+  });
+  for (const session of sessions) {
+    if (!session.chatId || !session.hasMoreBefore || remainingEvents <= 0) {
+      continue;
+    }
+    while (remainingEvents > 0) {
+      const batch = await options.store.loadOlderImportedAgentEvents({
+        chatId: session.chatId,
+        limitTurns: Math.max(1, options.backfillTurnsPerBatch ?? options.tailTurns),
+      });
+      const importedCount = batch.events.length;
+      result.backfilledEvents += importedCount;
+      result.importedEvents += importedCount;
+      remainingEvents -= importedCount;
+      if (!batch.hasMoreBefore || importedCount === 0) {
+        break;
+      }
+    }
+  }
+}
+
 export async function runAgentSessionImportOnce(options: AgentSessionImportRunOptions): Promise<AgentSessionImportRunResult> {
   const result: AgentSessionImportRunResult = {
     discovered: 0,
     linkedChats: 0,
     importedEvents: 0,
+    backfilledEvents: 0,
     skipped: 0,
   };
+  const maxEvents = Math.max(1, options.maxEvents ?? Number.POSITIVE_INFINITY);
+  let remainingEvents = maxEvents;
   const candidates = await collectCandidates(options);
   const normalizedProjectPath = resolve(options.projectPath);
   for (const candidate of candidates) {
+    if (remainingEvents <= 0) {
+      break;
+    }
     let contents: string;
     try {
       contents = await readFile(candidate.path, 'utf8');
@@ -240,17 +324,28 @@ export async function runAgentSessionImportOnce(options: AgentSessionImportRunOp
     if (!imported.chatId) {
       result.linkedChats += 1;
     }
-    const tailMessages = selectTailMessages(parsed.messages, options.tailTurns);
+    const selectedMessages = imported.chatId
+      ? selectNewerMessages(parsed.messages, imported.newestCursorOffset, remainingEvents)
+      : selectTailMessages(parsed.messages, options.tailTurns).slice(0, remainingEvents);
+    if (selectedMessages.length === 0) {
+      continue;
+    }
     const events = await options.store.appendImportedAgentEvents({
       importId: imported.id,
       provider: parsed.provider,
       providerSessionId: parsed.providerSessionId,
       sessionId: normalizedProjectPath,
       chatId,
-      messages: tailMessages,
-      hasMoreBefore: hasMessagesBeforeSelection(parsed.messages, tailMessages),
+      messages: selectedMessages,
+      hasMoreBefore: imported.chatId
+        ? imported.hasMoreBefore
+        : hasMessagesBeforeSelection(parsed.messages, selectedMessages),
     });
     result.importedEvents += events.length;
+    remainingEvents -= events.length;
+  }
+  if (options.mode === 'backfill') {
+    await runBackfill({ ...options, maxEvents: remainingEvents }, result);
   }
   return result;
 }

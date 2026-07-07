@@ -162,7 +162,20 @@ interface RuntimeStoreBackend {
     oldestCursorOffset?: bigint | null;
     newestCursorOffset?: bigint | null;
     status?: string;
-  }): Promise<{ id: string; chatId?: string | null }>;
+  }): Promise<{
+    id: string;
+    chatId?: string | null;
+    arisSessionId?: string | null;
+    provider: string;
+    providerSessionId: string;
+    sourcePath: string;
+    projectPath: string;
+    fileSize?: bigint;
+    fileMtimeMs?: bigint;
+    oldestCursorOffset?: bigint | null;
+    newestCursorOffset?: bigint | null;
+    hasMoreBefore: boolean;
+  }>;
   resolveProjectSessionIdByPath?(projectPath: string): Promise<string | null>;
   ensureImportedAgentChat?(input: {
     importId: string;
@@ -179,6 +192,14 @@ interface RuntimeStoreBackend {
     messages: ImportedProviderMessage[];
     hasMoreBefore?: boolean;
   }): Promise<Array<{ id: string }>>;
+  listImportedAgentSessionsForBackfill?(input: {
+    projectPath: string;
+    limit: number;
+  }): Promise<Array<{
+    id: string;
+    chatId?: string | null;
+    hasMoreBefore: boolean;
+  }>>;
   getImportedAgentSessionState?(chatId: string): Promise<{ hasMoreBefore: boolean } | null>;
   loadOlderImportedAgentEvents?(input: { chatId: string; limitTurns: number }): Promise<{ events: RuntimeMessage[]; hasMoreBefore: boolean }>;
   getLatestUserMessageForAction?(sessionId: string, chatId?: string): Promise<AppendMessageInput | null>;
@@ -763,6 +784,13 @@ export class RuntimeStore {
       return this.delegate.getImportedAgentSessionState(chatId);
     }
     return null;
+  }
+
+  async listImportedAgentSessionsForBackfill(input: { projectPath: string; limit: number }) {
+    if (typeof this.delegate.listImportedAgentSessionsForBackfill === 'function') {
+      return this.delegate.listImportedAgentSessionsForBackfill(input);
+    }
+    return [];
   }
 
   async loadOlderImportedAgentEvents(input: { chatId: string; limitTurns: number }) {
