@@ -43,7 +43,7 @@ ARIS uses multiple visible URLs. Classify the target before deploying or reporti
 
 | Target | Example URL | Runtime | Standard action |
 | --- | --- | --- | --- |
-| Production | `https://aris.lawdigest.cloud` | Docker blue/green slots behind nginx | `DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_web.sh` |
+| Production | `https://aris.lawdigest.kr` | Docker blue/green slots behind nginx (`lawdigest-kr-services` site) | `DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_web.sh` |
 | Dev proxy | `https://lawdigest.cloud/proxy/3309/` | A local Next dev server exposed by code-server proxy | Restart/check `WEB_DEV_PORT=3309 ./deploy/dev/run_web_dev_hot_reload.sh` |
 | Local slot | `http://127.0.0.1:3301` or `3302` | Active/inactive production slot | Internal health check only |
 | GitHub branch | GitHub remote branch | No runtime | Push/review only |
@@ -158,7 +158,7 @@ Recommended runtime continuity checks after a backend deploy:
 - Trigger `abort` or disconnected-chat `retry` once during the drain window and confirm the action is honored by the active run/new worker.
 
 Current web routing expectations:
-- Production traffic: `https://aris.lawdigest.cloud` through nginx
+- Production traffic: `https://aris.lawdigest.kr` through nginx
 - Active slot local ports: `WEB_BLUE_PORT` (default `3301`), `WEB_GREEN_PORT` (default `3302`)
 - `localhost:3300` is legacy single-slot behavior, not the standard production verification target
 

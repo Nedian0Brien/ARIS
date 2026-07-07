@@ -24,7 +24,11 @@ WEB_PRUNE_CACHE_UNTIL="${WEB_PRUNE_CACHE_UNTIL:-24h}"  # e.g. 24h, 168h
 WEB_PRUNE_CACHE_KEEP_STORAGE="${WEB_PRUNE_CACHE_KEEP_STORAGE:-8gb}"
 
 ARIS_WEB_IMAGE="${ARIS_WEB_IMAGE:-aris-stack-aris-web:latest}"
-NGINX_SITE="${ARIS_NGINX_SITE:-/etc/nginx/sites-available/aris.lawdigest.cloud}"
+# aris.lawdigest.cloud was retired; production now serves aris.lawdigest.kr from the
+# multi-service site file, which includes the aris-web upstream snippet. Keeping the
+# old default silently skipped the nginx upstream switch (site-not-found -> deploy exits
+# 0 but traffic stays on the old slot). Override with ARIS_NGINX_SITE if the host differs.
+NGINX_SITE="${ARIS_NGINX_SITE:-/etc/nginx/sites-available/lawdigest-kr-services}"
 NGINX_SNIPPET="${ARIS_WEB_UPSTREAM_SNIPPET:-/etc/nginx/snippets/aris-web-upstream.conf}"
 
 cd "$ROOT_DIR"
