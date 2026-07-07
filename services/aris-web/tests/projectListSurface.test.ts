@@ -704,6 +704,14 @@ describe('project list surface', () => {
     expect(exactCssBlock('.pc-proto .ws')).toContain('background: var(--surface);');
   });
 
+  it('keeps the workspace column from growing the shell row when chat history entries expand', () => {
+    // Grid items default to min-height: auto (content-based); without an explicit
+    // override, an expanded chist__text entry can stretch the whole .shell row and
+    // push the composer in .shell__main below the viewport.
+    expect(exactCssBlock('.pc-proto .shell__main')).toContain('min-height: 0;');
+    expect(exactCssBlock('.pc-proto .shell__workspace')).toContain('min-height: 0;');
+  });
+
   it('keeps the project filter chips attached to the search field instead of the screen edge', () => {
     const toolbar = cssBlock('.proj-list-toolbar');
     const chips = cssBlock('.proj-list-chips');
