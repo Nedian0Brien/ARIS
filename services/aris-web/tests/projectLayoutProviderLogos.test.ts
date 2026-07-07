@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { readAppStyles } from './helpers/readAppStyles';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
@@ -10,7 +11,7 @@ const providerLogo = readFileSync(resolve(__dirname, '../components/ui/ProviderL
 const chatTimeline = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/center-pane/ChatTimeline.tsx'), 'utf8');
 const chatInterfaceCss = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.module.css'), 'utf8');
 const middleware = readFileSync(resolve(__dirname, '../middleware.ts'), 'utf8');
-const uiCss = readFileSync(resolve(__dirname, '../app/styles/ui.css'), 'utf8');
+const uiCss = readAppStyles();
 
 describe('project layout and provider logo guards', () => {
   it('lets the mobile project shell and project tabs fill the browser width', () => {

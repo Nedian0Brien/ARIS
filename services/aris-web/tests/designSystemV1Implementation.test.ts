@@ -2,11 +2,12 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { readAppStyles } from './helpers/readAppStyles';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const tokensCss = readFileSync(resolve(__dirname, '../app/styles/tokens.css'), 'utf8');
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
-const uiCss = readFileSync(resolve(__dirname, '../app/styles/ui.css'), 'utf8');
+const uiCss = readAppStyles();
 const header = readFileSync(resolve(__dirname, '../components/layout/Header.tsx'), 'utf8');
 const bottomNav = readFileSync(resolve(__dirname, '../components/layout/BottomNav.tsx'), 'utf8');
 const chatComposer = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/chat-screen/center-pane/ChatComposer.tsx'), 'utf8');

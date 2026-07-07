@@ -2,11 +2,12 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { readAppStyles } from './helpers/readAppStyles';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
 const projectChatSurface = readFileSync(resolve(__dirname, '../components/project-chat/ProjectChatSurface.tsx'), 'utf8');
-const uiCss = readFileSync(resolve(__dirname, '../app/styles/ui.css'), 'utf8');
+const uiCss = readAppStyles();
 
 function cssBlock(selector: string) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

@@ -1,0 +1,318 @@
+[
+  {
+    "route": "home",
+    "viewport": "390x844",
+    "screenshot": "home-390.png",
+    "metrics": {
+      "activeNav": "Home",
+      "title": "Homeworkspace overview",
+      "classes": {
+        "hasProjectList": false,
+        "hasFiles": false,
+        "hasProjectChat": false
+      },
+      "rootScrollWidth": 390,
+      "viewportWidth": 390,
+      "rootOverflow": 0,
+      "visualViewportScale": 1,
+      "offenders": [
+        {
+          "tag": "div",
+          "className": "m-body m-body--home",
+          "overflow": 80,
+          "clientWidth": 390,
+          "scrollWidth": 470
+        }
+      ]
+    }
+  },
+  {
+    "route": "project",
+    "viewport": "390x844",
+    "screenshot": "project-390.png",
+    "metrics": {
+      "activeNav": "Project",
+      "title": "AARISubuntu",
+      "classes": {
+        "hasProjectList": false,
+        "hasFiles": false,
+        "hasProjectChat": true
+      },
+      "rootScrollWidth": 390,
+      "viewportWidth": 390,
+      "rootOverflow": 0,
+      "visualViewportScale": 1,
+      "offenders": [
+        {
+          "tag": "div",
+          "className": "cmp__top",
+          "overflow": 46,
+          "clientWidth": 376,
+          "scrollWidth": 422
+        }
+      ]
+    }
+  },
+  {
+    "route": "files",
+    "viewport": "390x844",
+    "screenshot": "files-390.png",
+    "metrics": {
+      "activeNav": "Files",
+      "title": "Filesproject filesystem",
+      "classes": {
+        "hasProjectList": false,
+        "hasFiles": true,
+        "hasProjectChat": false
+      },
+      "rootScrollWidth": 390,
+      "viewportWidth": 390,
+      "rootOverflow": 0,
+      "visualViewportScale": 1,
+      "offenders": []
+    }
+  },
+  {
+    "route": "project-chat",
+    "viewport": "390x844",
+    "screenshot": "project-chat-390.png",
+    "metrics": {
+      "activeNav": "Project",
+      "title": "AARISubuntu",
+      "classes": {
+        "hasProjectList": false,
+        "hasFiles": false,
+        "hasProjectChat": true
+      },
+      "rootScrollWidth": 390,
+      "viewportWidth": 390,
+      "rootOverflow": 0,
+      "visualViewportScale": 1,
+      "offenders": [
+        {
+          "tag": "div",
+          "className": "cmp__top",
+          "overflow": 46,
+          "clientWidth": 376,
+          "scrollWidth": 422
+        }
+      ]
+    }
+  },
+  {
+    "route": "home",
+    "viewport": "768x900",
+    "screenshot": "home-768.png",
+    "metrics": {
+      "activeNav": "Home",
+      "title": "Homeworkspace overview",
+      "classes": {
+        "hasProjectList": false,
+        "hasFiles": false,
+        "hasProjectChat": false
+      },
+      "rootScrollWidth": 768,
+      "viewportWidth": 768,
+      "rootOverflow": 0,
+      "visualViewportScale": 1,
+      "offenders": [
+        {
+          "tag": "div",
+          "className": "m-body m-body--home",
+          "overflow": 80,
+          "clientWidth": 528,
+          "scrollWidth": 608
+        }
+      ]
+    }
+  },
+  {
+    "route": "project",
+    "viewport": "768x900",
+    "screenshot": "project-768.png",
+    "metrics": {
+      "activeNav": "Project",
+      "title": "Projects0 active · project chats in sidebar",
+      "classes": {
+        "hasProjectList": true,
+        "hasFiles": false,
+        "hasProjectChat": false
+      },
+      "rootScrollWidth": 768,
+      "viewportWidth": 768,
+      "rootOverflow": 0,
+      "visualViewportScale": 1,
+      "offenders": []
+    }
+  },
+  {
+    "route": "files",
+    "viewport": "768x900",
+    "screenshot": "files-768.png",
+    "metrics": {
+      "activeNav": "Files",
+      "title": "Filesproject filesystem",
+      "classes": {
+        "hasProjectList": false,
+        "hasFiles": true,
+        "hasProjectChat": false
+      },
+      "rootScrollWidth": 768,
+      "viewportWidth": 768,
+      "rootOverflow": 0,
+      "visualViewportScale": 1,
+      "offenders": []
+    }
+  },
+  {
+    "route": "project-chat",
+    "viewport": "768x900",
+    "screenshot": "project-chat-768.png",
+    "metrics": {
+      "activeNav": "Project",
+      "title": "Projects0 active · project chats in sidebar",
+      "classes": {
+        "hasProjectList": false,
+        "hasFiles": false,
+        "hasProjectChat": false
+      },
+      "rootScrollWidth": 768,
+      "viewportWidth": 768,
+      "rootOverflow": 0,
+      "visualViewportScale": 1,
+      "offenders": []
+    }
+  },
+  {
+    "route": "home",
+    "viewport": "1280x900",
+    "screenshot": "home-1280.png",
+    "metrics": {
+      "activeNav": "Home",
+      "title": "Homeworkspace overview",
+      "classes": {
+        "hasProjectList": false,
+        "hasFiles": false,
+        "hasProjectChat": false
+      },
+      "rootScrollWidth": 1280,
+      "viewportWidth": 1280,
+      "rootOverflow": 0,
+      "visualViewportScale": 1,
+      "offenders": [
+        {
+          "tag": "div",
+          "className": "m-body m-body--home",
+          "overflow": 80,
+          "clientWidth": 1040,
+          "scrollWidth": 1120
+        }
+      ]
+    }
+  },
+  {
+    "route": "project",
+    "viewport": "1280x900",
+    "screenshot": "project-1280.png",
+    "metrics": {
+      "activeNav": "Project",
+      "title": "Projects0 active · project chats in sidebar",
+      "classes": {
+        "hasProjectList": true,
+        "hasFiles": false,
+        "hasProjectChat": false
+      },
+      "rootScrollWidth": 1280,
+      "viewportWidth": 1280,
+      "rootOverflow": 0,
+      "visualViewportScale": 1,
+      "offenders": []
+    }
+  },
+  {
+    "route": "files",
+    "viewport": "1280x900",
+    "screenshot": "files-1280.png",
+    "metrics": {
+      "activeNav": "Files",
+      "title": "Filesproject filesystem",
+      "classes": {
+        "hasProjectList": false,
+        "hasFiles": true,
+        "hasProjectChat": false
+      },
+      "rootScrollWidth": 1280,
+      "viewportWidth": 1280,
+      "rootOverflow": 0,
+      "visualViewportScale": 1,
+      "offenders": []
+    }
+  },
+  {
+    "route": "project-chat",
+    "viewport": "1280x900",
+    "screenshot": "project-chat-1280.png",
+    "metrics": {
+      "activeNav": "Project",
+      "title": "Projects0 active · project chats in sidebar",
+      "classes": {
+        "hasProjectList": false,
+        "hasFiles": false,
+        "hasProjectChat": false
+      },
+      "rootScrollWidth": 1280,
+      "viewportWidth": 1280,
+      "rootOverflow": 0,
+      "visualViewportScale": 1,
+      "offenders": []
+    }
+  },
+  {
+    "route": "project-chat-active",
+    "path": "/?tab=project&project=acd06db6-bd7e-4fe1-a399-1f04e785e114&view=chat&chat=dbcad9a8-c5ab-44e7-a327-0ac3456e6336",
+    "viewport": "390x844",
+    "screenshot": "project-chat-active-390.png",
+    "metrics": {
+      "title": "AARISARIS",
+      "hasPcProto": true,
+      "hasComposer": true,
+      "hasTimeline": true,
+      "rootScrollWidth": 390,
+      "viewportWidth": 390,
+      "rootOverflow": 0,
+      "visualViewportScale": 1
+    }
+  },
+  {
+    "route": "project-chat-active",
+    "path": "/?tab=project&project=acd06db6-bd7e-4fe1-a399-1f04e785e114&view=chat&chat=dbcad9a8-c5ab-44e7-a327-0ac3456e6336",
+    "viewport": "768x900",
+    "screenshot": "project-chat-active-768.png",
+    "metrics": {
+      "title": "AARISARIS",
+      "hasPcProto": true,
+      "hasComposer": true,
+      "hasTimeline": true,
+      "rootScrollWidth": 768,
+      "viewportWidth": 768,
+      "rootOverflow": 0,
+      "visualViewportScale": 1
+    }
+  },
+  {
+    "route": "project-chat-active",
+    "path": "/?tab=project&project=acd06db6-bd7e-4fe1-a399-1f04e785e114&view=chat&chat=dbcad9a8-c5ab-44e7-a327-0ac3456e6336",
+    "viewport": "1280x900",
+    "screenshot": "project-chat-active-1280.png",
+    "metrics": {
+      "title": "AARISARIS",
+      "hasPcProto": true,
+      "hasComposer": true,
+      "hasTimeline": true,
+      "rootScrollWidth": 1280,
+      "viewportWidth": 1280,
+      "rootOverflow": 0,
+      "visualViewportScale": 1
+    }
+  }
+]
