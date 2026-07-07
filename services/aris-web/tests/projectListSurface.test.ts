@@ -44,13 +44,20 @@ describe('project list surface', () => {
     const topbarStart = homeClient.indexOf('function Topbar({');
     const homeOrbStart = homeClient.indexOf('function HomeOrb()');
     const topbarSource = homeClient.slice(topbarStart, homeOrbStart);
+    const menuStart = topbarSource.indexOf('className="m-context-menu"');
+    const menuEnd = topbarSource.indexOf('</header>', menuStart);
+    const menuSource = topbarSource.slice(menuStart, menuEnd);
 
-    expect(topbarSource).toContain('className="m-context-menu"');
-    expect(topbarSource).toContain('className="m-context-menu__button"');
-    expect(topbarSource).toContain('aria-label="상단 헤더 메뉴"');
-    expect(topbarSource).toContain('aria-haspopup="menu"');
-    expect(topbarSource).toContain('className="m-theme-toggle"');
-    expect(topbarSource).toContain('aria-label="테마 선택"');
+    expect(menuSource).toContain('className="m-context-menu"');
+    expect(menuSource).toContain('className="m-context-menu__button"');
+    expect(menuSource).toContain('aria-label="상단 헤더 메뉴"');
+    expect(menuSource).toContain('aria-haspopup="menu"');
+    expect(topbarSource).toContain('onOpenSettings: () => void;');
+    expect(topbarSource).toContain('const handleOpenSettings = () => {');
+    expect(menuSource).toContain('className="m-context-menu__item"');
+    expect(menuSource).toContain('설정');
+    expect(menuSource).toContain('className="m-theme-toggle"');
+    expect(menuSource).toContain('aria-label="테마 선택"');
     expect(topbarSource).not.toContain('New project');
     expect(uiCss).toContain('.m-context-menu__panel');
   });

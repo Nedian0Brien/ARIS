@@ -42,6 +42,7 @@ import {
   Share2,
   Sparkles,
   Square,
+  Settings,
   Sun,
   Terminal,
   TerminalSquare,
@@ -951,6 +952,7 @@ function Topbar({
   onLogoHome,
   themeMode,
   onThemeChange,
+  onOpenSettings,
 }: {
   activeTab: TabType;
   sessions: SessionSummary[];
@@ -959,6 +961,7 @@ function Topbar({
   onLogoHome?: () => void;
   themeMode: ThemeMode;
   onThemeChange: (mode: ThemeMode) => void;
+  onOpenSettings: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -997,6 +1000,11 @@ function Topbar({
   const changeThemeMode = (next: ThemeMode) => {
     onThemeChange(next);
     setMenuOpen(false);
+  };
+
+  const handleOpenSettings = () => {
+    setMenuOpen(false);
+    onOpenSettings();
   };
 
   return (
@@ -1040,6 +1048,17 @@ function Topbar({
           </button>
           {menuOpen && (
             <div className="m-context-menu__panel" role="menu" aria-label="상단 헤더 메뉴">
+              <div className="m-context-menu__section">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="m-context-menu__item"
+                  onClick={handleOpenSettings}
+                >
+                  <Settings size={13} aria-hidden="true" />
+                  <span>설정</span>
+                </button>
+              </div>
               <div className="m-context-menu__section">
                 <div className="m-context-menu__label">테마</div>
                 <div className="m-theme-toggle" role="group" aria-label="테마 선택">
@@ -2628,6 +2647,7 @@ export default function HomePageWrapper({
             onLogoHome={handleTopbarLogoHome}
             themeMode={themeMode}
             onThemeChange={changeThemeMode}
+            onOpenSettings={() => handleTabChange('settings')}
           />
           {runtimeError && <div className="ia-runtime-notice"><BackendNotice message={runtimeError} /></div>}
           {content}
