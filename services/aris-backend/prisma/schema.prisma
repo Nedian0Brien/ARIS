@@ -32,6 +32,9 @@ model SessionChat {
   isPinned             Boolean
   isDefault            Boolean
   threadId             String?
+  parentChatId         String?
+  subagentType         String?
+  subagentStatus       String?
   model                String?
   geminiMode           String?
   modelReasoningEffort String?
@@ -51,6 +54,7 @@ model SessionChat {
 
   @@index([sessionId, userId, isPinned, lastActivityAt], map: "Chat_projectId_userId_isPinned_lastActivityAt_idx")
   @@index([userId, updatedAt], map: "Chat_userId_updatedAt_idx")
+  @@index([parentChatId], map: "Chat_parentChatId_idx")
   @@map("Chat")
 }
 
