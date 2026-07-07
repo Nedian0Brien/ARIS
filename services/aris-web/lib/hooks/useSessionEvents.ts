@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionEventsPage, UiEvent } from '@/lib/happy/types';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
+import { readUiEventStreamEvent } from '@/lib/happy/chatRuntime';
 import {
   buildRuntimeEventChannelUrl,
   type RuntimeEventChannelMessage,
@@ -70,33 +71,27 @@ function isUiEvent(value: unknown): value is UiEvent {
   );
 }
 
-function readTrimmedStreamEvent(event: UiEvent): string {
-  return typeof event.meta?.streamEvent === 'string'
-    ? event.meta.streamEvent.trim()
-    : '';
-}
-
 function readTrimmedMetaString(event: UiEvent, key: string): string {
   const value = event.meta?.[key];
   return typeof value === 'string' ? value.trim() : '';
 }
 
 function isGeminiPendingActionEvent(event: UiEvent): boolean {
-  return readTrimmedStreamEvent(event) === 'gemini_action_pending';
+  return readUiEventStreamEvent(event) === 'gemini_action_pending';
 }
 
 function isGeminiFinalActionEvent(event: UiEvent): boolean {
   return event.meta?.agent === 'gemini'
-    && readTrimmedStreamEvent(event) === 'agent_stream_action';
+    && readUiEventStreamEvent(event) === 'agent_stream_action';
 }
 
 function isGeminiRealtimeTextEvent(event: UiEvent): boolean {
-  const streamEvent = readTrimmedStreamEvent(event);
+  const streamEvent = readUiEventStreamEvent(event);
   return streamEvent === 'agent_message_partial' || streamEvent === 'agent_commentary_partial';
 }
 
 function isGeminiPersistedTextEvent(event: UiEvent): boolean {
-  const streamEvent = readTrimmedStreamEvent(event);
+  const streamEvent = readUiEventStreamEvent(event);
   return (
     streamEvent === 'agent_message'
     || streamEvent === 'agent_message_recovered'
@@ -109,7 +104,7 @@ function readGeminiTextEventIdentity(event: UiEvent): string | null {
     return null;
   }
 
-  const streamEvent = readTrimmedStreamEvent(event);
+  const streamEvent = readUiEventStreamEvent(event);
   const messagePhase = readTrimmedMetaString(event, 'messagePhase');
   const phase = (
     streamEvent === 'agent_commentary_partial'
@@ -132,7 +127,7 @@ function readGeminiTextEventIdentity(event: UiEvent): string | null {
 }
 
 function isRealtimeOnlyEvent(event: UiEvent): boolean {
-  const streamEvent = readTrimmedStreamEvent(event);
+  const streamEvent = readUiEventStreamEvent(event);
   return (
     streamEvent === 'gemini_action_pending'
     || streamEvent === 'agent_message_partial'
