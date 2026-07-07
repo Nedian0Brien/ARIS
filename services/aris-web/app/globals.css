@@ -1,6 +1,12 @@
 @import './styles/tokens.css';
 @import './styles/reset.css';
 @import './styles/ui.css';
+@import './styles/ia-shell.css';
+@import './styles/home.css';
+@import './styles/project.css';
+@import './styles/project-chat.css';
+@import './styles/files.css';
+@import './styles/ui-responsive.css';
 @import './styles/layout.css';
 @import './styles/bottom-nav.css';
 @import './styles/fab.css';

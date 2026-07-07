@@ -2,10 +2,11 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { readAppStyles } from './helpers/readAppStyles';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
-const uiCss = readFileSync(resolve(__dirname, '../app/styles/ui.css'), 'utf8');
+const uiCss = readAppStyles();
 
 describe('ARIS IA v3 implementation', () => {
   it('adds the acronym and ambient command console to the home surface', () => {
@@ -61,9 +62,7 @@ describe('ARIS IA v3 implementation', () => {
     expect(homeClient).toContain('--my');
   });
 
-  it('keeps the mobile command console ambient instead of covering hero text', () => {
-    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.cmd-console\s*\{[\s\S]*?left:\s*0;[\s\S]*?transform:\s*none;[\s\S]*?height:\s*112px;[\s\S]*?opacity:\s*0\.34;/);
-    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.cmd-console__viewport\s*\{[\s\S]*?align-items:\s*flex-end;/);
-    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.cmd-console__line\s*\{[\s\S]*?max-width:\s*min\(72vw,\s*280px\);[\s\S]*?font-size:\s*11\.5px;/);
+  it('hides the mobile command console instead of covering hero text', () => {
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.cmd-console\s*\{[\s\S]*?display:\s*none;/);
   });
 });

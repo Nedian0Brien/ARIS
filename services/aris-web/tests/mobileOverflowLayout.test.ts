@@ -2,11 +2,11 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { readAppStyles } from './helpers/readAppStyles';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dashboardCssPath = resolve(__dirname, '../app/SessionDashboard.module.css');
 const dashboardTsxPath = resolve(__dirname, '../app/SessionDashboard.tsx');
-const uiCssPath = resolve(__dirname, '../app/styles/ui.css');
 const fabCssPath = resolve(__dirname, '../app/styles/fab.css');
 const workspaceHomeCssPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/WorkspaceHome.module.css');
 const chatInterfaceCssPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.module.css');
@@ -14,7 +14,7 @@ const customizationSidebarCssPath = resolve(__dirname, '../app/_legacy/sessions/
 
 const dashboardCss = readFileSync(dashboardCssPath, 'utf8');
 const dashboardTsx = readFileSync(dashboardTsxPath, 'utf8');
-const uiCss = readFileSync(uiCssPath, 'utf8');
+const uiCss = readAppStyles();
 const fabCss = readFileSync(fabCssPath, 'utf8');
 const workspaceHomeCss = readFileSync(workspaceHomeCssPath, 'utf8');
 const chatInterfaceCss = readFileSync(chatInterfaceCssPath, 'utf8');
@@ -34,8 +34,8 @@ describe('mobile home/workspace layout overflow guards', () => {
   });
 
   it('keeps the redesigned IA home shell and recent project cards usable on phones', () => {
-    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.aris-ia-shell\s*\{[^}]*width:\s*calc\(100% - var\(--sp-12\)\);/s);
-    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.aris-ia-shell\s*\{[^}]*margin-inline:\s*auto;/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.aris-ia-shell\s*\{[^}]*width:\s*100%;/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.aris-ia-shell\s*\{[^}]*margin-inline:\s*0;/s);
     expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.cmd-console\s*\{[^}]*display:\s*none;/s);
     expect(uiCss).toMatch(/\.home-grid,\s*[\r\n]+\.home-proj\s*\{[^}]*max-width:\s*100%;/s);
     expect(uiCss).toMatch(/\.home-proj__head > div\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*100%;/s);
