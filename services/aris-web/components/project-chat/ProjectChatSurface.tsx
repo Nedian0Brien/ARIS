@@ -13,8 +13,10 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowDown,
   AtSign,
   Check,
@@ -27,6 +29,7 @@ import {
   File as FileIcon,
   FileText,
   FolderOpen,
+  Loader2,
   Maximize2,
   MessageSquareText,
   Mic,
@@ -43,6 +46,7 @@ import {
   X,
 } from 'lucide-react';
 import { ProviderLogo, type ProviderLogoProvider } from '@/components/ui/ProviderLogo';
+import { WorkspaceFileEditor } from '@/components/files/WorkspaceFileEditor';
 import { isTerminalRunStatus, readUiEventRunStatus } from '@/lib/happy/chatRuntime';
 import { hydratePersistedPermissions, mergeRenderablePermissions } from '@/lib/happy/permissions';
 import { withAppBasePath } from '@/lib/routing/appPath';
@@ -1745,6 +1749,16 @@ export function ProjectChatSurface({
   const [expandedTurnId, setExpandedTurnId] = useState<ExpandedTurnState>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [selectedWorkspaceFile, setSelectedWorkspaceFile] = useState('');
+  const [workspaceFilePreview, setWorkspaceFilePreview] = useState<{
+    path: string;
+    name: string;
+    content: string;
+    rawUrl?: string;
+    blockedReason?: 'binary' | 'large';
+    sizeBytes?: number;
+  } | null>(null);
+  const [workspaceFilePreviewLoading, setWorkspaceFilePreviewLoading] = useState(false);
+  const [workspaceFilePreviewSaving, setWorkspaceFilePreviewSaving] = useState(false);
   const [draftTerminalCommand, setDraftTerminalCommand] = useState('npm test -- --run tests/projectListSurface.test.ts');
   const [previewDevice, setPreviewDevice] = useState<'1200' | '768' | '390'>('1200');
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
@@ -1854,6 +1868,86 @@ export function ProjectChatSurface({
       showTransientFeedback(copied ? `${label} copied` : `${label} ready`);
     });
   };
+
+  const buildFsRequestUrl = useCallback((basePath: string, filePath: string) => {
+    const params = new URLSearchParams();
+    params.set('path', filePath);
+    if (projectId) {
+      params.set('projectId', projectId);
+      if (activeWorkspacePanelId) {
+        params.set('workspacePanelId', activeWorkspacePanelId);
+      }
+    }
+    return `${basePath}?${params.toString()}`;
+  }, [projectId, activeWorkspacePanelId]);
+
+  const openWorkspaceFilePreview = useCallback((file: WorkspaceFileItem) => {
+    setSelectedWorkspaceFile(file.path);
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext === 'pdf') {
+      setWorkspaceFilePreview({
+        path: file.path,
+        name: file.name,
+        content: '',
+        rawUrl: buildFsRequestUrl('/api/fs/raw', file.path),
+      });
+      return;
+    }
+
+    setWorkspaceFilePreviewLoading(true);
+    setWorkspaceFilePreview(null);
+    void (async () => {
+      try {
+        const response = await fetch(buildFsRequestUrl('/api/fs/read', file.path), { cache: 'no-store' });
+        const data = await response.json().catch(() => ({})) as {
+          content?: string;
+          error?: string;
+          blockedReason?: 'binary' | 'large';
+          sizeBytes?: number;
+        };
+        if (!response.ok) {
+          throw new Error(data.error ?? '파일을 읽을 수 없습니다.');
+        }
+        setWorkspaceFilePreview({
+          path: file.path,
+          name: file.name,
+          content: data.content ?? '',
+          blockedReason: data.blockedReason,
+          sizeBytes: data.sizeBytes,
+        });
+      } catch (err) {
+        showTransientFeedback(err instanceof Error ? err.message : '파일을 읽을 수 없습니다.');
+      } finally {
+        setWorkspaceFilePreviewLoading(false);
+      }
+    })();
+  }, [buildFsRequestUrl]);
+
+  const saveWorkspaceFilePreview = useCallback(() => {
+    if (!workspaceFilePreview) return;
+    setWorkspaceFilePreviewSaving(true);
+    void (async () => {
+      try {
+        const response = await fetch('/api/fs/write', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            path: workspaceFilePreview.path,
+            content: workspaceFilePreview.content,
+            projectId,
+            workspacePanelId: activeWorkspacePanelId,
+          }),
+        });
+        if (!response.ok) throw new Error('저장에 실패했습니다.');
+        showTransientFeedback('파일이 저장되었습니다');
+        workspaceFiles.refresh();
+      } catch (err) {
+        showTransientFeedback(err instanceof Error ? err.message : '저장에 실패했습니다.');
+      } finally {
+        setWorkspaceFilePreviewSaving(false);
+      }
+    })();
+  }, [workspaceFilePreview, projectId, activeWorkspacePanelId, workspaceFiles]);
 
   const updateJumpToLatestVisibility = useCallback(() => {
     const node = timelineRef.current;
@@ -3121,7 +3215,7 @@ export function ProjectChatSurface({
                         if (file.isDirectory) {
                           workspaceFiles.cdInto(file);
                         } else {
-                          setSelectedWorkspaceFile(file.path);
+                          openWorkspaceFilePreview(file);
                         }
                       }}
                     >
@@ -3637,8 +3731,7 @@ export function ProjectChatSurface({
                       if (file.isDirectory) {
                         workspaceFiles.cdInto(file);
                       } else {
-                        setSelectedWorkspaceFile(file.path);
-                        setPreviewState('dock');
+                        openWorkspaceFilePreview(file);
                       }
                     }}
                   >
@@ -3834,6 +3927,51 @@ export function ProjectChatSurface({
       </>
       )}
       {copyFeedback && <div className="pc-toast" data-copy-feedback role="status">{copyFeedback}</div>}
+      {typeof document !== 'undefined' && (workspaceFilePreview || workspaceFilePreviewLoading) && createPortal(
+        <div
+          className="pc-file-preview-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="File preview"
+          onClick={() => setWorkspaceFilePreview(null)}
+        >
+          <div className="pc-file-preview-card" onClick={(event) => event.stopPropagation()}>
+            {workspaceFilePreviewLoading && !workspaceFilePreview ? (
+              <div className="pc-file-preview-state">
+                <Loader2 size={16} className="pc-file-preview-spin" />
+                파일을 불러오는 중…
+              </div>
+            ) : workspaceFilePreview?.blockedReason ? (
+              <div className="pc-file-preview-blocked">
+                <div className="pc-file-preview-blocked__head">
+                  <AlertTriangle size={16} />
+                  <span>{workspaceFilePreview.name}</span>
+                  <button type="button" className="pc-file-preview-close" aria-label="닫기" onClick={() => setWorkspaceFilePreview(null)}>
+                    <X size={14} />
+                  </button>
+                </div>
+                <p>
+                  {workspaceFilePreview.blockedReason === 'binary'
+                    ? '바이너리 파일은 미리보기를 지원하지 않습니다.'
+                    : `파일이 너무 큽니다 (${Math.round((workspaceFilePreview.sizeBytes ?? 0) / 1024)}KB).`}
+                </p>
+              </div>
+            ) : workspaceFilePreview ? (
+              <WorkspaceFileEditor
+                fileName={workspaceFilePreview.name}
+                filePath={workspaceFilePreview.path}
+                content={workspaceFilePreview.content}
+                rawUrl={workspaceFilePreview.rawUrl}
+                isSaving={workspaceFilePreviewSaving}
+                onChange={(nextContent) => setWorkspaceFilePreview((current) => (current ? { ...current, content: nextContent } : current))}
+                onSave={() => saveWorkspaceFilePreview()}
+                onClose={() => setWorkspaceFilePreview(null)}
+              />
+            ) : null}
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
