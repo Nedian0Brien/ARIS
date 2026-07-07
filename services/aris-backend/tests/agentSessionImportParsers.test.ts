@@ -52,6 +52,39 @@ describe('agent session import parsers', () => {
     expect(parsed.messages.some((message) => message.text.includes('secret'))).toBe(false);
   });
 
+  it('hides Claude meta instruction messages from imported chat history', () => {
+    const contents = [
+      JSON.stringify({
+        type: 'user',
+        isMeta: true,
+        sessionId: 'claude-session-1',
+        cwd: '/home/ubuntu/project/ARIS',
+        timestamp: '2026-07-07T05:50:01.044Z',
+        message: {
+          role: 'user',
+          content: [{ type: 'text', text: 'Approach this as the design lead at a small studio known for their versatility.' }],
+        },
+      }),
+      JSON.stringify({
+        type: 'user',
+        isMeta: false,
+        sessionId: 'claude-session-1',
+        cwd: '/home/ubuntu/project/ARIS',
+        timestamp: '2026-07-07T05:51:01.044Z',
+        message: {
+          role: 'user',
+          content: [{ type: 'text', text: '실제 사용자 요청' }],
+        },
+      }),
+    ].join('\n');
+
+    const parsed = parseClaudeSessionLog(contents, {
+      sourcePath: '/home/ubuntu/.claude/projects/-home-ubuntu-project-ARIS/claude-session-1.jsonl',
+    });
+
+    expect(parsed.messages.map((message) => message.text)).toEqual(['실제 사용자 요청']);
+  });
+
   it('selects only the last requested turns', async () => {
     const contents = await readFile(join(fixturesDir, 'codex-session-tail.jsonl'), 'utf8');
     const parsed = parseCodexSessionLog(contents, { sourcePath: 'codex.jsonl' });
