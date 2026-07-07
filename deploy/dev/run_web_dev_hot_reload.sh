@@ -132,7 +132,7 @@ fi
 
 git_ref="$(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"
 git_sha="$(git -C "${ROOT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
-proxy_url="https://lawdigest.cloud/proxy/${WEB_DEV_PORT}/"
+proxy_url="https://lawdigest.kr/proxy/${WEB_DEV_PORT}/"
 
 # Host dev mode does not receive Docker Compose's DATABASE_URL injection.
 # Build it from deploy env and point to the running postgres container IP.
@@ -175,7 +175,7 @@ echo "[web-dev] starting Next.js dev server on http://${WEB_DEV_HOST}:${WEB_DEV_
 echo "[web-dev] checkout=${ROOT_DIR}"
 echo "[web-dev] git=${git_ref}@${git_sha}"
 echo "[web-dev] proxy URL=${proxy_url}"
-echo "[web-dev] note: this dev proxy is not production deploy; production is https://aris.lawdigest.cloud"
+echo "[web-dev] note: this dev proxy is not production deploy; production is https://aris.lawdigest.kr"
 echo "[web-dev] APP_BASE_URL=${APP_BASE_URL}"
 echo "[web-dev] RUNTIME_API_URL=${RUNTIME_API_URL}"
 echo "[web-dev] save files to see immediate reload in browser"

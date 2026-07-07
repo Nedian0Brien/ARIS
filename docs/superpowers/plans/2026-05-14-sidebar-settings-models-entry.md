@@ -793,7 +793,7 @@ Run: `cd services/aris-web && npm run build` (백그라운드 권장)
 
 ### Task 4.2: 수동 E2E 체크리스트
 
-- [ ] dev 서버 기동 + 브라우저 진입 (`https://aris.lawdigest.cloud` 또는 로컬)
+- [ ] dev 서버 기동 + 브라우저 진입 (`https://aris.lawdigest.kr` 또는 로컬)
 - [ ] 사이드바 푸터 → 메뉴 열림, Theme 3-way 동작, Sign out submit
 - [ ] 메뉴 → Settings → URL `?tab=settings`, Models/SSH sub-nav 동작
 - [ ] Settings → Models에서 키 등록/모델 토글/기본 모델 설정 — 기존 SettingsTab 동작 회귀 0

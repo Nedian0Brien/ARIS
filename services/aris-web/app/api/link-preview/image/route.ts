@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
     const upstream = await fetch(targetUrl, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; ARISBot/1.0; +https://aris.lawdigest.cloud)',
+        'User-Agent': 'Mozilla/5.0 (compatible; ARISBot/1.0; +https://aris.lawdigest.kr)',
         Accept: 'image/*',
       },
       redirect: 'follow',

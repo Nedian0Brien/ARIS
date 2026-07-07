@@ -238,7 +238,7 @@ async function fetchOgMeta(url: string): Promise<OgMeta> {
     const res = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; ARISBot/1.0; +https://aris.lawdigest.cloud)',
+        'User-Agent': 'Mozilla/5.0 (compatible; ARISBot/1.0; +https://aris.lawdigest.kr)',
         Accept: 'text/html,application/xhtml+xml',
       },
       redirect: 'follow',

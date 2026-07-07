@@ -86,7 +86,7 @@ DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env \
   ./deploy/dev/run_web_dev_hot_reload.sh
 ```
 
-→ 스크립트가 출력하는 `https://lawdigest.cloud/proxy/<port>/` URL로 접속 후 브라우저 DevTools > Console 탭 확인.
+→ 스크립트가 출력하는 `https://lawdigest.kr/proxy/<port>/` URL로 접속 후 브라우저 DevTools > Console 탭 확인.
 
 ---
 

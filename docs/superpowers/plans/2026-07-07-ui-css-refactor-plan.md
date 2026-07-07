@@ -40,7 +40,7 @@
   - `tests/designSystemV1Implementation.test.ts`
 - `npm --prefix services/aris-web run lint`
 - dev proxy visual QA:
-  - `https://lawdigest.cloud/proxy/2234/`
+  - `https://lawdigest.kr/proxy/2234/`
   - 390px, 768px, 1280px
   - home, project, files, active project chat
   - evidence: `.superloopy/evidence/frontend/2026-07-07-ui-css-refactor/`

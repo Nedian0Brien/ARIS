@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import type {
@@ -12,6 +14,12 @@ import type {
   SessionAction,
   SessionStatus,
 } from '../types.js';
+import type { ImportedAgentProvider, ImportedProviderMessage } from './import/providerSessionImportParsers.js';
+import {
+  parseClaudeSessionLog,
+  parseCodexSessionLog,
+  selectTailMessages,
+} from './import/providerSessionImportParsers.js';
 
 type CreateSessionInput = {
   path: string;
@@ -28,6 +36,51 @@ type AppendMessageInput = {
   title?: string;
   text: string;
   meta?: Record<string, unknown>;
+};
+
+type ImportedAgentSessionRecord = {
+  id: string;
+  provider: string;
+  providerSessionId: string;
+  sourcePath: string;
+  projectPath: string;
+  arisSessionId?: string | null;
+  chatId?: string | null;
+  fileSize?: bigint;
+  fileMtimeMs?: bigint;
+  oldestCursorOffset?: bigint | null;
+  newestCursorOffset?: bigint | null;
+  hasMoreBefore: boolean;
+};
+
+type DiscoverImportedAgentSessionInput = {
+  provider: ImportedAgentProvider;
+  providerSessionId: string;
+  sourcePath: string;
+  projectPath: string;
+  fileSize?: bigint;
+  fileMtimeMs?: bigint;
+  oldestCursorOffset?: bigint | null;
+  newestCursorOffset?: bigint | null;
+  status?: string;
+};
+
+type EnsureImportedAgentChatInput = {
+  importId: string;
+  arisSessionId: string;
+  userId: string;
+  title: string;
+  model?: string | null;
+};
+
+type AppendImportedAgentEventsInput = {
+  importId: string;
+  provider: ImportedAgentProvider;
+  providerSessionId: string;
+  sessionId: string;
+  chatId: string;
+  messages: ImportedProviderMessage[];
+  hasMoreBefore?: boolean;
 };
 
 type CreatePermissionInput = {
@@ -279,6 +332,309 @@ export class PrismaRuntimeStore {
       },
     });
     return result.count;
+  }
+
+  async discoverImportedAgentSession(input: DiscoverImportedAgentSessionInput): Promise<ImportedAgentSessionRecord> {
+    const now = new Date();
+    const existing = await this.db.importedAgentSession.findUnique({
+      where: {
+        provider_sourcePath: {
+          provider: input.provider,
+          sourcePath: input.sourcePath,
+        },
+      },
+    });
+    if (!existing) {
+      return this.db.importedAgentSession.create({
+        data: {
+          provider: input.provider,
+          providerSessionId: input.providerSessionId,
+          sourcePath: input.sourcePath,
+          projectPath: input.projectPath,
+          fileSize: input.fileSize ?? 0n,
+          fileMtimeMs: input.fileMtimeMs ?? 0n,
+          status: input.status ?? 'discovered',
+          lastScannedAt: now,
+        },
+      });
+    }
+    const row = await this.db.importedAgentSession.update({
+      where: { id: existing.id },
+      data: {
+        provider: input.provider,
+        providerSessionId: input.providerSessionId,
+        projectPath: input.projectPath,
+        fileSize: input.fileSize ?? 0n,
+        fileMtimeMs: input.fileMtimeMs ?? 0n,
+        status: existing.chatId ? existing.status : input.status ?? 'discovered',
+        errorMessage: null,
+        lastScannedAt: now,
+      },
+    });
+    return row;
+  }
+
+  async resolveProjectSessionIdByPath(projectPath: string): Promise<string | null> {
+    const normalizedProjectPath = resolve(projectPath);
+    const primary = await this.db.session.findFirst({
+      where: {
+        path: normalizedProjectPath,
+        branch: null,
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true },
+    });
+    if (primary) {
+      return primary.id;
+    }
+    const fallback = await this.db.session.findFirst({
+      where: { path: normalizedProjectPath },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true },
+    });
+    return fallback?.id ?? null;
+  }
+
+  async ensureImportedAgentChat(input: EnsureImportedAgentChatInput): Promise<{ chatId: string }> {
+    return this.runRuntimeWriteMutationWithRetry(async (tx) => {
+      const imported = await tx.importedAgentSession.findUnique({
+        where: { id: input.importId },
+      });
+      if (!imported) {
+        throw new Error('IMPORTED_AGENT_SESSION_NOT_FOUND');
+      }
+      if (imported.chatId) {
+        return { chatId: imported.chatId };
+      }
+      const now = new Date();
+      const chatId = randomUUID();
+      const created = await tx.sessionChat.create({
+        data: {
+          id: chatId,
+          sessionId: input.arisSessionId,
+          userId: input.userId,
+          agent: imported.provider,
+          title: input.title,
+          isPinned: false,
+          isDefault: false,
+          threadId: imported.providerSessionId,
+          model: input.model ?? null,
+          latestPreview: '',
+          latestEventIsUser: false,
+          latestHasErrorSignal: false,
+          lastActivityAt: now,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+      await tx.importedAgentSession.update({
+        where: { id: input.importId },
+        data: {
+          arisSessionId: input.arisSessionId,
+          chatId: created.id,
+          status: 'linked',
+          lastImportedAt: now,
+        },
+      });
+      return { chatId: created.id };
+    });
+  }
+
+  async getImportedAgentSessionState(chatId: string): Promise<{ hasMoreBefore: boolean } | null> {
+    const imported = await this.db.importedAgentSession.findFirst({
+      where: { chatId },
+      select: { hasMoreBefore: true },
+    });
+    return imported ? { hasMoreBefore: imported.hasMoreBefore } : null;
+  }
+
+  async appendImportedAgentEvents(input: AppendImportedAgentEventsInput): Promise<RuntimeMessage[]> {
+    if (input.messages.length === 0) {
+      return [];
+    }
+    const rows = await this.runRuntimeWriteMutationWithRetry(async (tx) => {
+      const existing = await tx.importedAgentEvent.findMany({
+        where: {
+          importId: input.importId,
+          sourceEventKey: { in: input.messages.map((message) => message.sourceEventKey) },
+        },
+        select: { sourceEventKey: true },
+      });
+      const existingKeys = new Set(existing.map((row) => row.sourceEventKey));
+      const newMessages = input.messages.filter((message) => !existingKeys.has(message.sourceEventKey));
+      if (newMessages.length === 0) {
+        return [];
+      }
+      const agg = await tx.sessionChatEvent.aggregate({
+        where: { chatId: input.chatId },
+        _max: { seq: true },
+      });
+      let nextSeq = (agg._max.seq ?? 0) + 1;
+      const createdRows: Array<{
+        id: string;
+        sessionId: string;
+        chatId: string;
+        runId?: string | null;
+        type: string;
+        title: string | null;
+        text: string;
+        meta: unknown;
+        seq: number;
+        createdAt: Date;
+      }> = [];
+      for (const message of newMessages) {
+        const createdAt = message.sourceCreatedAt ?? new Date();
+        const created = await tx.sessionChatEvent.create({
+          data: {
+            id: randomUUID(),
+            sessionId: input.sessionId,
+            chatId: input.chatId,
+            type: 'message',
+            title: message.role === 'user' ? 'User Instruction' : 'Text Reply',
+            text: message.text,
+            meta: {
+              imported: true,
+              importedProvider: input.provider,
+              importedSessionId: input.providerSessionId,
+              sourceEventKey: message.sourceEventKey,
+              sourceOffset: message.sourceOffset.toString(),
+              ...(message.sourceCreatedAt ? { sourceCreatedAt: message.sourceCreatedAt.toISOString() } : {}),
+              role: message.role,
+            },
+            seq: nextSeq,
+            createdAt,
+          },
+        });
+        await tx.importedAgentEvent.create({
+          data: {
+            importId: input.importId,
+            sourceEventKey: message.sourceEventKey,
+            chatEventId: created.id,
+            sourceOffset: message.sourceOffset,
+          },
+        });
+        createdRows.push(created);
+        nextSeq += 1;
+      }
+      const latest = createdRows
+        .slice()
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[createdRows.length - 1];
+      if (latest) {
+        const latestMeta = latest.meta && typeof latest.meta === 'object' && !Array.isArray(latest.meta)
+          ? latest.meta as Record<string, unknown>
+          : {};
+        await tx.sessionChat.update({
+          where: { id: input.chatId },
+          data: {
+            latestPreview: latest.text.slice(0, 280),
+            latestEventId: latest.id,
+            latestEventAt: latest.createdAt,
+            latestEventIsUser: latestMeta.role === 'user',
+            latestHasErrorSignal: Boolean(latestMeta.error),
+            lastActivityAt: latest.createdAt,
+          },
+        });
+      }
+      const offsets = newMessages.map((message) => message.sourceOffset);
+      const currentImport = await tx.importedAgentSession.findUnique({
+        where: { id: input.importId },
+        select: { importedEventCount: true, oldestCursorOffset: true, newestCursorOffset: true },
+      });
+      const minNewOffset = offsets.reduce((min, offset) => (offset < min ? offset : min), offsets[0]);
+      const maxNewOffset = offsets.reduce((max, offset) => (offset > max ? offset : max), offsets[0]);
+      const hasImportedRange = (currentImport?.importedEventCount ?? 0) > 0;
+      await tx.importedAgentSession.update({
+        where: { id: input.importId },
+        data: {
+          importedEventCount: { increment: createdRows.length },
+          importedTurnCount: { increment: newMessages.filter((message) => message.role === 'user').length },
+          oldestCursorOffset: hasImportedRange && currentImport?.oldestCursorOffset !== null && currentImport?.oldestCursorOffset !== undefined
+            ? (currentImport.oldestCursorOffset < minNewOffset ? currentImport.oldestCursorOffset : minNewOffset)
+            : minNewOffset,
+          newestCursorOffset: hasImportedRange && currentImport?.newestCursorOffset !== null && currentImport?.newestCursorOffset !== undefined
+            ? (currentImport.newestCursorOffset > maxNewOffset ? currentImport.newestCursorOffset : maxNewOffset)
+            : maxNewOffset,
+          hasMoreBefore: input.hasMoreBefore ?? offsets.some((offset) => offset > 0n),
+          status: 'imported',
+          lastImportedAt: new Date(),
+        },
+      });
+      return createdRows;
+    });
+
+    return rows.map((row) => toRuntimeMessage({
+      id: row.id,
+      sessionId: row.sessionId,
+      type: row.type,
+      title: row.title,
+      text: row.text,
+      meta: {
+        ...(row.meta && typeof row.meta === 'object' ? row.meta as Record<string, unknown> : {}),
+        chatId: row.chatId,
+        ...(row.runId ? { runId: row.runId } : {}),
+      },
+      seq: row.seq,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  async listImportedAgentSessionsForBackfill(input: { projectPath: string; limit: number }): Promise<ImportedAgentSessionRecord[]> {
+    return this.db.importedAgentSession.findMany({
+      where: {
+        projectPath: resolve(input.projectPath),
+        chatId: { not: null },
+        hasMoreBefore: true,
+      },
+      orderBy: [
+        { lastImportedAt: 'asc' },
+        { updatedAt: 'asc' },
+      ],
+      take: Math.max(1, input.limit),
+    });
+  }
+
+  async loadOlderImportedAgentEvents(input: { chatId: string; limitTurns: number }): Promise<{ events: RuntimeMessage[]; hasMoreBefore: boolean }> {
+    const imported = await this.db.importedAgentSession.findFirst({
+      where: { chatId: input.chatId },
+    });
+    if (!imported || !imported.chatId || !imported.arisSessionId) {
+      throw new Error('IMPORTED_AGENT_SESSION_NOT_FOUND');
+    }
+    const contents = await readFile(imported.sourcePath, 'utf8');
+    const parsed = imported.provider === 'claude'
+      ? parseClaudeSessionLog(contents, {
+          sourcePath: imported.sourcePath,
+          fallbackSessionId: imported.providerSessionId,
+        })
+      : parseCodexSessionLog(contents, {
+          sourcePath: imported.sourcePath,
+          fallbackSessionId: imported.providerSessionId,
+        });
+    const cursor = imported.oldestCursorOffset ?? parsed.newestCursorOffset ?? 0n;
+    const olderMessages = parsed.messages.filter((message) => message.sourceOffset < cursor);
+    if (olderMessages.length === 0) {
+      await this.db.importedAgentSession.update({
+        where: { id: imported.id },
+        data: { hasMoreBefore: false },
+      });
+      return { events: [], hasMoreBefore: false };
+    }
+    const selected = selectTailMessages(olderMessages, input.limitTurns);
+    const events = await this.appendImportedAgentEvents({
+      importId: imported.id,
+      provider: imported.provider === 'claude' ? 'claude' : 'codex',
+      providerSessionId: imported.providerSessionId,
+      sessionId: imported.arisSessionId,
+      chatId: imported.chatId,
+      messages: selected,
+    });
+    const minSelectedOffset = selected.reduce((min, message) => (message.sourceOffset < min ? message.sourceOffset : min), selected[0]?.sourceOffset ?? 0n);
+    const hasMoreBefore = olderMessages.some((message) => message.sourceOffset < minSelectedOffset);
+    await this.db.importedAgentSession.update({
+      where: { id: imported.id },
+      data: { hasMoreBefore },
+    });
+    return { events, hasMoreBefore };
   }
 
   private async runRuntimeWriteMutationWithRetry<T>(

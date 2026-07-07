@@ -115,6 +115,10 @@ type GetSessionEventsOptions = {
   includeUnassigned?: boolean;
 };
 
+type ImportedAgentSessionState = {
+  hasMoreBefore: boolean;
+};
+
 const DEFAULT_EVENTS_PAGE_LIMIT = 40;
 const MAX_EVENTS_PAGE_LIMIT = 200;
 const HAPPY_MESSAGES_API_LIMIT = 500;
@@ -750,6 +754,36 @@ export async function getSessionEvents(
   return {
     session: sessionDetail,
     ...paginateEvents(filterEventsByChat(normalizeEvents(messages), resolvedOptions), resolvedOptions),
+  };
+}
+
+export async function getImportedAgentSessionState(chatId: string): Promise<ImportedAgentSessionState | null> {
+  try {
+    const raw = await fetchHappy(`/v1/chats/${encodeURIComponent(chatId)}/import-state`);
+    const obj = asObject(raw);
+    return obj && typeof obj.hasMoreBefore === 'boolean'
+      ? { hasMoreBefore: obj.hasMoreBefore }
+      : null;
+  } catch (error) {
+    if (error instanceof HappyHttpError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function importOlderAgentTranscript(
+  chatId: string,
+  options: { limitTurns?: number } = {},
+): Promise<{ events: unknown[]; hasMoreBefore: boolean }> {
+  const raw = await fetchHappy(`/v1/chats/${encodeURIComponent(chatId)}/import/older`, {
+    method: 'POST',
+    body: JSON.stringify({ limitTurns: options.limitTurns ?? 3 }),
+  });
+  const obj = asObject(raw);
+  return {
+    events: extractArrayPayload(raw, 'events'),
+    hasMoreBefore: obj?.hasMoreBefore === true,
   };
 }
 

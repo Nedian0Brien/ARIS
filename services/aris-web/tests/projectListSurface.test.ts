@@ -114,6 +114,11 @@ describe('project list surface', () => {
     expect(projectChatSurface).toContain('const loadOlderEvents = useCallback(async () => {');
     expect(projectChatSurface).toContain('setEvents((current) => mergeProjectChatEvents([...olderEvents, ...current]));');
     expect(projectChatSurface).toContain('onScroll={handleTimelineScroll}');
+    expect(projectChatSurface).toContain('aria-label="이전 대화 더 불러오기"');
+    expect(projectChatSurface).toContain('이전 대화 불러오기');
+    expect(projectChatSurface).toContain('onClick={loadOlderEvents}');
+    expect(projectChatSurface).not.toContain('void loadOlderEvents();');
+    expect(uiCss).toContain('.tl__load-more-btn');
     expect(projectChatSurface).toContain('const visibleEvents = events;');
     expect(projectChatSurface).not.toContain('const visibleEvents = events.slice(-40);');
   });
@@ -155,7 +160,7 @@ describe('project list surface', () => {
     const detailSource = homeClient.slice(detailStart, projectSurfaceStart);
 
     expect(homeClient).toContain('async function createProjectChat(');
-    expect(homeClient).toContain("const DEFAULT_CODE_SERVER_BASE_URL = 'https://lawdigest.cloud/';");
+    expect(homeClient).toContain("const DEFAULT_CODE_SERVER_BASE_URL = 'https://lawdigest.kr/';");
     expect(homeClient).toContain('process.env.NEXT_PUBLIC_CODE_SERVER_BASE_URL');
     expect(homeClient).toContain('function buildCodeServerFolderUrl(projectPath: string): string');
     expect(homeClient).toContain('fetch(withAppBasePath(buildProjectChatCollectionPath(projectId))');

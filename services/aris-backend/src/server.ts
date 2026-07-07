@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireBearerToken } from './auth.js';
 import { RuntimeStore } from './store.js';
 import { installRuntimeRealtimeWebSocketGateway } from './runtime/realtimeWebSocketGateway.js';
+import { runAgentSessionImportOnce } from './runtime/import/agentSessionImportWorker.js';
 
 type RequestBucket = {
   windowStartAt: number;
@@ -19,6 +20,14 @@ type ServerConfig = {
   DEFAULT_PROJECT_PATH: string;
   HOST_PROJECTS_ROOT?: string;
   LOG_LEVEL: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
+  ARIS_SESSION_IMPORT_LOOKBACK_DAYS?: number;
+  ARIS_SESSION_IMPORT_MAX_FILES?: number;
+  ARIS_SESSION_IMPORT_MAX_BYTES?: number;
+  ARIS_SESSION_IMPORT_TAIL_TURNS?: number;
+  ARIS_SESSION_IMPORT_MAX_EVENTS?: number;
+  ARIS_SESSION_BACKFILL_SESSION_LIMIT?: number;
+  ARIS_SESSION_BACKFILL_TURNS_PER_BATCH?: number;
+  ARIS_SESSION_IMPORT_USER_ID?: string;
 };
 
 const RATE_LIMIT_WINDOW_MS = 10_000;
@@ -94,6 +103,19 @@ const terminalCommandSchema = z.object({
   sessionId: z.string().min(1),
   runtimeSessionId: z.string().min(1).optional(),
   command: z.string().trim().min(1),
+});
+
+const importOlderSchema = z.object({
+  limitTurns: z.number().int().positive().max(10).default(3),
+});
+
+const importBackfillSchema = z.object({
+  maxEvents: z.number().int().positive().max(1000).optional(),
+  sessionLimit: z.number().int().positive().max(100).optional(),
+  turnsPerBatch: z.number().int().positive().max(10).optional(),
+  lookbackDays: z.number().int().positive().max(3650).optional(),
+  maxFiles: z.number().int().positive().max(5000).optional(),
+  maxBytes: z.number().int().positive().max(20 * 1024 * 1024).optional(),
 });
 
 type AppendMessageInput = z.infer<typeof appendMessageSchema>;
@@ -689,6 +711,67 @@ export function buildServer(config: ServerConfig) {
       return { events };
     } catch (error) {
       const message = toErrorMessage(error, 'Failed to list chat events');
+      return reply.code(502).send({ error: message });
+    }
+  });
+
+  app.post('/v1/imported-agent-sessions/backfill', async (request, reply) => {
+    const parsed = importBackfillSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid request body' });
+    }
+    try {
+      const result = await runAgentSessionImportOnce({
+        store,
+        projectPath: config.DEFAULT_PROJECT_PATH,
+        userId: config.ARIS_SESSION_IMPORT_USER_ID,
+        lookbackDays: parsed.data.lookbackDays ?? config.ARIS_SESSION_IMPORT_LOOKBACK_DAYS ?? 7,
+        maxFiles: parsed.data.maxFiles ?? config.ARIS_SESSION_IMPORT_MAX_FILES ?? 20,
+        maxBytes: parsed.data.maxBytes ?? config.ARIS_SESSION_IMPORT_MAX_BYTES ?? 2 * 1024 * 1024,
+        tailTurns: config.ARIS_SESSION_IMPORT_TAIL_TURNS ?? 3,
+        mode: 'backfill',
+        maxEvents: parsed.data.maxEvents ?? config.ARIS_SESSION_IMPORT_MAX_EVENTS ?? 50,
+        backfillSessionLimit: parsed.data.sessionLimit ?? config.ARIS_SESSION_BACKFILL_SESSION_LIMIT ?? 10,
+        backfillTurnsPerBatch: parsed.data.turnsPerBatch ?? config.ARIS_SESSION_BACKFILL_TURNS_PER_BATCH ?? 3,
+      });
+      return result;
+    } catch (error) {
+      const message = toErrorMessage(error, 'Failed to backfill imported agent sessions');
+      return reply.code(502).send({ error: message });
+    }
+  });
+
+  app.get('/v1/chats/:chatId/import-state', async (request, reply) => {
+    try {
+      const { chatId } = request.params as { chatId: string };
+      const state = await store.getImportedAgentSessionState(chatId);
+      if (!state) {
+        return reply.code(404).send({ error: 'Imported agent session not found' });
+      }
+      return state;
+    } catch (error) {
+      const message = toErrorMessage(error, 'Failed to load imported agent session state');
+      return reply.code(502).send({ error: message });
+    }
+  });
+
+  app.post('/v1/chats/:chatId/import/older', async (request, reply) => {
+    const { chatId } = request.params as { chatId: string };
+    const parsed = importOlderSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid request body' });
+    }
+    try {
+      const result = await store.loadOlderImportedAgentEvents({
+        chatId,
+        limitTurns: parsed.data.limitTurns,
+      });
+      return result;
+    } catch (error) {
+      if (error instanceof Error && error.message === 'IMPORTED_AGENT_SESSION_NOT_FOUND') {
+        return reply.code(404).send({ error: 'Imported agent session not found' });
+      }
+      const message = toErrorMessage(error, 'Failed to import older agent transcript');
       return reply.code(502).send({ error: message });
     }
   });

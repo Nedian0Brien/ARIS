@@ -15,6 +15,7 @@ import type {
 import { RuntimeCore } from './runtime/runtimeCore.js';
 import { PrismaRuntimeStore } from './runtime/prismaStore.js';
 import { computeWorktreePath, ensureWorktree, removeWorktree } from './runtime/worktreeManager.js';
+import type { ImportedAgentProvider, ImportedProviderMessage } from './runtime/import/providerSessionImportParsers.js';
 
 type RuntimeBackend = 'mock' | 'prisma';
 const execAsync = promisify(exec);
@@ -151,6 +152,56 @@ interface RuntimeStoreBackend {
   listRealtimeEvents?(sessionId: string, options?: { afterCursor?: number; limit?: number; chatId?: string }): Promise<{ events: RuntimeMessage[]; cursor: number }>;
   appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage>;
   appendChatEvent?(chatId: string, input: AppendChatEventInput): Promise<RuntimeMessage>;
+  discoverImportedAgentSession?(input: {
+    provider: ImportedAgentProvider;
+    providerSessionId: string;
+    sourcePath: string;
+    projectPath: string;
+    fileSize?: bigint;
+    fileMtimeMs?: bigint;
+    oldestCursorOffset?: bigint | null;
+    newestCursorOffset?: bigint | null;
+    status?: string;
+  }): Promise<{
+    id: string;
+    chatId?: string | null;
+    arisSessionId?: string | null;
+    provider: string;
+    providerSessionId: string;
+    sourcePath: string;
+    projectPath: string;
+    fileSize?: bigint;
+    fileMtimeMs?: bigint;
+    oldestCursorOffset?: bigint | null;
+    newestCursorOffset?: bigint | null;
+    hasMoreBefore: boolean;
+  }>;
+  resolveProjectSessionIdByPath?(projectPath: string): Promise<string | null>;
+  ensureImportedAgentChat?(input: {
+    importId: string;
+    arisSessionId: string;
+    userId: string;
+    title: string;
+  }): Promise<{ chatId: string }>;
+  appendImportedAgentEvents?(input: {
+    importId: string;
+    provider: ImportedAgentProvider;
+    providerSessionId: string;
+    sessionId: string;
+    chatId: string;
+    messages: ImportedProviderMessage[];
+    hasMoreBefore?: boolean;
+  }): Promise<Array<{ id: string }>>;
+  listImportedAgentSessionsForBackfill?(input: {
+    projectPath: string;
+    limit: number;
+  }): Promise<Array<{
+    id: string;
+    chatId?: string | null;
+    hasMoreBefore: boolean;
+  }>>;
+  getImportedAgentSessionState?(chatId: string): Promise<{ hasMoreBefore: boolean } | null>;
+  loadOlderImportedAgentEvents?(input: { chatId: string; limitTurns: number }): Promise<{ events: RuntimeMessage[]; hasMoreBefore: boolean }>;
   getLatestUserMessageForAction?(sessionId: string, chatId?: string): Promise<AppendMessageInput | null>;
   applySessionAction(sessionId: string, action: SessionAction, chatId?: string): Promise<{ accepted: boolean; message: string; at: string }>;
   isSessionRunning(sessionId: string, chatId?: string): Promise<boolean>;
@@ -686,6 +737,67 @@ export class RuntimeStore {
       return event;
     }
     throw new Error('APPEND_CHAT_EVENT_NOT_SUPPORTED');
+  }
+
+  async discoverImportedAgentSession(input: Parameters<NonNullable<RuntimeStoreBackend['discoverImportedAgentSession']>>[0]) {
+    if (typeof this.delegate.discoverImportedAgentSession === 'function') {
+      return this.delegate.discoverImportedAgentSession(input);
+    }
+    throw new Error('IMPORTED_AGENT_SESSION_NOT_SUPPORTED');
+  }
+
+  async resolveProjectSessionIdByPath(projectPath: string) {
+    if (typeof this.delegate.resolveProjectSessionIdByPath === 'function') {
+      return this.delegate.resolveProjectSessionIdByPath(projectPath);
+    }
+    throw new Error('IMPORTED_AGENT_SESSION_NOT_SUPPORTED');
+  }
+
+  async ensureImportedAgentChat(input: Parameters<NonNullable<RuntimeStoreBackend['ensureImportedAgentChat']>>[0]) {
+    if (typeof this.delegate.ensureImportedAgentChat === 'function') {
+      return this.delegate.ensureImportedAgentChat(input);
+    }
+    throw new Error('IMPORTED_AGENT_SESSION_NOT_SUPPORTED');
+  }
+
+  async appendImportedAgentEvents(input: Parameters<NonNullable<RuntimeStoreBackend['appendImportedAgentEvents']>>[0]) {
+    if (typeof this.delegate.appendImportedAgentEvents === 'function') {
+      const events = await this.delegate.appendImportedAgentEvents(input);
+      for (const event of events) {
+        if ('sessionId' in event && typeof event.sessionId === 'string') {
+          this.emitRealtimeChannel({
+            type: 'event.appended',
+            sessionId: event.sessionId,
+            chatId: input.chatId,
+            event: event as RuntimeMessage,
+            source: 'mutation',
+          });
+        }
+      }
+      return events;
+    }
+    throw new Error('IMPORTED_AGENT_SESSION_NOT_SUPPORTED');
+  }
+
+  async getImportedAgentSessionState(chatId: string) {
+    if (typeof this.delegate.getImportedAgentSessionState === 'function') {
+      return this.delegate.getImportedAgentSessionState(chatId);
+    }
+    return null;
+  }
+
+  async listImportedAgentSessionsForBackfill(input: { projectPath: string; limit: number }) {
+    if (typeof this.delegate.listImportedAgentSessionsForBackfill === 'function') {
+      return this.delegate.listImportedAgentSessionsForBackfill(input);
+    }
+    return [];
+  }
+
+  async loadOlderImportedAgentEvents(input: { chatId: string; limitTurns: number }) {
+    if (typeof this.delegate.loadOlderImportedAgentEvents === 'function') {
+      return this.delegate.loadOlderImportedAgentEvents(input);
+    }
+    throw new Error('IMPORTED_AGENT_SESSION_NOT_SUPPORTED');
   }
 
   async submitChatUserPrompt(chatId: string, input: AppendChatEventInput) {

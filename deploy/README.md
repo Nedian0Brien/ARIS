@@ -24,7 +24,7 @@ Production deployment policy:
 - GitHub Actions deployment workflow is manual-only and should not be treated as the default production trigger.
 - `main` push is not deployment.
 - If the user gives an exact URL, that URL is the verification target.
-- `https://lawdigest.cloud/proxy/<port>/` is a code-server dev proxy target, not a production deploy target.
+- `https://lawdigest.kr/proxy/<port>/` is a code-server dev proxy target, not a production deploy target.
 
 - `deploy_backend_zero_downtime.sh`: backend build + PM2 zero-downtime reload
 - `deploy_web.sh`: web blue/green deploy and nginx upstream switch
@@ -44,7 +44,7 @@ ARIS uses multiple visible URLs. Classify the target before deploying or reporti
 | Target | Example URL | Runtime | Standard action |
 | --- | --- | --- | --- |
 | Production | `https://aris.lawdigest.kr` | Docker blue/green slots behind nginx (`lawdigest-kr-services` site) | `DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env ./deploy/deploy_web.sh` |
-| Dev proxy | `https://lawdigest.cloud/proxy/3309/` | A local Next dev server exposed by code-server proxy | Restart/check `WEB_DEV_PORT=3309 ./deploy/dev/run_web_dev_hot_reload.sh` |
+| Dev proxy | `https://lawdigest.kr/proxy/3309/` | A local Next dev server exposed by code-server proxy | Restart/check `WEB_DEV_PORT=3309 ./deploy/dev/run_web_dev_hot_reload.sh` |
 | Local slot | `http://127.0.0.1:3301` or `3302` | Active/inactive production slot | Internal health check only |
 | GitHub branch | GitHub remote branch | No runtime | Push/review only |
 
@@ -53,7 +53,7 @@ Completion wording must match the target:
 - Say "`<port>` dev proxy updated" only after the local port process is running from the intended checkout and the exact proxy URL was smoked.
 - Do not say "deployed" after only pushing to `main`.
 
-When a user reports a problem on `lawdigest.cloud/proxy/<port>/`, inspect that port first:
+When a user reports a problem on `lawdigest.kr/proxy/<port>/`, inspect that port first:
 
 ```bash
 lsof -nP -iTCP:<port> -sTCP:LISTEN
@@ -202,7 +202,7 @@ Optional fast restart:
 DEPLOY_ENV_FILE=/home/ubuntu/.config/aris/prod.env SKIP_DB_PREPARE=1 WEB_DEV_AUTO_PORT=1 ./deploy/dev/run_web_dev_hot_reload.sh
 ```
 
-The default dev proxy port is `2233`; with `WEB_DEV_AUTO_PORT=1`, the script increments to the next free port and prints the external URL as `https://lawdigest.cloud/proxy/<port>/`.
+The default dev proxy port is `2233`; with `WEB_DEV_AUTO_PORT=1`, the script increments to the next free port and prints the external URL as `https://lawdigest.kr/proxy/<port>/`.
 
 ## Legacy fallback
 

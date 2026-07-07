@@ -8,7 +8,7 @@ Create DNS records to your server public IP:
 
 Current target:
 
-- `aris.lawdigest.cloud` -> `140.245.74.246`
+- `aris.lawdigest.kr` -> `140.245.74.246`
 
 ## 2. Firewall
 
@@ -21,8 +21,8 @@ Open inbound ports:
 
 In `/home/ubuntu/.config/aris/prod.env`:
 
-- `ARIS_DOMAIN=aris.lawdigest.cloud`
-- `APP_BASE_URL=https://aris.lawdigest.cloud`
+- `ARIS_DOMAIN=aris.lawdigest.kr`
+- `APP_BASE_URL=https://aris.lawdigest.kr`
 - `AUTH_JWT_SECRET=<long-random-secret>`
 - `RUNTIME_API_TOKEN=<long-random-token>`
 - `ARIS_ADMIN_PASSWORD=<strong-random-password>`
