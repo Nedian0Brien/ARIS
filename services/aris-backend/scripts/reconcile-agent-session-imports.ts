@@ -15,6 +15,13 @@ type OwnerChat = {
   importedSourcePath?: string | null;
 };
 
+type SubagentChatState = {
+  parentChatId?: string | null;
+  subagentType?: string | null;
+  subagentStatus?: string | null;
+  title?: string | null;
+};
+
 type Action = {
   kind: 'link-subagent' | 'mark-native-duplicate';
   importId: string;
@@ -67,7 +74,7 @@ async function readClaudeProviderSessionId(sourcePath: string): Promise<string |
 
 async function ownerFromChat(chatId: string): Promise<OwnerChat | null> {
   const chat = await db.sessionChat.findFirst({
-    where: { id: chatId, parentChatId: null },
+    where: { id: chatId, parentChatId: null, subagentStatus: null },
     select: { id: true, sessionId: true },
   });
   if (!chat) {
@@ -99,6 +106,7 @@ async function findOwnerChat(providerSessionId: string, options: {
     where: {
       threadId: trimmed,
       parentChatId: null,
+      subagentStatus: null,
       ...(options.excludeChatId ? { id: { not: options.excludeChatId } } : {}),
     },
     orderBy: { lastActivityAt: 'desc' },
@@ -170,6 +178,27 @@ async function reconcileSubagents(actions: Action[]): Promise<void> {
     }
     const meta = await readSubagentMeta(row.sourcePath);
     const status = await deriveSubagentStatus(row.sourcePath, meta.toolUseId, parentReadCache);
+    const current = row.chatId
+      ? await db.sessionChat.findUnique({
+          where: { id: row.chatId },
+          select: {
+            parentChatId: true,
+            subagentType: true,
+            subagentStatus: true,
+            title: true,
+          },
+        })
+      : null;
+    const nextTitle = meta.description ? meta.description.trim().slice(0, 120) : null;
+    const expected: SubagentChatState = {
+      parentChatId: owner.id,
+      subagentType: meta.agentType ?? null,
+      subagentStatus: status,
+      ...(nextTitle ? { title: nextTitle } : {}),
+    };
+    if (current && isSubagentChatCurrent(current, expected)) {
+      continue;
+    }
     actions.push({
       kind: 'link-subagent',
       importId: row.id,
@@ -182,10 +211,10 @@ async function reconcileSubagents(actions: Action[]): Promise<void> {
       await db.sessionChat.update({
         where: { id: row.chatId ?? '' },
         data: {
-          parentChatId: owner.id,
-          subagentType: meta.agentType ?? null,
-          subagentStatus: status,
-          ...(meta.description ? { title: meta.description.trim().slice(0, 120) } : {}),
+          parentChatId: expected.parentChatId,
+          subagentType: expected.subagentType,
+          subagentStatus: expected.subagentStatus,
+          ...(expected.title ? { title: expected.title } : {}),
         },
       });
       await db.importedAgentSession.update({
@@ -198,6 +227,22 @@ async function reconcileSubagents(actions: Action[]): Promise<void> {
       });
     }
   }
+}
+
+function isSubagentChatCurrent(current: SubagentChatState, expected: SubagentChatState): boolean {
+  if (current.parentChatId !== expected.parentChatId) {
+    return false;
+  }
+  if ((current.subagentType ?? null) !== (expected.subagentType ?? null)) {
+    return false;
+  }
+  if ((current.subagentStatus ?? null) !== (expected.subagentStatus ?? null)) {
+    return false;
+  }
+  if (expected.title && current.title !== expected.title) {
+    return false;
+  }
+  return true;
 }
 
 async function reconcileNativeDuplicates(actions: Action[]): Promise<void> {
