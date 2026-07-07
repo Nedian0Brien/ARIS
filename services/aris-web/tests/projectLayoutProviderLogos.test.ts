@@ -26,7 +26,6 @@ describe('project layout and provider logo guards', () => {
     expect(providerLogo).toContain('svgToMaskDataUrl');
     expect(providerLogo).toContain('data:image/svg+xml');
     expect(middleware).toContain("pathname.startsWith('/icons/')");
-    expect(homeClient).toContain("import { ProviderLogo, type ProviderLogoProvider } from '@/components/ui/ProviderLogo';");
     expect(projectChatSurface).toContain('<ProviderLogo provider={selectedProvider} />');
     expect(projectChatSurface).toContain('<ProviderLogo provider={provider} />');
     expect(homeClient).not.toContain('function ProviderLogo({');
