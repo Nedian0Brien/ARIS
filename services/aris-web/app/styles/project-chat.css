@@ -606,6 +606,7 @@
   grid-area: workspace;
   border-left: 1px solid var(--border-subtle);
   min-width: 0;
+  min-height: 0;
   background: var(--surface);
 }
 
