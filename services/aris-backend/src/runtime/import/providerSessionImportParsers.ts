@@ -17,6 +17,13 @@ export type ParsedProviderSessionLog = {
   oldestCursorOffset: bigint | null;
   newestCursorOffset: bigint | null;
   hasMoreBefore: boolean;
+  /**
+   * True when the transcript is a Claude Code subagent (Task tool) sidechain —
+   * every message-bearing record carried `isSidechain: true`. Subagent
+   * transcripts must not appear in the main chat list; they are surfaced only
+   * in the subagent sidebar. Always false for Codex (no sidechain concept).
+   */
+  isSubagent: boolean;
 };
 
 type ParseOptions = {
@@ -102,6 +109,7 @@ function finalizeParsedLog(input: {
   sourcePath: string;
   projectPath?: string;
   messages: ImportedProviderMessage[];
+  isSubagent?: boolean;
 }): ParsedProviderSessionLog {
   const providerSessionId = input.providerSessionId ?? input.sourcePath;
   const offsets = input.messages.map((message) => message.sourceOffset);
@@ -120,6 +128,7 @@ function finalizeParsedLog(input: {
     oldestCursorOffset,
     newestCursorOffset,
     hasMoreBefore: oldestCursorOffset !== null && oldestCursorOffset > 0n,
+    isSubagent: input.isSubagent ?? false,
   };
 }
 
@@ -175,6 +184,12 @@ export function parseClaudeSessionLog(contents: string, options: ParseOptions): 
   let providerSessionId = options.fallbackSessionId;
   let projectPath: string | undefined;
   const messages: ImportedProviderMessage[] = [];
+  // Track sidechain vs non-sidechain among message-bearing records so we can
+  // classify the whole transcript. A Claude Code subagent (Task tool) transcript
+  // is written to a separate `subagents/agent-*.jsonl` file where every record
+  // has `isSidechain: true`; a normal top-level session has none.
+  let sidechainMessages = 0;
+  let mainlineMessages = 0;
 
   for (const { line, offset } of splitJsonlWithOffsets(contents)) {
     const record = parseJsonLine(line);
@@ -199,6 +214,11 @@ export function parseClaudeSessionLog(contents: string, options: ParseOptions): 
     if (!text) {
       continue;
     }
+    if (record.isSidechain === true) {
+      sidechainMessages += 1;
+    } else {
+      mainlineMessages += 1;
+    }
     const sessionId = providerSessionId ?? options.sourcePath;
     messages.push({
       role,
@@ -215,6 +235,10 @@ export function parseClaudeSessionLog(contents: string, options: ParseOptions): 
     sourcePath: options.sourcePath,
     projectPath,
     messages,
+    // Pure-sidechain transcript => subagent. Mixed/none => treat as a normal
+    // session (the import worker also detects subagents by the `/subagents/`
+    // path segment, which is authoritative for the separate-file layout).
+    isSubagent: sidechainMessages > 0 && mainlineMessages === 0,
   });
 }
 

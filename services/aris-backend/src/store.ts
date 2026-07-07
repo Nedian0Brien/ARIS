@@ -175,14 +175,30 @@ interface RuntimeStoreBackend {
     oldestCursorOffset?: bigint | null;
     newestCursorOffset?: bigint | null;
     hasMoreBefore: boolean;
+    status?: string;
   }>;
   resolveProjectSessionIdByPath?(projectPath: string): Promise<string | null>;
+  findOwningChat?(providerSessionId: string): Promise<{ chatId: string; isImported: boolean } | null>;
   ensureImportedAgentChat?(input: {
     importId: string;
     arisSessionId: string;
     userId: string;
     title: string;
+    parentChatId?: string | null;
+    subagentType?: string | null;
+    subagentStatus?: string | null;
   }): Promise<{ chatId: string }>;
+  markImportedAgentSessionNative?(input: {
+    importId: string;
+    arisSessionId: string;
+    chatId: string;
+  }): Promise<void>;
+  updateSubagentChatMeta?(input: {
+    chatId: string;
+    parentChatId?: string | null;
+    subagentType?: string | null;
+    subagentStatus?: string | null;
+  }): Promise<void>;
   appendImportedAgentEvents?(input: {
     importId: string;
     provider: ImportedAgentProvider;
@@ -754,9 +770,30 @@ export class RuntimeStore {
     throw new Error('IMPORTED_AGENT_SESSION_NOT_SUPPORTED');
   }
 
+  async findOwningChat(providerSessionId: string) {
+    if (typeof this.delegate.findOwningChat === 'function') {
+      return this.delegate.findOwningChat(providerSessionId);
+    }
+    return null;
+  }
+
   async ensureImportedAgentChat(input: Parameters<NonNullable<RuntimeStoreBackend['ensureImportedAgentChat']>>[0]) {
     if (typeof this.delegate.ensureImportedAgentChat === 'function') {
       return this.delegate.ensureImportedAgentChat(input);
+    }
+    throw new Error('IMPORTED_AGENT_SESSION_NOT_SUPPORTED');
+  }
+
+  async markImportedAgentSessionNative(input: Parameters<NonNullable<RuntimeStoreBackend['markImportedAgentSessionNative']>>[0]) {
+    if (typeof this.delegate.markImportedAgentSessionNative === 'function') {
+      return this.delegate.markImportedAgentSessionNative(input);
+    }
+    throw new Error('IMPORTED_AGENT_SESSION_NOT_SUPPORTED');
+  }
+
+  async updateSubagentChatMeta(input: Parameters<NonNullable<RuntimeStoreBackend['updateSubagentChatMeta']>>[0]) {
+    if (typeof this.delegate.updateSubagentChatMeta === 'function') {
+      return this.delegate.updateSubagentChatMeta(input);
     }
     throw new Error('IMPORTED_AGENT_SESSION_NOT_SUPPORTED');
   }

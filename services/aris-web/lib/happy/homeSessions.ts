@@ -49,11 +49,13 @@ export async function enrichSessionsWithRecentChats(
   const [perSessionGroupBy, recentChatGroups] = await Promise.all([
     prisma.chat.groupBy({
       by: ['projectId', 'agent'],
-      where: { userId, projectId: { in: sessionIds } },
+      // Exclude imported subagent transcripts from per-project chat counts.
+      where: { userId, projectId: { in: sessionIds }, parentChatId: null, subagentStatus: null },
       _count: { id: true },
     }),
     Promise.all(sessionIds.map((sessionId) => prisma.chat.findMany({
-      where: { userId, projectId: sessionId },
+      // Subagent transcripts must not surface as recent chats on the home screen.
+      where: { userId, projectId: sessionId, parentChatId: null, subagentStatus: null },
       orderBy: [{ lastActivityAt: 'desc' }, { createdAt: 'desc' }],
       take: Math.max(0, Math.floor(recentPerSession)),
     }))),

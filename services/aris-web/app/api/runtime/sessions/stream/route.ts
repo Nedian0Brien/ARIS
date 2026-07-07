@@ -60,15 +60,15 @@ export async function GET(request: NextRequest) {
           if (!cachedChatStats || now - chatStatsCachedAt > CHAT_STATS_TTL_MS) {
             const runningSessionIds = sessions.filter(s => s.status === 'running').map(s => s.id);
             const runningCount = await prisma.chat.count({
-              where: { projectId: { in: runningSessionIds }, latestEventIsUser: false, latestEventId: { not: null }, userId },
+              where: { projectId: { in: runningSessionIds }, latestEventIsUser: false, latestEventId: { not: null }, userId, parentChatId: null, subagentStatus: null },
             });
             const runningSampleRows = await prisma.chat.findMany({
-              where: { projectId: { in: runningSessionIds }, latestEventIsUser: false, latestEventId: { not: null }, userId },
+              where: { projectId: { in: runningSessionIds }, latestEventIsUser: false, latestEventId: { not: null }, userId, parentChatId: null, subagentStatus: null },
               orderBy: { lastActivityAt: 'desc' }, take: 3,
               select: { id: true, title: true, projectId: true, agent: true },
             });
             const completedNullCount = await prisma.chat.count({
-              where: { latestEventIsUser: false, latestEventId: { not: null }, userId, projectId: { notIn: runningSessionIds }, lastReadAt: null },
+              where: { latestEventIsUser: false, latestEventId: { not: null }, userId, projectId: { notIn: runningSessionIds }, lastReadAt: null, parentChatId: null, subagentStatus: null },
             });
             const completedNonNullResult = await prisma.$queryRaw<[{ count: bigint }]>`
               SELECT COUNT(*)::bigint as count FROM "Chat"
@@ -77,10 +77,11 @@ export async function GET(request: NextRequest) {
                 AND "latestEventId" IS NOT NULL
                 AND "projectId" != ALL(${runningSessionIds}::text[])
                 AND "lastReadAt" IS NOT NULL AND "lastActivityAt" > "lastReadAt"
+                AND "parentChatId" IS NULL AND "subagentStatus" IS NULL
             `;
             const completedCount = completedNullCount + Number(completedNonNullResult[0]?.count ?? 0);
             const completedNullSample = await prisma.chat.findMany({
-              where: { latestEventIsUser: false, latestEventId: { not: null }, userId, projectId: { notIn: runningSessionIds }, lastReadAt: null },
+              where: { latestEventIsUser: false, latestEventId: { not: null }, userId, projectId: { notIn: runningSessionIds }, lastReadAt: null, parentChatId: null, subagentStatus: null },
               orderBy: { lastActivityAt: 'desc' }, take: 5,
               select: { id: true, title: true, projectId: true, agent: true, lastActivityAt: true },
             });
@@ -90,13 +91,14 @@ export async function GET(request: NextRequest) {
                 AND "latestEventId" IS NOT NULL
                 AND "projectId" != ALL(${runningSessionIds}::text[])
                 AND "lastReadAt" IS NOT NULL AND "lastActivityAt" > "lastReadAt"
+                AND "parentChatId" IS NULL AND "subagentStatus" IS NULL
               ORDER BY "lastActivityAt" DESC LIMIT 5
             `;
             const completedSample = [...completedNullSample, ...completedNonNullSample]
               .sort((a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime())
               .slice(0, 5);
-            const agentGroupBy = await prisma.chat.groupBy({ by: ['agent'], where: { userId }, _count: { id: true } });
-            const perSessionGroupBy = await prisma.chat.groupBy({ by: ['projectId', 'agent'], where: { userId }, _count: { id: true } });
+            const agentGroupBy = await prisma.chat.groupBy({ by: ['agent'], where: { userId, parentChatId: null, subagentStatus: null }, _count: { id: true } });
+            const perSessionGroupBy = await prisma.chat.groupBy({ by: ['projectId', 'agent'], where: { userId, parentChatId: null, subagentStatus: null }, _count: { id: true } });
             const sessionChatMeta = buildSessionChatMeta(perSessionGroupBy);
             const sessionNameById = new Map(sessions.map(s => {
               const ws = workspaceMap.get(s.id);

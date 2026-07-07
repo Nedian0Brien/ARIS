@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   ArrowDown,
   AtSign,
+  Bot,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -47,6 +48,7 @@ import {
 } from 'lucide-react';
 import { ProviderLogo, type ProviderLogoProvider } from '@/components/ui/ProviderLogo';
 import { WorkspaceFileEditor } from '@/components/files/WorkspaceFileEditor';
+import { SubagentPanel } from '@/components/project-chat/SubagentPanel';
 import { isTerminalRunStatus, readUiEventRunStatus } from '@/lib/happy/chatRuntime';
 import { hydratePersistedPermissions, mergeRenderablePermissions } from '@/lib/happy/permissions';
 import { withAppBasePath } from '@/lib/routing/appPath';
@@ -113,7 +115,7 @@ import { DensityMenuList } from './cmd-display/DensityMenuList';
 // Local type aliases (duplicated from HomePageClient.tsx; cleanup out of scope)
 // ---------------------------------------------------------------------------
 type ComposerMode = 'agent' | 'plan' | 'terminal';
-type WorkspaceTab = 'run' | 'files' | 'git' | 'terminal' | 'context';
+type WorkspaceTab = 'run' | 'files' | 'git' | 'terminal' | 'context' | 'subagents';
 type PreviewState = 'closed' | 'open' | 'dock';
 type ModelProvider = ProviderLogoProvider;
 type ReasoningEffort = 'Low' | 'Medium' | 'High' | 'XHigh' | 'Max';
@@ -3161,6 +3163,7 @@ export function ProjectChatSurface({
               <button type="button" className="ws__tab" data-tab="git" aria-pressed={workspaceTab === 'git'} onClick={() => activateWorkspaceTab('git')}><GitActionMark size={12} />Git</button>
               <button type="button" className="ws__tab" data-tab="terminal" aria-pressed={workspaceTab === 'terminal'} onClick={() => activateWorkspaceTab('terminal')}><Terminal size={12} />Terminal</button>
               <button type="button" className="ws__tab" data-tab="context" aria-pressed={workspaceTab === 'context'} onClick={() => activateWorkspaceTab('context')}><PanelsTopLeft size={12} />Context</button>
+              <button type="button" className="ws__tab" data-tab="subagents" aria-pressed={workspaceTab === 'subagents'} onClick={() => activateWorkspaceTab('subagents')}><Bot size={12} />Subagents</button>
             </div>
             <div className="ws__status">
               <div className="ws__status-left">
@@ -3279,6 +3282,9 @@ export function ProjectChatSurface({
                     </button>
                   ))}
                 </div>
+              </div>
+              <div className={`ws__pane${workspaceTab === 'subagents' ? ' ws__pane--active' : ''}`} data-pane="subagents">
+                <SubagentPanel sessionId={session.id} chatId={activeChat?.id ?? null} active={workspaceTab === 'subagents'} />
               </div>
             </div>
           </aside>
@@ -3587,6 +3593,7 @@ export function ProjectChatSurface({
             <button type="button" className="ws__tab" data-tab="git" aria-pressed={workspaceTab === 'git'} onClick={() => activateWorkspaceTab('git')}><GitActionMark size={12} />Git</button>
             <button type="button" className="ws__tab" data-tab="terminal" aria-pressed={workspaceTab === 'terminal'} onClick={() => activateWorkspaceTab('terminal')}><Terminal size={12} />Terminal</button>
             <button type="button" className="ws__tab" data-tab="context" aria-pressed={workspaceTab === 'context'} onClick={() => activateWorkspaceTab('context')}><PanelsTopLeft size={12} />Context</button>
+              <button type="button" className="ws__tab" data-tab="subagents" aria-pressed={workspaceTab === 'subagents'} onClick={() => activateWorkspaceTab('subagents')}><Bot size={12} />Subagents</button>
           </div>
           <div className="ws__status">
             <div className="ws__status-left">
@@ -3846,6 +3853,9 @@ export function ProjectChatSurface({
                   </button>
                 ))}
               </div>
+            </div>
+            <div className={`ws__pane${workspaceTab === 'subagents' ? ' ws__pane--active' : ''}`} data-pane="subagents">
+              <SubagentPanel sessionId={session.id} chatId={activeChat?.id ?? null} active={workspaceTab === 'subagents'} />
             </div>
           </div>
           <div className="ws__footer">

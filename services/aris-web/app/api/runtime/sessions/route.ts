@@ -33,10 +33,10 @@ export async function GET(request: NextRequest) {
 
     // running 채팅 집계
     const runningCount = await prisma.chat.count({
-      where: { projectId: { in: runningSessionIds }, latestEventIsUser: false, latestEventId: { not: null }, userId },
+      where: { projectId: { in: runningSessionIds }, latestEventIsUser: false, latestEventId: { not: null }, userId, parentChatId: null, subagentStatus: null },
     });
     const runningSampleRows = await prisma.chat.findMany({
-      where: { projectId: { in: runningSessionIds }, latestEventIsUser: false, latestEventId: { not: null }, userId },
+      where: { projectId: { in: runningSessionIds }, latestEventIsUser: false, latestEventId: { not: null }, userId, parentChatId: null, subagentStatus: null },
       orderBy: { lastActivityAt: 'desc' },
       take: 3,
       select: { id: true, title: true, projectId: true, agent: true },
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     // completed 채팅 집계
     const completedNullCount = await prisma.chat.count({
-      where: { latestEventIsUser: false, latestEventId: { not: null }, userId, projectId: { notIn: runningSessionIds }, lastReadAt: null },
+      where: { latestEventIsUser: false, latestEventId: { not: null }, userId, projectId: { notIn: runningSessionIds }, lastReadAt: null, parentChatId: null, subagentStatus: null },
     });
     const completedNonNullResult = await prisma.$queryRaw<[{ count: bigint }]>`
       SELECT COUNT(*)::bigint as count
@@ -55,11 +55,13 @@ export async function GET(request: NextRequest) {
         AND "projectId" != ALL(${runningSessionIds}::text[])
         AND "lastReadAt" IS NOT NULL
         AND "lastActivityAt" > "lastReadAt"
+        AND "parentChatId" IS NULL
+        AND "subagentStatus" IS NULL
     `;
     const completedCount = completedNullCount + Number(completedNonNullResult[0]?.count ?? 0);
 
     const completedNullSample = await prisma.chat.findMany({
-      where: { latestEventIsUser: false, latestEventId: { not: null }, userId, projectId: { notIn: runningSessionIds }, lastReadAt: null },
+      where: { latestEventIsUser: false, latestEventId: { not: null }, userId, projectId: { notIn: runningSessionIds }, lastReadAt: null, parentChatId: null, subagentStatus: null },
       orderBy: { lastActivityAt: 'desc' }, take: 5,
       select: { id: true, title: true, projectId: true, agent: true, lastActivityAt: true },
     });
@@ -72,6 +74,8 @@ export async function GET(request: NextRequest) {
         AND "projectId" != ALL(${runningSessionIds}::text[])
         AND "lastReadAt" IS NOT NULL
         AND "lastActivityAt" > "lastReadAt"
+        AND "parentChatId" IS NULL
+        AND "subagentStatus" IS NULL
       ORDER BY "lastActivityAt" DESC
       LIMIT 5
     `;
@@ -81,12 +85,12 @@ export async function GET(request: NextRequest) {
 
     // 에이전트 분포
     const agentGroupBy = await prisma.chat.groupBy({
-      by: ['agent'], where: { userId }, _count: { id: true },
+      by: ['agent'], where: { userId, parentChatId: null, subagentStatus: null }, _count: { id: true },
     });
 
     // 세션별 채팅 에이전트 분포
     const perSessionGroupBy = await prisma.chat.groupBy({
-      by: ['projectId', 'agent'], where: { userId }, _count: { id: true },
+      by: ['projectId', 'agent'], where: { userId, parentChatId: null, subagentStatus: null }, _count: { id: true },
     });
     const sessionChatMeta = buildSessionChatMeta(perSessionGroupBy);
 

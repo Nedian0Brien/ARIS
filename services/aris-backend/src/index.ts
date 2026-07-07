@@ -25,7 +25,10 @@ async function bootstrap() {
       cleanupEmptyChats: (maxAgeMs: number) => Promise<number>;
       discoverImportedAgentSession: Parameters<typeof runAgentSessionImportOnce>[0]['store']['discoverImportedAgentSession'];
       resolveProjectSessionIdByPath: Parameters<typeof runAgentSessionImportOnce>[0]['store']['resolveProjectSessionIdByPath'];
+      findOwningChat: Parameters<typeof runAgentSessionImportOnce>[0]['store']['findOwningChat'];
       ensureImportedAgentChat: Parameters<typeof runAgentSessionImportOnce>[0]['store']['ensureImportedAgentChat'];
+      markImportedAgentSessionNative: Parameters<typeof runAgentSessionImportOnce>[0]['store']['markImportedAgentSessionNative'];
+      updateSubagentChatMeta: Parameters<typeof runAgentSessionImportOnce>[0]['store']['updateSubagentChatMeta'];
       appendImportedAgentEvents: Parameters<typeof runAgentSessionImportOnce>[0]['store']['appendImportedAgentEvents'];
       listImportedAgentSessionsForBackfill: Parameters<typeof runAgentSessionImportOnce>[0]['store']['listImportedAgentSessionsForBackfill'];
       loadOlderImportedAgentEvents: Parameters<typeof runAgentSessionImportOnce>[0]['store']['loadOlderImportedAgentEvents'];
