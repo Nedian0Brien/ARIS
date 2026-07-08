@@ -7,6 +7,9 @@ import { readAppStyles } from './helpers/readAppStyles';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
 const projectChatSurface = readFileSync(resolve(__dirname, '../components/project-chat/ProjectChatSurface.tsx'), 'utf8');
+const projectChatComposer = readFileSync(resolve(__dirname, '../components/project-chat/ProjectChatComposer.tsx'), 'utf8');
+const projectWorkspacePanelParts = readFileSync(resolve(__dirname, '../components/project-chat/ProjectWorkspacePanelParts.tsx'), 'utf8');
+const projectChatSurfaceCombined = `${projectChatSurface}\n${projectChatComposer}\n${projectWorkspacePanelParts}`;
 const projectChatSurfaceUtils = readFileSync(resolve(__dirname, '../components/project-chat/projectChatSurfaceUtils.ts'), 'utf8');
 const uiCss = readAppStyles();
 
@@ -46,7 +49,7 @@ describe('project parallel chat drag surface', () => {
     expect(projectChatSurface).toContain('onDrop={handleProjectParallelSurfaceDrop}');
     expect(projectChatSurface).toContain('resolveProjectParallelDropEdge(event)');
     expect(projectChatSurface).toContain('computeProjectPanelDropEdge(event.clientX, event.clientY, rect)');
-    expect(projectChatSurface).toContain('function ProjectChatComposer({');
+    expect(projectChatComposer).toContain('function ProjectChatComposer({');
     expect(projectChatSurface).toContain('<ProjectChatComposer');
     expect(projectChatSurface).not.toContain('className="pc-parallel-chat__composer"');
     expect(uiCss).toContain('.pc-parallel-chat__timeline');
@@ -119,8 +122,9 @@ describe('project parallel chat drag surface', () => {
     expect(projectChatSurface).toContain('fetchProjectPanelGitOverview');
     expect(projectChatSurface).toContain('pc-parallel-workspace');
     expect(projectChatSurface).toContain('onOpenPanelWorkspaceTab');
-    expect(projectChatSurface).toContain("data-tab=\"git\"");
-    expect(projectChatSurface).toContain("data-pane=\"git\"");
+    expect(projectChatSurfaceCombined).toContain('data-tab={id}');
+    expect(projectChatSurfaceCombined).toContain("id: 'git'");
+    expect(projectChatSurfaceCombined).toContain("data-pane=\"git\"");
     expect(projectChatSurface).not.toContain("type ProjectParallelPanelTool = 'chat' | 'files' | 'git';");
     expect(projectChatSurface).not.toContain('aria-label="Open panel files"');
     expect(projectChatSurface).not.toContain('aria-label="Open panel Git"');

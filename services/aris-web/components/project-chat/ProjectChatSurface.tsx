@@ -19,16 +19,12 @@ import {
   ArrowDown,
   ArrowUp,
   AtSign,
-  Bot,
   ChevronLeft,
   ChevronRight,
-  Clock,
   Clock3,
   Copy,
   ExternalLink,
-  File as FileIcon,
   FileText,
-  FolderOpen,
   Loader2,
   Maximize2,
   MessageSquareText,
@@ -47,7 +43,6 @@ import {
 } from 'lucide-react';
 import { ProviderLogo } from '@/components/ui/ProviderLogo';
 import { WorkspaceFileEditor } from '@/components/files/WorkspaceFileEditor';
-import { SubagentPanel } from '@/components/project-chat/SubagentPanel';
 import { isTerminalRunStatus } from '@/lib/happy/chatRuntime';
 import { hydratePersistedPermissions, mergeRenderablePermissions } from '@/lib/happy/permissions';
 import { withAppBasePath } from '@/lib/routing/appPath';
@@ -99,7 +94,6 @@ import {
   isProjectRunStatusEvent,
   eventCommand,
 } from '@/components/project-chat/helpers/projectChatEvents';
-import { GitActionMark } from '@/components/project-chat/helpers/actionMarks';
 import { useComposerAutoGrow } from '@/components/project-chat/helpers/useComposerAutoGrow';
 import { useMobileChatChrome } from '@/components/project-chat/helpers/useMobileChatChrome';
 import { useProjectSkills } from '@/components/project-chat/helpers/useProjectSkills';
@@ -117,6 +111,13 @@ import {
 } from '@/lib/chatImageAttachments';
 import type { ChatImageAttachment } from '@/lib/happy/types';
 import type { ProjectSkillEntry } from '@/lib/projectSkills';
+import { ProjectChatComposer } from '@/components/project-chat/ProjectChatComposer';
+import {
+  ProjectWorkspaceFilesPane,
+  ProjectWorkspaceGitPane,
+  ProjectWorkspaceSubagentsPane,
+  ProjectWorkspaceTabs,
+} from '@/components/project-chat/ProjectWorkspacePanelParts';
 import { ProjectRunStatusChip } from '@/components/project-chat/ProjectRunStatusChip';
 import { ProjectActionCard } from '@/components/project-chat/ProjectActionCard';
 import { ProjectPermissionRequestMessage } from '@/components/project-chat/ProjectPermissionRequestMessage';
@@ -182,259 +183,6 @@ import {
 } from './projectChatSurfaceUtils';
 export { PROJECT_CHAT_DRAG_JSON_MIME, PROJECT_CHAT_DRAG_MIME, writeProjectChatDragPayload } from './projectChatSurfaceUtils';
 export type { ProjectChatDragStartHandler, ProjectChatSurfaceMode } from './projectChatSurfaceUtils';
-
-function ProjectChatComposer({
-  activeModelLabel,
-  composerMode,
-  composerWrapRef,
-  error,
-  isAborting,
-  isRunning,
-  modelSelectorOpen,
-  onAddContext,
-  onAttachFile,
-  onComposerModeChange,
-  onEffortSelect,
-  onMentionProject,
-  onModelSelect,
-  onModelSelectorOpenChange,
-  onPromptChange,
-  onProviderSelect,
-  onStop,
-  onSubmit,
-  onVoice,
-  placeholder = '에이전트에게 무엇이든 요청하세요... Shift Enter 줄바꿈 · Cmd Enter 전송',
-  projectId,
-  prompt,
-  providerOptions,
-  selectedEffort,
-  selectedModelId,
-  selectedProvider,
-}: {
-  activeModelLabel: string;
-  composerMode: ComposerMode;
-  composerWrapRef?: RefObject<HTMLElement | null>;
-  error: string | null;
-  isAborting: boolean;
-  isRunning: boolean;
-  modelSelectorOpen: boolean;
-  onAddContext: () => void;
-  onAttachFile: () => void;
-  onComposerModeChange: (mode: ComposerMode) => void;
-  onEffortSelect: (effort: ReasoningEffort) => void;
-  onMentionProject: () => void;
-  onModelSelect: (provider: ModelProvider, modelName: string) => void;
-  onModelSelectorOpenChange: (open: boolean) => void;
-  onPromptChange: (value: string) => void;
-  onProviderSelect: (provider: ModelProvider) => void;
-  onStop: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onVoice: () => void;
-  placeholder?: string;
-  projectId: string;
-  prompt: string;
-  providerOptions: Record<ModelProvider, Array<{ id: string; label: string; meta?: string }>>;
-  selectedEffort: ReasoningEffort;
-  selectedModelId: string;
-  selectedProvider: ModelProvider;
-}) {
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  const formRef = useRef<HTMLFormElement | null>(null);
-  useComposerAutoGrow(inputRef, prompt);
-
-  const panelSkills = useProjectSkills(projectId);
-  const { recentCommands, recordRecentSkill } = useRecentSkills(projectId);
-  const applySlashSkill = useCallback((entry: ProjectSkillEntry) => {
-    recordRecentSkill(entry.command);
-    onPromptChange(`${entry.command} `);
-    inputRef.current?.focus();
-  }, [onPromptChange, recordRecentSkill]);
-  const slashAutocomplete = useSlashAutocomplete({
-    containerRef: formRef,
-    entries: panelSkills.entries,
-    loadEntries: panelSkills.load,
-    loading: panelSkills.loading,
-    onApply: applySlashSkill,
-    prompt,
-    recentCommands,
-  });
-
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (slashAutocomplete.handleKeyDown(event)) {
-      return;
-    }
-    if (event.key !== 'Enter' || event.shiftKey || (!event.metaKey && !event.ctrlKey)) {
-      return;
-    }
-    event.preventDefault();
-    if (isRunning || isAborting || !prompt.trim()) {
-      return;
-    }
-    event.currentTarget.form?.requestSubmit();
-  };
-
-  return (
-    <footer ref={composerWrapRef} className="cmp-wrap">
-      <form ref={formRef} className="cmp" onSubmit={onSubmit}>
-        <div className="cmp__top">
-          <div className="cmp-mode" role="tablist" aria-label="Mode">
-            {(['agent', 'plan', 'terminal'] as ComposerMode[]).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                className="cmp-mode__pill"
-                data-mode={mode}
-                aria-pressed={composerMode === mode}
-                onClick={() => onComposerModeChange(mode)}
-              >
-                <span className="cmp-mode__pill-dot" />
-                {COMPOSER_MODE_COPY[mode]}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            className="cmp-ctx"
-            aria-label="Current model"
-            aria-expanded={modelSelectorOpen}
-            onClick={() => onModelSelectorOpenChange(!modelSelectorOpen)}
-          >
-            <span className={`cmp-ctx__logo cmp-ctx__logo--${selectedProvider}`}>
-              <ProviderLogo provider={selectedProvider} />
-            </span>
-            <span className="cmp-ctx__name">{activeModelLabel}</span>
-            <span className="cmp-ctx__effort">{selectedEffort}</span>
-            <ChevronRight size={12} />
-          </button>
-        </div>
-        <div className={`ms${modelSelectorOpen ? ' ms--open' : ''}`} role="dialog" aria-label="Model selector">
-          <div className="ms__eyebrow-row">
-            <span className="ms__eyebrow">Model</span>
-            <button type="button" className="ms__close" aria-label="Close model selector" onClick={() => onModelSelectorOpenChange(false)}>
-              <X size={12} />
-            </button>
-          </div>
-          <div className="ms__providers" role="tablist">
-            {(['claude', 'codex', 'gemini'] as ModelProvider[]).map((provider) => (
-              <button
-                key={provider}
-                type="button"
-                className="ms__provider"
-                data-provider={provider}
-                aria-pressed={selectedProvider === provider}
-                onClick={() => onProviderSelect(provider)}
-              >
-                <ProviderLogo provider={provider} />
-                <span className="ms__provider-label">{PROVIDER_LABELS[provider]}</span>
-              </button>
-            ))}
-          </div>
-          <div className="ms__list-wrap">
-            {(['claude', 'codex', 'gemini'] as ModelProvider[]).map((provider) => (
-              <div key={provider} className="ms__group" data-provider={provider} data-active={selectedProvider === provider ? '' : undefined}>
-                {providerOptions[provider].map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className="ms__item"
-                    aria-pressed={selectedProvider === provider && selectedModelId === option.id}
-                    onClick={() => onModelSelect(provider, option.id)}
-                  >
-                    <span className="ms__item-check" />
-                    <span className="ms__item-body">
-                      <span className="ms__item-name">{option.label}</span>
-                      <span className="ms__item-meta">{option.meta ?? ''}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ))}
-          </div>
-          <div className="ms__footer">
-            <span className="ms__eyebrow">Effort</span>
-            <div className="ms__effort-chips" role="tablist" aria-label="Reasoning effort">
-              {(['Low', 'Medium', 'High', 'XHigh', 'Max'] as ReasoningEffort[]).map((effort) => {
-                const disabled = !PROVIDER_EFFORTS[selectedProvider].includes(effort);
-                return (
-                  <button
-                    key={effort}
-                    type="button"
-                    className={`ms__effort-chip${disabled ? ' ms__effort-chip--disabled' : ''}`}
-                    aria-pressed={selectedEffort === effort}
-                    disabled={disabled}
-                    onClick={() => onEffortSelect(effort)}
-                  >
-                    {effort}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-        <ProjectComposerSlashAutocomplete
-          open={slashAutocomplete.open}
-          entries={slashAutocomplete.matches}
-          loading={panelSkills.loading}
-          activeIndex={slashAutocomplete.activeIndex}
-          onHoverIndex={slashAutocomplete.setActiveIndex}
-          onSelect={applySlashSkill}
-        />
-        {!slashAutocomplete.open && (
-          <ProjectComposerArgumentHint entry={slashAutocomplete.argumentHintEntry} />
-        )}
-        <textarea
-          ref={inputRef}
-          className="cmp__input"
-          value={prompt}
-          onChange={(event) => onPromptChange(event.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          rows={1}
-        />
-        <div className="cmp__toolbar">
-          <div className="cmp__tools">
-            <button type="button" className="cmp__tool" aria-label="Add" onClick={onAddContext}><Plus size={15} /></button>
-            <button type="button" className="cmp__tool" aria-label="Attach file" onClick={onAttachFile}>
-              <Paperclip size={15} />
-            </button>
-            <button type="button" className="cmp__tool" aria-label="Mention" onClick={onMentionProject}>
-              <AtSign size={15} />
-            </button>
-            <button type="button" className="cmp__tool" aria-label="Voice" onClick={onVoice}>
-              <Mic size={15} />
-            </button>
-          </div>
-          <div className="cmp__right">
-            <span className="cmp__hint"><span className="kbd">⌘</span><span className="kbd">↵</span><span>{isRunning ? 'running' : 'send'}</span></span>
-            {isRunning ? (
-              <button
-                type="button"
-                className={`cmp__send cmp__send--running${isAborting ? ' cmp__send--aborting' : ''}`}
-                disabled={isAborting}
-                aria-label="Stop generation"
-                onClick={onStop}
-              >
-                {isAborting ? 'Stopping...' : 'Stop'}
-                <Square size={11} />
-              </button>
-            ) : (
-              <button
-                type="submit"
-                className="cmp__send"
-                disabled={!prompt.trim()}
-                aria-label="Send message"
-              >
-                Send
-                <Send size={13} />
-              </button>
-            )}
-          </div>
-        </div>
-      </form>
-      {error && <div className="pc-chat-error" role="alert">{error}</div>}
-    </footer>
-  );
-}
 
 function ProjectParallelDropOverlay({ edge }: { edge: ProjectParallelPanelDropEdge }) {
   return (
@@ -2818,14 +2566,7 @@ export function ProjectChatSurface({
                 </button>
               </div>
             </div>
-            <div className="ws__tabs" role="tablist">
-              <button type="button" className="ws__tab" data-tab="run" aria-pressed={workspaceTab === 'run'} onClick={() => activateWorkspaceTab('run')}><Clock size={12} />Run</button>
-              <button type="button" className="ws__tab" data-tab="files" aria-pressed={workspaceTab === 'files'} onClick={() => activateWorkspaceTab('files')}><FileIcon size={12} />Files</button>
-              <button type="button" className="ws__tab" data-tab="git" aria-pressed={workspaceTab === 'git'} onClick={() => activateWorkspaceTab('git')}><GitActionMark size={12} />Git</button>
-              <button type="button" className="ws__tab" data-tab="terminal" aria-pressed={workspaceTab === 'terminal'} onClick={() => activateWorkspaceTab('terminal')}><Terminal size={12} />Terminal</button>
-              <button type="button" className="ws__tab" data-tab="context" aria-pressed={workspaceTab === 'context'} onClick={() => activateWorkspaceTab('context')}><PanelsTopLeft size={12} />Context</button>
-              <button type="button" className="ws__tab" data-tab="subagents" aria-pressed={workspaceTab === 'subagents'} onClick={() => activateWorkspaceTab('subagents')}><Bot size={12} />Subagents</button>
-            </div>
+            <ProjectWorkspaceTabs activeTab={workspaceTab} onActivate={activateWorkspaceTab} />
             <div className="ws__status">
               <div className="ws__status-left">
                 <span className={`ws__model ws__model--${providerFromAgent(activeWorkspaceChat?.agent ?? session.agent)}`}>
@@ -2852,77 +2593,21 @@ export function ProjectChatSurface({
                   <div className="ws-empty-state">선택된 패널의 worktree 기준 상태입니다.</div>
                 </div>
               </div>
-              <div className={`ws__pane${workspaceTab === 'files' ? ' ws__pane--active' : ''}`} data-pane="files">
-                <div className="file-tree__head">
-                  <span className="file-tree__cwd" title={workspaceFiles.currentPath}>{workspaceFiles.currentPath}</span>
-                  <button type="button" className="file-tree__refresh" aria-label="Refresh files" onClick={() => workspaceFiles.refresh()} disabled={workspaceFiles.loading}>
-                    <RefreshCcw size={11} />
-                  </button>
-                </div>
-                <div className="file-tree">
-                  {workspaceFiles.parentPath && (
-                    <button type="button" className="file-row file-row--parent" onClick={() => workspaceFiles.goUp()}>
-                      <span className="file-row__icon file-row__icon--dir"><FolderOpen size={13} /></span>
-                      <span className="file-row__name">..</span>
-                      <span className="file-row__meta">parent</span>
-                    </button>
-                  )}
-                  {workspaceFiles.loading && workspaceFiles.items.length === 0 && <div className="file-row file-row--state">Loading…</div>}
-                  {workspaceFiles.error && <div className="file-row file-row--state file-row--error">{workspaceFiles.error}</div>}
-                  {!workspaceFiles.loading && !workspaceFiles.error && workspaceFiles.items.length === 0 && <div className="file-row file-row--state">빈 디렉터리</div>}
-                  {workspaceFiles.items.map((file: WorkspaceFileItem) => (
-                    <button
-                      key={file.path}
-                      type="button"
-                      className={`file-row${selectedWorkspaceFile === file.path ? ' file-row--selected' : ''}`}
-                      onClick={() => {
-                        if (file.isDirectory) {
-                          workspaceFiles.cdInto(file);
-                        } else {
-                          openWorkspaceFilePreview(file);
-                        }
-                      }}
-                    >
-                      <span className={`file-row__icon${file.isDirectory ? ' file-row__icon--dir' : ''}`}>
-                        {file.isDirectory ? <FolderOpen size={13} /> : <FileText size={13} />}
-                      </span>
-                      <span className="file-row__name">{file.name}</span>
-                      <span className="file-row__meta">{file.isDirectory ? 'dir' : 'file'}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className={`ws__pane${workspaceTab === 'git' ? ' ws__pane--active' : ''}`} data-pane="git">
-                <div className="file-tree__head">
-                  <span className="file-tree__cwd" title={workspaceGitOverview?.workspacePath ?? activeWorkspacePanelRuntime?.worktreePath ?? ''}>
-                    {workspaceGitOverview?.branch ?? activeWorkspacePanelRuntime?.branch ?? 'branch pending'}
-                  </span>
-                  <button type="button" className="file-tree__refresh" aria-label="Refresh Git" onClick={refreshWorkspaceGit} disabled={workspaceGitLoading}>
-                    <RefreshCcw size={11} />
-                  </button>
-                </div>
-                <div className="pc-panel-git-summary">
-                  <span data-tone={workspaceGitOverview?.isClean ? 'ready' : 'pending'}>{workspaceGitOverview?.isClean ? 'clean' : 'dirty'}</span>
-                  <span>staged {workspaceGitOverview?.stagedCount ?? 0}</span>
-                  <span>changed {workspaceGitOverview?.unstagedCount ?? 0}</span>
-                  <span>untracked {workspaceGitOverview?.untrackedCount ?? 0}</span>
-                  <span>ahead {workspaceGitOverview?.ahead ?? 0} / behind {workspaceGitOverview?.behind ?? 0}</span>
-                </div>
-                <div className="file-tree">
-                  {workspaceGitLoading && <div className="file-row file-row--state">Loading Git status…</div>}
-                  {workspaceGitError && <div className="file-row file-row--state file-row--error">{workspaceGitError}</div>}
-                  {!workspaceGitLoading && !workspaceGitError && workspaceGitOverview?.files.length === 0 && (
-                    <div className="file-row file-row--state">변경된 파일이 없습니다.</div>
-                  )}
-                  {workspaceGitOverview?.files.slice(0, 60).map((file) => (
-                    <div key={`${file.path}:${file.indexStatus}:${file.workTreeStatus}`} className="pc-panel-git-file">
-                      <span>{file.indexStatus}{file.workTreeStatus}</span>
-                      <strong title={file.path}>{file.path}</strong>
-                      <em>{file.conflicted ? 'conflict' : file.untracked ? 'new' : file.staged ? 'staged' : 'modified'}</em>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <ProjectWorkspaceFilesPane
+                active={workspaceTab === 'files'}
+                files={workspaceFiles}
+                selectedFile={selectedWorkspaceFile}
+                onOpenFile={openWorkspaceFilePreview}
+              />
+              <ProjectWorkspaceGitPane
+                active={workspaceTab === 'git'}
+                branchFallback={activeWorkspacePanelRuntime?.branch ?? 'branch pending'}
+                overview={workspaceGitOverview}
+                loading={workspaceGitLoading}
+                error={workspaceGitError}
+                onRefresh={refreshWorkspaceGit}
+                titlePath={activeWorkspacePanelRuntime?.worktreePath ?? ''}
+              />
               <div className={`ws__pane${workspaceTab === 'terminal' ? ' ws__pane--active' : ''}`} data-pane="terminal">
                 <div className="term">
                   <div className="term__head"><span className="term__tag">bash · selected panel</span><span className="term__dim">{activeWorkspacePanelRuntime?.runtimeSessionId ?? projectId}</span></div>
@@ -2944,9 +2629,11 @@ export function ProjectChatSurface({
                   ))}
                 </div>
               </div>
-              <div className={`ws__pane${workspaceTab === 'subagents' ? ' ws__pane--active' : ''}`} data-pane="subagents">
-                <SubagentPanel sessionId={session.id} chatId={activeChat?.id ?? null} active={workspaceTab === 'subagents'} />
-              </div>
+              <ProjectWorkspaceSubagentsPane
+                active={workspaceTab === 'subagents'}
+                sessionId={session.id}
+                chatId={activeChat?.id ?? null}
+              />
             </div>
           </aside>
         </div>
@@ -3346,14 +3033,7 @@ export function ProjectChatSurface({
               </button>
             </div>
           </div>
-          <div className="ws__tabs" role="tablist">
-            <button type="button" className="ws__tab" data-tab="run" aria-pressed={workspaceTab === 'run'} onClick={() => activateWorkspaceTab('run')}><Clock size={12} />Run</button>
-            <button type="button" className="ws__tab" data-tab="files" aria-pressed={workspaceTab === 'files'} onClick={() => activateWorkspaceTab('files')}><FileIcon size={12} />Files</button>
-            <button type="button" className="ws__tab" data-tab="git" aria-pressed={workspaceTab === 'git'} onClick={() => activateWorkspaceTab('git')}><GitActionMark size={12} />Git</button>
-            <button type="button" className="ws__tab" data-tab="terminal" aria-pressed={workspaceTab === 'terminal'} onClick={() => activateWorkspaceTab('terminal')}><Terminal size={12} />Terminal</button>
-            <button type="button" className="ws__tab" data-tab="context" aria-pressed={workspaceTab === 'context'} onClick={() => activateWorkspaceTab('context')}><PanelsTopLeft size={12} />Context</button>
-              <button type="button" className="ws__tab" data-tab="subagents" aria-pressed={workspaceTab === 'subagents'} onClick={() => activateWorkspaceTab('subagents')}><Bot size={12} />Subagents</button>
-          </div>
+                    <ProjectWorkspaceTabs activeTab={workspaceTab} onActivate={activateWorkspaceTab} />
           <div className="ws__status">
             <div className="ws__status-left">
               <span className={`ws__model ws__model--${selectedProvider}`}><span className="ws__model-dot" />{activeModelLabel}</span>
@@ -3452,101 +3132,21 @@ export function ProjectChatSurface({
                 </div>
               </div>
             </div>
-            <div className={`ws__pane${workspaceTab === 'files' ? ' ws__pane--active' : ''}`} data-pane="files">
-              <div className="file-tree__head">
-                <span className="file-tree__cwd" title={workspaceFiles.currentPath}>{workspaceFiles.currentPath}</span>
-                <button
-                  type="button"
-                  className="file-tree__refresh"
-                  aria-label="Refresh files"
-                  onClick={() => workspaceFiles.refresh()}
-                  disabled={workspaceFiles.loading}
-                >
-                  <RefreshCcw size={11} />
-                </button>
-              </div>
-              <div className="file-tree">
-                {workspaceFiles.parentPath && (
-                  <button
-                    type="button"
-                    className="file-row file-row--parent"
-                    onClick={() => workspaceFiles.goUp()}
-                  >
-                    <span className="file-row__icon file-row__icon--dir">
-                      <FolderOpen size={13} />
-                    </span>
-                    <span className="file-row__name">..</span>
-                    <span className="file-row__meta">parent</span>
-                  </button>
-                )}
-                {workspaceFiles.loading && workspaceFiles.items.length === 0 && (
-                  <div className="file-row file-row--state">Loading…</div>
-                )}
-                {workspaceFiles.error && (
-                  <div className="file-row file-row--state file-row--error">{workspaceFiles.error}</div>
-                )}
-                {!workspaceFiles.loading && !workspaceFiles.error && workspaceFiles.items.length === 0 && (
-                  <div className="file-row file-row--state">빈 디렉터리</div>
-                )}
-                {workspaceFiles.items.map((file: WorkspaceFileItem) => (
-                  <button
-                    key={file.path}
-                    type="button"
-                    className={`file-row${selectedWorkspaceFile === file.path ? ' file-row--selected' : ''}`}
-                    onClick={() => {
-                      if (file.isDirectory) {
-                        workspaceFiles.cdInto(file);
-                      } else {
-                        openWorkspaceFilePreview(file);
-                      }
-                    }}
-                  >
-                    <span className={`file-row__icon${file.isDirectory ? ' file-row__icon--dir' : ''}`}>
-                      {file.isDirectory ? <FolderOpen size={13} /> : <FileText size={13} />}
-                    </span>
-                    <span className="file-row__name">{file.name}</span>
-                    <span className="file-row__meta">{file.isDirectory ? 'dir' : 'file'}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className={`ws__pane${workspaceTab === 'git' ? ' ws__pane--active' : ''}`} data-pane="git">
-              <div className="file-tree__head">
-                <span className="file-tree__cwd" title={workspaceGitOverview?.workspacePath ?? activeWorkspacePanelRuntime?.worktreePath ?? projectPath}>
-                  {workspaceGitOverview?.branch ?? activeWorkspacePanelRuntime?.branch ?? 'project branch'}
-                </span>
-                <button
-                  type="button"
-                  className="file-tree__refresh"
-                  aria-label="Refresh Git"
-                  onClick={refreshWorkspaceGit}
-                  disabled={workspaceGitLoading}
-                >
-                  <RefreshCcw size={11} />
-                </button>
-              </div>
-              <div className="pc-panel-git-summary">
-                <span data-tone={workspaceGitOverview?.isClean ? 'ready' : 'pending'}>{workspaceGitOverview?.isClean ? 'clean' : 'dirty'}</span>
-                <span>staged {workspaceGitOverview?.stagedCount ?? 0}</span>
-                <span>changed {workspaceGitOverview?.unstagedCount ?? 0}</span>
-                <span>untracked {workspaceGitOverview?.untrackedCount ?? 0}</span>
-                <span>ahead {workspaceGitOverview?.ahead ?? 0} / behind {workspaceGitOverview?.behind ?? 0}</span>
-              </div>
-              <div className="file-tree">
-                {workspaceGitLoading && <div className="file-row file-row--state">Loading Git status…</div>}
-                {workspaceGitError && <div className="file-row file-row--state file-row--error">{workspaceGitError}</div>}
-                {!workspaceGitLoading && !workspaceGitError && workspaceGitOverview?.files.length === 0 && (
-                  <div className="file-row file-row--state">변경된 파일이 없습니다.</div>
-                )}
-                {workspaceGitOverview?.files.slice(0, 60).map((file) => (
-                  <div key={`${file.path}:${file.indexStatus}:${file.workTreeStatus}`} className="pc-panel-git-file">
-                    <span>{file.indexStatus}{file.workTreeStatus}</span>
-                    <strong title={file.path}>{file.path}</strong>
-                    <em>{file.conflicted ? 'conflict' : file.untracked ? 'new' : file.staged ? 'staged' : 'modified'}</em>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <ProjectWorkspaceFilesPane
+              active={workspaceTab === 'files'}
+              files={workspaceFiles}
+              selectedFile={selectedWorkspaceFile}
+              onOpenFile={openWorkspaceFilePreview}
+            />
+            <ProjectWorkspaceGitPane
+              active={workspaceTab === 'git'}
+              branchFallback={activeWorkspacePanelRuntime?.branch ?? 'project branch'}
+              overview={workspaceGitOverview}
+              loading={workspaceGitLoading}
+              error={workspaceGitError}
+              onRefresh={refreshWorkspaceGit}
+              titlePath={activeWorkspacePanelRuntime?.worktreePath ?? projectPath}
+            />
             <div className={`ws__pane${workspaceTab === 'terminal' ? ' ws__pane--active' : ''}`} data-pane="terminal">
               <div className="term">
                 <div className="term__head">
@@ -3613,9 +3213,11 @@ export function ProjectChatSurface({
                 ))}
               </div>
             </div>
-            <div className={`ws__pane${workspaceTab === 'subagents' ? ' ws__pane--active' : ''}`} data-pane="subagents">
-              <SubagentPanel sessionId={session.id} chatId={activeChat?.id ?? null} active={workspaceTab === 'subagents'} />
-            </div>
+            <ProjectWorkspaceSubagentsPane
+              active={workspaceTab === 'subagents'}
+              sessionId={session.id}
+              chatId={activeChat?.id ?? null}
+            />
           </div>
           <div className="ws__footer">
             <div className="ws__footer-row"><span className="ws__footer-label">Context usage</span><span className="ws__footer-value">{tokenLabel} / 200k</span></div>

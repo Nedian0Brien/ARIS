@@ -7,6 +7,8 @@ import { readAppStyles } from './helpers/readAppStyles';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
 const projectChatSurface = readFileSync(resolve(__dirname, '../components/project-chat/ProjectChatSurface.tsx'), 'utf8');
+const projectWorkspacePanelParts = readFileSync(resolve(__dirname, '../components/project-chat/ProjectWorkspacePanelParts.tsx'), 'utf8');
+const projectChatSurfaceCombined = `${projectChatSurface}\n${projectWorkspacePanelParts}`;
 const projectChatSurfaceUtils = readFileSync(resolve(__dirname, '../components/project-chat/projectChatSurfaceUtils.ts'), 'utf8');
 const projectActionCard = readFileSync(resolve(__dirname, '../components/project-chat/ProjectActionCard.tsx'), 'utf8');
 const projectRunStatusChip = readFileSync(resolve(__dirname, '../components/project-chat/ProjectRunStatusChip.tsx'), 'utf8');
@@ -438,16 +440,16 @@ describe('project list surface', () => {
   });
 
   it('matches the workspace panel top navigation to the chat-screen-v1 prototype', () => {
-    expect(projectChatSurface).toContain('File as FileIcon,');
-    expect(projectChatSurface).toContain('Clock,');
-    expect(projectChatSurface).toContain('<button type="button" className="ws__tab" data-tab="run" aria-pressed={workspaceTab === \'run\'} onClick={() => activateWorkspaceTab(\'run\')}><Clock size={12} />Run</button>');
-    expect(projectChatSurface).toContain('<button type="button" className="ws__tab" data-tab="files" aria-pressed={workspaceTab === \'files\'} onClick={() => activateWorkspaceTab(\'files\')}><FileIcon size={12} />Files</button>');
-    expect(projectChatSurface).toContain('<button type="button" className="ws__tab" data-tab="git" aria-pressed={workspaceTab === \'git\'} onClick={() => activateWorkspaceTab(\'git\')}><GitActionMark size={12} />Git</button>');
-    expect(projectChatSurface).not.toContain('<span className="ws__tab-badge">{fileCount}</span>');
-    expect(projectChatSurface).toContain('<button type="button" className="ws__tab" data-tab="terminal" aria-pressed={workspaceTab === \'terminal\'} onClick={() => activateWorkspaceTab(\'terminal\')}><Terminal size={12} />Terminal</button>');
-    expect(projectChatSurface).toContain('<button type="button" className="ws__tab" data-tab="context" aria-pressed={workspaceTab === \'context\'} onClick={() => activateWorkspaceTab(\'context\')}><PanelsTopLeft size={12} />Context</button>');
-    expect(projectChatSurface).not.toContain('<Terminal size={12} />Term</button>');
-    expect(projectChatSurface).not.toContain('<Database size={12} />Ctx</button>');
+    expect(projectWorkspacePanelParts).toContain('File as FileIcon,');
+    expect(projectWorkspacePanelParts).toContain('Clock,');
+    expect(projectWorkspacePanelParts).toContain("{ id: 'run', label: 'Run', Icon: Clock }");
+    expect(projectWorkspacePanelParts).toContain("{ id: 'files', label: 'Files', Icon: FileIcon }");
+    expect(projectWorkspacePanelParts).toContain("{ id: 'git', label: 'Git', Icon: GitActionMark }");
+    expect(projectChatSurfaceCombined).not.toContain('<span className="ws__tab-badge">{fileCount}</span>');
+    expect(projectWorkspacePanelParts).toContain("{ id: 'terminal', label: 'Terminal', Icon: Terminal }");
+    expect(projectWorkspacePanelParts).toContain("{ id: 'context', label: 'Context', Icon: PanelsTopLeft }");
+    expect(projectChatSurfaceCombined).not.toContain('<Terminal size={12} />Term</button>');
+    expect(projectChatSurfaceCombined).not.toContain('<Database size={12} />Ctx</button>');
     expect(uiCss).toContain('padding: 0 var(--sp-4);');
     expect(uiCss).toContain('background: var(--surface);');
     expect(uiCss).toContain('border-bottom: 2px solid transparent;');
@@ -481,11 +483,11 @@ describe('project list surface', () => {
 
   it('renders functional workspace panes instead of one static Run panel', () => {
     expect(projectChatSurface).toContain("workspaceTab === 'run'");
-    expect(projectChatSurface).toContain("workspaceTab === 'files'");
+    expect(projectChatSurfaceCombined).toContain("workspaceTab === 'files'");
     expect(projectChatSurface).toContain("workspaceTab === 'terminal'");
     expect(projectChatSurface).toContain("workspaceTab === 'context'");
     expect(projectChatSurface).toContain('data-pane="run"');
-    expect(projectChatSurface).toContain('data-pane="files"');
+    expect(projectChatSurfaceCombined).toContain('data-pane="files"');
     expect(projectChatSurface).toContain('data-pane="terminal"');
     expect(projectChatSurface).toContain('data-pane="context"');
     expect(projectChatSurface).toContain('data-preview-dock');

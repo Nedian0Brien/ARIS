@@ -7,6 +7,8 @@ import { readAppStyles } from './helpers/readAppStyles';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const tokensCss = readFileSync(resolve(__dirname, '../app/styles/tokens.css'), 'utf8');
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
+const filesSurface = readFileSync(resolve(__dirname, '../app/home/FilesSurface.tsx'), 'utf8');
+const homeClientCombined = `${homeClient}\n${filesSurface}`;
 const uiCss = readAppStyles();
 const header = readFileSync(resolve(__dirname, '../components/layout/Header.tsx'), 'utf8');
 const bottomNav = readFileSync(resolve(__dirname, '../components/layout/BottomNav.tsx'), 'utf8');
@@ -58,7 +60,7 @@ describe('ARIS design-system-v1 implementation', () => {
       'className="files-body"',
       'className="files-preview"',
     ].forEach((classFragment) => {
-      expect(homeClient).toContain(classFragment);
+      expect(homeClientCombined).toContain(classFragment);
     });
 
     [

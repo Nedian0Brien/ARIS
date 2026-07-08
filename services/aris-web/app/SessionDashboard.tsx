@@ -17,6 +17,7 @@ import { readLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage'
 import { hasAppBasePath, withAppBasePath } from '@/lib/routing/appPath';
 import { PieChart, Pie, Cell } from 'recharts';
 import { reconcileDeletedSessions } from './sessionDashboardState';
+import { ServerDonutCard } from './SessionDashboardParts';
 import styles from './SessionDashboard.module.css';
 
 type PathHistoryEntry = {
@@ -1137,69 +1138,8 @@ export function SessionDashboard({
                   <Activity size={16} color="var(--primary)" /> 서버 리소스
                 </h3>
                 <div className={styles.serverResourceGridHorizontal}>
-                  <div className={styles.serverDonutCard}>
-                    <div className={styles.serverDonutChart}>
-                      <DeferredResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={140}>
-                        <PieChart>
-                          <Pie
-                            data={cpuPieData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius="62%"
-                            outerRadius="86%"
-                            startAngle={90}
-                            endAngle={-270}
-                            dataKey="value"
-                            animationBegin={0}
-                            animationDuration={800}
-                            stroke="none"
-                            paddingAngle={1}
-                            cornerRadius={8}
-                          >
-                            {cpuPieData.map((entry, index) => (
-                              <Cell key={`cpu-cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                        </PieChart>
-                      </DeferredResponsiveContainer>
-                      <div className={styles.serverDonutCenter}>
-                        <div className={styles.serverDonutValue}>{cpuValueText}</div>
-                        <div className={styles.serverDonutLabel}>CPU</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className={styles.serverDonutCard}>
-                    <div className={styles.serverDonutChart}>
-                      <DeferredResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={140}>
-                        <PieChart>
-                          <Pie
-                            data={ramPieData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius="62%"
-                            outerRadius="86%"
-                            startAngle={90}
-                            endAngle={-270}
-                            dataKey="value"
-                            animationBegin={0}
-                            animationDuration={800}
-                            stroke="none"
-                            paddingAngle={1}
-                            cornerRadius={8}
-                          >
-                            {ramPieData.map((entry, index) => (
-                              <Cell key={`ram-cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                        </PieChart>
-                      </DeferredResponsiveContainer>
-                      <div className={styles.serverDonutCenter}>
-                        <div className={styles.serverDonutValue}>{ramValueText}</div>
-                        <div className={styles.serverDonutLabel}>RAM</div>
-                      </div>
-                    </div>
-                  </div>
+                  <ServerDonutCard data={cpuPieData} label="CPU" value={cpuValueText} cellKeyPrefix="cpu" />
+                  <ServerDonutCard data={ramPieData} label="RAM" value={ramValueText} cellKeyPrefix="ram" />
                 </div>
 
                 <div className={styles.serverStorageCardFull}>
