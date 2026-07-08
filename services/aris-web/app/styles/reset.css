@@ -16,8 +16,11 @@ html {
 
 html, body {
   width: 100%;
-  min-height: 100%;
-  min-height: -webkit-fill-available;
+  /* app-shell 등 나머지 전체 화면 컨테이너와 동일하게 --app-vh(ViewportHeightSync가
+     visualViewport 기준으로 갱신)에 맞춘다. 이전의 정적 100%/-webkit-fill-available는
+     iOS Safari 하단 툴바가 자동 숨김되며 visualViewport가 커질 때 갱신되지 않아,
+     실제 UI보다 짧게 고정된 layout viewport 높이 아래로 캔버스 배경색이 노출됐다. */
+  min-height: var(--app-vh, 100dvh);
   background-color: var(--bg);
   color: var(--text);
   font-size: var(--text-body, 14px);
@@ -29,7 +32,7 @@ html, body {
 }
 
 body {
-  min-height: 100%;
+  min-height: var(--app-vh, 100dvh);
 }
 
 a {

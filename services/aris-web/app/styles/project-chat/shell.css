@@ -1,6 +1,6 @@
 .pc-proto {
   position: relative;
-  min-height: calc(100vh - 238px);
+  min-height: calc(var(--app-vh, 100dvh) - 238px);
   border: 0;
   background: var(--canvas);
   overflow: hidden;
