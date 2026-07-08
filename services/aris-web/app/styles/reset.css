@@ -28,7 +28,13 @@ html, body {
   letter-spacing: var(--ls-normal, normal);
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  overflow-x: hidden;
+  /* hidden이 아니라 clip: CSS Overflow 스펙상 overflow-x가 visible이 아니고
+     overflow-y가 미지정이면 overflow-y가 auto로 자동 승격되는데, hidden은 이
+     승격을 트리거하지만 clip은 트리거하지 않는다(가로 스크롤 차단 목적은
+     동일). 이 승격이 모바일 채팅 화면에서 키보드가 열릴 때 body에 실제로는
+     필요 없는 스크롤 가능 여백을 만들어, 네이티브 "포커스 요소 스크롤"이
+     컴포저를 화면 밖으로 과도하게 끌고 가는 원인이었다. */
+  overflow-x: clip;
 }
 
 body {
