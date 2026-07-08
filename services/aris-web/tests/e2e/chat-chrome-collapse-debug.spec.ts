@@ -113,6 +113,9 @@ test('스크롤 시 상단 크롬 숨김/복원과 컴포저 pill 축소·확장
   const projectId = process.env.CHAT_CHROME_PROJECT_ID;
   test.skip(!projectId, 'CHAT_CHROME_PROJECT_ID is required');
 
+  // headless WebKit이 CSS 애니메이션을 얼려 스크린샷이 from-상태(opacity 0)로
+  // 찍히는 문제를 피한다 — reduced-motion 경로에서는 애니메이션이 꺼진다.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await login(page);
   await openProjectChatScreen(page, projectId!);
 
@@ -220,16 +223,11 @@ test('스크롤 시 상단 크롬 숨김/복원과 컴포저 pill 축소·확장
   await page.waitForTimeout(300);
   await page.screenshot({ path: 'test-results/chat-pill-draft.png' });
 
-  // pill의 + 버튼 → 액션 시트 (사진 첨부 / 파일 / 스킬·플러그인)
+  // pill의 + 버튼 → 액션 시트: 빠른 작업 2개 + 스킬·플러그인 목록이 한 뷰에 있다
   await page.locator('[data-project-chat-screen] .cmp-pill__add').click();
   await expect(page.locator('.pc-sheet__panel')).toBeVisible();
-  await expect(page.locator('.pc-sheet__item')).toHaveCount(3);
-  await page.waitForTimeout(350);
-  await page.screenshot({ path: 'test-results/chat-action-sheet.png' });
-
-  // 스킬·플러그인 → 스킬 목록 뷰 (목록 또는 빈 상태가 렌더된다)
-  await page.locator('.pc-sheet__item', { hasText: '스킬·플러그인' }).click();
-  await expect(page.locator('.pc-sheet__list')).toBeVisible();
+  await expect(page.locator('.pc-sheet__item')).toHaveCount(2);
+  await expect(page.locator('.pc-sheet__section')).toBeVisible();
   await expect
     .poll(async () => {
       const skillCount = await page.locator('.pc-sheet__skill').count();
@@ -238,6 +236,13 @@ test('스크롤 시 상단 크롬 숨김/복원과 컴포저 pill 축소·확장
     })
     .toBeGreaterThan(0);
   await page.waitForTimeout(350);
+  await page.screenshot({ path: 'test-results/chat-action-sheet.png' });
+
+  // 목록이 길면 시트 내부 스크롤로 탐색할 수 있다
+  await page.locator('.pc-sheet__scroll').evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
+  await page.waitForTimeout(200);
   await page.screenshot({ path: 'test-results/chat-action-sheet-skills.png' });
 
   // 스킬을 탭하면 슬래시 커맨드가 프롬프트 앞에 삽입되고 컴포저가 확장된다
