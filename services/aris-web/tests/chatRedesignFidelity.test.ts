@@ -32,7 +32,7 @@ describe('chat redesign fidelity', () => {
     expect(layoutCss).toContain('body:has(> .app-shell-ia--chat-screen),');
     expect(layoutCss).toMatch(/body:has\(> \.app-shell-ia--chat-screen\),[\s\S]*body:has\(> \.app-shell-immersive\)\s*\{[\s\S]*overflow:\s*hidden;[\s\S]*height:\s*100%;/s);
     expect(layoutCss).toMatch(/\.app-shell-chat-screen,\s*\.app-shell-ia--chat-screen\s*\{[\s\S]*padding-bottom:\s*0;/s);
-    expect(layoutCss).toMatch(/@media\s*\(max-width:\s*960px\)\s*\{[\s\S]*?\.app-shell-chat-screen,\s*\.app-shell-ia--chat-screen\s*\{[\s\S]*?height:\s*var\(--app-vh,\s*100dvh\);[\s\S]*?overflow:\s*hidden;/s);
+    expect(layoutCss).toMatch(/@media\s*\(max-width:\s*960px\)\s*\{[\s\S]*?\.app-shell-chat-screen,\s*\.app-shell-ia--chat-screen\s*\{[\s\S]*?height:\s*auto;[\s\S]*?min-height:\s*var\(--app-vh,\s*100dvh\);[\s\S]*?overflow:\s*visible;/s);
   });
 
   it('uses the prototype desktop shell with chat and a persistent 420px workspace pane', () => {
