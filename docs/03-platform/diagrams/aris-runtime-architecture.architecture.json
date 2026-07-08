@@ -1,0 +1,254 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "ARIS Runtime Architecture",
+    "subtitle": "Chat-first operator UI, runtime API, provider bridges, and deployment boundary",
+    "output": "aris-runtime-architecture.html",
+    "viewBox": [1120, 760]
+  },
+  "components": [
+    {
+      "id": "operator",
+      "type": "external",
+      "label": "Operator",
+      "sublabel": "browser / mobile",
+      "pos": [40, 330],
+      "size": [130, 62]
+    },
+    {
+      "id": "nginx",
+      "type": "cloud",
+      "label": "nginx + TLS",
+      "sublabel": "aris.lawdigest.kr",
+      "pos": [220, 330],
+      "size": [138, 62]
+    },
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "aris-web",
+      "sublabel": "Next.js 15 slots",
+      "tag": "blue / green",
+      "pos": [410, 330],
+      "size": [146, 62]
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "aris-backend",
+      "sublabel": "Fastify :4080",
+      "tag": "PM2 cluster",
+      "pos": [630, 330],
+      "size": [150, 62]
+    },
+    {
+      "id": "providers",
+      "type": "backend",
+      "label": "Provider CLIs",
+      "sublabel": "Codex / Claude / Gemini",
+      "pos": [880, 330],
+      "size": [158, 62]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "sessions / chats / audit",
+      "pos": [520, 130],
+      "size": [160, 64]
+    },
+    {
+      "id": "permissions",
+      "type": "security",
+      "label": "Auth + Permissions",
+      "sublabel": "JWT, roles, decisions",
+      "pos": [302, 130],
+      "size": [158, 64]
+    },
+    {
+      "id": "logs",
+      "type": "database",
+      "label": "Provider Logs",
+      "sublabel": ".codex / .claude JSONL",
+      "pos": [880, 130],
+      "size": [158, 64]
+    },
+    {
+      "id": "hostfs",
+      "type": "external",
+      "label": "Host Workspace",
+      "sublabel": "/home + skills mounts",
+      "pos": [650, 510],
+      "size": [166, 64]
+    },
+    {
+      "id": "ssh",
+      "type": "security",
+      "label": "SSH Fallback",
+      "sublabel": "audited exception path",
+      "pos": [400, 510],
+      "size": [156, 64]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Production host + Docker network",
+      "wraps": ["nginx", "web", "backend", "providers", "postgres", "logs", "hostfs", "ssh", "permissions"],
+      "pad": 36
+    },
+    {
+      "kind": "security-group",
+      "label": "runtime token / operator authorization boundary",
+      "wraps": ["web", "backend", "permissions"],
+      "pad": 30
+    }
+  ],
+  "connections": [
+    {
+      "from": "operator",
+      "to": "nginx",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "from": "nginx",
+      "to": "web",
+      "label": "slot upstream",
+      "variant": "emphasis",
+      "labelAt": [384, 408]
+    },
+    {
+      "from": "web",
+      "to": "backend",
+      "label": "/v1 + /v3 runtime API",
+      "variant": "emphasis",
+      "labelAt": [593, 408]
+    },
+    {
+      "from": "backend",
+      "to": "providers",
+      "label": "spawn + stream JSON",
+      "variant": "emphasis",
+      "labelDy": -16
+    },
+    {
+      "from": "web",
+      "to": "postgres",
+      "label": "Prisma auth/chat",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "route": "orthogonal-v",
+      "labelAt": [465, 245]
+    },
+    {
+      "from": "backend",
+      "to": "postgres",
+      "label": "Prisma runtime store",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "route": "orthogonal-v",
+      "labelAt": [700, 245]
+    },
+    {
+      "from": "web",
+      "to": "permissions",
+      "label": "JWT + role gate",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "right",
+      "route": "orthogonal-v",
+      "labelAt": [376, 260]
+    },
+    {
+      "from": "backend",
+      "to": "permissions",
+      "label": "permission queue",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "right",
+      "route": "orthogonal-v",
+      "via": [[705, 250], [482, 250]]
+    },
+    {
+      "from": "providers",
+      "to": "logs",
+      "label": "local transcripts",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "route": "orthogonal-v",
+      "labelAt": [965, 260]
+    },
+    {
+      "from": "backend",
+      "to": "logs",
+      "label": "import + backfill",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "left",
+      "route": "orthogonal-v",
+      "via": [[705, 250], [860, 250]],
+      "labelAt": [780, 235]
+    },
+    {
+      "from": "backend",
+      "to": "hostfs",
+      "label": "cwd, files, skills",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "orthogonal-v",
+      "labelAt": [730, 460]
+    },
+    {
+      "from": "web",
+      "to": "ssh",
+      "label": "fallback link",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "orthogonal-v",
+      "labelAt": [470, 460]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Web surface",
+      "items": [
+        "Next.js App Router renders the chat-first workspace.",
+        "Blue/green Docker slots sit behind nginx.",
+        "Server routes proxy authenticated runtime calls."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Runtime backend",
+      "items": [
+        "Fastify exposes /v1 sessions, /v3 messages, runtime status, permissions.",
+        "PM2 cluster owns provider turns and run continuity.",
+        "Realtime events stream back to the web timeline."
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Provider bridge",
+      "items": [
+        "Codex, Claude, and Gemini events normalize into shared action cards.",
+        "Local transcript import attaches Codex/Claude logs by directory session identity.",
+        "Host workspace and skills mounts keep provider execution close to local projects."
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Control plane",
+      "items": [
+        "JWT login, operator/viewer roles, permissions, and audit data live in Prisma/Postgres.",
+        "Sensitive operations pass through the permission queue.",
+        "SSH fallback is an audited exception path, not the primary workflow."
+      ]
+    }
+  ]
+}
