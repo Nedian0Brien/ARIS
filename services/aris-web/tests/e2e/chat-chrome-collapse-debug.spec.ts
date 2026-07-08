@@ -238,6 +238,18 @@ test('스크롤 시 상단 크롬 숨김/복원과 컴포저 pill 축소·확장
   await page.waitForTimeout(350);
   await page.screenshot({ path: 'test-results/chat-action-sheet.png' });
 
+  // 검색 필터: 일치하지 않는 검색어 → 빈 상태, 지우면 목록 복귀
+  const searchInput = page.locator('.pc-sheet__search-input');
+  await expect(searchInput).toBeVisible();
+  const skillCountBefore = await page.locator('.pc-sheet__skill').count();
+  if (skillCountBefore > 0) {
+    await searchInput.fill('zzzz-not-a-skill');
+    await expect(page.locator('.pc-sheet__skill')).toHaveCount(0);
+    await expect(page.locator('.pc-sheet__state')).toBeVisible();
+    await page.locator('.pc-sheet__search-clear').click();
+    await expect(page.locator('.pc-sheet__skill')).toHaveCount(skillCountBefore);
+  }
+
   // 목록이 길면 시트 내부 스크롤로 탐색할 수 있다
   await page.locator('.pc-sheet__scroll').evaluate((node) => {
     node.scrollTop = node.scrollHeight;
@@ -246,13 +258,14 @@ test('스크롤 시 상단 크롬 숨김/복원과 컴포저 pill 축소·확장
   await page.screenshot({ path: 'test-results/chat-action-sheet-skills.png' });
 
   // 스킬을 탭하면 슬래시 커맨드가 프롬프트 앞에 삽입되고 컴포저가 확장된다
+  let insertedCommand: string | null = null;
   const firstSkill = page.locator('.pc-sheet__skill').first();
   if (await firstSkill.count()) {
-    const commandText = await firstSkill.locator('.pc-sheet__skill-command').innerText();
+    insertedCommand = await firstSkill.locator('.pc-sheet__skill-command').innerText();
     await firstSkill.click();
     await expect(page.locator('.pc-sheet__panel')).toHaveCount(0);
     await expect(chatScreen).toHaveAttribute('data-composer', 'expanded');
-    await expect(composerInput).toHaveValue(new RegExp(`^${commandText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} `));
+    await expect(composerInput).toHaveValue(new RegExp(`^${insertedCommand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} `));
   } else {
     await page.locator('.pc-sheet__close').click();
     await expect(page.locator('.pc-sheet__panel')).toHaveCount(0);
@@ -275,4 +288,16 @@ test('스크롤 시 상단 크롬 숨김/복원과 컴포저 pill 축소·확장
   // 첨부 제거 버튼으로 칩이 사라진다
   await page.locator('[data-project-chat-screen] .cmp-attachment__remove').click();
   await expect(page.locator('[data-project-chat-screen] .cmp-attachment')).toHaveCount(0);
+
+  // 최근 사용: 방금 선택한 스킬이 시트를 다시 열면 상단에 고정된다
+  if (insertedCommand) {
+    await page.locator('[data-project-chat-screen] .cmp__tool[aria-label="Add"]').click();
+    await expect(page.locator('.pc-sheet__panel')).toBeVisible();
+    await expect(page.locator('.pc-sheet__group-label').first()).toHaveText('최근 사용');
+    await expect(page.locator('.pc-sheet__skill').first()).toContainText(insertedCommand);
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: 'test-results/chat-action-sheet-recent.png' });
+    await page.locator('.pc-sheet__close').click();
+    await expect(page.locator('.pc-sheet__panel')).toHaveCount(0);
+  }
 });

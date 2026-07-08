@@ -104,6 +104,7 @@ import { GitActionMark } from '@/components/project-chat/helpers/actionMarks';
 import { useComposerAutoGrow } from '@/components/project-chat/helpers/useComposerAutoGrow';
 import { useMobileChatChrome } from '@/components/project-chat/helpers/useMobileChatChrome';
 import { useProjectSkills } from '@/components/project-chat/helpers/useProjectSkills';
+import { useRecentSkills } from '@/components/project-chat/helpers/useRecentSkills';
 import { ProjectComposerActionSheet } from '@/components/project-chat/ProjectComposerActionSheet';
 import {
   buildImageAttachmentPromptPrefix,
@@ -1856,6 +1857,7 @@ export function ProjectChatSurface({
   const [isUploadingImages, setIsUploadingImages] = useState(false);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const projectSkills = useProjectSkills(projectId);
+  const { recentCommands, recordRecentSkill } = useRecentSkills(projectId);
 
   const handleActionSheetPickPhoto = useCallback(() => {
     setActionSheetOpen(false);
@@ -1864,13 +1866,14 @@ export function ProjectChatSurface({
 
   const handleActionSheetSkillSelect = useCallback((entry: ProjectSkillEntry) => {
     setActionSheetOpen(false);
+    recordRecentSkill(entry.command);
     setPrompt((current) => {
       const rest = current.trimStart();
       return rest ? `${entry.command} ${rest}` : `${entry.command} `;
     });
     expandComposer();
     composerInputRef.current?.focus();
-  }, [expandComposer]);
+  }, [expandComposer, recordRecentSkill]);
 
   const handleImageFilesSelected = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
@@ -3773,6 +3776,7 @@ export function ProjectChatSurface({
               }}
               onSkillSelect={handleActionSheetSkillSelect}
               onLoadSkills={projectSkills.load}
+              recentCommands={recentCommands}
               skills={projectSkills.entries}
               skillsError={projectSkills.error}
               skillsLoading={projectSkills.loading}
