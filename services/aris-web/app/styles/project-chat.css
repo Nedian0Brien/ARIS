@@ -3960,3 +3960,316 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
 .pc-proto .cmd-mini-pop__meta {
   font-size: 10.5px; color: var(--text-tertiary); font-family: var(--font-mono);
 }
+
+/* ─── Composer 이미지 첨부 칩 ─────────────────────────────── */
+
+.pc-proto .cmp-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5) 0;
+}
+
+.pc-proto .cmp-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  max-width: 200px;
+  padding: 3px 6px 3px 3px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--surface-sunken);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.pc-proto .cmp-attachment__thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.pc-proto .cmp-attachment__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-proto .cmp-attachment__remove {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.pc-proto .cmp-attachment__remove:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.pc-proto .cmp-attachment--uploading {
+  padding: 3px 8px;
+}
+
+.pc-proto .cmp-attachment__spin,
+.pc-sheet__spin {
+  animation: pc-sheet-spin 800ms linear infinite;
+}
+
+/* 유저 메시지의 첨부 이미지 프리뷰 */
+.pc-proto .msg__images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.pc-proto .msg__image {
+  max-width: min(220px, 60%);
+  max-height: 180px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  object-fit: cover;
+}
+
+/* ─── Composer 액션 시트 (document.body 포털) ─────────────── */
+
+.pc-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.pc-sheet__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.42);
+  animation: pc-sheet-fade 160ms var(--ease-smooth);
+}
+
+.pc-sheet__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(520px, calc(100% - 16px));
+  max-height: min(72dvh, 560px);
+  padding: var(--sp-3) var(--sp-5) calc(var(--sp-8) + var(--safe-area-inset-bottom));
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-bottom: 0;
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -12px 44px rgba(15, 23, 42, 0.28);
+  animation: pc-sheet-up 220ms var(--ease-smooth);
+}
+
+.pc-sheet__grip {
+  width: 36px;
+  height: 4px;
+  margin: 4px auto 6px;
+  border-radius: var(--r-full);
+  background: var(--border-default);
+}
+
+.pc-sheet__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-2) var(--sp-5);
+}
+
+.pc-sheet__title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.pc-sheet__back,
+.pc-sheet__close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.pc-sheet__back:hover,
+.pc-sheet__close:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.pc-sheet__items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.pc-sheet__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-6);
+  padding: var(--sp-5) var(--sp-4);
+  border-radius: 14px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pc-sheet__item:hover,
+.pc-sheet__item:focus-visible {
+  background: var(--surface-hover);
+}
+
+.pc-sheet__item:active {
+  background: var(--surface-sunken);
+}
+
+.pc-sheet__item-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.pc-sheet__item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pc-sheet__item-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pc-sheet__item-desc {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.pc-sheet__item-chevron {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.pc-sheet__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-height: 120px;
+  overflow-y: auto;
+}
+
+.pc-sheet__skill {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: 12px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pc-sheet__skill:hover,
+.pc-sheet__skill:focus-visible {
+  background: var(--surface-hover);
+}
+
+.pc-sheet__skill-command {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pc-sheet__skill-meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.pc-sheet__skill-source {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-full);
+  padding: 1px 7px;
+  background: var(--surface-sunken);
+}
+
+.pc-sheet__skill-desc {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.pc-sheet__state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: var(--sp-10) var(--sp-6);
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.pc-sheet__state--error {
+  color: var(--danger-fg);
+}
+
+@keyframes pc-sheet-up {
+  from {
+    transform: translateY(28px);
+    opacity: 0;
+  }
+}
+
+@keyframes pc-sheet-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes pc-sheet-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-sheet__backdrop,
+  .pc-sheet__panel {
+    animation: none;
+  }
+}

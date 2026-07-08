@@ -103,6 +103,15 @@ import {
 import { GitActionMark } from '@/components/project-chat/helpers/actionMarks';
 import { useComposerAutoGrow } from '@/components/project-chat/helpers/useComposerAutoGrow';
 import { useMobileChatChrome } from '@/components/project-chat/helpers/useMobileChatChrome';
+import { useProjectSkills } from '@/components/project-chat/helpers/useProjectSkills';
+import { ProjectComposerActionSheet } from '@/components/project-chat/ProjectComposerActionSheet';
+import {
+  buildImageAttachmentPromptPrefix,
+  readChatImageAttachments,
+  stripImageAttachmentPromptPrefix,
+} from '@/lib/chatImageAttachments';
+import type { ChatImageAttachment } from '@/lib/happy/types';
+import type { ProjectSkillEntry } from '@/lib/projectSkills';
 import { ProjectRunStatusChip } from '@/components/project-chat/ProjectRunStatusChip';
 import { ProjectActionCard } from '@/components/project-chat/ProjectActionCard';
 import { ProjectPermissionRequestMessage } from '@/components/project-chat/ProjectPermissionRequestMessage';
@@ -1599,7 +1608,9 @@ function ProjectParallelChatPane({
                     </div>
                   ) : (
                     <>
-                      <div className={isUser ? 'msg__bubble' : 'msg__text'}><MarkdownContent body={getEventText(item)} /></div>
+                      <div className={isUser ? 'msg__bubble' : 'msg__text'}>
+                        <MarkdownContent body={isUser ? stripImageAttachmentPromptPrefix(getEventText(item)) : getEventText(item)} />
+                      </div>
                       {snippet && (
                         <div className="code">
                           <div className="code__head">
@@ -1840,6 +1851,61 @@ export function ProjectChatSurface({
       setModelSelectorOpen(false);
     }
   }, [isComposerCollapsed]);
+  const [actionSheetOpen, setActionSheetOpen] = useState(false);
+  const [pendingImageAttachments, setPendingImageAttachments] = useState<ChatImageAttachment[]>([]);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const projectSkills = useProjectSkills(projectId);
+
+  const handleActionSheetPickPhoto = useCallback(() => {
+    setActionSheetOpen(false);
+    imageInputRef.current?.click();
+  }, []);
+
+  const handleActionSheetSkillSelect = useCallback((entry: ProjectSkillEntry) => {
+    setActionSheetOpen(false);
+    setPrompt((current) => {
+      const rest = current.trimStart();
+      return rest ? `${entry.command} ${rest}` : `${entry.command} `;
+    });
+    expandComposer();
+    composerInputRef.current?.focus();
+  }, [expandComposer]);
+
+  const handleImageFilesSelected = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    if (files.length === 0) {
+      return;
+    }
+    setIsUploadingImages(true);
+    setError(null);
+    try {
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await fetch(
+          withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(projectId)}/assets/images`),
+          { method: 'POST', body: formData },
+        );
+        const body = (await response.json().catch(() => ({}))) as { attachment?: ChatImageAttachment; error?: string };
+        if (!response.ok || !body.attachment) {
+          throw new Error(body.error ?? '이미지 업로드에 실패했습니다.');
+        }
+        const attachment = body.attachment;
+        setPendingImageAttachments((current) => [...current, attachment]);
+      }
+      expandComposer();
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : '이미지 업로드에 실패했습니다.');
+    } finally {
+      setIsUploadingImages(false);
+    }
+  }, [expandComposer, projectId]);
+
+  const removePendingImageAttachment = useCallback((assetId: string) => {
+    setPendingImageAttachments((current) => current.filter((attachment) => attachment.assetId !== assetId));
+  }, []);
   const workspaceFiles = useWorkspaceFiles('/workspace', {
     projectId,
     workspacePanelId: activeWorkspacePanelId,
@@ -2074,7 +2140,7 @@ export function ProjectChatSurface({
       return;
     }
     event.preventDefault();
-    if (!prompt.trim() || projectRunActive || isSubmitting) {
+    if ((!prompt.trim() && pendingImageAttachments.length === 0) || projectRunActive || isSubmitting) {
       return;
     }
     event.currentTarget.form?.requestSubmit();
@@ -2760,7 +2826,9 @@ export function ProjectChatSurface({
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = prompt.trim();
-    if (!text || isSubmitting || projectRunActive) return;
+    const isTerminalMode = composerMode === 'terminal';
+    const attachmentsToSend = isTerminalMode ? [] : pendingImageAttachments;
+    if ((!text && attachmentsToSend.length === 0) || isSubmitting || projectRunActive) return;
 
     setIsSubmitting(true);
     setError(null);
@@ -2770,15 +2838,17 @@ export function ProjectChatSurface({
         throw new Error('활성 채팅을 찾지 못했습니다.');
       }
       const submittedAt = new Date().toISOString();
-      const isTerminalMode = composerMode === 'terminal';
       const hasUserEventInChat = events.some((item) => isUserEvent(item));
       const shouldAutoRenameFromFirstPrompt = isAutoGeneratedChatTitle(chat.title)
         && !hasUserEventInChat;
-      const firstPromptTitle = shouldAutoRenameFromFirstPrompt
+      const firstPromptTitle = shouldAutoRenameFromFirstPrompt && text
         ? buildChatTitleFromFirstPrompt(text)
         : null;
       const modelToSend = selectedModelId || fallbackDefaultForProvider(selectedProvider) || '';
       const endpoint = withAppBasePath(isTerminalMode ? buildProjectRuntimeTerminalPath(projectId) : buildProjectRuntimeEventsPath(projectId));
+      const messageText = attachmentsToSend.length > 0
+        ? `${buildImageAttachmentPromptPrefix(attachmentsToSend)}${text}`
+        : text;
       const payload = isTerminalMode ? {
         chatId: chat.id,
         command: text,
@@ -2788,7 +2858,7 @@ export function ProjectChatSurface({
       } : {
         type: 'message',
         title: 'User Instruction',
-        text,
+        text: messageText,
         meta: {
           role: 'user',
           chatId: chat.id,
@@ -2797,6 +2867,7 @@ export function ProjectChatSurface({
           mode: composerMode,
           modelReasoningEffort: serializeReasoningEffort(selectedEffort),
           workspaceTab,
+          ...(attachmentsToSend.length > 0 ? { attachments: attachmentsToSend } : {}),
         },
       };
       setSubmittedRunStartedAt(submittedAt);
@@ -2815,6 +2886,9 @@ export function ProjectChatSurface({
       const latestEvent = submittedEvents[submittedEvents.length - 1] as UiEvent;
       const latestEventAt = latestEvent.timestamp || submittedAt;
       setPrompt('');
+      if (attachmentsToSend.length > 0) {
+        setPendingImageAttachments([]);
+      }
       setEvents((previous) => mergeProjectChatEvents([...previous, ...submittedEvents]));
       const shouldPersistModel = !!chat && !!modelToSend && chat.model !== modelToSend;
       setChats((previous) => previous.map((item) => (
@@ -2926,7 +3000,25 @@ export function ProjectChatSurface({
           </div>
           {isUser ? (
             <>
-              <div className="msg__bubble"><MarkdownContent body={getEventText(item)} /></div>
+              {(() => {
+                const imageAttachments = readChatImageAttachments(item.meta);
+                if (imageAttachments.length === 0) return null;
+                return (
+                  <div className="msg__images">
+                    {imageAttachments.map((attachment) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={attachment.assetId}
+                        className="msg__image"
+                        src={withAppBasePath(attachment.previewUrl)}
+                        alt={attachment.name}
+                        loading="lazy"
+                      />
+                    ))}
+                  </div>
+                );
+              })()}
+              <div className="msg__bubble"><MarkdownContent body={stripImageAttachmentPromptPrefix(getEventText(item))} /></div>
               {item.parsed?.files?.length ? (
                 <div className="msg__attachments">
                   {item.parsed.files.slice(0, 3).map((file) => (
@@ -3441,7 +3533,7 @@ export function ProjectChatSurface({
                   type="button"
                   className="cmp-pill__add"
                   aria-label="사진 첨부·스킬 등 추가 작업"
-                  onClick={expandComposer}
+                  onClick={() => setActionSheetOpen(true)}
                 >
                   <Plus size={18} />
                 </button>
@@ -3454,8 +3546,11 @@ export function ProjectChatSurface({
                     composerInputRef.current?.focus();
                   }}
                 >
-                  <span className={`cmp-pill__text${prompt.trim() ? ' cmp-pill__text--draft' : ''}`}>
-                    {prompt.trim() || '에이전트에게 요청하기...'}
+                  <span className={`cmp-pill__text${prompt.trim() || pendingImageAttachments.length > 0 ? ' cmp-pill__text--draft' : ''}`}>
+                    {prompt.trim()
+                      || (pendingImageAttachments.length > 0
+                        ? `사진 ${pendingImageAttachments.length}장 첨부됨`
+                        : '에이전트에게 요청하기...')}
                   </span>
                   {projectRunActive ? (
                     <span className="cmp-pill__send cmp-pill__send--running" aria-hidden="true">
@@ -3572,6 +3667,31 @@ export function ProjectChatSurface({
                   </div>
                 </div>
               </div>
+              {(pendingImageAttachments.length > 0 || isUploadingImages) && (
+                <div className="cmp-attachments">
+                  {pendingImageAttachments.map((attachment) => (
+                    <span key={attachment.assetId} className="cmp-attachment">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img className="cmp-attachment__thumb" src={withAppBasePath(attachment.previewUrl)} alt={attachment.name} />
+                      <span className="cmp-attachment__name">{attachment.name}</span>
+                      <button
+                        type="button"
+                        className="cmp-attachment__remove"
+                        aria-label={`${attachment.name} 첨부 제거`}
+                        onClick={() => removePendingImageAttachment(attachment.assetId)}
+                      >
+                        <X size={11} />
+                      </button>
+                    </span>
+                  ))}
+                  {isUploadingImages && (
+                    <span className="cmp-attachment cmp-attachment--uploading">
+                      <Loader2 size={13} className="cmp-attachment__spin" />
+                      <span className="cmp-attachment__name">업로드 중...</span>
+                    </span>
+                  )}
+                </div>
+              )}
               <textarea
                 ref={composerInputRef}
                 className="cmp__input"
@@ -3584,7 +3704,7 @@ export function ProjectChatSurface({
               />
               <div className="cmp__toolbar">
                 <div className="cmp__tools">
-                  <button type="button" className="cmp__tool" aria-label="Add" onClick={() => showTransientFeedback('Context action ready')}><Plus size={15} /></button>
+                  <button type="button" className="cmp__tool" aria-label="Add" onClick={() => setActionSheetOpen(true)}><Plus size={15} /></button>
                   <button
                     type="button"
                     className="cmp__tool"
@@ -3625,7 +3745,7 @@ export function ProjectChatSurface({
                     <button
                       type="submit"
                       className="cmp__send"
-                      disabled={!prompt.trim()}
+                      disabled={!prompt.trim() && pendingImageAttachments.length === 0}
                       aria-label="Send message"
                     >
                       Send
@@ -3635,6 +3755,28 @@ export function ProjectChatSurface({
                 </div>
               </div>
             </form>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              multiple
+              hidden
+              onChange={handleImageFilesSelected}
+            />
+            <ProjectComposerActionSheet
+              open={actionSheetOpen}
+              onClose={() => setActionSheetOpen(false)}
+              onPickPhoto={handleActionSheetPickPhoto}
+              onOpenFiles={() => {
+                setActionSheetOpen(false);
+                activateWorkspaceTab('files');
+              }}
+              onSkillSelect={handleActionSheetSkillSelect}
+              onLoadSkills={projectSkills.load}
+              skills={projectSkills.entries}
+              skillsError={projectSkills.error}
+              skillsLoading={projectSkills.loading}
+            />
             {error && <div className="pc-chat-error" role="alert">{error}</div>}
             {permissionError && <div className="pc-chat-error" role="alert">{permissionError}</div>}
           </footer>
