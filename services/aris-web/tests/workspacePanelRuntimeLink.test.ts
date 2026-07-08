@@ -7,7 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const schema = readFileSync(resolve(__dirname, '../prisma/schema.prisma'), 'utf8');
 const projectWorkspaces = readFileSync(resolve(__dirname, '../lib/happy/projectWorkspaces.ts'), 'utf8');
 const workspaceRoute = readFileSync(resolve(__dirname, '../app/api/projects/[projectId]/workspace/route.ts'), 'utf8');
-const homePageClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
+const projectChatSurface = readFileSync(resolve(__dirname, '../components/project-chat/ProjectChatSurface.tsx'), 'utf8');
 
 describe('workspace panel runtime linkage', () => {
   it('persists panel runtime/worktree metadata as first-class WorkspacePanel rows', () => {
@@ -43,16 +43,16 @@ describe('workspace panel runtime linkage', () => {
   });
 
   it('routes parallel panel agent state through the panel runtime session', () => {
-    expect(homePageClient).toContain('useSessionRuntime(runtimeSessionId, chat.id, true)');
-    expect(homePageClient).toContain('workspacePanelId: panelId');
-    expect(homePageClient).toContain('runtimeSessionId: runtimeSessionId !== projectId ? runtimeSessionId : undefined');
+    expect(projectChatSurface).toContain('useSessionRuntime(runtimeSessionId, chat.id, true)');
+    expect(projectChatSurface).toContain('workspacePanelId: panelId');
+    expect(projectChatSurface).toContain('runtimeSessionId: runtimeSessionId !== projectId ? runtimeSessionId : undefined');
   });
 
   it('surfaces panel runtime readiness and creation failures in the parallel UI', () => {
-    expect(homePageClient).toContain('parallelPanelRuntimeErrors');
-    expect(homePageClient).toContain('panelRuntimeError');
-    expect(homePageClient).toContain('resolvePanelRuntimeBadge');
-    expect(homePageClient).toContain('panelRuntimeErrors');
-    expect(homePageClient).toContain('runtime 생성 실패');
+    expect(projectChatSurface).toContain('parallelPanelRuntimeErrors');
+    expect(projectChatSurface).toContain('panelRuntimeError');
+    expect(projectChatSurface).toContain('resolvePanelRuntimeBadge');
+    expect(projectChatSurface).toContain('panelRuntimeErrors');
+    expect(projectChatSurface).toContain('runtime 생성 실패');
   });
 });

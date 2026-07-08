@@ -38,8 +38,9 @@ describe('chat composer dock desktop layout guards', () => {
   });
 
   it('derives browser chrome obstruction from visual viewport and layout viewport heights', () => {
-    expect(viewportHeightSync).toContain('const layoutBottomInset = Math.max(0, layoutViewportHeight - height - viewportOffsetTop);');
-    expect(viewportHeightSync).toContain('const visualViewportBottomInset = Math.max(historicalBottomInset, layoutBottomInset);');
+    expect(viewportHeightSync).toContain('const bottomInset = Math.max(0, layoutViewportHeight - height - viewportOffsetTop);');
+    expect(viewportHeightSync).toContain('const keyboardInset = keyboardOpen ? bottomInset : 0;');
+    expect(viewportHeightSync).toContain('const visualViewportBottomInset = keyboardOpen ? 0 : bottomInset;');
     expect(viewportHeightSync).toContain("root.style.setProperty('--visual-viewport-bottom-inset', `${visualViewportBottomInset}px`);");
     expect(viewportHeightSync).toContain("root.style.removeProperty('--visual-viewport-bottom-inset');");
   });

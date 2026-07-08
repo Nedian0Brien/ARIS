@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getSessionEvents: vi.fn(),
   getImportedAgentSessionState: vi.fn(),
   importOlderAgentTranscript: vi.fn(),
+  importLatestAgentTranscript: vi.fn(),
   getUserModelSettings: vi.fn(),
   resolveRuntimeMessageModel: vi.fn(),
   normalizeSupportedAgent: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock('@/lib/happy/client', () => ({
   getSessionEvents: mocks.getSessionEvents,
   getImportedAgentSessionState: mocks.getImportedAgentSessionState,
   importOlderAgentTranscript: mocks.importOlderAgentTranscript,
+  importLatestAgentTranscript: mocks.importLatestAgentTranscript,
   HappyHttpError: class HappyHttpError extends Error {
     status: number;
 
@@ -111,6 +113,7 @@ describe('session events route', () => {
     });
     mocks.getImportedAgentSessionState.mockResolvedValue(null);
     mocks.importOlderAgentTranscript.mockResolvedValue({ events: [], hasMoreBefore: false });
+    mocks.importLatestAgentTranscript.mockResolvedValue({ events: [], hasMoreBefore: false });
   });
 
   it('marks imported chats as having older history on the initial events page', async () => {
@@ -123,6 +126,7 @@ describe('session events route', () => {
 
     expect(response.status).toBe(200);
     expect((await response.json()).page.hasMoreBefore).toBe(true);
+    expect(mocks.importLatestAgentTranscript).toHaveBeenCalledWith('chat-1');
     expect(mocks.importOlderAgentTranscript).not.toHaveBeenCalled();
   });
 

@@ -109,6 +109,9 @@ model Chat {
   isPinned       Boolean  @default(false)
   isDefault      Boolean  @default(false)
   threadId       String?
+  parentChatId   String?
+  subagentType   String?
+  subagentStatus String?
   model          String?
   geminiMode     String?
   modelReasoningEffort String?
@@ -129,6 +132,7 @@ model Chat {
 
   @@index([projectId, userId, isPinned, lastActivityAt])
   @@index([userId, updatedAt])
+  @@index([parentChatId])
 }
 
 model SessionRun {

@@ -39,6 +39,9 @@ export type SessionChat = {
   isPinned: boolean;
   isDefault: boolean;
   threadId: string | null;
+  parentChatId?: string | null;
+  subagentType?: string | null;
+  subagentStatus?: string | null;
   latestPreview?: string;
   latestEventId?: string | null;
   latestEventAt?: string | null;

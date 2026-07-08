@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createSessionScrollOrchestratorStore } from '@/app/_legacy/sessions/[sessionId]/useSessionScrollOrchestrator';
+import { createSessionScrollOrchestratorStore } from '@/lib/hooks/useSessionScrollOrchestrator';
 
 describe('sessionScrollOrchestrator', () => {
   it('activates the session scope and transitions through resume phases', () => {

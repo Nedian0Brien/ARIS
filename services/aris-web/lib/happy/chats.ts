@@ -14,6 +14,9 @@ function toSessionChat(record: {
   isPinned: boolean;
   isDefault: boolean;
   threadId: string | null;
+  parentChatId?: string | null;
+  subagentType?: string | null;
+  subagentStatus?: string | null;
   latestPreview: string;
   latestEventId: string | null;
   latestEventAt: Date | null;
@@ -36,6 +39,9 @@ function toSessionChat(record: {
     isPinned: record.isPinned,
     isDefault: record.isDefault,
     threadId: record.threadId,
+    parentChatId: record.parentChatId ?? null,
+    subagentType: record.subagentType ?? null,
+    subagentStatus: record.subagentStatus ?? null,
     latestPreview: record.latestPreview,
     latestEventId: record.latestEventId,
     latestEventAt: record.latestEventAt ? record.latestEventAt.toISOString() : null,
@@ -142,6 +148,10 @@ export async function listSessionChats(input: {
       where: {
         projectId: input.sessionId,
         userId: input.userId,
+        // Ignore imported subagent chats so a project that only contains
+        // subagent transcripts still gets a real default chat.
+        parentChatId: null,
+        subagentStatus: null,
       },
       select: { id: true },
     });
@@ -162,6 +172,11 @@ export async function listSessionChats(input: {
     where: {
       projectId: input.sessionId,
       userId: input.userId,
+      // Subagent (Task tool) transcripts are imported but must never appear in
+      // the main chat list — they are surfaced only in the subagent sidebar.
+      // A subagent chat is marked by a non-null parentChatId and/or subagentStatus.
+      parentChatId: null,
+      subagentStatus: null,
     },
     orderBy: [
       { isPinned: 'desc' },
@@ -172,6 +187,27 @@ export async function listSessionChats(input: {
   });
 
   return sortChats(chats.map(toSessionChat));
+}
+
+/**
+ * List the subagent (Task tool) transcripts that belong to a given parent chat,
+ * for the right-sidebar subagent panel. Ordered most-recent first.
+ */
+export async function listSubagentChats(input: {
+  parentChatId: string;
+  userId: string;
+}): Promise<SessionChat[]> {
+  const chats = await prisma.chat.findMany({
+    where: {
+      parentChatId: input.parentChatId,
+      userId: input.userId,
+    },
+    orderBy: [
+      { lastActivityAt: 'desc' },
+      { createdAt: 'desc' },
+    ],
+  });
+  return chats.map(toSessionChat);
 }
 
 export async function createSessionChat(input: {

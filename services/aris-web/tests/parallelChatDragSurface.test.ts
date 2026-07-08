@@ -7,6 +7,7 @@ import { readAppStyles } from './helpers/readAppStyles';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
 const projectChatSurface = readFileSync(resolve(__dirname, '../components/project-chat/ProjectChatSurface.tsx'), 'utf8');
+const projectChatSurfaceUtils = readFileSync(resolve(__dirname, '../components/project-chat/projectChatSurfaceUtils.ts'), 'utf8');
 const uiCss = readAppStyles();
 
 function cssBlock(selector: string) {
@@ -26,13 +27,14 @@ describe('project parallel chat drag surface', () => {
   });
 
   it('makes project sidebar chat children draggable', () => {
-    expect(projectChatSurface).toContain("export const PROJECT_CHAT_DRAG_MIME = 'application/x-aris-project-chat';");
-    expect(projectChatSurface).toContain("export const PROJECT_CHAT_DRAG_JSON_MIME = 'application/json';");
+    expect(projectChatSurfaceUtils).toContain("export const PROJECT_CHAT_DRAG_MIME = 'application/x-aris-project-chat';");
+    expect(projectChatSurfaceUtils).toContain("export const PROJECT_CHAT_DRAG_JSON_MIME = 'application/json';");
+    expect(projectChatSurface).toContain("export { PROJECT_CHAT_DRAG_JSON_MIME, PROJECT_CHAT_DRAG_MIME, writeProjectChatDragPayload } from './projectChatSurfaceUtils';");
     expect(homeClient).toContain('writeProjectChatDragPayload(event, session.id, chat)');
     expect(projectChatSurface).toContain('writeProjectChatDragPayload(event, projectId, chat)');
-    expect(projectChatSurface).toContain('projectId: parsedProjectId');
-    expect(projectChatSurface).not.toContain('sessionId: parsed.sessionId');
-    expect(projectChatSurface).toContain("event.dataTransfer.setData('text/plain', payload);");
+    expect(projectChatSurfaceUtils).toContain('projectId: parsedProjectId');
+    expect(projectChatSurfaceUtils).not.toContain('sessionId: parsed.sessionId');
+    expect(projectChatSurfaceUtils).toContain("event.dataTransfer.setData('text/plain', payload);");
     expect(homeClient).toContain('className={`m-sb__chat-child${activeProjectChatId === chat.id ?');
   });
 
@@ -61,7 +63,8 @@ describe('project parallel chat drag surface', () => {
   });
 
   it('supports compact project panel mode instead of the legacy session screen', () => {
-    expect(projectChatSurface).toContain("export type ProjectChatSurfaceMode = 'full' | 'panel';");
+    expect(projectChatSurfaceUtils).toContain("export type ProjectChatSurfaceMode = 'full' | 'panel';");
+    expect(projectChatSurface).toContain("export type { ProjectChatDragStartHandler, ProjectChatSurfaceMode } from './projectChatSurfaceUtils';");
     expect(homeClient).toContain("searchParams.get('surface') === 'panel' ? 'panel' : 'full'");
     expect(homeClient).toContain("app-shell-ia--project-panel");
     expect(uiCss).toContain('.app-shell-ia--project-panel .m-sb');

@@ -7,6 +7,7 @@ import { readAppStyles } from './helpers/readAppStyles';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
 const projectChatSurface = readFileSync(resolve(__dirname, '../components/project-chat/ProjectChatSurface.tsx'), 'utf8');
+const projectChatSurfaceUtils = readFileSync(resolve(__dirname, '../components/project-chat/projectChatSurfaceUtils.ts'), 'utf8');
 const projectActionCard = readFileSync(resolve(__dirname, '../components/project-chat/ProjectActionCard.tsx'), 'utf8');
 const projectRunStatusChip = readFileSync(resolve(__dirname, '../components/project-chat/ProjectRunStatusChip.tsx'), 'utf8');
 const projectChatEventsHelper = readFileSync(resolve(__dirname, '../components/project-chat/helpers/projectChatEvents.ts'), 'utf8');
@@ -116,7 +117,7 @@ describe('project list surface', () => {
   });
 
   it('loads older project chat event pages from the timeline instead of replacing the visible window', () => {
-    expect(projectChatSurface).toContain('const PROJECT_CHAT_EVENT_PAGE_LIMIT = 40;');
+    expect(projectChatSurfaceUtils).toContain('export const PROJECT_CHAT_EVENT_PAGE_LIMIT = 40;');
     expect(projectChatSurface).toContain("params.set('before', cursor.before);");
     expect(projectChatSurface).toContain('const loadOlderEvents = useCallback(async () => {');
     expect(projectChatSurface).toContain('setEvents((current) => mergeProjectChatEvents([...olderEvents, ...current]));');
@@ -138,7 +139,7 @@ describe('project list surface', () => {
   });
 
   it('renders the jump-to-latest control only when the timeline has newer content below the viewport', () => {
-    expect(projectChatSurface).toContain('const PROJECT_CHAT_BOTTOM_THRESHOLD_PX = 96;');
+    expect(projectChatSurfaceUtils).toContain('export const PROJECT_CHAT_BOTTOM_THRESHOLD_PX = 96;');
     expect(projectChatSurface).toContain('setShowJumpToLatest(distanceFromBottom > PROJECT_CHAT_BOTTOM_THRESHOLD_PX);');
     expect(projectChatSurface).toContain('{showJumpToLatest && (');
     expect(projectChatSurface).toContain('className="jb"');
@@ -154,7 +155,7 @@ describe('project list surface', () => {
 
   it('keeps following refreshed project chat events only while the timeline is already at the tail', () => {
     expect(projectChatSurface).toContain('const stickToLatestOnNextPaintRef = useRef(false);');
-    expect(projectChatSurface).toContain('function isProjectChatTimelineNearBottom(node: HTMLElement | null): boolean {');
+    expect(projectChatSurfaceUtils).toContain('export function isProjectChatTimelineNearBottom(node: HTMLElement | null): boolean {');
     expect(projectChatSurface).toContain("const shouldFollowTail = mode === 'refresh' && isProjectChatTimelineNearBottom(timelineRef.current);");
     expect(projectChatSurface).toContain('stickToLatestOnNextPaintRef.current = shouldFollowTail;');
     expect(projectChatSurface).toContain('if (!stickToLatestOnNextPaintRef.current) {');
@@ -211,15 +212,15 @@ describe('project list surface', () => {
   });
 
   it('wires the prototype chat controls to real project-chat state', () => {
-    expect(projectChatSurface).toContain("type ComposerMode = 'agent' | 'plan' | 'terminal';");
-    expect(projectChatSurface).toContain("type WorkspaceTab = 'run' | 'files' | 'git' | 'terminal' | 'context';");
-    expect(projectChatSurface).toContain("type PreviewState = 'closed' | 'open' | 'dock';");
+    expect(projectChatSurfaceUtils).toContain("export type ComposerMode = 'agent' | 'plan' | 'terminal';");
+    expect(projectChatSurfaceUtils).toContain("export type WorkspaceTab = 'run' | 'files' | 'git' | 'terminal' | 'context' | 'subagents';");
+    expect(projectChatSurfaceUtils).toContain("export type PreviewState = 'closed' | 'open' | 'dock';");
     expect(projectChatSurface).toContain('const [composerMode, setComposerMode] = useState<ComposerMode>');
     expect(projectChatSurface).toContain('const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>');
     expect(projectChatSurface).toContain('const [workspaceOpen, setWorkspaceOpen] = useState(true);');
     expect(projectChatSurface).toContain('const [previewState, setPreviewState] = useState<PreviewState>');
     expect(projectChatSurface).toContain('const [modelSelectorOpen, setModelSelectorOpen] = useState(false);');
-    expect(projectChatSurface).toContain("type ExpandedTurnState = string | null | '__none__';");
+    expect(projectChatSurfaceUtils).toContain("export type ExpandedTurnState = string | null | '__none__';");
     expect(projectChatSurface).toContain('const [expandedTurnId, setExpandedTurnId] = useState<ExpandedTurnState>');
     expect(projectChatSurface).toContain("expandedTurnId === '__none__'");
     expect(projectChatSurface).toContain("visibleExpandedTurnId === item.id ? '__none__' : item.id");
@@ -240,7 +241,7 @@ describe('project list surface', () => {
     // Event classifier and run-indicator helpers now live in helpers/projectChatEvents.ts.
     expect(projectChatEventsHelper).toContain('export function isProjectActionEvent(event: UiEvent): boolean');
     expect(projectChatEventsHelper).toContain('export function isProjectRunStatusEvent(event: UiEvent): boolean');
-    expect(projectChatSurface).toContain('function resolveProjectRunIndicator(');
+    expect(projectChatSurfaceUtils).toContain('export function resolveProjectRunIndicator(');
 
     // ProjectRunStatusChip and ProjectActionCard are now standalone components.
     expect(projectRunStatusChip).toContain('export function ProjectRunStatusChip({ event }: { event: UiEvent })');
@@ -294,7 +295,7 @@ describe('project list surface', () => {
     expect(projectChatSurface).toContain('const activeRunStartedAt = submittedRunStartedAt ?? runtimeRunStartedAt;');
     expect(projectChatSurface).toContain('const projectRunIndicator = resolveProjectRunIndicator({');
     expect(projectChatSurface).toContain('runtimeRunning,');
-    expect(projectChatSurface).toContain('const localStartAfterLatestLifecycle =');
+    expect(projectChatSurfaceUtils).toContain('const localStartAfterLatestLifecycle =');
     expect(projectChatSurface).toContain('startedAt: activeRunStartedAt,');
     expect(projectChatSurface).toContain('setSubmittedRunStartedAt(submittedAt);');
     expect(projectChatSurface).toContain('if (!runtimeRunning) {');
@@ -313,7 +314,7 @@ describe('project list surface', () => {
   });
 
   it('renders project chat text replies through the shared markdown renderer', () => {
-    expect(projectChatSurface).toContain("import { MarkdownContent } from '@/app/_legacy/sessions/[sessionId]/chat-screen/center-pane/renderers/MarkdownContent';");
+    expect(projectChatSurface).toContain("import { MarkdownContent } from '@/components/chat/MarkdownContent';");
     expect(projectChatSurface).toContain('<div className="msg__text"><MarkdownContent body={getEventText(item)} /></div>');
     expect(projectChatSurface).toContain('<div className="chturn__agent-text"><MarkdownContent body={item.agentText} /></div>');
   });

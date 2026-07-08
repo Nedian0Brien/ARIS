@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import { dispatchSessionScrollPhaseEvent } from '@/app/_legacy/sessions/[sessionId]/useSessionScrollOrchestrator';
-import { recordScrollDebugEvent } from '@/app/_legacy/sessions/[sessionId]/scrollDebug';
+import { dispatchSessionScrollPhaseEvent } from '@/lib/hooks/useSessionScrollOrchestrator';
+import { recordScrollDebugEvent } from '@/lib/scroll/scrollDebug';
 
 export const VIEWPORT_LAYOUT_CHANGE_EVENT = 'aris:viewport-layout-change';
 

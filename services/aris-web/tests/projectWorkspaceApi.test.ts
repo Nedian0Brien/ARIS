@@ -7,6 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const schema = readFileSync(resolve(__dirname, '../prisma/schema.prisma'), 'utf8');
 const route = readFileSync(resolve(__dirname, '../app/api/projects/[projectId]/workspace/route.ts'), 'utf8');
 const projectChatSurface = readFileSync(resolve(__dirname, '../components/project-chat/ProjectChatSurface.tsx'), 'utf8');
+const projectChatSurfaceUtils = readFileSync(resolve(__dirname, '../components/project-chat/projectChatSurfaceUtils.ts'), 'utf8');
 
 describe('project workspace API boundary', () => {
   it('defines workspace as project-scoped parallel panel layout storage', () => {
@@ -25,11 +26,11 @@ describe('project workspace API boundary', () => {
   });
 
   it('hydrates and persists project parallel panels through the workspace API with local fallback', () => {
-    expect(projectChatSurface).toContain('buildProjectWorkspacePath(projectId)');
+    expect(projectChatSurfaceUtils).toContain('buildProjectWorkspacePath(projectId)');
     expect(projectChatSurface).toContain('fetchProjectWorkspaceLayout');
     expect(projectChatSurface).toContain('saveProjectWorkspaceLayout');
-    expect(projectChatSurface).toContain('parseProjectPanelApiState(layout, validChatIds)');
-    expect(projectChatSurface).toContain('const payload = \'version\' in layout');
+    expect(projectChatSurfaceUtils).toContain('parseProjectPanelApiState(layout, validChatIds)');
+    expect(projectChatSurfaceUtils).toContain('const payload = \'version\' in layout');
     expect(projectChatSurface).toContain('readLocalStorage(parallelLayoutStorageKey)');
   });
 });

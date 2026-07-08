@@ -36,14 +36,44 @@ type ImportedAgentSessionStore = {
     oldestCursorOffset?: bigint | null;
     newestCursorOffset?: bigint | null;
     hasMoreBefore: boolean;
+    status?: string;
   }>;
   resolveProjectSessionIdByPath(projectPath: string): Promise<string | null>;
+  /**
+   * Find an existing top-level chat (parentChatId IS NULL, i.e. not a subagent)
+   * that already owns a provider session id — matched by Chat.threadId or by any
+   * of its events' meta.threadId. Used to (a) detect ARIS-originated transcripts
+   * that must not be re-imported as duplicate chats, and (b) resolve the parent
+   * chat a subagent belongs to. `isImported` is true when that chat is itself an
+   * imported agent session (vs a native ARIS chat).
+   */
+  findOwningChat?(providerSessionId: string): Promise<{ chatId: string; isImported: boolean } | null>;
   ensureImportedAgentChat(input: {
     importId: string;
     arisSessionId: string;
     userId: string;
     title: string;
+    parentChatId?: string | null;
+    subagentType?: string | null;
+    subagentStatus?: string | null;
   }): Promise<{ chatId: string }>;
+  /**
+   * Mark an imported session as ARIS-native: link it to the existing native chat
+   * without creating a duplicate chat and without importing its events (the live
+   * ARIS runtime already owns them). Idempotent.
+   */
+  markImportedAgentSessionNative?(input: {
+    importId: string;
+    arisSessionId: string;
+    chatId: string;
+  }): Promise<void>;
+  /** Refresh subagent metadata (type/status) on an already-linked subagent chat. */
+  updateSubagentChatMeta?(input: {
+    chatId: string;
+    parentChatId?: string | null;
+    subagentType?: string | null;
+    subagentStatus?: string | null;
+  }): Promise<void>;
   appendImportedAgentEvents(input: {
     importId: string;
     provider: ImportedAgentProvider;
@@ -99,7 +129,82 @@ type CandidateFile = {
   size: bigint;
   mtimeMs: bigint;
   fallbackSessionId?: string;
+  isSubagent?: boolean;
+  subagentType?: string;
+  subagentDescription?: string;
+  subagentToolUseId?: string;
 };
+
+/** A Claude Code subagent transcript lives under `<parentSessionId>/subagents/`. */
+export function isSubagentPath(path: string): boolean {
+  return path.includes('/subagents/');
+}
+
+/**
+ * Sidecar metadata Claude Code writes next to each subagent transcript:
+ * `agent-<id>.jsonl` -> `agent-<id>.meta.json` with { agentType, description, toolUseId }.
+ */
+export async function readSubagentMeta(subagentPath: string): Promise<{
+  agentType?: string;
+  description?: string;
+  toolUseId?: string;
+}> {
+  const metaPath = subagentPath.replace(/\.jsonl$/, '.meta.json');
+  try {
+    const raw = await readFile(metaPath, 'utf8');
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return {
+      ...(typeof parsed.agentType === 'string' ? { agentType: parsed.agentType } : {}),
+      ...(typeof parsed.description === 'string' ? { description: parsed.description } : {}),
+      ...(typeof parsed.toolUseId === 'string' ? { toolUseId: parsed.toolUseId } : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Resolve the parent session transcript for a subagent file.
+ * `.../projects/<projectId>/<parentSessionId>/subagents/agent-x.jsonl`
+ *   -> `.../projects/<projectId>/<parentSessionId>.jsonl`
+ */
+export function subagentParentTranscriptPath(subagentPath: string): string {
+  const subagentsDir = resolve(subagentPath, '..');
+  const parentSessionDir = resolve(subagentsDir, '..');
+  return `${parentSessionDir}.jsonl`;
+}
+
+/**
+ * Best-effort subagent run status. A completed subagent has a `tool_result` for
+ * its Task `toolUseId` in the parent transcript; a still-running one has only the
+ * `tool_use`. Falls back to 'completed' when we cannot prove it is running
+ * (missing toolUseId / unreadable parent) to avoid stale "running" badges.
+ */
+export async function deriveSubagentStatus(
+  subagentPath: string,
+  toolUseId: string | undefined,
+  parentReadCache: Map<string, string>,
+): Promise<'running' | 'completed'> {
+  if (!toolUseId) {
+    return 'completed';
+  }
+  const parentPath = subagentParentTranscriptPath(subagentPath);
+  let contents = parentReadCache.get(parentPath);
+  if (contents === undefined) {
+    try {
+      contents = await readFile(parentPath, 'utf8');
+    } catch {
+      contents = '';
+    }
+    parentReadCache.set(parentPath, contents);
+  }
+  if (!contents) {
+    return 'completed';
+  }
+  const hasResult = contents.includes(`"tool_use_id":"${toolUseId}"`)
+    || contents.includes(`"tool_use_id": "${toolUseId}"`);
+  return hasResult ? 'completed' : 'running';
+}
 
 async function listJsonlFiles(root: string): Promise<string[]> {
   let entries: Array<{ name: string; isDirectory: () => boolean; isFile: () => boolean }>;
@@ -148,12 +253,18 @@ async function collectCandidates(options: AgentSessionImportRunOptions): Promise
     if (details.mtimeMs < cutoffMs || details.size > options.maxBytes) {
       continue;
     }
+    const subagent = item.provider === 'claude' && isSubagentPath(item.path);
+    const meta = subagent ? await readSubagentMeta(item.path) : {};
     candidates.push({
       provider: item.provider,
       path: item.path,
       size: BigInt(details.size),
       mtimeMs: BigInt(Math.floor(details.mtimeMs)),
       ...(item.provider === 'claude' ? { fallbackSessionId: item.path.replace(/\.jsonl$/, '').split('/').at(-1) } : {}),
+      ...(subagent ? { isSubagent: true } : {}),
+      ...(meta.agentType ? { subagentType: meta.agentType } : {}),
+      ...(meta.description ? { subagentDescription: meta.description } : {}),
+      ...(meta.toolUseId ? { subagentToolUseId: meta.toolUseId } : {}),
     });
   }
   return candidates
@@ -277,6 +388,9 @@ export async function runAgentSessionImportOnce(options: AgentSessionImportRunOp
   let remainingEvents = maxEvents;
   const candidates = await collectCandidates(options);
   const normalizedProjectPath = resolve(options.projectPath);
+  // Cache parent-transcript reads within a single run so N subagents sharing a
+  // parent trigger at most one read of that (potentially large) transcript.
+  const parentReadCache = new Map<string, string>();
   for (const candidate of candidates) {
     if (remainingEvents <= 0) {
       break;
@@ -308,21 +422,77 @@ export async function runAgentSessionImportOnce(options: AgentSessionImportRunOp
     if (!options.userId) {
       continue;
     }
+    // Already resolved as an ARIS-native transcript on a previous run: the live
+    // runtime owns these events, so importing them again would duplicate messages
+    // inside the native chat. Nothing to do.
+    if (imported.status === 'native') {
+      continue;
+    }
     const arisSessionId = await options.store.resolveProjectSessionIdByPath(normalizedProjectPath);
     if (!arisSessionId) {
       result.skipped += 1;
       continue;
     }
-    const { chatId } = imported.chatId
-      ? { chatId: imported.chatId }
-      : await options.store.ensureImportedAgentChat({
+    const isSubagent = candidate.isSubagent === true || parsed.isSubagent;
+
+    // Problem 2: a freshly-discovered top-level transcript whose provider session
+    // id already belongs to a native ARIS chat is an ARIS-originated session that
+    // came back through the file scan. Link the bookkeeping row to that chat and
+    // skip — never create a duplicate chat, never re-import its events.
+    if (!isSubagent && !imported.chatId && options.store.findOwningChat && options.store.markImportedAgentSessionNative) {
+      const owning = await options.store.findOwningChat(parsed.providerSessionId);
+      if (owning && !owning.isImported) {
+        await options.store.markImportedAgentSessionNative({
+          importId: imported.id,
+          arisSessionId,
+          chatId: owning.chatId,
+        });
+        result.skipped += 1;
+        continue;
+      }
+    }
+
+    // Problem 1: subagent (Task tool) transcripts are still imported, but into a
+    // hidden chat linked to their parent chat so they surface only in the subagent
+    // sidebar — never in the main chat list.
+    let subagentStatus: 'running' | 'completed' | null = null;
+    let parentChatId: string | null = null;
+    if (isSubagent) {
+      subagentStatus = await deriveSubagentStatus(candidate.path, candidate.subagentToolUseId, parentReadCache);
+      // parsed.providerSessionId for a subagent is the PARENT session id, so this
+      // resolves the chat the subagent belongs to (native or imported parent).
+      parentChatId = options.store.findOwningChat
+        ? (await options.store.findOwningChat(parsed.providerSessionId))?.chatId ?? null
+        : null;
+    }
+
+    const title = isSubagent && candidate.subagentDescription
+      ? normalizeImportedChatTitle(candidate.subagentDescription)
+      : buildImportedChatTitle(parsed.provider, parsed.messages);
+
+    const chatId = imported.chatId
+      ? imported.chatId
+      : (await options.store.ensureImportedAgentChat({
           importId: imported.id,
           arisSessionId,
           userId: options.userId,
-          title: buildImportedChatTitle(parsed.provider, parsed.messages),
-        });
+          title,
+          ...(isSubagent
+            ? { parentChatId, subagentType: candidate.subagentType ?? null, subagentStatus }
+            : {}),
+        })).chatId;
     if (!imported.chatId) {
       result.linkedChats += 1;
+    } else if (isSubagent && options.store.updateSubagentChatMeta) {
+      // Refresh status/parent linkage on an already-linked subagent chat (the
+      // parent chat may have been imported after the subagent; status may flip
+      // from running to completed).
+      await options.store.updateSubagentChatMeta({
+        chatId,
+        parentChatId,
+        subagentType: candidate.subagentType ?? null,
+        subagentStatus,
+      });
     }
     const selectedMessages = imported.chatId
       ? selectNewerMessages(parsed.messages, imported.newestCursorOffset, remainingEvents)

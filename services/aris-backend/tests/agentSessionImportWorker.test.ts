@@ -166,6 +166,101 @@ describe('agent session import worker', () => {
     }));
   });
 
+  it('imports subagent transcripts into a hidden chat linked to the parent (not the chat list)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'aris-import-worker-'));
+    const projectDir = join(root, '.claude/projects/-home-ubuntu-project-ARIS');
+    const parentId = '22222222-2222-2222-2222-222222222222';
+    const subagentsDir = join(projectDir, parentId, 'subagents');
+    await mkdir(subagentsDir, { recursive: true });
+    // Subagent transcript: every record isSidechain, sessionId is the PARENT id.
+    await writeFile(join(subagentsDir, 'agent-explore1.jsonl'), [
+      '{"type":"user","isSidechain":true,"message":{"role":"user","content":"작업 지시"},"uuid":"su1","timestamp":"2026-07-07T00:00:01.000Z","cwd":"/home/ubuntu/project/ARIS","sessionId":"22222222-2222-2222-2222-222222222222"}',
+      '{"type":"assistant","isSidechain":true,"message":{"role":"assistant","content":[{"type":"text","text":"작업 결과"}]},"uuid":"sa1","timestamp":"2026-07-07T00:00:02.000Z","cwd":"/home/ubuntu/project/ARIS","sessionId":"22222222-2222-2222-2222-222222222222"}',
+    ].join('\n'));
+    await writeFile(join(subagentsDir, 'agent-explore1.meta.json'), JSON.stringify({
+      agentType: 'Explore', description: '코드베이스 매핑', toolUseId: 'toolu_test123',
+    }));
+    // Parent transcript has the Task tool_use but NO tool_result => still running.
+    // No cwd => skipped as an import candidate, but still read for status.
+    await writeFile(join(projectDir, `${parentId}.jsonl`),
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_test123","name":"Task","input":{}}]},"uuid":"p1","timestamp":"2026-07-07T00:00:00.000Z"}');
+
+    const store = {
+      discoverImportedAgentSession: vi.fn().mockResolvedValue({ id: 'import-sub', chatId: null }),
+      resolveProjectSessionIdByPath: vi.fn().mockResolvedValue('project-session-1'),
+      findOwningChat: vi.fn().mockResolvedValue({ chatId: 'parent-chat-1', isImported: true }),
+      ensureImportedAgentChat: vi.fn().mockResolvedValue({ chatId: 'subagent-chat-1' }),
+      markImportedAgentSessionNative: vi.fn(),
+      updateSubagentChatMeta: vi.fn(),
+      appendImportedAgentEvents: vi.fn().mockResolvedValue([{ id: 'sev-1' }, { id: 'sev-2' }]),
+    };
+
+    const result = await runAgentSessionImportOnce({
+      store,
+      projectPath: '/home/ubuntu/project/ARIS',
+      userId: 'user-1',
+      codexHome: join(root, '.codex'),
+      claudeHome: join(root, '.claude'),
+      lookbackDays: 7,
+      maxFiles: 10,
+      maxBytes: 200_000,
+      tailTurns: 3,
+    });
+
+    expect(result.discovered).toBe(1);
+    expect(store.markImportedAgentSessionNative).not.toHaveBeenCalled();
+    expect(store.findOwningChat).toHaveBeenCalledWith('22222222-2222-2222-2222-222222222222');
+    expect(store.ensureImportedAgentChat).toHaveBeenCalledWith(expect.objectContaining({
+      parentChatId: 'parent-chat-1',
+      subagentType: 'Explore',
+      subagentStatus: 'running',
+      title: '코드베이스 매핑',
+    }));
+    expect(store.appendImportedAgentEvents).toHaveBeenCalledWith(expect.objectContaining({
+      chatId: 'subagent-chat-1',
+    }));
+  });
+
+  it('links ARIS-originated transcripts to the native chat instead of creating a duplicate', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'aris-import-worker-'));
+    const sessionDir = join(root, '.claude/projects/-home-ubuntu-project-ARIS');
+    await mkdir(sessionDir, { recursive: true });
+    await writeFile(join(sessionDir, '33333333-3333-3333-3333-333333333333.jsonl'), [
+      '{"type":"user","message":{"role":"user","content":"네이티브 요청"},"uuid":"nu1","timestamp":"2026-07-07T00:00:01.000Z","cwd":"/home/ubuntu/project/ARIS","sessionId":"33333333-3333-3333-3333-333333333333"}',
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"네이티브 답변"}]},"uuid":"na1","timestamp":"2026-07-07T00:00:02.000Z","cwd":"/home/ubuntu/project/ARIS","sessionId":"33333333-3333-3333-3333-333333333333"}',
+    ].join('\n'));
+    const store = {
+      discoverImportedAgentSession: vi.fn().mockResolvedValue({ id: 'import-native', chatId: null }),
+      resolveProjectSessionIdByPath: vi.fn().mockResolvedValue('project-session-1'),
+      findOwningChat: vi.fn().mockResolvedValue({ chatId: 'native-chat-1', isImported: false }),
+      ensureImportedAgentChat: vi.fn(),
+      markImportedAgentSessionNative: vi.fn(),
+      updateSubagentChatMeta: vi.fn(),
+      appendImportedAgentEvents: vi.fn(),
+    };
+
+    const result = await runAgentSessionImportOnce({
+      store,
+      projectPath: '/home/ubuntu/project/ARIS',
+      userId: 'user-1',
+      codexHome: join(root, '.codex'),
+      claudeHome: join(root, '.claude'),
+      lookbackDays: 7,
+      maxFiles: 10,
+      maxBytes: 200_000,
+      tailTurns: 3,
+    });
+
+    expect(store.markImportedAgentSessionNative).toHaveBeenCalledWith({
+      importId: 'import-native',
+      arisSessionId: 'project-session-1',
+      chatId: 'native-chat-1',
+    });
+    expect(store.ensureImportedAgentChat).not.toHaveBeenCalled();
+    expect(store.appendImportedAgentEvents).not.toHaveBeenCalled();
+    expect(result.importedEvents).toBe(0);
+  });
+
   it('runs bounded backfill batches for imported chats with older transcript', async () => {
     const store = {
       discoverImportedAgentSession: vi.fn(),

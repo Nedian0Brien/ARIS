@@ -51,6 +51,7 @@ type ImportedAgentSessionRecord = {
   oldestCursorOffset?: bigint | null;
   newestCursorOffset?: bigint | null;
   hasMoreBefore: boolean;
+  status?: string;
 };
 
 type DiscoverImportedAgentSessionInput = {
@@ -71,6 +72,9 @@ type EnsureImportedAgentChatInput = {
   userId: string;
   title: string;
   model?: string | null;
+  parentChatId?: string | null;
+  subagentType?: string | null;
+  subagentStatus?: string | null;
 };
 
 type AppendImportedAgentEventsInput = {
@@ -395,6 +399,77 @@ export class PrismaRuntimeStore {
     return fallback?.id ?? null;
   }
 
+  async findOwningChat(providerSessionId: string): Promise<{ chatId: string; isImported: boolean } | null> {
+    const trimmed = providerSessionId.trim();
+    if (!trimmed) {
+      return null;
+    }
+    // Fast path: a top-level chat whose threadId already points at this provider
+    // session (native chats — post-redesign — now persist threadId again; imported
+    // chats always do).
+    const byThread = await this.db.sessionChat.findFirst({
+      where: { threadId: trimmed, parentChatId: null, subagentStatus: null },
+      orderBy: { lastActivityAt: 'desc' },
+      select: { id: true },
+    });
+    let chatId = byThread?.id ?? null;
+    if (!chatId) {
+      // Slow path: a single ARIS chat can rotate through several provider session
+      // ids across resume/continue, and older native chats never persisted
+      // threadId on the row — but the id is still recorded in each event's meta.
+      const event = await this.db.sessionChatEvent.findFirst({
+        where: { meta: { path: ['threadId'], equals: trimmed } },
+        orderBy: { createdAt: 'desc' },
+        select: { chatId: true },
+      });
+      if (event?.chatId) {
+        const chat = await this.db.sessionChat.findFirst({
+          where: { id: event.chatId, parentChatId: null, subagentStatus: null },
+          select: { id: true },
+        });
+        chatId = chat?.id ?? null;
+      }
+    }
+    if (!chatId) {
+      return null;
+    }
+    const importedRow = await this.db.importedAgentSession.findFirst({
+      where: { chatId },
+      select: { id: true },
+    });
+    return { chatId, isImported: Boolean(importedRow) };
+  }
+
+  async markImportedAgentSessionNative(input: { importId: string; arisSessionId: string; chatId: string }): Promise<void> {
+    await this.db.importedAgentSession.update({
+      where: { id: input.importId },
+      data: {
+        arisSessionId: input.arisSessionId,
+        chatId: input.chatId,
+        status: 'native',
+        lastImportedAt: new Date(),
+      },
+    });
+  }
+
+  async updateSubagentChatMeta(input: {
+    chatId: string;
+    parentChatId?: string | null;
+    subagentType?: string | null;
+    subagentStatus?: string | null;
+  }): Promise<void> {
+    // Only ever set fields to non-null values so a transiently-unresolved parent
+    // (parent session imported after the subagent) never clears a good linkage.
+    await this.db.sessionChat.update({
+      where: { id: input.chatId },
+      data: {
+        ...(input.parentChatId ? { parentChatId: input.parentChatId } : {}),
+        ...(input.subagentType ? { subagentType: input.subagentType } : {}),
+        ...(input.subagentStatus ? { subagentStatus: input.subagentStatus } : {}),
+      },
+    });
+  }
+
   async ensureImportedAgentChat(input: EnsureImportedAgentChatInput): Promise<{ chatId: string }> {
     return this.runRuntimeWriteMutationWithRetry(async (tx) => {
       const imported = await tx.importedAgentSession.findUnique({
@@ -418,6 +493,9 @@ export class PrismaRuntimeStore {
           isPinned: false,
           isDefault: false,
           threadId: imported.providerSessionId,
+          parentChatId: input.parentChatId ?? null,
+          subagentType: input.subagentType ?? null,
+          subagentStatus: input.subagentStatus ?? null,
           model: input.model ?? null,
           latestPreview: '',
           latestEventIsUser: false,
@@ -958,10 +1036,20 @@ export class PrismaRuntimeStore {
           seq: nextSeq,
         },
       });
+      // Persist the provider session id onto the chat row. This linkage was
+      // dropped during the chat-surface redesign (the new ProjectChatSurface no
+      // longer PATCHes threadId), leaving native chats with threadId = null and
+      // letting the import worker re-create them as duplicate chats. Restoring it
+      // server-side covers every surface. A chat can rotate through several
+      // provider session ids (resume/continue), so we keep the latest.
+      const nextThreadId = typeof input.meta?.threadId === 'string' && input.meta.threadId.trim().length > 0
+        ? input.meta.threadId.trim()
+        : null;
       await tx.sessionChat.update({
         where: { id: chatId },
         data: {
           ...(lifecycleStatus === null && { latestPreview: input.text.slice(0, 280) }),
+          ...(nextThreadId ? { threadId: nextThreadId } : {}),
           latestEventId: created.id,
           latestEventAt: created.createdAt,
           latestEventIsUser: input.meta?.role === 'user',

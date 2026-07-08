@@ -859,6 +859,32 @@ html[data-theme='dark'] .m-theme-toggle__item--active {
   min-height: 0;
 }
 
+/* Mobile + on-screen keyboard open: fit the whole chat screen to the VISIBLE
+   viewport so the composer pins directly above the keyboard instead of forcing a
+   page scroll. ViewportHeightSync intentionally locks --app-vh to the pre-keyboard
+   height (to avoid reflow on the legacy surface), so the redesigned chat surface
+   must switch to --visual-viewport-height, which does shrink with the keyboard.
+   Without this, the document stays full height while only the reduced area is
+   visible, and the browser scrolls the focused composer up to the top. */
+@media (max-width: 960px) {
+  html[data-keyboard-open='true'] .app-shell-ia--chat-screen,
+  html[data-keyboard-open='true'] .app-shell-ia--chat-screen .aris-ia-shell,
+  html[data-keyboard-open='true'] .app-shell-ia--chat-screen .m-main {
+    height: var(--visual-viewport-height, 100dvh);
+    min-height: var(--visual-viewport-height, 100dvh);
+    overflow: hidden;
+  }
+
+  html[data-keyboard-open='true'] .app-shell-ia--chat-screen .m-main-scroll--project-chat-detail .pc-proto {
+    height: 100%;
+    min-height: calc(var(--visual-viewport-height, 100dvh) - 48px);
+  }
+
+  html[data-keyboard-open='true'] .app-shell-ia--chat-screen .m-main-scroll--project-chat-detail .pc-proto .shell {
+    height: calc(var(--visual-viewport-height, 100dvh) - 48px);
+  }
+}
+
 .app-shell-ia--project-panel .aris-ia-shell {
   grid-template-columns: minmax(0, 1fr);
 }

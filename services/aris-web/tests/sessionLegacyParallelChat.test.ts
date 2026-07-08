@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const chatInterface = readFileSync(resolve(__dirname, '../app/sessions/[sessionId]/ChatInterface.tsx'), 'utf8');
+const chatInterface = readFileSync(resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.tsx'), 'utf8');
 
 describe('legacy session parallel chat surface', () => {
   it('removes the iframe-based left/right parallel chat model from the legacy session route', () => {
