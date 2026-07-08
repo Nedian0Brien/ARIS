@@ -105,6 +105,8 @@ import { useComposerAutoGrow } from '@/components/project-chat/helpers/useCompos
 import { useMobileChatChrome } from '@/components/project-chat/helpers/useMobileChatChrome';
 import { useProjectSkills } from '@/components/project-chat/helpers/useProjectSkills';
 import { useRecentSkills } from '@/components/project-chat/helpers/useRecentSkills';
+import { filterSkillEntriesForAutocomplete } from '@/components/project-chat/helpers/skillEntries';
+import { ProjectComposerSlashAutocomplete } from '@/components/project-chat/ProjectComposerSlashAutocomplete';
 import { ProjectComposerActionSheet } from '@/components/project-chat/ProjectComposerActionSheet';
 import {
   buildImageAttachmentPromptPrefix,
@@ -1909,6 +1911,48 @@ export function ProjectChatSurface({
   const removePendingImageAttachment = useCallback((assetId: string) => {
     setPendingImageAttachments((current) => current.filter((attachment) => attachment.assetId !== assetId));
   }, []);
+
+  // `/` 인라인 자동완성: 프롬프트가 슬래시 토큰 하나로만 이뤄진 동안 활성
+  const slashQuery = useMemo(() => /^\/(\S*)$/.exec(prompt)?.[1] ?? null, [prompt]);
+  const [slashDismissed, setSlashDismissed] = useState(false);
+  const [slashActiveIndex, setSlashActiveIndex] = useState(0);
+  useEffect(() => {
+    // ESC/바깥 탭으로 닫아도 다음 입력에서 다시 열린다
+    setSlashDismissed(false);
+    setSlashActiveIndex(0);
+  }, [prompt]);
+  const slashMatches = useMemo(
+    () => (slashQuery === null ? [] : filterSkillEntriesForAutocomplete(projectSkills.entries, slashQuery, recentCommands)),
+    [slashQuery, projectSkills.entries, recentCommands],
+  );
+  const slashAutocompleteOpen = slashQuery !== null
+    && !slashDismissed
+    && !isComposerCollapsed
+    && (projectSkills.loading || slashMatches.length > 0);
+  const loadProjectSkills = projectSkills.load;
+  useEffect(() => {
+    if (slashQuery !== null && !slashDismissed) {
+      void loadProjectSkills();
+    }
+  }, [slashQuery, slashDismissed, loadProjectSkills]);
+  useEffect(() => {
+    if (!slashAutocompleteOpen) {
+      return;
+    }
+    const dismissOnOutsidePointer = (event: PointerEvent) => {
+      if (!composerWrapRef.current?.contains(event.target as Node)) {
+        setSlashDismissed(true);
+      }
+    };
+    document.addEventListener('pointerdown', dismissOnOutsidePointer);
+    return () => document.removeEventListener('pointerdown', dismissOnOutsidePointer);
+  }, [slashAutocompleteOpen]);
+
+  const applySlashSkill = useCallback((entry: ProjectSkillEntry) => {
+    recordRecentSkill(entry.command);
+    setPrompt(`${entry.command} `);
+    composerInputRef.current?.focus();
+  }, [recordRecentSkill]);
   const workspaceFiles = useWorkspaceFiles('/workspace', {
     projectId,
     workspacePanelId: activeWorkspacePanelId,
@@ -2139,6 +2183,28 @@ export function ProjectChatSurface({
   }, [handleTimelineChromeScroll, updateJumpToLatestVisibility]);
 
   const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slashAutocompleteOpen && slashMatches.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setSlashActiveIndex((current) => (current + 1) % slashMatches.length);
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setSlashActiveIndex((current) => (current - 1 + slashMatches.length) % slashMatches.length);
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setSlashDismissed(true);
+        return;
+      }
+      if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey && !event.metaKey && !event.ctrlKey)) {
+        event.preventDefault();
+        applySlashSkill(slashMatches[slashActiveIndex] ?? slashMatches[0]);
+        return;
+      }
+    }
     if (event.key !== 'Enter' || event.shiftKey || (!event.metaKey && !event.ctrlKey)) {
       return;
     }
@@ -3695,6 +3761,14 @@ export function ProjectChatSurface({
                   )}
                 </div>
               )}
+              <ProjectComposerSlashAutocomplete
+                open={slashAutocompleteOpen}
+                entries={slashMatches}
+                loading={projectSkills.loading}
+                activeIndex={slashActiveIndex}
+                onHoverIndex={setSlashActiveIndex}
+                onSelect={applySlashSkill}
+              />
               <textarea
                 ref={composerInputRef}
                 className="cmp__input"

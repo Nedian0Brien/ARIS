@@ -3,14 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FolderOpen, Image as ImageIcon, Loader2, Puzzle, Search, X } from 'lucide-react';
+import { SKILL_SOURCE_LABELS } from '@/components/project-chat/helpers/skillEntries';
 import type { ProjectSkillEntry } from '@/lib/projectSkills';
-
-const SOURCE_LABELS: Record<ProjectSkillEntry['source'], string> = {
-  'project-command': '프로젝트 커맨드',
-  'project-skill': '프로젝트 스킬',
-  'user-command': '내 커맨드',
-  'user-skill': '내 스킬',
-};
 
 function matchesQuery(entry: ProjectSkillEntry, normalizedQuery: string): boolean {
   return entry.command.toLowerCase().includes(normalizedQuery)
@@ -96,7 +90,7 @@ export function ProjectComposerActionSheet({
     >
       <span className="pc-sheet__skill-command">{entry.command}</span>
       <span className="pc-sheet__skill-meta">
-        <span className="pc-sheet__skill-source">{SOURCE_LABELS[entry.source]}</span>
+        <span className="pc-sheet__skill-source">{SKILL_SOURCE_LABELS[entry.source]}</span>
         {entry.description && <span className="pc-sheet__skill-desc">{entry.description}</span>}
       </span>
     </button>

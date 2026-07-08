@@ -300,4 +300,22 @@ test('스크롤 시 상단 크롬 숨김/복원과 컴포저 pill 축소·확장
     await page.locator('.pc-sheet__close').click();
     await expect(page.locator('.pc-sheet__panel')).toHaveCount(0);
   }
+
+  // `/` 인라인 자동완성: 입력 → 목록 표시, Enter → 최상단 항목 삽입
+  await composerInput.fill('/');
+  await expect(page.locator('[data-project-chat-screen] .cmp-slash')).toBeVisible();
+  const slashFirstItem = page.locator('[data-project-chat-screen] .cmp-slash__item').first();
+  await expect(slashFirstItem).toBeVisible();
+  await page.waitForTimeout(250);
+  await removeDevOverlays(page);
+  await page.screenshot({ path: 'test-results/chat-slash-autocomplete.png' });
+  const slashFirstCommand = await slashFirstItem.locator('.cmp-slash__command').innerText();
+  await composerInput.press('Enter');
+  await expect(composerInput).toHaveValue(`${slashFirstCommand} `);
+  await expect(page.locator('[data-project-chat-screen] .cmp-slash')).toHaveCount(0);
+
+  // 일치하는 스킬이 없으면 팝업이 뜨지 않는다 (경로 입력 등을 방해하지 않음)
+  await composerInput.fill('/zzz-not-a-skill');
+  await page.waitForTimeout(300);
+  await expect(page.locator('[data-project-chat-screen] .cmp-slash')).toHaveCount(0);
 });
