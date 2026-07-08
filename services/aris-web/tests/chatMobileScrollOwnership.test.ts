@@ -25,7 +25,7 @@ describe('chat mobile scroll ownership', () => {
     const timeline = readCssBlock(projectChatCss, '.pc-proto .tl');
 
     expect(proto).toContain('overflow: hidden;');
-    expect(shell).toContain('height: calc(100vh - 238px);');
+    expect(shell).toContain('height: calc(var(--app-vh, 100dvh) - 238px);');
     expect(main).toContain('min-height: 0;');
     expect(timeline).toContain('overflow-y: auto;');
     expect(timeline).not.toContain('overflow: visible;');
