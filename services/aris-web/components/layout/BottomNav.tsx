@@ -160,8 +160,17 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
     { id: 'files', label: 'Files', icon: FolderTree },
   ];
 
+  // 숨김 상태에서는 DOM에서 완전히 제거한다. CSS로 뷰포트 아래에 숨겨두면
+  // (offscreen fixed + backdrop-filter 컴포지팅 레이어) iOS Safari가 하단 툴바를
+  // 접을 때 그 자리에 죽은 띠를 남겨 콘텐츠 영역을 잘라먹는다.
+  // 스크롤 감지 훅은 계속 살아 있으므로 위로 스크롤하면 다시 마운트된다.
+  // 재등장 애니메이션은 .bottom-nav의 CSS mount 애니메이션이 담당한다.
+  if (hidden) {
+    return null;
+  }
+
   return (
-    <nav className={`bottom-nav${hidden ? ' bottom-nav-hidden' : ''}`} ref={navRef}>
+    <nav className="bottom-nav" ref={navRef}>
       <span
         className="bottom-nav-indicator"
         aria-hidden="true"
