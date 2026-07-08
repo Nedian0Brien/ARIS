@@ -102,6 +102,8 @@ import {
 import { GitActionMark } from '@/components/project-chat/helpers/actionMarks';
 import { useComposerAutoGrow } from '@/components/project-chat/helpers/useComposerAutoGrow';
 import { useMobileChatChrome } from '@/components/project-chat/helpers/useMobileChatChrome';
+import { AppChromeMenuItems } from '@/components/layout/AppChromeMenu';
+import type { ThemeMode } from '@/lib/theme/clientTheme';
 import { useProjectSkills } from '@/components/project-chat/helpers/useProjectSkills';
 import { useRecentSkills } from '@/components/project-chat/helpers/useRecentSkills';
 import { useSlashAutocomplete } from '@/components/project-chat/helpers/useSlashAutocomplete';
@@ -1183,12 +1185,16 @@ export function ProjectChatSurface({
   modelLabel,
   onBackToChatList,
   onChatOpen,
+  onLogoHome,
+  onOpenSettings,
+  onThemeChange,
   projectName,
   projectPath,
   recentPreview,
   selectedChatId,
   session,
   surfaceMode = 'full',
+  themeMode,
   tokenLabel,
 }: {
   fileCount: number;
@@ -1196,12 +1202,16 @@ export function ProjectChatSurface({
   modelLabel: string;
   onBackToChatList: () => void;
   onChatOpen: (chatId: string) => void;
+  onLogoHome?: () => void;
+  onOpenSettings?: () => void;
+  onThemeChange?: (mode: ThemeMode) => void;
   projectName: string;
   projectPath: string;
   recentPreview: string;
   selectedChatId: string | null;
   session: SessionSummary;
   surfaceMode?: ProjectChatSurfaceMode;
+  themeMode?: ThemeMode;
   tokenLabel: string;
 }) {
   const projectId = session.id;
@@ -1345,6 +1355,27 @@ export function ProjectChatSurface({
   const prototypeRef = useRef<HTMLDivElement | null>(null);
   const composerWrapRef = useRef<HTMLElement | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const chatHeaderObserverRef = useRef<ResizeObserver | null>(null);
+  // 스크롤 시 헤더를 아예 언마운트하므로(true unmount) 일반 ref로는 옵저버를
+  // 붙일 시점을 놓친다. 콜백 ref로 마운트/언마운트마다 직접 연결·해제한다.
+  const setChatHeaderNode = useCallback((node: HTMLElement | null) => {
+    chatHeaderObserverRef.current?.disconnect();
+    chatHeaderObserverRef.current = null;
+    if (!node) {
+      return;
+    }
+    const syncHeaderHeight = () => {
+      const height = Math.ceil(node.getBoundingClientRect().height);
+      prototypeRef.current?.style.setProperty('--pc-header-height', `${height}px`);
+    };
+    syncHeaderHeight();
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const observer = new ResizeObserver(syncHeaderHeight);
+    observer.observe(node);
+    chatHeaderObserverRef.current = observer;
+  }, []);
   const isComposerInputFocused = useCallback(
     () => Boolean(composerInputRef.current) && document.activeElement === composerInputRef.current,
     [],
@@ -1354,6 +1385,7 @@ export function ProjectChatSurface({
     handleTimelineChromeScroll,
     isChromeHidden,
     isComposerCollapsed,
+    isMobileViewport,
     suppressChromeScroll,
   } = useMobileChatChrome({ isComposerInputFocused });
   useComposerAutoGrow(composerInputRef, prompt, !isComposerCollapsed);
@@ -2954,7 +2986,8 @@ export function ProjectChatSurface({
       <>
       <div className="shell">
         <main className="shell__main">
-          <header className="ch">
+          {!isChromeHidden && (
+          <header ref={setChatHeaderNode} className="ch">
             <button type="button" className="ch__menu ch__menu--visible" onClick={onBackToChatList} aria-label="Back to chats">
               <ChevronLeft size={18} />
             </button>
@@ -3006,11 +3039,25 @@ export function ProjectChatSurface({
                       <div className="ch-context-menu__label">액션 카드 밀도</div>
                       <DensityMenuList onSelect={() => setContextMenuOpen(false)} />
                     </div>
+                    {/* 모바일은 상단 앱 탑바를 렌더링하지 않으므로(1줄 헤더),
+                        홈 이동·설정·테마를 이 메뉴로 옮겨 기능 손실 없이 통합한다. */}
+                    {isMobileViewport && onOpenSettings && onThemeChange && (
+                      <div className="ch-context-menu__section ch-context-menu__section--divider">
+                        <AppChromeMenuItems
+                          onLogoHome={onLogoHome}
+                          onOpenSettings={onOpenSettings}
+                          onSelect={() => setContextMenuOpen(false)}
+                          onThemeChange={onThemeChange}
+                          themeMode={themeMode ?? 'system'}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
           </header>
+          )}
 
           <div className="tl" ref={timelineRef} onScroll={handleTimelineScroll}>
             <div className="tl__container">

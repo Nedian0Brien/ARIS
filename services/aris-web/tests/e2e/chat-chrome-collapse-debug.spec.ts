@@ -125,15 +125,37 @@ test('스크롤 시 상단 크롬 숨김/복원과 컴포저 pill 축소·확장
   const timeline = page.locator('[data-project-chat-screen] .tl');
   const composerInput = page.locator('[data-project-chat-screen] .cmp-wrap .cmp__input');
 
-  // 초기 상태: 크롬 표시 + 컴포저 확장
+  // 초기 상태: 크롬 표시 + 컴포저 확장. 앱 탑바는 모바일 채팅 화면에서 항상
+  // 렌더링되지 않고(1줄 헤더 병합), 채팅 헤더(.ch)가 유일한 헤더다.
   await expect(chatScreen).toHaveAttribute('data-chrome', 'visible');
   await expect(chatScreen).toHaveAttribute('data-composer', 'expanded');
-  await expect(topbar).toBeVisible();
+  await expect(topbar).toBeHidden();
+  await expect(chatHeader).toHaveCount(1);
+  await expect(chatHeader).toBeVisible();
 
+  // 앱 탑바가 사라진 대신, 홈 이동/설정/테마가 채팅 헤더의 More 메뉴로
+  // 기능 손실 없이 통합되어 있어야 한다.
+  await removeDevOverlays(page);
+  await page.locator('[data-project-chat-screen] .ch__action[aria-label="More chat actions"]').click();
+  await expect(page.locator('.ch-context-menu')).toBeVisible();
+  const mergedMenuItems = page.locator('.ch-context-menu .m-context-menu__item');
+  await expect(mergedMenuItems).toContainText(['홈으로 이동', '설정']);
+  await expect(page.locator('.ch-context-menu .m-theme-toggle__item')).toHaveCount(3);
+  await page.screenshot({ path: 'test-results/chat-single-header-menu.png' });
+  await page.locator('[data-project-chat-screen] .ch__action[aria-label="More chat actions"]').click();
+  await expect(page.locator('.ch-context-menu')).toHaveCount(0);
+
+  // 타임라인 박스 자체(top/height)는 헤더 표시 여부와 무관하게 항상 고정이어야
+  // 한다 — 헤더는 오버레이이고 확보 공간은 padding-top으로만 표현되므로,
+  // 스크롤 중 .tl의 화면상 위치가 흔들리지 않는다(= 스크롤이 움직이는 버그 없음).
+  const fixedTimelineTop = await timeline.evaluate((node) => Math.round(node.getBoundingClientRect().top));
   const initialTimelineHeight = await timeline.evaluate((node) => node.clientHeight);
   // 컴포저는 오버레이라서 확보 공간은 타임라인 하단 패딩(--pc-composer-height 연동)으로 측정
   const expandedTimelinePadding = await timeline.evaluate(
     (node) => Number.parseFloat(window.getComputedStyle(node).paddingBottom),
+  );
+  const expandedTimelinePaddingTop = await timeline.evaluate(
+    (node) => Number.parseFloat(window.getComputedStyle(node).paddingTop),
   );
 
   // 스크롤 가능하도록 스페이서 주입 후 최상단 근처로 이동
@@ -157,31 +179,36 @@ test('스크롤 시 상단 크롬 숨김/복원과 컴포저 pill 축소·확장
   await timelineScrollBy(page, 200);
   await expect(chatScreen).toHaveAttribute('data-chrome', 'hidden');
   await expect(chatScreen).toHaveAttribute('data-composer', 'collapsed');
-  // opacity는 트랜지션 속성이라 headless 환경에서 중간값에 머물 수 있으므로
-  // 즉시 적용되는 pointer-events로 숨김 상태를 판정한다.
-  await expect
-    .poll(() => topbar.evaluate((node) => window.getComputedStyle(node).pointerEvents))
-    .toBe('none');
-  await expect
-    .poll(() => chatHeader.evaluate((node) => window.getComputedStyle(node).pointerEvents))
-    .toBe('none');
+  // 헤더는 숨김 시 화면 밖으로 옮기는 게 아니라 아예 언마운트된다(true unmount).
+  await expect(chatHeader).toHaveCount(0);
 
-  // pill이 나타나고, 타임라인이 실제로 세로 공간을 얻었는지 확인
+  // pill이 나타나고, 타임라인이 실제로 세로 공간을 얻었는지 확인.
+  // 타임라인의 박스 자체(top/height)는 그대로이고 padding만 줄어야 한다 —
+  // 헤더/컴포저 표시 여부가 .tl의 화면상 위치를 흔들면 안 된다.
   await expect(page.locator('[data-project-chat-screen] .cmp-pill')).toBeVisible();
   await page.waitForTimeout(400);
   const collapsedTimelinePadding = await timeline.evaluate(
     (node) => Number.parseFloat(window.getComputedStyle(node).paddingBottom),
   );
-  const hiddenTimelineHeight = await timeline.evaluate((node) => node.clientHeight);
+  const collapsedTimelinePaddingTop = await timeline.evaluate(
+    (node) => Number.parseFloat(window.getComputedStyle(node).paddingTop),
+  );
+  const collapsedTimelineTop = await timeline.evaluate((node) => Math.round(node.getBoundingClientRect().top));
+  const collapsedTimelineHeight = await timeline.evaluate((node) => node.clientHeight);
   expect(collapsedTimelinePadding).toBeLessThan(expandedTimelinePadding - 40);
-  expect(hiddenTimelineHeight).toBeGreaterThan(initialTimelineHeight + 80);
+  expect(collapsedTimelinePaddingTop).toBeLessThan(expandedTimelinePaddingTop - 20);
+  expect(collapsedTimelineTop).toBe(fixedTimelineTop);
+  expect(collapsedTimelineHeight).toBe(initialTimelineHeight);
   await removeDevOverlays(page);
   await page.screenshot({ path: 'test-results/chat-chrome-collapsed.png' });
 
-  // 위로 스크롤 → 크롬 복원, 컴포저는 축소 유지
+  // 위로 스크롤 → 크롬 복원(헤더 재마운트), 컴포저는 축소 유지
   await timelineScrollBy(page, -120);
   await expect(chatScreen).toHaveAttribute('data-chrome', 'visible');
   await expect(chatScreen).toHaveAttribute('data-composer', 'collapsed');
+  await expect(chatHeader).toHaveCount(1);
+  await expect(chatHeader).toBeVisible();
+  expect(await timeline.evaluate((node) => Math.round(node.getBoundingClientRect().top))).toBe(fixedTimelineTop);
 
   // pill 본문 터치 → 확장 + 입력 포커스
   await removeDevOverlays(page);
@@ -318,4 +345,51 @@ test('스크롤 시 상단 크롬 숨김/복원과 컴포저 pill 축소·확장
   await composerInput.fill('/zzz-not-a-skill');
   await page.waitForTimeout(300);
   await expect(page.locator('[data-project-chat-screen] .cmp-slash')).toHaveCount(0);
+});
+
+test('컴포저 포커스 후 키보드가 열려도 body에 스크롤 가능한 여백이 생기지 않는다', async ({ page }) => {
+  const projectId = process.env.CHAT_CHROME_PROJECT_ID;
+  test.skip(!projectId, 'CHAT_CHROME_PROJECT_ID is required');
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await login(page);
+  await openProjectChatScreen(page, projectId!);
+  await removeDevOverlays(page);
+
+  const composerInput = page.locator('[data-project-chat-screen] .cmp-wrap .cmp__input');
+  await composerInput.click();
+  await page.waitForTimeout(100);
+
+  // 실제 모바일 키보드가 열리는 것을 흉내낸다: visualViewport.height를 여러
+  // 단계로 줄여가며 resize 이벤트를 발생시킨다(ViewportHeightSync가 구독).
+  for (const height of [664, 560, 460, 400, 380, 380]) {
+    await page.evaluate((h) => {
+      Object.defineProperty(window.visualViewport, 'height', { get: () => h, configurable: true });
+      window.visualViewport!.dispatchEvent(new Event('resize'));
+    }, height);
+    await page.waitForTimeout(50);
+  }
+  await page.waitForTimeout(900);
+
+  const state = await page.evaluate(() => ({
+    keyboardOpen: document.documentElement.dataset.keyboardOpen,
+    bodyScrollHeight: document.body.scrollHeight,
+    visualViewportHeight: window.visualViewport?.height,
+    scrollY: window.scrollY,
+  }));
+  expect(state.keyboardOpen).toBe('true');
+  // body의 실제 스크롤 가능 높이가 라이브 visualViewport 높이를 초과하면 안 된다
+  // (초과분이 곧 브라우저의 네이티브 "포커스 요소 스크롤"이 컴포저를 화면 밖으로
+  // 끌고 가는 여지였다).
+  expect(state.bodyScrollHeight).toBeLessThanOrEqual((state.visualViewportHeight ?? 0) + 1);
+  expect(state.scrollY).toBe(0);
+
+  const cmpRect = await page.locator('[data-project-chat-screen] .cmp-wrap .cmp').evaluate((node) => {
+    const r = node.getBoundingClientRect();
+    return { top: Math.round(r.top), bottom: Math.round(r.bottom) };
+  });
+  // 컴포저가 화면 맨 위로 끌려가지 않고, 축소된 뷰포트 안에서 하단 근처에 남아있어야 한다
+  expect(cmpRect.top).toBeGreaterThan(50);
+  expect(cmpRect.bottom).toBeLessThanOrEqual((state.visualViewportHeight ?? 0) + 1);
+  await page.screenshot({ path: 'test-results/chat-keyboard-open-no-overflow.png' });
 });

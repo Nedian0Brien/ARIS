@@ -994,3 +994,10 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
 .pc-proto .cmd-mini-pop__meta {
   font-size: 10.5px; color: var(--text-tertiary); font-family: var(--font-mono);
 }
+
+/* 모바일 채팅 헤더 병합 메뉴: 밀도 섹션과 앱 크롬(홈/설정/테마) 섹션 사이 구분선 */
+.pc-proto .ch-context-menu__section--divider {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}

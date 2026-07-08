@@ -13,6 +13,7 @@ const projectRunStatusChip = readFileSync(resolve(__dirname, '../components/proj
 const projectChatEventsHelper = readFileSync(resolve(__dirname, '../components/project-chat/helpers/projectChatEvents.ts'), 'utf8');
 const actionMarksHelper = readFileSync(resolve(__dirname, '../components/project-chat/helpers/actionMarks.tsx'), 'utf8');
 const commandTokensHelper = readFileSync(resolve(__dirname, '../components/project-chat/helpers/commandTokens.tsx'), 'utf8');
+const appChromeMenuSource = readFileSync(resolve(__dirname, '../components/layout/AppChromeMenu.tsx'), 'utf8');
 const uiCss = readAppStyles();
 const terminalRoute = readFileSync(resolve(__dirname, '../app/api/runtime/sessions/[sessionId]/terminal/route.ts'), 'utf8');
 
@@ -45,21 +46,21 @@ describe('project list surface', () => {
     const topbarStart = homeClient.indexOf('function Topbar({');
     const homeOrbStart = homeClient.indexOf('function HomeOrb()');
     const topbarSource = homeClient.slice(topbarStart, homeOrbStart);
-    const menuStart = topbarSource.indexOf('className="m-context-menu"');
-    const menuEnd = topbarSource.indexOf('</header>', menuStart);
-    const menuSource = topbarSource.slice(menuStart, menuEnd);
 
-    expect(menuSource).toContain('className="m-context-menu"');
-    expect(menuSource).toContain('className="m-context-menu__button"');
-    expect(menuSource).toContain('aria-label="상단 헤더 메뉴"');
-    expect(menuSource).toContain('aria-haspopup="menu"');
+    // Topbar는 설정/테마 메뉴 자체를 그리지 않고 AppChromeMenu(채팅 헤더와
+    // 공유하는 컴포넌트)에 위임한다 — 로직 중복 없이 두 헤더가 같은 메뉴를 쓴다.
     expect(topbarSource).toContain('onOpenSettings: () => void;');
-    expect(topbarSource).toContain('const handleOpenSettings = () => {');
-    expect(menuSource).toContain('className="m-context-menu__item"');
-    expect(menuSource).toContain('설정');
-    expect(menuSource).toContain('className="m-theme-toggle"');
-    expect(menuSource).toContain('aria-label="테마 선택"');
+    expect(topbarSource).toContain('<AppChromeMenu');
     expect(topbarSource).not.toContain('New project');
+
+    expect(appChromeMenuSource).toContain('className="m-context-menu"');
+    expect(appChromeMenuSource).toContain('className="m-context-menu__button"');
+    expect(appChromeMenuSource).toContain('aria-label="상단 헤더 메뉴"');
+    expect(appChromeMenuSource).toContain('aria-haspopup="menu"');
+    expect(appChromeMenuSource).toContain('className="m-context-menu__item"');
+    expect(appChromeMenuSource).toContain('설정');
+    expect(appChromeMenuSource).toContain('className="m-theme-toggle"');
+    expect(appChromeMenuSource).toContain('aria-label="테마 선택"');
     expect(uiCss).toContain('.m-context-menu__panel');
   });
 
@@ -693,9 +694,17 @@ describe('project list surface', () => {
     expect(homeClient).toContain("className={`app-shell app-shell-ia${shouldShowBottomNav ? '' : ' app-shell-ia--chat-screen'}${projectSurfaceMode === 'panel' ? ' app-shell-ia--project-panel' : ''}`}");
     expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.app-shell-ia--chat-screen\s*\{[^}]*padding-bottom:\s*0;/s);
     expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.app-shell-ia--chat-screen \.aris-ia-shell\s*\{[^}]*min-height:\s*var\(--app-vh,\s*100dvh\);/s);
-    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto\s*\{[^}]*min-height:\s*calc\(var\(--app-vh,\s*100dvh\) - 48px\);/s);
-    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto \.shell\s*\{[^}]*height:\s*calc\(var\(--app-vh,\s*100dvh\) - 48px\);[^}]*min-height:\s*0;/s);
-    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto\[data-chrome="hidden"\] \.shell\s*\{[^}]*height:\s*var\(--app-vh,\s*100dvh\);/s);
+    // 모바일 채팅 화면은 앱 탑바를 항상 렌더링하지 않으므로(1줄 헤더 병합)
+    // .pc-proto/.shell 높이 계산에서 더 이상 그 48px을 빼지 않는다.
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.m-main-scroll--project-chat-detail \.pc-proto\s*\{[^}]*min-height:\s*var\(--app-vh,\s*100dvh\);/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.m-main-scroll--project-chat-detail \.pc-proto \.shell\s*\{[^}]*height:\s*var\(--app-vh,\s*100dvh\);[^}]*min-height:\s*0;/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.app-shell-ia--chat-screen \.m-top\s*\{[^}]*display:\s*none;/s);
+    // 채팅 헤더는 스크롤 숨김 시 이동시키지 않고 언마운트되며(React 쪽), 표시
+    // 중에는 타임라인 위 오버레이라 .tl/.shell__main의 박스 크기를 흔들지 않는다.
+    // 헤더가 차지하던 공간은 .tl의 padding-top으로만 표현되고 그 값만 토글된다.
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto \.shell__main > \.ch\s*\{[^}]*position:\s*absolute;/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto \.shell__main > \.tl\s*\{[^}]*padding-top:\s*var\(--pc-header-height,\s*52px\);/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto\[data-chrome="hidden"\] \.shell__main > \.tl\s*\{[^}]*padding-top:\s*0;/s);
     expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto \.tl\s*\{[^}]*min-height:\s*0;/s);
     expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto \.cmp__top\s*\{[^}]*flex-direction:\s*row;[^}]*overflow-x:\s*auto;/s);
     expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto \.cmp__toolbar\s*\{[^}]*flex-direction:\s*row;/s);
