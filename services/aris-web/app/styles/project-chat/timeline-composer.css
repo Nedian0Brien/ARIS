@@ -3,7 +3,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 420px;
   grid-template-areas: "main workspace";
-  height: calc(100vh - 238px);
+  height: calc(var(--app-vh, 100dvh) - 238px);
   min-height: 620px;
   background: var(--canvas);
 }
