@@ -1,0 +1,274 @@
+.resourceLabelList {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+}
+
+.inlineResourceChipWrap {
+  display: inline-flex;
+  vertical-align: middle;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.resourceChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: 0.14rem 0.45rem;
+  white-space: nowrap;
+  max-width: 100%;
+  min-width: 0;
+  line-height: 1;
+}
+
+.resourceChipButton {
+  cursor: pointer;
+}
+
+.resourceChipButton:disabled {
+  cursor: default;
+}
+
+.resourceChipButton:hover:not(:disabled) {
+  border-color: var(--chat-item-hover-border);
+  background: var(--chat-surface-hover);
+}
+
+.resourceChipFolder {
+  border-color: rgba(96, 165, 250, 0.5);
+  background: rgba(59, 130, 246, 0.14);
+}
+
+.resourceChipFile {
+  border-color: var(--line-strong);
+  background: var(--surface-subtle);
+}
+
+.resourceChipIcon {
+  flex-shrink: 0;
+}
+
+.resourceChipText {
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--chat-text-primary);
+  min-width: 0;
+  max-width: min(52vw, 18rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.resourceIconFolder {
+  color: var(--chat-accent);
+}
+
+.resourceIconCode {
+  color: var(--chat-accent);
+}
+
+.resourceIconShell {
+  color: var(--accent-emerald);
+}
+
+.resourceIconConfig {
+  color: var(--accent-amber);
+}
+
+.resourceIconDoc {
+  color: var(--accent-slate);
+}
+
+.resourceIconOther {
+  color: var(--chat-text-muted);
+}
+
+.markdownRoot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.markdownRoot > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.markdownParagraph {
+  margin: 0;
+  overflow-wrap: break-word;
+  word-break: keep-all;
+}
+
+.markdownHeading {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.35;
+  font-weight: 800;
+  color: var(--chat-text-primary);
+}
+
+.markdownList {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 0.24rem;
+}
+
+.markdownOrderedList {
+  margin: 0;
+  padding-left: 1.15rem;
+  list-style-type: decimal;
+}
+
+.markdownOrderedList > .markdownListItem + .markdownListItem {
+  margin-top: 0.24rem;
+}
+
+.markdownListItem {
+  margin: 0;
+}
+
+.markdownQuote {
+  margin: 0;
+  padding: 0.42rem 0.6rem;
+  border-left: 3px solid color-mix(in srgb, var(--chat-accent) 45%, transparent);
+  background: var(--chat-surface-hover);
+  border-radius: 8px;
+}
+
+.markdownTableWrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--chat-msg-border);
+  border-radius: 10px;
+  background: var(--chat-control-bg);
+}
+
+.markdownTable {
+  width: 100%;
+  min-width: 320px;
+  border-collapse: collapse;
+  font-size: 0.79rem;
+  line-height: 1.45;
+}
+
+.markdownTable th,
+.markdownTable td {
+  padding: 0.4rem 0.56rem;
+  border-bottom: 1px solid var(--chat-msg-border);
+  vertical-align: top;
+}
+
+.markdownTable th {
+  font-weight: 800;
+  color: var(--chat-text-primary);
+  background: var(--chat-surface-subtle);
+}
+
+.markdownTable td {
+  color: var(--chat-text-primary);
+  background: var(--chat-control-bg);
+}
+
+.markdownTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.markdownCodeBlock {
+  margin: 0;
+  border-radius: 10px;
+  border: 1px solid var(--chat-msg-border);
+  background: rgba(15, 23, 42, 0.95);
+  color: #e2e8f0;
+  font-size: 0.76rem;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.markdownCodeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.36rem 0.56rem 0;
+  min-height: 1.6rem;
+}
+
+.markdownCodePre {
+  margin: 0;
+  padding: 0.4rem 0.56rem 0.56rem;
+  overflow-x: auto;
+  white-space: pre;
+  line-height: 1.45;
+  background: transparent;
+}
+
+.copyCodeBtn {
+  font-size: 0.65rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--font-sans, sans-serif);
+  white-space: nowrap;
+}
+
+.copyCodeBtn:hover {
+  background: rgba(148, 163, 184, 0.2);
+  color: #e2e8f0;
+}
+
+.markdownCodeLang {
+  display: inline-block;
+  margin-bottom: 0.36rem;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+  color: #cbd5e1;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.markdownInlineCode {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  border-radius: 6px;
+  padding: 0.08rem 0.32rem;
+  background: var(--chat-surface-subtle);
+  color: var(--chat-text-primary);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.markdownLink {
+  display: inline;
+  max-width: 100%;
+  color: var(--chat-accent);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.markdownStrong {
+  font-weight: 800;
+}
+
+.markdownEmphasis {
+  font-style: italic;
+}

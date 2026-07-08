@@ -212,7 +212,7 @@ describe('project list surface', () => {
 
   it('wires the prototype chat controls to real project-chat state', () => {
     expect(projectChatSurface).toContain("type ComposerMode = 'agent' | 'plan' | 'terminal';");
-    expect(projectChatSurface).toContain("type WorkspaceTab = 'run' | 'files' | 'git' | 'terminal' | 'context';");
+    expect(projectChatSurface).toContain("type WorkspaceTab = 'run' | 'files' | 'git' | 'terminal' | 'context' | 'subagents';");
     expect(projectChatSurface).toContain("type PreviewState = 'closed' | 'open' | 'dock';");
     expect(projectChatSurface).toContain('const [composerMode, setComposerMode] = useState<ComposerMode>');
     expect(projectChatSurface).toContain('const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>');
@@ -313,7 +313,7 @@ describe('project list surface', () => {
   });
 
   it('renders project chat text replies through the shared markdown renderer', () => {
-    expect(projectChatSurface).toContain("import { MarkdownContent } from '@/app/_legacy/sessions/[sessionId]/chat-screen/center-pane/renderers/MarkdownContent';");
+    expect(projectChatSurface).toContain("import { MarkdownContent } from '@/components/chat/MarkdownContent';");
     expect(projectChatSurface).toContain('<div className="msg__text"><MarkdownContent body={getEventText(item)} /></div>');
     expect(projectChatSurface).toContain('<div className="chturn__agent-text"><MarkdownContent body={item.agentText} /></div>');
   });

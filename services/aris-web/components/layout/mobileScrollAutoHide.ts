@@ -1,4 +1,4 @@
-import type { SessionScrollPhase } from '@/app/_legacy/sessions/[sessionId]/chatScroll';
+import type { SessionScrollPhase } from '@/lib/scroll/sessionScrollPhase';
 
 export type AutoHideScrollState = {
   hidden: boolean;
