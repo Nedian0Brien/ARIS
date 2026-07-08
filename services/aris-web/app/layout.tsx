@@ -115,6 +115,10 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
+  // Android/Chrome: 키보드가 열릴 때 레이아웃 뷰포트 자체를 줄여서(visual
+  // viewport가 아니라) 100dvh 등 CSS 단위가 자연스럽게 따라가게 한다.
+  // iOS Safari는 이 속성을 지원하지 않아 무시되므로 부작용이 없다.
+  interactiveWidget: 'resizes-content',
 };
 
 export default function RootLayout({

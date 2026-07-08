@@ -469,7 +469,10 @@
     padding-top: 0;
   }
 
-  /* 입력 길이에 따른 auto-grow: 상한은 뷰포트의 30% (키보드 오픈 시 함께 줄어듦) */
+  /* 입력 길이에 따른 auto-grow: 상한은 뷰포트의 30%.
+     --app-vh는 키보드가 열린 동안 이전 높이로 고정되므로 실제로는 따라 줄지
+     않는다 — 키보드 중 축소는 ia-shell.css의 data-keyboard-open 규칙이
+     --visual-viewport-height로 override한다. */
   .pc-proto .cmp__input {
     padding: 11px 14px;
     min-height: 44px;
