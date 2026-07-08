@@ -100,6 +100,8 @@ import {
   eventCommand,
 } from '@/components/project-chat/helpers/projectChatEvents';
 import { GitActionMark } from '@/components/project-chat/helpers/actionMarks';
+import { useComposerAutoGrow } from '@/components/project-chat/helpers/useComposerAutoGrow';
+import { useMobileChatChrome } from '@/components/project-chat/helpers/useMobileChatChrome';
 import { ProjectRunStatusChip } from '@/components/project-chat/ProjectRunStatusChip';
 import { ProjectActionCard } from '@/components/project-chat/ProjectActionCard';
 import { ProjectPermissionRequestMessage } from '@/components/project-chat/ProjectPermissionRequestMessage';
@@ -748,6 +750,9 @@ function ProjectChatComposer({
   selectedModelId: string;
   selectedProvider: ModelProvider;
 }) {
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  useComposerAutoGrow(inputRef, prompt);
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== 'Enter' || event.shiftKey || (!event.metaKey && !event.ctrlKey)) {
       return;
@@ -858,12 +863,13 @@ function ProjectChatComposer({
           </div>
         </div>
         <textarea
+          ref={inputRef}
           className="cmp__input"
           value={prompt}
           onChange={(event) => onPromptChange(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          rows={2}
+          rows={1}
         />
         <div className="cmp__toolbar">
           <div className="cmp__tools">
@@ -1815,6 +1821,25 @@ export function ProjectChatSurface({
   const parallelLayoutStorageKey = useMemo(() => createProjectPanelLayoutStorageKey(projectId), [projectId]);
   const prototypeRef = useRef<HTMLDivElement | null>(null);
   const composerWrapRef = useRef<HTMLElement | null>(null);
+  const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const isComposerInputFocused = useCallback(
+    () => Boolean(composerInputRef.current) && document.activeElement === composerInputRef.current,
+    [],
+  );
+  const {
+    expandComposer,
+    handleTimelineChromeScroll,
+    isChromeHidden,
+    isComposerCollapsed,
+    isMobileViewport,
+    suppressChromeScroll,
+  } = useMobileChatChrome({ isComposerInputFocused });
+  useComposerAutoGrow(composerInputRef, prompt, !isComposerCollapsed);
+  useEffect(() => {
+    if (isComposerCollapsed) {
+      setModelSelectorOpen(false);
+    }
+  }, [isComposerCollapsed]);
   const workspaceFiles = useWorkspaceFiles('/workspace', {
     projectId,
     workspacePanelId: activeWorkspacePanelId,
@@ -2020,6 +2045,7 @@ export function ProjectChatSurface({
           return;
         }
         const nextScrollHeight = nextTimelineNode.scrollHeight;
+        suppressChromeScroll();
         nextTimelineNode.scrollTop = nextScrollHeight - previousScrollHeight + previousScrollTop;
         updateJumpToLatestVisibility();
       });
@@ -2033,11 +2059,15 @@ export function ProjectChatSurface({
         setIsLoadingOlderEvents(false);
       }
     }
-  }, [fetchEventsPage, selectedChatId, updateJumpToLatestVisibility]);
+  }, [fetchEventsPage, selectedChatId, suppressChromeScroll, updateJumpToLatestVisibility]);
 
   const handleTimelineScroll = useCallback(() => {
     updateJumpToLatestVisibility();
-  }, [updateJumpToLatestVisibility]);
+    const node = timelineRef.current;
+    if (node) {
+      handleTimelineChromeScroll(node);
+    }
+  }, [handleTimelineChromeScroll, updateJumpToLatestVisibility]);
 
   const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== 'Enter' || event.shiftKey || (!event.metaKey && !event.ctrlKey)) {
@@ -2100,6 +2130,7 @@ export function ProjectChatSurface({
   const handleJumpToLatest = () => {
     const targetId = visibleEvents.at(-1)?.id ?? null;
     setHighlightedMessageId(targetId);
+    suppressChromeScroll(1000);
     timelineRef.current?.scrollTo({ top: timelineRef.current.scrollHeight, behavior: 'smooth' });
     window.setTimeout(() => {
       setHighlightedMessageId(null);
@@ -2109,6 +2140,7 @@ export function ProjectChatSurface({
   const handleJumpToTurn = (turnId: string) => {
     setExpandedTurnId(turnId);
     setHighlightedMessageId(turnId);
+    suppressChromeScroll(1000);
     timelineRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     window.setTimeout(() => {
       setHighlightedMessageId(null);
@@ -2526,9 +2558,10 @@ export function ProjectChatSurface({
     if (!node) {
       return;
     }
+    suppressChromeScroll();
     node.scrollTop = node.scrollHeight;
     setShowJumpToLatest(false);
-  }, [events]);
+  }, [events, suppressChromeScroll]);
 
   useEffect(() => {
     selectedChatIdRef.current = selectedChatId;
@@ -2643,9 +2676,10 @@ export function ProjectChatSurface({
       return;
     }
     initialTailScrolledChatIdRef.current = selectedChatId;
+    suppressChromeScroll();
     node.scrollTop = node.scrollHeight;
     setShowJumpToLatest(false);
-  }, [events.length, eventsForChatId, isLoadingEvents, selectedChatId]);
+  }, [events.length, eventsForChatId, isLoadingEvents, selectedChatId, suppressChromeScroll]);
 
   useEffect(() => {
     const latestLifecycle = readLatestProjectRunLifecycle(events);
@@ -3098,6 +3132,8 @@ export function ProjectChatSurface({
       data-project-chat-screen
       data-mode={composerMode}
       data-surface={surfaceMode}
+      data-chrome={isChromeHidden ? 'hidden' : 'visible'}
+      data-composer={isComposerCollapsed ? 'collapsed' : 'expanded'}
       data-workspace={workspaceDrawerPhase === 'closing' ? 'closing' : workspaceOpen ? 'open' : 'closed'}
       data-workspace-ready={workspaceLayoutReady ? 'true' : 'false'}
       data-ws-tab={workspaceTab}
@@ -3397,7 +3433,15 @@ export function ProjectChatSurface({
           </div>
 
           <footer ref={composerWrapRef} className="cmp-wrap">
-            <form className="cmp" onSubmit={handleSubmit}>
+            <form
+              className="cmp"
+              onSubmit={handleSubmit}
+              onClick={() => {
+                if (!isComposerCollapsed) return;
+                expandComposer();
+                composerInputRef.current?.focus();
+              }}
+            >
               <div className="cmp__top">
                 <div className="cmp-mode" role="tablist" aria-label="Mode">
                   {(['agent', 'plan', 'terminal'] as ComposerMode[]).map((mode) => (
@@ -3501,12 +3545,16 @@ export function ProjectChatSurface({
                 </div>
               </div>
               <textarea
+                ref={composerInputRef}
                 className="cmp__input"
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
                 onKeyDown={handleComposerKeyDown}
-                placeholder="에이전트에게 무엇이든 요청하세요... Shift Enter 줄바꿈 · Cmd Enter 전송"
-                rows={2}
+                onFocus={expandComposer}
+                placeholder={isMobileViewport
+                  ? '에이전트에게 무엇이든 요청하세요...'
+                  : '에이전트에게 무엇이든 요청하세요... Shift Enter 줄바꿈 · Cmd Enter 전송'}
+                rows={1}
               />
               <div className="cmp__toolbar">
                 <div className="cmp__tools">

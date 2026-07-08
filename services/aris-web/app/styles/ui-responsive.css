@@ -86,6 +86,15 @@
   .pc-proto[data-workspace-ready="true"][data-workspace="closing"] .shell__workspace {
     animation: none;
   }
+
+  .app-shell-ia--chat-screen .m-top,
+  .pc-proto .ch,
+  .pc-proto .cmp-wrap,
+  .pc-proto .cmp,
+  .pc-proto .cmp__top,
+  .pc-proto .cmp__toolbar {
+    transition: none;
+  }
 }
 
 @media (max-width: 767px) {
@@ -413,6 +422,87 @@
 
   .pc-proto .cmp__tools {
     min-width: 0;
+  }
+
+  /* 스크롤 다운 시 상단 크롬(채팅 헤더 + 앱 탑바) 자동 숨김 */
+  .pc-proto .ch {
+    transition: margin-top 200ms var(--ease-smooth), opacity 160ms var(--ease-smooth);
+  }
+
+  .pc-proto[data-chrome="hidden"] .ch {
+    margin-top: -53px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .app-shell-ia--chat-screen .m-top {
+    transition: margin-top 200ms var(--ease-smooth), opacity 160ms var(--ease-smooth);
+  }
+
+  /* :has() 미지원 브라우저에서는 탑바 숨김과 화면 확장을 함께 포기해
+     레이아웃 높이가 어긋나지 않게 한 쌍으로 게이트한다. */
+  @supports selector(:has(*)) {
+    .app-shell-ia--chat-screen:has(.pc-proto[data-chrome="hidden"]) .m-top {
+      margin-top: -49px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .pc-proto[data-chrome="hidden"] {
+      min-height: var(--app-vh, 100dvh);
+    }
+  }
+
+  /* 입력 길이에 따른 auto-grow: 상한은 뷰포트의 30% (키보드 오픈 시 함께 줄어듦) */
+  .pc-proto .cmp__input {
+    padding: 11px 14px;
+    min-height: 44px;
+    max-height: min(200px, calc(var(--app-vh, 100dvh) * 0.3));
+  }
+
+  /* 스크롤 시 컴포저 pill 축소: 모드 탭/도구줄을 접고 입력줄만 남긴다 */
+  .pc-proto .cmp-wrap {
+    transition: border-top-color 200ms var(--ease-smooth);
+  }
+
+  .pc-proto .cmp {
+    transition: border-radius 200ms var(--ease-smooth), box-shadow 200ms var(--ease-smooth);
+  }
+
+  .pc-proto .cmp__top,
+  .pc-proto .cmp__toolbar {
+    max-height: 64px;
+    transition:
+      max-height 200ms var(--ease-smooth),
+      opacity 140ms var(--ease-smooth),
+      padding 200ms var(--ease-smooth),
+      border-bottom-width 200ms var(--ease-smooth);
+  }
+
+  .pc-proto[data-composer="collapsed"] .cmp__top,
+  .pc-proto[data-composer="collapsed"] .cmp__toolbar {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-bottom-width: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .pc-proto[data-composer="collapsed"] .cmp-wrap {
+    border-top-color: transparent;
+  }
+
+  .pc-proto[data-composer="collapsed"] .cmp {
+    border-radius: var(--r-full);
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  }
+
+  .pc-proto[data-composer="collapsed"] .cmp__input {
+    height: 44px !important;
+    min-height: 44px;
+    overflow: hidden;
   }
 
   .files-list__head,
