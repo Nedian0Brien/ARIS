@@ -19,18 +19,15 @@ import {
   Home,
   MessageSquareText,
   Monitor,
-  Moon,
-  MoreHorizontal,
   PanelsTopLeft,
   Plus,
   Search,
   Send,
   Sparkles,
-  Settings,
-  Sun,
   Wifi,
   X,
 } from 'lucide-react';
+import { AppChromeMenu } from '@/components/layout/AppChromeMenu';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { SidebarFooterMenu } from '@/components/layout/SidebarFooterMenu';
 import { SidebarResizer } from '@/components/layout/SidebarResizer';
@@ -126,12 +123,6 @@ const CMD_CONSOLE_SCRIPT: Array<[string, CmdConsoleOutput[]]> = [
   ['aris memory write --type project "ia-v3"', [
     { kind: 'out', text: 'signature: ghost-button + console + spotlight' },
   ]],
-];
-
-const THEME_OPTIONS = [
-  { mode: 'system' as const, label: '시스템', Icon: Monitor },
-  { mode: 'light' as const, label: '라이트', Icon: Sun },
-  { mode: 'dark' as const, label: '다크', Icon: Moon },
 ];
 
 const FALLBACK_FILES: FileItem[] = [
@@ -842,8 +833,6 @@ function Topbar({
   onThemeChange: (mode: ThemeMode) => void;
   onOpenSettings: () => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
   const activeProjects = sessions.filter((session) => session.status === 'running' || session.status === 'error').length;
   const copy: Record<TabType, { title: string; crumb: string }> = {
     home: { title: 'Home', crumb: 'workspace overview' },
@@ -851,39 +840,6 @@ function Topbar({
     project: { title: 'Projects', crumb: `${activeProjects} active · project chats in sidebar` },
     files: { title: 'Files', crumb: 'project filesystem' },
     settings: { title: 'Settings', crumb: 'preferences & configuration' },
-  };
-
-  useEffect(() => {
-    if (!menuOpen) {
-      return;
-    }
-    const closeOnOutsidePointer = (event: MouseEvent) => {
-      if (menuRef.current?.contains(event.target as Node)) {
-        return;
-      }
-      setMenuOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', closeOnOutsidePointer);
-    document.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.removeEventListener('mousedown', closeOnOutsidePointer);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [menuOpen]);
-
-  const changeThemeMode = (next: ThemeMode) => {
-    onThemeChange(next);
-    setMenuOpen(false);
-  };
-
-  const handleOpenSettings = () => {
-    setMenuOpen(false);
-    onOpenSettings();
   };
 
   return (
@@ -914,56 +870,7 @@ function Topbar({
         )}
       </div>
       <div className="m-top__right">
-        <div className="m-context-menu" ref={menuRef}>
-          <button
-            type="button"
-            className="m-context-menu__button"
-            aria-label="상단 헤더 메뉴"
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            <MoreHorizontal size={16} />
-          </button>
-          {menuOpen && (
-            <div className="m-context-menu__panel" role="menu" aria-label="상단 헤더 메뉴">
-              <div className="m-context-menu__section">
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="m-context-menu__item"
-                  onClick={handleOpenSettings}
-                >
-                  <Settings size={13} aria-hidden="true" />
-                  <span>설정</span>
-                </button>
-              </div>
-              <div className="m-context-menu__section">
-                <div className="m-context-menu__label">테마</div>
-                <div className="m-theme-toggle" role="group" aria-label="테마 선택">
-                  {THEME_OPTIONS.map(({ mode, label, Icon }) => {
-                    const active = themeMode === mode;
-                    return (
-                      <button
-                        key={mode}
-                        type="button"
-                        role="menuitemradio"
-                        className={`m-theme-toggle__item${active ? ' m-theme-toggle__item--active' : ''}`}
-                        aria-checked={active}
-                        aria-label={`${label} 테마`}
-                        title={`${label} 테마`}
-                        onClick={() => changeThemeMode(mode)}
-                      >
-                        <Icon size={13} />
-                        <span className="m-theme-toggle__label">{label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <AppChromeMenu themeMode={themeMode} onThemeChange={onThemeChange} onOpenSettings={onOpenSettings} />
       </div>
     </header>
   );
@@ -1516,22 +1423,30 @@ function ProjectDetailSurface({
   index,
   isOperator,
   onBackToProjects,
+  onLogoHome,
+  onOpenSettings,
   onProjectChatOpen,
   onProjectViewChange,
+  onThemeChange,
   projectView,
   selectedChatId,
   session,
   surfaceMode,
+  themeMode,
 }: {
   index: number;
   isOperator: boolean;
   onBackToProjects: () => void;
+  onLogoHome: () => void;
+  onOpenSettings: () => void;
   onProjectChatOpen: (chatId: string) => void;
   onProjectViewChange: (view: ProjectView) => void;
+  onThemeChange: (mode: ThemeMode) => void;
   projectView: ProjectView;
   selectedChatId: string | null;
   session: SessionSummary;
   surfaceMode: ProjectChatSurfaceMode;
+  themeMode: ThemeMode;
 }) {
   const projectName = displayProjectName(session);
   const projectPath = displayProjectPath(session);
@@ -1590,12 +1505,16 @@ function ProjectDetailSurface({
           modelLabel={modelLabel}
           onBackToChatList={() => onProjectViewChange('chats')}
           onChatOpen={onProjectChatOpen}
+          onLogoHome={onLogoHome}
+          onOpenSettings={onOpenSettings}
+          onThemeChange={onThemeChange}
           projectName={projectName}
           projectPath={projectPath}
           recentPreview={recentPreview}
           selectedChatId={selectedChatId}
           session={session}
           surfaceMode={surfaceMode}
+          themeMode={themeMode}
           tokenLabel={tokenLabel}
         />
       </div>
@@ -1881,25 +1800,33 @@ function ProjectPlaceholderPanel({
 function ProjectSurface({
   isOperator,
   onBackToProjects,
+  onLogoHome,
+  onOpenSettings,
   onProjectChatOpen,
   onProjectOpen,
   onProjectViewChange,
+  onThemeChange,
   projectView,
   selectedChatId,
   selectedProjectId,
   sessions,
   surfaceMode,
+  themeMode,
 }: {
   isOperator: boolean;
   onBackToProjects: () => void;
+  onLogoHome: () => void;
+  onOpenSettings: () => void;
   onProjectChatOpen: (sessionId: string, chatId: string) => void;
   onProjectOpen: (sessionId: string, view?: ProjectView) => void;
   onProjectViewChange: (view: ProjectView) => void;
+  onThemeChange: (mode: ThemeMode) => void;
   projectView: ProjectView;
   selectedChatId: string | null;
   selectedProjectId: string | null;
   sessions: SessionSummary[];
   surfaceMode: ProjectChatSurfaceMode;
+  themeMode: ThemeMode;
 }) {
   const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
@@ -1927,11 +1854,15 @@ function ProjectSurface({
         index={selectedIndex}
         isOperator={isOperator}
         onBackToProjects={onBackToProjects}
+        onLogoHome={onLogoHome}
+        onOpenSettings={onOpenSettings}
         onProjectChatOpen={(chatId) => onProjectChatOpen(selectedProject.id, chatId)}
         onProjectViewChange={onProjectViewChange}
+        onThemeChange={onThemeChange}
         projectView={projectView}
         selectedChatId={selectedChatId}
         surfaceMode={surfaceMode}
+        themeMode={themeMode}
       />
     );
   }
@@ -2348,14 +2279,18 @@ export default function HomePageWrapper({
         <ProjectSurface
           isOperator={user.role === 'operator'}
           onBackToProjects={handleBackToProjects}
+          onLogoHome={() => handleTabChange('home')}
+          onOpenSettings={() => handleTabChange('settings')}
           onProjectChatOpen={handleProjectChatOpen}
           onProjectOpen={handleProjectOpen}
           onProjectViewChange={handleProjectViewChange}
+          onThemeChange={changeThemeMode}
           projectView={selectedProjectView}
           selectedChatId={selectedProjectChatId}
           selectedProjectId={selectedProjectId}
           sessions={sessions}
           surfaceMode={projectSurfaceMode}
+          themeMode={themeMode}
         />
       );
     }

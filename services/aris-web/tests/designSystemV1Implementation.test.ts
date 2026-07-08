@@ -7,6 +7,7 @@ import { readAppStyles } from './helpers/readAppStyles';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const tokensCss = readFileSync(resolve(__dirname, '../app/styles/tokens.css'), 'utf8');
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
+const appChromeMenu = readFileSync(resolve(__dirname, '../components/layout/AppChromeMenu.tsx'), 'utf8');
 const uiCss = readAppStyles();
 const header = readFileSync(resolve(__dirname, '../components/layout/Header.tsx'), 'utf8');
 const bottomNav = readFileSync(resolve(__dirname, '../components/layout/BottomNav.tsx'), 'utf8');
@@ -45,8 +46,6 @@ describe('ARIS design-system-v1 implementation', () => {
       'className="m-sb"',
       'className="m-top"',
       'className="m-top__right"',
-      'className="m-context-menu"',
-      'className="m-theme-toggle"',
       'className="home-orb"',
       'className="home-strip"',
       'home-proj__chats${className',
@@ -59,6 +58,12 @@ describe('ARIS design-system-v1 implementation', () => {
       'className="files-preview"',
     ].forEach((classFragment) => {
       expect(homeClient).toContain(classFragment);
+    });
+
+    // 테마/설정 메뉴는 채팅 헤더와 공유하기 위해 AppChromeMenu로 추출됐다
+    // (모바일 채팅 화면은 단일 헤더로 병합되어 앱 탑바를 별도로 렌더링하지 않는다).
+    ['className="m-context-menu"', 'className="m-theme-toggle"'].forEach((classFragment) => {
+      expect(appChromeMenu).toContain(classFragment);
     });
 
     [
@@ -89,13 +94,15 @@ describe('ARIS design-system-v1 implementation', () => {
   it('keeps the IA v2 topbar theme control wired to system, light, and dark modes', () => {
     expect(homeClient).toContain('readThemeMode');
     expect(homeClient).toContain('applyTheme');
-    expect(homeClient).toContain("'system' as const");
-    expect(homeClient).toContain("'light' as const");
-    expect(homeClient).toContain("'dark' as const");
-    expect(homeClient).toContain('시스템');
-    expect(homeClient).toContain('라이트');
-    expect(homeClient).toContain('다크');
-    expect(homeClient).toContain("aria-label=\"테마 선택\"");
+    // 실제 시스템/라이트/다크 옵션 목록은 AppChromeMenu(Topbar와 채팅 헤더가
+    // 공유하는 메뉴 컴포넌트)에 있다.
+    expect(appChromeMenu).toContain("'system' as const");
+    expect(appChromeMenu).toContain("'light' as const");
+    expect(appChromeMenu).toContain("'dark' as const");
+    expect(appChromeMenu).toContain('시스템');
+    expect(appChromeMenu).toContain('라이트');
+    expect(appChromeMenu).toContain('다크');
+    expect(appChromeMenu).toContain("aria-label=\"테마 선택\"");
     expect(homeClient).not.toContain('More actions');
   });
 
