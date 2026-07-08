@@ -64,6 +64,35 @@ describe('collapseRealtimeGeminiPartialEvents', () => {
     expect(collapseRealtimeGeminiPartialEvents([partial, final])).toEqual([final]);
   });
 
+  it('normalizes streamEvent casing before matching realtime Gemini events', () => {
+    const partial = buildEvent({
+      id: 'gemini-partial:session:turn-1:msg-1',
+      timestamp: '2026-03-14T04:00:00.000Z',
+      body: '실시간 응답',
+      meta: {
+        agent: 'gemini',
+        streamEvent: ' Agent_Message_Partial ',
+        sessionTurnId: 'turn-1',
+        sessionItemId: 'msg-1',
+        threadId: 'thread-1',
+      },
+    });
+    const final = buildEvent({
+      id: 'persisted-final-1',
+      timestamp: '2026-03-14T04:00:01.000Z',
+      body: '실시간 응답 완료',
+      meta: {
+        agent: 'gemini',
+        streamEvent: ' Agent_Message ',
+        sessionTurnId: 'turn-1',
+        sessionItemId: 'msg-1',
+        threadId: 'thread-1',
+      },
+    });
+
+    expect(collapseRealtimeGeminiPartialEvents([partial, final])).toEqual([final]);
+  });
+
   it('keeps commentary partials separate from the final answer stream and drops them only after commentary persists', () => {
     const commentaryPartial = buildEvent({
       id: 'gemini-partial:session:commentary-turn-1:thought-1',
@@ -201,6 +230,29 @@ describe('findLatestPersistedCursorEventId', () => {
       meta: {
         agent: 'gemini',
         streamEvent: 'agent_message_partial',
+        sessionTurnId: 'turn-1',
+        sessionItemId: 'msg-2',
+        threadId: 'thread-1',
+      },
+    });
+
+    expect(findLatestPersistedCursorEventId([persisted, partial])).toBe('persisted-read-1');
+  });
+
+  it('normalizes streamEvent casing before skipping realtime-only cursor events', () => {
+    const persisted = buildEvent({
+      id: 'persisted-read-1',
+      kind: 'file_read',
+      title: 'File Read',
+      body: 'services/aris-web/app/SessionDashboard.tsx',
+    });
+    const partial = buildEvent({
+      id: 'gemini-partial:session:turn-1:msg-2',
+      timestamp: '2026-03-14T04:00:01.000Z',
+      body: '다음 파일을 읽겠습니다.',
+      meta: {
+        agent: 'gemini',
+        streamEvent: ' Agent_Message_Partial ',
         sessionTurnId: 'turn-1',
         sessionItemId: 'msg-2',
         threadId: 'thread-1',

@@ -72,7 +72,7 @@ function isUiEvent(value: unknown): value is UiEvent {
 
 function readTrimmedStreamEvent(event: UiEvent): string {
   return typeof event.meta?.streamEvent === 'string'
-    ? event.meta.streamEvent.trim()
+    ? event.meta.streamEvent.trim().toLowerCase()
     : '';
 }
 

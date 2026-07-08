@@ -15,12 +15,10 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  AlertCircle,
   AlertTriangle,
   ArrowDown,
   AtSign,
   Bot,
-  Check,
   ChevronLeft,
   ChevronRight,
   Clock,
