@@ -10,6 +10,13 @@ const KEYBOARD_INSET_THRESHOLD_DEFAULT_PX = 120;
 // 입력 요소가 포커스 상태일 때는 키보드일 가능성이 높으므로 임계값을 낮춰
 // 작은 가상 키보드/부분 키보드/키보드 애니메이션 중간 상태에서도 inset이 적용되도록 한다.
 const KEYBOARD_INSET_THRESHOLD_FOCUSED_PX = 60;
+// 포커스 시점에 곧바로 data-keyboard-open을 낙관적으로 켜 두는 기간(ms).
+// visualViewport의 resize 이벤트는 키보드 애니메이션이 "시작된 이후"에만
+// 도착하는데, iOS/Android의 네이티브 "포커스 요소를 화면에 보이도록 스크롤"은
+// 포커스 시점에 훨씬 즉각적으로 실행될 수 있다. resize를 기다렸다가 잠그면
+// 그 경합에서 항상 늦으므로, 포커스 이벤트 자체에서 곧장 잠근다. 실제 인셋
+// 측정(재sync 스케줄과 동일하게 100/300/600ms)이 이 창 안에서 이어받는다.
+const OPTIMISTIC_KEYBOARD_LOCK_MS = 700;
 
 const isTextInputElement = (element: Element | null): boolean => {
   if (!element) return false;
@@ -30,6 +37,7 @@ export function ViewportHeightSync() {
     const root = document.documentElement;
     let lastNoKeyboardHeight = window.visualViewport?.height ?? window.innerHeight;
     let lastInnerWidth = window.innerWidth;
+    let optimisticKeyboardOpenUntil = 0;
     let previousMetrics: {
       appViewportHeight: number;
       height: number;
@@ -70,7 +78,8 @@ export function ViewportHeightSync() {
       const threshold = focusedTextInput
         ? KEYBOARD_INSET_THRESHOLD_FOCUSED_PX
         : KEYBOARD_INSET_THRESHOLD_DEFAULT_PX;
-      const keyboardOpen = bottomInset > threshold;
+      const withinOptimisticWindow = performance.now() < optimisticKeyboardOpenUntil;
+      const keyboardOpen = bottomInset > threshold || withinOptimisticWindow;
       const keyboardInset = keyboardOpen ? bottomInset : 0;
       const visualViewportBottomInset = keyboardOpen ? 0 : bottomInset;
 
@@ -115,6 +124,7 @@ export function ViewportHeightSync() {
           keyboardOpen,
           threshold,
           focusedTextInput,
+          withinOptimisticWindow,
         },
       });
       if (metricsChanged) {
@@ -146,6 +156,10 @@ export function ViewportHeightSync() {
       if (!isTextInputElement(event.target as Element | null)) {
         return;
       }
+      // 실제 visualViewport resize를 기다리지 않고 포커스 시점에 곧바로
+      // 낙관적으로 잠근다 — 네이티브 스크롤과의 경합에서 이겨야 하므로,
+      // 아직 키보드 인셋을 측정하지 못했더라도 먼저 잠그고 본다.
+      optimisticKeyboardOpenUntil = performance.now() + OPTIMISTIC_KEYBOARD_LOCK_MS;
       clearFocusResyncTimeouts();
       updateViewportHeight('document:focusin');
       [100, 300, 600].forEach((delay) => {
@@ -159,6 +173,9 @@ export function ViewportHeightSync() {
       if (!isTextInputElement(event.target as Element | null)) {
         return;
       }
+      // 낙관적 잠금을 즉시 해제한다 — 실제로 키보드가 열려 있었다면 곧이어
+      // 실행되는 updateViewportHeight가 측정값으로 다시 true를 확인해 준다.
+      optimisticKeyboardOpenUntil = 0;
       clearFocusResyncTimeouts();
       // 키보드가 닫히는 애니메이션도 한 번에 끝나지 않을 수 있어 같은 패턴으로 재sync.
       updateViewportHeight('document:focusout');
