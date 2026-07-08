@@ -693,7 +693,8 @@ describe('project list surface', () => {
     expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.app-shell-ia--chat-screen\s*\{[^}]*padding-bottom:\s*0;/s);
     expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.app-shell-ia--chat-screen \.aris-ia-shell\s*\{[^}]*min-height:\s*var\(--app-vh,\s*100dvh\);/s);
     expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto\s*\{[^}]*min-height:\s*calc\(var\(--app-vh,\s*100dvh\) - 48px\);/s);
-    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto \.shell\s*\{[^}]*height:\s*100%;[^}]*min-height:\s*0;/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto \.shell\s*\{[^}]*height:\s*calc\(var\(--app-vh,\s*100dvh\) - 48px\);[^}]*min-height:\s*0;/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto\[data-chrome="hidden"\] \.shell\s*\{[^}]*height:\s*var\(--app-vh,\s*100dvh\);/s);
     expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto \.tl\s*\{[^}]*min-height:\s*0;/s);
     expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto \.cmp__top\s*\{[^}]*flex-direction:\s*row;[^}]*overflow-x:\s*auto;/s);
     expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.pc-proto \.cmp__toolbar\s*\{[^}]*flex-direction:\s*row;/s);

@@ -90,6 +90,14 @@ async function openProjectChatScreen(page: Page, projectId: string) {
   await page.waitForTimeout(900);
 }
 
+/** dev 전용 오버레이(Next dev 배지, react-grab)는 스크린샷/클릭을 방해하므로 제거 */
+function removeDevOverlays(page: Page) {
+  return page.evaluate(() => {
+    document.querySelector('nextjs-portal')?.remove();
+    document.querySelector('[data-testid="react-grab-overlay"]')?.remove();
+  });
+}
+
 function timelineScrollBy(page: Page, deltaPx: number) {
   return page.evaluate((delta) => {
     const timeline = document.querySelector<HTMLElement>('[data-project-chat-screen] .tl');
@@ -120,9 +128,10 @@ test('스크롤 시 상단 크롬 숨김/복원과 컴포저 pill 축소·확장
   await expect(topbar).toBeVisible();
 
   const initialTimelineHeight = await timeline.evaluate((node) => node.clientHeight);
-  const expandedComposerHeight = await page
-    .locator('[data-project-chat-screen] .cmp-wrap')
-    .evaluate((node) => node.getBoundingClientRect().height);
+  // 컴포저는 오버레이라서 확보 공간은 타임라인 하단 패딩(--pc-composer-height 연동)으로 측정
+  const expandedTimelinePadding = await timeline.evaluate(
+    (node) => Number.parseFloat(window.getComputedStyle(node).paddingBottom),
+  );
 
   // 스크롤 가능하도록 스페이서 주입 후 최상단 근처로 이동
   await page.evaluate(() => {
@@ -154,14 +163,16 @@ test('스크롤 시 상단 크롬 숨김/복원과 컴포저 pill 축소·확장
     .poll(() => chatHeader.evaluate((node) => window.getComputedStyle(node).pointerEvents))
     .toBe('none');
 
-  // 타임라인과 컴포저가 실제로 세로 공간을 얻었는지 확인
+  // pill이 나타나고, 타임라인이 실제로 세로 공간을 얻었는지 확인
+  await expect(page.locator('[data-project-chat-screen] .cmp-pill')).toBeVisible();
   await page.waitForTimeout(400);
-  const collapsedComposerHeight = await page
-    .locator('[data-project-chat-screen] .cmp-wrap')
-    .evaluate((node) => node.getBoundingClientRect().height);
+  const collapsedTimelinePadding = await timeline.evaluate(
+    (node) => Number.parseFloat(window.getComputedStyle(node).paddingBottom),
+  );
   const hiddenTimelineHeight = await timeline.evaluate((node) => node.clientHeight);
-  expect(collapsedComposerHeight).toBeLessThan(expandedComposerHeight - 40);
+  expect(collapsedTimelinePadding).toBeLessThan(expandedTimelinePadding - 40);
   expect(hiddenTimelineHeight).toBeGreaterThan(initialTimelineHeight + 80);
+  await removeDevOverlays(page);
   await page.screenshot({ path: 'test-results/chat-chrome-collapsed.png' });
 
   // 위로 스크롤 → 크롬 복원, 컴포저는 축소 유지
@@ -169,13 +180,12 @@ test('스크롤 시 상단 크롬 숨김/복원과 컴포저 pill 축소·확장
   await expect(chatScreen).toHaveAttribute('data-chrome', 'visible');
   await expect(chatScreen).toHaveAttribute('data-composer', 'collapsed');
 
-  // 컴포저 터치 → 확장 + 입력 포커스 (dev 전용 react-grab 오버레이는 클릭을 가로채므로 제거)
-  await page.evaluate(() => {
-    document.querySelector('[data-testid="react-grab-overlay"]')?.remove();
-  });
-  await page.locator('[data-project-chat-screen] .cmp-wrap .cmp').click();
+  // pill 터치 → 확장 + 입력 포커스
+  await removeDevOverlays(page);
+  await page.locator('[data-project-chat-screen] .cmp-pill').click();
   await expect(chatScreen).toHaveAttribute('data-composer', 'expanded');
   await expect(composerInput).toBeFocused();
+  await removeDevOverlays(page);
   await page.screenshot({ path: 'test-results/chat-chrome-expanded.png' });
 
   // auto-grow: 입력 줄 수에 따라 높이가 늘고 max-height에서 멈춘다
@@ -191,10 +201,22 @@ test('스크롤 시 상단 크롬 숨김/복원과 컴포저 pill 축소·확장
     return Math.min(200, viewport * 0.3);
   });
   expect(cappedHeight).toBeLessThanOrEqual(maxAllowed + 1);
+  await removeDevOverlays(page);
   await page.screenshot({ path: 'test-results/chat-composer-autogrow.png' });
 
   // 확장(포커스) 상태에서는 스크롤해도 컴포저가 다시 축소되지 않는다
   await timelineScrollBy(page, 300);
   await page.waitForTimeout(400);
   await expect(chatScreen).toHaveAttribute('data-composer', 'expanded');
+
+  // 드래프트가 있는 채로 다시 축소하면 pill에 드래프트 텍스트가 표시된다
+  await composerInput.evaluate((node) => (node as HTMLTextAreaElement).blur());
+  await timelineScrollBy(page, -80);
+  await expect(chatScreen).toHaveAttribute('data-composer', 'collapsed');
+  const pillText = page.locator('[data-project-chat-screen] .cmp-pill__text');
+  await expect(pillText).toHaveClass(/cmp-pill__text--draft/);
+  await expect(pillText).toContainText('line 1');
+  await removeDevOverlays(page);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: 'test-results/chat-pill-draft.png' });
 });

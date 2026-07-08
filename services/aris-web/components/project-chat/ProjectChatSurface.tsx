@@ -18,6 +18,7 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowDown,
+  ArrowUp,
   AtSign,
   Check,
   ChevronLeft,
@@ -1831,7 +1832,6 @@ export function ProjectChatSurface({
     handleTimelineChromeScroll,
     isChromeHidden,
     isComposerCollapsed,
-    isMobileViewport,
     suppressChromeScroll,
   } = useMobileChatChrome({ isComposerInputFocused });
   useComposerAutoGrow(composerInputRef, prompt, !isComposerCollapsed);
@@ -2516,6 +2516,8 @@ export function ProjectChatSurface({
     };
   }, [selectedChatId, setWorkspacePanelImmediate]);
 
+  // 채팅 미선택(디렉터리) 상태로 마운트되면 composer 노드가 없어 옵저버가
+  // 붙지 못하므로, 화면 전환 시점마다 재시도한다.
   useEffect(() => {
     const prototypeNode = prototypeRef.current;
     const composerNode = composerWrapRef.current;
@@ -2542,7 +2544,7 @@ export function ProjectChatSurface({
       composerObserver.disconnect();
       window.removeEventListener('resize', syncComposerHeight);
     };
-  }, []);
+  }, [selectedChatId, parallelPanelState]);
 
   useEffect(() => {
     eventsRef.current = events;
@@ -3433,15 +3435,32 @@ export function ProjectChatSurface({
           </div>
 
           <footer ref={composerWrapRef} className="cmp-wrap">
-            <form
-              className="cmp"
-              onSubmit={handleSubmit}
-              onClick={() => {
-                if (!isComposerCollapsed) return;
-                expandComposer();
-                composerInputRef.current?.focus();
-              }}
-            >
+            {isComposerCollapsed && (
+              <button
+                type="button"
+                className="cmp-pill"
+                aria-label="메시지 입력 열기"
+                onClick={() => {
+                  expandComposer();
+                  composerInputRef.current?.focus();
+                }}
+              >
+                <span className="cmp-pill__mode" aria-hidden="true" />
+                <span className={`cmp-pill__text${prompt.trim() ? ' cmp-pill__text--draft' : ''}`}>
+                  {prompt.trim() || '에이전트에게 요청하기...'}
+                </span>
+                {projectRunActive ? (
+                  <span className="cmp-pill__send cmp-pill__send--running" aria-hidden="true">
+                    <span className="cmp-pill__spinner" />
+                  </span>
+                ) : (
+                  <span className="cmp-pill__send" aria-hidden="true">
+                    <ArrowUp size={16} />
+                  </span>
+                )}
+              </button>
+            )}
+            <form className="cmp" onSubmit={handleSubmit}>
               <div className="cmp__top">
                 <div className="cmp-mode" role="tablist" aria-label="Mode">
                   {(['agent', 'plan', 'terminal'] as ComposerMode[]).map((mode) => (
@@ -3551,9 +3570,7 @@ export function ProjectChatSurface({
                 onChange={(event) => setPrompt(event.target.value)}
                 onKeyDown={handleComposerKeyDown}
                 onFocus={expandComposer}
-                placeholder={isMobileViewport
-                  ? '에이전트에게 무엇이든 요청하세요...'
-                  : '에이전트에게 무엇이든 요청하세요... Shift Enter 줄바꿈 · Cmd Enter 전송'}
+                placeholder="에이전트에게 무엇이든 요청하세요..."
                 rows={1}
               />
               <div className="cmp__toolbar">
