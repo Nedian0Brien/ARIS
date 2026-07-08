@@ -5,6 +5,8 @@ export const SKILL_SOURCE_LABELS: Record<ProjectSkillEntry['source'], string> = 
   'project-skill': '프로젝트 스킬',
   'user-command': '내 커맨드',
   'user-skill': '내 스킬',
+  'plugin-command': '플러그인',
+  'plugin-skill': '플러그인',
 };
 
 export const SLASH_AUTOCOMPLETE_LIMIT = 6;
@@ -42,4 +44,20 @@ export function filterSkillEntriesForAutocomplete(
     }
   }
   return [...prefixMatches, ...substringMatches].slice(0, limit);
+}
+
+/**
+ * 프롬프트가 `/커맨드 `로 시작하고 아직 인자를 입력하지 않은 상태라면,
+ * 인자 힌트를 보여줄 스킬 엔트리를 찾는다.
+ */
+export function findArgumentHintEntry(
+  entries: ProjectSkillEntry[],
+  prompt: string,
+): ProjectSkillEntry | null {
+  const match = /^(\/\S+)\s+(.*)$/s.exec(prompt);
+  if (!match || match[2].trim()) {
+    return null;
+  }
+  const entry = entries.find((candidate) => candidate.command === match[1]);
+  return entry?.argumentHint ? entry : null;
 }

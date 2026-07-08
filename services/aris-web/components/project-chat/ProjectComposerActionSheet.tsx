@@ -88,7 +88,10 @@ export function ProjectComposerActionSheet({
       className="pc-sheet__skill"
       onClick={() => onSkillSelect(entry)}
     >
-      <span className="pc-sheet__skill-command">{entry.command}</span>
+      <span className="pc-sheet__skill-command">
+        {entry.command}
+        {entry.argumentHint && <span className="pc-sheet__skill-arg"> {entry.argumentHint}</span>}
+      </span>
       <span className="pc-sheet__skill-meta">
         <span className="pc-sheet__skill-source">{SKILL_SOURCE_LABELS[entry.source]}</span>
         {entry.description && <span className="pc-sheet__skill-desc">{entry.description}</span>}

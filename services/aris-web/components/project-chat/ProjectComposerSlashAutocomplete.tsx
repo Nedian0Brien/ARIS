@@ -46,10 +46,28 @@ export function ProjectComposerSlashAutocomplete({
           onClick={() => onSelect(entry)}
         >
           <span className="cmp-slash__command">{entry.command}</span>
+          {entry.argumentHint && <span className="cmp-slash__arg">{entry.argumentHint}</span>}
           {entry.description && <span className="cmp-slash__desc">{entry.description}</span>}
           <span className="cmp-slash__source">{SKILL_SOURCE_LABELS[entry.source]}</span>
         </button>
       ))}
+    </div>
+  );
+}
+
+/**
+ * 스킬 선택 직후(`/cmd `) 인자를 아직 입력하지 않은 동안
+ * 컴포저 위에 인자 힌트를 보여주는 스트립.
+ */
+export function ProjectComposerArgumentHint({ entry }: { entry: ProjectSkillEntry | null }) {
+  if (!entry?.argumentHint) {
+    return null;
+  }
+  return (
+    <div className="cmp-arg-hint" role="status" aria-label="스킬 인자 힌트">
+      <span className="cmp-arg-hint__command">{entry.command}</span>
+      <span className="cmp-arg-hint__hint">{entry.argumentHint}</span>
+      {entry.description && <span className="cmp-arg-hint__desc">{entry.description}</span>}
     </div>
   );
 }

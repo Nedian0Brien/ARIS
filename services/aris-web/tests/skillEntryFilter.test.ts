@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { filterSkillEntriesForAutocomplete } from '@/components/project-chat/helpers/skillEntries';
+import {
+  filterSkillEntriesForAutocomplete,
+  findArgumentHintEntry,
+} from '@/components/project-chat/helpers/skillEntries';
 import type { ProjectSkillEntry } from '@/lib/projectSkills';
 
-function entry(name: string, description: string | null = null): ProjectSkillEntry {
+function entry(name: string, description: string | null = null, argumentHint: string | null = null): ProjectSkillEntry {
   return {
     id: `user-command:${name}`,
     name,
     command: `/${name}`,
     description,
+    argumentHint,
     source: 'user-command',
   };
 }
@@ -50,5 +54,31 @@ describe('filterSkillEntriesForAutocomplete', () => {
   it('applies the result limit', () => {
     const many = Array.from({ length: 10 }, (_, index) => entry(`skill-${index}`));
     expect(filterSkillEntriesForAutocomplete(many, 'skill', [], 6)).toHaveLength(6);
+  });
+});
+
+describe('findArgumentHintEntry', () => {
+  const withHint = [entry('deploy', '배포', '[environment]'), entry('review', '리뷰')];
+
+  it('returns the entry right after a command with a hint is selected', () => {
+    expect(findArgumentHintEntry(withHint, '/deploy ')?.command).toBe('/deploy');
+  });
+
+  it('hides the hint once the user starts typing arguments', () => {
+    expect(findArgumentHintEntry(withHint, '/deploy staging')).toBeNull();
+    expect(findArgumentHintEntry(withHint, '/deploy s')).toBeNull();
+  });
+
+  it('returns null while the slash token is still being typed', () => {
+    expect(findArgumentHintEntry(withHint, '/deploy')).toBeNull();
+  });
+
+  it('returns null for commands without an argument hint', () => {
+    expect(findArgumentHintEntry(withHint, '/review ')).toBeNull();
+  });
+
+  it('returns null for unknown commands and plain prompts', () => {
+    expect(findArgumentHintEntry(withHint, '/unknown ')).toBeNull();
+    expect(findArgumentHintEntry(withHint, '안녕하세요')).toBeNull();
   });
 });

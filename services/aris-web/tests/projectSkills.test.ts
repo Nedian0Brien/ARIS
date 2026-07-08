@@ -44,6 +44,38 @@ describe('collectProjectSkills', () => {
     expect(entries[2].description).toBeNull();
   });
 
+  it('parses argument-hint from command frontmatter', async () => {
+    await write(projectDir, '.claude/commands/deploy.md', '---\ndescription: 배포\nargument-hint: [environment]\n---\n');
+
+    const entries = await collectProjectSkills({ projectPath: projectDir, userHomeDir: homeDir });
+
+    expect(entries[0].argumentHint).toBe('[environment]');
+  });
+
+  it('scans plugin commands and skills including one marketplace nesting level', async () => {
+    await write(homeDir, '.claude/plugins/my-plugin/commands/lint.md', '---\ndescription: 린트 실행\n---\n');
+    await write(homeDir, '.claude/plugins/marketplace/deep-plugin/skills/audit/SKILL.md', '---\ndescription: 감사 스킬\n---\n');
+    await write(homeDir, '.claude/plugins/data/not-a-plugin/readme.md', '플러그인 아님');
+
+    const entries = await collectProjectSkills({ projectPath: null, userHomeDir: homeDir });
+
+    // 플러그인 스코프는 커맨드/스킬 구분 없이 이름순 단일 그룹이다
+    expect(entries.map((entry) => [entry.command, entry.source])).toEqual([
+      ['/audit', 'plugin-skill'],
+      ['/lint', 'plugin-command'],
+    ]);
+  });
+
+  it('lets user-scope commands shadow plugin commands of the same name', async () => {
+    await write(homeDir, '.claude/commands/lint.md', '사용자 린트');
+    await write(homeDir, '.claude/plugins/my-plugin/commands/lint.md', '플러그인 린트');
+
+    const entries = await collectProjectSkills({ projectPath: null, userHomeDir: homeDir });
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0].source).toBe('user-command');
+  });
+
   it('folds YAML block-scalar descriptions instead of returning the indicator', async () => {
     await write(
       homeDir,
