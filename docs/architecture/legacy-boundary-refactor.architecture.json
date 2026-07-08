@@ -1,0 +1,234 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "ARIS Legacy Boundary Refactor",
+    "subtitle": "리디자인 활성 코드의 legacy 직접 의존을 공유 모듈 경계로 이동",
+    "output": "legacy-boundary-refactor.html",
+    "viewBox": [1260, 760]
+  },
+  "components": [
+    {
+      "id": "before_home",
+      "type": "frontend",
+      "label": "HomePageClient",
+      "sublabel": "active redesign surface",
+      "pos": [70, 155],
+      "size": [170, 64]
+    },
+    {
+      "id": "before_project_chat",
+      "type": "frontend",
+      "label": "ProjectChatSurface",
+      "sublabel": "active project chat",
+      "pos": [70, 270],
+      "size": [170, 64]
+    },
+    {
+      "id": "before_layout",
+      "type": "frontend",
+      "label": "Layout Chrome",
+      "sublabel": "Header / BottomNav",
+      "pos": [70, 385],
+      "size": [170, 64]
+    },
+    {
+      "id": "legacy_helpers",
+      "type": "backend",
+      "label": "legacy helpers",
+      "sublabel": "chat title + elapsed",
+      "pos": [320, 155],
+      "size": [170, 64],
+      "tag": "app/_legacy"
+    },
+    {
+      "id": "legacy_markdown",
+      "type": "backend",
+      "label": "legacy markdown",
+      "sublabel": "renderer + chips",
+      "pos": [320, 270],
+      "size": [170, 64],
+      "tag": "app/_legacy"
+    },
+    {
+      "id": "legacy_scroll",
+      "type": "backend",
+      "label": "legacy scroll",
+      "sublabel": "phase + debug store",
+      "pos": [320, 385],
+      "size": [170, 64],
+      "tag": "app/_legacy"
+    },
+    {
+      "id": "after_home",
+      "type": "frontend",
+      "label": "HomePageClient",
+      "sublabel": "active redesign surface",
+      "pos": [630, 155],
+      "size": [170, 64]
+    },
+    {
+      "id": "after_project_chat",
+      "type": "frontend",
+      "label": "ProjectChatSurface",
+      "sublabel": "active project chat",
+      "pos": [630, 270],
+      "size": [170, 64]
+    },
+    {
+      "id": "after_layout",
+      "type": "frontend",
+      "label": "Layout Chrome",
+      "sublabel": "Header / BottomNav",
+      "pos": [630, 385],
+      "size": [170, 64]
+    },
+    {
+      "id": "shared_display",
+      "type": "backend",
+      "label": "chatDisplay.ts",
+      "sublabel": "title + elapsed helpers",
+      "pos": [880, 155],
+      "size": [180, 64],
+      "tag": "lib/happy"
+    },
+    {
+      "id": "shared_chat",
+      "type": "backend",
+      "label": "components/chat",
+      "sublabel": "Markdown + chips",
+      "pos": [880, 270],
+      "size": [180, 64],
+      "tag": "shared UI"
+    },
+    {
+      "id": "shared_scroll",
+      "type": "backend",
+      "label": "scroll modules",
+      "sublabel": "phase + debug + hook",
+      "pos": [880, 385],
+      "size": [180, 64],
+      "tag": "lib/scroll"
+    },
+    {
+      "id": "legacy_isolated",
+      "type": "external",
+      "label": "app/_legacy",
+      "sublabel": "old route tree",
+      "pos": [880, 520],
+      "size": [180, 64],
+      "tag": "isolated"
+    },
+    {
+      "id": "boundary_test",
+      "type": "security",
+      "label": "legacyBoundary.test",
+      "sublabel": "blocks direct imports",
+      "pos": [630, 520],
+      "size": [170, 64],
+      "tag": "regression guard"
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "기존 구조: 활성 코드가 legacy 내부 구현을 직접 참조",
+      "wraps": ["before_home", "before_project_chat", "before_layout", "legacy_helpers", "legacy_markdown", "legacy_scroll"],
+      "pad": 34
+    },
+    {
+      "kind": "region",
+      "label": "정리된 구조: 활성 코드와 legacy 격리 경계 분리",
+      "wraps": ["after_home", "after_project_chat", "after_layout", "shared_display", "shared_chat", "shared_scroll", "legacy_isolated", "boundary_test"],
+      "pad": 34
+    }
+  ],
+  "connections": [
+    {
+      "from": "before_home",
+      "to": "legacy_helpers",
+      "label": "display helpers",
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "before_project_chat",
+      "to": "legacy_markdown",
+      "label": "MarkdownContent",
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "before_layout",
+      "to": "legacy_scroll",
+      "label": "scroll state",
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "after_home",
+      "to": "shared_display",
+      "label": "shared helper",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "after_project_chat",
+      "to": "shared_chat",
+      "label": "shared renderer",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "after_layout",
+      "to": "shared_scroll",
+      "label": "shared hook",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "boundary_test",
+      "to": "legacy_isolated",
+      "label": "no direct import",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelAt": [840, 598]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "기존 구조",
+      "items": [
+        "활성 리디자인 코드가 app/_legacy 내부 helper와 renderer를 import",
+        "legacy route tree가 공유 모듈처럼 쓰여 경계가 흐려짐",
+        "리디자인 이후 삭제·격리 판단이 어려운 상태"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "정리된 구조",
+      "items": [
+        "공유 가능한 표시, markdown, scroll 로직을 lib와 components/chat으로 이동",
+        "활성 surface는 공유 모듈만 참조",
+        "app/_legacy는 old route tree로 격리"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "효과",
+      "items": [
+        "legacy 재유입을 legacyBoundary.test로 차단",
+        "채팅 렌더링과 scroll 상태 계약을 한 곳에서 관리",
+        "후속 dead code 정리 범위가 명확해짐"
+      ]
+    }
+  ]
+}
