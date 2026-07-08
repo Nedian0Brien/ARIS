@@ -347,7 +347,7 @@ test('스크롤 시 상단 크롬 숨김/복원과 컴포저 pill 축소·확장
   await expect(page.locator('[data-project-chat-screen] .cmp-slash')).toHaveCount(0);
 });
 
-test('컴포저 포커스 후 키보드가 열려도 body에 스크롤 가능한 여백이 생기지 않는다', async ({ page }) => {
+test('컴포저 포커스 후 키보드가 열려도 html/body의 position은 절대 바뀌지 않는다 (네이티브 스크롤과 협력)', async ({ page }) => {
   const projectId = process.env.CHAT_CHROME_PROJECT_ID;
   test.skip(!projectId, 'CHAT_CHROME_PROJECT_ID is required');
 
@@ -356,28 +356,27 @@ test('컴포저 포커스 후 키보드가 열려도 body에 스크롤 가능한
   await openProjectChatScreen(page, projectId!);
   await removeDevOverlays(page);
 
-  // 포커스 전: 평상시 page-scroll 모델이 유지되어야 한다(iOS 주소창 자동 숨김 UX 보존).
+  // ChatGPT 웹 모바일 실측으로 확인한 전략: html/body의 position은 키보드
+  // 상태와 무관하게 항상 static이어야 한다. position:static → fixed 전환은
+  // 스펙상 transition이 불가능해, 이전엔 네이티브 스크롤이 컴포저를 끌어올린
+  // "직후" 잠금이 뒤늦게 걸리며 순간이동(스냅)하는 것으로 보였다.
   const beforeFocus = await page.evaluate(() => ({
     keyboardOpen: document.documentElement.dataset.keyboardOpen,
     bodyPosition: getComputedStyle(document.body).position,
+    bodyOverflowY: getComputedStyle(document.body).overflowY,
   }));
   expect(beforeFocus.keyboardOpen).toBe('false');
   expect(beforeFocus.bodyPosition).toBe('static');
+  // overflow-x: clip(hidden 아님)이므로 overflow-y가 auto로 자동 승격되지 않아야 한다.
+  expect(beforeFocus.bodyOverflowY).not.toBe('auto');
 
   const composerInput = page.locator('[data-project-chat-screen] .cmp-wrap .cmp__input');
   await composerInput.click();
-
-  // 리사이즈 이벤트를 단 하나도 보내지 않은 채 곧바로 확인한다: 실기기에서
-  // iOS의 네이티브 "포커스 요소 스크롤"은 visualViewport.resize보다 먼저 실행될
-  // 수 있으므로, 우리 쪽 잠금도 resize를 기다리지 않고 포커스만으로 즉시 걸려야
-  // 그 경합에서 이길 수 있다(ViewportHeightSync의 낙관적 잠금 참고).
   const immediatelyAfterFocus = await page.evaluate(() => document.documentElement.dataset.keyboardOpen);
   expect(immediatelyAfterFocus).toBe('true');
 
   // 실제 모바일 키보드가 열리는 것을 흉내낸다: visualViewport.height/offsetTop을
   // 여러 단계로 바꿔가며 resize 이벤트를 발생시킨다(ViewportHeightSync가 구독).
-  // offsetTop도 함께 변화시켜, 키보드 애니메이션 중 주소창 상태 변화로
-  // visualViewport의 top이 밀리는 경우까지 보정되는지 확인한다.
   for (const { height, offsetTop } of [
     { height: 664, offsetTop: 0 },
     { height: 460, offsetTop: 20 },
@@ -395,31 +394,22 @@ test('컴포저 포커스 후 키보드가 열려도 body에 스크롤 가능한
 
   const state = await page.evaluate(() => ({
     keyboardOpen: document.documentElement.dataset.keyboardOpen,
-    bodyScrollHeight: document.body.scrollHeight,
     bodyPosition: getComputedStyle(document.body).position,
-    bodyTop: getComputedStyle(document.body).top,
+    bodyOverflowY: getComputedStyle(document.body).overflowY,
+    htmlPosition: getComputedStyle(document.documentElement).position,
     visualViewportHeight: window.visualViewport?.height,
-    visualViewportOffsetTop: window.visualViewport?.offsetTop ?? 0,
-    scrollY: window.scrollY,
   }));
   expect(state.keyboardOpen).toBe('true');
-  expect(state.bodyPosition).toBe('fixed');
-  // visualViewport의 top이 밀린 만큼 body도 함께 보정되어야, 고정 레이아웃과
-  // 실제 보이는 영역의 기준점이 어긋나지 않는다.
-  expect(state.bodyTop).toBe(`${state.visualViewportOffsetTop}px`);
-  // body의 실제 스크롤 가능 높이가 라이브 visualViewport 높이를 초과하면 안 된다
-  // (초과분이 곧 브라우저의 네이티브 "포커스 요소 스크롤"이 컴포저를 화면 밖으로
-  // 끌고 가는 여지였다).
-  expect(state.bodyScrollHeight).toBeLessThanOrEqual((state.visualViewportHeight ?? 0) + 1);
-  expect(state.scrollY).toBe(0);
+  // 키보드가 열려도 position은 절대 바뀌지 않는다 — 이게 이번 재설계의 핵심.
+  expect(state.bodyPosition).toBe('static');
+  expect(state.htmlPosition).toBe('static');
+  expect(state.bodyOverflowY).not.toBe('auto');
 
-  const cmpRect = await page.locator('[data-project-chat-screen] .cmp-wrap .cmp').evaluate((node) => {
-    const r = node.getBoundingClientRect();
-    return { top: Math.round(r.top), bottom: Math.round(r.bottom) };
-  });
-  // 컴포저가 화면 맨 위로 끌려가지 않고, 축소된 뷰포트 안에서 하단 근처에 남아있어야 한다
-  expect(cmpRect.top).toBeGreaterThan(50);
-  expect(cmpRect.bottom).toBeLessThanOrEqual((state.visualViewportHeight ?? 0) + state.visualViewportOffsetTop + 1);
+  // 컴포저 auto-grow 상한이 실제 보이는 높이 기준으로 줄어드는지 확인한다
+  // (position/scroll과 무관한 순수 시각 제약이라 여기선 안전하게 반응해야 한다).
+  const cmpInputMaxHeight = await composerInput.evaluate((node) => getComputedStyle(node).maxHeight);
+  expect(Number.parseFloat(cmpInputMaxHeight)).toBeLessThanOrEqual(Math.round((state.visualViewportHeight ?? 0) * 0.3) + 1);
+
   await page.screenshot({ path: 'test-results/chat-keyboard-open-no-overflow.png' });
 
   // blur 후에는 낙관적 잠금과 실측 상태 모두 해제되어 평상시 모델로 복귀해야 한다.
