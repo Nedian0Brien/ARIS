@@ -3436,29 +3436,38 @@ export function ProjectChatSurface({
 
           <footer ref={composerWrapRef} className="cmp-wrap">
             {isComposerCollapsed && (
-              <button
-                type="button"
-                className="cmp-pill"
-                aria-label="메시지 입력 열기"
-                onClick={() => {
-                  expandComposer();
-                  composerInputRef.current?.focus();
-                }}
-              >
-                <span className="cmp-pill__mode" aria-hidden="true" />
-                <span className={`cmp-pill__text${prompt.trim() ? ' cmp-pill__text--draft' : ''}`}>
-                  {prompt.trim() || '에이전트에게 요청하기...'}
-                </span>
-                {projectRunActive ? (
-                  <span className="cmp-pill__send cmp-pill__send--running" aria-hidden="true">
-                    <span className="cmp-pill__spinner" />
+              <div className="cmp-pill">
+                <button
+                  type="button"
+                  className="cmp-pill__add"
+                  aria-label="사진 첨부·스킬 등 추가 작업"
+                  onClick={expandComposer}
+                >
+                  <Plus size={18} />
+                </button>
+                <button
+                  type="button"
+                  className="cmp-pill__body"
+                  aria-label="메시지 입력 열기"
+                  onClick={() => {
+                    expandComposer();
+                    composerInputRef.current?.focus();
+                  }}
+                >
+                  <span className={`cmp-pill__text${prompt.trim() ? ' cmp-pill__text--draft' : ''}`}>
+                    {prompt.trim() || '에이전트에게 요청하기...'}
                   </span>
-                ) : (
-                  <span className="cmp-pill__send" aria-hidden="true">
-                    <ArrowUp size={16} />
-                  </span>
-                )}
-              </button>
+                  {projectRunActive ? (
+                    <span className="cmp-pill__send cmp-pill__send--running" aria-hidden="true">
+                      <span className="cmp-pill__spinner" />
+                    </span>
+                  ) : (
+                    <span className="cmp-pill__send" aria-hidden="true">
+                      <ArrowUp size={16} />
+                    </span>
+                  )}
+                </button>
+              </div>
             )}
             <form className="cmp" onSubmit={handleSubmit}>
               <div className="cmp__top">

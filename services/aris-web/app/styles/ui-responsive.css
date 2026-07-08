@@ -90,7 +90,8 @@
   .app-shell-ia--chat-screen .m-top,
   .pc-proto .ch,
   .pc-proto .shell,
-  .pc-proto .cmp-pill {
+  .pc-proto .cmp-pill__add,
+  .pc-proto .cmp-pill__body {
     transition: none;
   }
 
@@ -514,43 +515,74 @@
     animation: pc-cmp-form-in 200ms var(--ease-smooth);
   }
 
+  /* 확장 상태에서도 컴포저 테두리에 모드 컬러를 은은하게 반영한다 */
+  .pc-proto .shell__main > .cmp-wrap .cmp {
+    border-color: color-mix(in srgb, var(--mc-ring) 35%, var(--border-subtle));
+  }
+
+  .pc-proto .shell__main > .cmp-wrap .cmp:focus-within {
+    border-color: var(--mc-ring);
+  }
+
   .pc-proto .cmp-pill {
     position: relative;
     display: flex;
     align-items: center;
-    gap: var(--sp-5);
+    gap: var(--sp-4);
     width: 100%;
     max-width: 480px;
     margin: 0 auto;
     min-height: 50px;
-    padding: 7px 7px 7px 18px;
-    border: 1px solid var(--border-default);
+    padding: 7px;
+    /* 모드 컬러가 테두리를 통해 드러난다 (Agent/Plan/Terminal) */
+    border: 1px solid color-mix(in srgb, var(--mc-ring) 55%, var(--border-default));
     border-radius: var(--r-full);
     background: var(--surface);
     background: color-mix(in srgb, var(--surface) 86%, transparent);
     -webkit-backdrop-filter: blur(16px) saturate(1.4);
     backdrop-filter: blur(16px) saturate(1.4);
     box-shadow:
+      0 0 0 3px var(--mc-ring-soft),
       0 1px 2px rgba(15, 23, 42, 0.08),
       0 12px 32px -8px rgba(15, 23, 42, 0.28);
     pointer-events: auto;
-    cursor: pointer;
     /* fill-mode 없이 두어 애니메이션이 실행되지 못하는 환경에서도 최종 상태로 보이게 한다 */
     animation: pc-cmp-pill-in 220ms var(--ease-smooth);
+  }
+
+  .pc-proto .cmp-pill__add {
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+    color: var(--text-secondary);
+    transition: transform 120ms var(--ease-smooth), background 120ms var(--ease-smooth);
+  }
+
+  .pc-proto .cmp-pill__add:active {
+    transform: scale(0.92);
+    background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  }
+
+  .pc-proto .cmp-pill__body {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-5);
+    padding: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
     transition: transform 120ms var(--ease-smooth);
   }
 
-  .pc-proto .cmp-pill:active {
-    transform: scale(0.985);
-  }
-
-  .pc-proto .cmp-pill__mode {
-    flex-shrink: 0;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--mc-ring);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--mc-ring) 16%, transparent);
+  .pc-proto .cmp-pill__body:active {
+    transform: scale(0.99);
   }
 
   .pc-proto .cmp-pill__text {

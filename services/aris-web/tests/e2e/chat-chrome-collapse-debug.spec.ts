@@ -180,9 +180,9 @@ test('스크롤 시 상단 크롬 숨김/복원과 컴포저 pill 축소·확장
   await expect(chatScreen).toHaveAttribute('data-chrome', 'visible');
   await expect(chatScreen).toHaveAttribute('data-composer', 'collapsed');
 
-  // pill 터치 → 확장 + 입력 포커스
+  // pill 본문 터치 → 확장 + 입력 포커스
   await removeDevOverlays(page);
-  await page.locator('[data-project-chat-screen] .cmp-pill').click();
+  await page.locator('[data-project-chat-screen] .cmp-pill__body').click();
   await expect(chatScreen).toHaveAttribute('data-composer', 'expanded');
   await expect(composerInput).toBeFocused();
   await removeDevOverlays(page);
@@ -219,4 +219,10 @@ test('스크롤 시 상단 크롬 숨김/복원과 컴포저 pill 축소·확장
   await removeDevOverlays(page);
   await page.waitForTimeout(300);
   await page.screenshot({ path: 'test-results/chat-pill-draft.png' });
+
+  // pill의 + 버튼 → 키보드(포커스) 없이 확장되어 도구줄이 보인다
+  await page.locator('[data-project-chat-screen] .cmp-pill__add').click();
+  await expect(chatScreen).toHaveAttribute('data-composer', 'expanded');
+  await expect(composerInput).not.toBeFocused();
+  await expect(page.locator('[data-project-chat-screen] .cmp-wrap .cmp__toolbar')).toBeVisible();
 });
