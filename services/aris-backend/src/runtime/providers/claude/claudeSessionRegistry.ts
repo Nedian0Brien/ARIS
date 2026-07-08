@@ -1,6 +1,6 @@
 import { ClaudeSession } from './claudeSession.js';
 import { ClaudeSessionController } from './claudeSessionController.js';
-import type { ClaudeRunLifecycleMeta, ClaudeRunScope } from './types.js';
+import type { ClaudeRunScope } from './types.js';
 import type { ClaudeSessionHandle, ClaudeSessionOwner, ClaudeSessionOwnerMeta } from './claudeSessionContract.js';
 
 function buildRunKey(sessionId: string, chatId?: string): string {

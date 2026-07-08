@@ -65,7 +65,6 @@ import {
   classifyCodexAppServerFailure,
   extractCodexPermissionRequest,
   inferCodexFileWriteItem,
-  isMissingCodexThreadError,
   type CodexAppServerFailureKind,
 } from './codexProtocolMapper.js';
 import type { CodexPermissionRequest } from './types.js';
@@ -83,22 +82,6 @@ const CODEX_TURN_TIMEOUT_MS = (() => {
     return parsed;
   }
   return 30 * 60 * 1000; // 30 minutes
-})();
-
-const CODEX_APP_SERVER_POST_TURN_QUIET_MS = (() => {
-  const parsed = Number.parseInt(process.env.CODEX_APP_SERVER_POST_TURN_QUIET_MS || '', 10);
-  if (Number.isFinite(parsed) && parsed >= 100) {
-    return parsed;
-  }
-  return 1_500;
-})();
-
-const CODEX_APP_SERVER_POST_TURN_DRAIN_TIMEOUT_MS = (() => {
-  const parsed = Number.parseInt(process.env.CODEX_APP_SERVER_POST_TURN_DRAIN_TIMEOUT_MS || '', 10);
-  if (Number.isFinite(parsed) && parsed >= 1_000) {
-    return parsed;
-  }
-  return 15_000;
 })();
 
 const AGENT_EXTRA_PATHS = '/home/ubuntu/.local/bin:/home/ubuntu/.nvm/versions/node/v20.18.1/bin:/home/ubuntu/.bun/bin';
@@ -196,30 +179,6 @@ function normalizeModelReasoningEffort(value: unknown): ModelReasoningEffort | u
   const v = value.trim().toLowerCase();
   if (v === 'low' || v === 'medium' || v === 'high' || v === 'xhigh') return v;
   return undefined;
-}
-
-async function waitForStableActivity(input: {
-  getActivityTick: () => number;
-  getLastActivityAt: () => number;
-  quietMs: number;
-  timeoutMs: number;
-}): Promise<void> {
-  const deadline = Date.now() + Math.max(0, input.timeoutMs);
-  let observed = input.getActivityTick();
-  while (Date.now() < deadline) {
-    const idle = Date.now() - input.getLastActivityAt();
-    if (idle >= input.quietMs) {
-      const tick = input.getActivityTick();
-      if (tick === observed) return;
-      observed = tick;
-      continue;
-    }
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) return;
-    const wait = Math.min(Math.max(10, input.quietMs - Math.max(0, idle)), remaining);
-    await new Promise<void>((resolve) => { setTimeout(resolve, wait); });
-    observed = input.getActivityTick();
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -382,8 +341,6 @@ export async function runCodexAppServer(
   let pendingAgentMessage = '';
   let streamedPersisted = false;
   let agentMessagePersisted = false;
-  let transportActivityTick = 0;
-  let lastTransportActivityAt = Date.now();
   let resolvedThreadId = typeof threadId === 'string' && threadId.trim().length > 0
     ? threadId.trim()
     : '';
@@ -819,8 +776,6 @@ export async function runCodexAppServer(
   };
 
   const handleIncomingPayloadText = (rawText: string) => {
-    transportActivityTick += 1;
-    lastTransportActivityAt = Date.now();
     const rawLine = rawText.trim();
     host.runtimeEventLogger.logRaw({
       sessionId: session.id,
@@ -910,37 +865,6 @@ export async function runCodexAppServer(
     terminateCodexAppServerProcess(pseudoChild, process.kill, 'SIGTERM');
     await new Promise((resolve) => setTimeout(resolve, 250));
     terminateCodexAppServerProcess(pseudoChild, process.kill, 'SIGKILL');
-  };
-
-  const waitForPostTurnDrain = async () => {
-    const drainDeadline = Date.now() + CODEX_APP_SERVER_POST_TURN_DRAIN_TIMEOUT_MS;
-
-    while (Date.now() < drainDeadline) {
-      await waitForStableActivity({
-        getActivityTick: () => transportActivityTick,
-        getLastActivityAt: () => lastTransportActivityAt,
-        quietMs: CODEX_APP_SERVER_POST_TURN_QUIET_MS,
-        timeoutMs: Math.max(10, drainDeadline - Date.now()),
-      });
-
-      const activityTickSnapshot = transportActivityTick;
-      const appendSnapshot = appendChain;
-      const permissionSnapshot = permissionChain;
-      await appendSnapshot;
-      await permissionSnapshot;
-
-      if (
-        activityTickSnapshot === transportActivityTick
-        && appendSnapshot === appendChain
-        && permissionSnapshot === permissionChain
-        && Date.now() - lastTransportActivityAt >= CODEX_APP_SERVER_POST_TURN_QUIET_MS
-      ) {
-        return;
-      }
-    }
-
-    await appendChain;
-    await permissionChain;
   };
 
   try {

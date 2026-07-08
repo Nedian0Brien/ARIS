@@ -2,7 +2,6 @@ import type { SessionProtocolEnvelope } from '../../contracts/sessionProtocol.js
 import type {
   ProviderActionEvent,
   ProviderCliResult,
-  ProviderCommandExecutor,
   ProviderLaunchCommand,
   ProviderPermissionRequest,
   ProviderResumeTarget,

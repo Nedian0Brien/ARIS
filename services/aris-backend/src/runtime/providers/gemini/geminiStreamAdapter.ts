@@ -315,7 +315,6 @@ export class GeminiStreamAdapter {
     const payloadSubtype = String(payload.subtype ?? '').trim().toLowerCase();
     const records = collectGeminiNestedRecords(payload);
     const role = extractFirstGeminiStringByKeys(records, ['role']).toLowerCase();
-    const msgType = String(msg?.type ?? '').trim().toLowerCase();
     const itemType = String(item?.type ?? '').trim().toLowerCase();
     const phase = normalizeGeminiMessagePhase(msg?.phase ?? item?.phase ?? payloadSubtype);
     const threadId = extractGeminiObservedSessionId(records)

@@ -4,7 +4,6 @@ import type {
   ClaudeSessionContract,
   ClaudeSessionKeepAliveState,
   ClaudeSessionOneTimeFlag,
-  ClaudeSessionScope,
   ClaudeSessionSource,
   ClaudeSessionStateOwner,
   ClaudeSessionTurnState,

@@ -1,14 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { execFile, spawn, type SpawnOptionsWithoutStdio } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { createServer } from 'node:net';
 import * as path from 'node:path';
-import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { inferActionTypeFromCommand, titleForActionType } from './actionType.js';
-import { sanitizeAgentMessageText, shouldDisplayToolStatus } from './agentMessageSanitizer.js';
-import { summarizeDiffText, summarizeFileChangeDiff } from './diffStats.js';
+import { sanitizeAgentMessageText } from './agentMessageSanitizer.js';
+import { summarizeDiffText } from './diffStats.js';
 import { RuntimeEventLogger } from './runtimeEventLogger.js';
 import { resolveRuntimeModelSelection } from './modelPolicy.js';
 import { recoverClaudeThreadIdFromMessages, runClaudeProviderTurn } from './providers/claude/claudeOrchestrator.js';
@@ -32,22 +30,13 @@ import { GeminiSessionRegistry } from './providers/gemini/geminiSessionRegistry.
 import { buildProviderCommand, type ProviderCommand } from './providers/providerCommandFactory.js';
 import {
   buildCodexAppServerListenUrl,
-  connectCodexAppServerSocket,
-  normalizeCodexAppServerMessageData,
-  reserveCodexAppServerPort,
-  type CodexAppServerSocket,
 } from './providers/codex/codexAppServerClient.js';
 import {
   buildCodexAppServerSpawnOptions,
   createCodexAppServerAbortPromise,
-  launchDetachedCodexAppServerProcess,
   rejectCodexAppServerPendingRequests,
   terminateCodexAppServerProcess,
 } from './providers/codex/codexAppServerLifecycle.js';
-import {
-  extractCodexAppServerApproval,
-  normalizeCodexApprovalPolicy,
-} from './providers/codex/codexPermissionBridge.js';
 import {
   CODEX_RUNTIME_MODE,
   resolveCodexThreadId,
@@ -55,16 +44,10 @@ import {
   type CodexRuntimeHost,
 } from './providers/codex/codexRuntime.js';
 import {
-  buildCodexPermissionKey,
   buildCodexThreadCacheKey,
   classifyCodexAppServerFailure,
-  extractCodexPermissionRequest,
   isMissingCodexThreadError,
-  inferCodexFileWriteItem,
-  type CodexAppServerFailureInfo,
-  type CodexAppServerFailureKind,
 } from './providers/codex/codexProtocolMapper.js';
-import type { CodexPermissionRequest } from './providers/codex/types.js';
 import type { SessionProtocolEnvelope } from './contracts/sessionProtocol.js';
 import type {
   ProviderActionEvent,
@@ -77,13 +60,12 @@ import type {
   HappyRuntimePermissionInput,
   RuntimeCoordinationStore,
 } from './contracts/runtimeCoordinationStore.js';
-import { PermissionRouter, buildScopedPermissionKey } from './orchestration/permissionRouter.js';
+import { PermissionRouter } from './orchestration/permissionRouter.js';
 import { RealtimeEventBus } from './orchestration/realtimeEventBus.js';
 import {
   ActiveRunRegistry,
   buildRunKey,
   isSessionRunKey,
-  type ActiveRun,
   type StaleRunCleanupInput,
 } from './orchestration/activeRunRegistry.js';
 import type { ClaudeSessionLaunchMode } from './providers/claude/claudeSessionContract.js';
@@ -93,7 +75,6 @@ import type {
   GeminiSessionCapabilities,
   PermissionDecision,
   PermissionRequest,
-  PermissionRisk,
   RuntimeMessage,
   RuntimeSession,
   SessionAction,
@@ -159,7 +140,6 @@ type RuntimeAgent = RuntimeSession['metadata']['flavor'];
 type ModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 type PermissionState = PermissionRequest['state'];
 type SessionStatusValue = RuntimeSession['state']['status'];
-type JsonRpcId = string | number | null;
 
 type HappyRuntimeCreateInput = {
   path: string;
@@ -1054,16 +1034,6 @@ function parseJsonLine(line: string): Record<string, unknown> | null {
   }
 }
 
-function toJsonRpcIdKey(value: unknown): string {
-  if (typeof value === 'string' || typeof value === 'number') {
-    return String(value);
-  }
-  if (value === null) {
-    return 'null';
-  }
-  return JSON.stringify(value);
-}
-
 function isAbortFailure(error: unknown): boolean {
   if (!error || typeof error !== 'object') {
     return false;
@@ -1268,118 +1238,6 @@ export class RuntimeCore {
         this.codexThreads.delete(key);
       }
     }
-  }
-
-  private buildGeminiPartialIdentity(input: {
-    sessionId: string;
-    chatId?: string;
-    phase?: 'commentary' | 'final';
-    turnId?: string;
-    itemId?: string;
-    threadId?: string;
-  }): string | null {
-    const scope = input.chatId?.trim() || '__default__';
-    const phase = input.phase ?? 'final';
-    const turn = input.turnId?.trim() || input.threadId?.trim() || '';
-    const item = input.itemId?.trim() || '';
-    if (!turn && !item) {
-      return null;
-    }
-    return [
-      input.sessionId,
-      scope,
-      phase,
-      turn || '__turn__',
-      item || '__item__',
-    ].join(':');
-  }
-
-  private appendGeminiRealtimePartial(input: {
-    session: RuntimeSession;
-    chatId?: string;
-    model?: string;
-    event: ClaudeTextEvent;
-  }): void {
-    const identity = this.buildGeminiPartialIdentity({
-      sessionId: input.session.id,
-      chatId: input.chatId,
-      phase: input.event.phase,
-      turnId: input.event.turnId,
-      itemId: input.event.itemId,
-      threadId: input.event.threadId,
-    });
-    if (!identity) {
-      return;
-    }
-
-    const existing = this.geminiPartialTextStates.get(identity);
-    const nextState: GeminiPartialTextState = existing
-      ? {
-        ...existing,
-        threadId: input.event.threadId ?? existing.threadId,
-        text: `${existing.text}${input.event.text}`,
-      }
-      : {
-        eventId: `gemini-partial:${identity}`,
-        sessionId: input.session.id,
-        ...(input.chatId ? { chatId: input.chatId } : {}),
-        ...(input.event.phase ? { phase: input.event.phase } : {}),
-        ...(input.event.turnId ? { turnId: input.event.turnId } : {}),
-        ...(input.event.itemId ? { itemId: input.event.itemId } : {}),
-        ...(input.event.threadId ? { threadId: input.event.threadId } : {}),
-        text: input.event.text,
-        createdAt: new Date().toISOString(),
-      };
-    this.geminiPartialTextStates.set(identity, nextState);
-
-    const isCommentary = nextState.phase === 'commentary';
-
-    this.realtimeEventBus.append(input.session.id, {
-      id: nextState.eventId,
-      sessionId: input.session.id,
-      type: isCommentary ? 'tool' : 'message',
-      title: isCommentary ? 'Thinking' : 'Text Reply',
-      text: nextState.text,
-      createdAt: new Date().toISOString(),
-      meta: {
-        role: 'agent',
-        agent: 'gemini',
-        streamEvent: isCommentary ? 'agent_commentary_partial' : 'agent_message_partial',
-        sessionRole: 'agent',
-        sessionEventType: 'text',
-        ...(isCommentary ? { isThoughtCard: true, actionType: 'think' } : {}),
-        sessionEvent: {
-          role: 'agent',
-          ev: {
-            t: 'text',
-            ...(nextState.itemId ? { item: nextState.itemId } : {}),
-          },
-        },
-        requestedPath: input.session.metadata.path,
-        ...(input.chatId ? { chatId: input.chatId } : {}),
-        ...(input.model ? { model: input.model } : {}),
-        ...(nextState.phase ? { messagePhase: nextState.phase } : {}),
-        ...(nextState.threadId ? { threadId: nextState.threadId, geminiSessionId: nextState.threadId } : {}),
-        ...(nextState.turnId ? { sessionTurnId: nextState.turnId } : {}),
-        ...(nextState.itemId ? { sessionItemId: nextState.itemId } : {}),
-        partial: true,
-      },
-    });
-  }
-
-  private clearGeminiRealtimePartial(input: {
-    sessionId: string;
-    chatId?: string;
-    phase?: 'commentary' | 'final';
-    turnId?: string;
-    itemId?: string;
-    threadId?: string;
-  }): void {
-    const identity = this.buildGeminiPartialIdentity(input);
-    if (!identity) {
-      return;
-    }
-    this.geminiPartialTextStates.delete(identity);
   }
 
   private clearGeminiRealtimePartialsForScope(input: {

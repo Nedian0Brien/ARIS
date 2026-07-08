@@ -122,8 +122,6 @@ const importBackfillSchema = z.object({
   maxBytes: z.number().int().positive().max(20 * 1024 * 1024).optional(),
 });
 
-type AppendMessageInput = z.infer<typeof appendMessageSchema>;
-
 type HappyBridgeAppendMessage = {
   localId: string | null;
   content: string;
