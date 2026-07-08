@@ -2,13 +2,14 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { readCssWithImports } from './helpers/readAppStyles';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectChatSurfacePath = resolve(__dirname, '../components/project-chat/ProjectChatSurface.tsx');
 const projectChatCssPath = resolve(__dirname, '../app/styles/project-chat.css');
 
 const projectChatSurface = readFileSync(projectChatSurfacePath, 'utf8');
-const projectChatCss = readFileSync(projectChatCssPath, 'utf8');
+const projectChatCss = readCssWithImports(projectChatCssPath);
 
 function readCssBlock(source: string, selector: string): string {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
