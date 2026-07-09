@@ -864,25 +864,32 @@ html[data-theme='dark'] .m-theme-toggle__item--active {
    절대 바꾸지 않고, 포커스된 입력을 화면에 보이도록 끌어올리는 브라우저
    네이티브 동작을 그대로 둔다.)
 
-   이전 시도는 data-keyboard-open일 때 html/body를 position:fixed로 강제
+   1차 시도는 data-keyboard-open일 때 html/body를 position:fixed로 강제
    잠갔다. CSS 자체는 정확했지만 position:static → fixed 전환은 스펙상
    transition이 불가능한 이산적(discrete) 값 변경이라, 네이티브 스크롤이
    컴포저를 끌어올린 "직후" 이 잠금이 뒤늦게 걸리며 순간이동(스냅)하는
-   것으로 보였다 — "화면 맨 위로 과도하게 올라갔다가 정상 위치로 순간이동".
+   것으로 보였다.
 
-   근본 수정은 reset.css에서 overflow-x: hidden을 overflow-x: clip으로
-   바꾼 것이다: CSS Overflow 스펙상 overflow-x가 non-visible이고 overflow-y가
-   미지정이면 overflow-y가 auto로 자동 승격되는데(hidden은 이 승격을
-   트리거), 이게 키보드가 열린 동안 body에 실제보다 훨씬 큰 스크롤 가능
-   여백을 만든 진짜 원인이었다. clip은 이 승격을 트리거하지 않으므로,
-   네이티브 스크롤이 필요한 만큼(키보드 높이만큼)만 자연스럽게 문서를
-   끌어올리고 — 이게 ChatGPT/Claude 같은 서비스가 "매끄럽게" 느껴지는 이유다:
-   그들도 이 문제를 막지 않고, 막을 필요가 없도록 구조 자체를 정직하게
-   유지한다.
+   2차 시도는 position:fixed 잠금과 함께 셸의 높이 추적(.aris-ia-shell/
+   .pc-proto/.shell가 --visual-viewport-height를 따르던 규칙)까지 통째로
+   제거하고, reset.css의 overflow-x: hidden → clip 전환만으로 충분하다고
+   판단했다. 이건 틀렸다: overflow-x: clip은 overflow-y가 auto로 자동
+   승격되는 것만 막을 뿐, .aris-ia-shell/.pc-proto/.shell이 여전히 얼어붙은
+   --app-vh(키보드가 열린 동안 이전 높이에 고정)를 그대로 쓰고 있었다.
+   셸 전체가 실제로 보이는 영역보다 훨씬 커진 채로 남아 있었고, 그 차이
+   (최대 수백 px)만큼 네이티브 "포커스 요소 스크롤"이 페이지 전체를
+   과도하게 끌어올려 컴포저가 화면 맨 위까지 튀는 현상으로 재현됐다
+   (실기기 스크린샷으로 확인).
 
-   .cmp__input의 auto-grow 상한만 남겨둔다 — position/scroll과 무관하게
-   입력창 자체가 과도하게 커지지 않도록 하는 순수 시각적 제약이라 여기엔
-   영향이 없다. */
+   최종 수정: 셸 높이 추적을 되살리되(아래), position은 여전히 절대
+   바꾸지 않는다. height/min-height는 숫자 값이라 position과 달리
+   transition으로 부드럽게 이어진다 — 셸이 실제 보이는 영역에 맞춰
+   부드럽게 줄어들므로, 컴포저는 애초에 축소된 셸의 바닥 근처에 남아있게
+   되어 네이티브 스크롤이 거의/전혀 필요하지 않다. overflow-x: clip은
+   부수적인 방어 조치로 남겨둔다(auto 승격을 막는 것 자체는 여전히 유효).
+
+   .cmp__input의 auto-grow 상한도 같은 이유로 유지한다 — position/scroll과
+   무관하게 입력창 자체가 과도하게 커지지 않도록 하는 순수 시각적 제약. */
 @media (max-width: 767px) {
   .pc-proto .cmp__input {
     transition: max-height 150ms var(--ease-smooth, ease);
