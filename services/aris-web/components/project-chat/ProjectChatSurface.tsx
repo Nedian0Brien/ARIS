@@ -2992,7 +2992,11 @@ export function ProjectChatSurface({
               <ChevronLeft size={18} />
             </button>
             <div className="ch__title-wrap">
-              <span className="ch__title">{activeChat?.title ?? 'Project chat'}</span>
+              <div className="ch__breadcrumb">
+                <span className="ch__breadcrumb-project" title={session.projectName}>{projectName}</span>
+                <span className="ch__breadcrumb-sep" aria-hidden="true">|</span>
+                <span className="ch__title">{activeChat?.title ?? 'Project chat'}</span>
+              </div>
               <span className="ch__status"><span className="ch__status-dot" />{projectStatusLabel(session.status)}</span>
               {projectRunIndicator && (
                 <span className="ch__running-indicator" role="status" aria-live="polite" data-tone={projectRunIndicator.tone}>

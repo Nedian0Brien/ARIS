@@ -95,7 +95,33 @@
   flex: 1;
 }
 
+.pc-proto .ch__breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.pc-proto .ch__breadcrumb-project {
+  flex-shrink: 2;
+  min-width: 36px;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-size: 14px;
+  font-weight: 550;
+}
+
+.pc-proto .ch__breadcrumb-sep {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  opacity: 0.5;
+}
+
 .pc-proto .ch__title {
+  min-width: 36px;
   font-size: 14px;
   font-weight: 650;
   color: var(--text-primary);
