@@ -1394,6 +1394,30 @@ export function ProjectChatSurface({
       setModelSelectorOpen(false);
     }
   }, [isComposerCollapsed]);
+  // expandComposer() 호출 직후 같은 틱에서 곧바로 focus()하면 문제가 있다:
+  // pill 상태의 .cmp 폼은 opacity:0 + pointer-events:none으로만 숨겨져 있는데
+  // (포커스 자체는 가능해야 pill 탭이 즉시 키보드를 열 수 있다), React가 아직
+  // 리렌더를 커밋하기 전이라 그 "숨겨진" 상태의 요소를 포커스하게 된다. 브라우저의
+  // 네이티브 "포커스 요소 스크롤"이 투명/pointer-events:none 요소는 스크롤 대상에서
+  // 제외하는 것으로 보여, 키보드는 열리지만 컴포저는 제자리에서 확장 애니메이션만
+  // 재생되고 키보드 위로 올라오지 않았다. collapsed -> expanded 전환이 실제로
+  // 커밋되어 페인트된 다음 프레임에 포커스해야 그 스크롤이 정상적으로 트리거된다.
+  // pendingComposerFocusRef는 "이 확장 다음에 포커스할 의도가 있었는지"만 표시한다
+  // (예: 이미지 업로드 후의 expandComposer()처럼 포커스를 원치 않는 호출도 있음).
+  const wasComposerCollapsedRef = useRef(isComposerCollapsed);
+  const pendingComposerFocusRef = useRef(false);
+  useEffect(() => {
+    const wasCollapsed = wasComposerCollapsedRef.current;
+    wasComposerCollapsedRef.current = isComposerCollapsed;
+    if (!wasCollapsed || isComposerCollapsed || !pendingComposerFocusRef.current) {
+      return;
+    }
+    pendingComposerFocusRef.current = false;
+    const raf = requestAnimationFrame(() => {
+      composerInputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [isComposerCollapsed]);
   const [actionSheetOpen, setActionSheetOpen] = useState(false);
   const [pendingImageAttachments, setPendingImageAttachments] = useState<ChatImageAttachment[]>([]);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
@@ -1413,9 +1437,17 @@ export function ProjectChatSurface({
       const rest = current.trimStart();
       return rest ? `${entry.command} ${rest}` : `${entry.command} `;
     });
-    expandComposer();
-    composerInputRef.current?.focus();
-  }, [expandComposer, recordRecentSkill]);
+    if (isComposerCollapsed) {
+      // 축소 상태에서 열린 액션시트라면 expandComposer()가 만드는 collapsed
+      // -> expanded 전환을 위 useEffect가 감지해 리렌더 이후 안전하게 포커스한다.
+      pendingComposerFocusRef.current = true;
+      expandComposer();
+    } else {
+      // 이미 펼쳐진 상태(폼 안의 + 버튼)라면 숨김 상태 관련 타이밍 문제가 없어
+      // 곧바로 포커스해도 안전하다.
+      composerInputRef.current?.focus();
+    }
+  }, [expandComposer, isComposerCollapsed, recordRecentSkill]);
 
   const handleImageFilesSelected = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
@@ -3126,8 +3158,8 @@ export function ProjectChatSurface({
                   className="cmp-pill__body"
                   aria-label="메시지 입력 열기"
                   onClick={() => {
+                    pendingComposerFocusRef.current = true;
                     expandComposer();
-                    composerInputRef.current?.focus();
                   }}
                 >
                   <span className={`cmp-pill__text${prompt.trim() || pendingImageAttachments.length > 0 ? ' cmp-pill__text--draft' : ''}`}>
