@@ -693,11 +693,17 @@ describe('project list surface', () => {
     expect(homeClient).toContain('{shouldShowBottomNav && <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />}');
     expect(homeClient).toContain("className={`app-shell app-shell-ia${shouldShowBottomNav ? '' : ' app-shell-ia--chat-screen'}${projectSurfaceMode === 'panel' ? ' app-shell-ia--project-panel' : ''}`}");
     expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.app-shell-ia--chat-screen\s*\{[^}]*padding-bottom:\s*0;/s);
-    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.app-shell-ia--chat-screen \.aris-ia-shell\s*\{[^}]*min-height:\s*var\(--app-vh,\s*100dvh\);/s);
+    // --app-vh가 아니라 --visual-viewport-height를 쓴다: --app-vh는 키보드가
+    // 열린 동안 이전 높이에 고정되는데, 이 셸들이 그 얼어붙은 높이를 그대로
+    // 쓰면 실제 보이는 영역보다 커진 채로 남아 네이티브 "포커스 요소 스크롤"이
+    // 그 차이만큼 페이지 전체를 과도하게 끌어올린다(컴포저가 화면 맨 위로
+    // 튀는 회귀, 실기기로 확인됨). position은 건드리지 않으므로 height 값
+    // 자체의 전환은 transition으로 부드럽게 이어진다.
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.app-shell-ia--chat-screen \.aris-ia-shell\s*\{[^}]*min-height:\s*var\(--visual-viewport-height,\s*100dvh\);/s);
     // 모바일 채팅 화면은 앱 탑바를 항상 렌더링하지 않으므로(1줄 헤더 병합)
     // .pc-proto/.shell 높이 계산에서 더 이상 그 48px을 빼지 않는다.
-    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.m-main-scroll--project-chat-detail \.pc-proto\s*\{[^}]*min-height:\s*var\(--app-vh,\s*100dvh\);/s);
-    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.m-main-scroll--project-chat-detail \.pc-proto \.shell\s*\{[^}]*height:\s*var\(--app-vh,\s*100dvh\);[^}]*min-height:\s*0;/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.m-main-scroll--project-chat-detail \.pc-proto\s*\{[^}]*min-height:\s*var\(--visual-viewport-height,\s*100dvh\);/s);
+    expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.m-main-scroll--project-chat-detail \.pc-proto \.shell\s*\{[^}]*height:\s*var\(--visual-viewport-height,\s*100dvh\);[^}]*min-height:\s*0;/s);
     expect(uiCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.app-shell-ia--chat-screen \.m-top\s*\{[^}]*display:\s*none;/s);
     // 채팅 헤더는 스크롤 숨김 시 이동시키지 않고 언마운트되며(React 쪽), 표시
     // 중에는 타임라인 위 오버레이라 .tl/.shell__main의 박스 크기를 흔들지 않는다.
