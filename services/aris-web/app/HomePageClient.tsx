@@ -37,7 +37,7 @@ import { isChatEmpty, selectRecentChats, selectRecentProjects, type HomeRecentCh
 import { withAppBasePath } from '@/lib/routing/appPath';
 import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
 import type { AuthenticatedUser } from '@/lib/auth/types';
-import type { SessionChat, SessionStatus, SessionSummary } from '@/lib/happy/types';
+import type { ProjectChat, SessionChat, SessionStatus, SessionSummary } from '@/lib/happy/types';
 import { buildProjectChatCollectionPath } from '@/lib/projectRuntimeAdapter';
 import { useSidebarWidth } from '@/lib/hooks/useSidebarWidth';
 import {
@@ -379,10 +379,10 @@ function deriveProjectTokenLabel(session: SessionSummary, index: number): string
   return `${total.toFixed(1)}k`;
 }
 
-function buildProjectDetailPath(sessionId: string, view: ProjectView = 'chats', chatId?: string | null): string {
+function buildProjectDetailPath(projectId: string, view: ProjectView = 'chats', chatId?: string | null): string {
   const params = new URLSearchParams();
   params.set('tab', 'project');
-  params.set('project', sessionId);
+  params.set('project', projectId);
   if (view !== 'chats') {
     params.set('view', view);
   }
@@ -401,13 +401,13 @@ async function createProjectChat(
     geminiMode?: string | null;
     modelReasoningEffort?: SessionChat['modelReasoningEffort'];
   },
-): Promise<SessionChat> {
+): Promise<ProjectChat> {
   const response = await fetch(withAppBasePath(buildProjectChatCollectionPath(projectId)), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
-  const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
+  const body = (await response.json().catch(() => ({}))) as { chat?: ProjectChat; error?: string };
   if (!response.ok || !body.chat) {
     throw new Error(body.error ?? '새 채팅을 만들지 못했습니다.');
   }
@@ -469,9 +469,9 @@ function Sidebar({
   activeTab: TabType;
   activeProjectId: string | null;
   activeProjectChatId: string | null;
-  onProjectChatOpen: (sessionId: string, chatId: string) => void;
+  onProjectChatOpen: (projectId: string, chatId: string) => void;
   onTabChange: (tab: TabType) => void;
-  onProjectOpen: (sessionId: string, view?: ProjectView) => void;
+  onProjectOpen: (projectId: string, view?: ProjectView) => void;
   sessions: SessionSummary[];
   user: AuthenticatedUser;
   themeMode: ThemeMode;
@@ -480,7 +480,7 @@ function Sidebar({
   const projects = useMemo(() => sortSessions(sessions).slice(0, 6), [sessions]);
   const totalChats = sessions.reduce((sum, session) => sum + (session.totalChats ?? 0), 0);
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set());
-  const [projectChatsById, setProjectChatsById] = useState<Record<string, SessionChat[]>>({});
+  const [projectChatsById, setProjectChatsById] = useState<Record<string, ProjectChat[]>>({});
   const [visibleProjectChatCounts, setVisibleProjectChatCounts] = useState<Record<string, number>>({});
   const [loadingProjectChatIds, setLoadingProjectChatIds] = useState<Set<string>>(() => new Set());
   const [creatingProjectChatIds, setCreatingProjectChatIds] = useState<Set<string>>(() => new Set());
@@ -517,7 +517,7 @@ function Sidebar({
       const params = new URLSearchParams();
       params.set('limit', String(limit));
       const response = await fetch(withAppBasePath(`${buildProjectChatCollectionPath(projectId)}?${params}`), { cache: 'no-store' });
-      const body = (await response.json().catch(() => ({}))) as { chats?: SessionChat[] };
+      const body = (await response.json().catch(() => ({}))) as { chats?: ProjectChat[] };
       if (response.ok) {
         setProjectChatsById((current) => ({ ...current, [projectId]: body.chats ?? [] }));
       }
@@ -576,27 +576,27 @@ function Sidebar({
     visibleProjectChatCounts,
   ]);
 
-  function toggleProjectChatGroup(sessionId: string) {
+  function toggleProjectChatGroup(projectId: string) {
     setExpandedProjectIds((current) => {
       const next = new Set(current);
-      if (next.has(sessionId)) {
-        next.delete(sessionId);
+      if (next.has(projectId)) {
+        next.delete(projectId);
       } else {
-        next.add(sessionId);
+        next.add(projectId);
       }
       return next;
     });
     setVisibleProjectChatCounts((current) => {
-      if (current[sessionId]) return current;
-      return { ...current, [sessionId]: SIDEBAR_PROJECT_CHAT_PAGE_SIZE };
+      if (current[projectId]) return current;
+      return { ...current, [projectId]: SIDEBAR_PROJECT_CHAT_PAGE_SIZE };
     });
   }
 
-  function showMoreProjectChats(sessionId: string) {
+  function showMoreProjectChats(projectId: string) {
     setVisibleProjectChatCounts((current) => {
       const next = { ...current };
-      const currentCount = next[sessionId] ?? SIDEBAR_PROJECT_CHAT_PAGE_SIZE;
-      next[sessionId] = currentCount + SIDEBAR_PROJECT_CHAT_PAGE_SIZE;
+      const currentCount = next[projectId] ?? SIDEBAR_PROJECT_CHAT_PAGE_SIZE;
+      next[projectId] = currentCount + SIDEBAR_PROJECT_CHAT_PAGE_SIZE;
       return next;
     });
   }
@@ -1222,7 +1222,7 @@ function HomeSurface({
   user,
 }: {
   metrics: RuntimeMetrics | null;
-  onProjectOpen: (sessionId: string, view?: ProjectView, chatId?: string | null) => void;
+  onProjectOpen: (projectId: string, view?: ProjectView, chatId?: string | null) => void;
   sessions: SessionSummary[];
   user: AuthenticatedUser;
 }) {
@@ -1330,8 +1330,8 @@ function HomeSurface({
             key={chat.id}
             type="button"
             className="home-feed-row"
-            data-chat-href={buildProjectDetailPath(chat.sessionId, 'chat', chat.id)}
-            onClick={() => onProjectOpen(chat.sessionId, 'chat', chat.id)}
+            data-chat-href={buildProjectDetailPath(chat.projectId, 'chat', chat.id)}
+            onClick={() => onProjectOpen(chat.projectId, 'chat', chat.id)}
           >
             <span className={`home-feed-avatar ${homeFeedAvatarClass(chat.agent)}`}>
               {(chat.agent[0] || 'C').toUpperCase()}
@@ -1339,7 +1339,7 @@ function HomeSurface({
             <span className="home-feed-body">
               <span className="home-feed-head">
                 <span className="home-feed-actor">{chatTitle(chat)}</span>
-                <span className="home-feed-proj">{chat.sessionName}</span>
+                <span className="home-feed-proj">{chat.projectName}</span>
                 <span className="home-feed-time">{formatRelativeTime(chatActivityAt(chat))}</span>
               </span>
               <span className="home-feed-text">{chatPreviewText(chat)}</span>
@@ -1817,8 +1817,8 @@ function ProjectSurface({
   onBackToProjects: () => void;
   onLogoHome: () => void;
   onOpenSettings: () => void;
-  onProjectChatOpen: (sessionId: string, chatId: string) => void;
-  onProjectOpen: (sessionId: string, view?: ProjectView) => void;
+  onProjectChatOpen: (projectId: string, chatId: string) => void;
+  onProjectOpen: (projectId: string, view?: ProjectView) => void;
   onProjectViewChange: (view: ProjectView) => void;
   onThemeChange: (mode: ThemeMode) => void;
   projectView: ProjectView;
@@ -2240,12 +2240,12 @@ export default function HomePageWrapper({
     window.history.replaceState(null, '', withAppBasePath(`/?tab=${tab}`));
   };
 
-  const handleProjectOpen = (sessionId: string, view: ProjectView = 'chats', chatId?: string | null) => {
+  const handleProjectOpen = (projectId: string, view: ProjectView = 'chats', chatId?: string | null) => {
     setActiveTab('project');
-    setSelectedProjectId(sessionId);
+    setSelectedProjectId(projectId);
     setSelectedProjectView(view);
     setSelectedProjectChatId(view === 'chat' ? chatId ?? null : null);
-    window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(sessionId, view, chatId)));
+    window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(projectId, view, chatId)));
   };
 
   const handleProjectViewChange = (view: ProjectView) => {
@@ -2256,12 +2256,12 @@ export default function HomePageWrapper({
     window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(selectedProjectId, view)));
   };
 
-  const handleProjectChatOpen = (sessionId: string, chatId: string) => {
+  const handleProjectChatOpen = (projectId: string, chatId: string) => {
     setActiveTab('project');
-    setSelectedProjectId(sessionId);
+    setSelectedProjectId(projectId);
     setSelectedProjectView('chat');
     setSelectedProjectChatId(chatId);
-    window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(sessionId, 'chat', chatId)));
+    window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(projectId, 'chat', chatId)));
   };
 
   const handleBackToProjects = () => {

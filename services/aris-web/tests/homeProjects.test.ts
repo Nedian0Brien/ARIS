@@ -78,7 +78,7 @@ describe('home recent projects', () => {
     ]);
   });
 
-  it('selects latest real chats across projects with session context', () => {
+  it('selects latest real chats across projects with project context', () => {
     const sessions = [
       session('aris', '2026-04-20T09:00:00.000Z', {
         alias: 'ARIS',
@@ -104,14 +104,14 @@ describe('home recent projects', () => {
     expect(selectRecentChats(sessions, 2)).toEqual([
       expect.objectContaining({
         id: 'lawdigest-chat',
-        sessionId: 'lawdigest',
-        sessionName: 'Lawdigest',
+        projectId: 'lawdigest',
+        projectName: 'Lawdigest',
         latestPreview: '실제 Lawdigest 채팅 미리보기',
       }),
       expect.objectContaining({
         id: 'aris-new',
-        sessionId: 'aris',
-        sessionName: 'ARIS',
+        projectId: 'aris',
+        projectName: 'ARIS',
         agent: 'claude',
         latestPreview: '실제 ARIS 채팅 미리보기',
       }),

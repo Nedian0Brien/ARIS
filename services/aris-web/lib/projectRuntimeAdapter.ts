@@ -47,3 +47,7 @@ export function buildProjectRuntimeMetadataPath(projectId: string): string {
 export function buildProjectRuntimeStatusPath(projectId: string): string {
   return buildLegacyRuntimePath(projectId, '/runtime');
 }
+
+export function buildProjectRuntimeSubagentsPath(projectId: string, chatId: string): string {
+  return buildLegacyRuntimePath(projectId, `/chats/${encodeSegment(chatId)}/subagents`);
+}

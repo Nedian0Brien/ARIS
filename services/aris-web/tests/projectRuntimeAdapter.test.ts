@@ -4,6 +4,7 @@ import {
   buildProjectRuntimeActionPath,
   buildProjectRuntimeEventsPath,
   buildProjectRuntimeMetadataPath,
+  buildProjectRuntimeSubagentsPath,
   buildProjectRuntimeTerminalPath,
   resolveProjectRuntimeSessionId,
 } from '../lib/projectRuntimeAdapter';
@@ -16,5 +17,6 @@ describe('project runtime adapter', () => {
     expect(buildProjectRuntimeTerminalPath('project/a b')).toBe('/api/runtime/sessions/project%2Fa%20b/terminal');
     expect(buildProjectRuntimeActionPath('project/a b')).toBe('/api/runtime/sessions/project%2Fa%20b/actions');
     expect(buildProjectRuntimeMetadataPath('project/a b')).toBe('/api/runtime/sessions/project%2Fa%20b/metadata');
+    expect(buildProjectRuntimeSubagentsPath('project/a b', 'chat/x y')).toBe('/api/runtime/sessions/project%2Fa%20b/chats/chat%2Fx%20y/subagents');
   });
 });

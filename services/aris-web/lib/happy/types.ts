@@ -28,9 +28,9 @@ export type SessionSummary = {
 
 export type ProjectSummary = SessionSummary;
 
-export type SessionChat = {
+export type ProjectChat = {
   id: string;
-  sessionId: string;
+  projectId: string;
   agent: AgentFlavor;
   model?: string | null;
   geminiMode?: string | null;
@@ -54,11 +54,12 @@ export type SessionChat = {
   updatedAt: string;
 };
 
-export type Chat = SessionChat & {
-  projectId: string;
+export type SessionChat = Omit<ProjectChat, 'projectId'> & {
+  projectId?: string;
+  sessionId: string;
 };
 
-export type ProjectChat = Chat;
+export type Chat = ProjectChat;
 
 export type ChatImageAttachment = {
   assetId: string;
@@ -193,8 +194,8 @@ export type SessionActionResult = {
 export type ChatSample = {
   id: string;
   title: string;
-  sessionId: string;
-  sessionName: string;
+  projectId: string;
+  projectName: string;
   agent: AgentFlavor;
 };
 

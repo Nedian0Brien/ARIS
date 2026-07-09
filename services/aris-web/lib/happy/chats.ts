@@ -30,6 +30,7 @@ function toSessionChat(record: {
 }): SessionChat {
   return {
     id: record.id,
+    projectId: record.projectId,
     sessionId: record.projectId,
     agent: resolveAgentFlavor(record.agent),
     model: record.model,

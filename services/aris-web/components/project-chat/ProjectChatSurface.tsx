@@ -3009,7 +3009,7 @@ export function ProjectChatSurface({
                 </div>
               </div>
               <div className={`ws__pane${workspaceTab === 'subagents' ? ' ws__pane--active' : ''}`} data-pane="subagents">
-                <SubagentPanel sessionId={session.id} chatId={activeChat?.id ?? null} active={workspaceTab === 'subagents'} />
+                <SubagentPanel projectId={projectId} chatId={activeChat?.id ?? null} active={workspaceTab === 'subagents'} />
               </div>
             </div>
           </aside>
@@ -3697,7 +3697,7 @@ export function ProjectChatSurface({
               </div>
             </div>
             <div className={`ws__pane${workspaceTab === 'subagents' ? ' ws__pane--active' : ''}`} data-pane="subagents">
-              <SubagentPanel sessionId={session.id} chatId={activeChat?.id ?? null} active={workspaceTab === 'subagents'} />
+              <SubagentPanel projectId={projectId} chatId={activeChat?.id ?? null} active={workspaceTab === 'subagents'} />
             </div>
           </div>
           <div className="ws__footer">

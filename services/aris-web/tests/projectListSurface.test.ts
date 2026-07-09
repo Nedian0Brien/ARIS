@@ -66,15 +66,15 @@ describe('project list surface', () => {
 
   it('routes project card clicks to the IA project detail instead of the legacy session screen', () => {
     expect(homeClient).toContain("type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';");
-    expect(homeClient).toContain("function buildProjectDetailPath(sessionId: string, view: ProjectView = 'chats', chatId?: string | null)");
+    expect(homeClient).toContain("function buildProjectDetailPath(projectId: string, view: ProjectView = 'chats', chatId?: string | null)");
     expect(homeClient).toContain("params.set('tab', 'project');");
-    expect(homeClient).toContain("params.set('project', sessionId);");
+    expect(homeClient).toContain("params.set('project', projectId);");
     expect(homeClient).toContain("if (view === 'chat' && chatId) {");
     expect(homeClient).toContain("params.set('chat', chatId);");
     expect(homeClient).toContain('data-project-href={buildProjectDetailPath(session.id)}');
     expect(homeClient).toContain('onClick={() => onProjectOpen(session.id)}');
     expect(homeClient).toContain('onProjectOpen(session.id);');
-    expect(homeClient).toContain("window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(sessionId, view, chatId)))");
+    expect(homeClient).toContain("window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(projectId, view, chatId)))");
     expect(homeClient).toContain('selectedProjectId={selectedProjectId}');
     expect(homeClient).not.toContain('navigateTo(`/sessions/${session.id}`)');
   });
@@ -101,7 +101,7 @@ describe('project list surface', () => {
     expect(projectChatSurface).toContain("onClick={() => onChatOpen(chat.id)}");
     expect(homeClient).toContain("onProjectChatOpen(session.id, chat.id)");
     expect(homeClient).toContain("setSelectedProjectView('chat');");
-    expect(homeClient).toContain("buildProjectDetailPath(sessionId, 'chat', chatId)");
+    expect(homeClient).toContain("buildProjectDetailPath(projectId, 'chat', chatId)");
     expect(homeClient).toContain("params.set('view', view);");
     expect(projectChatSurface).toContain('fetch(withAppBasePath(buildProjectChatCollectionPath(projectId))');
     expect(projectChatSurface).toContain('fetch(withAppBasePath(buildProjectRuntimeEventsPath(projectId, params))');
@@ -507,12 +507,12 @@ describe('project list surface', () => {
   it('lets multiple project sidebar chat groups expand independently and page in five chats at a time', () => {
     expect(homeClient).toContain('const SIDEBAR_PROJECT_CHAT_PAGE_SIZE = 5;');
     expect(homeClient).toContain('const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set());');
-    expect(homeClient).toContain('const [projectChatsById, setProjectChatsById] = useState<Record<string, SessionChat[]>>({});');
+    expect(homeClient).toContain('const [projectChatsById, setProjectChatsById] = useState<Record<string, ProjectChat[]>>({});');
     expect(homeClient).toContain('const [visibleProjectChatCounts, setVisibleProjectChatCounts] = useState<Record<string, number>>({});');
-    expect(homeClient).toContain('function toggleProjectChatGroup(sessionId: string)');
-    expect(homeClient).toContain('function showMoreProjectChats(sessionId: string)');
+    expect(homeClient).toContain('function toggleProjectChatGroup(projectId: string)');
+    expect(homeClient).toContain('function showMoreProjectChats(projectId: string)');
     expect(homeClient).toContain("params.set('limit', String(limit));");
-    expect(homeClient).toContain('next[sessionId] = currentCount + SIDEBAR_PROJECT_CHAT_PAGE_SIZE;');
+    expect(homeClient).toContain('next[projectId] = currentCount + SIDEBAR_PROJECT_CHAT_PAGE_SIZE;');
     expect(homeClient).toContain('expandedProjectIds.has(session.id)');
     expect(homeClient).toContain('childChats.slice(0, visibleSidebarChatLimit).map((chat) => (');
     expect(homeClient).toContain('const hasMoreProjectChats = visibleChatCount > childChats.length;');

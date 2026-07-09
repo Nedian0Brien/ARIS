@@ -1264,7 +1264,7 @@ export function SessionDashboard({
                                 <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: 'var(--chart-status-running)' }} />
                                 <span className={styles.sessionMiniTextGroup}>
                                   <span className={styles.sessionMiniName}>{chat.title}</span>
-                                  <span className={styles.sessionMiniSubName}>{chat.sessionName}</span>
+                                  <span className={styles.sessionMiniSubName}>{chat.projectName}</span>
                                 </span>
                               </div>
                             ))}
@@ -1279,13 +1279,13 @@ export function SessionDashboard({
                               <div
                                 key={chat.id}
                                 className={`${styles.sessionMiniItem} ${styles.sessionMiniItemClickable}`}
-                                onClick={() => navigateToAppPath(`/sessions/${chat.sessionId}?chat=${chat.id}`)}
-                                title={`${chat.title} — ${chat.sessionName}`}
+                                onClick={() => navigateToAppPath(`/?tab=project&project=${encodeURIComponent(chat.projectId)}&view=chat&chat=${encodeURIComponent(chat.id)}`)}
+                                title={`${chat.title} — ${chat.projectName}`}
                               >
                                 <span className={styles.sessionMiniStatusDot} style={{ backgroundColor: 'var(--chart-status-completed)' }} />
                                 <span className={styles.sessionMiniTextGroup}>
                                   <span className={styles.sessionMiniName}>{chat.title}</span>
-                                  <span className={styles.sessionMiniSubName}>{chat.sessionName}</span>
+                                  <span className={styles.sessionMiniSubName}>{chat.projectName}</span>
                                 </span>
                               </div>
                             ))}

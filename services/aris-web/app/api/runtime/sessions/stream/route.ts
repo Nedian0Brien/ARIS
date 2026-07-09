@@ -100,15 +100,15 @@ export async function GET(request: NextRequest) {
             const agentGroupBy = await prisma.chat.groupBy({ by: ['agent'], where: { userId, parentChatId: null, subagentStatus: null }, _count: { id: true } });
             const perSessionGroupBy = await prisma.chat.groupBy({ by: ['projectId', 'agent'], where: { userId, parentChatId: null, subagentStatus: null }, _count: { id: true } });
             const sessionChatMeta = buildSessionChatMeta(perSessionGroupBy);
-            const sessionNameById = new Map(sessions.map(s => {
+            const projectNameById = new Map(sessions.map(s => {
               const ws = workspaceMap.get(s.id);
               return [s.id, ws?.alias || extractLastDirectoryName(s.projectName)];
             }));
-            const toSample = (c: { id: string; title: string; projectId?: string; sessionId?: string; agent: string }): ChatSample => {
-              const projectId = c.projectId ?? c.sessionId ?? '';
+            const toSample = (c: { id: string; title: string; projectId: string; agent: string }): ChatSample => {
+              const projectId = c.projectId;
               return {
                 id: c.id, title: c.title || '(제목 없음)',
-                sessionId: projectId, sessionName: sessionNameById.get(projectId) ?? projectId,
+                projectId, projectName: projectNameById.get(projectId) ?? projectId,
                 agent: resolveAgentFlavor(c.agent),
               };
             };

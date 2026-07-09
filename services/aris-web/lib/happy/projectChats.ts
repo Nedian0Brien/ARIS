@@ -9,7 +9,7 @@ import {
 function toProjectChat(chat: SessionChat): ProjectChat {
   return {
     ...chat,
-    projectId: chat.sessionId,
+    projectId: chat.projectId ?? chat.sessionId,
   };
 }
 

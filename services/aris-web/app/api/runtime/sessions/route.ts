@@ -94,8 +94,7 @@ export async function GET(request: NextRequest) {
     });
     const sessionChatMeta = buildSessionChatMeta(perSessionGroupBy);
 
-    // sessionName 맵 (alias 우선, 없으면 경로 마지막 세그먼트)
-    const sessionNameById = new Map(
+    const projectNameById = new Map(
       sessions.map(s => {
         const ws = workspaceMap.get(s.id);
         return [s.id, ws?.alias || extractLastDirectoryName(s.projectName)];
@@ -118,13 +117,13 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    const toSample = (c: { id: string; title: string; projectId?: string; sessionId?: string; agent: string; lastActivityAt?: Date }): ChatSample => {
-      const projectId = c.projectId ?? c.sessionId ?? '';
+    const toSample = (c: { id: string; title: string; projectId: string; agent: string; lastActivityAt?: Date }): ChatSample => {
+      const projectId = c.projectId;
       return {
         id: c.id,
         title: c.title || '(제목 없음)',
-        sessionId: projectId,
-        sessionName: sessionNameById.get(projectId) ?? projectId,
+        projectId,
+        projectName: projectNameById.get(projectId) ?? projectId,
         agent: resolveAgentFlavor(c.agent),
       };
     };

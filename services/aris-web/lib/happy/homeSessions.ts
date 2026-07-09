@@ -14,6 +14,7 @@ function normalizeModelReasoningEffort(input: string | null): SessionChat['model
 function toSessionChat(record: PrismaChat): SessionChat {
   return {
     id: record.id,
+    projectId: record.projectId,
     sessionId: record.projectId,
     agent: resolveAgentFlavor(record.agent),
     model: record.model,

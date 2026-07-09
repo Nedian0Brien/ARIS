@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SessionChat } from '@/lib/happy/types';
+import { buildProjectRuntimeSubagentsPath } from '@/lib/projectRuntimeAdapter';
 
 type SubagentPanelProps = {
-  sessionId: string;
+  projectId: string;
   chatId: string | null;
   active: boolean;
 };
@@ -28,7 +29,7 @@ function statusLabel(value: string | null | undefined): string {
  * the main chat list; this is the only place they surface. Polls while visible so
  * the run status (running/completed) stays roughly live.
  */
-export function SubagentPanel({ sessionId, chatId, active }: SubagentPanelProps) {
+export function SubagentPanel({ projectId, chatId, active }: SubagentPanelProps) {
   const [subagents, setSubagents] = useState<SessionChat[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +46,7 @@ export function SubagentPanel({ sessionId, chatId, active }: SubagentPanelProps)
     setError(null);
     try {
       const res = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chatId)}/subagents`,
+        buildProjectRuntimeSubagentsPath(projectId, chatId),
         { cache: 'no-store' },
       );
       const body = (await res.json().catch(() => ({}))) as { subagents?: SessionChat[]; error?: string };
@@ -67,7 +68,7 @@ export function SubagentPanel({ sessionId, chatId, active }: SubagentPanelProps)
         setLoading(false);
       }
     }
-  }, [sessionId, chatId]);
+  }, [projectId, chatId]);
 
   useEffect(() => {
     if (!active || !chatId) {
