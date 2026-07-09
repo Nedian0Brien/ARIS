@@ -1,24 +1,24 @@
 import { Suspense } from 'react';
 import { requirePageUser } from '@/lib/auth/guard';
-import { getRuntimeHealth, listSessions } from '@/lib/happy/client';
+import { getRuntimeHealth, listProjects } from '@/lib/happy/client';
 import { env } from '@/lib/config';
-import { enrichSessionsWithRecentChats } from '@/lib/happy/homeSessions';
-import { filterProjectSessionSummaries } from '@/lib/happy/workspaces';
+import { enrichProjectsWithRecentChats } from '@/lib/happy/homeProjects';
+import { filterProjectSummaries } from '@/lib/happy/workspaces';
 import HomePageWrapper from './HomePageClient';
 
 export default async function HomePage() {
   const user = await requirePageUser();
   const health = await getRuntimeHealth();
   let runtimeError: string | null = null;
-  let sessions: Awaited<ReturnType<typeof listSessions>> = [];
+  let projects: Awaited<ReturnType<typeof listProjects>> = [];
 
   if (health.happy === 'down') {
     runtimeError = '백엔드 런타임 API에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.';
   } else {
     try {
-      sessions = await enrichSessionsWithRecentChats(
+      projects = await enrichProjectsWithRecentChats(
         user.id,
-        filterProjectSessionSummaries(await listSessions(user.id)),
+        filterProjectSummaries(await listProjects(user.id)),
       );
     } catch (error) {
       if (
@@ -37,7 +37,7 @@ export default async function HomePage() {
     <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>로딩 중...</div>}>
       <HomePageWrapper
         user={user}
-        initialSessions={sessions}
+        initialProjects={projects}
         runtimeError={runtimeError}
         browserRootPath={env.HOST_HOME_DIR}
       />

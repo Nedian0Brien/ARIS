@@ -49,7 +49,7 @@ function createFakeGeminiStore(options: { emitAction?: boolean; emitCommentary?:
     const url = new URL(requestPath, 'http://fake-happy');
     const method = (init.method ?? 'GET').toUpperCase();
 
-    if (url.pathname === '/v1/sessions' && method === 'POST') {
+    if (url.pathname === '/v1/projects' && method === 'POST') {
       const body = JSON.parse(String(init.body ?? '{}')) as { metadata: string };
       const id = `session-${sessionSequence += 1}`;
       const now = Date.now();
@@ -61,16 +61,16 @@ function createFakeGeminiStore(options: { emitAction?: boolean; emitCommentary?:
       };
       fakeSessions.set(id, session);
       fakeMessages.set(id, []);
-      return { session };
+      return { project: session };
     }
 
-    if (url.pathname === '/v1/sessions' && method === 'GET') {
+    if (url.pathname === '/v1/projects' && method === 'GET') {
       return {
-        sessions: [...fakeSessions.values()],
+        projects: [...fakeSessions.values()],
       };
     }
 
-    const messageMatch = url.pathname.match(/^\/v3\/sessions\/([^/]+)\/messages$/);
+    const messageMatch = url.pathname.match(/^\/v3\/projects\/([^/]+)\/messages$/);
     if (messageMatch && method === 'POST') {
       const sessionId = decodeURIComponent(messageMatch[1] || '');
       const posted = JSON.parse(String(init.body ?? '{}')) as {
@@ -275,7 +275,7 @@ describe('gemini alignment E2E', () => {
   it('reuses the observed Gemini thread id across turns and preserves queue ordering', async () => {
     const { store, seenCommands } = createFakeGeminiStore();
 
-    const session = await store.createSession({
+    const session = await store.createProject({
       path: '/workspace/ARIS',
       flavor: 'gemini',
       approvalPolicy: 'on-request',
@@ -328,13 +328,13 @@ describe('gemini alignment E2E', () => {
     expect(agentMessages[1]?.text).toBe('두 번째 Gemini 응답');
     expect(agentMessages[0]?.meta?.geminiSessionId).toBe('gemini-observed-thread');
     expect(agentMessages[1]?.meta?.geminiSessionId).toBe('gemini-observed-thread');
-    expect(await store.isSessionRunning(session.id, 'chat-gemini')).toBe(false);
+    expect(await store.isProjectRunning(session.id, 'chat-gemini')).toBe(false);
   });
 
   it('passes the chat-selected Gemini model through to the CLI command args', async () => {
     const { store, seenCommands } = createFakeGeminiStore();
 
-    const session = await store.createSession({
+    const session = await store.createProject({
       path: '/workspace/ARIS',
       flavor: 'gemini',
       approvalPolicy: 'on-request',
@@ -367,7 +367,7 @@ describe('gemini alignment E2E', () => {
   it('passes auto-gemini-3 through to the CLI command args when selected', async () => {
     const { store, seenCommands } = createFakeGeminiStore();
 
-    const session = await store.createSession({
+    const session = await store.createProject({
       path: '/workspace/ARIS',
       flavor: 'gemini',
       approvalPolicy: 'on-request',
@@ -400,7 +400,7 @@ describe('gemini alignment E2E', () => {
   it('allows a Gemini chat override even when the parent session flavor differs', async () => {
     const { store, seenCommands } = createFakeGeminiStore();
 
-    const session = await store.createSession({
+    const session = await store.createProject({
       path: '/workspace/ARIS',
       flavor: 'codex',
       approvalPolicy: 'on-request',
@@ -432,7 +432,7 @@ describe('gemini alignment E2E', () => {
   it('persists Gemini streamed tool actions before the final assistant text', async () => {
     const { store } = createFakeGeminiStore({ emitAction: true });
 
-    const session = await store.createSession({
+    const session = await store.createProject({
       path: '/workspace/ARIS',
       flavor: 'gemini',
       approvalPolicy: 'on-request',
@@ -472,7 +472,7 @@ describe('gemini alignment E2E', () => {
   it('persists Gemini commentary before the final assistant text', async () => {
     const { store } = createFakeGeminiStore({ emitCommentary: true });
 
-    const session = await store.createSession({
+    const session = await store.createProject({
       path: '/workspace/ARIS',
       flavor: 'gemini',
       approvalPolicy: 'on-request',
@@ -518,7 +518,7 @@ describe('gemini alignment E2E', () => {
   it('creates a Gemini permission request and resumes after approval', async () => {
     const { store } = createFakeGeminiStore({ requirePermission: true, emitAction: true });
 
-    const session = await store.createSession({
+    const session = await store.createProject({
       path: '/workspace/ARIS',
       flavor: 'gemini',
       approvalPolicy: 'on-request',
@@ -540,7 +540,7 @@ describe('gemini alignment E2E', () => {
     );
     const permission = pendingPermissions[0];
     expect(permission?.command).toBe('Run pwd');
-    expect(await store.isSessionRunning(session.id, 'chat-gemini-permission')).toBe(true);
+    expect(await store.isProjectRunning(session.id, 'chat-gemini-permission')).toBe(true);
 
     const pendingPermissionMessages = await waitFor(
       async () => store.listMessages(session.id),
@@ -581,6 +581,6 @@ describe('gemini alignment E2E', () => {
       && message.meta?.permissionId === permission?.id
     ))).toBe(true);
     expect(await store.listPermissions('pending')).toHaveLength(0);
-    expect(await store.isSessionRunning(session.id, 'chat-gemini-permission')).toBe(false);
+    expect(await store.isProjectRunning(session.id, 'chat-gemini-permission')).toBe(false);
   });
 });

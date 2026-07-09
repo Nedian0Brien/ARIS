@@ -7,7 +7,7 @@ import {
 } from '@/lib/workspacePanels/executionTarget';
 
 export type FsRequestPath = ReturnType<typeof resolveFsPath> & {
-  runtimeSessionId: string | null;
+  runtimeProjectId: string | null;
 };
 
 function normalizeOptionalString(value: string | null): string | null {
@@ -34,7 +34,7 @@ export async function resolveFsRequestPath(input: {
   if (!projectId) {
     return {
       ...resolveFsPath(input.requestedPath),
-      runtimeSessionId: null,
+      runtimeProjectId: null,
     };
   }
 
@@ -46,7 +46,7 @@ export async function resolveFsRequestPath(input: {
 
   return {
     ...resolveFsPath(input.requestedPath, { executionRoot: target.executionPath }),
-    runtimeSessionId: target.runtimeSessionId,
+    runtimeProjectId: target.runtimeProjectId,
   };
 }
 
@@ -61,7 +61,7 @@ export async function resolveFsBodyPath(input: {
   if (!projectId) {
     return {
       ...resolveFsPath(input.requestedPath),
-      runtimeSessionId: null,
+      runtimeProjectId: null,
     };
   }
 
@@ -78,6 +78,6 @@ export async function resolveFsBodyPath(input: {
 
   return {
     ...resolveFsPath(input.requestedPath, { executionRoot: target.executionPath }),
-    runtimeSessionId: target.runtimeSessionId,
+    runtimeProjectId: target.runtimeProjectId,
   };
 }

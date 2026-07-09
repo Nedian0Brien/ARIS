@@ -13,7 +13,7 @@ describe('PrismaRuntimeStore runtime coordination', () => {
   it('loads a persisted permission by id', async () => {
     const permission = {
       id: 'perm-1',
-      sessionId: 'session-1',
+      projectId: 'session-1',
       chatId: 'chat-1',
       agent: 'codex',
       command: 'npm test',
@@ -54,7 +54,7 @@ describe('PrismaRuntimeStore runtime coordination', () => {
     };
     const store = buildStoreWithMockDb(db) as PrismaRuntimeStore & {
       hasRequestedAction: (input: {
-        sessionId: string;
+        projectId: string;
         action: 'abort' | 'retry' | 'resume' | 'kill';
         chatId?: string;
         createdAfter?: Date;
@@ -63,7 +63,7 @@ describe('PrismaRuntimeStore runtime coordination', () => {
     const startedAt = new Date('2026-04-14T12:00:00.000Z');
 
     await expect(store.hasRequestedAction({
-      sessionId: 'session-1',
+      projectId: 'session-1',
       action: 'abort',
       chatId: 'chat-1',
       createdAfter: startedAt,
@@ -71,7 +71,7 @@ describe('PrismaRuntimeStore runtime coordination', () => {
 
     expect(db.sessionMessage.findFirst).toHaveBeenCalledWith({
       where: expect.objectContaining({
-        sessionId: 'session-1',
+        projectId: 'session-1',
         createdAt: { gt: startedAt },
       }),
       orderBy: { createdAt: 'desc' },

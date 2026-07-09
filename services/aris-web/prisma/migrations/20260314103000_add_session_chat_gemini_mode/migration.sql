@@ -1,2 +1,2 @@
-ALTER TABLE "SessionChat"
+ALTER TABLE "ProjectChat"
 ADD COLUMN "geminiMode" TEXT;

@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import type { AgentFlavor } from './types';
 
 type SupportedAgent = Exclude<AgentFlavor, 'unknown'>;
-type ModelSelectionSource = 'requested' | 'session' | 'custom' | 'default';
+type ModelSelectionSource = 'requested' | 'project' | 'custom' | 'default';
 
 const MODEL_ID_MAX_LEN = 120;
 const DEFAULT_CUSTOM_MODEL_PATTERN_RAW = '^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$';
@@ -178,7 +178,7 @@ function sanitizeCustomModelList(value: unknown): string[] {
 export function resolveRuntimeMessageModel(input: {
   agent: AgentFlavor;
   requestedModel?: unknown;
-  sessionModel?: unknown;
+  projectModel?: unknown;
   customModel?: unknown;
   customModels?: unknown;
 }): ResolvedModelSelection {
@@ -186,7 +186,7 @@ export function resolveRuntimeMessageModel(input: {
   const builtinModels = BUILTIN_MODELS_BY_AGENT[agent];
   const defaultModel = builtinModels[0];
   const requestedModel = normalizeModelId(input.requestedModel) ?? undefined;
-  const sessionModel = normalizeModelId(input.sessionModel) ?? undefined;
+  const projectModel = normalizeModelId(input.projectModel) ?? undefined;
   const customModel = sanitizeCustomModel(input.customModel) ?? undefined;
   const customModels = sanitizeCustomModelList(input.customModels);
 
@@ -209,13 +209,13 @@ export function resolveRuntimeMessageModel(input: {
     };
   }
 
-  if (sessionModel && isAllowedModel(sessionModel)) {
+  if (projectModel && isAllowedModel(projectModel)) {
     return {
       agent,
-      model: sessionModel,
-      source: 'session',
+      model: projectModel,
+      source: 'project',
       ...(requestedModel ? { requestedModel, fallbackReason: 'requested_disallowed' } : {}),
-      ...(customModel ? { customModel } : sessionModel && customModels.includes(sessionModel) ? { customModel: sessionModel } : {}),
+      ...(customModel ? { customModel } : projectModel && customModels.includes(projectModel) ? { customModel: projectModel } : {}),
     };
   }
 

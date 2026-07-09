@@ -248,7 +248,7 @@
 }
 
 @media (max-width: 640px) {
-  .new-session-modal {
+  .new-project-modal {
     margin: 1rem; /* Add margin so rounded corners are visible */
     width: calc(100% - 2rem);
     height: auto;

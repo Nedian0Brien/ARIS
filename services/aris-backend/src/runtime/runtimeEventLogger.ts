@@ -18,7 +18,7 @@ type LogChannel = 'app_server' | 'exec_cli';
 type LogStage = 'incoming_raw' | 'incoming_payload' | 'parsed_append' | 'run_status' | 'turn_status';
 
 export type HappyRawLogRecord = {
-  sessionId: string;
+  projectId: string;
   agent?: string;
   chatId?: string;
   threadId?: string;
@@ -29,7 +29,7 @@ export type HappyRawLogRecord = {
 };
 
 export type HappyParsedLogRecord = {
-  sessionId: string;
+  projectId: string;
   agent?: string;
   chatId?: string;
   threadId?: string;
@@ -107,11 +107,11 @@ export class RuntimeEventLogger {
       chatId?: unknown;
       threadId?: unknown;
       payload?: unknown;
-      sessionId?: unknown;
+      projectId?: unknown;
     };
-    const sessionId = this.normalizeLogId(
-      typeof parsedRecord.sessionId === 'string'
-        ? parsedRecord.sessionId
+    const projectId = this.normalizeLogId(
+      typeof parsedRecord.projectId === 'string'
+        ? parsedRecord.projectId
         : undefined,
     );
 
@@ -134,7 +134,7 @@ export class RuntimeEventLogger {
 
     const safeAgent = agent || 'unknown';
     const safeChatId = chatId || 'no-chat';
-    const safeThreadId = threadId || sessionId || 'no-thread';
+    const safeThreadId = threadId || projectId || 'no-thread';
 
     return `chat-${safeAgent}-${safeChatId}-${safeThreadId}`;
   }

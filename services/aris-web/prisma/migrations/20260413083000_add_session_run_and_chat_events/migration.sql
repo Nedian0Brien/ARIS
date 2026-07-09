@@ -14,7 +14,7 @@ CREATE TABLE "SessionRun" (
     CONSTRAINT "SessionRun_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE "SessionChatEvent" (
+CREATE TABLE "ProjectChatEvent" (
     "id" TEXT NOT NULL,
     "sessionId" TEXT NOT NULL,
     "chatId" TEXT NOT NULL,
@@ -26,29 +26,29 @@ CREATE TABLE "SessionChatEvent" (
     "seq" INTEGER NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "SessionChatEvent_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "ProjectChatEvent_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "SessionChatEvent_chatId_seq_key" ON "SessionChatEvent"("chatId", "seq");
+CREATE UNIQUE INDEX "ProjectChatEvent_chatId_seq_key" ON "ProjectChatEvent"("chatId", "seq");
 CREATE INDEX "SessionRun_chatId_status_idx" ON "SessionRun"("chatId", "status");
 CREATE INDEX "SessionRun_sessionId_chatId_startedAt_idx" ON "SessionRun"("sessionId", "chatId", "startedAt");
-CREATE INDEX "SessionChatEvent_sessionId_chatId_seq_idx" ON "SessionChatEvent"("sessionId", "chatId", "seq");
-CREATE INDEX "SessionChatEvent_chatId_createdAt_idx" ON "SessionChatEvent"("chatId", "createdAt");
+CREATE INDEX "ProjectChatEvent_sessionId_chatId_seq_idx" ON "ProjectChatEvent"("sessionId", "chatId", "seq");
+CREATE INDEX "ProjectChatEvent_chatId_createdAt_idx" ON "ProjectChatEvent"("chatId", "createdAt");
 
 ALTER TABLE "SessionRun"
 ADD CONSTRAINT "SessionRun_chatId_fkey"
-FOREIGN KEY ("chatId") REFERENCES "SessionChat"("id")
+FOREIGN KEY ("chatId") REFERENCES "ProjectChat"("id")
 ON DELETE CASCADE
 ON UPDATE CASCADE;
 
-ALTER TABLE "SessionChatEvent"
-ADD CONSTRAINT "SessionChatEvent_chatId_fkey"
-FOREIGN KEY ("chatId") REFERENCES "SessionChat"("id")
+ALTER TABLE "ProjectChatEvent"
+ADD CONSTRAINT "ProjectChatEvent_chatId_fkey"
+FOREIGN KEY ("chatId") REFERENCES "ProjectChat"("id")
 ON DELETE CASCADE
 ON UPDATE CASCADE;
 
-ALTER TABLE "SessionChatEvent"
-ADD CONSTRAINT "SessionChatEvent_runId_fkey"
+ALTER TABLE "ProjectChatEvent"
+ADD CONSTRAINT "ProjectChatEvent_runId_fkey"
 FOREIGN KEY ("runId") REFERENCES "SessionRun"("id")
 ON DELETE SET NULL
 ON UPDATE CASCADE;

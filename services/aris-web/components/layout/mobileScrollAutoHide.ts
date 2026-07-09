@@ -1,4 +1,4 @@
-import type { SessionScrollPhase } from '@/lib/scroll/sessionScrollPhase';
+import type { ProjectScrollPhase } from '@/lib/scroll/projectScrollPhase';
 
 export type AutoHideScrollState = {
   hidden: boolean;
@@ -25,22 +25,22 @@ type ReduceAutoHideScrollStateInput = {
   now: number;
   isMobile: boolean;
   thresholds: AutoHideScrollThresholds;
-  isSessionScrollActive?: boolean;
-  sessionScrollPhase?: SessionScrollPhase;
+  isProjectScrollActive?: boolean;
+  projectScrollPhase?: ProjectScrollPhase;
 };
 
 function shouldForceVisibleForSessionPhase(input: {
-  isSessionScrollActive?: boolean;
-  sessionScrollPhase?: SessionScrollPhase;
+  isProjectScrollActive?: boolean;
+  projectScrollPhase?: ProjectScrollPhase;
 }): boolean {
-  if (!input.isSessionScrollActive) {
+  if (!input.isProjectScrollActive) {
     return false;
   }
 
-  return input.sessionScrollPhase === 'resuming'
-    || input.sessionScrollPhase === 'viewport-reflow'
-    || input.sessionScrollPhase === 'restoring-tail'
-    || input.sessionScrollPhase === 'loading-older';
+  return input.projectScrollPhase === 'resuming'
+    || input.projectScrollPhase === 'viewport-reflow'
+    || input.projectScrollPhase === 'restoring-tail'
+    || input.projectScrollPhase === 'loading-older';
 }
 
 export function primeAutoHideScrollState({
@@ -61,8 +61,8 @@ export function reduceAutoHideScrollState({
   now,
   isMobile,
   thresholds,
-  isSessionScrollActive,
-  sessionScrollPhase,
+  isProjectScrollActive,
+  projectScrollPhase,
 }: ReduceAutoHideScrollStateInput): AutoHideScrollState {
   if (!isMobile) {
     return {
@@ -72,7 +72,7 @@ export function reduceAutoHideScrollState({
     };
   }
 
-  if (shouldForceVisibleForSessionPhase({ isSessionScrollActive, sessionScrollPhase })) {
+  if (shouldForceVisibleForSessionPhase({ isProjectScrollActive, projectScrollPhase })) {
     return {
       hidden: false,
       lastScrollY: currentY,

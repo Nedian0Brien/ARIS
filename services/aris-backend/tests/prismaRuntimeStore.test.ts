@@ -66,7 +66,7 @@ describe('PrismaRuntimeStore.appendMessage', () => {
       .mockRejectedValueOnce(Object.assign(new Error('duplicate seq'), { code: 'P2002' }))
       .mockImplementationOnce(async ({ data }: { data: Record<string, unknown> }) => ({
         id: 'message-2',
-        sessionId: data.sessionId,
+        projectId: data.sessionId,
         type: data.type,
         title: data.title,
         text: data.text,
@@ -116,7 +116,7 @@ describe('PrismaRuntimeStore.appendMessage', () => {
       .mockRejectedValueOnce(new Error('TransactionWriteConflict'))
       .mockImplementationOnce(async ({ data }: { data: Record<string, unknown> }) => ({
         id: 'message-2',
-        sessionId: data.sessionId,
+        projectId: data.sessionId,
         type: data.type,
         title: data.title,
         text: data.text,
@@ -164,7 +164,7 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
     const sessionChat = {
       findFirst: vi.fn().mockResolvedValue({
         id: 'chat-1',
-        sessionId: 'session-1',
+        projectId: 'session-1',
         latestPreview: '',
       }),
       update: vi.fn().mockResolvedValue({ id: 'chat-1' }),
@@ -181,7 +181,7 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
       .mockRejectedValueOnce(Object.assign(new Error('duplicate chat seq'), { code: 'P2002' }))
       .mockImplementationOnce(async ({ data }: { data: Record<string, unknown> }) => ({
         id: 'event-4',
-        sessionId: data.sessionId,
+        projectId: data.sessionId,
         chatId: data.chatId,
         runId: data.runId,
         type: data.type,
@@ -209,12 +209,12 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
     const store = buildStoreWithMockDb(db) as PrismaRuntimeStore & {
       appendChatEvent: (
         chatId: string,
-        input: { sessionId: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
+        input: { projectId: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
       ) => Promise<{ meta?: Record<string, unknown> }>;
     };
 
     const event = await store.appendChatEvent('chat-1', {
-      sessionId: 'session-1',
+      projectId: 'session-1',
       type: 'message',
       title: 'Text Reply',
       text: '완료',
@@ -239,7 +239,7 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
     const sessionChat = {
       findFirst: vi.fn().mockResolvedValue({
         id: 'chat-1',
-        sessionId: 'session-1',
+        projectId: 'session-1',
         latestPreview: '',
       }),
       update: vi.fn().mockResolvedValue({ id: 'chat-1' }),
@@ -256,7 +256,7 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
       .mockRejectedValueOnce(new Error('Transaction API error: Unable to start a transaction in the given time.'))
       .mockImplementationOnce(async ({ data }: { data: Record<string, unknown> }) => ({
         id: 'event-1',
-        sessionId: data.sessionId,
+        projectId: data.sessionId,
         chatId: data.chatId,
         runId: data.runId,
         type: data.type,
@@ -284,12 +284,12 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
     const store = buildStoreWithMockDb(db) as PrismaRuntimeStore & {
       appendChatEvent: (
         chatId: string,
-        input: { sessionId: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
+        input: { projectId: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
       ) => Promise<{ meta?: Record<string, unknown> }>;
     };
 
     const event = await store.appendChatEvent('chat-1', {
-      sessionId: 'session-1',
+      projectId: 'session-1',
       type: 'message',
       title: 'Text Reply',
       text: '완료',
@@ -306,7 +306,7 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
     const sessionChat = {
       findFirst: vi.fn().mockResolvedValue({
         id: 'chat-1',
-        sessionId: 'session-1',
+        projectId: 'session-1',
         latestPreview: '',
       }),
       update: vi.fn().mockResolvedValue({ id: 'chat-1' }),
@@ -322,7 +322,7 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
       aggregate: vi.fn().mockResolvedValue({ _max: { seq: 2 } }),
       create: vi.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
         id: 'event-3',
-        sessionId: data.sessionId,
+        projectId: data.sessionId,
         chatId: data.chatId,
         runId: data.runId,
         type: data.type,
@@ -347,12 +347,12 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
     const store = buildStoreWithMockDb(db) as PrismaRuntimeStore & {
       appendChatEvent: (
         chatId: string,
-        input: { sessionId: string; runId?: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
+        input: { projectId: string; runId?: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
       ) => Promise<{ meta?: Record<string, unknown> }>;
     };
 
     const event = await store.appendChatEvent('chat-1', {
-      sessionId: 'session-1',
+      projectId: 'session-1',
       type: 'message',
       title: 'Text Reply',
       text: '완료',
@@ -367,7 +367,7 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
     expect(sessionChatEvent.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         chatId: 'chat-1',
-        sessionId: 'session-1',
+        projectId: 'session-1',
         seq: 3,
       }),
     }));
@@ -379,7 +379,7 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
     const sessionChat = {
       findFirst: vi.fn().mockResolvedValue({
         id: 'chat-1',
-        sessionId: 'session-1',
+        projectId: 'session-1',
         latestPreview: '',
       }),
       update: vi.fn().mockResolvedValue({ id: 'chat-1' }),
@@ -399,7 +399,7 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
       aggregate: vi.fn().mockResolvedValue({ _max: { seq: 0 } }),
       create: vi.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
         id: 'event-1',
-        sessionId: data.sessionId,
+        projectId: data.sessionId,
         chatId: data.chatId,
         runId: data.runId,
         type: data.type,
@@ -424,12 +424,12 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
     const store = buildStoreWithMockDb(db) as PrismaRuntimeStore & {
       appendChatEvent: (
         chatId: string,
-        input: { sessionId: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
+        input: { projectId: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
       ) => Promise<{ meta?: Record<string, unknown> }>;
     };
 
     const event = await store.appendChatEvent('chat-1', {
-      sessionId: 'session-1',
+      projectId: 'session-1',
       type: 'message',
       title: 'Run Status',
       text: 'run status: completed',
@@ -451,7 +451,7 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
       findMany: vi.fn().mockResolvedValue([
         {
           id: 'event-hidden',
-          sessionId: 'session-1',
+          projectId: 'session-1',
           chatId: 'chat-1',
           runId: null,
           type: 'message',
@@ -463,7 +463,7 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
         },
         {
           id: 'event-3',
-          sessionId: 'session-1',
+          projectId: 'session-1',
           chatId: 'chat-1',
           runId: 'run-1',
           type: 'message',
@@ -511,10 +511,10 @@ describe('PrismaRuntimeStore chat-scoped events', () => {
       },
     });
 
-    const isRunning = await store.isSessionRunning('session-1', 'chat-1');
+    const isRunning = await store.isProjectRunning('session-1', 'chat-1');
 
     expect(sessionRun.findFirst).toHaveBeenCalledWith({
-      where: { sessionId: 'session-1', chatId: 'chat-1', status: 'running' },
+      where: { projectId: 'session-1', chatId: 'chat-1', status: 'running' },
       select: { id: true },
     });
     expect(isRunning).toBe(true);

@@ -2,14 +2,14 @@
 
 import { useCallback, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import type { AgentFlavor, ApprovalPolicy, SessionChat } from '@/lib/happy/types';
+import type { AgentFlavor, ApprovalPolicy, ProjectChat } from '@/lib/happy/types';
 import {
   normalizeModelId,
   normalizeGeminiModeId,
   normalizeModelReasoningEffort,
   resolveDefaultGeminiModeId,
   resolveDefaultModelId,
-  sortSessionChats,
+  sortProjectChats,
   writeChatIdToHistory,
 } from '../helpers';
 import { writeLastSelectedModelId } from '../../chatModelPreferences';
@@ -17,7 +17,7 @@ import type { LegacyCustomModels, ModelReasoningEffort } from '../types';
 
 type Params = {
   activeAgentFlavor: AgentFlavor;
-  activeChat: SessionChat | null;
+  activeChat: ProjectChat | null;
   activeChatIdResolved: string | null;
   approvalPolicy?: ApprovalPolicy;
   isMobileLayout: boolean;
@@ -26,7 +26,7 @@ type Params = {
   providerSelections?: Parameters<typeof resolveDefaultModelId>[1];
   selectedModelReasoningEffort: ModelReasoningEffort;
   sessionId: string;
-  setChats: Dispatch<SetStateAction<SessionChat[]>>;
+  setChats: Dispatch<SetStateAction<ProjectChat[]>>;
   setIsChatSidebarOpen: (value: boolean) => void;
   setIsGeminiModeDropdownOpen: (value: boolean) => void;
   setIsModelDropdownOpen: (value: boolean) => void;
@@ -38,7 +38,7 @@ type Params = {
   setSelectedModelReasoningEffort: (value: ModelReasoningEffort) => void;
 };
 
-export function useChatSessionActions({
+export function useChatProjectActions({
   activeAgentFlavor,
   activeChat,
   activeChatIdResolved,
@@ -114,23 +114,23 @@ export function useChatSessionActions({
     }
     setIsModelDropdownOpen(false);
     setChatMutationError(null);
-    setChats((prev) => sortSessionChats(prev.map((chat) => (
+    setChats((prev) => sortProjectChats(prev.map((chat) => (
       chat.id === activeChatIdResolved ? { ...chat, model: normalizedModelId } : chat
     ))));
     try {
       const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
+        `/api/runtime/projects/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ model: normalizedModelId }),
         },
       );
-      const payload = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
+      const payload = (await response.json().catch(() => ({}))) as { chat?: ProjectChat; error?: string };
       if (!response.ok || !payload.chat) {
         throw new Error(payload.error ?? '모델 설정 저장에 실패했습니다.');
       }
-      setChats((prev) => sortSessionChats(prev.map((chat) => (
+      setChats((prev) => sortProjectChats(prev.map((chat) => (
         chat.id === payload.chat?.id ? payload.chat : chat
       ))));
     } catch (error) {
@@ -159,28 +159,28 @@ export function useChatSessionActions({
     setSelectedGeminiModeId(normalizedModeId);
     setIsGeminiModeDropdownOpen(false);
     setChatMutationError(null);
-    setChats((prev) => sortSessionChats(prev.map((chat) => (
+    setChats((prev) => sortProjectChats(prev.map((chat) => (
       chat.id === activeChatIdResolved ? { ...chat, geminiMode: normalizedModeId } : chat
     ))));
     try {
       const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
+        `/api/runtime/projects/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ geminiMode: normalizedModeId }),
         },
       );
-      const payload = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
+      const payload = (await response.json().catch(() => ({}))) as { chat?: ProjectChat; error?: string };
       if (!response.ok || !payload.chat) {
         throw new Error(payload.error ?? 'Gemini mode 저장에 실패했습니다.');
       }
-      setChats((prev) => sortSessionChats(prev.map((chat) => (
+      setChats((prev) => sortProjectChats(prev.map((chat) => (
         chat.id === payload.chat?.id ? payload.chat : chat
       ))));
     } catch (error) {
       setSelectedGeminiModeId(previousModeId);
-      setChats((prev) => sortSessionChats(prev.map((chat) => (
+      setChats((prev) => sortProjectChats(prev.map((chat) => (
         chat.id === activeChatIdResolved ? { ...chat, geminiMode: previousModeId } : chat
       ))));
       setChatMutationError(error instanceof Error ? error.message : 'Gemini mode 저장에 실패했습니다.');
@@ -204,28 +204,28 @@ export function useChatSessionActions({
     }
     setChatMutationError(null);
     const previousEffort = normalizeModelReasoningEffort(activeChat?.modelReasoningEffort, 'medium');
-    setChats((prev) => sortSessionChats(prev.map((chat) => (
+    setChats((prev) => sortProjectChats(prev.map((chat) => (
       chat.id === activeChatIdResolved ? { ...chat, modelReasoningEffort: normalizedEffort } : chat
     ))));
     try {
       const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
+        `/api/runtime/projects/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ modelReasoningEffort: normalizedEffort }),
         },
       );
-      const payload = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
+      const payload = (await response.json().catch(() => ({}))) as { chat?: ProjectChat; error?: string };
       if (!response.ok || !payload.chat) {
         throw new Error(payload.error ?? '모델 effort 저장에 실패했습니다.');
       }
-      setChats((prev) => sortSessionChats(prev.map((chat) => (
+      setChats((prev) => sortProjectChats(prev.map((chat) => (
         chat.id === payload.chat?.id ? payload.chat : chat
       ))));
     } catch (error) {
       setSelectedModelReasoningEffort(previousEffort);
-      setChats((prev) => sortSessionChats(prev.map((chat) => (
+      setChats((prev) => sortProjectChats(prev.map((chat) => (
         chat.id === activeChatIdResolved ? { ...chat, modelReasoningEffort: previousEffort } : chat
       ))));
       setChatMutationError(error instanceof Error ? error.message : '모델 effort 저장에 실패했습니다.');
@@ -255,7 +255,7 @@ export function useChatSessionActions({
       ? resolveDefaultGeminiModeId(approvalPolicy, providerSelections?.gemini?.defaultModeId)
       : undefined;
     try {
-      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`, {
+      const response = await fetch(`/api/runtime/projects/${encodeURIComponent(sessionId)}/chats`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -265,11 +265,11 @@ export function useChatSessionActions({
           ...(agent === 'codex' ? { modelReasoningEffort: selectedModelReasoningEffort } : {}),
         }),
       });
-      const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
+      const body = (await response.json().catch(() => ({}))) as { chat?: ProjectChat; error?: string };
       if (!response.ok || !body.chat) {
         throw new Error(body.error ?? '새 채팅 생성에 실패했습니다.');
       }
-      setChats((prev) => sortSessionChats([body.chat!, ...prev]));
+      setChats((prev) => sortProjectChats([body.chat!, ...prev]));
       goToChat(body.chat.id);
     } catch (error) {
       setChatMutationError(error instanceof Error ? error.message : '새 채팅 생성에 실패했습니다.');
@@ -288,16 +288,16 @@ export function useChatSessionActions({
     setChats,
   ]);
 
-  const handleToggleChatPin = useCallback(async (chat: SessionChat) => {
+  const handleToggleChatPin = useCallback(async (chat: ProjectChat) => {
     setChatMutationLoadingId(chat.id);
     setChatMutationError(null);
     const nextPinned = !chat.isPinned;
-    setChats((prev) => sortSessionChats(prev.map((item) => (
+    setChats((prev) => sortProjectChats(prev.map((item) => (
       item.id === chat.id ? { ...item, isPinned: nextPinned } : item
     ))));
     try {
       const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chat.id)}`,
+        `/api/runtime/projects/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chat.id)}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -308,7 +308,7 @@ export function useChatSessionActions({
         throw new Error('채팅 고정 상태 변경에 실패했습니다.');
       }
     } catch (error) {
-      setChats((prev) => sortSessionChats(prev.map((item) => (
+      setChats((prev) => sortProjectChats(prev.map((item) => (
         item.id === chat.id ? { ...item, isPinned: chat.isPinned } : item
       ))));
       setChatMutationError(error instanceof Error ? error.message : '채팅 고정 상태 변경에 실패했습니다.');
@@ -329,18 +329,18 @@ export function useChatSessionActions({
     setChatMutationError(null);
     try {
       const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chatId)}`,
+        `/api/runtime/projects/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chatId)}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ title: normalized }),
         },
       );
-      const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
+      const body = (await response.json().catch(() => ({}))) as { chat?: ProjectChat; error?: string };
       if (!response.ok || !body.chat) {
         throw new Error(body.error ?? '채팅 이름 변경에 실패했습니다.');
       }
-      setChats((prev) => sortSessionChats(prev.map((chat) => (
+      setChats((prev) => sortProjectChats(prev.map((chat) => (
         chat.id === chatId ? { ...chat, title: body.chat!.title } : chat
       ))));
       setRenamingChatId(null);
@@ -352,7 +352,7 @@ export function useChatSessionActions({
     }
   }, [sessionId, setChats]);
 
-  const handleDeleteChat = useCallback(async (chat: SessionChat) => {
+  const handleDeleteChat = useCallback(async (chat: ProjectChat) => {
     if (chatMutationLoadingId) {
       return;
     }
@@ -364,14 +364,14 @@ export function useChatSessionActions({
     setChatMutationError(null);
     try {
       const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chat.id)}`,
+        `/api/runtime/projects/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chat.id)}`,
         { method: 'DELETE' },
       );
-      const body = (await response.json().catch(() => ({}))) as { chats?: SessionChat[]; error?: string };
+      const body = (await response.json().catch(() => ({}))) as { chats?: ProjectChat[]; error?: string };
       if (!response.ok || !Array.isArray(body.chats)) {
         throw new Error(body.error ?? '채팅 삭제에 실패했습니다.');
       }
-      const nextChats = sortSessionChats(body.chats);
+      const nextChats = sortProjectChats(body.chats);
       setChats(nextChats);
       closeSidebarMenu();
       if (chat.id === activeChatIdResolved && nextChats[0]) {
@@ -407,7 +407,7 @@ export function useChatSessionActions({
     setChatTitleDraft('');
   }, []);
 
-  const handleSidebarStartRename = useCallback((chat: SessionChat) => {
+  const handleSidebarStartRename = useCallback((chat: ProjectChat) => {
     setRenamingChatId(chat.id);
     setChatTitleDraft(chat.title);
     setChatActionMenuId(null);

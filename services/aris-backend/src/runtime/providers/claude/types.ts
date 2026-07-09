@@ -12,7 +12,7 @@ import type {
 import type { PermissionDecision } from '../../../types.js';
 import type { ClaudeSessionLaunchMode } from './claudeSessionContract.js';
 
-export type { ClaudeRuntimeSession } from './claudeSessionContract.js';
+export type { ClaudeRuntimeProject } from './claudeSessionContract.js';
 
 export type ClaudeResumeTarget = ProviderResumeTarget;
 export type ClaudeThreadIdSource = ProviderThreadIdSource;

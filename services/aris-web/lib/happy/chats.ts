@@ -1,9 +1,9 @@
 import { prisma } from '@/lib/db/prisma';
-import type { AgentFlavor, SessionChat } from '@/lib/happy/types';
+import type { AgentFlavor, ProjectChat } from '@/lib/happy/types';
 
 const DEFAULT_CHAT_TITLE = '새 채팅';
 
-function toSessionChat(record: {
+function toProjectChat(record: {
   id: string;
   projectId: string;
   agent: string;
@@ -27,11 +27,10 @@ function toSessionChat(record: {
   lastActivityAt: Date;
   createdAt: Date;
   updatedAt: Date;
-}): SessionChat {
+}): ProjectChat {
   return {
     id: record.id,
     projectId: record.projectId,
-    sessionId: record.projectId,
     agent: resolveAgentFlavor(record.agent),
     model: record.model,
     geminiMode: record.geminiMode,
@@ -97,7 +96,7 @@ function normalizeModelReasoningEffort(input: unknown): 'low' | 'medium' | 'high
   return null;
 }
 
-function sortChats(chats: SessionChat[]): SessionChat[] {
+function sortChats(chats: ProjectChat[]): ProjectChat[] {
   return [...chats].sort((a, b) => {
     if (a.isPinned !== b.isPinned) {
       return a.isPinned ? -1 : 1;
@@ -138,16 +137,16 @@ function buildNextChatTitle(existingTitles: string[]): string {
   return `${DEFAULT_CHAT_TITLE} ${Date.now()}`;
 }
 
-export async function listSessionChats(input: {
-  sessionId: string;
+export async function listProjectChats(input: {
+  projectId: string;
   userId: string;
   ensureDefault?: boolean;
   limit?: number;
-}): Promise<SessionChat[]> {
+}): Promise<ProjectChat[]> {
   if (input.ensureDefault ?? true) {
     const hasAny = await prisma.chat.findFirst({
       where: {
-        projectId: input.sessionId,
+        projectId: input.projectId,
         userId: input.userId,
         // Ignore imported subagent chats so a project that only contains
         // subagent transcripts still gets a real default chat.
@@ -160,7 +159,7 @@ export async function listSessionChats(input: {
     if (!hasAny) {
       await prisma.chat.create({
         data: {
-          projectId: input.sessionId,
+          projectId: input.projectId,
           userId: input.userId,
           title: DEFAULT_CHAT_TITLE,
           isDefault: true,
@@ -171,7 +170,7 @@ export async function listSessionChats(input: {
 
   const chats = await prisma.chat.findMany({
     where: {
-      projectId: input.sessionId,
+      projectId: input.projectId,
       userId: input.userId,
       // Subagent (Task tool) transcripts are imported but must never appear in
       // the main chat list — they are surfaced only in the subagent sidebar.
@@ -187,7 +186,7 @@ export async function listSessionChats(input: {
     ...(Number.isFinite(input.limit) ? { take: Math.max(1, Math.floor(Number(input.limit))) } : {}),
   });
 
-  return sortChats(chats.map(toSessionChat));
+  return sortChats(chats.map(toProjectChat));
 }
 
 /**
@@ -197,7 +196,7 @@ export async function listSessionChats(input: {
 export async function listSubagentChats(input: {
   parentChatId: string;
   userId: string;
-}): Promise<SessionChat[]> {
+}): Promise<ProjectChat[]> {
   const chats = await prisma.chat.findMany({
     where: {
       parentChatId: input.parentChatId,
@@ -208,21 +207,21 @@ export async function listSubagentChats(input: {
       { createdAt: 'desc' },
     ],
   });
-  return chats.map(toSessionChat);
+  return chats.map(toProjectChat);
 }
 
-export async function createSessionChat(input: {
-  sessionId: string;
+export async function createProjectChat(input: {
+  projectId: string;
   userId: string;
   agent?: AgentFlavor;
   model?: string | null;
   geminiMode?: string | null;
   modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh' | null;
   title?: string;
-}): Promise<SessionChat> {
+}): Promise<ProjectChat> {
   const existing = await prisma.chat.findMany({
     where: {
-      projectId: input.sessionId,
+      projectId: input.projectId,
       userId: input.userId,
     },
     select: { title: true },
@@ -234,7 +233,7 @@ export async function createSessionChat(input: {
 
   const created = await prisma.chat.create({
     data: {
-      projectId: input.sessionId,
+      projectId: input.projectId,
       userId: input.userId,
       agent: input.agent && input.agent !== 'unknown' ? input.agent : 'codex',
       ...(input.model !== undefined && { model: normalizeChatModel(input.model) }),
@@ -247,11 +246,11 @@ export async function createSessionChat(input: {
     },
   });
 
-  return toSessionChat(created);
+  return toProjectChat(created);
 }
 
-export async function updateSessionChat(input: {
-  sessionId: string;
+export async function updateProjectChat(input: {
+  projectId: string;
   userId: string;
   chatId: string;
   agent?: AgentFlavor;
@@ -269,11 +268,11 @@ export async function updateSessionChat(input: {
   latestEventAt?: string | null;
   latestEventIsUser?: boolean;
   latestHasErrorSignal?: boolean;
-}): Promise<SessionChat> {
+}): Promise<ProjectChat> {
   const existing = await prisma.chat.findFirst({
     where: {
       id: input.chatId,
-      projectId: input.sessionId,
+      projectId: input.projectId,
       userId: input.userId,
     },
     select: { id: true },
@@ -333,7 +332,7 @@ export async function updateSessionChat(input: {
     if (!current) {
       throw new Error('CHAT_NOT_FOUND');
     }
-    return toSessionChat(current);
+    return toProjectChat(current);
   }
 
   const updated = await prisma.chat.update({
@@ -362,18 +361,18 @@ export async function updateSessionChat(input: {
     },
   });
 
-  return toSessionChat(updated);
+  return toProjectChat(updated);
 }
 
-export async function deleteSessionChat(input: {
-  sessionId: string;
+export async function deleteProjectChat(input: {
+  projectId: string;
   userId: string;
   chatId: string;
-}): Promise<{ deleted: boolean; chats: SessionChat[] }> {
+}): Promise<{ deleted: boolean; chats: ProjectChat[] }> {
   const existing = await prisma.chat.findFirst({
     where: {
       id: input.chatId,
-      projectId: input.sessionId,
+      projectId: input.projectId,
       userId: input.userId,
     },
   });
@@ -381,7 +380,7 @@ export async function deleteSessionChat(input: {
   if (!existing) {
     return {
       deleted: false,
-      chats: await listSessionChats({ sessionId: input.sessionId, userId: input.userId, ensureDefault: true }),
+      chats: await listProjectChats({ projectId: input.projectId, userId: input.userId, ensureDefault: true }),
     };
   }
 
@@ -389,7 +388,7 @@ export async function deleteSessionChat(input: {
     where: { id: existing.id },
   });
 
-  let chats = await listSessionChats({ sessionId: input.sessionId, userId: input.userId, ensureDefault: true });
+  let chats = await listProjectChats({ projectId: input.projectId, userId: input.userId, ensureDefault: true });
 
   const hasDefault = chats.some((chat) => chat.isDefault);
   if (!hasDefault && chats.length > 0) {
@@ -397,7 +396,7 @@ export async function deleteSessionChat(input: {
       where: { id: chats[0].id },
       data: { isDefault: true },
     });
-    chats = chats.map((chat) => (chat.id === promoted.id ? toSessionChat(promoted) : chat));
+    chats = chats.map((chat) => (chat.id === promoted.id ? toProjectChat(promoted) : chat));
     chats = sortChats(chats);
   }
 

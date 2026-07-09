@@ -7,10 +7,10 @@
  * in 2.5c (PermissionRouter) and 2.5d (RealtimeEventBus).
  *
  * Run-key semantics (preserved verbatim):
- *   - `${sessionId}:__default__` when no chat scope is provided.
- *   - `${sessionId}:${chatId.trim()}` when a non-empty chat scope exists.
- *   - `isSessionRunKey(runKey, sessionId)` returns true for the default
- *     scope or any run-key prefixed with `${sessionId}:`.
+ *   - `${projectId}:__default__` when no chat scope is provided.
+ *   - `${projectId}:${chatId.trim()}` when a non-empty chat scope exists.
+ *   - `isProjectRunKey(runKey, projectId)` returns true for the default
+ *     scope or any run-key prefixed with `${projectId}:`.
  *
  * Drain semantics (preserved verbatim):
  *   - `beginShutdownDrain()` flips an internal flag callers can read.
@@ -29,7 +29,7 @@ import type { AgentFlavor } from '../../types.js';
 /** A live provider run as recorded in the registry. */
 export interface ActiveRun {
   controller: AbortController;
-  sessionId: string;
+  projectId: string;
   chatId?: string;
   startedAt: number;
   agent: AgentFlavor;
@@ -40,7 +40,7 @@ export interface ActiveRun {
 
 /** Input shape for the stale-run handler callback. */
 export interface StaleRunCleanupInput {
-  sessionId: string;
+  projectId: string;
   chatId?: string;
   model?: string;
   agent: AgentFlavor;
@@ -60,22 +60,22 @@ export interface ActiveRunRegistryDeps {
 }
 
 /**
- * Build a run-key for the (sessionId, chatId) tuple. Verbatim port of the
+ * Build a run-key for the (projectId, chatId) tuple. Verbatim port of the
  * helper that lived in runtimeCore.ts.
  */
-export function buildRunKey(sessionId: string, chatId?: string): string {
+export function buildRunKey(projectId: string, chatId?: string): string {
   if (chatId && chatId.trim().length > 0) {
-    return `${sessionId}:${chatId.trim()}`;
+    return `${projectId}:${chatId.trim()}`;
   }
-  return `${sessionId}:__default__`;
+  return `${projectId}:__default__`;
 }
 
 /**
- * Predicate matching run-keys that belong to `sessionId`. Returns true for
- * the default scope or any run-key prefixed with `${sessionId}:`.
+ * Predicate matching run-keys that belong to `projectId`. Returns true for
+ * the default scope or any run-key prefixed with `${projectId}:`.
  */
-export function isSessionRunKey(runKey: string, sessionId: string): boolean {
-  return runKey === `${sessionId}:__default__` || runKey.startsWith(`${sessionId}:`);
+export function isProjectRunKey(runKey: string, projectId: string): boolean {
+  return runKey === `${projectId}:__default__` || runKey.startsWith(`${projectId}:`);
 }
 
 export class ActiveRunRegistry {
@@ -148,7 +148,7 @@ export class ActiveRunRegistry {
         if (runKey !== scopedRunKey) {
           continue;
         }
-      } else if (!isSessionRunKey(runKey, sessionId)) {
+      } else if (!isProjectRunKey(runKey, sessionId)) {
         continue;
       }
       if (!run.controller.signal.aborted) {
@@ -162,7 +162,7 @@ export class ActiveRunRegistry {
     await this.deps.claudeSessionRegistry.cleanupStaleRuns(
       this.deps.staleTimeoutMs,
       async ({ runKey, run, ageMs }) => this.deps.handleStaleRunCleanup({
-        sessionId: run.sessionId,
+        projectId: run.sessionId,
         chatId: run.chatId,
         model: run.model,
         agent: 'claude',
@@ -188,7 +188,7 @@ export class ActiveRunRegistry {
       }
       this.runs.delete(stale.runKey);
       await this.deps.handleStaleRunCleanup({
-        sessionId: stale.run.sessionId,
+        projectId: stale.run.projectId,
         chatId: stale.run.chatId,
         model: stale.run.model,
         agent: stale.run.agent,

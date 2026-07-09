@@ -81,7 +81,7 @@ describe('fs list route', () => {
     mocks.resolveWorkspacePanelExecutionTarget.mockResolvedValue({
       projectId: 'project-1',
       projectPath: '/home/ubuntu/project/ARIS',
-      runtimeSessionId: 'runtime-panel-1',
+      runtimeProjectId: 'runtime-panel-1',
       executionPath: '/home/ubuntu/project/ARIS/.worktrees/panel-1',
       workspacePanelId: 'panel-1',
       branch: 'parallel/panel-1',

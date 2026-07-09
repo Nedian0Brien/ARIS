@@ -50,7 +50,7 @@ describe('happy alignment E2E', () => {
       const url = new URL(requestPath, 'http://fake-happy');
       const method = (init.method ?? 'GET').toUpperCase();
 
-      if (url.pathname === '/v1/sessions' && method === 'POST') {
+      if (url.pathname === '/v1/projects' && method === 'POST') {
         const body = JSON.parse(String(init.body ?? '{}')) as { metadata: string };
         const id = `session-${sessionSequence += 1}`;
         const now = Date.now();
@@ -62,16 +62,16 @@ describe('happy alignment E2E', () => {
         };
         fakeSessions.set(id, session);
         fakeMessages.set(id, []);
-        return { session };
+        return { project: session };
       }
 
-      if (url.pathname === '/v1/sessions' && method === 'GET') {
+      if (url.pathname === '/v1/projects' && method === 'GET') {
         return {
-          sessions: [...fakeSessions.values()],
+          projects: [...fakeSessions.values()],
         };
       }
 
-      const messageMatch = url.pathname.match(/^\/v3\/sessions\/([^/]+)\/messages$/);
+      const messageMatch = url.pathname.match(/^\/v3\/projects\/([^/]+)\/messages$/);
       if (messageMatch && method === 'POST') {
         const sessionId = decodeURIComponent(messageMatch[1] || '');
         const posted = JSON.parse(String(init.body ?? '{}')) as {
@@ -192,7 +192,7 @@ describe('happy alignment E2E', () => {
       };
     };
 
-    const session = await store.createSession({
+    const session = await store.createProject({
       path: '/workspace/ARIS',
       flavor: 'claude',
       approvalPolicy: 'on-request',
@@ -214,7 +214,7 @@ describe('happy alignment E2E', () => {
     );
     const permission = pendingPermissions[0] as PermissionRequest;
     expect(permission.command).toBe('npm install sharp');
-    expect(await store.isSessionRunning(session.id, 'chat-e2e')).toBe(true);
+    expect(await store.isProjectRunning(session.id, 'chat-e2e')).toBe(true);
 
     await store.decidePermission(permission.id, 'allow_once');
 
@@ -237,7 +237,7 @@ describe('happy alignment E2E', () => {
     expect(agentMessages[1]?.meta?.claudeSessionId).toBe('observed-e2e-session');
     expect(agentMessages[1]?.meta?.launchMode).toBe('remote');
     expect(await store.listPermissions('pending')).toHaveLength(0);
-    expect(await store.isSessionRunning(session.id, 'chat-e2e')).toBe(false);
+    expect(await store.isProjectRunning(session.id, 'chat-e2e')).toBe(false);
   });
 
   it('persists Claude intermediate commentary before streamed actions and final text', async () => {
@@ -256,7 +256,7 @@ describe('happy alignment E2E', () => {
       const url = new URL(requestPath, 'http://fake-happy');
       const method = (init.method ?? 'GET').toUpperCase();
 
-      if (url.pathname === '/v1/sessions' && method === 'POST') {
+      if (url.pathname === '/v1/projects' && method === 'POST') {
         const body = JSON.parse(String(init.body ?? '{}')) as { metadata: string };
         const id = `session-${sessionSequence += 1}`;
         const now = Date.now();
@@ -268,16 +268,16 @@ describe('happy alignment E2E', () => {
         };
         fakeSessions.set(id, session);
         fakeMessages.set(id, []);
-        return { session };
+        return { project: session };
       }
 
-      if (url.pathname === '/v1/sessions' && method === 'GET') {
+      if (url.pathname === '/v1/projects' && method === 'GET') {
         return {
-          sessions: [...fakeSessions.values()],
+          projects: [...fakeSessions.values()],
         };
       }
 
-      const messageMatch = url.pathname.match(/^\/v3\/sessions\/([^/]+)\/messages$/);
+      const messageMatch = url.pathname.match(/^\/v3\/projects\/([^/]+)\/messages$/);
       if (messageMatch && method === 'POST') {
         const sessionId = decodeURIComponent(messageMatch[1] || '');
         const posted = JSON.parse(String(init.body ?? '{}')) as {
@@ -394,7 +394,7 @@ describe('happy alignment E2E', () => {
       };
     };
 
-    const session = await store.createSession({
+    const session = await store.createProject({
       path: '/workspace/ARIS',
       flavor: 'claude',
       approvalPolicy: 'on-request',
@@ -432,6 +432,6 @@ describe('happy alignment E2E', () => {
     expect(agentMessages[2]?.text).toBe('최종 정리입니다.');
     expect(agentMessages[2]?.meta?.claudeSessionId).toBe('observed-e2e-session');
     expect(agentMessages[2]?.meta?.threadIdSource).toBe('observed');
-    expect(await store.isSessionRunning(session.id, 'chat-e2e-text')).toBe(false);
+    expect(await store.isProjectRunning(session.id, 'chat-e2e-text')).toBe(false);
   });
 });

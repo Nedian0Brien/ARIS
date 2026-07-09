@@ -1,7 +1,7 @@
 import { runClaudeCommand } from './claudeLauncher.js';
 import { buildClaudeResumeTarget, resolveClaudeThreadId } from './claudeSessionSource.js';
 import type { ClaudeSessionStateOwner } from './claudeSessionContract.js';
-import type { ClaudeCommandExecutor, ClaudeRuntimeSession, ClaudeTurnResult } from './types.js';
+import type { ClaudeCommandExecutor, ClaudeRuntimeProject, ClaudeTurnResult } from './types.js';
 
 function extractObservedThreadIdFromError(error: unknown): string | undefined {
   if (!error || typeof error !== 'object') {
@@ -14,7 +14,7 @@ function extractObservedThreadIdFromError(error: unknown): string | undefined {
 }
 
 export async function runClaudeTurn(input: {
-  session: ClaudeRuntimeSession;
+  session: ClaudeRuntimeProject;
   sessionOwner?: ClaudeSessionStateOwner;
   prompt: string;
   chatId?: string;

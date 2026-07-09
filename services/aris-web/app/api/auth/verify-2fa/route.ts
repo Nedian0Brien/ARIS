@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticator } from 'otplib';
 import { prisma } from '@/lib/db/prisma';
-import { createSessionCookieValue, trustDevice } from '@/lib/auth/session';
+import { createProjectCookieValue, trustDevice } from '@/lib/auth/session';
 import { AUTH_COOKIE, DEVICE_COOKIE } from '@/lib/auth/constants';
 import { env } from '@/lib/config';
 import { writeAuditLog } from '@/lib/audit/log';
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
   if (rememberMe) {
     await trustDevice(user.id, deviceId);
   }
-  const token = await createSessionCookieValue(
+  const token = await createProjectCookieValue(
     { id: user.id, email: user.email, role: user.role },
     sessionTtlSeconds,
   );

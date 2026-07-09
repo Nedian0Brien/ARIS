@@ -6,7 +6,7 @@ import { signSessionJwt, verifySessionJwt } from '@/lib/auth/jwt';
 import type { AuthenticatedUser } from '@/lib/auth/types';
 import { AUTH_COOKIE } from '@/lib/auth/constants';
 
-export async function createSessionCookieValue(
+export async function createProjectCookieValue(
   user: AuthenticatedUser,
   ttlSeconds: number = env.AUTH_TOKEN_TTL_SECONDS,
 ): Promise<string> {

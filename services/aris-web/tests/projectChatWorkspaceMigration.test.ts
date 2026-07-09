@@ -18,12 +18,12 @@ describe('Project/Chat/Workspace migration boundary', () => {
     expect(schema).toContain('model Workspace {');
     expect(schema).toContain('model WorkspacePanel {');
     expect(schema).not.toContain('model ProjectWorkspace');
-    expect(schema).not.toContain('model SessionChat {');
+    expect(schema).not.toContain('model ProjectChat {');
   });
 
   it('uses projectId on Chat instead of product-level sessionId', () => {
     const chatStart = schema.indexOf('model Chat {');
-    const chatEnd = schema.indexOf('model SessionRun', chatStart);
+    const chatEnd = schema.indexOf('model ProjectRun', chatStart);
     const chatModel = schema.slice(chatStart, chatEnd);
 
     expect(chatModel).toContain('projectId');
@@ -34,7 +34,7 @@ describe('Project/Chat/Workspace migration boundary', () => {
   it('contains an explicit SQL migration for the table and column rename path', () => {
     expect(migration).toContain('ALTER TABLE "Workspace" RENAME TO "Project";');
     expect(migration).toContain('ALTER TABLE "ProjectWorkspace" RENAME TO "Workspace";');
-    expect(migration).toContain('ALTER TABLE "SessionChat" RENAME TO "Chat";');
+    expect(migration).toContain('ALTER TABLE "ProjectChat" RENAME TO "Chat";');
     expect(migration).toContain('ALTER TABLE "Chat" RENAME COLUMN "sessionId" TO "projectId";');
     expect(migration).toContain('CREATE TABLE "WorkspacePanel"');
   });

@@ -21,7 +21,7 @@ describe('PrismaRuntimeStore imported agent sessions', () => {
     };
     const store = buildStoreWithMockDb({ session });
 
-    await expect(store.resolveProjectSessionIdByPath('/home/ubuntu/project/ARIS')).resolves.toBe('project-session-1');
+    await expect(store.resolveProjectIdByPath('/home/ubuntu/project/ARIS')).resolves.toBe('project-session-1');
     expect(session.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: {
         path: '/home/ubuntu/project/ARIS',
@@ -92,14 +92,14 @@ describe('PrismaRuntimeStore imported agent sessions', () => {
 
     await expect(store.ensureImportedAgentChat({
       importId: 'import-1',
-      arisSessionId: '/home/ubuntu/project/ARIS',
+      arisProjectId: '/home/ubuntu/project/ARIS',
       userId: 'user-1',
       title: 'Codex 가져온 대화',
     })).resolves.toEqual({ chatId: 'chat-created' });
 
     expect(sessionChat.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
-        sessionId: '/home/ubuntu/project/ARIS',
+        projectId: '/home/ubuntu/project/ARIS',
         userId: 'user-1',
         agent: 'codex',
         threadId: 'codex-thread-1',
@@ -108,7 +108,7 @@ describe('PrismaRuntimeStore imported agent sessions', () => {
     }));
     expect(importedAgentSession.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'import-1' },
-      data: expect.objectContaining({ chatId: 'chat-created', arisSessionId: '/home/ubuntu/project/ARIS' }),
+      data: expect.objectContaining({ chatId: 'chat-created', arisProjectId: '/home/ubuntu/project/ARIS' }),
     }));
   });
 
@@ -122,7 +122,7 @@ describe('PrismaRuntimeStore imported agent sessions', () => {
       aggregate: vi.fn().mockResolvedValue({ _max: { seq: 2 } }),
       create: vi.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
         id: data.id,
-        sessionId: data.sessionId,
+        projectId: data.projectId,
         chatId: data.chatId,
         runId: null,
         type: data.type,
@@ -158,7 +158,7 @@ describe('PrismaRuntimeStore imported agent sessions', () => {
       importId: 'import-1',
       provider: 'codex',
       providerSessionId: 'codex-thread-1',
-      sessionId: '/home/ubuntu/project/ARIS',
+      projectId: '/home/ubuntu/project/ARIS',
       chatId: 'chat-1',
       hasMoreBefore: false,
       messages: [
@@ -232,7 +232,7 @@ describe('PrismaRuntimeStore imported agent sessions', () => {
         providerSessionId: 'codex-session-1',
         sourcePath,
         projectPath: '/home/ubuntu/project/ARIS',
-        arisSessionId: '/home/ubuntu/project/ARIS',
+        arisProjectId: '/home/ubuntu/project/ARIS',
         chatId: 'chat-1',
         oldestCursorOffset: secondTurnOffset,
       }),
@@ -276,7 +276,7 @@ describe('PrismaRuntimeStore imported agent sessions', () => {
         providerSessionId: 'codex-session-1',
         sourcePath,
         projectPath: '/home/ubuntu/project/ARIS',
-        arisSessionId: '/home/ubuntu/project/ARIS',
+        arisProjectId: '/home/ubuntu/project/ARIS',
         chatId: 'chat-1',
         fileSize: BigInt(lines.join('\n').length - 1),
         fileMtimeMs: 0n,
@@ -297,7 +297,7 @@ describe('PrismaRuntimeStore imported agent sessions', () => {
       importId: 'import-1',
       provider: 'codex',
       providerSessionId: 'codex-session-1',
-      sessionId: '/home/ubuntu/project/ARIS',
+      projectId: '/home/ubuntu/project/ARIS',
       chatId: 'chat-1',
       messages: [
         expect.objectContaining({ text: '새 요청' }),

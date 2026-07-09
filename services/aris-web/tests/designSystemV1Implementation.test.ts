@@ -86,7 +86,7 @@ describe('ARIS design-system-v1 implementation', () => {
       expect(uiCss).toContain(selector);
     });
 
-    expect(homeClient).not.toContain('SessionDashboard');
+    expect(homeClient).not.toContain('ProjectDashboard');
     expect(homeClient).not.toContain('FileExplorer');
     expect(homeClient).not.toContain("from '@/components/layout/Header'");
   });

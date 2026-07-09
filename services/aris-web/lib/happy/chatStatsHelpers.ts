@@ -7,7 +7,7 @@ type GroupByRow = {
   _count: { id: number };
 };
 
-type SessionChatCounts = {
+type ProjectChatCounts = {
   claude: number;
   codex: number;
   gemini: number;
@@ -22,10 +22,10 @@ type AgentDistribution = {
   unknown: number;
 };
 
-export function buildSessionChatMeta(
+export function buildProjectChatMeta(
   rows: GroupByRow[],
-): Map<string, SessionChatCounts> {
-  const meta = new Map<string, SessionChatCounts>();
+): Map<string, ProjectChatCounts> {
+  const meta = new Map<string, ProjectChatCounts>();
 
   for (const row of rows) {
     const key = row.projectId ?? row.sessionId;

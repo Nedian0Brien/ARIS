@@ -18,7 +18,7 @@ import {
 import type {
   ApprovalPolicy,
   ChatImageAttachment,
-  SessionChat,
+  ProjectChat,
   UiEvent,
   UiEventKind,
   UiEventResult,
@@ -248,7 +248,7 @@ export function formatElapsedDuration(timestamp: string, nowMs = Date.now()): st
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-export function sortSessionChats(chats: SessionChat[]): SessionChat[] {
+export function sortProjectChats(chats: ProjectChat[]): ProjectChat[] {
   return [...chats].sort((a, b) => {
     if (a.isPinned !== b.isPinned) {
       return a.isPinned ? -1 : 1;
@@ -267,7 +267,7 @@ export function sortSessionChats(chats: SessionChat[]): SessionChat[] {
   });
 }
 
-export function buildReadMarkerMap(chats: SessionChat[]): Record<string, string> {
+export function buildReadMarkerMap(chats: ProjectChat[]): Record<string, string> {
   const markers: Record<string, string> = {};
   for (const chat of chats) {
     const marker = typeof chat.lastReadEventId === 'string' ? chat.lastReadEventId.trim() : '';
@@ -278,7 +278,7 @@ export function buildReadMarkerMap(chats: SessionChat[]): Record<string, string>
   return markers;
 }
 
-export function buildSnapshotSyncMap(chats: SessionChat[]): Record<string, string> {
+export function buildSnapshotSyncMap(chats: ProjectChat[]): Record<string, string> {
   const synced: Record<string, string> = {};
   for (const chat of chats) {
     const latestEventId = typeof chat.latestEventId === 'string' ? chat.latestEventId.trim() : '';
@@ -289,7 +289,7 @@ export function buildSnapshotSyncMap(chats: SessionChat[]): Record<string, strin
   return synced;
 }
 
-export function buildSnapshotFromChat(chat: SessionChat): ChatSidebarSnapshot | null {
+export function buildSnapshotFromChat(chat: ProjectChat): ChatSidebarSnapshot | null {
   const preview = typeof chat.latestPreview === 'string' ? chat.latestPreview : '';
   const latestEventId = typeof chat.latestEventId === 'string' && chat.latestEventId.trim()
     ? chat.latestEventId.trim()

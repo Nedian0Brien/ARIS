@@ -58,7 +58,7 @@ export function PreviewPanelPage({
     setMessage('로컬 개발서버 프리뷰 주소를 준비하는 중입니다.');
 
     const response = await fetch(
-      `/api/runtime/sessions/${encodeURIComponent(sessionId)}/panels/${encodeURIComponent(panel.id)}/preview-url?port=${encodeURIComponent(portValue)}&path=${encodeURIComponent(pathValue)}`,
+      `/api/runtime/projects/${encodeURIComponent(sessionId)}/panels/${encodeURIComponent(panel.id)}/preview-url?port=${encodeURIComponent(portValue)}&path=${encodeURIComponent(pathValue)}`,
       {
         cache: 'no-store',
       },

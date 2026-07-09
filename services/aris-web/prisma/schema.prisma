@@ -26,7 +26,6 @@ model User {
   preferences  UiPreference?
   projects     Project[]
   workspaces   Workspace[]
-  sessionMetadata SessionMetadata[]
   chats         Chat[]
   trustedDevices TrustedDevice[]
   emailTokens    EmailVerificationToken[]
@@ -71,7 +70,7 @@ model WorkspacePanel {
   workspaceId      String
   panelId          String
   chatId           String
-  runtimeSessionId String?
+  runtimeProjectId String? @map("runtimeSessionId")
   branch           String?
   worktreePath     String?
   order            Int      @default(0)
@@ -84,20 +83,7 @@ model WorkspacePanel {
   @@unique([workspaceId, panelId])
   @@unique([workspaceId, chatId])
   @@index([chatId])
-  @@index([runtimeSessionId])
-}
-
-model SessionMetadata {
-  sessionId String
-  userId    String
-  alias     String?
-  isPinned  Boolean @default(false)
-  lastReadAt DateTime?
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([sessionId, userId])
-  @@index([userId])
+  @@index([runtimeProjectId])
 }
 
 model Chat {
@@ -126,8 +112,8 @@ model Chat {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  runs           SessionRun[]
-  events         SessionChatEvent[]
+  runs           ProjectRun[]
+  events         ProjectChatEvent[]
   workspacePanels WorkspacePanel[]
 
   @@index([projectId, userId, isPinned, lastActivityAt])
@@ -135,9 +121,9 @@ model Chat {
   @@index([parentChatId])
 }
 
-model SessionRun {
+model ProjectRun {
   id           String   @id @default(cuid())
-  sessionId    String
+  projectId    String   @map("sessionId")
   chatId       String
   agent        String
   model        String?
@@ -148,15 +134,16 @@ model SessionRun {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   chat         Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  events       SessionChatEvent[]
+  events       ProjectChatEvent[]
 
   @@index([chatId, status])
-  @@index([sessionId, chatId, startedAt])
+  @@index([projectId, chatId, startedAt])
+  @@map("SessionRun")
 }
 
-model SessionChatEvent {
+model ProjectChatEvent {
   id        String   @id @default(cuid())
-  sessionId String
+  projectId String   @map("sessionId")
   chatId    String
   runId     String?
   type      String
@@ -166,10 +153,10 @@ model SessionChatEvent {
   seq       Int
   createdAt DateTime @default(now())
   chat      Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  run       SessionRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+  run       ProjectRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
 
   @@unique([chatId, seq])
-  @@index([sessionId, chatId, seq])
+  @@index([projectId, chatId, seq])
   @@index([chatId, createdAt])
 }
 

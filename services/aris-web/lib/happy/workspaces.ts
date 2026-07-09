@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
-import type { SessionSummary } from '@/lib/happy/types';
+import type { ProjectSummary } from '@/lib/happy/types';
 import { normalizeLocalPreviewConfig } from '@/lib/preview/localPreviewProxy';
 import { buildDefaultWorkspacePanel } from '@/lib/workspacePanels/defaults';
 import { normalizeWorkspacePanelLayout } from '@/lib/workspacePanels/layout';
@@ -28,43 +28,43 @@ function toActivityEpoch(value: string | null | undefined): number {
   return parsed;
 }
 
-function sessionBranch(session: SessionSummary): string | null {
-  const directBranch = typeof session.branch === 'string' ? session.branch.trim() : '';
+function projectBranch(project: ProjectSummary): string | null {
+  const directBranch = typeof project.branch === 'string' ? project.branch.trim() : '';
   if (directBranch) return directBranch;
-  const metadataBranch = typeof session.metadata?.branch === 'string' ? session.metadata.branch.trim() : '';
+  const metadataBranch = typeof project.metadata?.branch === 'string' ? project.metadata.branch.trim() : '';
   return metadataBranch || null;
 }
 
-export function isProjectSessionSummary(session: SessionSummary): boolean {
-  return sessionBranch(session) === null;
+export function isProjectSummary(project: ProjectSummary): boolean {
+  return projectBranch(project) === null;
 }
 
-export function filterProjectSessionSummaries(sessions: SessionSummary[]): SessionSummary[] {
-  return sessions.filter(isProjectSessionSummary);
+export function filterProjectSummaries(projects: ProjectSummary[]): ProjectSummary[] {
+  return projects.filter(isProjectSummary);
 }
 
-function dedupeSessionsByPath(sessions: SessionSummary[]): SessionSummary[] {
-  const byPath = new Map<string, SessionSummary>();
-  for (const session of filterProjectSessionSummaries(sessions)) {
-    const normalizedPath = normalizeWorkspacePath(session.projectName);
+function dedupeProjectsByPath(projects: ProjectSummary[]): ProjectSummary[] {
+  const byPath = new Map<string, ProjectSummary>();
+  for (const project of filterProjectSummaries(projects)) {
+    const normalizedPath = normalizeWorkspacePath(project.projectName);
     const current = byPath.get(normalizedPath);
     if (!current) {
-      byPath.set(normalizedPath, session);
+      byPath.set(normalizedPath, project);
       continue;
     }
 
     const currentAt = toActivityEpoch(current.lastActivityAt);
-    const nextAt = toActivityEpoch(session.lastActivityAt);
-    if (nextAt > currentAt || (nextAt === currentAt && session.id > current.id)) {
-      byPath.set(normalizedPath, session);
+    const nextAt = toActivityEpoch(project.lastActivityAt);
+    if (nextAt > currentAt || (nextAt === currentAt && project.id > current.id)) {
+      byPath.set(normalizedPath, project);
     }
   }
   return [...byPath.values()];
 }
 
-export async function syncWorkspacesForUser(userId: string, sessions: SessionSummary[]) {
-  const uniqueSessions = dedupeSessionsByPath(sessions);
-  if (uniqueSessions.length === 0) {
+export async function syncWorkspacesForUser(userId: string, projects: ProjectSummary[]) {
+  const uniqueProjects = dedupeProjectsByPath(projects);
+  if (uniqueProjects.length === 0) {
     return new Map<string, {
       id: string;
       path: string;
@@ -75,25 +75,25 @@ export async function syncWorkspacesForUser(userId: string, sessions: SessionSum
   }
 
   await prisma.$transaction(
-    uniqueSessions.map((session) => prisma.project.upsert({
+    uniqueProjects.map((project) => prisma.project.upsert({
       where: {
         userId_path: {
           userId,
-          path: normalizeWorkspacePath(session.projectName),
+          path: normalizeWorkspacePath(project.projectName),
         },
       },
       create: {
-        id: session.id,
+        id: project.id,
         userId,
-        path: normalizeWorkspacePath(session.projectName),
+        path: normalizeWorkspacePath(project.projectName),
       },
       update: {
-        id: session.id,
+        id: project.id,
       },
     })),
   );
 
-  const paths = uniqueSessions.map((session) => normalizeWorkspacePath(session.projectName));
+  const paths = uniqueProjects.map((project) => normalizeWorkspacePath(project.projectName));
   const workspaces = await prisma.project.findMany({
     where: {
       userId,
@@ -109,13 +109,13 @@ export async function syncWorkspacesForUser(userId: string, sessions: SessionSum
   });
 
   const workspaceByPath = new Map(workspaces.map((workspace) => [workspace.path, workspace]));
-  return new Map(uniqueSessions.map((session) => {
-    const path = normalizeWorkspacePath(session.projectName);
+  return new Map(uniqueProjects.map((project) => {
+    const path = normalizeWorkspacePath(project.projectName);
     const workspace = workspaceByPath.get(path);
     return [
-      session.id,
+      project.id,
       workspace ?? {
-        id: session.id,
+        id: project.id,
         path,
         alias: null,
         isPinned: false,

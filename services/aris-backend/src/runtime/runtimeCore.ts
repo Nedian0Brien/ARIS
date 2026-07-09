@@ -70,7 +70,7 @@ import type {
   ProviderActionEvent,
   ProviderPermissionRequest,
   ProviderRuntimeFlavor,
-  ProviderRuntimeSession,
+  ProviderRuntimeProject,
   ProviderTextEvent,
 } from './contracts/providerRuntime.js';
 import type {
@@ -82,7 +82,7 @@ import { RealtimeEventBus } from './orchestration/realtimeEventBus.js';
 import {
   ActiveRunRegistry,
   buildRunKey,
-  isSessionRunKey,
+  isProjectRunKey,
   type ActiveRun,
   type StaleRunCleanupInput,
 } from './orchestration/activeRunRegistry.js';
@@ -90,13 +90,13 @@ import type { ClaudeSessionLaunchMode } from './providers/claude/claudeSessionCo
 import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeTextEvent } from './providers/claude/types.js';
 import type {
   ApprovalPolicy,
-  GeminiSessionCapabilities,
+  GeminiProjectCapabilities,
   PermissionDecision,
   PermissionRequest,
   PermissionRisk,
   RuntimeMessage,
-  RuntimeSession,
-  SessionAction,
+  RuntimeProject,
+  ProjectAction,
 } from '../types.js';
 import { computeWorktreePath } from './worktreeManager.js';
 
@@ -155,10 +155,10 @@ const STALE_RUN_TIMEOUT_MS = (() => {
 })();
 const UNPARSED_HAPPY_PAYLOAD_PREFIX = '[UNPARSED HAPPY PAYLOAD]';
 
-type RuntimeAgent = RuntimeSession['metadata']['flavor'];
+type RuntimeAgent = RuntimeProject['metadata']['flavor'];
 type ModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 type PermissionState = PermissionRequest['state'];
-type SessionStatusValue = RuntimeSession['state']['status'];
+type ProjectStatusValue = RuntimeProject['state']['status'];
 type JsonRpcId = string | number | null;
 
 type HappyRuntimeCreateInput = {
@@ -166,7 +166,7 @@ type HappyRuntimeCreateInput = {
   flavor: RuntimeAgent;
   approvalPolicy?: ApprovalPolicy;
   model?: string;
-  status?: SessionStatusValue;
+  status?: ProjectStatusValue;
   riskScore?: number;
   branch?: string;
 };
@@ -180,7 +180,7 @@ type HappyRuntimeAppendInput = {
 
 type GeminiPartialTextState = {
   eventId: string;
-  sessionId: string;
+  projectId: string;
   chatId?: string;
   phase?: 'commentary' | 'final';
   turnId?: string;
@@ -215,13 +215,13 @@ type HappyBackendMessage = {
   title?: string;
 };
 
-type HappyListSessionsResponse = {
-  sessions: unknown[];
+type HappyListProjectsResponse = {
+  projects: unknown[];
 };
 
 type HappySessionResponse = {
-  session?: HappyBackendSession;
-  sessions?: HappyBackendSession[];
+  project?: HappyBackendSession;
+  projects?: HappyBackendSession[];
 };
 
 type HappyMessageResponse = {
@@ -312,10 +312,10 @@ function normalizeGeminiMode(value: unknown): string | undefined {
   return trimmed.slice(0, 120);
 }
 
-function buildProviderRuntimeSession<TFlavor extends ProviderRuntimeFlavor>(
-  session: RuntimeSession,
+function buildProviderRuntimeProject<TFlavor extends ProviderRuntimeFlavor>(
+  session: RuntimeProject,
   flavor: TFlavor,
-): ProviderRuntimeSession<TFlavor> {
+): ProviderRuntimeProject<TFlavor> {
   return {
     id: session.id,
     metadata: {
@@ -328,7 +328,7 @@ function buildProviderRuntimeSession<TFlavor extends ProviderRuntimeFlavor>(
   };
 }
 
-function normalizeStatus(raw: unknown, active: unknown): SessionStatusValue {
+function normalizeStatus(raw: unknown, active: unknown): ProjectStatusValue {
   const value = asRecord(raw) ? String((raw as { status?: unknown }).status ?? raw) : raw;
   if (value === 'running' || value === 'idle' || value === 'stopped' || value === 'error') {
     return value;
@@ -567,13 +567,13 @@ function stringifyPayloadForDebug(payload: unknown): string | undefined {
   }
 }
 
-function toRuntimeMessage(sessionId: string, raw: HappyBackendMessage): RuntimeMessage {
+function toRuntimeMessage(projectId: string, raw: HappyBackendMessage): RuntimeMessage {
   const parsed = parseMessagePayloadText(raw.content);
   const role = parsed.role === 'agent' || parsed.role === 'user' ? parsed.role : undefined;
 
   return {
     id: raw.id,
-    sessionId,
+    projectId,
     type: raw.type || 'message',
     title: parsed.title ?? (role === 'user' ? 'User Instruction' : 'Text Reply'),
     text: parsed.text ?? '',
@@ -584,7 +584,7 @@ function toRuntimeMessage(sessionId: string, raw: HappyBackendMessage): RuntimeM
   };
 }
 
-function toRuntimeSession(raw: HappyBackendSession): RuntimeSession {
+function toRuntimeProject(raw: HappyBackendSession): RuntimeProject {
   const metadata = normalizeMetadata(raw.metadata);
   const seq = Number.isFinite(raw.seq) ? Number(raw.seq) : undefined;
   return {
@@ -605,10 +605,10 @@ function toRuntimeSession(raw: HappyBackendSession): RuntimeSession {
   };
 }
 
-function buildEchoMessage(sessionId: string, input: HappyRuntimeAppendInput, messageId: string): RuntimeMessage {
+function buildEchoMessage(projectId: string, input: HappyRuntimeAppendInput, messageId: string): RuntimeMessage {
   return {
     id: messageId,
-    sessionId,
+    projectId,
     type: input.type || 'message',
     title: input.title ?? (input.meta?.role === 'agent' ? 'Text Reply' : 'User Instruction'),
     text: input.text,
@@ -947,8 +947,8 @@ function parseAgentStreamLine(line: string): { action?: ParsedAgentActionEvent; 
     'call',
   ]);
   const sessionId = extractFirstStringByKeys(records, [
-    'session_id',
     'sessionId',
+    'session_id',
     'sessionid',
     'resume_session_id',
     'resumeSessionId',
@@ -1213,8 +1213,8 @@ export class RuntimeCore {
   private readonly runtimeEventLogger: RuntimeEventLogger;
   private readonly activeRunRegistry: ActiveRunRegistry;
 
-  // listSessions() 응답을 1초간 캐시하여 getSession() 호출 시 happy-server 왕복을 줄임
-  private sessionListCache: { sessions: RuntimeSession[]; expiresAt: number } | null = null;
+  // listProjects() 응답을 1초간 캐시하여 getProject() 호출 시 happy-server 왕복을 줄임
+  private sessionListCache: { sessions: RuntimeProject[]; expiresAt: number } | null = null;
   private readonly SESSION_LIST_CACHE_TTL_MS = 1_000;
 
   constructor(opts: {
@@ -1232,16 +1232,16 @@ export class RuntimeCore {
     this.runtimeEventLogger = new RuntimeEventLogger(HAPPY_EVENT_LOG_DIR, HAPPY_EVENT_LOG_MAX_BYTES);
     this.permissionRouter = new PermissionRouter({
       coordinationStore: this.coordinationStore,
-      getSession: (sessionId) => this.getSession(sessionId),
+      getProject: (projectId) => this.getProject(projectId),
       resolveApprovalPolicy: (session) => this.resolveSessionApprovalPolicy(session),
-      abortSessionRuns: (sessionId, chatId) => this.abortSessionRuns(sessionId, chatId),
-      appendAgentMessage: (sessionId, text, meta, options) =>
-        this.appendAgentMessage(sessionId, text, meta, options),
-      appendRunLifecycleEvent: (sessionId, state, meta) =>
-        this.appendRunLifecycleEvent(sessionId, state, meta),
+      abortSessionRuns: (projectId, chatId) => this.abortSessionRuns(projectId, chatId),
+      appendAgentMessage: (projectId, text, meta, options) =>
+        this.appendAgentMessage(projectId, text, meta, options),
+      appendRunLifecycleEvent: (projectId, state, meta) =>
+        this.appendRunLifecycleEvent(projectId, state, meta),
     });
     this.realtimeEventBus = new RealtimeEventBus({
-      getSession: (sessionId) => this.getSession(sessionId),
+      getProject: (projectId) => this.getProject(projectId),
     });
     this.activeRunRegistry = new ActiveRunRegistry({
       claudeSessionRegistry: this.claudeSessionRegistry,
@@ -1258,20 +1258,20 @@ export class RuntimeCore {
     return this.activeRunRegistry.awaitDrain(timeoutMs);
   }
 
-  private resolveSessionApprovalPolicy(session: RuntimeSession): ApprovalPolicy {
+  private resolveSessionApprovalPolicy(session: RuntimeProject): ApprovalPolicy {
     return normalizeApprovalPolicy(session.metadata.approvalPolicy, DEFAULT_APPROVAL_POLICY);
   }
 
-  private clearCodexThreadsForSession(sessionId: string): void {
+  private clearCodexThreadsForSession(projectId: string): void {
     for (const key of this.codexThreads.keys()) {
-      if (key === sessionId || key.startsWith(`${sessionId}:`)) {
+      if (key === projectId || key.startsWith(`${projectId}:`)) {
         this.codexThreads.delete(key);
       }
     }
   }
 
   private buildGeminiPartialIdentity(input: {
-    sessionId: string;
+    projectId: string;
     chatId?: string;
     phase?: 'commentary' | 'final';
     turnId?: string;
@@ -1286,7 +1286,7 @@ export class RuntimeCore {
       return null;
     }
     return [
-      input.sessionId,
+      input.projectId,
       scope,
       phase,
       turn || '__turn__',
@@ -1295,13 +1295,13 @@ export class RuntimeCore {
   }
 
   private appendGeminiRealtimePartial(input: {
-    session: RuntimeSession;
+    session: RuntimeProject;
     chatId?: string;
     model?: string;
     event: ClaudeTextEvent;
   }): void {
     const identity = this.buildGeminiPartialIdentity({
-      sessionId: input.session.id,
+      projectId: input.session.id,
       chatId: input.chatId,
       phase: input.event.phase,
       turnId: input.event.turnId,
@@ -1321,7 +1321,7 @@ export class RuntimeCore {
       }
       : {
         eventId: `gemini-partial:${identity}`,
-        sessionId: input.session.id,
+        projectId: input.session.id,
         ...(input.chatId ? { chatId: input.chatId } : {}),
         ...(input.event.phase ? { phase: input.event.phase } : {}),
         ...(input.event.turnId ? { turnId: input.event.turnId } : {}),
@@ -1336,7 +1336,7 @@ export class RuntimeCore {
 
     this.realtimeEventBus.append(input.session.id, {
       id: nextState.eventId,
-      sessionId: input.session.id,
+      projectId: input.session.id,
       type: isCommentary ? 'tool' : 'message',
       title: isCommentary ? 'Thinking' : 'Text Reply',
       text: nextState.text,
@@ -1368,7 +1368,7 @@ export class RuntimeCore {
   }
 
   private clearGeminiRealtimePartial(input: {
-    sessionId: string;
+    projectId: string;
     chatId?: string;
     phase?: 'commentary' | 'final';
     turnId?: string;
@@ -1383,13 +1383,13 @@ export class RuntimeCore {
   }
 
   private clearGeminiRealtimePartialsForScope(input: {
-    sessionId: string;
+    projectId: string;
     chatId?: string;
   }): void {
     const chatScope = input.chatId?.trim() || '__default__';
     for (const [identity, state] of this.geminiPartialTextStates.entries()) {
       const stateChatScope = state.chatId?.trim() || '__default__';
-      if (state.sessionId !== input.sessionId || stateChatScope !== chatScope) {
+      if (state.projectId !== input.projectId || stateChatScope !== chatScope) {
         continue;
       }
       this.geminiPartialTextStates.delete(identity);
@@ -1397,7 +1397,7 @@ export class RuntimeCore {
   }
 
   private monitorExternalAbortSignal(input: {
-    sessionId: string;
+    projectId: string;
     chatId?: string;
     startedAt: number;
     controller: AbortController;
@@ -1414,7 +1414,7 @@ export class RuntimeCore {
       }
       try {
         const abortRequested = await this.coordinationStore!.hasRequestedAction({
-          sessionId: input.sessionId,
+          projectId: input.projectId,
           action: 'abort',
           ...(input.chatId ? { chatId: input.chatId } : {}),
           createdAfter: startedAt,
@@ -1451,8 +1451,8 @@ export class RuntimeCore {
     return created;
   }
 
-  private abortSessionRuns(sessionId: string, chatId?: string): void {
-    this.activeRunRegistry.abortSessionRuns(sessionId, chatId);
+  private abortSessionRuns(projectId: string, chatId?: string): void {
+    this.activeRunRegistry.abortSessionRuns(projectId, chatId);
   }
 
   private async cleanupStaleRuns(reason: string): Promise<void> {
@@ -1462,7 +1462,7 @@ export class RuntimeCore {
   private async handleStaleRunCleanup(input: StaleRunCleanupInput): Promise<void> {
     const channel = input.agent === 'codex' && CODEX_RUNTIME_MODE !== 'exec' ? 'app_server' : 'exec_cli';
     this.runtimeEventLogger.logParsed({
-      sessionId: input.sessionId,
+      projectId: input.projectId,
       agent: input.agent,
       ...(input.chatId ? { chatId: input.chatId } : {}),
       ...(input.model ? { model: input.model } : {}),
@@ -1479,7 +1479,7 @@ export class RuntimeCore {
     });
     try {
       await this.appendAgentMessage(
-        input.sessionId,
+        input.projectId,
         `장기 실행 감지로 런타임을 정리했습니다. (${Math.floor(input.ageMs / 1000)}초 경과)`,
         {
           ...(input.chatId ? { chatId: input.chatId } : {}),
@@ -1526,11 +1526,11 @@ export class RuntimeCore {
   }
 
   mapHappyResponse(response: HappySessionResponse): HappyBackendSession[] {
-    if (Array.isArray(response.sessions)) {
-      return response.sessions as HappyBackendSession[];
+    if (Array.isArray(response.projects)) {
+      return response.projects as HappyBackendSession[];
     }
-    if (response.session) {
-      return [response.session];
+    if (response.project) {
+      return [response.project];
     }
     return [];
   }
@@ -2153,7 +2153,7 @@ export class RuntimeCore {
   }
 
   private async runGeminiAcpTurn(input: {
-    session: ProviderRuntimeSession<'gemini'>;
+    session: ProviderRuntimeProject<'gemini'>;
     prompt: string;
     preferredThreadId?: string;
     chatId?: string;
@@ -2184,7 +2184,7 @@ export class RuntimeCore {
         : undefined,
       onRawLine: (line) => {
         this.runtimeEventLogger.logRaw({
-          sessionId: input.session.id,
+          projectId: input.session.id,
           agent: 'gemini',
           ...(input.chatId ? { chatId: input.chatId } : {}),
           ...(normalizeModel(input.model) ? { model: normalizeModel(input.model)! } : {}),
@@ -2196,7 +2196,7 @@ export class RuntimeCore {
   }
 
   private async appendAgentMessage(
-    sessionId: string,
+    projectId: string,
     text: string,
     meta: Record<string, unknown> = {},
     options: { type?: string; title?: string } = {},
@@ -2220,7 +2220,7 @@ export class RuntimeCore {
 
       for (let attempt = 1; attempt <= HAPPY_MESSAGE_WRITE_MAX_RETRIES; attempt += 1) {
         try {
-          await this.request<HappyMessageResponse>(`/v3/sessions/${encodeURIComponent(sessionId)}/messages`, {
+          await this.request<HappyMessageResponse>(`/v3/projects/${encodeURIComponent(projectId)}/messages`, {
             method: 'POST',
             body: JSON.stringify({
               messages: [{ localId, content }],
@@ -2241,7 +2241,7 @@ export class RuntimeCore {
   }
 
   private async appendRunLifecycleEvent(
-    sessionId: string,
+    projectId: string,
     status: RunLifecycleStatus,
     meta: {
       chatId?: string;
@@ -2253,13 +2253,13 @@ export class RuntimeCore {
       turnId?: string;
       command?: string;
       reason?: string;
-      runtimeSessionId?: string;
-      runtimePersistenceSessionId?: string;
+      runtimeProjectId?: string;
+      runtimePersistenceProjectId?: string;
     } = {},
   ): Promise<void> {
     try {
       await this.appendAgentMessage(
-        sessionId,
+        projectId,
         `run status: ${status}`,
         {
           ...(meta.chatId ? { chatId: meta.chatId } : {}),
@@ -2268,8 +2268,8 @@ export class RuntimeCore {
           ...(meta.agent ? { agent: meta.agent } : {}),
           ...(meta.model ? { model: meta.model } : {}),
           ...(meta.threadId ? { threadId: meta.threadId } : {}),
-          ...(meta.runtimeSessionId ? { runtimeSessionId: meta.runtimeSessionId } : {}),
-          ...(meta.runtimePersistenceSessionId ? { runtimePersistenceSessionId: meta.runtimePersistenceSessionId } : {}),
+          ...(meta.runtimeProjectId ? { runtimeProjectId: meta.runtimeProjectId } : {}),
+          ...(meta.runtimePersistenceProjectId ? { runtimePersistenceProjectId: meta.runtimePersistenceProjectId } : {}),
           streamEvent: 'run_status',
           ...buildRunLifecycleMeta({
             status,
@@ -2286,9 +2286,9 @@ export class RuntimeCore {
     }
   }
 
-  private async resolveClaudeThreadId(sessionId: string, chatId?: string): Promise<string | undefined> {
+  private async resolveClaudeThreadId(projectId: string, chatId?: string): Promise<string | undefined> {
     try {
-      return recoverClaudeThreadIdFromMessages(await this.listMessages(sessionId), chatId);
+      return recoverClaudeThreadIdFromMessages(await this.listMessages(projectId), chatId);
     } catch {
       // Ignore Claude thread recovery failures and let the launcher start from the synthetic seed.
     }
@@ -2297,7 +2297,7 @@ export class RuntimeCore {
   }
 
   private async generateAndPersistAgentReply(
-    session: RuntimeSession,
+    session: RuntimeProject,
     prompt: string,
     context: {
       chatId?: string;
@@ -2325,13 +2325,13 @@ export class RuntimeCore {
       : session.id;
     const runtimePersistenceMeta = persistenceSessionId !== session.id
       ? {
-        runtimeSessionId: session.id,
-        runtimePersistenceSessionId: persistenceSessionId,
+        runtimeProjectId: session.id,
+        runtimePersistenceProjectId: persistenceSessionId,
       }
       : {};
     if (flavor === 'gemini') {
       this.clearGeminiRealtimePartialsForScope({
-        sessionId: session.id,
+        projectId: session.id,
         chatId: scopedChatId,
       });
     }
@@ -2351,7 +2351,7 @@ export class RuntimeCore {
       : undefined;
     if (modelSelection.source !== 'requested') {
       this.runtimeEventLogger.logParsed({
-        sessionId: session.id,
+        projectId: session.id,
         agent: flavor,
         ...(scopedChatId ? { chatId: scopedChatId } : {}),
         model: selectedModel,
@@ -2413,7 +2413,7 @@ export class RuntimeCore {
       });
       this.activeRunRegistry.set(runKey, {
         controller: activeController,
-        sessionId: session.id,
+        projectId: session.id,
         ...(scopedChatId ? { chatId: scopedChatId } : {}),
         startedAt: Date.now(),
         agent: flavor,
@@ -2441,7 +2441,7 @@ export class RuntimeCore {
       ...(selectedGeminiMode ? { geminiMode: selectedGeminiMode } : {}),
     });
     const stopExternalAbortWatcher = this.monitorExternalAbortSignal({
-      sessionId: session.id,
+      projectId: session.id,
       ...(scopedChatId ? { chatId: scopedChatId } : {}),
       startedAt: Date.now(),
       controller,
@@ -2592,7 +2592,7 @@ export class RuntimeCore {
           : null;
         let streamedActionIndex = 0;
         if (isClaude) {
-          const claudeSession = buildProviderRuntimeSession(session, 'claude');
+          const claudeSession = buildProviderRuntimeProject(session, 'claude');
           const claudeResponse = await runClaudeProviderTurn({
             session: claudeSession,
             sessionOwner: claudeController?.session,
@@ -2690,7 +2690,7 @@ export class RuntimeCore {
             protocolEnvelopes: claudeResponse.protocolEnvelopes,
           };
         } else if (isGemini) {
-          const geminiSession = buildProviderRuntimeSession(session, 'gemini');
+          const geminiSession = buildProviderRuntimeProject(session, 'gemini');
           geminiMessageQueue = new GeminiMessageQueue(
             {
               ...(scopedChatId ? { chatId: scopedChatId } : {}),
@@ -2701,7 +2701,7 @@ export class RuntimeCore {
           );
           const geminiRuntime = createGeminiRuntime({
             registry: this.geminiSessionRegistry,
-            listMessages: async (sessionId) => this.listMessages(sessionId),
+            listMessages: async (projectId) => this.listMessages(projectId),
             executeTurn: async (request) => this.runGeminiAcpTurn(request),
           });
           const recovered = await geminiRuntime.recoverSession({
@@ -2709,7 +2709,7 @@ export class RuntimeCore {
             chatId: scopedChatId,
           });
           this.runtimeEventLogger.logParsed({
-            sessionId: session.id,
+            projectId: session.id,
             agent: 'gemini',
             ...(scopedChatId ? { chatId: scopedChatId } : {}),
             model: selectedModel,
@@ -2723,7 +2723,7 @@ export class RuntimeCore {
             },
           });
           this.runtimeEventLogger.logParsed({
-            sessionId: session.id,
+            projectId: session.id,
             agent: 'gemini',
             ...(scopedChatId ? { chatId: scopedChatId } : {}),
             model: selectedModel,
@@ -2745,7 +2745,7 @@ export class RuntimeCore {
             onAction: async (action, meta) => {
               this.realtimeEventBus.append(session.id, {
                 id: `gemini-action-pending:${action.callId ?? String(Date.now())}`,
-                sessionId: session.id,
+                projectId: session.id,
                 type: 'tool',
                 title: action.title,
                 text: [action.command, action.path].filter(Boolean).join('\n'),
@@ -2762,7 +2762,7 @@ export class RuntimeCore {
                 },
               });
               this.runtimeEventLogger.logParsed({
-                sessionId: session.id,
+                projectId: session.id,
                 agent: 'gemini',
                 ...(scopedChatId ? { chatId: scopedChatId } : {}),
                 threadId: meta.threadId,
@@ -2816,7 +2816,7 @@ export class RuntimeCore {
               }
               const isCommentaryText = event.phase === 'commentary';
               this.runtimeEventLogger.logParsed({
-                sessionId: session.id,
+                projectId: session.id,
                 agent: 'gemini',
                 ...(scopedChatId ? { chatId: scopedChatId } : {}),
                 threadId: meta.threadId,
@@ -2846,7 +2846,7 @@ export class RuntimeCore {
             },
           });
           this.runtimeEventLogger.logParsed({
-            sessionId: session.id,
+            projectId: session.id,
             agent: 'gemini',
             ...(scopedChatId ? { chatId: scopedChatId } : {}),
             ...(geminiResponse.threadId ? { threadId: geminiResponse.threadId } : {}),
@@ -3121,7 +3121,7 @@ export class RuntimeCore {
       stopExternalAbortWatcher();
       if (flavor === 'gemini') {
         this.clearGeminiRealtimePartialsForScope({
-          sessionId: session.id,
+          projectId: session.id,
           chatId: scopedChatId,
         });
       }
@@ -3129,17 +3129,17 @@ export class RuntimeCore {
     }
   }
 
-  async listSessions(): Promise<RuntimeSession[]> {
+  async listProjects(): Promise<RuntimeProject[]> {
     const now = Date.now();
     if (this.sessionListCache && this.sessionListCache.expiresAt > now) {
       return this.sessionListCache.sessions;
     }
-    const raw = await this.request<HappyListSessionsResponse>('/v1/sessions');
-    const list = Array.isArray(raw.sessions) ? raw.sessions : [];
+    const raw = await this.request<HappyListProjectsResponse>('/v1/projects');
+    const list = Array.isArray(raw.projects) ? raw.projects : [];
     const sessions = list
       .map((item) => (asRecord(item) ? (item as unknown as HappyBackendSession) : null))
       .filter((item): item is HappyBackendSession => item !== null && typeof item.id === 'string')
-      .map(toRuntimeSession)
+      .map(toRuntimeProject)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     this.sessionListCache = { sessions, expiresAt: now + this.SESSION_LIST_CACHE_TTL_MS };
     return sessions;
@@ -3149,13 +3149,13 @@ export class RuntimeCore {
     this.sessionListCache = null;
   }
 
-  async getSession(sessionId: string): Promise<RuntimeSession | null> {
-    const sessions = await this.listSessions();
-    return sessions.find((session) => session.id === sessionId) ?? null;
+  async getProject(projectId: string): Promise<RuntimeProject | null> {
+    const sessions = await this.listProjects();
+    return sessions.find((session) => session.id === projectId) ?? null;
   }
 
-  async getGeminiSessionCapabilities(sessionId: string): Promise<GeminiSessionCapabilities> {
-    const session = await this.getSession(sessionId);
+  async getGeminiProjectCapabilities(projectId: string): Promise<GeminiProjectCapabilities> {
+    const session = await this.getProject(projectId);
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
     }
@@ -3164,7 +3164,7 @@ export class RuntimeCore {
     });
   }
 
-  async createSession(input: HappyRuntimeCreateInput): Promise<RuntimeSession> {
+  async createProject(input: HappyRuntimeCreateInput): Promise<RuntimeProject> {
     const approvalPolicy = normalizeApprovalPolicy(input.approvalPolicy, DEFAULT_APPROVAL_POLICY);
     const model = normalizeModel(input.model);
     const metadata = JSON.stringify({
@@ -3177,7 +3177,7 @@ export class RuntimeCore {
     });
 
     const tag = `aris-${input.flavor}-${randomUUID()}`;
-    const response = await this.request<HappySessionResponse>('/v1/sessions', {
+    const response = await this.request<HappySessionResponse>('/v1/projects', {
       method: 'POST',
       body: JSON.stringify({
         tag,
@@ -3190,14 +3190,14 @@ export class RuntimeCore {
       throw new Error('Failed to create happy session');
     }
     this.invalidateSessionListCache();
-    return toRuntimeSession(mapped);
+    return toRuntimeProject(mapped);
   }
 
   async listMessages(
-    sessionId: string,
+    projectId: string,
     options: { afterSeq?: number; afterId?: string; limit?: number } = {},
   ): Promise<RuntimeMessage[]> {
-    const session = await this.getSession(sessionId);
+    const session = await this.getProject(projectId);
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
     }
@@ -3214,12 +3214,12 @@ export class RuntimeCore {
           limit: String(normalizedLimit),
         });
         const response = await this.request<HappyMessageResponse>(
-          `/v3/sessions/${encodeURIComponent(sessionId)}/messages?${query.toString()}`,
+          `/v3/projects/${encodeURIComponent(projectId)}/messages?${query.toString()}`,
         );
         const batch = Array.isArray(response.messages) ? response.messages : [];
         return batch
           .filter((message) => typeof message.id === 'string')
-          .map((message) => toRuntimeMessage(sessionId, message))
+          .map((message) => toRuntimeMessage(projectId, message))
           .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       }
 
@@ -3242,7 +3242,7 @@ export class RuntimeCore {
           limit: String(pageLimit),
         });
         const response = await this.request<HappyMessageResponse>(
-          `/v3/sessions/${encodeURIComponent(sessionId)}/messages?${query.toString()}`,
+          `/v3/projects/${encodeURIComponent(projectId)}/messages?${query.toString()}`,
         );
         const batch = Array.isArray(response.messages) ? response.messages : [];
         if (batch.length === 0) {
@@ -3264,37 +3264,37 @@ export class RuntimeCore {
 
       return collected
         .filter((message) => typeof message.id === 'string')
-        .map((message) => toRuntimeMessage(sessionId, message))
+        .map((message) => toRuntimeMessage(projectId, message))
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     }
 
-    const messages = await this.listAllMessages(sessionId);
+    const messages = await this.listAllMessages(projectId);
     return messages
       .filter((message) => typeof message.id === 'string')
-      .map((message) => toRuntimeMessage(sessionId, message))
+      .map((message) => toRuntimeMessage(projectId, message))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
   async listRealtimeEvents(
-    sessionId: string,
+    projectId: string,
     options: {
       afterCursor?: number;
       limit?: number;
       chatId?: string;
     } = {},
   ): Promise<{ events: RuntimeMessage[]; cursor: number }> {
-    return this.realtimeEventBus.list(sessionId, options);
+    return this.realtimeEventBus.list(projectId, options);
   }
 
   subscribeRealtimeEvents(
-    sessionId: string,
+    projectId: string,
     options: { chatId?: string } = {},
     listener: (record: { cursor: number; event: RuntimeMessage }) => void,
   ): () => void {
-    return this.realtimeEventBus.subscribe(sessionId, options, listener);
+    return this.realtimeEventBus.subscribe(projectId, options, listener);
   }
 
-  private async listAllMessages(sessionId: string): Promise<HappyBackendMessage[]> {
+  private async listAllMessages(projectId: string): Promise<HappyBackendMessage[]> {
     let afterSeq = 0;
     const allMessages: HappyBackendMessage[] = [];
 
@@ -3304,7 +3304,7 @@ export class RuntimeCore {
         limit: String(HAPPY_MESSAGES_BATCH_LIMIT),
       });
       const response = await this.request<HappyMessageResponse>(
-        `/v3/sessions/${encodeURIComponent(sessionId)}/messages?${query.toString()}`,
+        `/v3/projects/${encodeURIComponent(projectId)}/messages?${query.toString()}`,
       );
       const batch = Array.isArray(response.messages) ? response.messages : [];
       if (batch.length === 0) {
@@ -3329,8 +3329,8 @@ export class RuntimeCore {
     return allMessages;
   }
 
-  async appendMessage(sessionId: string, input: HappyRuntimeAppendInput): Promise<RuntimeMessage> {
-    const session = await this.getSession(sessionId);
+  async appendMessage(projectId: string, input: HappyRuntimeAppendInput): Promise<RuntimeMessage> {
+    const session = await this.getProject(projectId);
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
     }
@@ -3345,7 +3345,7 @@ export class RuntimeCore {
       action: input.type,
     });
 
-    const response = await this.request<HappyMessageResponse>(`/v3/sessions/${encodeURIComponent(sessionId)}/messages`, {
+    const response = await this.request<HappyMessageResponse>(`/v3/projects/${encodeURIComponent(projectId)}/messages`, {
       method: 'POST',
       body: JSON.stringify({
         messages: [
@@ -3360,10 +3360,10 @@ export class RuntimeCore {
     const posted = response.messages.find((item) => item.localId === localId)
       ?? response.messages[response.messages.length - 1];
     if (!posted) {
-      return buildEchoMessage(sessionId, input, localId);
+      return buildEchoMessage(projectId, input, localId);
     }
 
-    const created = toRuntimeMessage(sessionId, posted);
+    const created = toRuntimeMessage(projectId, posted);
 
     const isUserPrompt = input.meta?.role !== 'agent';
     if (isUserPrompt) {
@@ -3393,7 +3393,7 @@ export class RuntimeCore {
 
     if (!created.text || !created.title) {
       return {
-        ...buildEchoMessage(sessionId, input, posted.id || localId),
+        ...buildEchoMessage(projectId, input, posted.id || localId),
         createdAt: created.createdAt || new Date().toISOString(),
         type: created.type,
       };
@@ -3401,12 +3401,12 @@ export class RuntimeCore {
     return created;
   }
 
-  async triggerPersistedUserMessage(sessionId: string, input: HappyRuntimeAppendInput): Promise<void> {
+  async triggerPersistedUserMessage(projectId: string, input: HappyRuntimeAppendInput): Promise<void> {
     if (input.meta?.role === 'agent') {
       return;
     }
 
-    const session = await this.getSession(sessionId);
+    const session = await this.getProject(projectId);
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
     }
@@ -3417,8 +3417,8 @@ export class RuntimeCore {
     const threadId = typeof input.meta?.threadId === 'string' && input.meta.threadId.trim().length > 0
       ? input.meta.threadId.trim()
       : undefined;
-    const persistenceSessionId = typeof input.meta?.runtimePersistenceSessionId === 'string' && input.meta.runtimePersistenceSessionId.trim().length > 0
-      ? input.meta.runtimePersistenceSessionId.trim()
+    const persistenceSessionId = typeof input.meta?.runtimePersistenceProjectId === 'string' && input.meta.runtimePersistenceProjectId.trim().length > 0
+      ? input.meta.runtimePersistenceProjectId.trim()
       : undefined;
     const requestedAgent = normalizeAgent(input.meta?.agent);
     const requestedModel = normalizeModel(input.meta?.model);
@@ -3440,20 +3440,20 @@ export class RuntimeCore {
     });
   }
 
-  async applySessionAction(sessionId: string, action: SessionAction, chatId?: string): Promise<{ accepted: boolean; message: string; at: string }> {
-    const session = await this.getSession(sessionId);
+  async applyProjectAction(projectId: string, action: ProjectAction, chatId?: string): Promise<{ accepted: boolean; message: string; at: string }> {
+    const session = await this.getProject(projectId);
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
     }
 
     if (action === 'abort' || action === 'kill') {
-      this.abortSessionRuns(sessionId, action === 'abort' ? chatId : undefined);
+      this.abortSessionRuns(projectId, action === 'abort' ? chatId : undefined);
     }
 
     if (action === 'kill') {
-      this.clearCodexThreadsForSession(sessionId);
+      this.clearCodexThreadsForSession(projectId);
       try {
-        await this.request(`/v1/sessions/${encodeURIComponent(sessionId)}`, {
+        await this.request(`/v1/projects/${encodeURIComponent(projectId)}`, {
           method: 'DELETE',
         });
       } catch (error) {
@@ -3473,20 +3473,20 @@ export class RuntimeCore {
     };
   }
 
-  async isSessionRunning(sessionId: string, chatId?: string): Promise<boolean> {
-    const session = await this.getSession(sessionId);
+  async isProjectRunning(projectId: string, chatId?: string): Promise<boolean> {
+    const session = await this.getProject(projectId);
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
     }
     await this.cleanupStaleRuns('runtime_status_poll');
-    if (this.claudeSessionRegistry.isRunning({ sessionId, chatId })) {
+    if (this.claudeSessionRegistry.isRunning({ sessionId: projectId, chatId })) {
       return true;
     }
     if (chatId && chatId.trim().length > 0) {
-      return this.activeRunRegistry.has(buildRunKey(sessionId, chatId));
+      return this.activeRunRegistry.has(buildRunKey(projectId, chatId));
     }
     for (const runKey of this.activeRunRegistry.keys()) {
-      if (isSessionRunKey(runKey, sessionId)) {
+      if (isProjectRunKey(runKey, projectId)) {
         return true;
       }
     }

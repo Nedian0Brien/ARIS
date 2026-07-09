@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { readAppStyles } from './helpers/readAppStyles';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const dashboardCssPath = resolve(__dirname, '../app/SessionDashboard.module.css');
-const dashboardTsxPath = resolve(__dirname, '../app/SessionDashboard.tsx');
+const dashboardCssPath = resolve(__dirname, '../app/ProjectDashboard.module.css');
+const dashboardTsxPath = resolve(__dirname, '../app/ProjectDashboard.tsx');
 const fabCssPath = resolve(__dirname, '../app/styles/fab.css');
 const workspaceHomeCssPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/WorkspaceHome.module.css');
 const chatInterfaceCssPath = resolve(__dirname, '../app/_legacy/sessions/[sessionId]/ChatInterface.module.css');
@@ -27,7 +27,7 @@ describe('mobile home/workspace layout overflow guards', () => {
     expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.dashboardCreateButton\s*\{[^}]*width:\s*100%;/s);
   });
 
-  it('preserves horizontal page gutters on the mobile sessions landing page', () => {
+  it('preserves horizontal page gutters on the mobile projects landing page', () => {
     expect(uiCss).toMatch(/\.container\s*\{[^}]*padding:\s*0 0\.75rem;/s);
     expect(fabCss).toMatch(/\.main\s*\{[^}]*padding-block:\s*1\.5rem;/s);
     expect(fabCss).toMatch(/@media\s*\(min-width:\s*768px\)\s*\{[\s\S]*?\.main\s*\{[^}]*padding-block:\s*2rem;/s);
@@ -58,8 +58,8 @@ describe('mobile home/workspace layout overflow guards', () => {
   });
 
   it('uses minmax(0, 1fr) for mobile dashboard grid tracks', () => {
-    expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*999px\)\s*\{[\s\S]*?\.sessionDashboardLayout\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
-    expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*999px\)\s*\{[\s\S]*?\.sessionDashboardSidebar\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
+    expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*999px\)\s*\{[\s\S]*?\.projectDashboardLayout\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
+    expect(dashboardCss).toMatch(/@media\s*\(max-width:\s*999px\)\s*\{[\s\S]*?\.projectDashboardSidebar\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
   });
 
   it('collapses workspace summary cards to one column on small screens', () => {
@@ -87,23 +87,23 @@ describe('mobile home/workspace layout overflow guards', () => {
   });
 
   it('renders the workspace status mini-list with overflow guards', () => {
-    expect(dashboardTsx).toMatch(/className=\{styles\.sessionMiniTextGroup\}/);
+    expect(dashboardTsx).toMatch(/className=\{styles\.projectMiniTextGroup\}/);
     expect(dashboardTsx).toMatch(/chatStats\.runningSample\.map\(chat =>/);
     expect(dashboardTsx).toMatch(/chatStats\.completedSample\.map\(chat =>/);
-    expect(dashboardCss).toMatch(/\.sessionMiniList\s*\{[^}]*max-width:\s*100%;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniItem\s*\{[^}]*min-width:\s*0;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniTextGroup\s*\{[^}]*min-width:\s*0;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniName\s*\{[^}]*overflow:\s*hidden;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniName\s*\{[^}]*text-overflow:\s*ellipsis;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniName\s*\{[^}]*white-space:\s*nowrap;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniSubName\s*\{[^}]*overflow:\s*hidden;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniSubName\s*\{[^}]*text-overflow:\s*ellipsis;/s);
-    expect(dashboardCss).toMatch(/\.sessionMiniSubName\s*\{[^}]*white-space:\s*nowrap;/s);
-    expect(dashboardCss).toMatch(/\.sessionSidebarCard\s*\{[^}]*max-width:\s*100%;/s);
-    expect(dashboardCss).toMatch(/\.sessionSidebarCard\s*\{[^}]*box-sizing:\s*border-box;/s);
-    expect(dashboardCss).toMatch(/\.sessionDashboardSidebar\s*\{[^}]*max-width:\s*100%;/s);
-    expect(dashboardCss).toMatch(/\.sessionDashboardSidebar\s*\{[^}]*min-width:\s*0;/s);
-    expect(dashboardCss).toMatch(/\.sessionDashboardLayout\s*\{[^}]*box-sizing:\s*border-box;/s);
+    expect(dashboardCss).toMatch(/\.projectMiniList\s*\{[^}]*max-width:\s*100%;/s);
+    expect(dashboardCss).toMatch(/\.projectMiniItem\s*\{[^}]*min-width:\s*0;/s);
+    expect(dashboardCss).toMatch(/\.projectMiniTextGroup\s*\{[^}]*min-width:\s*0;/s);
+    expect(dashboardCss).toMatch(/\.projectMiniName\s*\{[^}]*overflow:\s*hidden;/s);
+    expect(dashboardCss).toMatch(/\.projectMiniName\s*\{[^}]*text-overflow:\s*ellipsis;/s);
+    expect(dashboardCss).toMatch(/\.projectMiniName\s*\{[^}]*white-space:\s*nowrap;/s);
+    expect(dashboardCss).toMatch(/\.projectMiniSubName\s*\{[^}]*overflow:\s*hidden;/s);
+    expect(dashboardCss).toMatch(/\.projectMiniSubName\s*\{[^}]*text-overflow:\s*ellipsis;/s);
+    expect(dashboardCss).toMatch(/\.projectMiniSubName\s*\{[^}]*white-space:\s*nowrap;/s);
+    expect(dashboardCss).toMatch(/\.projectSidebarCard\s*\{[^}]*max-width:\s*100%;/s);
+    expect(dashboardCss).toMatch(/\.projectSidebarCard\s*\{[^}]*box-sizing:\s*border-box;/s);
+    expect(dashboardCss).toMatch(/\.projectDashboardSidebar\s*\{[^}]*max-width:\s*100%;/s);
+    expect(dashboardCss).toMatch(/\.projectDashboardSidebar\s*\{[^}]*min-width:\s*0;/s);
+    expect(dashboardCss).toMatch(/\.projectDashboardLayout\s*\{[^}]*box-sizing:\s*border-box;/s);
     expect(dashboardCss).toMatch(/\.serverStorageCardFull\s*\{[^}]*box-sizing:\s*border-box;/s);
   });
 

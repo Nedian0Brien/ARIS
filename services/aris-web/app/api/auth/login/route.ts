@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/db/prisma';
-import { createSessionCookieValue, isDeviceTrusted } from '@/lib/auth/session';
+import { createProjectCookieValue, isDeviceTrusted } from '@/lib/auth/session';
 import { AUTH_COOKIE, DEVICE_COOKIE } from '@/lib/auth/constants';
 import { env } from '@/lib/config';
 import { writeAuditLog } from '@/lib/audit/log';
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
   }
 
   // If trusted or no 2FA setup, proceed
-  const token = await createSessionCookieValue(
+  const token = await createProjectCookieValue(
     { id: user.id, email: user.email, role: user.role },
     sessionTtlSeconds,
   );

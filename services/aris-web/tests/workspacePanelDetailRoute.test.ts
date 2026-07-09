@@ -19,16 +19,16 @@ vi.mock('@/lib/happy/workspaces', () => ({
 type RouteModule = {
   PATCH?: (
     request: NextRequest,
-    context: { params: Promise<{ sessionId: string; panelId: string }> },
+    context: { params: Promise<{ projectId: string; panelId: string }> },
   ) => Promise<Response>;
   DELETE?: (
     request: NextRequest,
-    context: { params: Promise<{ sessionId: string; panelId: string }> },
+    context: { params: Promise<{ projectId: string; panelId: string }> },
   ) => Promise<Response>;
 };
 
 async function loadRouteModule(): Promise<RouteModule> {
-  return import('@/app/api/runtime/sessions/[sessionId]/panels/[panelId]/route').catch(() => ({}));
+  return import('@/app/api/runtime/projects/[projectId]/panels/[panelId]/route').catch(() => ({}));
 }
 
 describe('workspace panel detail route', () => {
@@ -58,11 +58,11 @@ describe('workspace panel detail route', () => {
     if (typeof mod.PATCH !== 'function') return;
 
     const response = await mod.PATCH(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/panels/panel-preview-1', {
+      new NextRequest('http://localhost/api/runtime/projects/session-1/panels/panel-preview-1', {
         method: 'PATCH',
         body: JSON.stringify({ config: { port: 5173, path: '/dashboard' } }),
       }),
-      { params: Promise.resolve({ sessionId: 'session-1', panelId: 'panel-preview-1' }) },
+      { params: Promise.resolve({ projectId: 'session-1', panelId: 'panel-preview-1' }) },
     );
 
     expect(response.status).toBe(200);
@@ -88,10 +88,10 @@ describe('workspace panel detail route', () => {
     if (typeof mod.DELETE !== 'function') return;
 
     const response = await mod.DELETE(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/panels/panel-preview-1', {
+      new NextRequest('http://localhost/api/runtime/projects/session-1/panels/panel-preview-1', {
         method: 'DELETE',
       }),
-      { params: Promise.resolve({ sessionId: 'session-1', panelId: 'panel-preview-1' }) },
+      { params: Promise.resolve({ projectId: 'session-1', panelId: 'panel-preview-1' }) },
     );
 
     expect(response.status).toBe(200);

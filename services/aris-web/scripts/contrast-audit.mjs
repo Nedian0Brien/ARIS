@@ -218,7 +218,7 @@ function mergeVars(...groups) {
 
 const tokensCss = read('app/styles/tokens.css');
 const chatCss = read('app/sessions/[sessionId]/ChatInterface.module.css');
-const dashboardCss = read('app/SessionDashboard.module.css');
+const dashboardCss = read('app/ProjectDashboard.module.css');
 
 const globalLight = parseVars(findBlock(tokensCss, ':root'));
 const globalDark = parseVars(findBlock(tokensCss, "html[data-theme='dark']"));

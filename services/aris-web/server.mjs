@@ -85,41 +85,41 @@ function parseLocalPreviewRequest(reqUrl) {
   }
 
   return {
-    sessionId: decodeURIComponent(match[1]),
+    projectId: decodeURIComponent(match[1]),
     panelId: decodeURIComponent(match[2]),
     forwardedPath: match[3] || '/',
     query: parsed.query,
   };
 }
 
-function buildPreviewBasePath(sessionId, panelId) {
-  return `${LOCAL_PREVIEW_PREFIX}/${encodeURIComponent(sessionId)}/${encodeURIComponent(panelId)}`;
+function buildPreviewBasePath(projectId, panelId) {
+  return `${LOCAL_PREVIEW_PREFIX}/${encodeURIComponent(projectId)}/${encodeURIComponent(panelId)}`;
 }
 
-function buildPreviewInjectionScript({ sessionId, panelId, port }) {
-  const basePath = buildPreviewBasePath(sessionId, panelId);
+function buildPreviewInjectionScript({ projectId, panelId, port }) {
+  const basePath = buildPreviewBasePath(projectId, panelId);
   return `<script>(function(){var BASE=${JSON.stringify(basePath)};var PORT=${JSON.stringify(String(port))};function rewrite(input){try{var url=new URL(String(input),window.location.origin);if(url.origin!==window.location.origin)return input;if(!url.pathname.startsWith(BASE)){url.pathname=BASE+url.pathname;}if(!url.searchParams.has('port')){url.searchParams.set('port',PORT);}return url.toString();}catch{return input;}}var NativeWS=window.WebSocket;if(typeof NativeWS==='function'){window.WebSocket=function(url,protocols){return protocols===undefined?new NativeWS(rewrite(url)):new NativeWS(rewrite(url),protocols);};window.WebSocket.prototype=NativeWS.prototype;}var NativeES=window.EventSource;if(typeof NativeES==='function'){window.EventSource=function(url,config){return config===undefined?new NativeES(rewrite(url)):new NativeES(rewrite(url),config);};window.EventSource.prototype=NativeES.prototype;}var nativeFetch=window.fetch;if(typeof nativeFetch==='function'){window.fetch=function(input,init){if(typeof input==='string'||input instanceof URL){return nativeFetch.call(this,rewrite(input),init);}if(input&&typeof input.url==='string'){return nativeFetch.call(this,new Request(rewrite(input.url),input),init);}return nativeFetch.call(this,input,init);};}var NativeXhr=window.XMLHttpRequest;if(typeof NativeXhr==='function'){var nativeOpen=NativeXhr.prototype.open;NativeXhr.prototype.open=function(method,url){var args=Array.prototype.slice.call(arguments);if(typeof url==='string'){args[1]=rewrite(url);}return nativeOpen.apply(this,args);};}})();</script>`;
 }
 
-function rewriteLocalPreviewHtml(html, { sessionId, panelId, port }) {
-  const basePath = buildPreviewBasePath(sessionId, panelId);
+function rewriteLocalPreviewHtml(html, { projectId, panelId, port }) {
+  const basePath = buildPreviewBasePath(projectId, panelId);
   const rewritten = html.replace(
     /\b(href|src|action)=("|')\/(?!\/)/g,
     (_match, attribute, quote) => `${attribute}=${quote}${basePath}/`,
   );
-  const injection = buildPreviewInjectionScript({ sessionId, panelId, port });
+  const injection = buildPreviewInjectionScript({ projectId, panelId, port });
   if (rewritten.includes('</head>')) {
     return rewritten.replace('</head>', `${injection}</head>`);
   }
   return `${injection}${rewritten}`;
 }
 
-function rewritePreviewLocation(location, { sessionId, panelId }) {
+function rewritePreviewLocation(location, { projectId, panelId }) {
   if (!location || !location.startsWith('/')) {
     return location;
   }
 
-  return `${buildPreviewBasePath(sessionId, panelId)}${location}`;
+  return `${buildPreviewBasePath(projectId, panelId)}${location}`;
 }
 
 function toNodeHeaders(headers) {
@@ -174,7 +174,7 @@ function parseRuntimeEventsRequest(reqUrl) {
   }
 
   return {
-    sessionId: decodeURIComponent(match[1]),
+    projectId: decodeURIComponent(match[1]),
     query: params.toString(),
   };
 }
@@ -191,7 +191,7 @@ function runtimeApiWebSocketBase() {
 }
 
 function buildRuntimeEventsUpstreamUrl(runtimeRequest) {
-  return `${runtimeApiWebSocketBase()}/v1/sessions/${encodeURIComponent(runtimeRequest.sessionId)}/realtime-events/ws${
+  return `${runtimeApiWebSocketBase()}/v1/projects/${encodeURIComponent(runtimeRequest.projectId)}/realtime-events/ws${
     runtimeRequest.query ? `?${runtimeRequest.query}` : ''
   }`;
 }
@@ -208,10 +208,10 @@ function logRuntimeEventsWarning(message, details = {}) {
   console.warn(`[runtime-events-ws] ${message}`, JSON.stringify(details));
 }
 
-async function getStoredLocalPreviewPanel(userId, sessionId, panelId) {
+async function getStoredLocalPreviewPanel(userId, projectId, panelId) {
   const project = await prisma.project.findFirst({
     where: {
-      id: sessionId,
+      id: projectId,
       userId,
     },
     select: {
@@ -237,10 +237,10 @@ async function getStoredLocalPreviewPanel(userId, sessionId, panelId) {
   };
 }
 
-async function canAccessWorkspace(userId, sessionId) {
+async function canAccessWorkspace(userId, projectId) {
   const project = await prisma.project.findFirst({
     where: {
-      id: sessionId,
+      id: projectId,
       userId,
     },
     select: { id: true },
@@ -254,7 +254,7 @@ async function resolveLocalPreviewTarget(userId, reqUrl) {
     return null;
   }
 
-  const stored = await getStoredLocalPreviewPanel(userId, preview.sessionId, preview.panelId);
+  const stored = await getStoredLocalPreviewPanel(userId, preview.projectId, preview.panelId);
   const port = parseLocalPreviewPort(typeof preview.query.port === 'string' ? preview.query.port : null) ?? stored?.port;
   if (!port) {
     return null;
@@ -357,23 +357,20 @@ async function getSshSettings() {
   }
 }
 
-// ── Happy 서버에서 세션 CWD 조회 ───────────────────────────────────────────
-async function getSessionCwd(sessionId) {
+// ── Runtime 프로젝트 CWD 조회 ──────────────────────────────────────────────
+async function getProjectCwd(projectId) {
   if (!RUNTIME_API_TOKEN) return null;
   try {
     const res = await fetch(
-      `${RUNTIME_API_URL}/v1/sessions/${encodeURIComponent(sessionId)}`,
+      `${RUNTIME_API_URL}/v1/projects/${encodeURIComponent(projectId)}`,
       { headers: { Authorization: `Bearer ${RUNTIME_API_TOKEN}` } },
     );
     if (!res.ok) return null;
     const data = await res.json();
     return (
-      data?.session?.hostPath ??
-      data?.session?.metadata?.path ??
-      data?.session?.path ??
-      data?.path ??
-      data?.metadata?.path ??
-      data?.workingDirectory ??
+      data?.project?.hostPath ??
+      data?.project?.metadata?.path ??
+      data?.project?.path ??
       null
     );
   } catch {
@@ -382,7 +379,7 @@ async function getSessionCwd(sessionId) {
 }
 
 // ── SSH PTY 스폰 ────────────────────────────────────────────────────────────
-function spawnSshPty(settings, sessionId, sessionCwd) {
+function spawnSshPty(settings, projectId, projectCwd) {
   // Private key를 임시 파일에 기록 (SSH는 파일 경로로만 키를 받음)
   const tmpKey = join(tmpdir(), `aris_key_${randomUUID()}`);
   writeFileSync(tmpKey, settings.sshPrivateKey.trim() + '\n', { mode: 0o600 });
@@ -395,13 +392,13 @@ function spawnSshPty(settings, sessionId, sessionCwd) {
     '-o', 'ServerAliveInterval=30',
   ];
 
-  // 세션 지정 시 tmux attach 우선, 실패 시 세션 경로로 cd
-  if (sessionId) {
-    const cdCmd = sessionCwd ? `cd '${sessionCwd.replace(/'/g, "'\\''")}' && ` : '';
+  // 프로젝트 지정 시 tmux attach 우선, 실패 시 프로젝트 경로로 cd
+  if (projectId) {
+    const cdCmd = projectCwd ? `cd '${projectCwd.replace(/'/g, "'\\''")}' && ` : '';
     sshArgs.push('-t');
     sshArgs.push(`${settings.sshUser}@${SSH_HOST}`);
     sshArgs.push(
-      `tmux attach-session -t '${sessionId}' 2>/dev/null || { ${cdCmd}exec $SHELL; }`,
+      `tmux attach-session -t '${projectId}' 2>/dev/null || { ${cdCmd}exec $SHELL; }`,
     );
   } else {
     sshArgs.push(`${settings.sshUser}@${SSH_HOST}`);
@@ -425,7 +422,7 @@ const wss = new WebSocketServer({ noServer: true });
 const localPreviewWss = new WebSocketServer({ noServer: true });
 const runtimeEventsWss = new WebSocketServer({ noServer: true });
 
-wss.on('connection', async (ws, _req, { sessionId, sessionCwd }) => {
+wss.on('connection', async (ws, _req, { projectId, projectCwd }) => {
   const settings = await getSshSettings();
 
   if (!settings) {
@@ -438,7 +435,7 @@ wss.on('connection', async (ws, _req, { sessionId, sessionCwd }) => {
 
   let ptyProcess;
   try {
-    ptyProcess = spawnSshPty(settings, sessionId, sessionCwd);
+    ptyProcess = spawnSshPty(settings, projectId, projectCwd);
   } catch (err) {
     ws.send(Buffer.from(`\r\n\x1b[31m오류: ${err.message}\x1b[0m\r\n`, 'utf-8'));
     ws.close();
@@ -521,7 +518,7 @@ localPreviewWss.on('connection', async (ws, req, { userId }) => {
 
 runtimeEventsWss.on('connection', (ws, _req, { runtimeRequest, userId }) => {
   if (!RUNTIME_API_TOKEN) {
-    logRuntimeEventsWarning('missing runtime api token', { sessionId: runtimeRequest.sessionId });
+    logRuntimeEventsWarning('missing runtime api token', { projectId: runtimeRequest.projectId });
     ws.close(1011, 'runtime_api_token_missing');
     return;
   }
@@ -549,7 +546,7 @@ runtimeEventsWss.on('connection', (ws, _req, { runtimeRequest, userId }) => {
   upstream.on('close', (code, reason) => {
     if (isAbnormalWebSocketClose(code)) {
       logRuntimeEventsWarning('upstream closed abnormally', {
-        sessionId: runtimeRequest.sessionId,
+        projectId: runtimeRequest.projectId,
         userId,
         code,
         reason: safeCloseReason(reason),
@@ -562,7 +559,7 @@ runtimeEventsWss.on('connection', (ws, _req, { runtimeRequest, userId }) => {
 
   upstream.on('error', (error) => {
     logRuntimeEventsWarning('upstream error', {
-      sessionId: runtimeRequest.sessionId,
+      projectId: runtimeRequest.projectId,
       userId,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -574,7 +571,7 @@ runtimeEventsWss.on('connection', (ws, _req, { runtimeRequest, userId }) => {
   ws.on('close', (code, reason) => {
     if (isAbnormalWebSocketClose(code)) {
       logRuntimeEventsWarning('client closed abnormally', {
-        sessionId: runtimeRequest.sessionId,
+        projectId: runtimeRequest.projectId,
         userId,
         code,
         reason: safeCloseReason(reason),
@@ -587,7 +584,7 @@ runtimeEventsWss.on('connection', (ws, _req, { runtimeRequest, userId }) => {
 
   ws.on('error', (error) => {
     logRuntimeEventsWarning('client socket error', {
-      sessionId: runtimeRequest.sessionId,
+      projectId: runtimeRequest.projectId,
       userId,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -671,7 +668,7 @@ app.prepare().then(() => {
       const cookies = parseCookies(req.headers.cookie);
       const token = cookies[AUTH_COOKIE_NAME];
       if (!token) {
-        logRuntimeEventsWarning('upgrade rejected: missing auth cookie', { sessionId: runtimeRequest.sessionId });
+        logRuntimeEventsWarning('upgrade rejected: missing auth cookie', { projectId: runtimeRequest.projectId });
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
         socket.destroy();
         return;
@@ -679,16 +676,16 @@ app.prepare().then(() => {
 
       const payload = await verifyToken(token);
       if (!payload?.sub) {
-        logRuntimeEventsWarning('upgrade rejected: invalid auth cookie', { sessionId: runtimeRequest.sessionId });
+        logRuntimeEventsWarning('upgrade rejected: invalid auth cookie', { projectId: runtimeRequest.projectId });
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
         socket.destroy();
         return;
       }
 
-      const hasAccess = await canAccessWorkspace(payload.sub, runtimeRequest.sessionId);
+      const hasAccess = await canAccessWorkspace(payload.sub, runtimeRequest.projectId);
       if (!hasAccess) {
         logRuntimeEventsWarning('upgrade rejected: workspace access denied', {
-          sessionId: runtimeRequest.sessionId,
+          projectId: runtimeRequest.projectId,
           userId: payload.sub,
         });
         socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
@@ -729,12 +726,12 @@ app.prepare().then(() => {
       return;
     }
 
-    const sessionMatch = pathname.match(/^\/ws\/terminal\/(.+)$/);
-    const sessionId = sessionMatch ? decodeURIComponent(sessionMatch[1]) : null;
-    const sessionCwd = sessionId ? await getSessionCwd(sessionId) : null;
+    const projectMatch = pathname.match(/^\/ws\/terminal\/(.+)$/);
+    const projectId = projectMatch ? decodeURIComponent(projectMatch[1]) : null;
+    const projectCwd = projectId ? await getProjectCwd(projectId) : null;
 
     wss.handleUpgrade(req, socket, head, (ws) => {
-      wss.emit('connection', ws, req, { sessionId, sessionCwd });
+      wss.emit('connection', ws, req, { projectId, projectCwd });
     });
   });
 

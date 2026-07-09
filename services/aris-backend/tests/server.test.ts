@@ -18,12 +18,12 @@ describe('aris-backend API', () => {
       LOG_LEVEL: 'silent',
     });
 
-    const response = await app.inject({ method: 'GET', url: '/v1/sessions' });
+    const response = await app.inject({ method: 'GET', url: '/v1/projects' });
     expect(response.statusCode).toBe(401);
     await app.close();
   });
 
-  it('lists sessions and messages', async () => {
+  it('lists projects and messages', async () => {
     const app = buildServer({
       RUNTIME_API_TOKEN: TOKEN,
       DEFAULT_PROJECT_PATH: '/tmp/project',
@@ -31,7 +31,7 @@ describe('aris-backend API', () => {
     });
     const createResponse = await app.inject({
       method: 'POST',
-      url: '/v1/sessions',
+      url: '/v1/projects',
       headers: {
         ...authHeader(),
         'content-type': 'application/json',
@@ -45,26 +45,26 @@ describe('aris-backend API', () => {
 
     expect(createResponse.statusCode).toBe(201);
     const createPayload = createResponse.json() as {
-      session: { metadata?: { model?: string } };
+      project: { metadata?: { model?: string } };
     };
-    expect(createPayload.session.metadata?.model).toBe('claude-sonnet-4-6');
+    expect(createPayload.project.metadata?.model).toBe('claude-sonnet-4-6');
 
-    const sessionsResponse = await app.inject({
+    const projectsResponse = await app.inject({
       method: 'GET',
-      url: '/v1/sessions',
+      url: '/v1/projects',
       headers: authHeader(),
     });
 
-    expect(sessionsResponse.statusCode).toBe(200);
-    const payload = sessionsResponse.json() as {
-      sessions: Array<{ id: string; metadata?: { model?: string } }>;
+    expect(projectsResponse.statusCode).toBe(200);
+    const payload = projectsResponse.json() as {
+      projects: Array<{ id: string; metadata?: { model?: string } }>;
     };
-    expect(payload.sessions.length).toBe(1);
-    expect(payload.sessions[0].metadata?.model).toBe('claude-sonnet-4-6');
+    expect(payload.projects.length).toBe(1);
+    expect(payload.projects[0].metadata?.model).toBe('claude-sonnet-4-6');
 
     const messagesResponse = await app.inject({
       method: 'GET',
-      url: `/v3/sessions/${payload.sessions[0].id}/messages`,
+      url: `/v3/projects/${payload.projects[0].id}/messages`,
       headers: authHeader(),
     });
 
@@ -75,7 +75,7 @@ describe('aris-backend API', () => {
     await app.close();
   });
 
-  it('returns a session creation error when branch worktree creation fails', async () => {
+  it('returns a project creation error when branch worktree creation fails', async () => {
     const app = buildServer({
       RUNTIME_API_TOKEN: TOKEN,
       DEFAULT_PROJECT_PATH: '/tmp/project',
@@ -84,7 +84,7 @@ describe('aris-backend API', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/sessions',
+      url: '/v1/projects',
       headers: {
         ...authHeader(),
         'content-type': 'application/json',
@@ -99,12 +99,12 @@ describe('aris-backend API', () => {
     expect(response.statusCode).toBe(502);
     expect((response.json() as { error?: string }).error).toContain('WORKTREE_CREATE_FAILED');
 
-    const sessionsResponse = await app.inject({
+    const projectsResponse = await app.inject({
       method: 'GET',
-      url: '/v1/sessions',
+      url: '/v1/projects',
       headers: authHeader(),
     });
-    expect((sessionsResponse.json() as { sessions: unknown[] }).sessions).toHaveLength(0);
+    expect((projectsResponse.json() as { projects: unknown[] }).projects).toHaveLength(0);
 
     await app.close();
   });
@@ -118,7 +118,7 @@ describe('aris-backend API', () => {
 
     const createResponse = await app.inject({
       method: 'POST',
-      url: '/v1/sessions',
+      url: '/v1/projects',
       headers: {
         ...authHeader(),
         'content-type': 'application/json',
@@ -130,11 +130,11 @@ describe('aris-backend API', () => {
     });
 
     expect(createResponse.statusCode).toBe(201);
-    const sessionId = (createResponse.json() as { session: { id: string } }).session.id;
+    const sessionId = (createResponse.json() as { project: { id: string } }).project.id;
 
     const appendResponse = await app.inject({
       method: 'POST',
-      url: `/v3/sessions/${sessionId}/messages`,
+      url: `/v3/projects/${sessionId}/messages`,
       headers: {
         ...authHeader(),
         'content-type': 'application/json',
@@ -166,7 +166,7 @@ describe('aris-backend API', () => {
 
     const messagesResponse = await app.inject({
       method: 'GET',
-      url: `/v3/sessions/${sessionId}/messages?chatId=chat-bridge-1`,
+      url: `/v3/projects/${sessionId}/messages?chatId=chat-bridge-1`,
       headers: authHeader(),
     });
 
@@ -189,7 +189,7 @@ describe('aris-backend API', () => {
 
     const createResponse = await app.inject({
       method: 'POST',
-      url: '/v1/sessions',
+      url: '/v1/projects',
       headers: {
         ...authHeader(),
         'content-type': 'application/json',
@@ -200,7 +200,7 @@ describe('aris-backend API', () => {
       }),
     });
     expect(createResponse.statusCode).toBe(201);
-    const sessionId = (createResponse.json() as { session: { id: string } }).session.id;
+    const sessionId = (createResponse.json() as { project: { id: string } }).project.id;
 
     const appendResponse = await app.inject({
       method: 'POST',
@@ -210,7 +210,7 @@ describe('aris-backend API', () => {
         'content-type': 'application/json',
       },
       payload: JSON.stringify({
-        sessionId,
+        projectId: sessionId,
         runId: 'run-1',
         type: 'message',
         title: 'Text Reply',
@@ -244,7 +244,7 @@ describe('aris-backend API', () => {
 
     const compatResponse = await app.inject({
       method: 'GET',
-      url: `/v3/sessions/${sessionId}/messages?chatId=chat-1&after_seq=0&limit=20`,
+      url: `/v3/projects/${sessionId}/messages?chatId=chat-1&after_seq=0&limit=20`,
       headers: authHeader(),
     });
     expect(compatResponse.statusCode).toBe(200);
@@ -264,7 +264,7 @@ describe('aris-backend API', () => {
 
     const createResponse = await app.inject({
       method: 'POST',
-      url: '/v1/sessions',
+      url: '/v1/projects',
       headers: {
         ...authHeader(),
         'content-type': 'application/json',
@@ -275,7 +275,7 @@ describe('aris-backend API', () => {
       }),
     });
     expect(createResponse.statusCode).toBe(201);
-    const sessionId = (createResponse.json() as { session: { id: string } }).session.id;
+    const sessionId = (createResponse.json() as { project: { id: string } }).project.id;
 
     const promptResponse = await app.inject({
       method: 'POST',
@@ -285,7 +285,7 @@ describe('aris-backend API', () => {
         'content-type': 'application/json',
       },
       payload: JSON.stringify({
-        sessionId,
+        projectId: sessionId,
         type: 'message',
         title: 'User Instruction',
         text: '구조를 올바르게 리팩토링해줘',
@@ -315,7 +315,7 @@ describe('aris-backend API', () => {
 
     const createResponse = await app.inject({
       method: 'POST',
-      url: '/v1/sessions',
+      url: '/v1/projects',
       headers: {
         ...authHeader(),
         'content-type': 'application/json',
@@ -326,7 +326,7 @@ describe('aris-backend API', () => {
       }),
     });
     expect(createResponse.statusCode).toBe(201);
-    const sessionId = (createResponse.json() as { session: { id: string } }).session.id;
+    const sessionId = (createResponse.json() as { project: { id: string } }).project.id;
 
     const terminalResponse = await app.inject({
       method: 'POST',
@@ -336,7 +336,7 @@ describe('aris-backend API', () => {
         'content-type': 'application/json',
       },
       payload: JSON.stringify({
-        sessionId,
+        projectId: sessionId,
         command: 'printf aris-terminal',
       }),
     });
@@ -369,7 +369,7 @@ describe('aris-backend API', () => {
 
     const projectResponse = await app.inject({
       method: 'POST',
-      url: '/v1/sessions',
+      url: '/v1/projects',
       headers: {
         ...authHeader(),
         'content-type': 'application/json',
@@ -381,7 +381,7 @@ describe('aris-backend API', () => {
     });
     const runtimeResponse = await app.inject({
       method: 'POST',
-      url: '/v1/sessions',
+      url: '/v1/projects',
       headers: {
         ...authHeader(),
         'content-type': 'application/json',
@@ -393,8 +393,8 @@ describe('aris-backend API', () => {
     });
     expect(projectResponse.statusCode).toBe(201);
     expect(runtimeResponse.statusCode).toBe(201);
-    const projectSessionId = (projectResponse.json() as { session: { id: string } }).session.id;
-    const runtimeSessionId = (runtimeResponse.json() as { session: { id: string } }).session.id;
+    const projectSessionId = (projectResponse.json() as { project: { id: string } }).project.id;
+    const runtimeProjectId = (runtimeResponse.json() as { project: { id: string } }).project.id;
 
     const terminalResponse = await app.inject({
       method: 'POST',
@@ -404,22 +404,22 @@ describe('aris-backend API', () => {
         'content-type': 'application/json',
       },
       payload: JSON.stringify({
-        sessionId: projectSessionId,
-        runtimeSessionId,
+        projectId: projectSessionId,
+        runtimeProjectId,
         command: 'pwd',
       }),
     });
 
     expect(terminalResponse.statusCode).toBe(201);
     const terminalPayload = terminalResponse.json() as {
-      events?: Array<{ sessionId?: string; text?: string; meta?: { chatId?: string; runtimeSessionId?: string; execCwd?: string } }>;
+      events?: Array<{ projectId?: string; text?: string; meta?: { chatId?: string; runtimeProjectId?: string; execCwd?: string } }>;
     };
     expect(terminalPayload.events?.[0]).toEqual(expect.objectContaining({
-      sessionId: projectSessionId,
+      projectId: projectSessionId,
       text: expect.stringContaining(panelDir),
       meta: expect.objectContaining({
         chatId: 'chat-1',
-        runtimeSessionId,
+        runtimeProjectId,
         execCwd: panelDir,
       }),
     }));
@@ -436,7 +436,7 @@ describe('aris-backend API', () => {
 
     const createResponse = await app.inject({
       method: 'POST',
-      url: '/v1/sessions',
+      url: '/v1/projects',
       headers: {
         ...authHeader(),
         'content-type': 'application/json',
@@ -448,22 +448,22 @@ describe('aris-backend API', () => {
     });
 
     expect(createResponse.statusCode).toBe(201);
-    const sessionId = (createResponse.json() as { session: { id: string } }).session.id;
+    const sessionId = (createResponse.json() as { project: { id: string } }).project.id;
 
     const response = await app.inject({
       method: 'GET',
-      url: `/v1/sessions/${sessionId}/providers/gemini/capabilities`,
+      url: `/v1/projects/${sessionId}/providers/gemini/capabilities`,
       headers: authHeader(),
     });
 
     expect(response.statusCode).toBe(200);
     const payload = response.json() as {
       capabilities?: {
-        sessionId?: string;
+        projectId?: string;
         modes?: { availableModes?: Array<{ id: string }> };
       };
     };
-    expect(payload.capabilities?.sessionId).toBe(sessionId);
+    expect(payload.capabilities?.projectId).toBe(sessionId);
     expect(Array.isArray(payload.capabilities?.modes?.availableModes)).toBe(true);
     await app.close();
   });
@@ -483,7 +483,7 @@ describe('aris-backend API', () => {
     for (let i = 0; i < 120; i += 1) {
       const response = await app.inject({
         method: 'GET',
-        url: '/v1/sessions',
+        url: '/v1/projects',
         headers: burstHeaders,
       });
       expect(response.statusCode).toBe(200);
@@ -491,7 +491,7 @@ describe('aris-backend API', () => {
 
     const burstResponse = await app.inject({
       method: 'GET',
-      url: '/v1/sessions',
+      url: '/v1/projects',
       headers: burstHeaders,
     });
     expect(burstResponse.statusCode).toBe(429);
@@ -508,7 +508,7 @@ describe('aris-backend API', () => {
     });
     const createResponse = await app.inject({
       method: 'POST',
-      url: '/v1/sessions',
+      url: '/v1/projects',
       headers: {
         ...authHeader(),
         'content-type': 'application/json',
@@ -520,12 +520,12 @@ describe('aris-backend API', () => {
     });
     expect(createResponse.statusCode).toBe(201);
 
-    const sessions = (await app.inject({
+    const projects = (await app.inject({
       method: 'GET',
-      url: '/v1/sessions',
+      url: '/v1/projects',
       headers: authHeader(),
-    })).json() as { sessions: Array<{ id: string }> };
-    expect(sessions.sessions.length).toBe(1);
+    })).json() as { projects: Array<{ id: string }> };
+    expect(projects.projects.length).toBe(1);
 
     const permissionCreateResponse = await app.inject({
       method: 'POST',
@@ -535,7 +535,7 @@ describe('aris-backend API', () => {
         'content-type': 'application/json',
       },
       payload: JSON.stringify({
-        sessionId: sessions.sessions[0].id,
+        projectId: projects.projects[0].id,
         agent: 'claude',
         command: 'npm install sharp',
         reason: 'Native dependency for image pipeline',
@@ -547,7 +547,7 @@ describe('aris-backend API', () => {
 
     const actionResponse = await app.inject({
       method: 'POST',
-      url: `/v1/sessions/${sessions.sessions[0].id}/actions`,
+      url: `/v1/projects/${projects.projects[0].id}/actions`,
       headers: {
         ...authHeader(),
         'content-type': 'application/json',

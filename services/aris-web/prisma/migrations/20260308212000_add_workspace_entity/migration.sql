@@ -13,7 +13,7 @@ CREATE TABLE "Workspace" (
 );
 
 -- AddColumn
-ALTER TABLE "SessionChat" ADD COLUMN "agent" TEXT NOT NULL DEFAULT 'codex';
+ALTER TABLE "ProjectChat" ADD COLUMN "agent" TEXT NOT NULL DEFAULT 'codex';
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Workspace_userId_path_key" ON "Workspace"("userId", "path");

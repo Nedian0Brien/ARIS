@@ -92,7 +92,7 @@ async function waitForScrollDebugQuiet(page: Page, quietMs = 1_500, timeoutMs = 
 
 async function resolveFirstSessionPath(page: Page) {
   return page.evaluate(async () => {
-    const response = await fetch('/api/runtime/sessions', { cache: 'no-store' });
+    const response = await fetch('/api/runtime/projects', { cache: 'no-store' });
     if (!response.ok) {
       return null;
     }
@@ -103,7 +103,7 @@ async function resolveFirstSessionPath(page: Page) {
       .filter(Boolean) ?? [];
 
     for (const sessionId of sessionIds) {
-      const chatsResponse = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats`, { cache: 'no-store' });
+      const chatsResponse = await fetch(`/api/runtime/projects/${encodeURIComponent(sessionId)}/chats`, { cache: 'no-store' });
       if (!chatsResponse.ok) {
         continue;
       }
@@ -116,7 +116,7 @@ async function resolveFirstSessionPath(page: Page) {
       }
 
       const snapshotsResponse = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/sidebar?${chatIds.map((chatId) => `chatId=${encodeURIComponent(chatId)}`).join('&')}`,
+        `/api/runtime/projects/${encodeURIComponent(sessionId)}/chats/sidebar?${chatIds.map((chatId) => `chatId=${encodeURIComponent(chatId)}`).join('&')}`,
         { cache: 'no-store' },
       );
       if (!snapshotsResponse.ok) {

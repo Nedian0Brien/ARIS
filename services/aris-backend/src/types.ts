@@ -1,12 +1,12 @@
 export type AgentFlavor = 'codex' | 'claude' | 'gemini' | 'unknown';
-export type SessionStatus = 'running' | 'idle' | 'stopped' | 'error' | 'unknown';
+export type ProjectStatus = 'running' | 'idle' | 'stopped' | 'error' | 'unknown';
 export type ApprovalPolicy = 'on-request' | 'on-failure' | 'never' | 'yolo';
 export type PermissionRisk = 'low' | 'medium' | 'high';
 export type PermissionState = 'pending' | 'approved' | 'denied';
 export type PermissionDecision = 'allow_once' | 'allow_session' | 'deny';
-export type SessionAction = 'abort' | 'retry' | 'kill' | 'resume';
+export type ProjectAction = 'abort' | 'retry' | 'kill' | 'resume';
 
-export type RuntimeSession = {
+export type RuntimeProject = {
   id: string;
   seq?: number;
   metadata: {
@@ -18,7 +18,7 @@ export type RuntimeSession = {
     runtimeModel?: string;
   };
   state: {
-    status: SessionStatus;
+    status: ProjectStatus;
   };
   updatedAt: string;
   riskScore: number;
@@ -29,8 +29,9 @@ export type GeminiCapabilityOption = {
   label: string;
 };
 
-export type GeminiSessionCapabilities = {
-  sessionId: string;
+export type GeminiProjectCapabilities = {
+  projectId?: string;
+  sessionId?: string;
   fetchedAt: string;
   modes: {
     currentModeId?: string | null;
@@ -44,7 +45,7 @@ export type GeminiSessionCapabilities = {
 
 export type RuntimeMessage = {
   id: string;
-  sessionId: string;
+  projectId: string;
   type: string;
   title: string;
   text: string;
@@ -54,7 +55,7 @@ export type RuntimeMessage = {
 
 export type PermissionRequest = {
   id: string;
-  sessionId: string;
+  projectId: string;
   chatId?: string | null;
   agent: AgentFlavor;
   command: string;

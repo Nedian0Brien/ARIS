@@ -21,14 +21,14 @@ ADD CONSTRAINT "Workspace_projectId_fkey"
 FOREIGN KEY ("projectId") REFERENCES "Project"("id")
 ON DELETE CASCADE ON UPDATE CASCADE;
 
-ALTER TABLE "SessionChat" RENAME TO "Chat";
+ALTER TABLE "ProjectChat" RENAME TO "Chat";
 ALTER TABLE "Chat" RENAME COLUMN "sessionId" TO "projectId";
-ALTER TABLE "Chat" RENAME CONSTRAINT "SessionChat_pkey" TO "Chat_pkey";
-ALTER TABLE "Chat" RENAME CONSTRAINT "SessionChat_userId_fkey" TO "Chat_userId_fkey";
-ALTER TABLE "Chat" RENAME CONSTRAINT "SessionChat_model_allowed_check" TO "Chat_model_allowed_check";
-ALTER TABLE "Chat" RENAME CONSTRAINT "SessionChat_model_reasoning_effort_check" TO "Chat_model_reasoning_effort_check";
-ALTER INDEX "SessionChat_sessionId_userId_isPinned_lastActivityAt_idx" RENAME TO "Chat_projectId_userId_isPinned_lastActivityAt_idx";
-ALTER INDEX "SessionChat_userId_updatedAt_idx" RENAME TO "Chat_userId_updatedAt_idx";
+ALTER TABLE "Chat" RENAME CONSTRAINT "ProjectChat_pkey" TO "Chat_pkey";
+ALTER TABLE "Chat" RENAME CONSTRAINT "ProjectChat_userId_fkey" TO "Chat_userId_fkey";
+ALTER TABLE "Chat" RENAME CONSTRAINT "ProjectChat_model_allowed_check" TO "Chat_model_allowed_check";
+ALTER TABLE "Chat" RENAME CONSTRAINT "ProjectChat_model_reasoning_effort_check" TO "Chat_model_reasoning_effort_check";
+ALTER INDEX "ProjectChat_sessionId_userId_isPinned_lastActivityAt_idx" RENAME TO "Chat_projectId_userId_isPinned_lastActivityAt_idx";
+ALTER INDEX "ProjectChat_userId_updatedAt_idx" RENAME TO "Chat_userId_updatedAt_idx";
 
 CREATE TABLE "WorkspacePanel" (
     "id" TEXT NOT NULL,

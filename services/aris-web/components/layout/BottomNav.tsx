@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FolderTree, Home, MessageSquareText, PanelsTopLeft } from 'lucide-react';
 import { primeAutoHideScrollState, reduceAutoHideScrollState } from './mobileScrollAutoHide';
-import { useSessionScrollOrchestrator } from '@/lib/hooks/useSessionScrollOrchestrator';
+import { useProjectScrollOrchestrator } from '@/lib/hooks/useProjectScrollOrchestrator';
 
 export type TabType = 'home' | 'ask' | 'project' | 'files' | 'settings';
 
@@ -22,7 +22,7 @@ const BOTTOM_NAV_AUTO_HIDE_THRESHOLDS = {
 
 export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   const [hidden, setHidden] = useState(false);
-  const { isActive: isSessionScrollActive, phase: sessionScrollPhase } = useSessionScrollOrchestrator();
+  const { isActive: isProjectScrollActive, phase: projectScrollPhase } = useProjectScrollOrchestrator();
   const lastScrollY = useRef(0);
   const hiddenRef = useRef(false);
   const scrollRafRef = useRef<number | null>(null);
@@ -55,8 +55,8 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
         now: Date.now(),
         isMobile: window.innerWidth < 768,
         thresholds: BOTTOM_NAV_AUTO_HIDE_THRESHOLDS,
-        isSessionScrollActive,
-        sessionScrollPhase,
+        isProjectScrollActive,
+        projectScrollPhase,
       });
       lastScrollY.current = autoHideState.lastScrollY;
       updateHidden(autoHideState.hidden);
@@ -116,7 +116,7 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
         scrollRafRef.current = null;
       }
     };
-  }, [activeTab, isSessionScrollActive, sessionScrollPhase]);
+  }, [activeTab, isProjectScrollActive, projectScrollPhase]);
 
   const syncIndicator = useCallback(() => {
     const nav = navRef.current;

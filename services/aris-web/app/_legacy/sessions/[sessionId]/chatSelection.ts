@@ -1,7 +1,7 @@
-import type { SessionChat } from '@/lib/happy/types';
+import type { ProjectChat } from '@/lib/happy/types';
 
 type ChatSelectionInput = {
-  chats: SessionChat[];
+  chats: ProjectChat[];
   selectedChatId: string | null;
   requestedChatId: string | null;
   isNewChatPlaceholder: boolean;
@@ -20,11 +20,11 @@ export function shouldStartChatEntryLoading(input: {
 }
 
 export function resolveActiveChat(
-  chats: SessionChat[],
+  chats: ProjectChat[],
   selectedChatId: string | null,
   isNewChatPlaceholder: boolean,
   isWorkspaceHome?: boolean,
-): SessionChat | null {
+): ProjectChat | null {
   if (isNewChatPlaceholder || isWorkspaceHome) {
     return null;
   }

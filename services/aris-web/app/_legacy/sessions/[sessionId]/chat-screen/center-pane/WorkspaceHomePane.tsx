@@ -1,14 +1,14 @@
 'use client';
 
 import type { RefObject } from 'react';
-import type { AgentFlavor, SessionChat } from '@/lib/happy/types';
+import type { AgentFlavor, ProjectChat } from '@/lib/happy/types';
 import { WorkspaceHome } from '../../WorkspaceHome';
 import styles from '../../ChatInterface.module.css';
 
 type WorkspaceHomePaneProps = {
   agentFlavor: AgentFlavor | string;
   chatEntryPendingRevealClassName: string;
-  chats: SessionChat[];
+  chats: ProjectChat[];
   isMobileLayout: boolean;
   projectPath: string;
   scrollRef: RefObject<HTMLDivElement | null>;

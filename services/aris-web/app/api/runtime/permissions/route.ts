@@ -9,12 +9,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const sessionId = request.nextUrl.searchParams.get('sessionId') ?? undefined;
+    const projectId = request.nextUrl.searchParams.get('projectId') ?? undefined;
     const chatId = request.nextUrl.searchParams.get('chatId') ?? undefined;
     const includeUnassignedRaw = request.nextUrl.searchParams.get('includeUnassigned');
     const includeUnassigned = includeUnassignedRaw === '1' || includeUnassignedRaw === 'true';
     const permissions = await listPermissionRequests({
-      sessionId,
+      projectId,
       chatId,
       includeUnassigned,
     });

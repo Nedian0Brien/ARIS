@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 type PreviewGatewayModule = {
-  buildLocalPreviewBasePath?: (input: { sessionId: string; panelId: string }) => string;
+  buildLocalPreviewBasePath?: (input: { projectId: string; panelId: string }) => string;
   buildLocalPreviewTargetUrl?: (input: { port: number; path?: string | null }) => string;
   rewriteLocalPreviewHtml?: (html: string, previewBasePath: string) => string;
 };
@@ -18,7 +18,7 @@ describe('local preview gateway helpers', () => {
     if (typeof mod.buildLocalPreviewBasePath !== 'function') return;
 
     expect(mod.buildLocalPreviewBasePath({
-      sessionId: 'session-1',
+      projectId: 'session-1',
       panelId: 'panel-preview-1',
     })).toBe('/__local_preview/session-1/panel-preview-1');
   });

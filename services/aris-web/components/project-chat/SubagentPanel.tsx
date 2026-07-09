@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { SessionChat } from '@/lib/happy/types';
+import type { ProjectChat } from '@/lib/happy/types';
 import { buildProjectRuntimeSubagentsPath } from '@/lib/projectRuntimeAdapter';
 
 type SubagentPanelProps = {
@@ -30,7 +30,7 @@ function statusLabel(value: string | null | undefined): string {
  * the run status (running/completed) stays roughly live.
  */
 export function SubagentPanel({ projectId, chatId, active }: SubagentPanelProps) {
-  const [subagents, setSubagents] = useState<SessionChat[]>([]);
+  const [subagents, setSubagents] = useState<ProjectChat[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reqRef = useRef(0);
@@ -49,7 +49,7 @@ export function SubagentPanel({ projectId, chatId, active }: SubagentPanelProps)
         buildProjectRuntimeSubagentsPath(projectId, chatId),
         { cache: 'no-store' },
       );
-      const body = (await res.json().catch(() => ({}))) as { subagents?: SessionChat[]; error?: string };
+      const body = (await res.json().catch(() => ({}))) as { subagents?: ProjectChat[]; error?: string };
       if (reqId !== reqRef.current) {
         return;
       }

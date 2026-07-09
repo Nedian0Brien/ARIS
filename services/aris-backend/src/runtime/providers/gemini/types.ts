@@ -4,13 +4,13 @@ import type {
   ProviderActionEvent,
   ProviderCliResult,
   ProviderResumeTarget,
-  ProviderRuntimeSession,
+  ProviderRuntimeProject,
   ProviderThreadIdSource,
   ProviderTurnRequest,
   ProviderTurnResult,
 } from '../../contracts/providerRuntime.js';
 
-export type GeminiRuntimeSession = ProviderRuntimeSession<'gemini'>;
+export type GeminiRuntimeProject = ProviderRuntimeProject<'gemini'>;
 export type GeminiResumeTarget = ProviderResumeTarget;
 export type GeminiThreadIdSource = ProviderThreadIdSource;
 export type GeminiActionEvent = ProviderActionEvent;
@@ -35,7 +35,7 @@ export type GeminiSessionSnapshot = {
 };
 
 export type GeminiTurnExecutor = (
-  input: ProviderTurnRequest<GeminiRuntimeSession> & {
+  input: ProviderTurnRequest<GeminiRuntimeProject> & {
     preferredThreadId?: string;
   },
 ) => Promise<GeminiTurnResult>;

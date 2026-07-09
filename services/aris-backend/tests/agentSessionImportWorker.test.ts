@@ -36,7 +36,7 @@ describe('agent session import worker', () => {
     ].join('\n'));
     const store = {
       discoverImportedAgentSession: vi.fn().mockResolvedValue({ id: 'import-1', chatId: null }),
-      resolveProjectSessionIdByPath: vi.fn(),
+      resolveProjectIdByPath: vi.fn(),
       ensureImportedAgentChat: vi.fn(),
       appendImportedAgentEvents: vi.fn(),
     };
@@ -74,7 +74,7 @@ describe('agent session import worker', () => {
     ].join('\n'));
     const store = {
       discoverImportedAgentSession: vi.fn().mockResolvedValue({ id: 'import-1', chatId: null }),
-      resolveProjectSessionIdByPath: vi.fn().mockResolvedValue('project-session-1'),
+      resolveProjectIdByPath: vi.fn().mockResolvedValue('project-session-1'),
       ensureImportedAgentChat: vi.fn().mockResolvedValue({ chatId: 'chat-1' }),
       appendImportedAgentEvents: vi.fn().mockResolvedValue([{ id: 'event-1' }, { id: 'event-2' }]),
     };
@@ -95,7 +95,7 @@ describe('agent session import worker', () => {
     expect(result.importedEvents).toBe(2);
     expect(store.ensureImportedAgentChat).toHaveBeenCalledWith(expect.objectContaining({
       importId: 'import-1',
-      arisSessionId: 'project-session-1',
+      arisProjectId: 'project-session-1',
       userId: 'user-1',
       title: '첫 번째 요청',
     }));
@@ -127,7 +127,7 @@ describe('agent session import worker', () => {
       discoverImportedAgentSession: vi.fn().mockResolvedValue({
         id: 'import-1',
         chatId: 'chat-1',
-        arisSessionId: 'project-session-1',
+        arisProjectId: 'project-session-1',
         provider: 'codex',
         providerSessionId: 'codex-session-1',
         sourcePath,
@@ -135,7 +135,7 @@ describe('agent session import worker', () => {
         newestCursorOffset: cursorAfterFirstTurn,
         hasMoreBefore: true,
       }),
-      resolveProjectSessionIdByPath: vi.fn().mockResolvedValue('project-session-1'),
+      resolveProjectIdByPath: vi.fn().mockResolvedValue('project-session-1'),
       ensureImportedAgentChat: vi.fn(),
       appendImportedAgentEvents: vi.fn().mockResolvedValue([{ id: 'event-1' }, { id: 'event-2' }]),
     };
@@ -187,7 +187,7 @@ describe('agent session import worker', () => {
 
     const store = {
       discoverImportedAgentSession: vi.fn().mockResolvedValue({ id: 'import-sub', chatId: null }),
-      resolveProjectSessionIdByPath: vi.fn().mockResolvedValue('project-session-1'),
+      resolveProjectIdByPath: vi.fn().mockResolvedValue('project-session-1'),
       findOwningChat: vi.fn().mockResolvedValue({ chatId: 'parent-chat-1', isImported: true }),
       ensureImportedAgentChat: vi.fn().mockResolvedValue({ chatId: 'subagent-chat-1' }),
       markImportedAgentSessionNative: vi.fn(),
@@ -231,7 +231,7 @@ describe('agent session import worker', () => {
     ].join('\n'));
     const store = {
       discoverImportedAgentSession: vi.fn().mockResolvedValue({ id: 'import-native', chatId: null }),
-      resolveProjectSessionIdByPath: vi.fn().mockResolvedValue('project-session-1'),
+      resolveProjectIdByPath: vi.fn().mockResolvedValue('project-session-1'),
       findOwningChat: vi.fn().mockResolvedValue({ chatId: 'native-chat-1', isImported: false }),
       ensureImportedAgentChat: vi.fn(),
       markImportedAgentSessionNative: vi.fn(),
@@ -253,7 +253,7 @@ describe('agent session import worker', () => {
 
     expect(store.markImportedAgentSessionNative).toHaveBeenCalledWith({
       importId: 'import-native',
-      arisSessionId: 'project-session-1',
+      arisProjectId: 'project-session-1',
       chatId: 'native-chat-1',
     });
     expect(store.ensureImportedAgentChat).not.toHaveBeenCalled();
@@ -264,7 +264,7 @@ describe('agent session import worker', () => {
   it('runs bounded backfill batches for imported chats with older transcript', async () => {
     const store = {
       discoverImportedAgentSession: vi.fn(),
-      resolveProjectSessionIdByPath: vi.fn(),
+      resolveProjectIdByPath: vi.fn(),
       ensureImportedAgentChat: vi.fn(),
       appendImportedAgentEvents: vi.fn(),
       listImportedAgentSessionsForBackfill: vi.fn().mockResolvedValue([

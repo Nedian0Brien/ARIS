@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { dispatchSessionScrollPhaseEvent } from '@/lib/hooks/useSessionScrollOrchestrator';
+import { dispatchProjectScrollPhaseEvent } from '@/lib/hooks/useProjectScrollOrchestrator';
 import { recordScrollDebugEvent } from '@/lib/scroll/scrollDebug';
 
 export const VIEWPORT_LAYOUT_CHANGE_EVENT = 'aris:viewport-layout-change';
@@ -129,7 +129,7 @@ export function ViewportHeightSync() {
       });
       if (metricsChanged) {
         previousMetrics = nextMetrics;
-        dispatchSessionScrollPhaseEvent('viewport-changed');
+        dispatchProjectScrollPhaseEvent('viewport-changed');
         window.dispatchEvent(new CustomEvent(VIEWPORT_LAYOUT_CHANGE_EVENT, {
           detail: nextMetrics,
         }));

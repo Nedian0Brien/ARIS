@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
-import { listSessions, createSession } from '@/lib/happy/client';
-import { filterProjectSessionSummaries, syncWorkspacesForUser } from '@/lib/happy/workspaces';
+import { listProjects, createProject } from '@/lib/happy/client';
+import { filterProjectSummaries, syncWorkspacesForUser } from '@/lib/happy/workspaces';
 
 function normalizeProjectPath(input: string): string {
   const normalized = input.replace(/\\/g, '/').trim();
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const projects = filterProjectSessionSummaries(await listSessions(auth.user.id));
+    const projects = filterProjectSummaries(await listProjects(auth.user.id));
     await syncWorkspacesForUser(auth.user.id, projects);
     return NextResponse.json({ projects });
   } catch (error) {
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       : 'on-request';
     const branch = typeof body.branch === 'string' && body.branch.trim() ? body.branch.trim() : undefined;
 
-    const project = await createSession({ path, agent, approvalPolicy, branch });
+    const project = await createProject({ path, agent, approvalPolicy, branch });
     await syncWorkspacesForUser(auth.user.id, [project]);
     return NextResponse.json({ project }, { status: 201 });
   } catch (error) {

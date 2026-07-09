@@ -21,7 +21,7 @@
  * `chatEvents`).
  */
 
-import type { RuntimeMessage, RuntimeSession } from '../../types.js';
+import type { RuntimeMessage, RuntimeProject } from '../../types.js';
 
 /**
  * One entry in a session bucket. Verbatim port of the inline type that
@@ -51,7 +51,7 @@ export type RealtimeEventBusListener = (record: SessionRealtimeEventRecord) => v
  */
 export interface RealtimeEventBusDeps {
   /** Resolves an ARIS session by id; null when session does not exist. */
-  getSession(sessionId: string): Promise<RuntimeSession | null>;
+  getProject(projectId: string): Promise<RuntimeProject | null>;
 }
 
 /** Hard cap on entries per session bucket. */
@@ -73,52 +73,52 @@ export class RealtimeEventBus {
    * Append a realtime event for a session and return the event verbatim.
    * Returning the input lets callers chain: `const e = bus.append(...)`.
    */
-  append(sessionId: string, event: RuntimeMessage): RuntimeMessage {
-    const nextCursor = (this.cursors.get(sessionId) ?? 0) + 1;
-    this.cursors.set(sessionId, nextCursor);
-    const bucket = this.events.get(sessionId) ?? [];
+  append(projectId: string, event: RuntimeMessage): RuntimeMessage {
+    const nextCursor = (this.cursors.get(projectId) ?? 0) + 1;
+    this.cursors.set(projectId, nextCursor);
+    const bucket = this.events.get(projectId) ?? [];
     bucket.push({ cursor: nextCursor, event });
     if (bucket.length > SESSION_BUCKET_CAP) {
       bucket.splice(0, bucket.length - SESSION_BUCKET_CAP);
     }
-    this.events.set(sessionId, bucket);
-    this.notify(sessionId, { cursor: nextCursor, event });
+    this.events.set(projectId, bucket);
+    this.notify(projectId, { cursor: nextCursor, event });
     return event;
   }
 
   subscribe(
-    sessionId: string,
+    projectId: string,
     options: Pick<ListRealtimeEventsOptions, 'chatId'>,
     listener: RealtimeEventBusListener,
   ): () => void {
-    const subscribers = this.subscribers.get(sessionId) ?? new Set();
+    const subscribers = this.subscribers.get(projectId) ?? new Set();
     const subscription = { options, listener };
     subscribers.add(subscription);
-    this.subscribers.set(sessionId, subscribers);
+    this.subscribers.set(projectId, subscribers);
     return () => {
       subscribers.delete(subscription);
       if (subscribers.size === 0) {
-        this.subscribers.delete(sessionId);
+        this.subscribers.delete(projectId);
       }
     };
   }
 
   /**
    * List session events newer than `options.afterCursor`. Validates the
-   * session exists via `deps.getSession`; throws `SESSION_NOT_FOUND` when
+   * project exists via `deps.getProject`; throws `SESSION_NOT_FOUND` when
    * the session is absent (preserves the legacy contract for HTTP
    * handlers that translate that error to 404).
    */
   async list(
-    sessionId: string,
+    projectId: string,
     options: ListRealtimeEventsOptions = {},
   ): Promise<{ events: RuntimeMessage[]; cursor: number }> {
-    const session = await this.deps.getSession(sessionId);
+    const session = await this.deps.getProject(projectId);
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
     }
 
-    const bucket = this.events.get(sessionId) ?? [];
+    const bucket = this.events.get(projectId) ?? [];
     const normalizedAfterCursor = Number.isFinite(options.afterCursor)
       ? Math.max(0, Math.floor(Number(options.afterCursor)))
       : 0;
@@ -142,12 +142,12 @@ export class RealtimeEventBus {
 
     return {
       events,
-      cursor: this.cursors.get(sessionId) ?? 0,
+      cursor: this.cursors.get(projectId) ?? 0,
     };
   }
 
-  private notify(sessionId: string, record: SessionRealtimeEventRecord): void {
-    const subscribers = this.subscribers.get(sessionId);
+  private notify(projectId: string, record: SessionRealtimeEventRecord): void {
+    const subscribers = this.subscribers.get(projectId);
     if (!subscribers || subscribers.size === 0) {
       return;
     }

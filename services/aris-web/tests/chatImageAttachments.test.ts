@@ -15,7 +15,7 @@ describe('chatImageAttachments helpers', () => {
         mimeType: 'image/png',
         size: 1200,
         serverPath: '/tmp/aris/session-1/chat-1/asset-1-screen.png',
-        previewUrl: '/api/runtime/sessions/session-1/assets/images/asset-1',
+        previewUrl: '/api/runtime/projects/session-1/assets/images/asset-1',
       },
       {
         assetId: 'asset-2',
@@ -24,7 +24,7 @@ describe('chatImageAttachments helpers', () => {
         mimeType: 'image/jpeg',
         size: 2400,
         serverPath: '/tmp/aris/session-1/chat-1/asset-2-details.jpg',
-        previewUrl: '/api/runtime/sessions/session-1/assets/images/asset-2',
+        previewUrl: '/api/runtime/projects/session-1/assets/images/asset-2',
       },
     ])).toBe([
       '<image_attachment assetId="asset-1" serverPath="/tmp/aris/session-1/chat-1/asset-1-screen.png" mimeType="image/png">',
@@ -52,7 +52,7 @@ describe('chatImageAttachments helpers', () => {
         mimeType: 'image/png',
         size: 1200,
         serverPath: '/tmp/aris/session-1/chat-1/asset-1-screen.png',
-        previewUrl: '/api/runtime/sessions/session-1/assets/images/asset-1',
+        previewUrl: '/api/runtime/projects/session-1/assets/images/asset-1',
       },
     ]).endsWith('\n\n')).toBe(true);
   });
@@ -97,7 +97,7 @@ describe('chatImageAttachments helpers', () => {
         mimeType: 'image/png',
         size: 1200,
         serverPath: '/tmp/aris/session-1/chat-1/asset-1-screen\nline.png',
-        previewUrl: '/api/runtime/sessions/session-1/assets/images/asset-1',
+        previewUrl: '/api/runtime/projects/session-1/assets/images/asset-1',
       },
     ])).toContain('serverPath="/tmp/aris/session-1/chat-1/asset-1-screen&#10;line.png"');
   });

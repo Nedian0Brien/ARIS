@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
-import { deleteProjectChat, updateProjectChat } from '@/lib/happy/projectChats';
+import { deleteProjectChat, updateProjectChat } from '@/lib/happy/chats';
 
 function isProjectChatConstraintError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return message.includes('Chat_model_allowed_check') || message.includes('SessionChat_model_allowed_check')
-    || message.includes('Chat_model_reasoning_effort_check') || message.includes('SessionChat_model_reasoning_effort_check')
-    || (message.includes('violates check constraint') && (message.includes('Chat') || message.includes('SessionChat')));
+  return message.includes('Chat_model_allowed_check') || message.includes('ProjectChat_model_allowed_check')
+    || message.includes('Chat_model_reasoning_effort_check') || message.includes('ProjectChat_model_reasoning_effort_check')
+    || (message.includes('violates check constraint') && (message.includes('Chat') || message.includes('ProjectChat')));
 }
 
 export async function PATCH(

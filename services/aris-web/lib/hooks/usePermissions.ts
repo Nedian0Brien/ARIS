@@ -36,7 +36,7 @@ function arePermissionsEqual(prev: PermissionRequest[], next: PermissionRequest[
 }
 
 export function usePermissions(
-  sessionId: string,
+  projectId: string,
   initialPermissions: PermissionRequest[],
   activeChatId: string | null,
   includeUnassignedForActiveChat = false,
@@ -46,7 +46,7 @@ export function usePermissions(
   const [resolvedPermissions, setResolvedPermissions] = useState<PermissionRequest[]>([]);
   const [loadingPermissionId, setLoadingPermissionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const scopeKey = `${sessionId}:${activeChatId ?? ''}:${includeUnassignedForActiveChat ? '1' : '0'}`;
+  const scopeKey = `${projectId}:${activeChatId ?? ''}:${includeUnassignedForActiveChat ? '1' : '0'}`;
   const scopeKeyRef = useRef(scopeKey);
 
   useEffect(() => {
@@ -62,7 +62,7 @@ export function usePermissions(
     setPermissions(initialPermissions);
     setResolvedPermissions([]);
     setError(null);
-  }, [sessionId, initialPermissions]);
+  }, [projectId, initialPermissions]);
 
   const refreshPermissions = useCallback(async () => {
     if (!enabled) {
@@ -75,7 +75,7 @@ export function usePermissions(
     const requestScopeKey = scopeKey;
     try {
       const params = new URLSearchParams();
-      params.set('sessionId', sessionId);
+      params.set('projectId', projectId);
       if (activeChatId && activeChatId.trim().length > 0) {
         params.set('chatId', activeChatId.trim());
         if (includeUnassignedForActiveChat) {
@@ -126,7 +126,7 @@ export function usePermissions(
       }
       setError('권한 요청 동기화를 확인하세요.');
     }
-  }, [enabled, scopeKey, sessionId, activeChatId, includeUnassignedForActiveChat]);
+  }, [enabled, scopeKey, projectId, activeChatId, includeUnassignedForActiveChat]);
 
   useEffect(() => {
     if (!enabled) {
@@ -169,7 +169,7 @@ export function usePermissions(
 
     let disposed = false;
     const socket = new WebSocket(buildRuntimeEventChannelUrl({
-      sessionId,
+      projectId,
       chatId: activeChatId,
       includeUnassigned: includeUnassignedForActiveChat,
     }));
@@ -198,7 +198,7 @@ export function usePermissions(
       disposed = true;
       socket.close();
     };
-  }, [enabled, sessionId, activeChatId, includeUnassignedForActiveChat, refreshPermissions]);
+  }, [enabled, projectId, activeChatId, includeUnassignedForActiveChat, refreshPermissions]);
 
   const scopedPermissions = useMemo(
     () => permissions.filter((item) => isPermissionForChat(item, activeChatId, includeUnassignedForActiveChat)),

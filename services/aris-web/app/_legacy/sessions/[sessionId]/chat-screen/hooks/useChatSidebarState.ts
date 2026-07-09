@@ -4,7 +4,7 @@ import {
   resolveChatRunPhase as resolveRunPhaseState,
 } from '@/lib/happy/chatRuntime';
 import type { RenderablePermissionRequest } from '@/lib/happy/permissions';
-import type { PermissionRequest, SessionChat, UiEvent } from '@/lib/happy/types';
+import type { PermissionRequest, ProjectChat, UiEvent } from '@/lib/happy/types';
 import { CHAT_SIDEBAR_SECTION_LABELS, DEFAULT_CHAT_RUNTIME_UI_STATE } from '../constants';
 import {
   buildReadMarkerMap,
@@ -13,7 +13,7 @@ import {
   hasChatErrorSignal,
   isUserEvent,
   resolveRecentSummary,
-  sortSessionChats,
+  sortProjectChats,
 } from '../helpers';
 import { resolveChatReadMarkerId } from '../../chatSidebar';
 import { useChatSidebarApprovalState } from './useChatSidebarApprovalState';
@@ -30,10 +30,10 @@ import type {
 
 type UseChatSidebarStateParams = {
   activeChatIdResolved: string | null;
-  chats: SessionChat[];
+  chats: ProjectChat[];
   events: UiEvent[];
   eventsForChatId: string | null;
-  initialChats: SessionChat[];
+  initialChats: ProjectChat[];
   initialEvents: UiEvent[];
   activeChatId: string | null;
   visibleEvents: UiEvent[];
@@ -58,7 +58,7 @@ type UseChatSidebarStateParams = {
   chatListRef: RefObject<HTMLDivElement | null>;
   chatListSentinelRef: RefObject<HTMLDivElement | null>;
   isChatSidebarOpen: boolean;
-  setChats: React.Dispatch<React.SetStateAction<SessionChat[]>>;
+  setChats: React.Dispatch<React.SetStateAction<ProjectChat[]>>;
 };
 
 export function useChatSidebarState({
@@ -94,7 +94,7 @@ export function useChatSidebarState({
   chatListSentinelRef,
 }: UseChatSidebarStateParams) {
   const [chatSidebarSnapshots, setChatSidebarSnapshots] = useState<Record<string, ChatSidebarSnapshot>>(() => {
-    const sortedInitialChats = sortSessionChats(initialChats);
+    const sortedInitialChats = sortProjectChats(initialChats);
     const seeded: Record<string, ChatSidebarSnapshot> = {};
     for (const chat of sortedInitialChats) {
       const snapshot = buildSnapshotFromChat(chat);
@@ -177,7 +177,7 @@ export function useChatSidebarState({
     });
   }, []);
 
-  const handleMarkChatAsRead = useCallback((chat: SessionChat) => {
+  const handleMarkChatAsRead = useCallback((chat: ProjectChat) => {
     const nextReadMarker = resolveChatReadMarkerId({
       latestEventId: chatSidebarSnapshots[chat.id]?.latestEventId,
       fallbackLatestEventId: chat.latestEventId,
@@ -208,7 +208,7 @@ export function useChatSidebarState({
     return readMarker !== snapshot.latestEventId;
   }, [chatReadMarkers, chatSidebarSnapshots]);
 
-  const resolveSidebarChatRunPhase = useCallback((chat: SessionChat): ChatRunPhase => {
+  const resolveSidebarChatRunPhase = useCallback((chat: ProjectChat): ChatRunPhase => {
     const runtimeUi = chatRuntimeUiByChat[chat.id] ?? DEFAULT_CHAT_RUNTIME_UI_STATE;
     const snapshot = chatSidebarSnapshots[chat.id];
     const isActive = chat.id === activeChatIdResolved;
@@ -231,7 +231,7 @@ export function useChatSidebarState({
     runtimeRunning,
   ]);
 
-  const resolveChatSidebarState = useCallback((chat: SessionChat): ChatSidebarState => {
+  const resolveChatSidebarState = useCallback((chat: ProjectChat): ChatSidebarState => {
     const isActive = chat.id === activeChatIdResolved;
     const snapshot = chatSidebarSnapshots[chat.id];
     const chatRunPhase = resolveSidebarChatRunPhase(chat);
@@ -295,7 +295,7 @@ export function useChatSidebarState({
     return '최근 메시지가 없습니다.';
   }, [chatSidebarSnapshots, chats]);
 
-  const resolveChatSidebarSection = useCallback((chat: SessionChat): ChatSidebarSectionKey => {
+  const resolveChatSidebarSection = useCallback((chat: ProjectChat): ChatSidebarSectionKey => {
     if (chat.isPinned) {
       return 'pinned';
     }
@@ -309,8 +309,8 @@ export function useChatSidebarState({
     return 'history';
   }, [resolveChatSidebarState]);
 
-  const groupedSidebarChats = useMemo<Record<ChatSidebarSectionKey, SessionChat[]>>(() => {
-    const grouped: Record<ChatSidebarSectionKey, SessionChat[]> = {
+  const groupedSidebarChats = useMemo<Record<ChatSidebarSectionKey, ProjectChat[]>>(() => {
+    const grouped: Record<ChatSidebarSectionKey, ProjectChat[]> = {
       pinned: [],
       running: [],
       completed: [],

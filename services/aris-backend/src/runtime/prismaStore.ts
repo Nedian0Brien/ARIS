@@ -5,14 +5,14 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import type {
   ApprovalPolicy,
-  GeminiSessionCapabilities,
+  GeminiProjectCapabilities,
   PermissionDecision,
   PermissionRequest,
   PermissionRisk,
   RuntimeMessage,
-  RuntimeSession,
-  SessionAction,
-  SessionStatus,
+  RuntimeProject,
+  ProjectAction,
+  ProjectStatus,
 } from '../types.js';
 import type { ImportedAgentProvider, ImportedProviderMessage } from './import/providerSessionImportParsers.js';
 import {
@@ -23,10 +23,10 @@ import {
 
 type CreateSessionInput = {
   path: string;
-  flavor: RuntimeSession['metadata']['flavor'];
+  flavor: RuntimeProject['metadata']['flavor'];
   approvalPolicy?: ApprovalPolicy;
   model?: string;
-  status?: SessionStatus;
+  status?: ProjectStatus;
   riskScore?: number;
   branch?: string;
 };
@@ -44,7 +44,7 @@ type ImportedAgentSessionRecord = {
   providerSessionId: string;
   sourcePath: string;
   projectPath: string;
-  arisSessionId?: string | null;
+  arisProjectId?: string | null;
   chatId?: string | null;
   fileSize?: bigint;
   fileMtimeMs?: bigint;
@@ -68,7 +68,7 @@ type DiscoverImportedAgentSessionInput = {
 
 type EnsureImportedAgentChatInput = {
   importId: string;
-  arisSessionId: string;
+  arisProjectId: string;
   userId: string;
   title: string;
   model?: string | null;
@@ -81,14 +81,14 @@ type AppendImportedAgentEventsInput = {
   importId: string;
   provider: ImportedAgentProvider;
   providerSessionId: string;
-  sessionId: string;
+  projectId: string;
   chatId: string;
   messages: ImportedProviderMessage[];
   hasMoreBefore?: boolean;
 };
 
 type CreatePermissionInput = {
-  sessionId: string;
+  projectId: string;
   chatId?: string | null;
   agent: PermissionRequest['agent'];
   command: string;
@@ -101,7 +101,7 @@ const RUNTIME_WRITE_BASE_DELAY_MS = 50;
 const RUNTIME_WRITE_TRANSACTION_MAX_WAIT_MS = 10_000;
 const RUNTIME_WRITE_TRANSACTION_TIMEOUT_MS = 15_000;
 
-function toRuntimeSession(row: {
+function toRuntimeProject(row: {
   id: string;
   flavor: string;
   path: string;
@@ -112,7 +112,7 @@ function toRuntimeSession(row: {
   metadata?: unknown;
   riskScore: number;
   updatedAt: Date;
-}): RuntimeSession {
+}): RuntimeProject {
   const metadataRecord = row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
     ? row.metadata as Record<string, unknown>
     : {};
@@ -122,7 +122,7 @@ function toRuntimeSession(row: {
   return {
     id: row.id,
     metadata: {
-      flavor: row.flavor as RuntimeSession['metadata']['flavor'],
+      flavor: row.flavor as RuntimeProject['metadata']['flavor'],
       path: row.path,
       approvalPolicy: row.approvalPolicy as ApprovalPolicy,
       ...(row.model ? { model: row.model } : {}),
@@ -130,7 +130,7 @@ function toRuntimeSession(row: {
       ...(runtimeModel ? { runtimeModel } : {}),
     },
     state: {
-      status: row.status as SessionStatus,
+      status: row.status as ProjectStatus,
     },
     updatedAt: row.updatedAt.toISOString(),
     riskScore: row.riskScore,
@@ -139,7 +139,7 @@ function toRuntimeSession(row: {
 
 function toRuntimeMessage(row: {
   id: string;
-  sessionId: string;
+  projectId: string;
   type: string;
   title: string | null;
   text: string;
@@ -149,7 +149,7 @@ function toRuntimeMessage(row: {
 }): RuntimeMessage {
   return {
     id: row.id,
-    sessionId: row.sessionId,
+    projectId: row.projectId,
     type: row.type,
     title: row.title ?? row.type,
     text: row.text,
@@ -242,7 +242,7 @@ export function resolveChatRunningState<
 
 function toPermissionRequest(row: {
   id: string;
-  sessionId: string;
+  projectId: string;
   chatId: string | null;
   agent: string;
   command: string;
@@ -254,7 +254,7 @@ function toPermissionRequest(row: {
 }): PermissionRequest {
   return {
     id: row.id,
-    sessionId: row.sessionId,
+    projectId: row.projectId,
     ...(row.chatId ? { chatId: row.chatId } : {}),
     agent: row.agent as PermissionRequest['agent'],
     command: row.command,
@@ -378,7 +378,7 @@ export class PrismaRuntimeStore {
     return row;
   }
 
-  async resolveProjectSessionIdByPath(projectPath: string): Promise<string | null> {
+  async resolveProjectIdByPath(projectPath: string): Promise<string | null> {
     const normalizedProjectPath = resolve(projectPath);
     const primary = await this.db.session.findFirst({
       where: {
@@ -440,11 +440,11 @@ export class PrismaRuntimeStore {
     return { chatId, isImported: Boolean(importedRow) };
   }
 
-  async markImportedAgentSessionNative(input: { importId: string; arisSessionId: string; chatId: string }): Promise<void> {
+  async markImportedAgentSessionNative(input: { importId: string; arisProjectId: string; chatId: string }): Promise<void> {
     await this.db.importedAgentSession.update({
       where: { id: input.importId },
       data: {
-        arisSessionId: input.arisSessionId,
+        arisProjectId: input.arisProjectId,
         chatId: input.chatId,
         status: 'native',
         lastImportedAt: new Date(),
@@ -486,7 +486,7 @@ export class PrismaRuntimeStore {
       const created = await tx.sessionChat.create({
         data: {
           id: chatId,
-          sessionId: input.arisSessionId,
+          projectId: input.arisProjectId,
           userId: input.userId,
           agent: imported.provider,
           title: input.title,
@@ -508,7 +508,7 @@ export class PrismaRuntimeStore {
       await tx.importedAgentSession.update({
         where: { id: input.importId },
         data: {
-          arisSessionId: input.arisSessionId,
+          arisProjectId: input.arisProjectId,
           chatId: created.id,
           status: 'linked',
           lastImportedAt: now,
@@ -550,7 +550,7 @@ export class PrismaRuntimeStore {
       let nextSeq = (agg._max.seq ?? 0) + 1;
       const createdRows: Array<{
         id: string;
-        sessionId: string;
+        projectId: string;
         chatId: string;
         runId?: string | null;
         type: string;
@@ -565,7 +565,7 @@ export class PrismaRuntimeStore {
         const created = await tx.sessionChatEvent.create({
           data: {
             id: randomUUID(),
-            sessionId: input.sessionId,
+            projectId: input.projectId,
             chatId: input.chatId,
             type: 'message',
             title: message.role === 'user' ? 'User Instruction' : 'Text Reply',
@@ -642,7 +642,7 @@ export class PrismaRuntimeStore {
 
     return rows.map((row) => toRuntimeMessage({
       id: row.id,
-      sessionId: row.sessionId,
+      projectId: row.projectId,
       type: row.type,
       title: row.title,
       text: row.text,
@@ -675,7 +675,7 @@ export class PrismaRuntimeStore {
     const imported = await this.db.importedAgentSession.findFirst({
       where: { chatId: input.chatId },
     });
-    if (!imported || !imported.chatId || !imported.arisSessionId) {
+    if (!imported || !imported.chatId || !imported.arisProjectId) {
       throw new Error('IMPORTED_AGENT_SESSION_NOT_FOUND');
     }
     const contents = await readFile(imported.sourcePath, 'utf8');
@@ -702,7 +702,7 @@ export class PrismaRuntimeStore {
       importId: imported.id,
       provider: imported.provider === 'claude' ? 'claude' : 'codex',
       providerSessionId: imported.providerSessionId,
-      sessionId: imported.arisSessionId,
+      projectId: imported.arisProjectId,
       chatId: imported.chatId,
       messages: selected,
     });
@@ -719,7 +719,7 @@ export class PrismaRuntimeStore {
     const imported = await this.db.importedAgentSession.findFirst({
       where: { chatId: input.chatId },
     });
-    if (!imported || !imported.chatId || !imported.arisSessionId) {
+    if (!imported || !imported.chatId || !imported.arisProjectId) {
       throw new Error('IMPORTED_AGENT_SESSION_NOT_FOUND');
     }
     if (imported.newestCursorOffset === null || imported.newestCursorOffset === undefined) {
@@ -760,7 +760,7 @@ export class PrismaRuntimeStore {
       importId: imported.id,
       provider: imported.provider === 'claude' ? 'claude' : 'codex',
       providerSessionId: imported.providerSessionId,
-      sessionId: imported.arisSessionId,
+      projectId: imported.arisProjectId,
       chatId: imported.chatId,
       messages: selected,
       hasMoreBefore: imported.hasMoreBefore,
@@ -800,23 +800,23 @@ export class PrismaRuntimeStore {
     throw new Error('RUNTIME_WRITE_RETRY_EXHAUSTED');
   }
 
-  async listSessions(): Promise<RuntimeSession[]> {
+  async listProjects(): Promise<RuntimeProject[]> {
     const rows = await this.db.session.findMany({
       orderBy: { updatedAt: 'desc' },
     });
-    return rows.map(toRuntimeSession);
+    return rows.map(toRuntimeProject);
   }
 
-  async getSession(sessionId: string): Promise<RuntimeSession | null> {
-    const row = await this.db.session.findUnique({ where: { id: sessionId } });
-    return row ? toRuntimeSession(row) : null;
+  async getProject(projectId: string): Promise<RuntimeProject | null> {
+    const row = await this.db.session.findUnique({ where: { id: projectId } });
+    return row ? toRuntimeProject(row) : null;
   }
 
-  async getGeminiSessionCapabilities(sessionId: string): Promise<GeminiSessionCapabilities> {
-    const session = await this.getSession(sessionId);
+  async getGeminiProjectCapabilities(projectId: string): Promise<GeminiProjectCapabilities> {
+    const session = await this.getProject(projectId);
     if (!session) throw new Error('SESSION_NOT_FOUND');
     return {
-      sessionId,
+      projectId,
       fetchedAt: new Date().toISOString(),
       modes: {
         currentModeId: session.metadata.approvalPolicy === 'yolo' ? 'yolo' : 'default',
@@ -834,7 +834,7 @@ export class PrismaRuntimeStore {
     };
   }
 
-  async createSession(input: CreateSessionInput): Promise<RuntimeSession> {
+  async createProject(input: CreateSessionInput): Promise<RuntimeProject> {
     const row = await this.db.session.create({
       data: {
         id: randomUUID(),
@@ -848,21 +848,21 @@ export class PrismaRuntimeStore {
         riskScore: input.riskScore ?? 20,
       },
     });
-    return toRuntimeSession(row);
+    return toRuntimeProject(row);
   }
 
-  async updateApprovalPolicy(sessionId: string, approvalPolicy: ApprovalPolicy): Promise<RuntimeSession> {
-    const existing = await this.db.session.findUnique({ where: { id: sessionId } });
+  async updateApprovalPolicy(projectId: string, approvalPolicy: ApprovalPolicy): Promise<RuntimeProject> {
+    const existing = await this.db.session.findUnique({ where: { id: projectId } });
     if (!existing) throw new Error('SESSION_NOT_FOUND');
     const row = await this.db.session.update({
-      where: { id: sessionId },
+      where: { id: projectId },
       data: { approvalPolicy, updatedAt: new Date() },
     });
-    return toRuntimeSession(row);
+    return toRuntimeProject(row);
   }
 
   async listMessages(
-    sessionId: string,
+    projectId: string,
     options: { afterSeq?: number; afterId?: string; limit?: number } = {},
   ): Promise<RuntimeMessage[]> {
     // afterId: find seq of that message, then get everything after it
@@ -873,7 +873,7 @@ export class PrismaRuntimeStore {
       });
       const afterSeq = pivot?.seq ?? 0;
       const rows = await this.db.sessionMessage.findMany({
-        where: { sessionId, seq: { gt: afterSeq } },
+        where: { projectId, seq: { gt: afterSeq } },
         orderBy: { seq: 'asc' },
         ...(options.limit ? { take: options.limit } : {}),
       });
@@ -882,7 +882,7 @@ export class PrismaRuntimeStore {
 
     const afterSeq = Number.isFinite(options.afterSeq) ? Math.max(0, Math.floor(Number(options.afterSeq))) : 0;
     const rows = await this.db.sessionMessage.findMany({
-      where: { sessionId, seq: { gt: afterSeq } },
+      where: { projectId, seq: { gt: afterSeq } },
       orderBy: { seq: 'asc' },
       ...(options.limit ? { take: options.limit } : {}),
     });
@@ -890,12 +890,12 @@ export class PrismaRuntimeStore {
   }
 
   async listRealtimeEvents(
-    sessionId: string,
+    projectId: string,
     options: { afterCursor?: number; limit?: number; chatId?: string } = {},
   ): Promise<{ events: RuntimeMessage[]; cursor: number }> {
     const afterSeq = options.afterCursor ?? 0;
     const rows = await this.db.sessionMessage.findMany({
-      where: { sessionId, seq: { gt: afterSeq } },
+      where: { projectId, seq: { gt: afterSeq } },
       orderBy: { seq: 'asc' },
       ...(options.limit ? { take: options.limit } : {}),
     });
@@ -926,7 +926,7 @@ export class PrismaRuntimeStore {
       return meta.importHidden !== true;
     }).map((row: {
       id: string;
-      sessionId: string;
+      projectId: string;
       chatId: string;
       runId?: string | null;
       type: string;
@@ -937,7 +937,7 @@ export class PrismaRuntimeStore {
       createdAt: Date;
     }) => toRuntimeMessage({
       id: row.id,
-      sessionId: row.sessionId,
+      projectId: row.projectId,
       type: row.type,
       title: row.title,
       text: row.text,
@@ -954,7 +954,7 @@ export class PrismaRuntimeStore {
   async appendChatEvent(
     chatId: string,
     input: {
-      sessionId: string;
+      projectId: string;
       runId?: string;
       type: string;
       title?: string;
@@ -965,8 +965,8 @@ export class PrismaRuntimeStore {
     const db = this.db as any;
 
     const chat = await db.sessionChat.findFirst({
-      where: { id: chatId, sessionId: input.sessionId },
-      select: { id: true, sessionId: true, latestPreview: true },
+      where: { id: chatId, projectId: input.projectId },
+      select: { id: true, projectId: true, latestPreview: true },
     });
     if (!chat) {
       throw new Error('CHAT_NOT_FOUND');
@@ -985,7 +985,7 @@ export class PrismaRuntimeStore {
         } else {
           const createdRun = await tx.sessionRun.create({
             data: {
-              sessionId: input.sessionId,
+              projectId: input.projectId,
               chatId,
               agent: typeof input.meta?.agent === 'string' && input.meta.agent.trim().length > 0
                 ? input.meta.agent.trim()
@@ -1027,7 +1027,7 @@ export class PrismaRuntimeStore {
         data: {
           id: randomUUID(),
           chatId,
-          sessionId: input.sessionId,
+          projectId: input.projectId,
           ...(resolvedRunId ? { runId: resolvedRunId } : {}),
           type: input.type,
           title: input.title ?? input.type,
@@ -1062,7 +1062,7 @@ export class PrismaRuntimeStore {
 
     return toRuntimeMessage({
       id: row.id,
-      sessionId: row.sessionId,
+      projectId: row.projectId,
       type: row.type,
       title: row.title,
       text: row.text,
@@ -1076,18 +1076,18 @@ export class PrismaRuntimeStore {
     });
   }
 
-  async appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage> {
-    const session = await this.db.session.findUnique({ where: { id: sessionId } });
+  async appendMessage(projectId: string, input: AppendMessageInput): Promise<RuntimeMessage> {
+    const session = await this.db.session.findUnique({ where: { id: projectId } });
     if (!session) throw new Error('SESSION_NOT_FOUND');
 
     const isAgentMessage = input.meta?.role === 'agent';
     const isUserPrompt = input.type === 'message' && !isAgentMessage;
 
-    const newStatus: SessionStatus = isUserPrompt ? 'running' : isAgentMessage ? 'idle' : (session.status as SessionStatus);
+    const newStatus: ProjectStatus = isUserPrompt ? 'running' : isAgentMessage ? 'idle' : (session.status as ProjectStatus);
 
     const row = await this.runRuntimeWriteMutationWithRetry(async (tx) => {
       const agg = await tx.sessionMessage.aggregate({
-        where: { sessionId },
+        where: { projectId },
         _max: { seq: true },
       });
       const nextSeq = (agg._max.seq ?? 0) + 1;
@@ -1095,7 +1095,7 @@ export class PrismaRuntimeStore {
       const created = await tx.sessionMessage.create({
         data: {
           id: randomUUID(),
-          sessionId,
+          projectId,
           type: input.type,
           title: input.title ?? input.type,
           text: input.text,
@@ -1105,7 +1105,7 @@ export class PrismaRuntimeStore {
       });
 
       await tx.session.update({
-        where: { id: sessionId },
+        where: { id: projectId },
         data: { status: newStatus, updatedAt: new Date() },
       });
 
@@ -1115,22 +1115,22 @@ export class PrismaRuntimeStore {
     return toRuntimeMessage(row);
   }
 
-  async applySessionAction(
-    sessionId: string,
-    action: SessionAction,
+  async applyProjectAction(
+    projectId: string,
+    action: ProjectAction,
     chatId?: string,
   ): Promise<{ accepted: boolean; message: string; at: string }> {
-    const session = await this.db.session.findUnique({ where: { id: sessionId } });
+    const session = await this.db.session.findUnique({ where: { id: projectId } });
     if (!session) throw new Error('SESSION_NOT_FOUND');
 
     const at = new Date().toISOString();
 
     if (action === 'kill') {
-      await this.db.session.delete({ where: { id: sessionId } });
+      await this.db.session.delete({ where: { id: projectId } });
       return { accepted: true, message: 'KILL acknowledged', at };
     }
 
-    const statusByAction: Record<Exclude<SessionAction, 'kill'>, SessionStatus> = {
+    const statusByAction: Record<Exclude<ProjectAction, 'kill'>, ProjectStatus> = {
       abort: 'idle',
       retry: 'running',
       resume: 'running',
@@ -1148,18 +1148,18 @@ export class PrismaRuntimeStore {
 
     await this.runRuntimeWriteMutationWithRetry(async (tx) => {
       const nextSeq = await tx.sessionMessage
-        .aggregate({ where: { sessionId }, _max: { seq: true } })
+        .aggregate({ where: { projectId }, _max: { seq: true } })
         .then((a) => (a._max.seq ?? 0) + 1);
 
       await tx.session.update({
-        where: { id: sessionId },
+        where: { id: projectId },
         data: { ...updates, updatedAt: new Date(at) },
       });
 
       await tx.sessionMessage.create({
         data: {
           id: randomUUID(),
-          sessionId,
+          projectId,
           type: 'tool',
           title: 'Command Execution',
           text: `$ session ${action}\nexit code: 0`,
@@ -1176,20 +1176,20 @@ export class PrismaRuntimeStore {
     return { accepted: true, message: `${action.toUpperCase()} acknowledged`, at };
   }
 
-  async isSessionRunning(sessionId: string, _chatId?: string): Promise<boolean> {
+  async isProjectRunning(projectId: string, _chatId?: string): Promise<boolean> {
     const normalizedChatId = typeof _chatId === 'string' && _chatId.trim().length > 0
       ? _chatId.trim()
       : null;
     if (normalizedChatId) {
       const activeRun = await (this.db as any).sessionRun.findFirst({
-        where: { sessionId, chatId: normalizedChatId, status: 'running' },
+        where: { projectId, chatId: normalizedChatId, status: 'running' },
         select: { id: true },
       });
       return Boolean(activeRun);
     }
 
     const row = await this.db.session.findUnique({
-      where: { id: sessionId },
+      where: { id: projectId },
       select: { status: true },
     });
     if (!row) throw new Error('SESSION_NOT_FOUND');
@@ -1204,7 +1204,7 @@ export class PrismaRuntimeStore {
     return rows.map(toPermissionRequest);
   }
 
-  async getLatestUserMessageForAction(sessionId: string, chatId?: string): Promise<AppendMessageInput | null> {
+  async getLatestUserMessageForAction(projectId: string, chatId?: string): Promise<AppendMessageInput | null> {
     const normalizedChatId = typeof chatId === 'string' && chatId.trim().length > 0
       ? chatId.trim()
       : null;
@@ -1212,7 +1212,7 @@ export class PrismaRuntimeStore {
       const db = this.db as any;
       const row = await db.sessionChatEvent.findFirst({
         where: {
-          sessionId,
+          projectId,
           chatId: normalizedChatId,
           meta: {
             path: ['role'],
@@ -1238,7 +1238,7 @@ export class PrismaRuntimeStore {
 
     const row = await this.db.sessionMessage.findFirst({
       where: {
-        sessionId,
+        projectId,
         meta: {
           path: ['role'],
           equals: 'user',
@@ -1267,8 +1267,8 @@ export class PrismaRuntimeStore {
   }
 
   async hasRequestedAction(input: {
-    sessionId: string;
-    action: SessionAction;
+    projectId: string;
+    action: ProjectAction;
     chatId?: string;
     createdAfter?: Date;
   }): Promise<boolean> {
@@ -1280,7 +1280,7 @@ export class PrismaRuntimeStore {
       : null;
     const row = await this.db.sessionMessage.findFirst({
       where: {
-        sessionId: input.sessionId,
+        projectId: input.projectId,
         ...(createdAfter ? { createdAt: { gt: createdAfter } } : {}),
         ...(normalizedChatId
           ? {
@@ -1314,13 +1314,13 @@ export class PrismaRuntimeStore {
   }
 
   async createPermission(input: CreatePermissionInput): Promise<PermissionRequest> {
-    const session = await this.db.session.findUnique({ where: { id: input.sessionId } });
+    const session = await this.db.session.findUnique({ where: { id: input.projectId } });
     if (!session) throw new Error('SESSION_NOT_FOUND');
 
     const row = await this.db.permission.create({
       data: {
         id: randomUUID(),
-        sessionId: input.sessionId,
+        projectId: input.projectId,
         chatId: typeof input.chatId === 'string' && input.chatId.trim() ? input.chatId.trim() : null,
         agent: input.agent,
         command: input.command,

@@ -8,7 +8,7 @@ import type { TabType } from './BottomNav';
 import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
 import { hasAppBasePath, withAppBasePath } from '@/lib/routing/appPath';
 import { primeAutoHideScrollState, reduceAutoHideScrollState } from './mobileScrollAutoHide';
-import { useSessionScrollOrchestrator } from '@/lib/hooks/useSessionScrollOrchestrator';
+import { useProjectScrollOrchestrator } from '@/lib/hooks/useProjectScrollOrchestrator';
 
 interface HeaderProps {
   userEmail: string;
@@ -30,7 +30,7 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
   const router = useRouter();
   const [hiddenOnScroll, setHiddenOnScroll] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
-  const { isActive: isSessionScrollActive, phase: sessionScrollPhase } = useSessionScrollOrchestrator();
+  const { isActive: isProjectScrollActive, phase: projectScrollPhase } = useProjectScrollOrchestrator();
   const navItems = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'ask', label: 'Ask ARIS', icon: MessageSquareText },
@@ -134,8 +134,8 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
         now: Date.now(),
         isMobile: mobileQuery.matches,
         thresholds: HEADER_AUTO_HIDE_THRESHOLDS,
-        isSessionScrollActive,
-        sessionScrollPhase,
+        isProjectScrollActive,
+        projectScrollPhase,
       });
       syncHidden(autoHideState.hidden);
     };
@@ -198,7 +198,7 @@ export function Header({ userEmail, role, activeTab, onTabChange, autoHideOnScro
         window.cancelAnimationFrame(scrollRaf);
       }
     };
-  }, [activeTab, autoHideOnScroll, isSessionScrollActive, sessionScrollPhase]);
+  }, [activeTab, autoHideOnScroll, isProjectScrollActive, projectScrollPhase]);
 
   useEffect(() => {
     const root = document.documentElement;

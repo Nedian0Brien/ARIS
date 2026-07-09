@@ -46,7 +46,7 @@ export function useCustomizationGitState({
     setGitLoading(true);
     setGitError(null);
     try {
-      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/git`, {
+      const response = await fetch(`/api/runtime/projects/${encodeURIComponent(sessionId)}/git`, {
         cache: 'no-store',
       });
       const data = await response.json().catch(() => null);
@@ -69,7 +69,7 @@ export function useCustomizationGitState({
     setGitDiffError(null);
     try {
       const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/git?kind=diff&path=${encodeURIComponent(filePath)}&scope=${encodeURIComponent(scope)}`,
+        `/api/runtime/projects/${encodeURIComponent(sessionId)}/git?kind=diff&path=${encodeURIComponent(filePath)}&scope=${encodeURIComponent(scope)}`,
         { cache: 'no-store' },
       );
       const data = await response.json().catch(() => null) as { diff?: string; error?: string } | null;
@@ -94,7 +94,7 @@ export function useCustomizationGitState({
     setGitActionStatus(null);
     setGitError(null);
     try {
-      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/git`, {
+      const response = await fetch(`/api/runtime/projects/${encodeURIComponent(sessionId)}/git`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

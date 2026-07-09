@@ -19,7 +19,7 @@ describe('project workspace API boundary', () => {
     expect(schema).not.toContain('model ProjectWorkspace');
   });
 
-  it('exposes a project workspace route instead of using runtime sessions for layout', () => {
+  it('exposes a project workspace route instead of using runtime projects for layout', () => {
     expect(route).toContain('getProjectWorkspace');
     expect(route).toContain('saveProjectWorkspace');
     expect(route).toContain('projectId');

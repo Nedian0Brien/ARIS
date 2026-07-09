@@ -8,8 +8,8 @@ export function normalizeLocalPreviewPath(pathname?: string | null): string {
   return pathname.startsWith('/') ? pathname : `/${pathname}`;
 }
 
-export function buildLocalPreviewBasePath(input: { sessionId: string; panelId: string }): string {
-  return `${LOCAL_PREVIEW_PREFIX}/${encodeURIComponent(input.sessionId)}/${encodeURIComponent(input.panelId)}`;
+export function buildLocalPreviewBasePath(input: { projectId: string; panelId: string }): string {
+  return `${LOCAL_PREVIEW_PREFIX}/${encodeURIComponent(input.projectId)}/${encodeURIComponent(input.panelId)}`;
 }
 
 export function buildLocalPreviewTargetUrl(input: { port: number; path?: string | null }): string {
@@ -52,13 +52,13 @@ export function normalizeLocalPreviewConfig(input: Record<string, unknown> | nul
 }
 
 export function buildLocalPreviewUrl(input: {
-  sessionId: string;
+  projectId: string;
   panelId: string;
   port: number;
   path?: string | null;
 }): string {
   const basePath = buildLocalPreviewBasePath({
-    sessionId: input.sessionId,
+    projectId: input.projectId,
     panelId: input.panelId,
   });
   const pathname = normalizeLocalPreviewPath(input.path);

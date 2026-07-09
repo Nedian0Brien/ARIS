@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { AgentFlavor, ApprovalPolicy, SessionChat } from '@/lib/happy/types';
+import type { AgentFlavor, ApprovalPolicy, ProjectChat } from '@/lib/happy/types';
 import { DEFAULT_GEMINI_MODE_ID, type ProviderModelSelections } from '@/lib/settings/providerModels';
 import { readLastSelectedModelId } from '../../chatModelPreferences';
 import type {
@@ -14,14 +14,14 @@ import {
   normalizeModelReasoningEffort,
   resolveAvailableComposerModelId,
   resolveAvailableGeminiModeId,
-  sortSessionChats,
+  sortProjectChats,
 } from '../helpers';
 import type { UsageCommandProvider } from '../../chatCommands';
 
 type UseComposerStateParams = {
-  initialChats: SessionChat[];
+  initialChats: ProjectChat[];
   activeChatId: string | null;
-  activeChat: SessionChat | null;
+  activeChat: ProjectChat | null;
   activeAgentFlavor: AgentFlavor;
   defaultAgentFlavor: AgentFlavor;
   agentFlavor: string;
@@ -50,7 +50,7 @@ export function useComposerState({
   const [imageUploadsInFlight, setImageUploadsInFlight] = useState(0);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<ComposerModelId>(() => {
-    const sortedInitialChats = sortSessionChats(initialChats);
+    const sortedInitialChats = sortProjectChats(initialChats);
     const initialChat = (activeChatId && activeChatId.trim().length > 0
       ? sortedInitialChats.find((chat) => chat.id === activeChatId.trim())
       : null) ?? sortedInitialChats[0] ?? null;
@@ -66,7 +66,7 @@ export function useComposerState({
     });
   });
   const [selectedModelReasoningEffort, setSelectedModelReasoningEffort] = useState<ModelReasoningEffort>(() => {
-    const sortedInitialChats = sortSessionChats(initialChats);
+    const sortedInitialChats = sortProjectChats(initialChats);
     const initialChat = (activeChatId && activeChatId.trim().length > 0
       ? sortedInitialChats.find((chat) => chat.id === activeChatId.trim())
       : null) ?? sortedInitialChats[0] ?? null;
@@ -78,7 +78,7 @@ export function useComposerState({
     return normalizeModelReasoningEffort(initialChat?.modelReasoningEffort, 'medium');
   });
   const [selectedGeminiModeId, setSelectedGeminiModeId] = useState<string>(() => {
-    const sortedInitialChats = sortSessionChats(initialChats);
+    const sortedInitialChats = sortProjectChats(initialChats);
     const initialChat = (activeChatId && activeChatId.trim().length > 0
       ? sortedInitialChats.find((chat) => chat.id === activeChatId.trim())
       : null) ?? sortedInitialChats[0] ?? null;

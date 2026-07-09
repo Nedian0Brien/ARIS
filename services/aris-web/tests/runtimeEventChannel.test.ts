@@ -8,7 +8,7 @@ import {
 describe('runtime event channel helpers', () => {
   it('builds a same-origin websocket URL with chat filters', () => {
     const url = buildRuntimeEventChannelUrl({
-      sessionId: 'session 1',
+      projectId: 'session 1',
       chatId: 'chat/1',
       includeUnassigned: true,
       location: {
@@ -26,8 +26,8 @@ describe('runtime event channel helpers', () => {
     expect(shouldRefreshPermissionsForRuntimeMessage({ type: 'event.appended' })).toBe(false);
   });
 
-  it('refreshes runtime status for session actions and persisted mutation events', () => {
-    expect(shouldRefreshRuntimeForRuntimeMessage({ type: 'session.action' })).toBe(true);
+  it('refreshes runtime status for project actions and persisted mutation events', () => {
+    expect(shouldRefreshRuntimeForRuntimeMessage({ type: 'project.action' })).toBe(true);
     expect(shouldRefreshRuntimeForRuntimeMessage({ type: 'event.appended', source: 'mutation' })).toBe(true);
     expect(shouldRefreshRuntimeForRuntimeMessage({ type: 'event.appended', source: 'runtime' })).toBe(false);
   });

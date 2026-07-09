@@ -40,14 +40,14 @@ describe('scrollDebug', () => {
 
     recordScrollDebugEvent({
       kind: 'phase',
-      source: 'session-scroll',
+      source: 'project-scroll',
       phase: 'resuming',
     });
 
     expect(readScrollDebugEvents()).toHaveLength(1);
     expect(readScrollDebugEvents()[0]).toMatchObject({
       kind: 'phase',
-      source: 'session-scroll',
+      source: 'project-scroll',
       phase: 'resuming',
     });
 

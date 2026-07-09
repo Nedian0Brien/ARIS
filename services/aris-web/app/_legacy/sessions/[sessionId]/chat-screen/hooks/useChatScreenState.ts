@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ApprovalPolicy, SessionChat } from '@/lib/happy/types';
+import type { ApprovalPolicy, ProjectChat } from '@/lib/happy/types';
 import type { ModelSettingsResponse } from '@/lib/settings/providerModels';
 import { resolveActiveChat, resolveNextSelectedChatId } from '../../chatSelection';
-import { buildChatUrl, readChatIdFromLocation, sortSessionChats, writeChatIdToHistory } from '../helpers';
+import { buildChatUrl, readChatIdFromLocation, sortProjectChats, writeChatIdToHistory } from '../helpers';
 
 type UseChatScreenStateParams = {
   sessionId: string;
   initialApprovalPolicy?: ApprovalPolicy;
-  initialChats: SessionChat[];
+  initialChats: ProjectChat[];
   activeChatId: string | null;
   initialModelSettings?: ModelSettingsResponse | null;
   initialShowWorkspaceHome?: boolean;
@@ -25,7 +25,7 @@ export function useChatScreenState({
   const [isPolicyChanging, setIsPolicyChanging] = useState(false);
   const [modelSettings, setModelSettings] = useState<ModelSettingsResponse | null>(initialModelSettings);
   const [isWorkspaceHome, setIsWorkspaceHome] = useState(initialShowWorkspaceHome);
-  const [chats, setChats] = useState<SessionChat[]>(() => sortSessionChats(initialChats));
+  const [chats, setChats] = useState<ProjectChat[]>(() => sortProjectChats(initialChats));
   const [selectedChatId, setSelectedChatId] = useState<string | null>(activeChatId);
   const [isNewChatPlaceholder, setIsNewChatPlaceholder] = useState(false);
 
@@ -45,7 +45,7 @@ export function useChatScreenState({
   }, [initialModelSettings]);
 
   useEffect(() => {
-    setChats(sortSessionChats(initialChats));
+    setChats(sortProjectChats(initialChats));
   }, [initialChats]);
 
   useEffect(() => {

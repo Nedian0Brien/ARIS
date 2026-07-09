@@ -8,13 +8,13 @@ import { AGENT_QUICK_STARTS } from '@/app/_legacy/sessions/[sessionId]/chat-scre
 import { ActionEventCard } from '@/app/_legacy/sessions/[sessionId]/chat-screen/center-pane/renderers/ActionEventCard';
 import type { AgentMeta, TimelineRenderItem } from '@/app/_legacy/sessions/[sessionId]/chat-screen/types';
 import type { RenderablePermissionRequest } from '@/lib/happy/permissions';
-import type { SessionChat, UiEvent } from '@/lib/happy/types';
+import type { ProjectChat, UiEvent } from '@/lib/happy/types';
 import { buildPermissionTimelineItems } from '@/app/_legacy/sessions/[sessionId]/chatTimeline';
 
 function buildPermission(overrides: Partial<RenderablePermissionRequest> = {}): RenderablePermissionRequest {
   return {
     id: overrides.id ?? 'perm-1',
-    sessionId: overrides.sessionId ?? 'session-1',
+    projectId: overrides.projectId ?? 'session-1',
     ...(overrides.chatId ? { chatId: overrides.chatId } : {}),
     agent: overrides.agent ?? 'gemini',
     command: overrides.command ?? 'Run pwd',
@@ -26,10 +26,10 @@ function buildPermission(overrides: Partial<RenderablePermissionRequest> = {}): 
   };
 }
 
-function buildChat(overrides: Partial<SessionChat> = {}): SessionChat {
+function buildChat(overrides: Partial<ProjectChat> = {}): ProjectChat {
   return {
     id: overrides.id ?? 'chat-1',
-    sessionId: overrides.sessionId ?? 'session-1',
+    projectId: overrides.projectId ?? 'session-1',
     agent: overrides.agent ?? 'codex',
     model: overrides.model ?? 'gpt-5.4',
     geminiMode: overrides.geminiMode ?? null,

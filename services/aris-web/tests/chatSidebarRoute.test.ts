@@ -3,9 +3,9 @@ import { NextRequest } from 'next/server';
 
 const mocks = vi.hoisted(() => ({
   requireApiUser: vi.fn(),
-  listSessionChats: vi.fn(),
-  updateSessionChat: vi.fn(),
-  getSessionRuntimeState: vi.fn(),
+  listProjectChats: vi.fn(),
+  updateProjectChat: vi.fn(),
+  getProjectRuntimeState: vi.fn(),
   listLatestEventsByChat: vi.fn(),
 }));
 
@@ -14,28 +14,28 @@ vi.mock('@/lib/auth/guard', () => ({
 }));
 
 vi.mock('@/lib/happy/chats', () => ({
-  listSessionChats: mocks.listSessionChats,
-  updateSessionChat: mocks.updateSessionChat,
+  listProjectChats: mocks.listProjectChats,
+  updateProjectChat: mocks.updateProjectChat,
 }));
 
 vi.mock('@/lib/happy/client', () => ({
-  getSessionRuntimeState: mocks.getSessionRuntimeState,
+  getProjectRuntimeState: mocks.getProjectRuntimeState,
   listLatestEventsByChat: mocks.listLatestEventsByChat,
 }));
 
-import { GET } from '@/app/api/runtime/sessions/[sessionId]/chats/sidebar/route';
+import { GET } from '@/app/api/runtime/projects/[projectId]/chats/sidebar/route';
 
 describe('chat sidebar route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.requireApiUser.mockResolvedValue({ user: { id: 'user-1' } });
     mocks.listLatestEventsByChat.mockResolvedValue({});
-    mocks.updateSessionChat.mockResolvedValue(undefined);
-    mocks.getSessionRuntimeState.mockResolvedValue({ isRunning: true });
+    mocks.updateProjectChat.mockResolvedValue(undefined);
+    mocks.getProjectRuntimeState.mockResolvedValue({ isRunning: true });
   });
 
   it('only fetches runtime state for the active chat', async () => {
-    mocks.listSessionChats.mockResolvedValue([
+    mocks.listProjectChats.mockResolvedValue([
       {
         id: 'chat-1',
         title: 'Chat 1',
@@ -58,17 +58,17 @@ describe('chat sidebar route', () => {
 
     const response = await GET(
       new NextRequest(
-        'http://localhost/api/runtime/sessions/session-1/chats/sidebar?chatId=chat-1&chatId=chat-2&activeChatId=chat-2',
+        'http://localhost/api/runtime/projects/session-1/chats/sidebar?chatId=chat-1&chatId=chat-2&activeChatId=chat-2',
       ),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     const payload = await response.json() as { snapshots: Array<{ chatId: string; isRunning: boolean }> };
 
-    expect(mocks.getSessionRuntimeState).toHaveBeenCalledTimes(1);
-    expect(mocks.getSessionRuntimeState).toHaveBeenCalledWith('session-1', { chatId: 'chat-2' });
+    expect(mocks.getProjectRuntimeState).toHaveBeenCalledTimes(1);
+    expect(mocks.getProjectRuntimeState).toHaveBeenCalledWith('session-1', { chatId: 'chat-2' });
     expect(mocks.listLatestEventsByChat).not.toHaveBeenCalled();
-    expect(mocks.updateSessionChat).not.toHaveBeenCalled();
+    expect(mocks.updateProjectChat).not.toHaveBeenCalled();
     expect(payload.snapshots).toEqual([
       expect.objectContaining({ chatId: 'chat-1', isRunning: false }),
       expect.objectContaining({ chatId: 'chat-2', isRunning: true }),

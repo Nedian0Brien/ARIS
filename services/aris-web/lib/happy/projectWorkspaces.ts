@@ -22,7 +22,7 @@ export type ProjectWorkspacePayload = {
 export type ProjectWorkspacePanelPayload = {
   panelId: string;
   chatId: string;
-  runtimeSessionId: string | null;
+  runtimeProjectId: string | null;
   branch: string | null;
   worktreePath: string | null;
   order: number;
@@ -30,7 +30,7 @@ export type ProjectWorkspacePanelPayload = {
 };
 
 export type ProjectWorkspacePanelRuntimePatch = {
-  runtimeSessionId?: string | null;
+  runtimeProjectId?: string | null;
   branch?: string | null;
   worktreePath?: string | null;
   meta?: Prisma.InputJsonValue | null;
@@ -86,7 +86,7 @@ function toPayload(row: {
 function toPanelPayload(row: {
   panelId: string;
   chatId: string;
-  runtimeSessionId: string | null;
+  runtimeProjectId: string | null;
   branch: string | null;
   worktreePath: string | null;
   order: number;
@@ -95,7 +95,7 @@ function toPanelPayload(row: {
   return {
     panelId: row.panelId,
     chatId: row.chatId,
-    runtimeSessionId: row.runtimeSessionId,
+    runtimeProjectId: row.runtimeProjectId,
     branch: row.branch,
     worktreePath: row.worktreePath,
     order: row.order,
@@ -119,7 +119,7 @@ export async function syncWorkspacePanelsForLayout(input: {
   if (!input.layout) {
     const removedRows = await prisma.workspacePanel.findMany({
       where: { workspaceId: input.workspaceId },
-      select: { runtimeSessionId: true },
+      select: { runtimeProjectId: true },
     });
     await cleanupWorkspacePanelRuntimes(removedRows);
     await prisma.workspacePanel.deleteMany({
@@ -135,7 +135,7 @@ export async function syncWorkspacePanelsForLayout(input: {
       workspaceId: input.workspaceId,
       panelId: { notIn: panelIds },
     },
-    select: { runtimeSessionId: true },
+    select: { runtimeProjectId: true },
   });
   await cleanupWorkspacePanelRuntimes(removedRows);
   await prisma.workspacePanel.deleteMany({
@@ -159,7 +159,7 @@ export async function syncWorkspacePanelsForLayout(input: {
         panelId: panel.id,
         chatId: panel.chatId,
         order: index,
-        ...(runtime.runtimeSessionId !== undefined && { runtimeSessionId: runtime.runtimeSessionId }),
+        ...(runtime.runtimeProjectId !== undefined && { runtimeProjectId: runtime.runtimeProjectId }),
         ...(runtime.branch !== undefined && { branch: runtime.branch }),
         ...(runtime.worktreePath !== undefined && { worktreePath: runtime.worktreePath }),
         ...(runtime.meta !== undefined && { meta: runtime.meta ?? Prisma.JsonNull }),
@@ -167,7 +167,7 @@ export async function syncWorkspacePanelsForLayout(input: {
       update: {
         chatId: panel.chatId,
         order: index,
-        ...(runtime.runtimeSessionId !== undefined && { runtimeSessionId: runtime.runtimeSessionId }),
+        ...(runtime.runtimeProjectId !== undefined && { runtimeProjectId: runtime.runtimeProjectId }),
         ...(runtime.branch !== undefined && { branch: runtime.branch }),
         ...(runtime.worktreePath !== undefined && { worktreePath: runtime.worktreePath }),
         ...(runtime.meta !== undefined && { meta: runtime.meta ?? Prisma.JsonNull }),

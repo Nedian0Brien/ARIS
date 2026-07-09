@@ -30,10 +30,10 @@ describe('project parallel chat drag surface', () => {
     expect(projectChatSurfaceUtils).toContain("export const PROJECT_CHAT_DRAG_MIME = 'application/x-aris-project-chat';");
     expect(projectChatSurfaceUtils).toContain("export const PROJECT_CHAT_DRAG_JSON_MIME = 'application/json';");
     expect(projectChatSurface).toContain("export { PROJECT_CHAT_DRAG_JSON_MIME, PROJECT_CHAT_DRAG_MIME, writeProjectChatDragPayload } from './projectChatSurfaceUtils';");
-    expect(homeClient).toContain('writeProjectChatDragPayload(event, session.id, chat)');
+    expect(homeClient).toContain('writeProjectChatDragPayload(event, project.id, chat)');
     expect(projectChatSurface).toContain('writeProjectChatDragPayload(event, projectId, chat)');
     expect(projectChatSurfaceUtils).toContain('projectId: parsedProjectId');
-    expect(projectChatSurfaceUtils).not.toContain('sessionId: parsed.sessionId');
+    expect(projectChatSurfaceUtils).not.toContain('projectId: parsed.projectId');
     expect(projectChatSurfaceUtils).toContain("event.dataTransfer.setData('text/plain', payload);");
     expect(homeClient).toContain('className={`m-sb__chat-child${activeProjectChatId === chat.id ?');
   });
@@ -62,7 +62,7 @@ describe('project parallel chat drag surface', () => {
     expect(projectChatSurface).toContain('removeLocalStorage(parallelLayoutStorageKey)');
   });
 
-  it('supports compact project panel mode instead of the legacy session screen', () => {
+  it('supports compact project panel mode instead of the legacy project screen', () => {
     expect(projectChatSurfaceUtils).toContain("export type ProjectChatSurfaceMode = 'full' | 'panel';");
     expect(projectChatSurface).toContain("export type { ProjectChatDragStartHandler, ProjectChatSurfaceMode } from './projectChatSurfaceUtils';");
     expect(homeClient).toContain("searchParams.get('surface') === 'panel' ? 'panel' : 'full'");

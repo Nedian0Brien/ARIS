@@ -21,7 +21,7 @@ function buildEvent(overrides: Partial<UiEvent> = {}): UiEvent {
 function buildPermission(overrides: Partial<PermissionRequest> = {}): PermissionRequest {
   return {
     id: overrides.id ?? 'perm-1',
-    sessionId: overrides.sessionId ?? 'session-1',
+    projectId: overrides.projectId ?? 'session-1',
     ...(overrides.chatId ? { chatId: overrides.chatId } : {}),
     agent: overrides.agent ?? 'gemini',
     command: overrides.command ?? 'Run pwd',
@@ -39,7 +39,7 @@ describe('permission helpers', () => {
       meta: {
         streamEvent: 'permission_request',
         permissionId: 'perm-1',
-        sessionId: 'session-1',
+        projectId: 'session-1',
         permissionState: 'pending',
         command: 'Run pwd',
         reason: 'Need shell access',
@@ -55,7 +55,7 @@ describe('permission helpers', () => {
       meta: {
         streamEvent: 'permission_decision',
         permissionId: 'perm-1',
-        sessionId: 'session-1',
+        projectId: 'session-1',
         permissionState: 'approved',
         command: 'Run pwd',
         reason: 'Need shell access',

@@ -60,7 +60,7 @@ function buildPermissionFromEvent(event: UiEvent, fallback?: PermissionRequest):
   const requestedAt = normalizeText(meta.requestedAt) || fallback?.requestedAt || event.timestamp;
   const chatId = normalizeText(meta.chatId) || normalizePermissionChatId(fallback ?? {
     id: '',
-    sessionId: '',
+    projectId: '',
     agent: 'unknown',
     command: '',
     reason: '',
@@ -71,7 +71,7 @@ function buildPermissionFromEvent(event: UiEvent, fallback?: PermissionRequest):
 
   return {
     id: permissionId,
-    sessionId: normalizeText(meta.sessionId) || fallback?.sessionId || '',
+    projectId: normalizeText(meta.projectId) || fallback?.projectId || '',
     ...(chatId ? { chatId } : {}),
     agent: normalizePermissionAgent(meta.agent ?? fallback?.agent),
     command,

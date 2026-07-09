@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SessionChat } from '@/lib/happy/types';
+import type { ProjectChat } from '@/lib/happy/types';
 import {
   resolveActiveChat,
   resolveNextSelectedChatId,
@@ -7,10 +7,10 @@ import {
   shouldShowChatTransitionLoading,
 } from '@/app/_legacy/sessions/[sessionId]/chatSelection';
 
-function makeChat(id: string, overrides: Partial<SessionChat> = {}): SessionChat {
+function makeChat(id: string, overrides: Partial<ProjectChat> = {}): ProjectChat {
   return {
     id,
-    sessionId: 'session-1',
+    projectId: 'session-1',
     title: `채팅 ${id}`,
     agent: 'codex',
     model: 'gpt-5.4',

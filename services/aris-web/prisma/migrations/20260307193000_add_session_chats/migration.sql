@@ -1,5 +1,5 @@
 -- CreateTable
-CREATE TABLE "SessionChat" (
+CREATE TABLE "ProjectChat" (
     "id" TEXT NOT NULL,
     "sessionId" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -11,14 +11,14 @@ CREATE TABLE "SessionChat" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "SessionChat_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "ProjectChat_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
-CREATE INDEX "SessionChat_sessionId_userId_isPinned_lastActivityAt_idx" ON "SessionChat"("sessionId", "userId", "isPinned", "lastActivityAt");
+CREATE INDEX "ProjectChat_sessionId_userId_isPinned_lastActivityAt_idx" ON "ProjectChat"("sessionId", "userId", "isPinned", "lastActivityAt");
 
 -- CreateIndex
-CREATE INDEX "SessionChat_userId_updatedAt_idx" ON "SessionChat"("userId", "updatedAt");
+CREATE INDEX "ProjectChat_userId_updatedAt_idx" ON "ProjectChat"("userId", "updatedAt");
 
 -- AddForeignKey
-ALTER TABLE "SessionChat" ADD CONSTRAINT "SessionChat_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "ProjectChat" ADD CONSTRAINT "ProjectChat_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

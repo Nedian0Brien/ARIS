@@ -22,7 +22,7 @@ export function useWorkspacePanels(sessionId: string) {
       setError(null);
 
       try {
-        const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/panels`, {
+        const response = await fetch(`/api/runtime/projects/${encodeURIComponent(sessionId)}/panels`, {
           cache: 'no-store',
         });
         if (!response.ok) {
@@ -54,7 +54,7 @@ export function useWorkspacePanels(sessionId: string) {
   const createPanel = useCallback(async (type: WorkspacePanelType) => {
     setError(null);
 
-    const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/panels`, {
+    const response = await fetch(`/api/runtime/projects/${encodeURIComponent(sessionId)}/panels`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -83,7 +83,7 @@ export function useWorkspacePanels(sessionId: string) {
     setError(null);
 
     const response = await fetch(
-      `/api/runtime/sessions/${encodeURIComponent(sessionId)}/panels/${encodeURIComponent(panelId)}`,
+      `/api/runtime/projects/${encodeURIComponent(sessionId)}/panels/${encodeURIComponent(panelId)}`,
       {
         method: 'PATCH',
         headers: {
@@ -108,7 +108,7 @@ export function useWorkspacePanels(sessionId: string) {
     setError(null);
 
     const response = await fetch(
-      `/api/runtime/sessions/${encodeURIComponent(sessionId)}/panels/${encodeURIComponent(panelId)}`,
+      `/api/runtime/projects/${encodeURIComponent(sessionId)}/panels/${encodeURIComponent(panelId)}`,
       {
         method: 'DELETE',
       },

@@ -58,7 +58,7 @@ function getPathOnly(url: string): string {
   return index < 0 ? url : url.slice(0, index);
 }
 
-const createSessionSchema = z.object({
+const createProjectSchema = z.object({
   path: z.string().min(1),
   flavor: z.enum(['codex', 'claude', 'gemini', 'unknown']),
   approvalPolicy: z.enum(['on-request', 'on-failure', 'never', 'yolo']).optional(),
@@ -68,7 +68,7 @@ const createSessionSchema = z.object({
   branch: z.string().trim().min(1).max(255).optional(),
 });
 
-const updateSessionSchema = z.object({
+const updateProjectSchema = z.object({
   approvalPolicy: z.enum(['on-request', 'on-failure', 'never', 'yolo']),
 });
 
@@ -80,8 +80,8 @@ const appendMessageSchema = z.object({
 });
 
 const appendChatEventSchema = z.object({
-  sessionId: z.string().min(1),
-  runtimeSessionId: z.string().min(1).optional(),
+  projectId: z.string().min(1),
+  runtimeProjectId: z.string().min(1).optional(),
   runId: z.string().min(1).optional(),
   type: z.string().min(1),
   title: z.string().min(1).optional(),
@@ -94,14 +94,14 @@ const submitUserPromptSchema = appendChatEventSchema.extend({
   text: z.string().min(1),
 });
 
-const submitSessionUserPromptSchema = appendMessageSchema.extend({
+const submitProjectUserPromptSchema = appendMessageSchema.extend({
   type: z.literal('message').default('message'),
   text: z.string().min(1),
 });
 
 const terminalCommandSchema = z.object({
-  sessionId: z.string().min(1),
-  runtimeSessionId: z.string().min(1).optional(),
+  projectId: z.string().min(1),
+  runtimeProjectId: z.string().min(1).optional(),
   command: z.string().trim().min(1),
 });
 
@@ -135,13 +135,13 @@ type HappyBridgeAppendMessage = {
   };
 };
 
-const sessionActionSchema = z.object({
+const projectActionSchema = z.object({
   action: z.enum(['abort', 'retry', 'kill', 'resume']),
   chatId: z.string().trim().min(1).optional(),
 });
 
 const createPermissionSchema = z.object({
-  sessionId: z.string().min(1),
+  projectId: z.string().min(1),
   chatId: z.string().trim().min(1).optional(),
   agent: z.enum(['codex', 'claude', 'gemini', 'unknown']),
   command: z.string().min(1),
@@ -264,8 +264,8 @@ function toHappyBridgeMessage(
   };
 }
 
-function supportsChatScopedRuntime(session: { metadata?: { runtimeModel?: string } }): boolean {
-  return session.metadata?.runtimeModel === 'chat-stream';
+function supportsChatScopedRuntime(project: { metadata?: { runtimeModel?: string } }): boolean {
+  return project.metadata?.runtimeModel === 'chat-stream';
 }
 
 export function buildServer(config: ServerConfig) {
@@ -343,146 +343,146 @@ export function buildServer(config: ServerConfig) {
     now: new Date().toISOString(),
   }));
 
-  app.get('/v1/sessions', async (_request, reply) => {
+  app.get('/v1/projects', async (_request, reply) => {
     try {
       return {
-        sessions: await store.listSessions(),
+        projects: await store.listProjects(),
       };
     } catch (error) {
-      const message = toErrorMessage(error, 'Failed to list sessions');
+      const message = toErrorMessage(error, 'Failed to list projects');
       return reply.code(502).send({ error: message });
     }
   });
 
-  app.get('/v1/sessions/:sessionId', async (request, reply) => {
+  app.get('/v1/projects/:projectId', async (request, reply) => {
     try {
-      const { sessionId } = request.params as { sessionId: string };
-      const session = await store.getSession(sessionId);
-      if (!session) {
-        return reply.code(404).send({ error: 'Session not found' });
+      const { projectId } = request.params as { projectId: string };
+      const project = await store.getProject(projectId);
+      if (!project) {
+        return reply.code(404).send({ error: 'Project not found' });
       }
 
       // Resolve host-side path for terminal access
-      let hostPath = session.metadata.path;
+      let hostPath = project.metadata.path;
       try {
-        hostPath = store.resolveExecutionCwd(session.metadata.path, session.metadata.branch);
+        hostPath = store.resolveExecutionCwd(project.metadata.path, project.metadata.branch);
       } catch {
         // Keep original path as fallback
       }
 
       return {
-        session: {
-          ...session,
+        project: {
+          ...project,
           hostPath,
         },
       };
     } catch (error) {
-      const message = toErrorMessage(error, 'Failed to load session');
+      const message = toErrorMessage(error, 'Failed to load project');
       return reply.code(502).send({ error: message });
     }
   });
 
-  app.post('/v1/sessions', async (request, reply) => {
-    const parsed = createSessionSchema.safeParse(request.body);
+  app.post('/v1/projects', async (request, reply) => {
+    const parsed = createProjectSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: 'Invalid request body' });
     }
 
     try {
-      const session = await store.createSession(parsed.data);
-      return reply.code(201).send({ session });
+      const project = await store.createProject(parsed.data);
+      return reply.code(201).send({ project });
     } catch (error) {
-      const message = toErrorMessage(error, 'Failed to create session');
+      const message = toErrorMessage(error, 'Failed to create project');
       return reply.code(502).send({ error: message });
     }
   });
 
-  app.patch('/v1/sessions/:sessionId', async (request, reply) => {
-    const parsed = updateSessionSchema.safeParse(request.body);
+  app.patch('/v1/projects/:projectId', async (request, reply) => {
+    const parsed = updateProjectSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: 'Invalid request body' });
     }
 
-    const { sessionId } = request.params as { sessionId: string };
+    const { projectId } = request.params as { projectId: string };
     try {
-      const session = await store.updateApprovalPolicy(sessionId, parsed.data.approvalPolicy);
-      return { session };
+      const project = await store.updateProjectApprovalPolicy(projectId, parsed.data.approvalPolicy);
+      return { project };
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
-        return reply.code(404).send({ error: 'Session not found' });
+        return reply.code(404).send({ error: 'Project not found' });
       }
       if (error instanceof Error && error.message === 'UPDATE_APPROVAL_POLICY_NOT_SUPPORTED') {
         return reply.code(501).send({ error: 'Not supported in current backend' });
       }
-      const message = toErrorMessage(error, 'Failed to update session');
+      const message = toErrorMessage(error, 'Failed to update project');
       return reply.code(502).send({ error: message });
     }
   });
 
-  app.post('/v1/sessions/:sessionId/actions', async (request, reply) => {
-    const parsed = sessionActionSchema.safeParse(request.body);
+  app.post('/v1/projects/:projectId/actions', async (request, reply) => {
+    const parsed = projectActionSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: 'Invalid request body' });
     }
 
-    const { sessionId } = request.params as { sessionId: string };
+    const { projectId } = request.params as { projectId: string };
     try {
-      const result = await store.applySessionAction(
-        sessionId,
+      const result = await store.applyProjectAction(
+        projectId,
         parsed.data.action,
         parsed.data.chatId,
       );
 
       // RUNTIME_BACKEND='happy' kill fallback was the only remaining caller of
       // config.HAPPY_SERVER_URL/TOKEN. Removed in 2.5b.1: prisma backend
-      // handles kill via store.applySessionAction() above; mock backend has
+      // handles kill via store.applyProjectAction() above; mock backend has
       // nothing to hard-delete on a remote service.
 
-      return { result: { sessionId, action: parsed.data.action, ...result } };
+      return { result: { projectId, action: parsed.data.action, ...result } };
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
-        return reply.code(404).send({ error: 'Session not found' });
+        return reply.code(404).send({ error: 'Project not found' });
       }
-      const message = toErrorMessage(error, 'Failed to apply session action');
+      const message = toErrorMessage(error, 'Failed to apply project action');
       return reply.code(502).send({ error: message });
     }
   });
 
-  app.get('/v1/sessions/:sessionId/runtime', async (request, reply) => {
-    const { sessionId } = request.params as { sessionId: string };
+  app.get('/v1/projects/:projectId/runtime', async (request, reply) => {
+    const { projectId } = request.params as { projectId: string };
     const { chatId } = request.query as { chatId?: string };
     const normalizedChatId = typeof chatId === 'string' && chatId.trim().length > 0
       ? chatId.trim()
       : undefined;
     try {
-      const isRunning = await store.isSessionRunning(sessionId, normalizedChatId);
-      return { sessionId, isRunning };
+      const isRunning = await store.isProjectRunning(projectId, normalizedChatId);
+      return { projectId, isRunning };
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
-        return reply.code(404).send({ error: 'Session not found' });
+        return reply.code(404).send({ error: 'Project not found' });
       }
-      const message = toErrorMessage(error, 'Failed to read session runtime');
+      const message = toErrorMessage(error, 'Failed to read project runtime');
       return reply.code(502).send({ error: message });
     }
   });
 
-  app.get('/v1/sessions/:sessionId/providers/gemini/capabilities', async (request, reply) => {
-    const { sessionId } = request.params as { sessionId: string };
+  app.get('/v1/projects/:projectId/providers/gemini/capabilities', async (request, reply) => {
+    const { projectId } = request.params as { projectId: string };
     try {
-      const capabilities = await store.getGeminiSessionCapabilities(sessionId);
+      const capabilities = await store.getGeminiProjectCapabilities(projectId);
       return { capabilities };
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
-        return reply.code(404).send({ error: 'Session not found' });
+        return reply.code(404).send({ error: 'Project not found' });
       }
       const message = toErrorMessage(error, 'Failed to load Gemini capabilities');
       return reply.code(502).send({ error: message });
     }
   });
 
-  app.get('/v1/sessions/:sessionId/realtime-events', async (request, reply) => {
+  app.get('/v1/projects/:projectId/realtime-events', async (request, reply) => {
     try {
-      const { sessionId } = request.params as { sessionId: string };
+      const { projectId } = request.params as { projectId: string };
       const query = request.query as {
         after_cursor?: string;
         limit?: string;
@@ -509,33 +509,33 @@ export function buildServer(config: ServerConfig) {
         }, afterCursor);
         return { events, cursor };
       }
-      const payload = await store.listRealtimeEvents(sessionId, {
+      const payload = await store.listRealtimeEvents(projectId, {
         afterCursor,
         limit,
         chatId,
       });
       return payload;
     } catch (error) {
-      const message = toErrorMessage(error, 'Failed to list session realtime events');
+      const message = toErrorMessage(error, 'Failed to list project realtime events');
       if (message.includes('SESSION_NOT_FOUND')) {
-        return reply.code(404).send({ error: 'Session not found' });
+        return reply.code(404).send({ error: 'Project not found' });
       }
       return reply.code(502).send({ error: message });
     }
   });
 
-  app.get('/v3/sessions/:sessionId/messages', async (request, reply) => {
+  app.get('/v3/projects/:projectId/messages', async (request, reply) => {
     try {
-      const { sessionId } = request.params as { sessionId: string };
+      const { projectId } = request.params as { projectId: string };
       const { after_seq, after_id, limit, chatId: chatIdRaw } = request.query as {
         after_seq?: string;
         after_id?: string;
         limit?: string;
         chatId?: string;
       };
-      const session = await store.getSession(sessionId);
-      if (!session) {
-        return reply.code(404).send({ error: 'Session not found' });
+      const project = await store.getProject(projectId);
+      if (!project) {
+        return reply.code(404).send({ error: 'Project not found' });
       }
 
       const parsedAfterSeq = Number.parseInt(String(after_seq ?? ''), 10);
@@ -575,7 +575,7 @@ export function buildServer(config: ServerConfig) {
       }
 
       const readLimit = pageLimit ? pageLimit + 1 : undefined;
-      const rawMessages = await store.listMessages(sessionId, {
+      const rawMessages = await store.listMessages(projectId, {
         ...(afterId !== undefined ? { afterId } : afterSeq !== undefined ? { afterSeq } : {}),
         ...(readLimit !== undefined ? { limit: readLimit } : {}),
       });
@@ -596,37 +596,37 @@ export function buildServer(config: ServerConfig) {
         ...(lastSeq > 0 ? { lastSeq } : {}),
       };
     } catch (error) {
-      const message = toErrorMessage(error, 'Failed to list session messages');
+      const message = toErrorMessage(error, 'Failed to list project messages');
       return reply.code(502).send({ error: message });
     }
   });
 
-  app.post('/v3/sessions/:sessionId/messages', async (request, reply) => {
-    const { sessionId } = request.params as { sessionId: string };
+  app.post('/v3/projects/:projectId/messages', async (request, reply) => {
+    const { projectId } = request.params as { projectId: string };
     const bridgeMessages = parseHappyBridgeMessages(request.body);
     if (bridgeMessages) {
       try {
         const createdMessages = [];
-        const session = await store.getSession(sessionId);
-        if (!session) {
-          return reply.code(404).send({ error: 'Session not found' });
+        const project = await store.getProject(projectId);
+        if (!project) {
+          return reply.code(404).send({ error: 'Project not found' });
         }
         for (const bridgeMessage of bridgeMessages) {
           const chatId = typeof bridgeMessage.input.meta?.chatId === 'string' && bridgeMessage.input.meta.chatId.trim().length > 0
             ? bridgeMessage.input.meta.chatId.trim()
             : undefined;
-          if (chatId && !supportsChatScopedRuntime(session)) {
-            return reply.code(409).send({ error: 'Legacy sessions are read-only for chat-scoped runtime writes.' });
+          if (chatId && !supportsChatScopedRuntime(project)) {
+            return reply.code(409).send({ error: 'Legacy projects are read-only for chat-scoped runtime writes.' });
           }
           const createdMessage = chatId
             ? await store.appendChatEvent(chatId, {
-                sessionId,
+                projectId,
                 type: bridgeMessage.input.type,
                 title: bridgeMessage.input.title,
                 text: bridgeMessage.input.text,
                 meta: bridgeMessage.input.meta,
               })
-            : await store.appendMessage(sessionId, bridgeMessage.input);
+            : await store.appendMessage(projectId, bridgeMessage.input);
           createdMessages.push(
             toHappyBridgeMessage(createdMessage, bridgeMessage.localId, bridgeMessage.content),
           );
@@ -635,9 +635,9 @@ export function buildServer(config: ServerConfig) {
         return reply.code(201).send({ messages: createdMessages });
       } catch (error) {
         if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
-          return reply.code(404).send({ error: 'Session not found' });
+          return reply.code(404).send({ error: 'Project not found' });
         }
-        const message = toErrorMessage(error, 'Failed to append session message');
+        const message = toErrorMessage(error, 'Failed to append project message');
         return reply.code(502).send({ error: message });
       }
     }
@@ -648,52 +648,52 @@ export function buildServer(config: ServerConfig) {
     }
 
     try {
-      const session = await store.getSession(sessionId);
-      if (!session) {
-        return reply.code(404).send({ error: 'Session not found' });
+      const project = await store.getProject(projectId);
+      if (!project) {
+        return reply.code(404).send({ error: 'Project not found' });
       }
       const chatId = typeof parsed.data.meta?.chatId === 'string' && parsed.data.meta.chatId.trim().length > 0
         ? parsed.data.meta.chatId.trim()
         : undefined;
-      if (chatId && !supportsChatScopedRuntime(session)) {
-        return reply.code(409).send({ error: 'Legacy sessions are read-only for chat-scoped runtime writes.' });
+      if (chatId && !supportsChatScopedRuntime(project)) {
+        return reply.code(409).send({ error: 'Legacy projects are read-only for chat-scoped runtime writes.' });
       }
       const message = chatId
         ? await store.appendChatEvent(chatId, {
-            sessionId,
+            projectId,
             type: parsed.data.type,
             title: parsed.data.title,
             text: parsed.data.text,
             meta: parsed.data.meta,
           })
-        : await store.appendMessage(sessionId, parsed.data);
+        : await store.appendMessage(projectId, parsed.data);
       return reply.code(201).send({ message });
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
-        return reply.code(404).send({ error: 'Session not found' });
+        return reply.code(404).send({ error: 'Project not found' });
       }
-      const message = toErrorMessage(error, 'Failed to append session message');
+      const message = toErrorMessage(error, 'Failed to append project message');
       return reply.code(502).send({ error: message });
     }
   });
 
-  app.post('/v1/sessions/:sessionId/user-prompts', async (request, reply) => {
-    const { sessionId } = request.params as { sessionId: string };
-    const parsed = submitSessionUserPromptSchema.safeParse(request.body);
+  app.post('/v1/projects/:projectId/user-prompts', async (request, reply) => {
+    const { projectId } = request.params as { projectId: string };
+    const parsed = submitProjectUserPromptSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: 'Invalid request body' });
     }
 
     try {
-      const session = await store.getSession(sessionId);
-      if (!session) {
-        return reply.code(404).send({ error: 'Session not found' });
+      const project = await store.getProject(projectId);
+      if (!project) {
+        return reply.code(404).send({ error: 'Project not found' });
       }
-      const message = await store.submitUserPrompt(sessionId, parsed.data);
+      const message = await store.submitUserPrompt(projectId, parsed.data);
       return reply.code(201).send({ message });
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
-        return reply.code(404).send({ error: 'Session not found' });
+        return reply.code(404).send({ error: 'Project not found' });
       }
       const message = toErrorMessage(error, 'Failed to submit user prompt');
       return reply.code(502).send({ error: message });
@@ -809,21 +809,21 @@ export function buildServer(config: ServerConfig) {
     }
 
     try {
-      const session = await store.getSession(parsed.data.sessionId);
-      if (!session) {
-        return reply.code(404).send({ error: 'Session not found' });
+      const project = await store.getProject(parsed.data.projectId);
+      if (!project) {
+        return reply.code(404).send({ error: 'Project not found' });
       }
-      if (!supportsChatScopedRuntime(session)) {
-        return reply.code(409).send({ error: 'Legacy sessions are read-only for chat-scoped runtime writes.' });
+      if (!supportsChatScopedRuntime(project)) {
+        return reply.code(409).send({ error: 'Legacy projects are read-only for chat-scoped runtime writes.' });
       }
       const event = await store.appendChatEvent(chatId, parsed.data);
       return reply.code(201).send({ event });
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
-        return reply.code(404).send({ error: 'Session not found' });
+        return reply.code(404).send({ error: 'Project not found' });
       }
       if (error instanceof Error && error.message === 'RUNTIME_SESSION_NOT_FOUND') {
-        return reply.code(404).send({ error: 'Runtime session not found' });
+        return reply.code(404).send({ error: 'Runtime project not found' });
       }
       if (error instanceof Error && error.message === 'CHAT_NOT_FOUND') {
         return reply.code(404).send({ error: 'Chat not found' });
@@ -841,30 +841,30 @@ export function buildServer(config: ServerConfig) {
     }
 
     try {
-      const session = await store.getSession(parsed.data.sessionId);
-      if (!session) {
-        return reply.code(404).send({ error: 'Session not found' });
+      const project = await store.getProject(parsed.data.projectId);
+      if (!project) {
+        return reply.code(404).send({ error: 'Project not found' });
       }
-      if (!supportsChatScopedRuntime(session)) {
-        return reply.code(409).send({ error: 'Legacy sessions are read-only for chat-scoped runtime writes.' });
+      if (!supportsChatScopedRuntime(project)) {
+        return reply.code(409).send({ error: 'Legacy projects are read-only for chat-scoped runtime writes.' });
       }
-      if (parsed.data.runtimeSessionId && parsed.data.runtimeSessionId !== parsed.data.sessionId) {
-        const runtimeSession = await store.getSession(parsed.data.runtimeSessionId);
+      if (parsed.data.runtimeProjectId && parsed.data.runtimeProjectId !== parsed.data.projectId) {
+        const runtimeSession = await store.getProject(parsed.data.runtimeProjectId);
         if (!runtimeSession) {
-          return reply.code(404).send({ error: 'Runtime session not found' });
+          return reply.code(404).send({ error: 'Runtime project not found' });
         }
         if (!supportsChatScopedRuntime(runtimeSession)) {
-          return reply.code(409).send({ error: 'Legacy runtime sessions are read-only for chat-scoped runtime writes.' });
+          return reply.code(409).send({ error: 'Legacy runtime projects are read-only for chat-scoped runtime writes.' });
         }
       }
       const event = await store.submitChatUserPrompt(chatId, parsed.data);
       return reply.code(201).send({ event });
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
-        return reply.code(404).send({ error: 'Session not found' });
+        return reply.code(404).send({ error: 'Project not found' });
       }
       if (error instanceof Error && error.message === 'RUNTIME_SESSION_NOT_FOUND') {
-        return reply.code(404).send({ error: 'Runtime session not found' });
+        return reply.code(404).send({ error: 'Runtime project not found' });
       }
       if (error instanceof Error && error.message === 'CHAT_NOT_FOUND') {
         return reply.code(404).send({ error: 'Chat not found' });
@@ -882,27 +882,27 @@ export function buildServer(config: ServerConfig) {
     }
 
     try {
-      const session = await store.getSession(parsed.data.sessionId);
-      if (!session) {
-        return reply.code(404).send({ error: 'Session not found' });
+      const project = await store.getProject(parsed.data.projectId);
+      if (!project) {
+        return reply.code(404).send({ error: 'Project not found' });
       }
-      if (!supportsChatScopedRuntime(session)) {
-        return reply.code(409).send({ error: 'Legacy sessions are read-only for chat-scoped runtime writes.' });
+      if (!supportsChatScopedRuntime(project)) {
+        return reply.code(409).send({ error: 'Legacy projects are read-only for chat-scoped runtime writes.' });
       }
-      if (parsed.data.runtimeSessionId && parsed.data.runtimeSessionId !== parsed.data.sessionId) {
-        const runtimeSession = await store.getSession(parsed.data.runtimeSessionId);
+      if (parsed.data.runtimeProjectId && parsed.data.runtimeProjectId !== parsed.data.projectId) {
+        const runtimeSession = await store.getProject(parsed.data.runtimeProjectId);
         if (!runtimeSession) {
-          return reply.code(404).send({ error: 'Runtime session not found' });
+          return reply.code(404).send({ error: 'Runtime project not found' });
         }
         if (!supportsChatScopedRuntime(runtimeSession)) {
-          return reply.code(409).send({ error: 'Legacy runtime sessions are read-only for terminal execution.' });
+          return reply.code(409).send({ error: 'Legacy runtime projects are read-only for terminal execution.' });
         }
       }
       const event = await store.runTerminalCommand(chatId, parsed.data);
       return reply.code(201).send({ events: [event] });
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
-        return reply.code(404).send({ error: 'Session not found' });
+        return reply.code(404).send({ error: 'Project not found' });
       }
       if (error instanceof Error && error.message === 'CHAT_NOT_FOUND') {
         return reply.code(404).send({ error: 'Chat not found' });
@@ -913,22 +913,22 @@ export function buildServer(config: ServerConfig) {
   });
 
   app.get('/v1/permissions', async (request) => {
-    const { state, sessionId, chatId, includeUnassigned } = request.query as {
+    const { state, projectId, chatId, includeUnassigned } = request.query as {
       state?: 'pending' | 'approved' | 'denied';
-      sessionId?: string;
+      projectId?: string;
       chatId?: string;
       includeUnassigned?: string;
     };
-    const normalizedSessionId = typeof sessionId === 'string' && sessionId.trim().length > 0
-      ? sessionId.trim()
+    const normalizedProjectId = typeof projectId === 'string' && projectId.trim().length > 0
+      ? projectId.trim()
       : undefined;
     const normalizedChatId = typeof chatId === 'string' && chatId.trim().length > 0
       ? chatId.trim()
       : undefined;
     const allowUnassigned = includeUnassigned === '1' || includeUnassigned === 'true';
     let permissions = await store.listPermissions(state);
-    if (normalizedSessionId) {
-      permissions = permissions.filter((permission) => permission.sessionId === normalizedSessionId);
+    if (normalizedProjectId) {
+      permissions = permissions.filter((permission) => permission.projectId === normalizedProjectId);
     }
     if (normalizedChatId) {
       permissions = permissions.filter((permission) => {
@@ -957,7 +957,7 @@ export function buildServer(config: ServerConfig) {
       return reply.code(201).send({ permission });
     } catch (error) {
       if (error instanceof Error && error.message === 'SESSION_NOT_FOUND') {
-        return reply.code(404).send({ error: 'Session not found' });
+        return reply.code(404).send({ error: 'Project not found' });
       }
       const message = toErrorMessage(error, 'Failed to create permission request');
       return reply.code(502).send({ error: message });

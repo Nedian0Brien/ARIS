@@ -38,7 +38,7 @@ vi.mock('@/lib/git/sidebar', () => ({
   performGitSidebarAction: mocks.performGitSidebarAction,
 }));
 
-import { GET, POST } from '@/app/api/runtime/sessions/[sessionId]/git/route';
+import { GET, POST } from '@/app/api/runtime/projects/[projectId]/git/route';
 
 describe('git sidebar route', () => {
   beforeEach(() => {
@@ -47,7 +47,7 @@ describe('git sidebar route', () => {
     mocks.resolveWorkspacePanelExecutionTarget.mockResolvedValue({
       projectId: 'session-1',
       projectPath: '/home/ubuntu/project/ARIS',
-      runtimeSessionId: 'session-1',
+      runtimeProjectId: 'session-1',
       executionPath: '/home/ubuntu/project/ARIS',
       workspacePanelId: null,
       branch: null,
@@ -71,8 +71,8 @@ describe('git sidebar route', () => {
     });
 
     const response = await GET(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/git'),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      new NextRequest('http://localhost/api/runtime/projects/session-1/git'),
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(mocks.getGitSidebarOverview).toHaveBeenCalledWith('/home/ubuntu/project/ARIS');
@@ -83,7 +83,7 @@ describe('git sidebar route', () => {
     mocks.resolveWorkspacePanelExecutionTarget.mockResolvedValue({
       projectId: 'session-1',
       projectPath: '/home/ubuntu/project/ARIS',
-      runtimeSessionId: 'runtime-panel-1',
+      runtimeProjectId: 'runtime-panel-1',
       executionPath: '/home/ubuntu/project/ARIS/.worktrees/panel-1',
       workspacePanelId: 'panel-1',
       branch: 'parallel/panel-1',
@@ -104,8 +104,8 @@ describe('git sidebar route', () => {
     });
 
     await GET(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/git?workspacePanelId=panel-1'),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      new NextRequest('http://localhost/api/runtime/projects/session-1/git?workspacePanelId=panel-1'),
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(mocks.resolveWorkspacePanelExecutionTarget).toHaveBeenCalledWith({
@@ -121,9 +121,9 @@ describe('git sidebar route', () => {
 
     const response = await GET(
       new NextRequest(
-        'http://localhost/api/runtime/sessions/session-1/git?kind=diff&path=src/app.ts&scope=working',
+        'http://localhost/api/runtime/projects/session-1/git?kind=diff&path=src/app.ts&scope=working',
       ),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(mocks.getGitSidebarDiff).toHaveBeenCalledWith('/home/ubuntu/project/ARIS', 'src/app.ts', 'working');
@@ -153,11 +153,11 @@ describe('git sidebar route', () => {
     });
 
     const response = await POST(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/git', {
+      new NextRequest('http://localhost/api/runtime/projects/session-1/git', {
         method: 'POST',
         body: JSON.stringify({ action: 'commit', message: 'feat: add git sidebar' }),
       }),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(mocks.performGitSidebarAction).toHaveBeenCalledWith('/home/ubuntu/project/ARIS', {

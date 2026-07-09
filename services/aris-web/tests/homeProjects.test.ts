@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { selectRecentChats, selectRecentProjects } from '@/app/homeProjects';
-import type { SessionChat, SessionSummary } from '@/lib/happy/types';
+import type { ProjectChat, ProjectSummary } from '@/lib/happy/types';
 
-function session(id: string, lastActivityAt: string | null, overrides: Partial<SessionSummary> = {}): SessionSummary {
+function session(id: string, lastActivityAt: string | null, overrides: Partial<ProjectSummary> = {}): ProjectSummary {
   return {
     id,
     agent: 'codex',
@@ -15,10 +15,10 @@ function session(id: string, lastActivityAt: string | null, overrides: Partial<S
   };
 }
 
-function chat(id: string, sessionId: string, lastActivityAt: string, overrides: Partial<SessionChat> = {}): SessionChat {
+function chat(id: string, projectId: string, lastActivityAt: string, overrides: Partial<ProjectChat> = {}): ProjectChat {
   return {
     id,
-    sessionId,
+    projectId,
     agent: 'codex',
     title: `Chat ${id}`,
     isPinned: false,

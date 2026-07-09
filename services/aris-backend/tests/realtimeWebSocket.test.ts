@@ -71,7 +71,7 @@ describe('runtime realtime WebSocket channel', () => {
   });
 
   it('pushes mutation broadcasts to subscribed websocket clients', async () => {
-    const createResponse = await fetch(`${baseUrl}/v1/sessions`, {
+    const createResponse = await fetch(`${baseUrl}/v1/projects`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({
@@ -79,10 +79,10 @@ describe('runtime realtime WebSocket channel', () => {
         flavor: 'codex',
       }),
     });
-    const created = (await createResponse.json()) as { session: { id: string } };
-    const sessionId = created.session.id;
+    const created = (await createResponse.json()) as { project: { id: string } };
+    const sessionId = created.project.id;
     const ws = new WebSocket(
-      `${baseUrl.replace('http:', 'ws:')}/v1/sessions/${encodeURIComponent(sessionId)}/realtime-events/ws?chatId=chat-1`,
+      `${baseUrl.replace('http:', 'ws:')}/v1/projects/${encodeURIComponent(sessionId)}/realtime-events/ws?chatId=chat-1`,
       { headers: { Authorization: `Bearer ${TOKEN}` } },
     );
 
@@ -98,7 +98,7 @@ describe('runtime realtime WebSocket channel', () => {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({
-          sessionId,
+          projectId: sessionId,
           type: 'message',
           text: 'hello over websocket',
           meta: {

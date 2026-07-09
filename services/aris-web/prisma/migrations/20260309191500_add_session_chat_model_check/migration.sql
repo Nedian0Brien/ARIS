@@ -1,10 +1,10 @@
 -- Legacy/blank value normalization before adding model constraint.
-UPDATE "SessionChat"
+UPDATE "ProjectChat"
 SET "model" = NULL
 WHERE "model" IS NOT NULL
   AND btrim("model") = '';
 
-UPDATE "SessionChat"
+UPDATE "ProjectChat"
 SET "model" = 'gpt-5.3-codex'
 WHERE lower(btrim(coalesce("model", ''))) = 'gpt-5-codex';
 
@@ -13,10 +13,10 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1
     FROM pg_constraint
-    WHERE conname = 'SessionChat_model_allowed_check'
+    WHERE conname = 'ProjectChat_model_allowed_check'
   ) THEN
-    ALTER TABLE "SessionChat"
-    ADD CONSTRAINT "SessionChat_model_allowed_check"
+    ALTER TABLE "ProjectChat"
+    ADD CONSTRAINT "ProjectChat_model_allowed_check"
     CHECK (
       "model" IS NULL
       OR (

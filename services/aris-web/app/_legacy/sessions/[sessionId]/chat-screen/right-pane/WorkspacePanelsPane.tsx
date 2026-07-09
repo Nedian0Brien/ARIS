@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { BackendNotice } from '@/components/ui/BackendNotice';
-import type { SessionChat, UiEvent } from '@/lib/happy/types';
+import type { ProjectChat, UiEvent } from '@/lib/happy/types';
 import type { RequestedFilePayload } from '../../customization-sidebar/types';
 import type { WorkspacePanelLayout, WorkspacePanelType } from '@/lib/workspacePanels/types';
 import { CreatePanelPage } from '../../workspace-panels/CreatePanelPage';
@@ -32,7 +32,7 @@ type WorkspacePanelsPaneBaseProps = {
   header?: ReactNode;
   requestedFile?: RequestedFilePayload | null;
   activeAgentLabel?: string;
-  chats?: SessionChat[];
+  chats?: ProjectChat[];
   events?: UiEvent[];
   isAgentRunning?: boolean;
   onInsertSnippet?: (snippet: string) => void;
@@ -72,7 +72,7 @@ const SNIPPETS = [
 ];
 
 const EMPTY_EVENTS: UiEvent[] = [];
-const EMPTY_CHATS: SessionChat[] = [];
+const EMPTY_CHATS: ProjectChat[] = [];
 
 function getEventLabel(event: UiEvent) {
   if (isUserEvent(event)) return 'User';

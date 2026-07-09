@@ -17,7 +17,7 @@ describe('workspace panel runtime linkage', () => {
 
     expect(panelModel).toContain('workspaceId');
     expect(panelModel).toContain('chatId');
-    expect(panelModel).toMatch(/\bruntimeSessionId\s+String\?/);
+    expect(panelModel).toMatch(/\bruntimeProjectId\s+String\?/);
     expect(panelModel).toMatch(/\bbranch\s+String\?/);
     expect(panelModel).toMatch(/\bworktreePath\s+String\?/);
     expect(panelModel).toContain('@@unique([workspaceId, chatId])');
@@ -26,26 +26,26 @@ describe('workspace panel runtime linkage', () => {
   it('normalizes layout leaves against persisted WorkspacePanel records', () => {
     expect(projectWorkspaces).toContain('prisma.workspacePanel');
     expect(projectWorkspaces).toContain('syncWorkspacePanelsForLayout');
-    expect(projectWorkspaces).toContain('runtimeSessionId');
+    expect(projectWorkspaces).toContain('runtimeProjectId');
     expect(projectWorkspaces).toContain('worktreePath');
     expect(projectWorkspaces).not.toContain('prisma.projectWorkspace');
   });
 
   it('allows workspace PATCH callers to attach panel runtime metadata', () => {
     expect(workspaceRoute).toContain('panelRuntime');
-    expect(workspaceRoute).toContain('runtimeSessionId');
+    expect(workspaceRoute).toContain('runtimeProjectId');
     expect(workspaceRoute).toContain('worktreePath');
   });
 
-  it('creates and repairs panel runtime sessions from the workspace PATCH boundary', () => {
+  it('creates and repairs panel runtime projects from the workspace PATCH boundary', () => {
     expect(workspaceRoute).toContain('ensureProjectWorkspacePanelRuntimes');
     expect(workspaceRoute).toContain('repairPanelRuntimes');
   });
 
   it('routes parallel panel agent state through the panel runtime session', () => {
-    expect(projectChatSurface).toContain('useSessionRuntime(runtimeSessionId, chat.id, true)');
+    expect(projectChatSurface).toContain('useProjectRuntime(runtimeProjectId, chat.id, true)');
     expect(projectChatSurface).toContain('workspacePanelId: panelId');
-    expect(projectChatSurface).toContain('runtimeSessionId: runtimeSessionId !== projectId ? runtimeSessionId : undefined');
+    expect(projectChatSurface).toContain('runtimeProjectId: runtimeProjectId !== projectId ? runtimeProjectId : undefined');
   });
 
   it('surfaces panel runtime readiness and creation failures in the parallel UI', () => {

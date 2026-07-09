@@ -3,9 +3,9 @@ import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Pie, PieChart } from 'recharts';
 
-import { SessionDashboard } from '@/app/SessionDashboard';
+import { ProjectDashboard } from '@/app/ProjectDashboard';
 import { DeferredResponsiveContainer } from '@/components/charts/DeferredResponsiveContainer';
-import type { SessionSummary } from '@/lib/happy/types';
+import type { ProjectSummary } from '@/lib/happy/types';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -47,9 +47,9 @@ describe('DeferredResponsiveContainer', () => {
     expect(loggedOutput).not.toContain('The width(-1) and height(-1) of chart should be greater than 0');
   });
 
-  it('keeps SessionDashboard SSR free from the Recharts negative size warning', () => {
+  it('keeps ProjectDashboard SSR free from the Recharts negative size warning', () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const sessions: SessionSummary[] = [
+    const sessions: ProjectSummary[] = [
       {
         id: 'session-1',
         agent: 'codex',
@@ -61,8 +61,8 @@ describe('DeferredResponsiveContainer', () => {
     ];
 
     renderToString(
-      React.createElement(SessionDashboard, {
-        initialSessions: sessions,
+      React.createElement(ProjectDashboard, {
+        initialProjects: sessions,
         isOperator: false,
         browserRootPath: '/home/ubuntu',
       }),

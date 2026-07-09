@@ -1,7 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import type { ClaudeRunLifecycleMeta } from './types.js';
 import { ClaudeSession } from './claudeSession.js';
-import type { ClaudeSessionHandle, ClaudeSessionLaunchMode, ClaudeSessionSnapshot, ClaudeSessionStatus } from './claudeSessionContract.js';
+import type { ClaudeSessionHandle, ClaudeSessionLaunchMode, ClaudeSessionSnapshot, ClaudeProjectStatus } from './claudeSessionContract.js';
 
 export class ClaudeSessionController implements ClaudeSessionHandle {
   readonly abortController = new AbortController();
@@ -33,7 +33,7 @@ export class ClaudeSessionController implements ClaudeSessionHandle {
   }
 
   snapshot(): ClaudeSessionSnapshot {
-    const status: ClaudeSessionStatus = this.finished ? 'finished' : 'running';
+    const status: ClaudeProjectStatus = this.finished ? 'finished' : 'running';
     return {
       scope: {
         sessionId: this.sessionId,

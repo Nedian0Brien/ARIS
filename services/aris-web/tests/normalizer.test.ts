@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyEventKind, normalizeEvents, normalizeSessions } from '@/lib/happy/normalizer';
+import { classifyEventKind, normalizeEvents, normalizeProjects } from '@/lib/happy/normalizer';
 
 describe('classifyEventKind', () => {
   it('classifies run execution events', () => {
@@ -147,9 +147,9 @@ git status --short"`,
   });
 });
 
-describe('normalizeSessions', () => {
+describe('normalizeProjects', () => {
   it('normalizes session list shape', () => {
-    const sessions = normalizeSessions([
+    const sessions = normalizeProjects([
       {
         id: 's1',
         metadata: { flavor: 'claude', path: '/repo/a' },

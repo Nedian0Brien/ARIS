@@ -1,12 +1,12 @@
-export type SessionStatus = 'running' | 'idle' | 'stopped' | 'error' | 'unknown';
-export type SessionAction = 'abort' | 'retry' | 'kill' | 'resume';
+export type ProjectStatus = 'running' | 'idle' | 'stopped' | 'error' | 'unknown';
+export type ProjectAction = 'abort' | 'retry' | 'kill' | 'resume';
 export type ApprovalPolicy = 'on-request' | 'on-failure' | 'never' | 'yolo';
 export type AgentFlavor = 'claude' | 'codex' | 'gemini' | 'unknown';
 
-export type SessionSummary = {
+export type ProjectSummary = {
   id: string;
   agent: AgentFlavor;
-  status: SessionStatus;
+  status: ProjectStatus;
   lastActivityAt: string | null;
   model?: string | null;
   lastReadAt?: string | null;
@@ -23,10 +23,8 @@ export type SessionSummary = {
   // 채팅 집계 (API route에서 주입, happy 서버에서 오지 않음)
   chatAgentCounts?: { claude: number; codex: number; gemini: number; unknown: number };
   totalChats?: number;
-  recentChats?: SessionChat[];
+  recentChats?: ProjectChat[];
 };
-
-export type ProjectSummary = SessionSummary;
 
 export type ProjectChat = {
   id: string;
@@ -52,11 +50,6 @@ export type ProjectChat = {
   lastActivityAt: string;
   createdAt: string;
   updatedAt: string;
-};
-
-export type SessionChat = Omit<ProjectChat, 'projectId'> & {
-  projectId?: string;
-  sessionId: string;
 };
 
 export type Chat = ProjectChat;
@@ -124,7 +117,7 @@ export type UiEvent = {
   severity?: 'info' | 'warning' | 'danger' | 'success';
 };
 
-export type SessionEventsPage = {
+export type ProjectEventsPage = {
   hasMoreBefore: boolean;
   hasMoreAfter: boolean;
   oldestEventId: string | null;
@@ -133,10 +126,10 @@ export type SessionEventsPage = {
   totalCount: number;
 };
 
-export type SessionDetail = {
+export type ProjectDetail = {
   id: string;
-  agent: SessionSummary['agent'];
-  status: SessionStatus;
+  agent: ProjectSummary['agent'];
+  status: ProjectStatus;
   projectName: string;
   branch?: string | null;
   hostPath?: string | null;
@@ -153,8 +146,9 @@ export type GeminiCapabilityOption = {
   label: string;
 };
 
-export type GeminiSessionCapabilities = {
-  sessionId: string;
+export type GeminiProjectCapabilities = {
+  projectId?: string;
+  sessionId?: string;
   fetchedAt: string;
   modes: {
     currentModeId?: string | null;
@@ -172,9 +166,9 @@ export type PermissionDecision = 'allow_once' | 'allow_session' | 'deny';
 
 export type PermissionRequest = {
   id: string;
-  sessionId: string;
+  projectId: string;
   chatId?: string | null;
-  agent: SessionSummary['agent'];
+  agent: ProjectSummary['agent'];
   command: string;
   reason: string;
   risk: PermissionRisk;
@@ -182,10 +176,10 @@ export type PermissionRequest = {
   state: PermissionState;
 };
 
-export type SessionActionResult = {
-  sessionId: string;
+export type ProjectActionResult = {
+  projectId: string;
   chatId?: string;
-  action: SessionAction;
+  action: ProjectAction;
   accepted: boolean;
   message: string;
   at: string;

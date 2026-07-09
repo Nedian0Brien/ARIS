@@ -43,7 +43,7 @@ export function useCustomizationOverviewState({
     setOverviewLoading(true);
     setOverviewError(null);
     try {
-      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/customization`, {
+      const response = await fetch(`/api/runtime/projects/${encodeURIComponent(sessionId)}/customization`, {
         cache: 'no-store',
       });
       const data = await response.json().catch(() => null);
@@ -79,7 +79,7 @@ export function useCustomizationOverviewState({
     setInstructionStatus(null);
     try {
       const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/customization?kind=instruction&id=${encodeURIComponent(instructionId)}`,
+        `/api/runtime/projects/${encodeURIComponent(sessionId)}/customization?kind=instruction&id=${encodeURIComponent(instructionId)}`,
         { cache: 'no-store' },
       );
       const data = await response.json().catch(() => null);
@@ -102,7 +102,7 @@ export function useCustomizationOverviewState({
     setSkillError(null);
     try {
       const response = await fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/customization?kind=skill&id=${encodeURIComponent(skillId)}`,
+        `/api/runtime/projects/${encodeURIComponent(sessionId)}/customization?kind=skill&id=${encodeURIComponent(skillId)}`,
         { cache: 'no-store' },
       );
       const data = await response.json().catch(() => null);
@@ -138,7 +138,7 @@ export function useCustomizationOverviewState({
     setInstructionSaving(true);
     setInstructionStatus(null);
     try {
-      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/customization`, {
+      const response = await fetch(`/api/runtime/projects/${encodeURIComponent(sessionId)}/customization`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

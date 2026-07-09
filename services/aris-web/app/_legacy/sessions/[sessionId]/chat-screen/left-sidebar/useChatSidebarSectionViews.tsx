@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import type { SessionChat } from '@/lib/happy/types';
+import type { ProjectChat } from '@/lib/happy/types';
 import { resolveChatReadMarkerId } from '../../chatSidebar';
 import { CHAT_RUN_PHASE_LABELS } from '../constants';
 import { resolveAgentMeta } from '../helpers';
@@ -38,20 +38,20 @@ type Params = {
   loadingPermissionId: string | null;
   renamingChatId: string | null;
   resolveChatPreviewText: (chatId: string) => string;
-  resolveChatSidebarState: (chat: SessionChat) => ChatSidebarState;
-  resolveSidebarChatRunPhase: (chat: SessionChat) => ChatRunPhase;
+  resolveChatSidebarState: (chat: ProjectChat) => ChatSidebarState;
+  resolveSidebarChatRunPhase: (chat: ProjectChat) => ChatRunPhase;
   sidebarApprovalLoadingChatId: string | null;
   sidebarSections: ChatSidebarSection[];
-  onDeleteChat: (chat: SessionChat) => void;
+  onDeleteChat: (chat: ProjectChat) => void;
   onGoToChat: (chatId: string) => void;
-  onMarkChatAsRead: (chat: SessionChat) => void;
+  onMarkChatAsRead: (chat: ProjectChat) => void;
   onPermissionDecision: (chatId: string, decision: SidebarPermissionDecision) => void;
   onRenameCancel: () => void;
   onRenameSubmit: (chatId: string, nextTitle: string) => void;
-  onStartRename: (chat: SessionChat) => void;
+  onStartRename: (chat: ProjectChat) => void;
   onTitleDraftChange: (value: string) => void;
   onToggleChatMenu: (chatId: string, rect: DOMRect) => void;
-  onToggleChatPin: (chat: SessionChat) => void;
+  onToggleChatPin: (chat: ProjectChat) => void;
 };
 
 export function useChatSidebarSectionViews({

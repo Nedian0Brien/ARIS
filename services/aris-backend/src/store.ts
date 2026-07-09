@@ -3,14 +3,14 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import type {
   ApprovalPolicy,
-  GeminiSessionCapabilities,
+  GeminiProjectCapabilities,
   PermissionDecision,
   PermissionRequest,
   PermissionRisk,
   RuntimeMessage,
-  RuntimeSession,
-  SessionAction,
-  SessionStatus,
+  RuntimeProject,
+  ProjectAction,
+  ProjectStatus,
 } from './types.js';
 import { RuntimeCore } from './runtime/runtimeCore.js';
 import { PrismaRuntimeStore } from './runtime/prismaStore.js';
@@ -23,12 +23,12 @@ const TERMINAL_COMMAND_TIMEOUT_MS = 30_000;
 const TERMINAL_COMMAND_MAX_BUFFER = 1024 * 1024;
 const TERMINAL_OUTPUT_MAX_CHARS = 12_000;
 
-type CreateSessionInput = {
+type CreateProjectInput = {
   path: string;
-  flavor: RuntimeSession['metadata']['flavor'];
+  flavor: RuntimeProject['metadata']['flavor'];
   approvalPolicy?: ApprovalPolicy;
   model?: string;
-  status?: SessionStatus;
+  status?: ProjectStatus;
   riskScore?: number;
   branch?: string;
 };
@@ -52,8 +52,8 @@ type AppendMessageInput = {
 };
 
 type AppendChatEventInput = {
-  sessionId: string;
-  runtimeSessionId?: string;
+  projectId: string;
+  runtimeProjectId?: string;
   runId?: string;
   type: string;
   title?: string;
@@ -62,8 +62,8 @@ type AppendChatEventInput = {
 };
 
 type RunTerminalCommandInput = {
-  sessionId: string;
-  runtimeSessionId?: string;
+  projectId: string;
+  runtimeProjectId?: string;
   command: string;
 };
 
@@ -102,7 +102,7 @@ function trimTerminalOutput(value: string): string {
 }
 
 type CreatePermissionInput = {
-  sessionId: string;
+  projectId: string;
   chatId?: string | null;
   agent: PermissionRequest['agent'];
   command: string;
@@ -113,28 +113,28 @@ type CreatePermissionInput = {
 export type RuntimeRealtimeChannelEvent =
   | {
       type: 'event.appended';
-      sessionId: string;
+      projectId: string;
       chatId?: string;
       event: RuntimeMessage;
       cursor?: number;
       source: 'mutation' | 'runtime';
     }
   | {
-      type: 'session.created' | 'session.updated' | 'session.action';
-      sessionId: string;
+      type: 'project.created' | 'project.updated' | 'project.action';
+      projectId: string;
       chatId?: string;
-      session?: RuntimeSession;
-      action?: SessionAction;
+      project?: RuntimeProject;
+      action?: ProjectAction;
     }
   | {
       type: 'permission.created' | 'permission.updated';
-      sessionId: string;
+      projectId: string;
       chatId?: string;
       permission: PermissionRequest;
     };
 
 export type RuntimeRealtimeChannelFilter = {
-  sessionId: string;
+  projectId: string;
   chatId?: string;
   includeUnassigned?: boolean;
 };
@@ -142,15 +142,15 @@ export type RuntimeRealtimeChannelFilter = {
 export type RuntimeRealtimeChannelListener = (event: RuntimeRealtimeChannelEvent) => void;
 
 interface RuntimeStoreBackend {
-  listSessions(): Promise<RuntimeSession[]>;
-  getSession(sessionId: string): Promise<RuntimeSession | null>;
-  getGeminiSessionCapabilities?(sessionId: string): Promise<GeminiSessionCapabilities>;
-  createSession(input: CreateSessionInput): Promise<RuntimeSession>;
-  updateApprovalPolicy?(sessionId: string, approvalPolicy: ApprovalPolicy): Promise<RuntimeSession>;
-  listMessages(sessionId: string, options?: { afterSeq?: number; afterId?: string; limit?: number }): Promise<RuntimeMessage[]>;
+  listProjects(): Promise<RuntimeProject[]>;
+  getProject(projectId: string): Promise<RuntimeProject | null>;
+  getGeminiProjectCapabilities?(projectId: string): Promise<GeminiProjectCapabilities>;
+  createProject(input: CreateProjectInput): Promise<RuntimeProject>;
+  updateProjectApprovalPolicy?(projectId: string, approvalPolicy: ApprovalPolicy): Promise<RuntimeProject>;
+  listMessages(projectId: string, options?: { afterSeq?: number; afterId?: string; limit?: number }): Promise<RuntimeMessage[]>;
   listChatEvents?(chatId: string, options?: { afterSeq?: number; limit?: number }): Promise<RuntimeMessage[]>;
-  listRealtimeEvents?(sessionId: string, options?: { afterCursor?: number; limit?: number; chatId?: string }): Promise<{ events: RuntimeMessage[]; cursor: number }>;
-  appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage>;
+  listRealtimeEvents?(projectId: string, options?: { afterCursor?: number; limit?: number; chatId?: string }): Promise<{ events: RuntimeMessage[]; cursor: number }>;
+  appendMessage(projectId: string, input: AppendMessageInput): Promise<RuntimeMessage>;
   appendChatEvent?(chatId: string, input: AppendChatEventInput): Promise<RuntimeMessage>;
   discoverImportedAgentSession?(input: {
     provider: ImportedAgentProvider;
@@ -165,7 +165,7 @@ interface RuntimeStoreBackend {
   }): Promise<{
     id: string;
     chatId?: string | null;
-    arisSessionId?: string | null;
+    arisProjectId?: string | null;
     provider: string;
     providerSessionId: string;
     sourcePath: string;
@@ -177,11 +177,11 @@ interface RuntimeStoreBackend {
     hasMoreBefore: boolean;
     status?: string;
   }>;
-  resolveProjectSessionIdByPath?(projectPath: string): Promise<string | null>;
+  resolveProjectIdByPath?(projectPath: string): Promise<string | null>;
   findOwningChat?(providerSessionId: string): Promise<{ chatId: string; isImported: boolean } | null>;
   ensureImportedAgentChat?(input: {
     importId: string;
-    arisSessionId: string;
+    arisProjectId: string;
     userId: string;
     title: string;
     parentChatId?: string | null;
@@ -190,7 +190,7 @@ interface RuntimeStoreBackend {
   }): Promise<{ chatId: string }>;
   markImportedAgentSessionNative?(input: {
     importId: string;
-    arisSessionId: string;
+    arisProjectId: string;
     chatId: string;
   }): Promise<void>;
   updateSubagentChatMeta?(input: {
@@ -203,7 +203,7 @@ interface RuntimeStoreBackend {
     importId: string;
     provider: ImportedAgentProvider;
     providerSessionId: string;
-    sessionId: string;
+    projectId: string;
     chatId: string;
     messages: ImportedProviderMessage[];
     hasMoreBefore?: boolean;
@@ -219,9 +219,9 @@ interface RuntimeStoreBackend {
   getImportedAgentSessionState?(chatId: string): Promise<{ hasMoreBefore: boolean } | null>;
   loadOlderImportedAgentEvents?(input: { chatId: string; limitTurns: number }): Promise<{ events: RuntimeMessage[]; hasMoreBefore: boolean }>;
   syncLatestImportedAgentEvents?(input: { chatId: string; limitEvents: number }): Promise<{ events: RuntimeMessage[] }>;
-  getLatestUserMessageForAction?(sessionId: string, chatId?: string): Promise<AppendMessageInput | null>;
-  applySessionAction(sessionId: string, action: SessionAction, chatId?: string): Promise<{ accepted: boolean; message: string; at: string }>;
-  isSessionRunning(sessionId: string, chatId?: string): Promise<boolean>;
+  getLatestUserMessageForAction?(projectId: string, chatId?: string): Promise<AppendMessageInput | null>;
+  applyProjectAction(projectId: string, action: ProjectAction, chatId?: string): Promise<{ accepted: boolean; message: string; at: string }>;
+  isProjectRunning(projectId: string, chatId?: string): Promise<boolean>;
   listPermissions(state?: PermissionRequest['state']): Promise<PermissionRequest[]>;
   createPermission(input: CreatePermissionInput): Promise<PermissionRequest>;
   decidePermission(permissionId: string, decision: PermissionDecision): Promise<PermissionRequest>;
@@ -231,19 +231,19 @@ type RuntimeExecutor = Pick<
   RuntimeCore,
   | 'triggerPersistedUserMessage'
   | 'listRealtimeEvents'
-  | 'applySessionAction'
-  | 'isSessionRunning'
+  | 'applyProjectAction'
+  | 'isProjectRunning'
   | 'listPermissions'
   | 'createPermission'
   | 'decidePermission'
-  | 'getGeminiSessionCapabilities'
+  | 'getGeminiProjectCapabilities'
   | 'subscribeRealtimeEvents'
   | 'beginShutdownDrain'
   | 'awaitDrain'
 >;
 
 class MockRuntimeStore implements RuntimeStoreBackend {
-  private readonly sessions = new Map<string, RuntimeSession>();
+  private readonly projects = new Map<string, RuntimeProject>();
   private readonly messages = new Map<string, RuntimeMessage[]>();
   private readonly chatEvents = new Map<string, RuntimeMessage[]>();
   private readonly permissions = new Map<string, PermissionRequest>();
@@ -251,46 +251,46 @@ class MockRuntimeStore implements RuntimeStoreBackend {
 
   constructor(defaultProjectPath: string) {
     // Keep store intentionally empty on startup.
-    // Sessions, messages, and permissions should be created only by real user actions or runtime events.
+    // Projects, messages, and permissions should be created only by real user actions or runtime events.
     void defaultProjectPath;
   }
 
-  async listSessions(): Promise<RuntimeSession[]> {
-    return [...this.sessions.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  async listProjects(): Promise<RuntimeProject[]> {
+    return [...this.projects.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
-  async getSession(sessionId: string): Promise<RuntimeSession | null> {
-    return this.sessions.get(sessionId) ?? null;
+  async getProject(projectId: string): Promise<RuntimeProject | null> {
+    return this.projects.get(projectId) ?? null;
   }
 
-  async getGeminiSessionCapabilities(sessionId: string): Promise<GeminiSessionCapabilities> {
-    const session = await this.getSession(sessionId);
-    if (!session) {
+  async getGeminiProjectCapabilities(projectId: string): Promise<GeminiProjectCapabilities> {
+    const project = await this.getProject(projectId);
+    if (!project) {
       throw new Error('SESSION_NOT_FOUND');
     }
     return {
-      sessionId,
+      projectId,
       fetchedAt: new Date().toISOString(),
       modes: {
-        currentModeId: session.metadata.approvalPolicy === 'yolo' ? 'yolo' : 'default',
+        currentModeId: project.metadata.approvalPolicy === 'yolo' ? 'yolo' : 'default',
         availableModes: [
           { id: 'default', label: 'Default' },
           { id: 'yolo', label: 'YOLO' },
         ],
       },
       models: {
-        currentModelId: session.metadata.model ?? null,
-        availableModels: session.metadata.model
-          ? [{ id: session.metadata.model, label: session.metadata.model }]
+        currentModelId: project.metadata.model ?? null,
+        availableModels: project.metadata.model
+          ? [{ id: project.metadata.model, label: project.metadata.model }]
           : [],
       },
     };
   }
 
-  async createSession(input: CreateSessionInput): Promise<RuntimeSession> {
+  async createProject(input: CreateProjectInput): Promise<RuntimeProject> {
     const now = new Date().toISOString();
     const model = normalizeModel(input.model);
-    const session: RuntimeSession = {
+    const project: RuntimeProject = {
       id: randomUUID(),
       metadata: {
         flavor: input.flavor,
@@ -307,23 +307,23 @@ class MockRuntimeStore implements RuntimeStoreBackend {
       riskScore: input.riskScore ?? 20,
     };
 
-    this.sessions.set(session.id, session);
-    this.messages.set(session.id, []);
-    return session;
+    this.projects.set(project.id, project);
+    this.messages.set(project.id, []);
+    return project;
   }
 
-  async updateApprovalPolicy(sessionId: string, approvalPolicy: ApprovalPolicy): Promise<RuntimeSession> {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
+  async updateProjectApprovalPolicy(projectId: string, approvalPolicy: ApprovalPolicy): Promise<RuntimeProject> {
+    const project = this.projects.get(projectId);
+    if (!project) {
       throw new Error('SESSION_NOT_FOUND');
     }
-    session.metadata.approvalPolicy = approvalPolicy;
-    session.updatedAt = new Date().toISOString();
-    return session;
+    project.metadata.approvalPolicy = approvalPolicy;
+    project.updatedAt = new Date().toISOString();
+    return project;
   }
 
-  async listMessages(sessionId: string, options: { afterSeq?: number; afterId?: string; limit?: number } = {}): Promise<RuntimeMessage[]> {
-    const base = this.messages.get(sessionId) ?? [];
+  async listMessages(projectId: string, options: { afterSeq?: number; afterId?: string; limit?: number } = {}): Promise<RuntimeMessage[]> {
+    const base = this.messages.get(projectId) ?? [];
     const sorted = [...base].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const withSeq = sorted.map((message, index) => ({
       ...message,
@@ -373,24 +373,24 @@ class MockRuntimeStore implements RuntimeStoreBackend {
     return normalizedLimit === null ? filtered : filtered.slice(0, normalizedLimit);
   }
 
-  async appendMessage(sessionId: string, input: AppendMessageInput): Promise<RuntimeMessage> {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
+  async appendMessage(projectId: string, input: AppendMessageInput): Promise<RuntimeMessage> {
+    const project = this.projects.get(projectId);
+    if (!project) {
       throw new Error('SESSION_NOT_FOUND');
     }
 
     const isAgentMessage = input.meta?.role === 'agent';
     const isUserPrompt = input.type === 'message' && !isAgentMessage;
     if (isUserPrompt) {
-      session.state.status = 'running';
+      project.state.status = 'running';
     }
     if (isAgentMessage) {
-      session.state.status = 'idle';
+      project.state.status = 'idle';
     }
 
     const message: RuntimeMessage = {
       id: randomUUID(),
-      sessionId,
+      projectId,
       type: input.type,
       title: input.title ?? input.type,
       text: input.text,
@@ -398,30 +398,30 @@ class MockRuntimeStore implements RuntimeStoreBackend {
       createdAt: new Date().toISOString(),
     };
 
-    const list = this.messages.get(sessionId) ?? [];
+    const list = this.messages.get(projectId) ?? [];
     list.push(message);
-    this.messages.set(sessionId, list);
+    this.messages.set(projectId, list);
 
-    session.updatedAt = message.createdAt;
-    this.sessions.set(sessionId, session);
+    project.updatedAt = message.createdAt;
+    this.projects.set(projectId, project);
 
     // Mock Agent Response Logic
     if (isUserPrompt) {
-      const existingTimer = this.pendingAgentReplies.get(sessionId);
+      const existingTimer = this.pendingAgentReplies.get(projectId);
       if (existingTimer) {
         clearTimeout(existingTimer);
       }
 
       const timer = setTimeout(() => {
-        this.pendingAgentReplies.delete(sessionId);
-        void this.appendMessage(sessionId, {
+        this.pendingAgentReplies.delete(projectId);
+        void this.appendMessage(projectId, {
           type: 'message',
           title: 'Text Reply',
-          text: `[${session.metadata.flavor}] I received your message: "${input.text}". How can I help you with the code in ${session.metadata.path}?`,
+          text: `[${project.metadata.flavor}] I received your message: "${input.text}". How can I help you with the code in ${project.metadata.path}?`,
           meta: { role: 'agent' },
         });
       }, 1500);
-      this.pendingAgentReplies.set(sessionId, timer);
+      this.pendingAgentReplies.set(projectId, timer);
     }
 
     return message;
@@ -429,10 +429,10 @@ class MockRuntimeStore implements RuntimeStoreBackend {
 
   async appendChatEvent(
     chatId: string,
-    input: { sessionId: string; runId?: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
+    input: { projectId: string; runId?: string; type: string; title?: string; text: string; meta?: Record<string, unknown> },
   ): Promise<RuntimeMessage> {
-    const session = this.sessions.get(input.sessionId);
-    if (!session) {
+    const project = this.projects.get(input.projectId);
+    if (!project) {
       throw new Error('SESSION_NOT_FOUND');
     }
 
@@ -440,7 +440,7 @@ class MockRuntimeStore implements RuntimeStoreBackend {
     const seq = list.length + 1;
     const message: RuntimeMessage = {
       id: randomUUID(),
-      sessionId: input.sessionId,
+      projectId: input.projectId,
       type: input.type,
       title: input.title ?? input.type,
       text: input.text,
@@ -454,18 +454,18 @@ class MockRuntimeStore implements RuntimeStoreBackend {
     };
     list.push(message);
     this.chatEvents.set(chatId, list);
-    session.updatedAt = message.createdAt;
-    this.sessions.set(input.sessionId, session);
+    project.updatedAt = message.createdAt;
+    this.projects.set(input.projectId, project);
     return message;
   }
 
-  async getLatestUserMessageForAction(sessionId: string, chatId?: string): Promise<AppendMessageInput | null> {
+  async getLatestUserMessageForAction(projectId: string, chatId?: string): Promise<AppendMessageInput | null> {
     if (chatId && chatId.trim().length > 0) {
       const events = this.chatEvents.get(chatId.trim()) ?? [];
       for (let index = events.length - 1; index >= 0; index -= 1) {
         const event = events[index];
         const role = typeof event.meta?.role === 'string' ? event.meta.role.trim() : '';
-        if (event.sessionId === sessionId && role === 'user') {
+        if (event.projectId === projectId && role === 'user') {
           return {
             type: event.type,
             title: event.title,
@@ -477,7 +477,7 @@ class MockRuntimeStore implements RuntimeStoreBackend {
       return null;
     }
 
-    const messages = this.messages.get(sessionId) ?? [];
+    const messages = this.messages.get(projectId) ?? [];
     for (let index = messages.length - 1; index >= 0; index -= 1) {
       const message = messages[index];
       const role = typeof message.meta?.role === 'string' ? message.meta.role.trim() : '';
@@ -493,50 +493,50 @@ class MockRuntimeStore implements RuntimeStoreBackend {
     return null;
   }
 
-  async applySessionAction(sessionId: string, action: SessionAction, _chatId?: string): Promise<{ accepted: boolean; message: string; at: string }> {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
+  async applyProjectAction(projectId: string, action: ProjectAction, _chatId?: string): Promise<{ accepted: boolean; message: string; at: string }> {
+    const project = this.projects.get(projectId);
+    if (!project) {
       throw new Error('SESSION_NOT_FOUND');
     }
 
     const at = new Date().toISOString();
-    const statusByAction: Record<Exclude<SessionAction, 'kill'>, SessionStatus> = {
+    const statusByAction: Record<Exclude<ProjectAction, 'kill'>, ProjectStatus> = {
       abort: 'idle',
       retry: 'running',
       resume: 'running',
     };
 
     if (action !== 'kill') {
-      session.state.status = statusByAction[action];
-      session.updatedAt = at;
+      project.state.status = statusByAction[action];
+      project.updatedAt = at;
     }
 
     if (action === 'retry' || action === 'resume') {
-      session.riskScore = Math.max(10, session.riskScore - 15);
+      project.riskScore = Math.max(10, project.riskScore - 15);
     }
 
     if (action === 'abort' || action === 'kill') {
-      const pendingReply = this.pendingAgentReplies.get(sessionId);
+      const pendingReply = this.pendingAgentReplies.get(projectId);
       if (pendingReply) {
         clearTimeout(pendingReply);
-        this.pendingAgentReplies.delete(sessionId);
+        this.pendingAgentReplies.delete(projectId);
       }
     }
 
     if (action === 'kill') {
-      this.sessions.delete(sessionId);
-      this.messages.delete(sessionId);
+      this.projects.delete(projectId);
+      this.messages.delete(projectId);
       for (const [permissionId, permission] of this.permissions.entries()) {
-        if (permission.sessionId === sessionId) {
+        if (permission.projectId === projectId) {
           this.permissions.delete(permissionId);
         }
       }
     } else {
-      this.sessions.set(sessionId, session);
-      await this.appendMessage(sessionId, {
+      this.projects.set(projectId, project);
+      await this.appendMessage(projectId, {
         type: 'tool',
         title: 'Command Execution',
-        text: `$ session ${action}\nexit code: 0`,
+        text: `$ project ${action}\nexit code: 0`,
         meta: { system: true, action },
       });
     }
@@ -548,13 +548,13 @@ class MockRuntimeStore implements RuntimeStoreBackend {
     };
   }
 
-  async isSessionRunning(sessionId: string, _chatId?: string): Promise<boolean> {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
+  async isProjectRunning(projectId: string, _chatId?: string): Promise<boolean> {
+    const project = this.projects.get(projectId);
+    if (!project) {
       throw new Error('SESSION_NOT_FOUND');
     }
 
-    return session.state.status === 'running';
+    return project.state.status === 'running';
   }
 
   async listPermissions(state?: PermissionRequest['state']): Promise<PermissionRequest[]> {
@@ -563,13 +563,13 @@ class MockRuntimeStore implements RuntimeStoreBackend {
   }
 
   async createPermission(input: CreatePermissionInput): Promise<PermissionRequest> {
-    if (!this.sessions.has(input.sessionId)) {
+    if (!this.projects.has(input.projectId)) {
       throw new Error('SESSION_NOT_FOUND');
     }
 
     const permission: PermissionRequest = {
       id: randomUUID(),
-      sessionId: input.sessionId,
+      projectId: input.projectId,
       ...(typeof input.chatId === 'string' && input.chatId.trim().length > 0
         ? { chatId: input.chatId.trim() }
         : {}),
@@ -652,55 +652,55 @@ export class RuntimeStore {
     this.runtimeExecutor = null;
   }
 
-  async listSessions() {
-    return this.delegate.listSessions();
+  async listProjects() {
+    return this.delegate.listProjects();
   }
 
-  async getSession(sessionId: string) {
-    return this.delegate.getSession(sessionId);
+  async getProject(projectId: string) {
+    return this.delegate.getProject(projectId);
   }
 
-  async getGeminiSessionCapabilities(sessionId: string) {
+  async getGeminiProjectCapabilities(projectId: string) {
     if (this.runtimeExecutor) {
-      return this.runtimeExecutor.getGeminiSessionCapabilities(sessionId);
+      return this.runtimeExecutor.getGeminiProjectCapabilities(projectId);
     }
-    if ('getGeminiSessionCapabilities' in this.delegate && typeof this.delegate.getGeminiSessionCapabilities === 'function') {
-      return this.delegate.getGeminiSessionCapabilities(sessionId);
+    if ('getGeminiProjectCapabilities' in this.delegate && typeof this.delegate.getGeminiProjectCapabilities === 'function') {
+      return this.delegate.getGeminiProjectCapabilities(projectId);
     }
     throw new Error('GEMINI_CAPABILITIES_NOT_SUPPORTED');
   }
 
-  async createSession(input: CreateSessionInput) {
+  async createProject(input: CreateProjectInput) {
     if (input.branch) {
       await ensureWorktree(input.path, input.branch);
     }
 
-    const session = await this.delegate.createSession(input);
+    const project = await this.delegate.createProject(input);
 
     this.emitRealtimeChannel({
-      type: 'session.created',
-      sessionId: session.id,
-      session,
+      type: 'project.created',
+      projectId: project.id,
+      project,
     });
 
-    return session;
+    return project;
   }
 
-  async updateApprovalPolicy(sessionId: string, approvalPolicy: ApprovalPolicy) {
-    if (typeof this.delegate.updateApprovalPolicy === 'function') {
-      const session = await this.delegate.updateApprovalPolicy(sessionId, approvalPolicy);
+  async updateProjectApprovalPolicy(projectId: string, approvalPolicy: ApprovalPolicy) {
+    if (typeof this.delegate.updateProjectApprovalPolicy === 'function') {
+      const project = await this.delegate.updateProjectApprovalPolicy(projectId, approvalPolicy);
       this.emitRealtimeChannel({
-        type: 'session.updated',
-        sessionId,
-        session,
+        type: 'project.updated',
+        projectId,
+        project,
       });
-      return session;
+      return project;
     }
     throw new Error('UPDATE_APPROVAL_POLICY_NOT_SUPPORTED');
   }
 
-  async listMessages(sessionId: string, options?: { afterSeq?: number; afterId?: string; limit?: number }) {
-    return this.delegate.listMessages(sessionId, options);
+  async listMessages(projectId: string, options?: { afterSeq?: number; afterId?: string; limit?: number }) {
+    return this.delegate.listMessages(projectId, options);
   }
 
   async listChatEvents(chatId: string, options?: { afterSeq?: number; limit?: number }) {
@@ -710,11 +710,11 @@ export class RuntimeStore {
     return [];
   }
 
-  async appendMessage(sessionId: string, input: AppendMessageInput) {
-    const event = await this.delegate.appendMessage(sessionId, input);
+  async appendMessage(projectId: string, input: AppendMessageInput) {
+    const event = await this.delegate.appendMessage(projectId, input);
     this.emitRealtimeChannel({
       type: 'event.appended',
-      sessionId,
+      projectId,
       ...extractEventChatScope(event),
       event,
       source: 'mutation',
@@ -722,18 +722,18 @@ export class RuntimeStore {
     return event;
   }
 
-  async submitUserPrompt(sessionId: string, input: AppendMessageInput) {
+  async submitUserPrompt(projectId: string, input: AppendMessageInput) {
     const promptInput = asUserPromptInput(input);
-    const created = await this.delegate.appendMessage(sessionId, promptInput);
+    const created = await this.delegate.appendMessage(projectId, promptInput);
     this.emitRealtimeChannel({
       type: 'event.appended',
-      sessionId,
+      projectId,
       ...extractEventChatScope(created),
       event: created,
       source: 'mutation',
     });
     if (this.runtimeExecutor) {
-      await this.runtimeExecutor.triggerPersistedUserMessage(sessionId, promptInput);
+      await this.runtimeExecutor.triggerPersistedUserMessage(projectId, promptInput);
     }
     return created;
   }
@@ -746,7 +746,7 @@ export class RuntimeStore {
       const event = await this.delegate.appendChatEvent(chatId, input);
       this.emitRealtimeChannel({
         type: 'event.appended',
-        sessionId: input.sessionId,
+        projectId: input.projectId,
         chatId,
         event,
         source: 'mutation',
@@ -763,9 +763,9 @@ export class RuntimeStore {
     throw new Error('IMPORTED_AGENT_SESSION_NOT_SUPPORTED');
   }
 
-  async resolveProjectSessionIdByPath(projectPath: string) {
-    if (typeof this.delegate.resolveProjectSessionIdByPath === 'function') {
-      return this.delegate.resolveProjectSessionIdByPath(projectPath);
+  async resolveProjectIdByPath(projectPath: string) {
+    if (typeof this.delegate.resolveProjectIdByPath === 'function') {
+      return this.delegate.resolveProjectIdByPath(projectPath);
     }
     throw new Error('IMPORTED_AGENT_SESSION_NOT_SUPPORTED');
   }
@@ -802,10 +802,10 @@ export class RuntimeStore {
     if (typeof this.delegate.appendImportedAgentEvents === 'function') {
       const events = await this.delegate.appendImportedAgentEvents(input);
       for (const event of events) {
-        if ('sessionId' in event && typeof event.sessionId === 'string') {
+        if ('projectId' in event && typeof event.projectId === 'string') {
           this.emitRealtimeChannel({
             type: 'event.appended',
-            sessionId: event.sessionId,
+            projectId: event.projectId,
             chatId: input.chatId,
             event: event as RuntimeMessage,
             source: 'mutation',
@@ -842,10 +842,10 @@ export class RuntimeStore {
     if (typeof this.delegate.syncLatestImportedAgentEvents === 'function') {
       const result = await this.delegate.syncLatestImportedAgentEvents(input);
       for (const event of result.events) {
-        if ('sessionId' in event && typeof event.sessionId === 'string') {
+        if ('projectId' in event && typeof event.projectId === 'string') {
           this.emitRealtimeChannel({
             type: 'event.appended',
-            sessionId: event.sessionId,
+            projectId: event.projectId,
             chatId: input.chatId,
             event,
             source: 'mutation',
@@ -866,25 +866,25 @@ export class RuntimeStore {
     const created = await this.delegate.appendChatEvent(chatId, promptInput);
     this.emitRealtimeChannel({
       type: 'event.appended',
-      sessionId: promptInput.sessionId,
+      projectId: promptInput.projectId,
       chatId,
       event: created,
       source: 'mutation',
     });
     if (this.runtimeExecutor) {
-      const runtimeSessionId = typeof input.runtimeSessionId === 'string' && input.runtimeSessionId.trim().length > 0
-        ? input.runtimeSessionId.trim()
-        : promptInput.sessionId;
-      await this.runtimeExecutor.triggerPersistedUserMessage(runtimeSessionId, {
+      const runtimeProjectId = typeof input.runtimeProjectId === 'string' && input.runtimeProjectId.trim().length > 0
+        ? input.runtimeProjectId.trim()
+        : promptInput.projectId;
+      await this.runtimeExecutor.triggerPersistedUserMessage(runtimeProjectId, {
         type: promptInput.type,
         title: promptInput.title,
         text: promptInput.text,
         meta: {
           ...(promptInput.meta ?? {}),
-          ...(runtimeSessionId !== promptInput.sessionId
+          ...(runtimeProjectId !== promptInput.projectId
             ? {
-                runtimeSessionId,
-                runtimePersistenceSessionId: promptInput.sessionId,
+                runtimeProjectId,
+                runtimePersistenceProjectId: promptInput.projectId,
               }
             : {}),
         },
@@ -899,16 +899,16 @@ export class RuntimeStore {
       throw new Error('COMMAND_REQUIRED');
     }
 
-    const persistenceSession = await this.delegate.getSession(input.sessionId);
+    const persistenceSession = await this.delegate.getProject(input.projectId);
     if (!persistenceSession) {
       throw new Error('SESSION_NOT_FOUND');
     }
-    const runtimeSessionId = typeof input.runtimeSessionId === 'string' && input.runtimeSessionId.trim().length > 0
-      ? input.runtimeSessionId.trim()
-      : input.sessionId;
-    const executionSession = runtimeSessionId === input.sessionId
+    const runtimeProjectId = typeof input.runtimeProjectId === 'string' && input.runtimeProjectId.trim().length > 0
+      ? input.runtimeProjectId.trim()
+      : input.projectId;
+    const executionSession = runtimeProjectId === input.projectId
       ? persistenceSession
-      : await this.delegate.getSession(runtimeSessionId);
+      : await this.delegate.getProject(runtimeProjectId);
     if (!executionSession) {
       throw new Error('RUNTIME_SESSION_NOT_FOUND');
     }
@@ -938,7 +938,7 @@ export class RuntimeStore {
     const output = trimTerminalOutput([stdout, stderr].filter(Boolean).join('\n'));
     const preview = output || '(no output)';
     return this.appendChatEvent(chatId, {
-      sessionId: input.sessionId,
+      projectId: input.projectId,
       type: 'tool',
       title: exitCode === 0 ? 'Terminal completed' : 'Terminal failed',
       text: `$ ${command}\n${preview}`,
@@ -954,77 +954,77 @@ export class RuntimeStore {
         exitCode,
         command,
         execCwd: cwd,
-        ...(runtimeSessionId !== input.sessionId ? { runtimeSessionId } : {}),
+        ...(runtimeProjectId !== input.projectId ? { runtimeProjectId } : {}),
       },
     });
   }
 
-  async listRealtimeEvents(sessionId: string, options?: { afterCursor?: number; limit?: number; chatId?: string }) {
+  async listRealtimeEvents(projectId: string, options?: { afterCursor?: number; limit?: number; chatId?: string }) {
     if (this.runtimeExecutor) {
-      return this.runtimeExecutor.listRealtimeEvents(sessionId, options);
+      return this.runtimeExecutor.listRealtimeEvents(projectId, options);
     }
     if ('listRealtimeEvents' in this.delegate && typeof this.delegate.listRealtimeEvents === 'function') {
-      return this.delegate.listRealtimeEvents(sessionId, options);
+      return this.delegate.listRealtimeEvents(projectId, options);
     }
     return { events: [], cursor: 0 };
   }
 
-  async applySessionAction(sessionId: string, action: SessionAction, chatId?: string) {
+  async applyProjectAction(projectId: string, action: ProjectAction, chatId?: string) {
     const sessionForCleanup = action === 'kill'
-      ? await this.delegate.getSession(sessionId).catch(() => null)
+      ? await this.delegate.getProject(projectId).catch(() => null)
       : null;
     if (this.runtimeExecutor) {
       if (action === 'retry' || action === 'resume') {
-        const result = await this.delegate.applySessionAction(sessionId, action, chatId);
+        const result = await this.delegate.applyProjectAction(projectId, action, chatId);
         const latestUserMessage = typeof this.delegate.getLatestUserMessageForAction === 'function'
-          ? await this.delegate.getLatestUserMessageForAction(sessionId, chatId)
+          ? await this.delegate.getLatestUserMessageForAction(projectId, chatId)
           : null;
         if (latestUserMessage) {
-          await this.runtimeExecutor.triggerPersistedUserMessage(sessionId, latestUserMessage);
+          await this.runtimeExecutor.triggerPersistedUserMessage(projectId, latestUserMessage);
         }
-        this.emitRealtimeChannel({ type: 'session.action', sessionId, ...(chatId ? { chatId } : {}), action });
+        this.emitRealtimeChannel({ type: 'project.action', projectId, ...(chatId ? { chatId } : {}), action });
         return result;
       }
       if (action === 'kill') {
-        await this.runtimeExecutor.applySessionAction(sessionId, 'abort');
-        const result = await this.delegate.applySessionAction(sessionId, action, chatId);
+        await this.runtimeExecutor.applyProjectAction(projectId, 'abort');
+        const result = await this.delegate.applyProjectAction(projectId, action, chatId);
         await this.cleanupKilledSessionWorktree(sessionForCleanup);
-        this.emitRealtimeChannel({ type: 'session.action', sessionId, ...(chatId ? { chatId } : {}), action });
+        this.emitRealtimeChannel({ type: 'project.action', projectId, ...(chatId ? { chatId } : {}), action });
         return result;
       }
-      await this.runtimeExecutor.applySessionAction(sessionId, action, chatId);
-      const result = await this.delegate.applySessionAction(sessionId, action, chatId);
-      this.emitRealtimeChannel({ type: 'session.action', sessionId, ...(chatId ? { chatId } : {}), action });
+      await this.runtimeExecutor.applyProjectAction(projectId, action, chatId);
+      const result = await this.delegate.applyProjectAction(projectId, action, chatId);
+      this.emitRealtimeChannel({ type: 'project.action', projectId, ...(chatId ? { chatId } : {}), action });
       return result;
     }
-    const result = await this.delegate.applySessionAction(sessionId, action, chatId);
+    const result = await this.delegate.applyProjectAction(projectId, action, chatId);
     if (action === 'kill') {
       await this.cleanupKilledSessionWorktree(sessionForCleanup);
     }
-    this.emitRealtimeChannel({ type: 'session.action', sessionId, ...(chatId ? { chatId } : {}), action });
+    this.emitRealtimeChannel({ type: 'project.action', projectId, ...(chatId ? { chatId } : {}), action });
     return result;
   }
 
-  private async cleanupKilledSessionWorktree(session: RuntimeSession | null): Promise<void> {
-    const branch = typeof session?.metadata.branch === 'string' && session.metadata.branch.trim().length > 0
-      ? session.metadata.branch.trim()
+  private async cleanupKilledSessionWorktree(project: RuntimeProject | null): Promise<void> {
+    const branch = typeof project?.metadata.branch === 'string' && project.metadata.branch.trim().length > 0
+      ? project.metadata.branch.trim()
       : null;
-    if (!session || !branch) {
+    if (!project || !branch) {
       return;
     }
-    const projectPath = this.resolveExecutionCwd(session.metadata.path);
+    const projectPath = this.resolveExecutionCwd(project.metadata.path);
     await removeWorktree(projectPath, branch).catch(() => undefined);
   }
 
-  async isSessionRunning(sessionId: string, chatId?: string) {
+  async isProjectRunning(projectId: string, chatId?: string) {
     if (this.runtimeExecutor) {
       const [runtimeRunning, persistedRunning] = await Promise.all([
-        this.runtimeExecutor.isSessionRunning(sessionId, chatId),
-        this.delegate.isSessionRunning(sessionId, chatId),
+        this.runtimeExecutor.isProjectRunning(projectId, chatId),
+        this.delegate.isProjectRunning(projectId, chatId),
       ]);
       return runtimeRunning || persistedRunning;
     }
-    return this.delegate.isSessionRunning(sessionId, chatId);
+    return this.delegate.isProjectRunning(projectId, chatId);
   }
 
   beginShutdownDrain(): void {
@@ -1058,7 +1058,7 @@ export class RuntimeStore {
       : await this.delegate.createPermission(input);
     this.emitRealtimeChannel({
       type: 'permission.created',
-      sessionId: permission.sessionId,
+      projectId: permission.projectId,
       ...(typeof permission.chatId === 'string' && permission.chatId.trim().length > 0
         ? { chatId: permission.chatId.trim() }
         : {}),
@@ -1077,17 +1077,17 @@ export class RuntimeStore {
         decision !== 'deny'
         && typeof this.delegate.getLatestUserMessageForAction === 'function'
       ) {
-        const runtimeStillRunning = await this.runtimeExecutor.isSessionRunning(updated.sessionId, normalizedChatId);
+        const runtimeStillRunning = await this.runtimeExecutor.isProjectRunning(updated.projectId, normalizedChatId);
         if (!runtimeStillRunning) {
-          const latestUserMessage = await this.delegate.getLatestUserMessageForAction(updated.sessionId, normalizedChatId);
+          const latestUserMessage = await this.delegate.getLatestUserMessageForAction(updated.projectId, normalizedChatId);
           if (latestUserMessage) {
-            await this.runtimeExecutor.triggerPersistedUserMessage(updated.sessionId, latestUserMessage);
+            await this.runtimeExecutor.triggerPersistedUserMessage(updated.projectId, latestUserMessage);
           }
         }
       }
       this.emitRealtimeChannel({
         type: 'permission.updated',
-        sessionId: updated.sessionId,
+        projectId: updated.projectId,
         ...(normalizedChatId ? { chatId: normalizedChatId } : {}),
         permission: updated,
       });
@@ -1099,7 +1099,7 @@ export class RuntimeStore {
       : undefined;
     this.emitRealtimeChannel({
       type: 'permission.updated',
-      sessionId: updated.sessionId,
+      projectId: updated.projectId,
       ...(normalizedChatId ? { chatId: normalizedChatId } : {}),
       permission: updated,
     });
@@ -1119,13 +1119,13 @@ export class RuntimeStore {
       ? { chatId: subscription.filter.chatId }
       : {};
     const unsubscribeRuntime = this.runtimeExecutor?.subscribeRealtimeEvents?.(
-      subscription.filter.sessionId,
+      subscription.filter.projectId,
       runtimeEventFilter,
       (record) => {
         const eventChatScope = extractEventChatScope(record.event);
         this.deliverRealtimeChannelEvent(subscription, {
           type: 'event.appended',
-          sessionId: record.event.sessionId,
+          projectId: record.event.projectId,
           ...eventChatScope,
           event: record.event,
           cursor: record.cursor,
@@ -1171,12 +1171,12 @@ export class RuntimeStore {
 }
 
 function normalizeRealtimeChannelFilter(filter: RuntimeRealtimeChannelFilter): RuntimeRealtimeChannelFilter {
-  const sessionId = filter.sessionId.trim();
+  const projectId = filter.projectId.trim();
   const chatId = typeof filter.chatId === 'string' && filter.chatId.trim().length > 0
     ? filter.chatId.trim()
     : undefined;
   return {
-    sessionId,
+    projectId,
     ...(chatId ? { chatId } : {}),
     ...(filter.includeUnassigned ? { includeUnassigned: true } : {}),
   };
@@ -1193,7 +1193,7 @@ function matchesRealtimeChannelFilter(
   filter: RuntimeRealtimeChannelFilter,
   event: RuntimeRealtimeChannelEvent,
 ): boolean {
-  if (filter.sessionId !== event.sessionId) {
+  if (filter.projectId !== event.projectId) {
     return false;
   }
   if (!filter.chatId) {

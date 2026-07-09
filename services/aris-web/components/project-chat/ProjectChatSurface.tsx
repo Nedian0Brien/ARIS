@@ -51,11 +51,11 @@ import { SubagentPanel } from '@/components/project-chat/SubagentPanel';
 import { isTerminalRunStatus } from '@/lib/happy/chatRuntime';
 import { hydratePersistedPermissions, mergeRenderablePermissions } from '@/lib/happy/permissions';
 import { withAppBasePath } from '@/lib/routing/appPath';
-import type { PermissionDecision, SessionChat, SessionEventsPage, SessionSummary, UiEvent } from '@/lib/happy/types';
+import type { PermissionDecision, ProjectChat, ProjectEventsPage, ProjectSummary, UiEvent } from '@/lib/happy/types';
 import { readLocalStorage, removeLocalStorage, writeLocalStorage } from '@/lib/browser/localStorage';
 import { abortProjectChat } from '@/lib/runtime/abortChat';
 import { usePermissions } from '@/lib/hooks/usePermissions';
-import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
+import { useProjectRuntime } from '@/lib/hooks/useProjectRuntime';
 import { useProviderModels } from '@/lib/settings/useProviderModels';
 import {
   BUILTIN_FALLBACK_BY_PROVIDER,
@@ -514,11 +514,11 @@ function ProjectParallelPanelTree({
   panelRuntime,
   panelState,
   recentPreview,
-  session,
+  project,
   tokenLabel,
   workspaceOpen,
 }: {
-  chats: SessionChat[];
+  chats: ProjectChat[];
   isOperator: boolean;
   modelLabel: string;
   node: ProjectParallelPanelNode;
@@ -535,7 +535,7 @@ function ProjectParallelPanelTree({
   panelRuntime: ProjectWorkspacePanelRuntimeMap;
   panelState: ProjectParallelPanelTreeState;
   recentPreview: string;
-  session: SessionSummary;
+  project: ProjectSummary;
   tokenLabel: string;
   workspaceOpen: boolean;
 }) {
@@ -577,7 +577,7 @@ function ProjectParallelPanelTree({
         panelRuntime={panelRuntime[node.panelId] ?? null}
         panelRuntimeError={panelRuntimeErrors[node.panelId] ?? null}
         recentPreview={recentPreview}
-        session={session}
+        project={project}
         showClose={Object.keys(panelState.panels).length > 1}
         isWorkspaceActive={workspaceOpen && panelState.activePanelId === node.panelId}
         tokenLabel={tokenLabel}
@@ -615,7 +615,7 @@ function ProjectParallelPanelTree({
           panelRuntime={panelRuntime}
           panelState={panelState}
           recentPreview={recentPreview}
-          session={session}
+          project={project}
           tokenLabel={tokenLabel}
           workspaceOpen={workspaceOpen}
         />
@@ -646,7 +646,7 @@ function ProjectParallelPanelTree({
           panelRuntime={panelRuntime}
           panelState={panelState}
           recentPreview={recentPreview}
-          session={session}
+          project={project}
           tokenLabel={tokenLabel}
           workspaceOpen={workspaceOpen}
         />
@@ -673,12 +673,12 @@ function ProjectParallelChatPane({
   panelRuntime,
   panelRuntimeError,
   recentPreview,
-  session,
+  project,
   showClose,
   isWorkspaceActive,
   tokenLabel,
 }: {
-  chat: SessionChat;
+  chat: ProjectChat;
   isActivePanel: boolean;
   isOperator: boolean;
   modelLabel: string;
@@ -695,12 +695,12 @@ function ProjectParallelChatPane({
   panelRuntime: ProjectWorkspacePanelRuntime | null;
   panelRuntimeError: string | null;
   recentPreview: string;
-  session: SessionSummary;
+  project: ProjectSummary;
   showClose: boolean;
   isWorkspaceActive: boolean;
   tokenLabel: string;
 }) {
-  const projectId = session.id;
+  const projectId = project.id;
   const [events, setEvents] = useState<UiEvent[]>([]);
   const [prompt, setPrompt] = useState('');
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
@@ -709,7 +709,7 @@ function ProjectParallelChatPane({
   const [error, setError] = useState<string | null>(null);
   const [composerMode, setComposerMode] = useState<ComposerMode>('agent');
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<ModelProvider>(() => providerFromAgent(chat.agent ?? session.agent));
+  const [selectedProvider, setSelectedProvider] = useState<ModelProvider>(() => providerFromAgent(chat.agent ?? project.agent));
   const { data: panelModelSettings } = useProviderModels();
 
   const panelProviderOptions = useMemo<Record<ModelProvider, Array<{ id: string; label: string; meta?: string }>>>(() => {
@@ -730,7 +730,7 @@ function ProjectParallelChatPane({
     return { claude: toOptions('claude'), codex: toOptions('codex'), gemini: toOptions('gemini') };
   }, [panelModelSettings]);
 
-  const [selectedModelId, setSelectedModelId] = useState<string>(() => chat.model ?? fallbackDefaultForProvider(providerFromAgent(chat.agent ?? session.agent)));
+  const [selectedModelId, setSelectedModelId] = useState<string>(() => chat.model ?? fallbackDefaultForProvider(providerFromAgent(chat.agent ?? project.agent)));
 
   const activeOption = useMemo(() => {
     const list = panelProviderOptions[selectedProvider] ?? [];
@@ -742,9 +742,9 @@ function ProjectParallelChatPane({
   const [selectedEffort, setSelectedEffort] = useState<ReasoningEffort>(() => normalizeReasoningEffort(chat.modelReasoningEffort));
   const [dropEdge, setDropEdge] = useState<ProjectParallelPanelDropEdge | null>(null);
   const frameRef = useRef<HTMLElement | null>(null);
-  const activeAgent: SessionSummary['agent'] = selectedProvider;
-  const runtimeSessionId = panelRuntime?.runtimeSessionId ?? projectId;
-  const { isRunning: runtimeRunning } = useSessionRuntime(runtimeSessionId, chat.id, true);
+  const activeAgent: ProjectSummary['agent'] = selectedProvider;
+  const runtimeProjectId = panelRuntime?.runtimeProjectId ?? projectId;
+  const { isRunning: runtimeRunning } = useProjectRuntime(runtimeProjectId, chat.id, true);
   const runtimeBadge = resolvePanelRuntimeBadge(panelRuntime, runtimeRunning, panelRuntimeError);
   const runtimeNeedsRepair = runtimeBadge.tone === 'pending' || runtimeBadge.tone === 'error';
   const visibleEvents = events;
@@ -753,7 +753,7 @@ function ProjectParallelChatPane({
     loadingPermissionId,
     decidePermission,
     error: permissionError,
-  } = usePermissions(runtimeSessionId, [], chat.id, chat.isDefault, true);
+  } = usePermissions(runtimeProjectId, [], chat.id, chat.isDefault, true);
   const persistedPermissions = useMemo(
     () => hydratePersistedPermissions(visibleEvents),
     [visibleEvents],
@@ -771,17 +771,17 @@ function ProjectParallelChatPane({
     setError(null);
     setComposerMode('agent');
     setModelSelectorOpen(false);
-    setSelectedProvider(providerFromAgent(chat.agent ?? session.agent));
-    setSelectedModelId(chat.model ?? fallbackDefaultForProvider(providerFromAgent(chat.agent ?? session.agent)));
+    setSelectedProvider(providerFromAgent(chat.agent ?? project.agent));
+    setSelectedModelId(chat.model ?? fallbackDefaultForProvider(providerFromAgent(chat.agent ?? project.agent)));
     setSelectedEffort(normalizeReasoningEffort(chat.modelReasoningEffort));
-  }, [chat.agent, chat.id, chat.model, chat.modelReasoningEffort, modelLabel, session.agent]);
+  }, [chat.agent, chat.id, chat.model, chat.modelReasoningEffort, modelLabel, project.agent]);
 
   useEffect(() => {
     if (chat?.model) {
       setSelectedModelId(chat.model);
       return;
     }
-    const provider = providerFromAgent(chat.agent ?? session.agent);
+    const provider = providerFromAgent(chat.agent ?? project.agent);
     const def = panelModelSettings?.providers?.[provider]?.defaultModelId;
     if (def) {
       setSelectedModelId(def);
@@ -791,7 +791,7 @@ function ProjectParallelChatPane({
     if (firstOption) {
       setSelectedModelId(firstOption);
     }
-  }, [chat?.id, chat?.model, chat?.agent, session.agent, panelModelSettings, panelProviderOptions]);
+  }, [chat?.id, chat?.model, chat?.agent, project.agent, panelModelSettings, panelProviderOptions]);
 
   const handleComposerProviderSelect = (provider: ModelProvider) => {
     setSelectedProvider(provider);
@@ -808,7 +808,7 @@ function ProjectParallelChatPane({
   };
 
   const handleMentionProject = () => {
-    setPrompt((value) => `${value}${value.endsWith(' ') || value.length === 0 ? '' : ' '}@${displayProjectName(session)} `);
+    setPrompt((value) => `${value}${value.endsWith(' ') || value.length === 0 ? '' : ' '}@${displayProjectName(project)} `);
   };
 
   useEffect(() => {
@@ -925,7 +925,7 @@ function ProjectParallelChatPane({
     try {
       await abortProjectChat({
         projectId,
-        runtimeSessionId: runtimeSessionId !== projectId ? runtimeSessionId : undefined,
+        runtimeProjectId: runtimeProjectId !== projectId ? runtimeProjectId : undefined,
         chatId: chat.id,
       });
     } catch (abortError) {
@@ -934,7 +934,7 @@ function ProjectParallelChatPane({
       setIsAborting(false);
       setIsSubmitting(false);
     }
-  }, [chat.id, isAborting, projectId, projectRunActive, runtimeSessionId]);
+  }, [chat.id, isAborting, projectId, projectRunActive, runtimeProjectId]);
 
   const isCompatiblePanelDrop = useCallback((event: DragEvent<HTMLElement>) => {
     if (!hasProjectChatDragPayload(event)) return false;
@@ -1192,7 +1192,7 @@ export function ProjectChatSurface({
   projectPath,
   recentPreview,
   selectedChatId,
-  session,
+  project,
   surfaceMode = 'full',
   themeMode,
   tokenLabel,
@@ -1209,16 +1209,16 @@ export function ProjectChatSurface({
   projectPath: string;
   recentPreview: string;
   selectedChatId: string | null;
-  session: SessionSummary;
+  project: ProjectSummary;
   surfaceMode?: ProjectChatSurfaceMode;
   themeMode?: ThemeMode;
   tokenLabel: string;
 }) {
-  const projectId = session.id;
-  const [chats, setChats] = useState<SessionChat[]>([]);
+  const projectId = project.id;
+  const [chats, setChats] = useState<ProjectChat[]>([]);
   const [events, setEvents] = useState<UiEvent[]>([]);
   const [eventsForChatId, setEventsForChatId] = useState<string | null>(null);
-  const [eventsPage, setEventsPage] = useState<Partial<SessionEventsPage> | null>(null);
+  const [eventsPage, setEventsPage] = useState<Partial<ProjectEventsPage> | null>(null);
   const [prompt, setPrompt] = useState('');
   const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
@@ -1230,7 +1230,7 @@ export function ProjectChatSurface({
   const [projectRunNowMs, setProjectRunNowMs] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
   const activeChat = selectedChatId ? chats.find((chat) => chat.id === selectedChatId) ?? null : null;
-  const { isRunning: runtimeRunning } = useSessionRuntime(projectId, selectedChatId, Boolean(selectedChatId));
+  const { isRunning: runtimeRunning } = useProjectRuntime(projectId, selectedChatId, Boolean(selectedChatId));
   const {
     displayPermissions,
     loadingPermissionId,
@@ -1238,7 +1238,7 @@ export function ProjectChatSurface({
     error: permissionError,
   } = usePermissions(projectId, [], selectedChatId, activeChat?.isDefault ?? false, Boolean(selectedChatId));
   const runtimeModelLabel = activeChat?.model ?? modelLabel;
-  const runtimeAgent = activeChat?.agent ?? session.agent;
+  const runtimeAgent = activeChat?.agent ?? project.agent;
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const eventsRef = useRef<UiEvent[]>([]);
   const selectedChatIdRef = useRef<string | null>(selectedChatId);
@@ -1331,7 +1331,7 @@ export function ProjectChatSurface({
     return list.find((o) => o.id === selectedModelId) ?? { id: selectedModelId, label: selectedModelId, meta: undefined };
   }, [providerOptions, selectedProvider, selectedModelId]);
   const activeModelLabel = activeOption.label || runtimeModelLabel;
-  const activeAgent: SessionSummary['agent'] = selectedProvider;
+  const activeAgent: ProjectSummary['agent'] = selectedProvider;
   const userTurns = visibleEvents.filter((item) => readEventRole(item) === 'user');
   const representativeAgentEvent = visibleEvents.find((item) => readEventRole(item) !== 'user');
   const activeRunStartedAt = submittedRunStartedAt ?? runtimeRunStartedAt;
@@ -1347,7 +1347,7 @@ export function ProjectChatSurface({
   const projectRunActive = Boolean(projectRunIndicator);
   const selectedChatTimestamp = activeChat?.latestEventAt
     ?? activeChat?.lastActivityAt
-    ?? session.lastActivityAt
+    ?? project.lastActivityAt
     ?? new Date().toISOString();
   const projectChatRoute = `/?tab=project&project=${projectId}&view=chat${selectedChatId ? `&chat=${selectedChatId}` : ''}`;
   const previewTarget = `aris.lawdigest.kr${projectChatRoute}`;
@@ -1462,7 +1462,7 @@ export function ProjectChatSurface({
         const formData = new FormData();
         formData.append('file', file);
         const response = await fetch(
-          withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(projectId)}/assets/images`),
+          withAppBasePath(`/api/runtime/projects/${encodeURIComponent(projectId)}/assets/images`),
           { method: 'POST', body: formData },
         );
         const body = (await response.json().catch(() => ({}))) as { attachment?: ChatImageAttachment; error?: string };
@@ -1529,7 +1529,7 @@ export function ProjectChatSurface({
     { id: 'build', name: 'build', cmd: 'npm run build', tag: 'build' },
   ];
   const contextItems = [
-    { id: 'ctx-project', name: displayProjectName(session), tokens: tokenLabel },
+    { id: 'ctx-project', name: displayProjectName(project), tokens: tokenLabel },
     { id: 'ctx-route', name: projectChatRoute, tokens: 'route' },
     { id: 'ctx-prototype', name: 'design/chat-prototype.html', tokens: 'source' },
     { id: 'ctx-mode', name: `${COMPOSER_MODE_COPY[composerMode]} mode`, tokens: selectedEffort },
@@ -2252,7 +2252,7 @@ export function ProjectChatSurface({
       setError(null);
       try {
         const response = await fetch(withAppBasePath(buildProjectChatCollectionPath(projectId)), { cache: 'no-store' });
-        const body = (await response.json().catch(() => ({}))) as { chats?: SessionChat[]; error?: string };
+        const body = (await response.json().catch(() => ({}))) as { chats?: ProjectChat[]; error?: string };
         if (!response.ok) {
           throw new Error(body.error ?? '채팅 목록을 불러오지 못했습니다.');
         }
@@ -2395,10 +2395,10 @@ export function ProjectChatSurface({
     ));
   }, [chats, parallelPanelState]);
 
-  const createChat = async (): Promise<SessionChat | null> => {
+  const createChat = async (): Promise<ProjectChat | null> => {
     setError(null);
     const projectModelInput = normalizeProjectChatModelInput(
-      selectedModelId || session.model,
+      selectedModelId || project.model,
     );
     const createdChat = await createProjectChat(projectId, {
       title: '새 채팅',
@@ -2752,7 +2752,7 @@ export function ProjectChatSurface({
         <div className="pc-chat-directory__head">
           <span className="pc-chat-directory__eyebrow">
             Chats
-            <span className="pc-chat-directory__count">{chats.length || session.totalChats || 0}</span>
+            <span className="pc-chat-directory__count">{chats.length || project.totalChats || 0}</span>
           </span>
         </div>
 
@@ -2781,8 +2781,8 @@ export function ProjectChatSurface({
                 </span>
                 <span className="pc-chat-card__preview">{chat.latestPreview || recentPreview}</span>
                 <span className="pc-chat-card__meta">
-                  <span className={`badge badge--dot ${projectStatusBadgeClass(session.status)}`}>
-                    {projectStatusLabel(session.status)}
+                  <span className={`badge badge--dot ${projectStatusBadgeClass(project.status)}`}>
+                    {projectStatusLabel(project.status)}
                   </span>
                   <span>{agentLabel(chat.agent, chat.model ?? modelLabel)}</span>
                 </span>
@@ -2805,8 +2805,8 @@ export function ProjectChatSurface({
                 <MessageSquareText size={14} />
                 Project conversation map
               </div>
-              <div className="pc-chat-side-stat"><span>Total chats</span><strong>{chats.length || session.totalChats || 0}</strong></div>
-              <div className="pc-chat-side-stat"><span>Active signal</span><strong>{projectStatusLabel(session.status)}</strong></div>
+              <div className="pc-chat-side-stat"><span>Total chats</span><strong>{chats.length || project.totalChats || 0}</strong></div>
+              <div className="pc-chat-side-stat"><span>Active signal</span><strong>{projectStatusLabel(project.status)}</strong></div>
               <div className="pc-chat-side-stat"><span>Context</span><strong>{tokenLabel}</strong></div>
             </article>
           </aside>
@@ -2864,7 +2864,7 @@ export function ProjectChatSurface({
                 panelRuntime={parallelPanelRuntime}
                 panelState={parallelPanelState}
                 recentPreview={recentPreview}
-                session={session}
+                project={project}
                 tokenLabel={tokenLabel}
                 workspaceOpen={workspaceOpen}
               />
@@ -2892,7 +2892,7 @@ export function ProjectChatSurface({
             </div>
             <div className="ws__status">
               <div className="ws__status-left">
-                <span className={`ws__model ws__model--${providerFromAgent(activeWorkspaceChat?.agent ?? session.agent)}`}>
+                <span className={`ws__model ws__model--${providerFromAgent(activeWorkspaceChat?.agent ?? project.agent)}`}>
                   <span className="ws__model-dot" />{activeWorkspaceChat?.title ?? 'Panel'}
                 </span>
                 <span className="ws__pill"><span className="ws__pill-dot" />{activeWorkspacePanelRuntime?.branch ?? 'project'}</span>
@@ -2906,7 +2906,7 @@ export function ProjectChatSurface({
                 <div className="run-summary">
                   <div className="run-summary__cell"><span className="run-summary__label">Panel</span><span className="run-summary__value">{activeWorkspacePanelId ? activeWorkspacePanelId.slice(-4) : '-'}</span></div>
                   <div className="run-summary__cell"><span className="run-summary__label">Branch</span><span className="run-summary__value">{activeWorkspacePanelRuntime?.branch ?? '-'}</span></div>
-                  <div className="run-summary__cell"><span className="run-summary__label">Runtime</span><span className="run-summary__value">{activeWorkspacePanelRuntime?.runtimeSessionId ? 'ready' : 'project'}</span></div>
+                  <div className="run-summary__cell"><span className="run-summary__label">Runtime</span><span className="run-summary__value">{activeWorkspacePanelRuntime?.runtimeProjectId ? 'ready' : 'project'}</span></div>
                 </div>
                 <div className="ws-card ws-card--run">
                   <div className="ws-card__head">
@@ -2989,7 +2989,7 @@ export function ProjectChatSurface({
               </div>
               <div className={`ws__pane${workspaceTab === 'terminal' ? ' ws__pane--active' : ''}`} data-pane="terminal">
                 <div className="term">
-                  <div className="term__head"><span className="term__tag">bash · selected panel</span><span className="term__dim">{activeWorkspacePanelRuntime?.runtimeSessionId ?? projectId}</span></div>
+                  <div className="term__head"><span className="term__tag">bash · selected panel</span><span className="term__dim">{activeWorkspacePanelRuntime?.runtimeProjectId ?? projectId}</span></div>
                   <div className="term__body">
                     <div className="term__line"><span className="term__prompt">~/aris$</span><span>{draftTerminalCommand}</span></div>
                     <div className="term__line"><span className="term__dim">cwd · {activeWorkspacePanelRuntime?.worktreePath ?? projectPath}</span></div>
@@ -3025,11 +3025,11 @@ export function ProjectChatSurface({
             </button>
             <div className="ch__title-wrap">
               <div className="ch__breadcrumb">
-                <span className="ch__breadcrumb-project" title={session.projectName}>{projectName}</span>
+                <span className="ch__breadcrumb-project" title={project.projectName}>{projectName}</span>
                 <span className="ch__breadcrumb-sep" aria-hidden="true">|</span>
                 <span className="ch__title">{activeChat?.title ?? 'Project chat'}</span>
               </div>
-              <span className="ch__status"><span className="ch__status-dot" />{projectStatusLabel(session.status)}</span>
+              <span className="ch__status"><span className="ch__status-dot" />{projectStatusLabel(project.status)}</span>
               {projectRunIndicator && (
                 <span className="ch__running-indicator" role="status" aria-live="polite" data-tone={projectRunIndicator.tone}>
                   <span className="ch__running-spinner" aria-hidden="true" />
@@ -3351,7 +3351,7 @@ export function ProjectChatSurface({
                     type="button"
                     className="cmp__tool"
                     aria-label="Mention"
-                    onClick={() => setPrompt((value) => `${value}${value.endsWith(' ') || value.length === 0 ? '' : ' '}@${displayProjectName(session)} `)}
+                    onClick={() => setPrompt((value) => `${value}${value.endsWith(' ') || value.length === 0 ? '' : ' '}@${displayProjectName(project)} `)}
                   >
                     <AtSign size={15} />
                   </button>
@@ -3440,7 +3440,7 @@ export function ProjectChatSurface({
           <div className="ws__status">
             <div className="ws__status-left">
               <span className={`ws__model ws__model--${selectedProvider}`}><span className="ws__model-dot" />{activeModelLabel}</span>
-              <span className="ws__pill"><span className="ws__pill-dot" />{projectStatusLabel(session.status)}</span>
+              <span className="ws__pill"><span className="ws__pill-dot" />{projectStatusLabel(project.status)}</span>
             </div>
             <div className="ws__status-right">
               <span>{tokenLabel}</span>
@@ -3732,7 +3732,7 @@ export function ProjectChatSurface({
             <div className="preview-page">
               <aside className="preview-page__sb">
                 <div className="preview-page__sb-logo">ARIS</div>
-                <div className="preview-page__sb-item preview-page__sb-item--active">{displayProjectName(session)}</div>
+                <div className="preview-page__sb-item preview-page__sb-item--active">{displayProjectName(project)}</div>
                 <div className="preview-page__sb-item">{activeChat?.title ?? 'Project chat'}</div>
                 <div className="preview-page__sb-item">{selectedWorkspaceFile}</div>
               </aside>

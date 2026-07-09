@@ -13,7 +13,7 @@ import {
   Layers,
   Hash,
 } from 'lucide-react';
-import type { AgentFlavor, SessionChat } from '@/lib/happy/types';
+import type { AgentFlavor, ProjectChat } from '@/lib/happy/types';
 import { ClaudeIcon, GeminiIcon, CodexIcon } from '@/components/ui/AgentIcons';
 import styles from './WorkspaceHome.module.css';
 import { limitWorkspaceHomeChats } from './workspaceHome';
@@ -25,7 +25,7 @@ interface WorkspaceHomeProps {
   sessionTitle: string;
   projectPath: string;
   agentFlavor: AgentFlavor | string;
-  chats: SessionChat[];
+  chats: ProjectChat[];
   onSelectChat: (chatId: string) => void;
   onNewChat: () => void;
   onBack: () => void;
@@ -83,7 +83,7 @@ function resolveAgentMeta(flavor: AgentFlavor | string): {
 
 type ChatStatus = 'running' | 'unread' | 'idle' | 'pinned';
 
-function resolveChatStatus(chat: SessionChat): ChatStatus {
+function resolveChatStatus(chat: ProjectChat): ChatStatus {
   if (chat.isPinned) return 'pinned';
   if (chat.latestEventAt) {
     const lastActivity = new Date(chat.lastActivityAt).getTime();

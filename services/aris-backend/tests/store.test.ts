@@ -36,10 +36,10 @@ beforeEach(() => {
   vi.mocked(removeWorktree).mockResolvedValue(undefined);
 });
 
-describe('RuntimeStore.createSession', () => {
+describe('RuntimeStore.createProject', () => {
   it('ensures a branch worktree before persisting the session', async () => {
     const delegate = {
-      createSession: vi.fn().mockResolvedValue({
+      createProject: vi.fn().mockResolvedValue({
         id: 'session-1',
         metadata: {
           flavor: 'codex',
@@ -55,7 +55,7 @@ describe('RuntimeStore.createSession', () => {
     };
     const store = buildRuntimeStore({ delegate });
 
-    await expect(store.createSession({
+    await expect(store.createProject({
       path: '/projects/app',
       branch: 'parallel/panel-one',
       flavor: 'codex',
@@ -68,24 +68,24 @@ describe('RuntimeStore.createSession', () => {
 
     expect(ensureWorktree).toHaveBeenCalledWith('/projects/app', 'parallel/panel-one');
     expect(vi.mocked(ensureWorktree).mock.invocationCallOrder[0]).toBeLessThan(
-      delegate.createSession.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+      delegate.createProject.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
     );
   });
 
-  it('does not persist a branch session when worktree creation fails', async () => {
+  it('does not persist a branch project when worktree creation fails', async () => {
     vi.mocked(ensureWorktree).mockRejectedValue(new Error('WORKTREE_CREATE_FAILED: boom'));
     const delegate = {
-      createSession: vi.fn(),
+      createProject: vi.fn(),
     };
     const store = buildRuntimeStore({ delegate });
 
-    await expect(store.createSession({
+    await expect(store.createProject({
       path: '/projects/app',
       branch: 'parallel/fails',
       flavor: 'codex',
     })).rejects.toThrow('WORKTREE_CREATE_FAILED: boom');
 
-    expect(delegate.createSession).not.toHaveBeenCalled();
+    expect(delegate.createProject).not.toHaveBeenCalled();
   });
 });
 
@@ -103,33 +103,33 @@ describe('RuntimeStore.resolveExecutionCwd', () => {
   });
 });
 
-describe('RuntimeStore.isSessionRunning', () => {
+describe('RuntimeStore.isProjectRunning', () => {
   it('falls back to persisted state when the in-memory executor lost the active run', async () => {
     const delegate = {
-      isSessionRunning: vi.fn().mockResolvedValue(true),
+      isProjectRunning: vi.fn().mockResolvedValue(true),
     };
     const runtimeExecutor = {
-      isSessionRunning: vi.fn().mockResolvedValue(false),
+      isProjectRunning: vi.fn().mockResolvedValue(false),
     };
     const store = buildRuntimeStore({ delegate, runtimeExecutor });
 
-    await expect(store.isSessionRunning('session-1', 'chat-1')).resolves.toBe(true);
-    expect(runtimeExecutor.isSessionRunning).toHaveBeenCalledWith('session-1', 'chat-1');
-    expect(delegate.isSessionRunning).toHaveBeenCalledWith('session-1', 'chat-1');
+    await expect(store.isProjectRunning('session-1', 'chat-1')).resolves.toBe(true);
+    expect(runtimeExecutor.isProjectRunning).toHaveBeenCalledWith('session-1', 'chat-1');
+    expect(delegate.isProjectRunning).toHaveBeenCalledWith('session-1', 'chat-1');
   });
 });
 
-describe('RuntimeStore.applySessionAction', () => {
-  it('removes a branch worktree when a runtime session is killed', async () => {
+describe('RuntimeStore.applyProjectAction', () => {
+  it('removes a branch worktree when a runtime project is killed', async () => {
     const delegate = {
-      getSession: vi.fn().mockResolvedValue({
+      getProject: vi.fn().mockResolvedValue({
         id: 'runtime-panel-1',
         metadata: {
           path: '/projects/app',
           branch: 'aris/panel/project-1/panel-1',
         },
       }),
-      applySessionAction: vi.fn().mockResolvedValue({
+      applyProjectAction: vi.fn().mockResolvedValue({
         accepted: true,
         message: 'KILL acknowledged',
         at: '2026-05-13T00:00:00.000Z',
@@ -137,7 +137,7 @@ describe('RuntimeStore.applySessionAction', () => {
     };
     const store = buildRuntimeStore({ delegate });
 
-    await expect(store.applySessionAction('runtime-panel-1', 'kill')).resolves.toMatchObject({
+    await expect(store.applyProjectAction('runtime-panel-1', 'kill')).resolves.toMatchObject({
       accepted: true,
     });
 
@@ -149,7 +149,7 @@ describe('RuntimeStore.appendChatEvent', () => {
   it('broadcasts appended chat events immediately to realtime channel subscribers', async () => {
     const event = {
       id: 'event-1',
-      sessionId: 'session-1',
+      projectId: 'session-1',
       type: 'message',
       title: 'User Instruction',
       text: 'continue',
@@ -165,9 +165,9 @@ describe('RuntimeStore.appendChatEvent', () => {
     const store = buildRuntimeStore({ delegate });
     const listener = vi.fn();
 
-    store.subscribeRealtimeChannel({ sessionId: 'session-1', chatId: 'chat-1' }, listener);
+    store.subscribeRealtimeChannel({ projectId: 'session-1', chatId: 'chat-1' }, listener);
     await store.appendChatEvent('chat-1', {
-      sessionId: 'session-1',
+      projectId: 'session-1',
       type: 'message',
       title: 'User Instruction',
       text: 'continue',
@@ -179,7 +179,7 @@ describe('RuntimeStore.appendChatEvent', () => {
 
     expect(listener).toHaveBeenCalledWith({
       type: 'event.appended',
-      sessionId: 'session-1',
+      projectId: 'session-1',
       chatId: 'chat-1',
       event,
       source: 'mutation',
@@ -190,7 +190,7 @@ describe('RuntimeStore.appendChatEvent', () => {
     const events = [
       {
         id: 'import-event-1',
-        sessionId: 'session-1',
+        projectId: 'session-1',
         type: 'message',
         title: 'User Instruction',
         text: 'new imported request',
@@ -203,7 +203,7 @@ describe('RuntimeStore.appendChatEvent', () => {
       },
       {
         id: 'import-event-2',
-        sessionId: 'session-1',
+        projectId: 'session-1',
         type: 'message',
         title: 'Text Reply',
         text: 'new imported reply',
@@ -221,20 +221,20 @@ describe('RuntimeStore.appendChatEvent', () => {
     const store = buildRuntimeStore({ delegate });
     const listener = vi.fn();
 
-    store.subscribeRealtimeChannel({ sessionId: 'session-1', chatId: 'chat-1' }, listener);
+    store.subscribeRealtimeChannel({ projectId: 'session-1', chatId: 'chat-1' }, listener);
     await store.syncLatestImportedAgentEvents({ chatId: 'chat-1', limitEvents: 10 });
 
     expect(listener).toHaveBeenCalledTimes(2);
     expect(listener).toHaveBeenNthCalledWith(1, {
       type: 'event.appended',
-      sessionId: 'session-1',
+      projectId: 'session-1',
       chatId: 'chat-1',
       event: events[0],
       source: 'mutation',
     });
     expect(listener).toHaveBeenNthCalledWith(2, {
       type: 'event.appended',
-      sessionId: 'session-1',
+      projectId: 'session-1',
       chatId: 'chat-1',
       event: events[1],
       source: 'mutation',
@@ -245,7 +245,7 @@ describe('RuntimeStore.appendChatEvent', () => {
     const delegate = {
       appendChatEvent: vi.fn().mockResolvedValue({
         id: 'event-1',
-        sessionId: 'session-1',
+        projectId: 'session-1',
         type: 'tool',
         title: 'Terminal completed',
         text: '$ pwd\n/home/ubuntu/project/ARIS',
@@ -262,7 +262,7 @@ describe('RuntimeStore.appendChatEvent', () => {
     const store = buildRuntimeStore({ delegate, runtimeExecutor });
 
     await store.appendChatEvent('chat-1', {
-      sessionId: 'session-1',
+      projectId: 'session-1',
       type: 'tool',
       title: 'Terminal completed',
       text: '$ pwd\n/home/ubuntu/project/ARIS',
@@ -280,7 +280,7 @@ describe('RuntimeStore.appendChatEvent', () => {
     const delegate = {
       appendChatEvent: vi.fn().mockResolvedValue({
         id: 'event-1',
-        sessionId: 'session-1',
+        projectId: 'session-1',
         type: 'message',
         title: 'User Instruction',
         text: 'continue',
@@ -297,7 +297,7 @@ describe('RuntimeStore.appendChatEvent', () => {
     const store = buildRuntimeStore({ delegate, runtimeExecutor });
 
     await store.appendChatEvent('chat-1', {
-      sessionId: 'session-1',
+      projectId: 'session-1',
       type: 'message',
       title: 'User Instruction',
       text: 'continue',
@@ -313,10 +313,10 @@ describe('RuntimeStore.appendChatEvent', () => {
 });
 
 describe('RuntimeStore.submitChatUserPrompt', () => {
-  it('records the user prompt on the project session while triggering the panel runtime session', async () => {
+  it('records the user prompt on the project session while triggering the panel runtime project', async () => {
     const createdEvent = {
       id: 'event-1',
-      sessionId: 'project-1',
+      projectId: 'project-1',
       type: 'message',
       title: 'User Instruction',
       text: 'run in panel',
@@ -335,8 +335,8 @@ describe('RuntimeStore.submitChatUserPrompt', () => {
     const store = buildRuntimeStore({ delegate, runtimeExecutor });
 
     await expect(store.submitChatUserPrompt('chat-1', {
-      sessionId: 'project-1',
-      runtimeSessionId: 'runtime-panel-1',
+      projectId: 'project-1',
+      runtimeProjectId: 'runtime-panel-1',
       type: 'message',
       title: 'User Instruction',
       text: 'run in panel',
@@ -344,14 +344,14 @@ describe('RuntimeStore.submitChatUserPrompt', () => {
     })).resolves.toEqual(createdEvent);
 
     expect(delegate.appendChatEvent).toHaveBeenCalledWith('chat-1', expect.objectContaining({
-      sessionId: 'project-1',
+      projectId: 'project-1',
     }));
     expect(runtimeExecutor.triggerPersistedUserMessage).toHaveBeenCalledWith('runtime-panel-1', expect.objectContaining({
       text: 'run in panel',
       meta: expect.objectContaining({
         chatId: 'chat-1',
-        runtimeSessionId: 'runtime-panel-1',
-        runtimePersistenceSessionId: 'project-1',
+        runtimeProjectId: 'runtime-panel-1',
+        runtimePersistenceProjectId: 'project-1',
       }),
     }));
   });
@@ -362,7 +362,7 @@ describe('RuntimeStore.submitChatUserPrompt', () => {
     const delegate = {
       appendChatEvent: vi.fn().mockResolvedValue({
         id: 'event-1',
-        sessionId: 'session-1',
+        projectId: 'session-1',
         type: 'message',
         title: 'User Instruction',
         text: 'continue',
@@ -379,7 +379,7 @@ describe('RuntimeStore.submitChatUserPrompt', () => {
     const store = buildRuntimeStore({ delegate, runtimeExecutor });
 
     await store.submitChatUserPrompt('chat-1', {
-      sessionId: 'session-1',
+      projectId: 'session-1',
       type: 'message',
       title: 'User Instruction',
       text: 'continue',
@@ -393,7 +393,7 @@ describe('RuntimeStore.submitChatUserPrompt', () => {
     });
 
     expect(delegate.appendChatEvent).toHaveBeenCalledWith('chat-1', {
-      sessionId: 'session-1',
+      projectId: 'session-1',
       type: 'message',
       title: 'User Instruction',
       text: 'continue',
@@ -420,10 +420,10 @@ describe('RuntimeStore.submitChatUserPrompt', () => {
   });
 });
 
-describe('RuntimeStore.applySessionAction', () => {
+describe('RuntimeStore.applyProjectAction', () => {
   it('replays the latest persisted chat user message when retry is requested', async () => {
     const delegate = {
-      applySessionAction: vi.fn().mockResolvedValue({
+      applyProjectAction: vi.fn().mockResolvedValue({
         accepted: true,
         message: 'RETRY acknowledged',
         at: '2026-04-14T00:00:00.000Z',
@@ -440,7 +440,7 @@ describe('RuntimeStore.applySessionAction', () => {
       }),
     };
     const runtimeExecutor = {
-      applySessionAction: vi.fn().mockResolvedValue({
+      applyProjectAction: vi.fn().mockResolvedValue({
         accepted: true,
         message: 'RETRY acknowledged',
         at: '2026-04-14T00:00:00.000Z',
@@ -449,7 +449,7 @@ describe('RuntimeStore.applySessionAction', () => {
     };
     const store = buildRuntimeStore({ delegate, runtimeExecutor });
 
-    await expect(store.applySessionAction('session-1', 'retry', 'chat-1')).resolves.toMatchObject({
+    await expect(store.applyProjectAction('session-1', 'retry', 'chat-1')).resolves.toMatchObject({
       accepted: true,
     });
 
@@ -476,7 +476,7 @@ describe('RuntimeStore.subscribeRealtimeChannel', () => {
           cursor: 1,
           event: {
             id: 'event-unassigned',
-            sessionId: 'session-1',
+            projectId: 'session-1',
             type: 'tool',
             title: 'Unassigned',
             text: 'workspace update',
@@ -488,7 +488,7 @@ describe('RuntimeStore.subscribeRealtimeChannel', () => {
           cursor: 2,
           event: {
             id: 'event-chat-1',
-            sessionId: 'session-1',
+            projectId: 'session-1',
             type: 'message',
             title: 'Chat',
             text: 'chat update',
@@ -500,7 +500,7 @@ describe('RuntimeStore.subscribeRealtimeChannel', () => {
           cursor: 3,
           event: {
             id: 'event-chat-2',
-            sessionId: 'session-1',
+            projectId: 'session-1',
             type: 'message',
             title: 'Other chat',
             text: 'other update',
@@ -515,7 +515,7 @@ describe('RuntimeStore.subscribeRealtimeChannel', () => {
     const listener = vi.fn();
 
     const unsubscribe = store.subscribeRealtimeChannel({
-      sessionId: 'session-1',
+      projectId: 'session-1',
       chatId: 'chat-1',
       includeUnassigned: true,
     }, listener);
@@ -536,7 +536,7 @@ describe('RuntimeStore.decidePermission', () => {
   it('broadcasts permission updates to realtime channel subscribers', async () => {
     const updatedPermission = {
       id: 'perm-1',
-      sessionId: 'session-1',
+      projectId: 'session-1',
       chatId: 'chat-1',
       agent: 'codex',
       command: 'curl -I https://example.com',
@@ -548,18 +548,18 @@ describe('RuntimeStore.decidePermission', () => {
     };
     const runtimeExecutor = {
       decidePermission: vi.fn().mockResolvedValue(updatedPermission),
-      isSessionRunning: vi.fn().mockResolvedValue(true),
+      isProjectRunning: vi.fn().mockResolvedValue(true),
       triggerPersistedUserMessage: vi.fn(),
     };
     const store = buildRuntimeStore({ delegate: {}, runtimeExecutor });
     const listener = vi.fn();
 
-    store.subscribeRealtimeChannel({ sessionId: 'session-1', chatId: 'chat-1' }, listener);
+    store.subscribeRealtimeChannel({ projectId: 'session-1', chatId: 'chat-1' }, listener);
     await store.decidePermission('perm-1', 'allow_once');
 
     expect(listener).toHaveBeenCalledWith({
       type: 'permission.updated',
-      sessionId: 'session-1',
+      projectId: 'session-1',
       chatId: 'chat-1',
       permission: updatedPermission,
     });
@@ -581,7 +581,7 @@ describe('RuntimeStore.decidePermission', () => {
     const runtimeExecutor = {
       decidePermission: vi.fn().mockResolvedValue({
         id: 'perm-1',
-        sessionId: 'session-1',
+        projectId: 'session-1',
         chatId: 'chat-1',
         agent: 'codex',
         command: 'curl -I https://example.com',
@@ -591,7 +591,7 @@ describe('RuntimeStore.decidePermission', () => {
         decision: 'allow_once',
         requestedAt: '2026-04-14T00:00:00.000Z',
       }),
-      isSessionRunning: vi.fn().mockResolvedValue(false),
+      isProjectRunning: vi.fn().mockResolvedValue(false),
       triggerPersistedUserMessage: vi.fn().mockResolvedValue(undefined),
     };
     const store = buildRuntimeStore({ delegate, runtimeExecutor });
@@ -601,7 +601,7 @@ describe('RuntimeStore.decidePermission', () => {
       state: 'approved',
     });
 
-    expect(runtimeExecutor.isSessionRunning).toHaveBeenCalledWith('session-1', 'chat-1');
+    expect(runtimeExecutor.isProjectRunning).toHaveBeenCalledWith('session-1', 'chat-1');
     expect(delegate.getLatestUserMessageForAction).toHaveBeenCalledWith('session-1', 'chat-1');
     expect(runtimeExecutor.triggerPersistedUserMessage).toHaveBeenCalledWith('session-1', {
       type: 'message',
@@ -622,7 +622,7 @@ describe('RuntimeStore.decidePermission', () => {
     const runtimeExecutor = {
       decidePermission: vi.fn().mockResolvedValue({
         id: 'perm-1',
-        sessionId: 'session-1',
+        projectId: 'session-1',
         chatId: 'chat-1',
         agent: 'codex',
         command: 'curl -I https://example.com',
@@ -632,7 +632,7 @@ describe('RuntimeStore.decidePermission', () => {
         decision: 'allow_once',
         requestedAt: '2026-04-14T00:00:00.000Z',
       }),
-      isSessionRunning: vi.fn().mockResolvedValue(true),
+      isProjectRunning: vi.fn().mockResolvedValue(true),
       triggerPersistedUserMessage: vi.fn(),
     };
     const store = buildRuntimeStore({ delegate, runtimeExecutor });

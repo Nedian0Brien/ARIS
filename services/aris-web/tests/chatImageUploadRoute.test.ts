@@ -59,13 +59,13 @@ describe('chat image upload route', () => {
     const form = new FormData();
     form.set('file', new File([Uint8Array.from([137, 80, 78, 71])], 'screen.png', { type: 'image/png' }));
 
-    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const { POST } = await import('@/app/api/runtime/projects/[projectId]/assets/images/route');
     const response = await POST(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+      new NextRequest('http://localhost/api/runtime/projects/session-1/assets/images', {
         method: 'POST',
         body: form,
       }),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(response.status).toBe(200);
@@ -79,7 +79,7 @@ describe('chat image upload route', () => {
         mimeType: 'image/png',
         size: 4,
         serverPath: '/home/ubuntu/.aris/chat-assets/session-1/asset-123-screen.png',
-        previewUrl: '/api/runtime/sessions/session-1/assets/images?path=%2Fhome%2Fubuntu%2F.aris%2Fchat-assets%2Fsession-1%2Fasset-123-screen.png',
+        previewUrl: '/api/runtime/projects/session-1/assets/images?path=%2Fhome%2Fubuntu%2F.aris%2Fchat-assets%2Fsession-1%2Fasset-123-screen.png',
       },
     });
   });
@@ -89,26 +89,26 @@ describe('chat image upload route', () => {
     const form = new FormData();
     form.set('file', new File([Uint8Array.from([137, 80, 78, 71])], 'screen.png', { type: 'image/png' }));
 
-    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const { POST } = await import('@/app/api/runtime/projects/[projectId]/assets/images/route');
     const response = await POST(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+      new NextRequest('http://localhost/api/runtime/projects/session-1/assets/images', {
         method: 'POST',
         body: form,
       }),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(response.status).toBe(404);
   });
 
   it('rejects requests without a file', async () => {
-    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const { POST } = await import('@/app/api/runtime/projects/[projectId]/assets/images/route');
     const response = await POST(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+      new NextRequest('http://localhost/api/runtime/projects/session-1/assets/images', {
         method: 'POST',
         body: new FormData(),
       }),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(response.status).toBe(400);
@@ -119,13 +119,13 @@ describe('chat image upload route', () => {
     const form = new FormData();
     form.set('file', new File(['hello'], 'notes.txt', { type: 'text/plain' }));
 
-    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const { POST } = await import('@/app/api/runtime/projects/[projectId]/assets/images/route');
     const response = await POST(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+      new NextRequest('http://localhost/api/runtime/projects/session-1/assets/images', {
         method: 'POST',
         body: form,
       }),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(response.status).toBe(400);
@@ -136,13 +136,13 @@ describe('chat image upload route', () => {
     const form = new FormData();
     form.set('file', new File(['<svg></svg>'], 'vector.svg', { type: 'image/svg+xml' }));
 
-    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const { POST } = await import('@/app/api/runtime/projects/[projectId]/assets/images/route');
     const response = await POST(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+      new NextRequest('http://localhost/api/runtime/projects/session-1/assets/images', {
         method: 'POST',
         body: form,
       }),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(response.status).toBe(400);
@@ -153,13 +153,13 @@ describe('chat image upload route', () => {
     const form = new FormData();
     form.set('file', new File([Uint8Array.from([137, 80, 78, 71])], 'screen.png', { type: 'image/png' }));
 
-    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const { POST } = await import('@/app/api/runtime/projects/[projectId]/assets/images/route');
     const response = await POST(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+      new NextRequest('http://localhost/api/runtime/projects/session-1/assets/images', {
         method: 'POST',
         body: form,
       }),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(response.status).toBe(403);
@@ -169,13 +169,13 @@ describe('chat image upload route', () => {
     const form = new FormData();
     form.set('file', new File([Uint8Array.from([137, 80, 78, 71])], 'screen.png', { type: 'image/png' }));
 
-    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const { POST } = await import('@/app/api/runtime/projects/[projectId]/assets/images/route');
     const response = await POST(
-      new NextRequest('http://localhost/api/runtime/sessions/../../.ssh/assets/images', {
+      new NextRequest('http://localhost/api/runtime/projects/../../.ssh/assets/images', {
         method: 'POST',
         body: form,
       }),
-      { params: Promise.resolve({ sessionId: '../../.ssh' }) },
+      { params: Promise.resolve({ projectId: '../../.ssh' }) },
     );
 
     expect(response.status).toBe(400);
@@ -186,13 +186,13 @@ describe('chat image upload route', () => {
     const form = new FormData();
     form.set('file', new File([Uint8Array.from([137, 80, 78, 71])], 'screen.png', { type: 'image/png' }));
 
-    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const { POST } = await import('@/app/api/runtime/projects/[projectId]/assets/images/route');
     const response = await POST(
-      new NextRequest('http://localhost/api/runtime/sessions/../assets/images', {
+      new NextRequest('http://localhost/api/runtime/projects/../assets/images', {
         method: 'POST',
         body: form,
       }),
-      { params: Promise.resolve({ sessionId: '..' }) },
+      { params: Promise.resolve({ projectId: '..' }) },
     );
 
     expect(response.status).toBe(400);
@@ -204,13 +204,13 @@ describe('chat image upload route', () => {
     const form = new FormData();
     form.set('file', new File([largeBytes], 'huge.png', { type: 'image/png' }));
 
-    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const { POST } = await import('@/app/api/runtime/projects/[projectId]/assets/images/route');
     const response = await POST(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+      new NextRequest('http://localhost/api/runtime/projects/session-1/assets/images', {
         method: 'POST',
         body: form,
       }),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(response.status).toBe(400);
@@ -219,16 +219,16 @@ describe('chat image upload route', () => {
   });
 
   it('rejects multipart requests whose declared body size exceeds the request ceiling', async () => {
-    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const { POST } = await import('@/app/api/runtime/projects/[projectId]/assets/images/route');
     const response = await POST(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+      new NextRequest('http://localhost/api/runtime/projects/session-1/assets/images', {
         method: 'POST',
         body: new FormData(),
         headers: {
           'content-length': String(10 * 1024 * 1024 + 256 * 1024 + 1),
         },
       }),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(response.status).toBe(400);
@@ -236,16 +236,16 @@ describe('chat image upload route', () => {
   });
 
   it('does not reject near-limit multipart overhead before the file is parsed', async () => {
-    const { POST } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const { POST } = await import('@/app/api/runtime/projects/[projectId]/assets/images/route');
     const response = await POST(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+      new NextRequest('http://localhost/api/runtime/projects/session-1/assets/images', {
         method: 'POST',
         body: new FormData(),
         headers: {
           'content-length': String(10 * 1024 * 1024 + 1024),
         },
       }),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(response.status).toBe(400);
@@ -253,9 +253,9 @@ describe('chat image upload route', () => {
   });
 
   it('deletes a stored image asset when the composer removes it', async () => {
-    const { DELETE } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const { DELETE } = await import('@/app/api/runtime/projects/[projectId]/assets/images/route');
     const response = await DELETE(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+      new NextRequest('http://localhost/api/runtime/projects/session-1/assets/images', {
         method: 'DELETE',
         body: JSON.stringify({
           serverPath: '/home/ubuntu/.aris/chat-assets/session-1/asset-123-screen.png',
@@ -264,7 +264,7 @@ describe('chat image upload route', () => {
           'content-type': 'application/json',
         },
       }),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(response.status).toBe(200);
@@ -273,10 +273,10 @@ describe('chat image upload route', () => {
 
   it('serves a stored image preview to authenticated viewers', async () => {
     mocks.requireApiUser.mockResolvedValue({ user: { role: 'viewer', id: 'user-2' } });
-    const { GET } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const { GET } = await import('@/app/api/runtime/projects/[projectId]/assets/images/route');
     const response = await GET(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images?path=%2Fhome%2Fubuntu%2F.aris%2Fchat-assets%2Fsession-1%2Fasset-123-screen.png'),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      new NextRequest('http://localhost/api/runtime/projects/session-1/assets/images?path=%2Fhome%2Fubuntu%2F.aris%2Fchat-assets%2Fsession-1%2Fasset-123-screen.png'),
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(response.status).toBe(200);
@@ -285,9 +285,9 @@ describe('chat image upload route', () => {
   });
 
   it('rejects deleting another session path through the current session endpoint', async () => {
-    const { DELETE } = await import('@/app/api/runtime/sessions/[sessionId]/assets/images/route');
+    const { DELETE } = await import('@/app/api/runtime/projects/[projectId]/assets/images/route');
     const response = await DELETE(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/assets/images', {
+      new NextRequest('http://localhost/api/runtime/projects/session-1/assets/images', {
         method: 'DELETE',
         body: JSON.stringify({
           serverPath: '/home/ubuntu/.aris/chat-assets/session-2/asset-999-screen.png',
@@ -296,7 +296,7 @@ describe('chat image upload route', () => {
           'content-type': 'application/json',
         },
       }),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(response.status).toBe(400);

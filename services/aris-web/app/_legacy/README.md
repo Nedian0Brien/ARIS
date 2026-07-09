@@ -9,7 +9,7 @@ This folder contains **pre-redesign** code that is no longer the active path.
 ## Rules
 
 - **Do not add new features here.**
-- Some utility modules (`useSessionScrollOrchestrator`, `MarkdownContent`, `chat-screen/helpers`, etc.) are still imported by post-redesign code — leave those alone. New features should pull them out to a shared location instead of editing them in place.
+- Some utility modules (`useProjectScrollOrchestrator`, `MarkdownContent`, `chat-screen/helpers`, etc.) are still imported by post-redesign code — leave those alone. New features should pull them out to a shared location instead of editing them in place.
 - If a future refactor extracts those utilities to a shared location, the corresponding files in `_legacy/sessions/[sessionId]/` can be deleted.
 
 See `AGENTS.md` for the broader legacy boundary policy.

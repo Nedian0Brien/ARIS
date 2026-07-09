@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SessionSummary } from '@/lib/happy/types';
+import type { ProjectSummary } from '@/lib/happy/types';
 
 const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
@@ -22,11 +22,11 @@ vi.mock('@/lib/happy/workspacePanelRuntimes', () => ({
 }));
 
 import {
-  filterProjectSessionSummaries,
+  filterProjectSummaries,
   syncWorkspacesForUser,
 } from '@/lib/happy/workspaces';
 
-function session(overrides: Partial<SessionSummary>): SessionSummary {
+function session(overrides: Partial<ProjectSummary>): ProjectSummary {
   return {
     id: overrides.id ?? 'project-1',
     agent: overrides.agent ?? 'codex',
@@ -46,12 +46,12 @@ describe('project workspace sync', () => {
     mocks.transaction.mockImplementation(async (operations: unknown[]) => operations);
   });
 
-  it('does not treat branch-backed panel runtime sessions as Projects', async () => {
+  it('does not treat branch-backed panel runtime projects as Projects', async () => {
     const projectSession = session({
       id: 'project-session',
       lastActivityAt: '2026-05-14T01:00:00.000Z',
     });
-    const panelRuntimeSession = session({
+    const panelRuntimeProject = session({
       id: 'panel-runtime-session',
       branch: 'aris/panel/project-session/panel-1',
       metadata: {
@@ -69,11 +69,11 @@ describe('project workspace sync', () => {
     }]);
 
     const workspaceMap = await syncWorkspacesForUser('user-1', [
-      panelRuntimeSession,
+      panelRuntimeProject,
       projectSession,
     ]);
 
-    expect(filterProjectSessionSummaries([panelRuntimeSession, projectSession])).toEqual([projectSession]);
+    expect(filterProjectSummaries([panelRuntimeProject, projectSession])).toEqual([projectSession]);
     expect(mocks.projectUpsert).toHaveBeenCalledTimes(1);
     expect(mocks.projectUpsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({ id: 'project-session' }),

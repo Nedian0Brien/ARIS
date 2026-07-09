@@ -1,7 +1,7 @@
 import type {
   ApprovalPolicy,
-  SessionDetail,
-  SessionSummary,
+  ProjectDetail,
+  ProjectSummary,
   UiEvent,
   UiEventAction,
   UiEventKind,
@@ -778,14 +778,14 @@ function severityFromKind(kind: UiEventKind): Severity {
   return 'info';
 }
 
-function normalizeAgent(flavor?: string): SessionSummary['agent'] {
+function normalizeAgent(flavor?: string): ProjectSummary['agent'] {
   if (flavor === 'claude' || flavor === 'codex' || flavor === 'gemini') {
     return flavor;
   }
   return 'unknown';
 }
 
-function normalizeStatus(value?: string): SessionSummary['status'] {
+function normalizeStatus(value?: string): ProjectSummary['status'] {
   if (value === 'running' || value === 'idle' || value === 'stopped' || value === 'error') {
     return value;
   }
@@ -1010,10 +1010,10 @@ function inferCliAgentActionKind(input: {
   return null;
 }
 
-export function normalizeSessions(raw: unknown): SessionSummary[] {
+export function normalizeProjects(raw: unknown): ProjectSummary[] {
   const list = Array.isArray(raw) ? raw : [];
 
-  return list.map((item, idx): SessionSummary => {
+  return list.map((item, idx): ProjectSummary => {
     const rec = asRecord(item);
     const metadata = asRecord(rec?.metadata);
     const state = asRecord(rec?.state);
@@ -1023,7 +1023,7 @@ export function normalizeSessions(raw: unknown): SessionSummary[] {
     const runtimeModel = asNullableString(metadata?.runtimeModel ?? rec?.runtimeModel);
 
     return {
-      id: asString(rec?.id ?? rec?.sessionId, `unknown-${idx}`),
+      id: asString(rec?.id ?? rec?.projectId, `unknown-${idx}`),
       agent: normalizeAgent(asString(metadata?.flavor ?? rec?.flavor, 'unknown')),
       status: normalizeStatus(status),
       lastActivityAt: asNullableString(rec?.updatedAt ?? rec?.lastActivityAt),
@@ -1040,7 +1040,7 @@ export function normalizeSessions(raw: unknown): SessionSummary[] {
   });
 }
 
-export function normalizeSessionDetail(raw: unknown): SessionDetail {
+export function normalizeProjectDetail(raw: unknown): ProjectDetail {
   const rec = asRecord(raw);
   const metadata = asRecord(rec?.metadata);
   const state = asRecord(rec?.state);
@@ -1048,7 +1048,7 @@ export function normalizeSessionDetail(raw: unknown): SessionDetail {
   const branch = asNullableString(metadata?.branch ?? rec?.branch);
 
   return {
-    id: asString(rec?.id ?? rec?.sessionId, 'unknown'),
+    id: asString(rec?.id ?? rec?.projectId, 'unknown'),
     agent: normalizeAgent(asString(metadata?.flavor ?? rec?.flavor, 'unknown')),
     status: normalizeStatus(asString(state?.status ?? rec?.status, 'unknown')),
     projectName: asString(metadata?.path ?? rec?.projectName, 'unknown-project'),

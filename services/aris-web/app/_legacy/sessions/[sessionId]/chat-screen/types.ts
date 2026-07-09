@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react';
 import type { ResolvedChatRunPhase } from '@/lib/happy/chatRuntime';
 import type { RenderablePermissionRequest } from '@/lib/happy/permissions';
-import type { AgentFlavor, ChatImageAttachment, SessionChat, UiEvent } from '@/lib/happy/types';
+import type { AgentFlavor, ChatImageAttachment, ProjectChat, UiEvent } from '@/lib/happy/types';
 
 export const FOLDER_LABELS = ['src', 'tools', 'jobs', 'scripts', 'tests'] as const;
 
@@ -59,7 +59,7 @@ export type ChatApprovalFeedback = 'approved' | 'denied';
 export type ChatSidebarSection = {
   key: ChatSidebarSectionKey;
   label: string;
-  chats: SessionChat[];
+  chats: ProjectChat[];
   totalCount: number;
 };
 export type ChatSubmittedPayload = {

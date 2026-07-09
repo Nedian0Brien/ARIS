@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
-import type { ApprovalPolicy, SessionChat, UiEvent } from '@/lib/happy/types';
+import type { ApprovalPolicy, ProjectChat, UiEvent } from '@/lib/happy/types';
 import type { ChatRuntimeUiState, ChatSubmittedPayload } from '../types';
 
 type CopyState = 'idle' | 'copied' | 'failed';
@@ -9,7 +9,7 @@ type SetCopyState = Dispatch<SetStateAction<CopyState>>;
 type SetBooleanState = Dispatch<SetStateAction<boolean>>;
 
 type UseChatHeaderStatusControlsParams = {
-  activeChat: SessionChat | null;
+  activeChat: ProjectChat | null;
   activeChatIdResolved: string | null;
   addEvent: (event: UiEvent) => void;
   disconnectNoticeAwaitingRef: MutableRefObject<string | null>;
@@ -123,7 +123,7 @@ export function useChatHeaderStatusControls({
 
   const handleUpdateApprovalPolicy = useCallback((next: ApprovalPolicy) => {
     setIsPolicyChanging(true);
-    fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}`, {
+    fetch(`/api/runtime/projects/${encodeURIComponent(sessionId)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ approvalPolicy: next }),
@@ -158,7 +158,7 @@ export function useChatHeaderStatusControls({
     disconnectNoticeAwaitingRef.current = null;
 
     try {
-      const response = await fetch(`/api/runtime/sessions/${sessionId}/actions`, {
+      const response = await fetch(`/api/runtime/projects/${sessionId}/actions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

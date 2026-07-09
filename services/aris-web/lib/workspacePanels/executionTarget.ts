@@ -13,7 +13,7 @@ export class WorkspacePanelExecutionTargetError extends Error {
 export type WorkspacePanelExecutionTarget = {
   projectId: string;
   projectPath: string;
-  runtimeSessionId: string;
+  runtimeProjectId: string;
   executionPath: string;
   workspacePanelId: string | null;
   branch: string | null;
@@ -48,7 +48,7 @@ async function resolveProjectTarget(input: {
   return {
     projectId: project.id,
     projectPath: project.path,
-    runtimeSessionId: project.id,
+    runtimeProjectId: project.id,
     executionPath: project.path,
     workspacePanelId: null,
     branch: null,
@@ -79,7 +79,7 @@ export async function resolveWorkspacePanelExecutionTarget(input: {
     },
     select: {
       panelId: true,
-      runtimeSessionId: true,
+      runtimeProjectId: true,
       branch: true,
       worktreePath: true,
       workspace: {
@@ -100,13 +100,13 @@ export async function resolveWorkspacePanelExecutionTarget(input: {
   }
 
   const projectPath = row.workspace.project.path;
-  const runtimeSessionId = normalizeOptionalString(row.runtimeSessionId) ?? input.projectId;
+  const runtimeProjectId = normalizeOptionalString(row.runtimeProjectId) ?? input.projectId;
   const executionPath = normalizeOptionalString(row.worktreePath) ?? projectPath;
 
   return {
     projectId: row.workspace.projectId,
     projectPath,
-    runtimeSessionId,
+    runtimeProjectId,
     executionPath,
     workspacePanelId: row.panelId,
     branch: normalizeOptionalString(row.branch),

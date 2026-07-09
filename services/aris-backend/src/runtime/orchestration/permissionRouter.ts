@@ -32,7 +32,7 @@ import type {
   PermissionRequest,
   PermissionState,
   ApprovalPolicy,
-  RuntimeSession,
+  RuntimeProject,
 } from '../../types.js';
 import { randomUUID } from 'node:crypto';
 import type { ProviderPermissionRequest } from '../contracts/providerRuntime.js';
@@ -59,22 +59,22 @@ export function buildScopedPermissionKey(baseKey: string, chatId?: string): stri
  */
 export interface PermissionRouterDeps {
   coordinationStore: RuntimeCoordinationStore | null;
-  /** Resolves an ARIS session by id; null when session does not exist. */
-  getSession(sessionId: string): Promise<RuntimeSession | null>;
+  /** Resolves an ARIS project by id; null when project does not exist. */
+  getProject(projectId: string): Promise<RuntimeProject | null>;
   /** Resolves the approval policy in effect for a session at decision time. */
-  resolveApprovalPolicy(session: RuntimeSession): ApprovalPolicy;
+  resolveApprovalPolicy(session: RuntimeProject): ApprovalPolicy;
   /** Aborts in-flight runs scoped to a session (and optionally a chat). */
-  abortSessionRuns(sessionId: string, chatId?: string): void;
+  abortSessionRuns(projectId: string, chatId?: string): void;
   /** Persists a permission event as a message stream entry (best-effort). */
   appendAgentMessage(
-    sessionId: string,
+    projectId: string,
     text: string,
     meta: Record<string, unknown>,
     options: { type?: string; title?: string },
   ): Promise<void>;
   /** Records a lifecycle event for the run (waiting_for_approval, etc). */
   appendRunLifecycleEvent(
-    sessionId: string,
+    projectId: string,
     state: 'waiting_for_approval',
     meta: Record<string, unknown>,
   ): Promise<void>;
@@ -89,7 +89,7 @@ export class PermissionRouter {
   /** Local mirror of every permission record observed in the current process. */
   private readonly permissions = new Map<string, PermissionRequest>();
 
-  /** Codex permission key (sessionId+callId scope) -> permission id. */
+  /** Codex permission key (projectId+callId scope) -> permission id. */
   private readonly codexPermissionIndex = new Map<string, string>();
 
   /** Codex permission id -> responder callback that ships decision to codex CLI. */
@@ -128,7 +128,7 @@ export class PermissionRouter {
   }
 
   async createPermission(input: HappyRuntimePermissionInput): Promise<PermissionRequest> {
-    const session = await this.deps.getSession(input.sessionId);
+    const session = await this.deps.getProject(input.projectId);
     if (!session) {
       throw new Error('SESSION_NOT_FOUND');
     }
@@ -137,7 +137,7 @@ export class PermissionRouter {
       ? await this.deps.coordinationStore.createPermission(input)
       : ({
         id: randomUUID(),
-        sessionId: input.sessionId,
+        projectId: input.projectId,
         ...(typeof input.chatId === 'string' && input.chatId.trim().length > 0
           ? { chatId: input.chatId.trim() }
           : {}),
@@ -151,7 +151,7 @@ export class PermissionRouter {
 
     this.permissions.set(permission.id, permission);
     await this.persistPermissionEvent(permission, 'permission_request');
-    await this.deps.appendRunLifecycleEvent(input.sessionId, 'waiting_for_approval', {
+    await this.deps.appendRunLifecycleEvent(input.projectId, 'waiting_for_approval', {
       ...(permission.chatId ? { chatId: permission.chatId } : {}),
       requestedPath: session.metadata.path,
       agent: input.agent,
@@ -209,11 +209,11 @@ export class PermissionRouter {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`failed to send codex permission decision: ${message}`);
         if (decision === 'deny') {
-          this.deps.abortSessionRuns(permission.sessionId, permission.chatId ?? undefined);
+          this.deps.abortSessionRuns(permission.projectId, permission.chatId ?? undefined);
         }
       }
     } else if (decision === 'deny') {
-      this.deps.abortSessionRuns(permission.sessionId, permission.chatId ?? undefined);
+      this.deps.abortSessionRuns(permission.projectId, permission.chatId ?? undefined);
     }
 
     return updated;
@@ -302,7 +302,7 @@ export class PermissionRouter {
   // ---------------------------------------------------------------------
 
   async handleProviderPermissionRequest(input: {
-    session: RuntimeSession;
+    session: RuntimeProject;
     chatId?: string;
     agent: PermissionRequest['agent'];
     request: ProviderPermissionRequest;
@@ -325,7 +325,7 @@ export class PermissionRouter {
     }
 
     const created = await this.createPermission({
-      sessionId: input.session.id,
+      projectId: input.session.id,
       ...(input.chatId ? { chatId: input.chatId } : {}),
       agent: input.agent,
       command: input.request.command,
@@ -439,10 +439,10 @@ export class PermissionRouter {
   ): Promise<void> {
     try {
       await this.deps.appendAgentMessage(
-        permission.sessionId,
+        permission.projectId,
         permission.command,
         {
-          sessionId: permission.sessionId,
+          projectId: permission.projectId,
           ...(permission.chatId ? { chatId: permission.chatId } : {}),
           agent: permission.agent,
           streamEvent,

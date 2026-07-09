@@ -25,7 +25,7 @@ model Session {
 
 model SessionChat {
   id                   String   @id
-  sessionId            String   @map("projectId")
+  projectId            String
   userId               String
   agent                String
   title                String
@@ -52,7 +52,7 @@ model SessionChat {
   runs   SessionRun[]
   events SessionChatEvent[]
 
-  @@index([sessionId, userId, isPinned, lastActivityAt], map: "Chat_projectId_userId_isPinned_lastActivityAt_idx")
+  @@index([projectId, userId, isPinned, lastActivityAt], map: "Chat_projectId_userId_isPinned_lastActivityAt_idx")
   @@index([userId, updatedAt], map: "Chat_userId_updatedAt_idx")
   @@index([parentChatId], map: "Chat_parentChatId_idx")
   @@map("Chat")
@@ -60,7 +60,7 @@ model SessionChat {
 
 model SessionRun {
   id          String   @id @default(cuid())
-  sessionId   String
+  projectId   String   @map("sessionId")
   chatId      String
   agent       String
   model       String?
@@ -75,12 +75,12 @@ model SessionRun {
   events SessionChatEvent[]
 
   @@index([chatId, status])
-  @@index([sessionId, chatId, startedAt])
+  @@index([projectId, chatId, startedAt])
 }
 
 model SessionChatEvent {
   id        String   @id @default(cuid())
-  sessionId String
+  projectId String   @map("sessionId")
   chatId    String
   runId     String?
   type      String
@@ -94,7 +94,7 @@ model SessionChatEvent {
   run  SessionRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
 
   @@unique([chatId, seq])
-  @@index([sessionId, chatId, seq])
+  @@index([projectId, chatId, seq])
   @@index([chatId, createdAt])
 }
 
@@ -104,7 +104,7 @@ model ImportedAgentSession {
   providerSessionId  String
   sourcePath         String
   projectPath        String
-  arisSessionId      String?
+  arisProjectId      String?  @map("arisSessionId")
   chatId             String?
   tailCursorOffset   BigInt?
   oldestCursorOffset BigInt?
@@ -141,7 +141,7 @@ model ImportedAgentEvent {
 
 model SessionMessage {
   id        String   @id @default(uuid())
-  sessionId String
+  projectId String   @map("sessionId")
   type      String
   title     String?
   text      String
@@ -150,16 +150,16 @@ model SessionMessage {
 
   createdAt DateTime @default(now())
 
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session Session @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@unique([sessionId, seq])
-  @@index([sessionId, seq])
-  @@index([sessionId, createdAt])
+  @@unique([projectId, seq])
+  @@index([projectId, seq])
+  @@index([projectId, createdAt])
 }
 
 model Permission {
   id          String    @id @default(uuid())
-  sessionId   String
+  projectId   String    @map("sessionId")
   chatId      String?
   agent       String
   command     String
@@ -170,8 +170,8 @@ model Permission {
   requestedAt DateTime  @default(now())
   decidedAt   DateTime?
 
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session Session @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@index([sessionId])
+  @@index([projectId])
   @@index([state])
 }

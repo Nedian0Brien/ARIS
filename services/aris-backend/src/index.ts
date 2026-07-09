@@ -24,7 +24,7 @@ async function bootstrap() {
     arisRuntimeStore?: {
       cleanupEmptyChats: (maxAgeMs: number) => Promise<number>;
       discoverImportedAgentSession: Parameters<typeof runAgentSessionImportOnce>[0]['store']['discoverImportedAgentSession'];
-      resolveProjectSessionIdByPath: Parameters<typeof runAgentSessionImportOnce>[0]['store']['resolveProjectSessionIdByPath'];
+      resolveProjectIdByPath: Parameters<typeof runAgentSessionImportOnce>[0]['store']['resolveProjectIdByPath'];
       findOwningChat: Parameters<typeof runAgentSessionImportOnce>[0]['store']['findOwningChat'];
       ensureImportedAgentChat: Parameters<typeof runAgentSessionImportOnce>[0]['store']['ensureImportedAgentChat'];
       markImportedAgentSessionNative: Parameters<typeof runAgentSessionImportOnce>[0]['store']['markImportedAgentSessionNative'];

@@ -29,7 +29,7 @@ type SessionScrollOrchestratorStore = {
   subscribe: (listener: () => void) => () => void;
 };
 
-export function createSessionScrollOrchestratorStore(): SessionScrollOrchestratorStore {
+export function createProjectScrollOrchestratorStore(): SessionScrollOrchestratorStore {
   const listeners = new Set<() => void>();
   let activeCount = 0;
   let snapshot: SessionScrollOrchestratorSnapshot = {
@@ -92,9 +92,9 @@ export function createSessionScrollOrchestratorStore(): SessionScrollOrchestrato
   };
 }
 
-const sessionScrollOrchestratorStore = createSessionScrollOrchestratorStore();
+const sessionScrollOrchestratorStore = createProjectScrollOrchestratorStore();
 
-export function useSessionScrollOrchestrator() {
+export function useProjectScrollOrchestrator() {
   return useSyncExternalStore(
     sessionScrollOrchestratorStore.subscribe,
     sessionScrollOrchestratorStore.getSnapshot,

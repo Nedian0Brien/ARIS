@@ -1,0 +1,972 @@
+.dashboardTitleRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.dashboardTitleGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.dashboardCreateButton {
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.projectDashboardLayout {
+  --dashboard-card-bg: rgba(255, 255, 255, 0.82);
+  --dashboard-card-bg-soft: rgba(255, 255, 255, 0.64);
+  --dashboard-card-bg-strong: rgba(255, 255, 255, 0.92);
+  --dashboard-input-bg: rgba(255, 255, 255, 0.82);
+  --dashboard-border-soft: rgba(255, 255, 255, 0.5);
+  --dashboard-border-strong: rgba(148, 163, 184, 0.34);
+  --dashboard-surface-track: rgba(226, 232, 240, 0.9);
+  --dashboard-shine: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  --dashboard-shadow-soft: 0 8px 32px rgba(15, 23, 42, 0.06);
+  --dashboard-shadow-tiny: 0 2px 8px rgba(15, 23, 42, 0.06);
+  --dashboard-shadow-card: 0 4px 16px rgba(15, 23, 42, 0.08);
+  --dashboard-shadow-hover: 0 12px 24px rgba(15, 23, 42, 0.12);
+  --dashboard-shadow-selected: 0 0 0 2px rgba(59, 130, 246, 0.22), 0 8px 20px rgba(15, 23, 42, 0.16);
+  --dashboard-menu-bg: rgba(255, 255, 255, 0.95);
+  --dashboard-menu-border: rgba(15, 23, 42, 0.08);
+  --dashboard-menu-shadow: 0 10px 40px rgba(15, 23, 42, 0.14);
+  --dashboard-list-item-bg: rgba(255, 255, 255, 0.44);
+  display: grid;
+  grid-template-columns: 400px minmax(0, 1fr);
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+:global(html[data-theme='dark']) .projectDashboardLayout {
+  --dashboard-card-bg: rgba(17, 26, 42, 0.78);
+  --dashboard-card-bg-soft: rgba(17, 26, 42, 0.64);
+  --dashboard-card-bg-strong: rgba(17, 26, 42, 0.9);
+  --dashboard-input-bg: rgba(15, 23, 42, 0.78);
+  --dashboard-border-soft: rgba(71, 85, 105, 0.48);
+  --dashboard-border-strong: rgba(96, 165, 250, 0.52);
+  --dashboard-surface-track: rgba(51, 65, 85, 0.92);
+  --dashboard-shine: inset 0 1px 0 rgba(148, 163, 184, 0.08);
+  --dashboard-shadow-soft: 0 12px 32px rgba(2, 6, 23, 0.52);
+  --dashboard-shadow-tiny: 0 4px 12px rgba(2, 6, 23, 0.46);
+  --dashboard-shadow-card: 0 8px 24px rgba(2, 6, 23, 0.52);
+  --dashboard-shadow-hover: 0 14px 28px rgba(2, 6, 23, 0.58);
+  --dashboard-shadow-selected: 0 0 0 2px rgba(96, 165, 250, 0.32), 0 12px 26px rgba(2, 6, 23, 0.58);
+  --dashboard-menu-bg: rgba(17, 26, 42, 0.96);
+  --dashboard-menu-border: rgba(71, 85, 105, 0.58);
+  --dashboard-menu-shadow: 0 14px 36px rgba(2, 6, 23, 0.58);
+  --dashboard-list-item-bg: rgba(30, 41, 59, 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(html:not([data-theme='light']):not([data-theme='dark'])) .projectDashboardLayout {
+    --dashboard-card-bg: rgba(17, 26, 42, 0.78);
+    --dashboard-card-bg-soft: rgba(17, 26, 42, 0.64);
+    --dashboard-card-bg-strong: rgba(17, 26, 42, 0.9);
+    --dashboard-input-bg: rgba(15, 23, 42, 0.78);
+    --dashboard-border-soft: rgba(71, 85, 105, 0.48);
+    --dashboard-border-strong: rgba(96, 165, 250, 0.52);
+    --dashboard-surface-track: rgba(51, 65, 85, 0.92);
+    --dashboard-shine: inset 0 1px 0 rgba(148, 163, 184, 0.08);
+    --dashboard-shadow-soft: 0 12px 32px rgba(2, 6, 23, 0.52);
+    --dashboard-shadow-tiny: 0 4px 12px rgba(2, 6, 23, 0.46);
+    --dashboard-shadow-card: 0 8px 24px rgba(2, 6, 23, 0.52);
+    --dashboard-shadow-hover: 0 14px 28px rgba(2, 6, 23, 0.58);
+    --dashboard-shadow-selected: 0 0 0 2px rgba(96, 165, 250, 0.32), 0 12px 26px rgba(2, 6, 23, 0.58);
+    --dashboard-menu-bg: rgba(17, 26, 42, 0.96);
+    --dashboard-menu-border: rgba(71, 85, 105, 0.58);
+    --dashboard-menu-shadow: 0 14px 36px rgba(2, 6, 23, 0.58);
+    --dashboard-list-item-bg: rgba(30, 41, 59, 0.5);
+  }
+}
+
+.projectDashboardSidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.projectDashboardMain {
+  min-width: 0;
+}
+
+.projectSidebarCard {
+  padding: 1.5rem;
+  border: none;
+  border-radius: 1.5rem;
+  overflow: hidden;
+  background: var(--dashboard-card-bg);
+  backdrop-filter: blur(20px);
+  box-shadow: var(--dashboard-shadow-soft);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.projectSidebarTitle {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* 서버 리소스 수평 그리드 (CPU, RAM) */
+.serverResourceGridHorizontal {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.serverDonutCard {
+  border-radius: 1rem;
+  background: var(--dashboard-card-bg-soft);
+  border: none;
+  padding: 0.65rem 0.55rem 0.55rem;
+  box-shadow: var(--dashboard-shine);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.serverDonutChart {
+  position: relative;
+  width: 100%;
+  height: 140px;
+  min-height: 140px;
+}
+
+.serverDonutCenter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding-inline: 0.25rem;
+  text-align: center;
+  pointer-events: none;
+}
+
+.serverDonutValue {
+  font-size: 1.08rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+}
+
+.serverDonutLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+/* 저장소 카드 (Full Width) */
+.serverStorageCardFull {
+  border-radius: 1rem;
+  background: var(--dashboard-card-bg-soft);
+  border: none;
+  padding: 1rem;
+  box-shadow: var(--dashboard-shine);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.serverStorageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.serverStorageLabelRow {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.serverStorageLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.serverStorageValue {
+  font-size: 1.06rem;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.serverStorageBarTrack {
+  margin-top: 0.65rem;
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--dashboard-surface-track);
+  overflow: hidden;
+}
+
+.serverStorageBarFill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--gradient-primary);
+  transition: width 0.8s ease;
+}
+
+.serverStorageHint {
+  margin-top: 0.5rem;
+  font-size: 0.63rem;
+  color: var(--text-muted);
+}
+
+.serverMetricError {
+  margin-top: 0.5rem;
+  font-size: 0.68rem;
+  color: var(--accent-red);
+}
+
+/* 워크스페이스 & 에이전트 수평 그리드 */
+.projectStatsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.projectSummaryBarChart {
+  width: 100%;
+  height: 12px;
+  margin: 0.85rem 0;
+  background: var(--dashboard-surface-track);
+  border-radius: 999px;
+  display: flex;
+  overflow: hidden;
+}
+
+.projectBarSegment {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.projectBarRunning {
+  background: var(--chart-status-running);
+}
+
+.projectBarIdle {
+  background: var(--chart-status-idle);
+}
+
+.projectBarPending {
+  background: var(--chart-status-pending);
+}
+
+.projectBarCompleted {
+  background: var(--chart-status-completed);
+}
+
+.projectSummaryLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+.projectSummaryLegendItem {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 0;
+}
+
+.projectSummaryLegendItem strong {
+  margin-left: 0.2rem;
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.projectSummaryLegendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+/* 워크스페이스 리스트 섹션 */
+.projectStatusLists {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.projectStatusSubSection {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.projectStatusSubTitle {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.5rem;
+}
+
+.projectMiniList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.projectMiniItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--dashboard-list-item-bg);
+  border-radius: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.projectMiniTextGroup {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+}
+
+.projectMiniItemClickable {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.projectMiniItemClickable:hover {
+  background: var(--dashboard-list-item-bg-hover, var(--hover));
+}
+
+.projectMiniStatusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.projectMiniName {
+  display: block;
+  flex: 1;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectMiniSubName {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+}
+
+.projectEmptyHint {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.agentDonutWrap {
+  border-radius: 1rem;
+  background: var(--dashboard-card-bg-soft);
+  border: none;
+  box-shadow: var(--dashboard-shine);
+  padding: 0.5rem;
+  flex: 1;
+}
+
+.agentStatsContent {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  margin-top: 0.5rem;
+}
+
+.agentDonutChart {
+  position: relative;
+  width: 100%;
+  height: 120px;
+  min-height: 120px;
+}
+
+.agentDonutCenter {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.agentDonutValue {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+}
+
+.agentDonutLabel {
+  margin-top: 0.2rem;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.agentSummaryLegend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  flex: 1.2;
+}
+
+.agentSummaryLegendItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: 0.45rem 0.65rem;
+  background: var(--dashboard-list-item-bg);
+  border-radius: 0.65rem;
+  transition: background 0.2s;
+}
+
+.agentSummaryLegendItem:hover {
+  background: var(--dashboard-card-bg-soft);
+}
+
+.agentSummaryLegendInfo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.agentSummaryLegendItem strong {
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.projectMainToolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.projectSearchWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: none;
+  border-radius: 1rem;
+  background: var(--dashboard-input-bg);
+  backdrop-filter: blur(10px);
+  padding: 0 1rem;
+  min-height: 48px;
+  flex: 1;
+  box-shadow: var(--dashboard-shadow-tiny);
+}
+
+.projectSearchInput {
+  width: 100%;
+  border: none;
+  outline: none;
+  font-size: 0.95rem;
+  background: transparent;
+}
+
+.projectSortWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.projectToolbarRight {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.projectSelectionModeBtn {
+  width: 42px !important;
+  min-width: 42px !important;
+  min-height: 42px !important;
+  padding: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.8rem !important;
+}
+
+.projectSelectionToolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  width: 100%;
+  margin-bottom: 1.1rem;
+}
+
+.projectIconActionBtn {
+  min-height: 36px !important;
+  width: 36px !important;
+  padding: 0 !important;
+  border-radius: 0.75rem !important;
+}
+
+.projectIconDeleteBtn {
+  color: var(--accent-red) !important;
+}
+
+.projectSortLabel {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.projectSortSelect {
+  min-height: 48px;
+  border: none;
+  border-radius: 1rem;
+  padding: 0 1rem;
+  background: var(--dashboard-input-bg);
+  backdrop-filter: blur(10px);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--dashboard-shadow-tiny);
+  outline: none;
+}
+
+.projectGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1.25rem;
+}
+
+.projectCard {
+  position: relative;
+  background: var(--dashboard-card-bg-strong);
+  backdrop-filter: blur(12px);
+  border-radius: 1.5rem;
+  padding: 1.25rem;
+  box-shadow: var(--dashboard-shadow-card);
+  border: 1px solid var(--dashboard-border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  overflow: visible;
+}
+
+.projectCardSelected {
+  border-color: var(--dashboard-border-strong);
+  box-shadow: var(--dashboard-shadow-selected);
+}
+
+.projectCard:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--dashboard-shadow-hover);
+}
+
+.projectCard:active {
+  transform: translateY(-1px);
+  box-shadow: var(--dashboard-shadow-card);
+  background: var(--dashboard-card-bg-hover);
+  transition: transform 0.1s ease;
+}
+
+.projectSelectToggle {
+  position: absolute;
+  top: 0.7rem;
+  left: 0.7rem;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: var(--dashboard-card-bg-strong);
+  color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 2;
+}
+
+.projectSelectToggle:hover {
+  border-color: var(--primary);
+}
+
+.projectSelectToggleActive {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--text-on-accent);
+}
+
+.projectCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.projectCardHeaderMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.projectCardHeaderMainSelectable {
+  padding-left: 1.6rem;
+}
+
+.projectCardMenuAnchor {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.projectCardTitle {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.projectCardId {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-top: 0.25rem;
+}
+
+.projectMenuBtn {
+  padding: 0.25rem;
+  border-radius: 0.5rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.projectMenuBtn:hover {
+  background: var(--surface-soft);
+  color: var(--text);
+}
+
+.projectCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.projectCardAgent {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.projectCardAgentIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.projectCardMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: 2.5rem;
+  right: 0;
+  background: var(--dashboard-menu-bg);
+  backdrop-filter: blur(20px);
+  border-radius: 1rem;
+  box-shadow: var(--dashboard-menu-shadow);
+  border: 1px solid var(--dashboard-menu-border);
+  padding: 0.5rem;
+  min-width: 180px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  transform-origin: top right;
+  animation: dropdownFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.dropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  border-radius: 0.5rem;
+  transition: background 0.2s;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dropdownItem:hover {
+  background: var(--surface-subtle);
+}
+
+.dropdownItemDanger {
+  color: var(--accent-red);
+}
+
+.dropdownItemDanger:hover {
+  background: var(--accent-red-bg);
+}
+
+.pinBadge {
+  position: absolute;
+  top: -0.5rem;
+  right: -0.5rem;
+  background: var(--accent-amber);
+  color: var(--text-on-accent);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+@media (max-width: 999px) {
+
+  .projectMainToolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .projectToolbarRight {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .projectSortWrap {
+    flex: 1;
+  }
+
+  .projectSortSelect {
+    width: 100%;
+  }
+
+  .projectSelectionToolbar {
+    justify-content: flex-start;
+  }
+
+  .projectDashboardLayout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  .projectDashboardSidebar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+    order: -1;
+  }
+
+  .serverResourceGridHorizontal {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 767px) {
+  .dashboardTitleRow {
+    flex-direction: column;
+    align-items: stretch;
+    margin-bottom: 1.5rem;
+  }
+
+  .dashboardCreateButton {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .projectSidebarCard {
+    overflow: hidden;
+    padding: 1rem;
+  }
+
+  .serverResourceGridHorizontal {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .serverDonutCard {
+    padding: 0.5rem 0.4rem;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .serverDonutChart {
+    height: 120px;
+    min-height: 120px;
+    width: 100%;
+  }
+
+  .serverStorageCardFull {
+    padding: 0.75rem;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+}
+
+/* 워크스페이스 카드 에이전트 분포 */
+.chatAgentDistribution {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.chatAgentBar {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background-color: var(--dashboard-surface-track);
+}
+
+.chatAgentBarSegment {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.agentAvatarStack {
+  display: flex;
+  align-items: center;
+}
+
+.agentAvatarItem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--surface-base, #fff);
+  flex-shrink: 0;
+}
+
+.chatAgentEmpty {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  flex: 1;
+}

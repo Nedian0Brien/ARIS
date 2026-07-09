@@ -17,12 +17,12 @@ vi.mock('@/lib/happy/workspaces', () => ({
 }));
 
 type RouteModule = {
-  GET?: (request: NextRequest, context: { params: Promise<{ sessionId: string }> }) => Promise<NextResponse>;
-  POST?: (request: NextRequest, context: { params: Promise<{ sessionId: string }> }) => Promise<NextResponse>;
+  GET?: (request: NextRequest, context: { params: Promise<{ projectId: string }> }) => Promise<NextResponse>;
+  POST?: (request: NextRequest, context: { params: Promise<{ projectId: string }> }) => Promise<NextResponse>;
 };
 
 async function loadRouteModule(): Promise<RouteModule> {
-  return import('@/app/api/runtime/sessions/[sessionId]/panels/route').catch(() => ({}));
+  return import('@/app/api/runtime/projects/[projectId]/panels/route').catch(() => ({}));
 }
 
 describe('workspace panels route', () => {
@@ -44,8 +44,8 @@ describe('workspace panels route', () => {
     if (typeof mod.GET !== 'function') return;
 
     const response = await mod.GET(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/panels'),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      new NextRequest('http://localhost/api/runtime/projects/session-1/panels'),
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(response.status).toBe(200);
@@ -84,11 +84,11 @@ describe('workspace panels route', () => {
     if (typeof mod.POST !== 'function') return;
 
     const response = await mod.POST(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/panels', {
+      new NextRequest('http://localhost/api/runtime/projects/session-1/panels', {
         method: 'POST',
         body: JSON.stringify({ type: 'preview' }),
       }),
-      { params: Promise.resolve({ sessionId: 'session-1' }) },
+      { params: Promise.resolve({ projectId: 'session-1' }) },
     );
 
     expect(response.status).toBe(200);

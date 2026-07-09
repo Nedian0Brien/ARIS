@@ -2,7 +2,7 @@ function encodeSegment(value: string): string {
   return encodeURIComponent(value);
 }
 
-export function resolveProjectRuntimeSessionId(projectId: string): string {
+export function resolveProjectRuntimeProjectId(projectId: string): string {
   return projectId;
 }
 
@@ -22,32 +22,32 @@ export function buildProjectWorkspacePath(projectId: string): string {
   return `/api/projects/${encodeSegment(projectId)}/workspace`;
 }
 
-function buildLegacyRuntimePath(projectId: string, suffix: string): string {
-  const runtimeSessionId = resolveProjectRuntimeSessionId(projectId);
-  return `/api/runtime/sessions/${encodeSegment(runtimeSessionId)}${suffix}`;
+function buildProjectRuntimePath(projectId: string, suffix: string): string {
+  const runtimeProjectId = resolveProjectRuntimeProjectId(projectId);
+  return `/api/runtime/projects/${encodeSegment(runtimeProjectId)}${suffix}`;
 }
 
 export function buildProjectRuntimeEventsPath(projectId: string, params?: URLSearchParams): string {
   const query = params && params.toString() ? `?${params.toString()}` : '';
-  return buildLegacyRuntimePath(projectId, `/events${query}`);
+  return buildProjectRuntimePath(projectId, `/events${query}`);
 }
 
 export function buildProjectRuntimeTerminalPath(projectId: string): string {
-  return buildLegacyRuntimePath(projectId, '/terminal');
+  return buildProjectRuntimePath(projectId, '/terminal');
 }
 
 export function buildProjectRuntimeActionPath(projectId: string): string {
-  return buildLegacyRuntimePath(projectId, '/actions');
+  return buildProjectRuntimePath(projectId, '/actions');
 }
 
 export function buildProjectRuntimeMetadataPath(projectId: string): string {
-  return buildLegacyRuntimePath(projectId, '/metadata');
+  return buildProjectRuntimePath(projectId, '/metadata');
 }
 
 export function buildProjectRuntimeStatusPath(projectId: string): string {
-  return buildLegacyRuntimePath(projectId, '/runtime');
+  return buildProjectRuntimePath(projectId, '/runtime');
 }
 
 export function buildProjectRuntimeSubagentsPath(projectId: string, chatId: string): string {
-  return buildLegacyRuntimePath(projectId, `/chats/${encodeSegment(chatId)}/subagents`);
+  return buildProjectRuntimePath(projectId, `/chats/${encodeSegment(chatId)}/subagents`);
 }

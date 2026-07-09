@@ -10,7 +10,7 @@ function buildRunKey(sessionId: string, chatId?: string): string {
   return `${sessionId}:__default__`;
 }
 
-function isSessionRunKey(runKey: string, sessionId: string): boolean {
+function isProjectRunKey(runKey: string, sessionId: string): boolean {
   return runKey === `${sessionId}:__default__` || runKey.startsWith(`${sessionId}:`);
 }
 
@@ -60,7 +60,7 @@ export class ClaudeSessionRegistry implements ClaudeSessionOwner {
         if (runKey !== scopedRunKey) {
           continue;
         }
-      } else if (!isSessionRunKey(runKey, scope.sessionId)) {
+      } else if (!isProjectRunKey(runKey, scope.sessionId)) {
         continue;
       }
       run.abort();
@@ -97,7 +97,7 @@ export class ClaudeSessionRegistry implements ClaudeSessionOwner {
     }
 
     for (const runKey of this.runs.keys()) {
-      if (isSessionRunKey(runKey, scope.sessionId)) {
+      if (isProjectRunKey(runKey, scope.sessionId)) {
         return true;
       }
     }

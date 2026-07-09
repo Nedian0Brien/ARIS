@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  createSession: vi.fn(),
-  getSessionDetail: vi.fn(),
-  runSessionAction: vi.fn(),
+  createProject: vi.fn(),
+  getProjectDetail: vi.fn(),
+  runProjectAction: vi.fn(),
   workspaceFindFirst: vi.fn(),
   workspacePanelUpdate: vi.fn(),
 }));
 
 vi.mock('@/lib/happy/client', () => ({
-  createSession: mocks.createSession,
-  getSessionDetail: mocks.getSessionDetail,
-  runSessionAction: mocks.runSessionAction,
+  createProject: mocks.createProject,
+  getProjectDetail: mocks.getProjectDetail,
+  runProjectAction: mocks.runProjectAction,
 }));
 
 vi.mock('@/lib/db/prisma', () => ({
@@ -49,17 +49,17 @@ describe('workspace panel runtimes', () => {
       project: { path: '/home/ubuntu/project/ARIS' },
       panels: [{
         panelId: 'panel-1',
-        runtimeSessionId: null,
+        runtimeProjectId: null,
         branch: null,
         worktreePath: null,
         chat: { agent: 'codex' },
       }],
     });
-    mocks.createSession.mockResolvedValue({
+    mocks.createProject.mockResolvedValue({
       id: 'runtime-panel-1',
       branch: 'aris/panel/project-1/panel-1',
     });
-    mocks.getSessionDetail.mockResolvedValue({
+    mocks.getProjectDetail.mockResolvedValue({
       hostPath: '/home/ubuntu/project/ARIS/.worktrees/aris/panel/project-1/panel-1',
     });
 
@@ -68,7 +68,7 @@ describe('workspace panel runtimes', () => {
       projectId: 'project-1',
     })).resolves.toEqual({});
 
-    expect(mocks.createSession).toHaveBeenCalledWith({
+    expect(mocks.createProject).toHaveBeenCalledWith({
       path: '/home/ubuntu/project/ARIS',
       agent: 'codex',
       approvalPolicy: 'on-request',
@@ -76,7 +76,7 @@ describe('workspace panel runtimes', () => {
     });
     expect(mocks.workspacePanelUpdate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
-        runtimeSessionId: 'runtime-panel-1',
+        runtimeProjectId: 'runtime-panel-1',
         branch: 'aris/panel/project-1/panel-1',
         worktreePath: '/home/ubuntu/project/ARIS/.worktrees/aris/panel/project-1/panel-1',
       }),
@@ -89,18 +89,18 @@ describe('workspace panel runtimes', () => {
       project: { path: '/home/ubuntu/project/ARIS' },
       panels: [{
         panelId: 'panel-1',
-        runtimeSessionId: 'stale-runtime',
+        runtimeProjectId: 'stale-runtime',
         branch: 'aris/panel/project-1/panel-1',
         worktreePath: '/missing/worktree',
         chat: { agent: 'claude' },
       }],
     });
-    mocks.getSessionDetail.mockRejectedValueOnce(new Error('Session not found'));
-    mocks.createSession.mockResolvedValue({
+    mocks.getProjectDetail.mockRejectedValueOnce(new Error('Session not found'));
+    mocks.createProject.mockResolvedValue({
       id: 'runtime-panel-2',
       branch: 'aris/panel/project-1/panel-1',
     });
-    mocks.getSessionDetail.mockResolvedValueOnce({
+    mocks.getProjectDetail.mockResolvedValueOnce({
       hostPath: '/home/ubuntu/project/ARIS/.worktrees/aris/panel/project-1/panel-1',
     });
 
@@ -110,25 +110,25 @@ describe('workspace panel runtimes', () => {
       repairStale: true,
     })).resolves.toEqual({});
 
-    expect(mocks.createSession).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mocks.createProject).toHaveBeenCalledWith(expect.objectContaining({
       agent: 'claude',
       branch: 'aris/panel/project-1/panel-1',
     }));
     expect(mocks.workspacePanelUpdate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
-        runtimeSessionId: 'runtime-panel-2',
+        runtimeProjectId: 'runtime-panel-2',
       }),
     }));
   });
 
-  it('kills runtime sessions for panels removed from the layout', async () => {
+  it('kills runtime projects for panels removed from the layout', async () => {
     await cleanupWorkspacePanelRuntimes([
-      { runtimeSessionId: 'runtime-panel-1' },
-      { runtimeSessionId: null },
+      { runtimeProjectId: 'runtime-panel-1' },
+      { runtimeProjectId: null },
     ]);
 
-    expect(mocks.runSessionAction).toHaveBeenCalledTimes(1);
-    expect(mocks.runSessionAction).toHaveBeenCalledWith('runtime-panel-1', 'kill');
+    expect(mocks.runProjectAction).toHaveBeenCalledTimes(1);
+    expect(mocks.runProjectAction).toHaveBeenCalledWith('runtime-panel-1', 'kill');
   });
 
   it('returns panel-specific runtime creation failures instead of hiding the cause', async () => {
@@ -137,13 +137,13 @@ describe('workspace panel runtimes', () => {
       project: { path: '/home/ubuntu/project/ARIS' },
       panels: [{
         panelId: 'panel-1',
-        runtimeSessionId: null,
+        runtimeProjectId: null,
         branch: null,
         worktreePath: null,
         chat: { agent: 'codex' },
       }],
     });
-    mocks.createSession.mockRejectedValue(new Error('WORKTREE_CREATE_FAILED: branch collision'));
+    mocks.createProject.mockRejectedValue(new Error('WORKTREE_CREATE_FAILED: branch collision'));
 
     await expect(ensureProjectWorkspacePanelRuntimes({
       userId: 'user-1',

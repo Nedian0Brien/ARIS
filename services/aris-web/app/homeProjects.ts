@@ -1,4 +1,4 @@
-import type { ProjectChat, SessionChat, SessionSummary } from '@/lib/happy/types';
+import type { ProjectChat, ProjectSummary } from '@/lib/happy/types';
 
 export const RECENT_PROJECT_LIMIT = 6;
 export const RECENT_CHAT_LIMIT = 4;
@@ -14,7 +14,7 @@ function parseTime(value: string | null | undefined): number {
   return Number.isNaN(parsed) ? -1 : parsed;
 }
 
-function chatActivityTime(chat: ProjectChat | SessionChat): number {
+function chatActivityTime(chat: ProjectChat): number {
   return Math.max(
     parseTime(chat.latestEventAt),
     parseTime(chat.lastActivityAt),
@@ -23,25 +23,25 @@ function chatActivityTime(chat: ProjectChat | SessionChat): number {
   );
 }
 
-export function isChatEmpty(chat: ProjectChat | SessionChat): boolean {
+export function isChatEmpty(chat: ProjectChat): boolean {
   return chat.latestEventId == null && !(chat.latestPreview ?? '').trim();
 }
 
-function displayProjectName(project: SessionSummary): string {
+function displayProjectName(project: ProjectSummary): string {
   const candidate = project.alias || project.projectName || project.id;
   const normalized = candidate.replace(/\\/g, '/').replace(/\/+$/, '');
   return normalized.split('/').filter(Boolean).pop() || candidate;
 }
 
-function activityTime(project: SessionSummary): number {
+function activityTime(project: ProjectSummary): number {
   const chatTime = Math.max(...(project.recentChats ?? []).map(chatActivityTime), -1);
   return Math.max(parseTime(project.lastActivityAt), chatTime);
 }
 
 export function selectRecentProjects(
-  projects: SessionSummary[],
+  projects: ProjectSummary[],
   limit = RECENT_PROJECT_LIMIT,
-): SessionSummary[] {
+): ProjectSummary[] {
   const count = Math.max(0, Math.floor(limit));
 
   return [...projects]
@@ -54,7 +54,7 @@ export function selectRecentProjects(
 }
 
 export function selectRecentChats(
-  projects: SessionSummary[],
+  projects: ProjectSummary[],
   limit = RECENT_CHAT_LIMIT,
 ): HomeRecentChat[] {
   const count = Math.max(0, Math.floor(limit));

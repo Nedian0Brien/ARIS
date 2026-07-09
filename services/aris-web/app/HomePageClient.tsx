@@ -37,7 +37,7 @@ import { isChatEmpty, selectRecentChats, selectRecentProjects, type HomeRecentCh
 import { withAppBasePath } from '@/lib/routing/appPath';
 import { applyTheme, readThemeMode, type ThemeMode } from '@/lib/theme/clientTheme';
 import type { AuthenticatedUser } from '@/lib/auth/types';
-import type { ProjectChat, SessionChat, SessionStatus, SessionSummary } from '@/lib/happy/types';
+import type { ProjectChat, ProjectStatus, ProjectSummary } from '@/lib/happy/types';
 import { buildProjectChatCollectionPath } from '@/lib/projectRuntimeAdapter';
 import { useSidebarWidth } from '@/lib/hooks/useSidebarWidth';
 import {
@@ -134,7 +134,7 @@ const FALLBACK_FILES: FileItem[] = [
   { name: 'chat-composer-v2.html', path: '/docs/design/chat-composer-v2.html', isDirectory: false, isFile: true, sizeBytes: 108500 },
 ];
 
-function serializeReasoningEffort(value: ReasoningEffort): SessionChat['modelReasoningEffort'] {
+function serializeReasoningEffort(value: ReasoningEffort): ProjectChat['modelReasoningEffort'] {
   if (value === 'Low') return 'low';
   if (value === 'Medium') return 'medium';
   if (value === 'XHigh' || value === 'Max') return 'xhigh';
@@ -144,12 +144,12 @@ function serializeReasoningEffort(value: ReasoningEffort): SessionChat['modelRea
 function normalizeTab(tab: string | null): TabType {
   switch (tab) {
     case 'home':
-    case 'sessions':
       return 'home';
     case 'ask':
     case 'console':
       return 'ask';
     case 'project':
+    case 'projects':
       return 'project';
     case 'settings':
       return 'settings';
@@ -173,7 +173,7 @@ function normalizeProjectView(view: string | null): ProjectView {
   }
 }
 
-function statusWeight(status: SessionStatus): number {
+function statusWeight(status: ProjectStatus): number {
   if (status === 'running') return 0;
   if (status === 'idle') return 1;
   if (status === 'stopped') return 2;
@@ -181,8 +181,8 @@ function statusWeight(status: SessionStatus): number {
   return 4;
 }
 
-function sortSessions(sessions: SessionSummary[]): SessionSummary[] {
-  return [...sessions].sort((a, b) => {
+function sortProjects(projects: ProjectSummary[]): ProjectSummary[] {
+  return [...projects].sort((a, b) => {
     if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
     const statusDelta = statusWeight(a.status) - statusWeight(b.status);
     if (statusDelta !== 0) return statusDelta;
@@ -190,14 +190,14 @@ function sortSessions(sessions: SessionSummary[]): SessionSummary[] {
   });
 }
 
-function displayProjectName(session: SessionSummary): string {
-  const candidate = session.alias || session.projectName || session.id;
+function displayProjectName(project: ProjectSummary): string {
+  const candidate = project.alias || project.projectName || project.id;
   const normalized = candidate.replace(/\\/g, '/').replace(/\/+$/, '');
   return normalized.split('/').filter(Boolean).pop() || candidate;
 }
 
-function displayProjectPath(session: SessionSummary): string {
-  return session.projectName || session.id;
+function displayProjectPath(project: ProjectSummary): string {
+  return project.projectName || project.id;
 }
 
 function buildCodeServerFolderUrl(projectPath: string): string {
@@ -239,53 +239,53 @@ function clampPercent(value: number): number {
   return Math.min(100, Math.max(0, value));
 }
 
-function statusClass(status: SessionStatus): string {
+function statusClass(status: ProjectStatus): string {
   if (status === 'running') return 'run';
   if (status === 'error') return 'appr';
   if (status === 'stopped') return 'done';
   return 'idle';
 }
 
-function chatTitle(chat: Pick<SessionChat, 'title'>): string {
+function chatTitle(chat: Pick<ProjectChat, 'title'>): string {
   return chat.title?.trim() || 'Untitled chat';
 }
 
-function chatPreviewText(chat: Pick<SessionChat, 'latestPreview' | 'latestEventIsUser'>): string {
+function chatPreviewText(chat: Pick<ProjectChat, 'latestPreview' | 'latestEventIsUser'>): string {
   const preview = chat.latestPreview?.trim();
   if (preview) return preview;
   if (chat.latestEventIsUser) return '마지막 사용자 메시지가 기록되었습니다.';
   return '아직 미리보기가 없습니다.';
 }
 
-function chatActivityAt(chat: Pick<SessionChat, 'latestEventAt' | 'lastActivityAt' | 'updatedAt' | 'createdAt'>): string | null {
+function chatActivityAt(chat: Pick<ProjectChat, 'latestEventAt' | 'lastActivityAt' | 'updatedAt' | 'createdAt'>): string | null {
   return chat.latestEventAt || chat.lastActivityAt || chat.updatedAt || chat.createdAt || null;
 }
 
-function chatDotStatusClass(chat: Pick<SessionChat, 'latestHasErrorSignal' | 'latestEventIsUser'>): string {
+function chatDotStatusClass(chat: Pick<ProjectChat, 'latestHasErrorSignal' | 'latestEventIsUser'>): string {
   if (chat.latestHasErrorSignal) return 'appr';
   if (chat.latestEventIsUser) return 'idle';
   return 'done';
 }
 
-function homeFeedAvatarClass(agent: SessionChat['agent']): string {
+function homeFeedAvatarClass(agent: ProjectChat['agent']): string {
   if (agent === 'claude') return 'home-feed-avatar--c';
   if (agent === 'gemini') return 'home-feed-avatar--g';
   if (agent === 'codex') return 'home-feed-avatar--x';
   return 'home-feed-avatar--u';
 }
 
-function createChatPreview(session: SessionSummary): string {
-  const latestChat = session.recentChats?.[0];
+function createChatPreview(project: ProjectSummary): string {
+  const latestChat = project.recentChats?.[0];
   if (latestChat) {
     return chatPreviewText(latestChat);
   }
 
-  const project = displayProjectName(session);
-  if (session.status === 'running') {
-    return `${project} 작업이 실행 중입니다. 최근 런타임 이벤트와 파일 변경을 확인하세요.`;
+  const projectName = displayProjectName(project);
+  if (project.status === 'running') {
+    return `${projectName} 작업이 실행 중입니다. 최근 런타임 이벤트와 파일 변경을 확인하세요.`;
   }
-  if (session.status === 'error') {
-    return `${project}에서 확인이 필요한 오류 신호가 있습니다. 마지막 이벤트부터 추적하세요.`;
+  if (project.status === 'error') {
+    return `${projectName}에서 확인이 필요한 오류 신호가 있습니다. 마지막 이벤트부터 추적하세요.`;
   }
   return '아직 채팅 내역이 없습니다.';
 }
@@ -294,14 +294,14 @@ function ProjectRecentChatRows({
   className = '',
   emptyCopy = '아직 채팅 내역이 없습니다.',
   onChatOpen,
-  session,
+  project,
 }: {
   className?: string;
   emptyCopy?: string;
   onChatOpen?: (chatId: string) => void;
-  session: SessionSummary;
+  project: ProjectSummary;
 }) {
-  const chats = (session.recentChats ?? []).filter((chat) => !isChatEmpty(chat)).slice(0, 3);
+  const chats = (project.recentChats ?? []).filter((chat) => !isChatEmpty(chat)).slice(0, 3);
 
   return (
     <div className={`home-proj__chats${className ? ` ${className}` : ''}`}>
@@ -334,7 +334,7 @@ function ProjectRecentChatRows({
         <div className="home-proj__chat home-proj__chat--empty">
           <span className="home-proj__chat-dot home-proj__chat-dot--idle" />
           <div className="home-proj__chat-body">
-            <div className="home-proj__chat-title">{displayProjectName(session)}</div>
+            <div className="home-proj__chat-title">{displayProjectName(project)}</div>
             <div className="home-proj__chat-last">{emptyCopy}</div>
           </div>
         </div>
@@ -343,8 +343,8 @@ function ProjectRecentChatRows({
   );
 }
 
-function buildRecentAsks(sessions: SessionSummary[]): Array<{ question: string; meta: string }> {
-  const source = sessions.slice(0, 3);
+function buildRecentAsks(projects: ProjectSummary[]): Array<{ question: string; meta: string }> {
+  const source = projects.slice(0, 3);
   if (source.length === 0) {
     return [
       { question: 'composer v2 라이브 결정 뭐였지?', meta: 'recent · 8 msgs' },
@@ -352,30 +352,30 @@ function buildRecentAsks(sessions: SessionSummary[]): Array<{ question: string; 
       { question: 'deploy squash-merge 금지 배경', meta: 'recent · 5 msgs' },
     ];
   }
-  return source.map((session) => ({
-    question: `${displayProjectName(session)} 최근 결정 맥락`,
-    meta: `${formatRelativeTime(session.lastActivityAt)} · ${session.totalChats ?? 0} chats`,
+  return source.map((project) => ({
+    question: `${displayProjectName(project)} 최근 결정 맥락`,
+    meta: `${formatRelativeTime(project.lastActivityAt)} · ${project.totalChats ?? 0} chats`,
   }));
 }
 
-function projectStatusLabel(status: SessionStatus): string {
+function projectStatusLabel(status: ProjectStatus): string {
   if (status === 'running') return 'running';
   if (status === 'error') return 'approval';
   return 'idle';
 }
 
-function projectStatusBadgeClass(status: SessionStatus): string {
+function projectStatusBadgeClass(status: ProjectStatus): string {
   if (status === 'running') return 'badge--info';
   if (status === 'error') return 'badge--warning';
   return 'badge--neutral';
 }
 
-function deriveProjectFileCount(session: SessionSummary, index: number): number {
-  return Math.max(18, (session.totalChats ?? 0) * 7 + index * 11 + 24);
+function deriveProjectFileCount(project: ProjectSummary, index: number): number {
+  return Math.max(18, (project.totalChats ?? 0) * 7 + index * 11 + 24);
 }
 
-function deriveProjectTokenLabel(session: SessionSummary, index: number): string {
-  const total = Math.max(9.1, (session.totalChats ?? 0) * 11.8 + index * 7.4);
+function deriveProjectTokenLabel(project: ProjectSummary, index: number): string {
+  const total = Math.max(9.1, (project.totalChats ?? 0) * 11.8 + index * 7.4);
   return `${total.toFixed(1)}k`;
 }
 
@@ -396,10 +396,10 @@ async function createProjectChat(
   projectId: string,
   input: {
     title?: string;
-    agent?: SessionSummary['agent'];
+    agent?: ProjectSummary['agent'];
     model?: string | null;
     geminiMode?: string | null;
-    modelReasoningEffort?: SessionChat['modelReasoningEffort'];
+    modelReasoningEffort?: ProjectChat['modelReasoningEffort'];
   },
 ): Promise<ProjectChat> {
   const response = await fetch(withAppBasePath(buildProjectChatCollectionPath(projectId)), {
@@ -461,7 +461,7 @@ function Sidebar({
   onProjectChatOpen,
   onTabChange,
   onProjectOpen,
-  sessions,
+  projects,
   user,
   themeMode,
   onThemeChange,
@@ -472,13 +472,13 @@ function Sidebar({
   onProjectChatOpen: (projectId: string, chatId: string) => void;
   onTabChange: (tab: TabType) => void;
   onProjectOpen: (projectId: string, view?: ProjectView) => void;
-  sessions: SessionSummary[];
+  projects: ProjectSummary[];
   user: AuthenticatedUser;
   themeMode: ThemeMode;
   onThemeChange: (mode: ThemeMode) => void;
 }) {
-  const projects = useMemo(() => sortSessions(sessions).slice(0, 6), [sessions]);
-  const totalChats = sessions.reduce((sum, session) => sum + (session.totalChats ?? 0), 0);
+  const sidebarProjects = useMemo(() => sortProjects(projects).slice(0, 6), [projects]);
+  const totalChats = projects.reduce((sum, project) => sum + (project.totalChats ?? 0), 0);
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set());
   const [projectChatsById, setProjectChatsById] = useState<Record<string, ProjectChat[]>>({});
   const [visibleProjectChatCounts, setVisibleProjectChatCounts] = useState<Record<string, number>>({});
@@ -487,12 +487,12 @@ function Sidebar({
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
   const [tipPosition, setTipPosition] = useState<{ top: number; left: number } | null>(null);
 
-  function handleProjectTipShow(session: SessionSummary, event: React.SyntheticEvent<HTMLButtonElement>) {
+  function handleProjectTipShow(project: ProjectSummary, event: React.SyntheticEvent<HTMLButtonElement>) {
     const target = event.currentTarget;
     const rect = target.getBoundingClientRect();
     const top = Math.max(8, Math.min(rect.top, window.innerHeight - 220));
     const left = rect.right + 8;
-    setHoveredProjectId(session.id);
+    setHoveredProjectId(project.id);
     setTipPosition({ top, left });
   }
 
@@ -501,7 +501,7 @@ function Sidebar({
   }
 
   const hoveredProject = hoveredProjectId
-    ? projects.find((p) => p.id === hoveredProjectId) ?? null
+    ? sidebarProjects.find((p) => p.id === hoveredProjectId) ?? null
     : null;
 
   const navItems: Array<{ id: TabType; label: string; Icon: typeof Home; count?: number }> = [
@@ -553,18 +553,18 @@ function Sidebar({
   useEffect(() => {
     if (activeTab !== 'project') return;
 
-    projects.forEach((session) => {
-      if (!expandedProjectIds.has(session.id) || loadingProjectChatIds.has(session.id)) {
+    sidebarProjects.forEach((project) => {
+      if (!expandedProjectIds.has(project.id) || loadingProjectChatIds.has(project.id)) {
         return;
       }
 
-      const visibleCount = visibleProjectChatCounts[session.id] ?? SIDEBAR_PROJECT_CHAT_PAGE_SIZE;
-      const loadedCount = projectChatsById[session.id]?.length ?? 0;
-      const totalProjectChats = session.totalChats;
+      const visibleCount = visibleProjectChatCounts[project.id] ?? SIDEBAR_PROJECT_CHAT_PAGE_SIZE;
+      const loadedCount = projectChatsById[project.id]?.length ?? 0;
+      const totalProjectChats = project.totalChats;
       const targetCount = typeof totalProjectChats === 'number' ? Math.min(visibleCount, totalProjectChats) : visibleCount;
       if (targetCount <= 0 || loadedCount >= targetCount) return;
 
-      void loadProjectChats(session.id, targetCount);
+      void loadProjectChats(project.id, targetCount);
     });
   }, [
     activeTab,
@@ -572,7 +572,7 @@ function Sidebar({
     loadProjectChats,
     loadingProjectChatIds,
     projectChatsById,
-    projects,
+    sidebarProjects,
     visibleProjectChatCounts,
   ]);
 
@@ -601,40 +601,40 @@ function Sidebar({
     });
   }
 
-  async function createSidebarProjectChat(session: SessionSummary) {
-    if (creatingProjectChatIds.has(session.id)) return;
-    setCreatingProjectChatIds((current) => new Set(current).add(session.id));
+  async function createSidebarProjectChat(project: ProjectSummary) {
+    if (creatingProjectChatIds.has(project.id)) return;
+    setCreatingProjectChatIds((current) => new Set(current).add(project.id));
     try {
-      const projectModelInput = normalizeProjectChatModelInput(session.model);
-      const createdChat = await createProjectChat(session.id, {
-        title: `Chat ${Math.max(1, (session.totalChats ?? 0) + 1)}`,
-        agent: session.agent,
+      const projectModelInput = normalizeProjectChatModelInput(project.model);
+      const createdChat = await createProjectChat(project.id, {
+        title: `Chat ${Math.max(1, (project.totalChats ?? 0) + 1)}`,
+        agent: project.agent,
         model: projectModelInput,
         modelReasoningEffort: serializeReasoningEffort('High'),
       });
       setProjectChatsById((current) => {
-        const existingChats = current[session.id] ?? [];
+        const existingChats = current[project.id] ?? [];
         return {
           ...current,
-          [session.id]: [createdChat, ...existingChats.filter((chat) => chat.id !== createdChat.id)],
+          [project.id]: [createdChat, ...existingChats.filter((chat) => chat.id !== createdChat.id)],
         };
       });
       setExpandedProjectIds((current) => {
         const next = new Set(current);
-        next.add(session.id);
+        next.add(project.id);
         return next;
       });
       setVisibleProjectChatCounts((current) => ({
         ...current,
-        [session.id]: Math.max(current[session.id] ?? SIDEBAR_PROJECT_CHAT_PAGE_SIZE, SIDEBAR_PROJECT_CHAT_PAGE_SIZE),
+        [project.id]: Math.max(current[project.id] ?? SIDEBAR_PROJECT_CHAT_PAGE_SIZE, SIDEBAR_PROJECT_CHAT_PAGE_SIZE),
       }));
-      onProjectChatOpen(session.id, createdChat.id);
+      onProjectChatOpen(project.id, createdChat.id);
     } catch {
       return;
     } finally {
       setCreatingProjectChatIds((current) => {
         const next = new Set(current);
-        next.delete(session.id);
+        next.delete(project.id);
         return next;
       });
     }
@@ -668,35 +668,35 @@ function Sidebar({
       <div className="m-sb__proj-head"><span>{activeTab === 'ask' ? 'Recent asks' : 'Projects'}</span></div>
       <div className="m-sb__projects">
         {activeTab === 'ask'
-          ? buildRecentAsks(sessions).map((ask) => (
+          ? buildRecentAsks(projects).map((ask) => (
               <button key={ask.question} type="button" className="m-sb__proj">
                 <span className="m-sb__proj-name m-sb__proj-name--ask">{ask.question}</span>
               </button>
             ))
-          : projects.map((session) => {
-              const isActiveProject = activeProjectId === session.id;
-              const isProjectExpanded = expandedProjectIds.has(session.id);
-              const childChats = projectChatsById[session.id] ?? [];
-              const isLoadingProjectChats = loadingProjectChatIds.has(session.id);
-              const isCreatingProjectChat = creatingProjectChatIds.has(session.id);
-              const visibleSidebarChatLimit = visibleProjectChatCounts[session.id] ?? SIDEBAR_PROJECT_CHAT_PAGE_SIZE;
-              const visibleChatCount = session.totalChats ?? childChats.length;
+          : sidebarProjects.map((project) => {
+              const isActiveProject = activeProjectId === project.id;
+              const isProjectExpanded = expandedProjectIds.has(project.id);
+              const childChats = projectChatsById[project.id] ?? [];
+              const isLoadingProjectChats = loadingProjectChatIds.has(project.id);
+              const isCreatingProjectChat = creatingProjectChatIds.has(project.id);
+              const visibleSidebarChatLimit = visibleProjectChatCounts[project.id] ?? SIDEBAR_PROJECT_CHAT_PAGE_SIZE;
+              const visibleChatCount = project.totalChats ?? childChats.length;
               const hasMoreProjectChats = visibleChatCount > childChats.length;
-              const projectName = displayProjectName(session);
+              const projectName = displayProjectName(project);
               return (
-                <div key={session.id} className={`m-sb__project-node${isProjectExpanded ? ' m-sb__project-node--open' : ''}`}>
+                <div key={project.id} className={`m-sb__project-node${isProjectExpanded ? ' m-sb__project-node--open' : ''}`}>
                   <div className={`m-sb__proj-row${isActiveProject ? ' m-sb__proj-row--active' : ''}`}>
                     <button
                       type="button"
                       className={`m-sb__proj${isActiveProject ? ' m-sb__proj--active' : ''}`}
                       aria-label={`${isProjectExpanded ? 'Collapse' : 'Expand'} ${projectName} chats`}
                       aria-expanded={isProjectExpanded}
-                      onClick={() => toggleProjectChatGroup(session.id)}
-                      onMouseEnter={(event) => handleProjectTipShow(session, event)}
+                      onClick={() => toggleProjectChatGroup(project.id)}
+                      onMouseEnter={(event) => handleProjectTipShow(project, event)}
                       onMouseLeave={handleProjectTipHide}
-                      onFocus={(event) => handleProjectTipShow(session, event)}
+                      onFocus={(event) => handleProjectTipShow(project, event)}
                       onBlur={handleProjectTipHide}
-                      aria-describedby={hoveredProjectId === session.id ? 'sb-tip' : undefined}
+                      aria-describedby={hoveredProjectId === project.id ? 'sb-tip' : undefined}
                     >
                       <ChevronRight className={`m-sb__chat-toggle-icon${isProjectExpanded ? ' m-sb__chat-toggle-icon--open' : ''}`} size={13} />
                       <span className="m-sb__proj-name">{projectName}</span>
@@ -713,7 +713,7 @@ function Sidebar({
                         onClick={(event) => {
                           event.stopPropagation();
                           handleProjectTipHide();
-                          void createSidebarProjectChat(session);
+                          void createSidebarProjectChat(project);
                         }}
                       >
                         <Plus size={13} />
@@ -726,7 +726,7 @@ function Sidebar({
                         onClick={(event) => {
                           event.stopPropagation();
                           handleProjectTipHide();
-                          onProjectOpen(session.id);
+                          onProjectOpen(project.id);
                         }}
                       >
                         <ExternalLink size={13} />
@@ -741,8 +741,8 @@ function Sidebar({
                           type="button"
                           className={`m-sb__chat-child${activeProjectChatId === chat.id ? ' m-sb__chat-child--active' : ''}`}
                           draggable
-                          onDragStart={(event) => writeProjectChatDragPayload(event, session.id, chat)}
-                          onClick={() => onProjectChatOpen(session.id, chat.id)}
+                          onDragStart={(event) => writeProjectChatDragPayload(event, project.id, chat)}
+                          onClick={() => onProjectChatOpen(project.id, chat.id)}
                         >
                           <span className="m-sb__chat-branch" />
                           <span className="m-sb__chat-title">{chat.title}</span>
@@ -751,7 +751,7 @@ function Sidebar({
                       ))}
                       {isLoadingProjectChats && childChats.length === 0 && <div className="m-sb__chat-loading">Loading chats</div>}
                       {!isLoadingProjectChats && childChats.length === 0 && (
-                        <button type="button" className="m-sb__chat-child m-sb__chat-child--empty" onClick={() => onProjectOpen(session.id, 'chats')}>
+                        <button type="button" className="m-sb__chat-child m-sb__chat-child--empty" onClick={() => onProjectOpen(project.id, 'chats')}>
                           <span className="m-sb__chat-branch" />
                           <span className="m-sb__chat-title">No chats yet</span>
                         </button>
@@ -762,7 +762,7 @@ function Sidebar({
                           className="m-sb__chat-more"
                           disabled={isLoadingProjectChats}
                           aria-busy={isLoadingProjectChats}
-                          onClick={() => showMoreProjectChats(session.id)}
+                          onClick={() => showMoreProjectChats(project.id)}
                         >
                           {isLoadingProjectChats ? 'Loading chats' : '더보기'}
                         </button>
@@ -816,7 +816,7 @@ function Sidebar({
 
 function Topbar({
   activeTab,
-  sessions,
+  projects,
   chatScreenMode = false,
   chatProjectName = null,
   onLogoHome,
@@ -825,7 +825,7 @@ function Topbar({
   onOpenSettings,
 }: {
   activeTab: TabType;
-  sessions: SessionSummary[];
+  projects: ProjectSummary[];
   chatScreenMode?: boolean;
   chatProjectName?: string | null;
   onLogoHome?: () => void;
@@ -833,7 +833,7 @@ function Topbar({
   onThemeChange: (mode: ThemeMode) => void;
   onOpenSettings: () => void;
 }) {
-  const activeProjects = sessions.filter((session) => session.status === 'running' || session.status === 'error').length;
+  const activeProjects = projects.filter((project) => project.status === 'running' || project.status === 'error').length;
   const copy: Record<TabType, { title: string; crumb: string }> = {
     home: { title: 'Home', crumb: 'workspace overview' },
     ask: { title: 'Ask ARIS', crumb: 'global memory' },
@@ -1218,19 +1218,19 @@ function HomeStat({
 function HomeSurface({
   metrics,
   onProjectOpen,
-  sessions,
+  projects,
   user,
 }: {
   metrics: RuntimeMetrics | null;
   onProjectOpen: (projectId: string, view?: ProjectView, chatId?: string | null) => void;
-  sessions: SessionSummary[];
+  projects: ProjectSummary[];
   user: AuthenticatedUser;
 }) {
-  const projects = selectRecentProjects(sessions);
-  const recentChats = selectRecentChats(sessions);
-  const running = sessions.filter((session) => session.status === 'running').length;
-  const needsReview = sessions.filter((session) => session.status === 'error').length;
-  const idle = sessions.filter((session) => session.status === 'idle' || session.status === 'stopped').length;
+  const recentProjects = selectRecentProjects(projects);
+  const recentChats = selectRecentChats(projects);
+  const running = projects.filter((project) => project.status === 'running').length;
+  const needsReview = projects.filter((project) => project.status === 'error').length;
+  const idle = projects.filter((project) => project.status === 'idle' || project.status === 'stopped').length;
   const ramUsed = metrics?.ram.usedBytes && metrics?.ram.totalBytes
     ? `${formatBytes(metrics.ram.usedBytes)}`
     : `${Math.round(metrics?.ram.percent ?? 0)}`;
@@ -1290,30 +1290,30 @@ function HomeSurface({
         <button type="button" onClick={() => navigateTo('/?tab=project')}>View all</button>
       </div>
       <section className="home-grid" aria-label="Recent Project">
-        {projects.map((session) => {
-          const latestChatActivityAt = session.recentChats?.[0] ? chatActivityAt(session.recentChats[0]) : null;
+        {recentProjects.map((project) => {
+          const latestChatActivityAt = project.recentChats?.[0] ? chatActivityAt(project.recentChats[0]) : null;
 
           return (
             <article
-              key={session.id}
+              key={project.id}
               className="home-proj"
               role="button"
               tabIndex={0}
-              data-project-href={buildProjectDetailPath(session.id)}
-              onClick={() => onProjectOpen(session.id)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onProjectOpen(session.id); } }}
+              data-project-href={buildProjectDetailPath(project.id)}
+              onClick={() => onProjectOpen(project.id)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onProjectOpen(project.id); } }}
             >
               <div className="home-proj__head">
                 <div>
-                  <div className="home-proj__title">{displayProjectName(session)}</div>
-                  <div className="home-proj__path">{displayProjectPath(session)}</div>
+                  <div className="home-proj__title">{displayProjectName(project)}</div>
+                  <div className="home-proj__path">{displayProjectPath(project)}</div>
                 </div>
                 <ChevronRight size={15} />
               </div>
-              <ProjectRecentChatRows session={session} onChatOpen={(chatId) => onProjectOpen(session.id, 'chat', chatId)} />
+              <ProjectRecentChatRows project={project} onChatOpen={(chatId) => onProjectOpen(project.id, 'chat', chatId)} />
               <div className="home-proj__foot">
-                <span>{session.totalChats ?? 0} chats</span>
-                <span>{formatRelativeTime(latestChatActivityAt ?? session.lastActivityAt)}</span>
+                <span>{project.totalChats ?? 0} chats</span>
+                <span>{formatRelativeTime(latestChatActivityAt ?? project.lastActivityAt)}</span>
               </div>
             </article>
           );
@@ -1361,9 +1361,9 @@ function HomeSurface({
   );
 }
 
-function AskSurface({ sessions }: { sessions: SessionSummary[] }) {
+function AskSurface({ projects }: { projects: ProjectSummary[] }) {
   const [query, setQuery] = useState('');
-  const recentAsks = buildRecentAsks(sessions);
+  const recentAsks = buildRecentAsks(projects);
 
   return (
     <div className="m-body">
@@ -1430,7 +1430,7 @@ function ProjectDetailSurface({
   onThemeChange,
   projectView,
   selectedChatId,
-  session,
+  project,
   surfaceMode,
   themeMode,
 }: {
@@ -1444,19 +1444,19 @@ function ProjectDetailSurface({
   onThemeChange: (mode: ThemeMode) => void;
   projectView: ProjectView;
   selectedChatId: string | null;
-  session: SessionSummary;
+  project: ProjectSummary;
   surfaceMode: ProjectChatSurfaceMode;
   themeMode: ThemeMode;
 }) {
-  const projectName = displayProjectName(session);
-  const projectPath = displayProjectPath(session);
-  const status = statusClass(session.status);
-  const totalChats = session.totalChats ?? 0;
-  const activeChats = session.status === 'running' || session.status === 'error' ? 1 : 0;
-  const fileCount = deriveProjectFileCount(session, index);
-  const tokenLabel = deriveProjectTokenLabel(session, index);
-  const modelLabel = session.model || session.metadata?.runtimeModel || 'default model';
-  const recentPreview = createChatPreview(session);
+  const projectName = displayProjectName(project);
+  const projectPath = displayProjectPath(project);
+  const status = statusClass(project.status);
+  const totalChats = project.totalChats ?? 0;
+  const activeChats = project.status === 'running' || project.status === 'error' ? 1 : 0;
+  const fileCount = deriveProjectFileCount(project, index);
+  const tokenLabel = deriveProjectTokenLabel(project, index);
+  const modelLabel = project.model || project.metadata?.runtimeModel || 'default model';
+  const recentPreview = createChatPreview(project);
   const [isCreatingHeaderChat, setIsCreatingHeaderChat] = useState(false);
   const [headerCreateError, setHeaderCreateError] = useState<string | null>(null);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
@@ -1481,10 +1481,10 @@ function ProjectDetailSurface({
     setIsCreatingHeaderChat(true);
     setHeaderCreateError(null);
     try {
-      const projectModelInput = normalizeProjectChatModelInput(session.model);
-      const createdChat = await createProjectChat(session.id, {
+      const projectModelInput = normalizeProjectChatModelInput(project.model);
+      const createdChat = await createProjectChat(project.id, {
         title: `Chat ${Math.max(1, totalChats + 1)}`,
-        agent: session.agent,
+        agent: project.agent,
         model: projectModelInput,
         modelReasoningEffort: serializeReasoningEffort('High'),
       });
@@ -1512,7 +1512,7 @@ function ProjectDetailSurface({
           projectPath={projectPath}
           recentPreview={recentPreview}
           selectedChatId={selectedChatId}
-          session={session}
+          project={project}
           surfaceMode={surfaceMode}
           themeMode={themeMode}
           tokenLabel={tokenLabel}
@@ -1533,7 +1533,7 @@ function ProjectDetailSurface({
             <h1 className="proj-head__title">{projectName}</h1>
             <div className="proj-head__path">
               {projectPath}
-              <span className={`proj-head__path-status--${status}`}>● {projectStatusLabel(session.status)}</span>
+              <span className={`proj-head__path-status--${status}`}>● {projectStatusLabel(project.status)}</span>
             </div>
           </div>
           <div className="proj-head__actions">
@@ -1577,7 +1577,7 @@ function ProjectDetailSurface({
           </div>
           <div>
             <div className="proj-stat-label">Last activity</div>
-            <div className="proj-stat-value">{formatRelativeTime(session.lastActivityAt)}</div>
+            <div className="proj-stat-value">{formatRelativeTime(project.lastActivityAt)}</div>
           </div>
           <div>
             <div className="proj-stat-label">Tokens used</div>
@@ -1667,7 +1667,7 @@ function ProjectDetailSurface({
             projectPath={projectPath}
             recentPreview={recentPreview}
             selectedChatId={selectedChatId}
-            session={session}
+            project={project}
             surfaceMode={surfaceMode}
             tokenLabel={tokenLabel}
           />
@@ -1690,13 +1690,13 @@ function ProjectDetailSurface({
           <div className="proj-chats">
             <button type="button" className="proj-chat" onClick={() => onProjectViewChange('chats')}>
               <div className="proj-chat__head">
-                <div className="proj-chat__title">{session.alias || projectName}</div>
-                <div className="proj-chat__time">{formatRelativeTime(session.lastActivityAt)}</div>
+                <div className="proj-chat__title">{project.alias || projectName}</div>
+                <div className="proj-chat__time">{formatRelativeTime(project.lastActivityAt)}</div>
               </div>
               <div className="proj-chat__preview">{recentPreview}</div>
               <div className="proj-chat__meta">
-                <span className={`badge badge--dot ${projectStatusBadgeClass(session.status)}`}>{projectStatusLabel(session.status)}</span>
-                <span>{session.agent} · {modelLabel}</span>
+                <span className={`badge badge--dot ${projectStatusBadgeClass(project.status)}`}>{projectStatusLabel(project.status)}</span>
+                <span>{project.agent} · {modelLabel}</span>
                 <span>{tokenLabel} · project scope</span>
               </div>
             </button>
@@ -1709,7 +1709,7 @@ function ProjectDetailSurface({
                 className="home-proj__chats--project-overview"
                 emptyCopy="프로젝트에서 채팅을 시작하면 최신 내역이 여기에 표시됩니다."
                 onChatOpen={onProjectChatOpen}
-                session={session}
+                project={project}
               />
             </article>
           </div>
@@ -1723,7 +1723,7 @@ function ProjectDetailSurface({
               <div className="proj-item">
                 <span className={`proj-item__ico proj-item__ico--${status}`}>{status === 'appr' ? '!' : '●'}</span>
                 <div className="proj-item__body">
-                  <div className="proj-item__title">{projectStatusLabel(session.status)}</div>
+                  <div className="proj-item__title">{projectStatusLabel(project.status)}</div>
                   <div className="proj-item__meta">{recentPreview}</div>
                 </div>
               </div>
@@ -1809,7 +1809,7 @@ function ProjectSurface({
   projectView,
   selectedChatId,
   selectedProjectId,
-  sessions,
+  projects,
   surfaceMode,
   themeMode,
 }: {
@@ -1824,25 +1824,25 @@ function ProjectSurface({
   projectView: ProjectView;
   selectedChatId: string | null;
   selectedProjectId: string | null;
-  sessions: SessionSummary[];
+  projects: ProjectSummary[];
   surfaceMode: ProjectChatSurfaceMode;
   themeMode: ThemeMode;
 }) {
   const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
-  const projects = sortSessions(sessions);
-  const selectedIndex = selectedProjectId ? projects.findIndex((session) => session.id === selectedProjectId) : -1;
-  const selectedProject = selectedIndex >= 0 ? projects[selectedIndex] : null;
-  const activeCount = projects.filter((session) => session.status === 'running' || session.status === 'error').length;
-  const totalChats = projects.reduce((sum, session) => sum + (session.totalChats ?? 0), 0);
+  const sortedProjects = sortProjects(projects);
+  const selectedIndex = selectedProjectId ? sortedProjects.findIndex((project) => project.id === selectedProjectId) : -1;
+  const selectedProject = selectedIndex >= 0 ? sortedProjects[selectedIndex] : null;
+  const activeCount = sortedProjects.filter((project) => project.status === 'running' || project.status === 'error').length;
+  const totalChats = sortedProjects.reduce((sum, project) => sum + (project.totalChats ?? 0), 0);
   const normalizedQuery = query.trim().toLowerCase();
-  const filteredProjects = projects.filter((session) => {
+  const filteredProjects = sortedProjects.filter((project) => {
     const matchesQuery = !normalizedQuery
-      || displayProjectName(session).toLowerCase().includes(normalizedQuery)
-      || displayProjectPath(session).toLowerCase().includes(normalizedQuery);
+      || displayProjectName(project).toLowerCase().includes(normalizedQuery)
+      || displayProjectPath(project).toLowerCase().includes(normalizedQuery);
     if (!matchesQuery) return false;
-    if (activeFilter === 'Active') return session.status === 'running' || session.status === 'error';
-    if (activeFilter === 'Archived') return session.status === 'stopped';
+    if (activeFilter === 'Active') return project.status === 'running' || project.status === 'error';
+    if (activeFilter === 'Archived') return project.status === 'stopped';
     return true;
   });
   const chips = ['All', 'Active', 'Recent', 'Archived'];
@@ -1850,7 +1850,7 @@ function ProjectSurface({
   if (selectedProject) {
     return (
       <ProjectDetailSurface
-        session={selectedProject}
+        project={selectedProject}
         index={selectedIndex}
         isOperator={isOperator}
         onBackToProjects={onBackToProjects}
@@ -1882,7 +1882,7 @@ function ProjectSurface({
         <div className="proj-list-chips" aria-label="프로젝트 필터">
           {chips.map((chip) => {
             const count = chip === 'All'
-              ? projects.length
+              ? sortedProjects.length
               : chip === 'Active'
                 ? activeCount
                 : null;
@@ -1903,66 +1903,66 @@ function ProjectSurface({
 
       <div className="proj-list-body">
         <div className="proj-list-grid">
-          {filteredProjects.map((session, index) => {
-            const latestChatActivityAt = session.recentChats?.[0] ? chatActivityAt(session.recentChats[0]) : null;
+          {filteredProjects.map((project, index) => {
+            const latestChatActivityAt = project.recentChats?.[0] ? chatActivityAt(project.recentChats[0]) : null;
 
             return (
               <article
-                key={session.id}
+                key={project.id}
                 className="proj-list-card"
                 role="button"
                 tabIndex={0}
-                aria-label={`${displayProjectName(session)} 프로젝트 열기`}
-                onClick={() => onProjectOpen(session.id)}
+                aria-label={`${displayProjectName(project)} 프로젝트 열기`}
+                onClick={() => onProjectOpen(project.id)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
-                    onProjectOpen(session.id);
+                    onProjectOpen(project.id);
                   }
                 }}
               >
               <div className="proj-list-card__head">
                 <div className="proj-list-card__info">
-                  <div className="proj-list-card__name">{displayProjectName(session)}</div>
-                  <div className="proj-list-card__path">{displayProjectPath(session)}</div>
+                  <div className="proj-list-card__name">{displayProjectName(project)}</div>
+                  <div className="proj-list-card__path">{displayProjectPath(project)}</div>
                 </div>
-                <span className={`badge badge--dot ${projectStatusBadgeClass(session.status)}`}>
-                  {projectStatusLabel(session.status)}
+                <span className={`badge badge--dot ${projectStatusBadgeClass(project.status)}`}>
+                  {projectStatusLabel(project.status)}
                 </span>
               </div>
               <div className="proj-list-stats">
                 <div className="proj-list-stat">
                   <div className="proj-list-stat__label">Chats</div>
                   <div className="proj-list-stat__val">
-                    {session.totalChats ?? 0}
-                    {(session.status === 'running' || session.status === 'error') && (
+                    {project.totalChats ?? 0}
+                    {(project.status === 'running' || project.status === 'error') && (
                       <span className="proj-list-stat__sub">· 1 active</span>
                     )}
                   </div>
                 </div>
                 <div className="proj-list-stat">
                   <div className="proj-list-stat__label">Files</div>
-                  <div className="proj-list-stat__val">{deriveProjectFileCount(session, index)}</div>
+                  <div className="proj-list-stat__val">{deriveProjectFileCount(project, index)}</div>
                 </div>
                 <div className="proj-list-stat">
                   <div className="proj-list-stat__label">Tokens</div>
-                  <div className="proj-list-stat__val">{deriveProjectTokenLabel(session, index)}</div>
+                  <div className="proj-list-stat__val">{deriveProjectTokenLabel(project, index)}</div>
                 </div>
               </div>
               <ProjectRecentChatRows
                 className="home-proj__chats--project-list"
                 emptyCopy="프로젝트에서 채팅을 시작하면 최근 내역이 여기에 표시됩니다."
-                session={session}
-                onChatOpen={(chatId) => onProjectChatOpen(session.id, chatId)}
+                project={project}
+                onChatOpen={(chatId) => onProjectChatOpen(project.id, chatId)}
               />
               <div className="proj-list-card__foot">
-                <span className="proj-list-card__foot-meta">last {formatRelativeTime(latestChatActivityAt ?? session.lastActivityAt)}</span>
+                <span className="proj-list-card__foot-meta">last {formatRelativeTime(latestChatActivityAt ?? project.lastActivityAt)}</span>
                 <button
                   type="button"
                   className="proj-list-new-btn"
                   onClick={(event) => {
                     event.stopPropagation();
-                    onProjectOpen(session.id, 'chats');
+                    onProjectOpen(project.id, 'chats');
                   }}
                 >
                   <Plus size={11} />
@@ -2115,12 +2115,12 @@ function FilesSurface({ browserRootPath }: { browserRootPath: string }) {
 
 export default function HomePageWrapper({
   user,
-  initialSessions,
+  initialProjects,
   runtimeError,
   browserRootPath,
 }: {
   user: AuthenticatedUser;
-  initialSessions: SessionSummary[];
+  initialProjects: ProjectSummary[];
   runtimeError: string | null;
   browserRootPath: string;
 }) {
@@ -2230,7 +2230,7 @@ export default function HomePageWrapper({
     };
   }, []);
 
-  const sessions = useMemo(() => sortSessions(initialSessions), [initialSessions]);
+  const projects = useMemo(() => sortProjects(initialProjects), [initialProjects]);
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
@@ -2273,7 +2273,7 @@ export default function HomePageWrapper({
   };
 
   const content = (() => {
-    if (activeTab === 'ask') return <AskSurface sessions={sessions} />;
+    if (activeTab === 'ask') return <AskSurface projects={projects} />;
     if (activeTab === 'project') {
       return (
         <ProjectSurface
@@ -2288,7 +2288,7 @@ export default function HomePageWrapper({
           projectView={selectedProjectView}
           selectedChatId={selectedProjectChatId}
           selectedProjectId={selectedProjectId}
-          sessions={sessions}
+          projects={projects}
           surfaceMode={projectSurfaceMode}
           themeMode={themeMode}
         />
@@ -2296,13 +2296,13 @@ export default function HomePageWrapper({
     }
     if (activeTab === 'files') return <FilesSurface browserRootPath={browserRootPath} />;
     if (activeTab === 'settings') return <SettingsSurface />;
-    return <HomeSurface metrics={metrics} onProjectOpen={handleProjectOpen} sessions={sessions} user={user} />;
+    return <HomeSurface metrics={metrics} onProjectOpen={handleProjectOpen} projects={projects} user={user} />;
   })();
 
   const shouldShowBottomNav = !(activeTab === 'project' && selectedProjectView === 'chat');
   const isChatScreen = !shouldShowBottomNav;
   const chatScreenProject = isChatScreen && selectedProjectId
-    ? sessions.find((session) => session.id === selectedProjectId) ?? null
+    ? projects.find((project) => project.id === selectedProjectId) ?? null
     : null;
   const chatScreenProjectName = chatScreenProject ? displayProjectName(chatScreenProject) : null;
   const handleTopbarLogoHome = () => {
@@ -2322,7 +2322,7 @@ export default function HomePageWrapper({
           onProjectChatOpen={handleProjectChatOpen}
           onProjectOpen={handleProjectOpen}
           onTabChange={handleTabChange}
-          sessions={sessions}
+          projects={projects}
           user={user}
           themeMode={themeMode}
           onThemeChange={changeThemeMode}
@@ -2331,7 +2331,7 @@ export default function HomePageWrapper({
         <main className="m-main">
           <Topbar
             activeTab={activeTab}
-            sessions={sessions}
+            projects={projects}
             chatScreenMode={isChatScreen}
             chatProjectName={chatScreenProjectName}
             onLogoHome={handleTopbarLogoHome}

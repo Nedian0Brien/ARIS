@@ -15,7 +15,7 @@ const actionMarksHelper = readFileSync(resolve(__dirname, '../components/project
 const commandTokensHelper = readFileSync(resolve(__dirname, '../components/project-chat/helpers/commandTokens.tsx'), 'utf8');
 const appChromeMenuSource = readFileSync(resolve(__dirname, '../components/layout/AppChromeMenu.tsx'), 'utf8');
 const uiCss = readAppStyles();
-const terminalRoute = readFileSync(resolve(__dirname, '../app/api/runtime/sessions/[sessionId]/terminal/route.ts'), 'utf8');
+const terminalRoute = readFileSync(resolve(__dirname, '../app/api/runtime/projects/[projectId]/terminal/route.ts'), 'utf8');
 
 function cssBlock(selector: string) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -39,7 +39,7 @@ describe('project list surface', () => {
     expect(homeClient).toContain('className="proj-list-card"');
     expect(homeClient).toContain('className="proj-list-card proj-list-card--new"');
     expect(homeClient).toContain('className="proj-list-new-btn"');
-    expect(homeClient).not.toContain('const selected = sortSessions(sessions)[0] ?? null;');
+    expect(homeClient).not.toContain('const selected = sortSessions(projects)[0] ?? null;');
   });
 
   it('keeps the Project topbar compact with theme actions behind a context menu', () => {
@@ -64,19 +64,19 @@ describe('project list surface', () => {
     expect(uiCss).toContain('.m-context-menu__panel');
   });
 
-  it('routes project card clicks to the IA project detail instead of the legacy session screen', () => {
+  it('routes project card clicks to the IA project detail instead of the legacy project screen', () => {
     expect(homeClient).toContain("type ProjectView = 'overview' | 'chats' | 'chat' | 'files' | 'context';");
     expect(homeClient).toContain("function buildProjectDetailPath(projectId: string, view: ProjectView = 'chats', chatId?: string | null)");
     expect(homeClient).toContain("params.set('tab', 'project');");
     expect(homeClient).toContain("params.set('project', projectId);");
     expect(homeClient).toContain("if (view === 'chat' && chatId) {");
     expect(homeClient).toContain("params.set('chat', chatId);");
-    expect(homeClient).toContain('data-project-href={buildProjectDetailPath(session.id)}');
-    expect(homeClient).toContain('onClick={() => onProjectOpen(session.id)}');
-    expect(homeClient).toContain('onProjectOpen(session.id);');
+    expect(homeClient).toContain('data-project-href={buildProjectDetailPath(project.id)}');
+    expect(homeClient).toContain('onClick={() => onProjectOpen(project.id)}');
+    expect(homeClient).toContain('onProjectOpen(project.id);');
     expect(homeClient).toContain("window.history.pushState(null, '', withAppBasePath(buildProjectDetailPath(projectId, view, chatId)))");
     expect(homeClient).toContain('selectedProjectId={selectedProjectId}');
-    expect(homeClient).not.toContain('navigateTo(`/sessions/${session.id}`)');
+    expect(homeClient).not.toContain('navigateTo(`/projects/${project.id}`)');
   });
 
   it('renders the IA project detail surface from the selected project query param', () => {
@@ -91,15 +91,15 @@ describe('project list surface', () => {
     expect(homeClient).toContain('if (selectedProject) {');
   });
 
-  it('keeps project chat inside the IA project route instead of opening the legacy session route', () => {
+  it('keeps project chat inside the IA project route instead of opening the legacy project route', () => {
     expect(projectChatSurface).toContain('export function ProjectChatSurface({');
     expect(projectChatSurface).toContain('data-project-chat-list');
     expect(projectChatSurface).toContain('data-project-chat-screen');
     expect(homeClient).toContain('m-main-scroll--project-chat-detail');
-    expect(homeClient).toContain("onClick={() => onProjectOpen(session.id, 'chats')}");
+    expect(homeClient).toContain("onClick={() => onProjectOpen(project.id, 'chats')}");
     expect(homeClient).toContain("onClick={() => onProjectViewChange('chats')}");
     expect(projectChatSurface).toContain("onClick={() => onChatOpen(chat.id)}");
-    expect(homeClient).toContain("onProjectChatOpen(session.id, chat.id)");
+    expect(homeClient).toContain("onProjectChatOpen(project.id, chat.id)");
     expect(homeClient).toContain("setSelectedProjectView('chat');");
     expect(homeClient).toContain("buildProjectDetailPath(projectId, 'chat', chatId)");
     expect(homeClient).toContain("params.set('view', view);");
@@ -113,8 +113,8 @@ describe('project list surface', () => {
     expect(projectChatSurface).not.toContain('Read · project context');
     expect(projectChatSurface).not.toContain('project-context.snapshot');
     expect(projectChatSurface).not.toContain('프로젝트 컨텍스트를 먼저 확인하겠습니다.');
-    expect(homeClient).not.toContain('/sessions/${session.id}');
-    expect(projectChatSurface).not.toContain('/sessions/${session.id}');
+    expect(homeClient).not.toContain('/projects/${project.id}');
+    expect(projectChatSurface).not.toContain('/projects/${project.id}');
   });
 
   it('loads older project chat event pages from the timeline instead of replacing the visible window', () => {
@@ -176,9 +176,9 @@ describe('project list surface', () => {
     expect(detailSource).toContain('const [isCreatingHeaderChat, setIsCreatingHeaderChat] = useState(false);');
     expect(detailSource).toContain('const [settingsModalOpen, setSettingsModalOpen] = useState(false);');
     expect(detailSource).toContain('const handleProjectHeaderNewChat = async () => {');
-    expect(detailSource).toContain('const projectModelInput = normalizeProjectChatModelInput(session.model);');
-    expect(detailSource).not.toContain('normalizeProjectChatModelInput(session.model ?? session.metadata?.runtimeModel)');
-    expect(detailSource).toContain('const createdChat = await createProjectChat(session.id, {');
+    expect(detailSource).toContain('const projectModelInput = normalizeProjectChatModelInput(project.model);');
+    expect(detailSource).not.toContain('normalizeProjectChatModelInput(project.model ?? project.metadata?.runtimeModel)');
+    expect(detailSource).toContain('const createdChat = await createProjectChat(project.id, {');
     expect(detailSource).toContain('title: `Chat ${Math.max(1, totalChats + 1)}`,');
     expect(detailSource).toContain('onProjectChatOpen(createdChat.id);');
     expect(detailSource).toContain('className="proj-head__actions"');
@@ -288,11 +288,11 @@ describe('project list surface', () => {
   });
 
   it('surfaces the active project chat run with a spinner and elapsed timer', () => {
-    expect(projectChatSurface).toContain("import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';");
+    expect(projectChatSurface).toContain("import { useProjectRuntime } from '@/lib/hooks/useProjectRuntime';");
     expect(projectChatSurface).toContain('const [submittedRunStartedAt, setSubmittedRunStartedAt] = useState<string | null>(null);');
     expect(projectChatSurface).toContain('const [runtimeRunStartedAt, setRuntimeRunStartedAt] = useState<string | null>(null);');
     expect(projectChatSurface).toContain('const [projectRunNowMs, setProjectRunNowMs] = useState(() => Date.now());');
-    expect(projectChatSurface).toContain('const { isRunning: runtimeRunning } = useSessionRuntime(');
+    expect(projectChatSurface).toContain('const { isRunning: runtimeRunning } = useProjectRuntime(');
     expect(projectChatSurface).toContain('const activeRunStartedAt = submittedRunStartedAt ?? runtimeRunStartedAt;');
     expect(projectChatSurface).toContain('const projectRunIndicator = resolveProjectRunIndicator({');
     expect(projectChatSurface).toContain('runtimeRunning,');
@@ -340,8 +340,8 @@ describe('project list surface', () => {
     const createChatEnd = projectChatSurface.indexOf('const handleNewChat = async', createChatStart);
     const createChatSource = projectChatSurface.slice(createChatStart, createChatEnd);
 
-    expect(createChatSource).toContain('selectedModelId || session.model');
-    expect(createChatSource).not.toContain('session.metadata?.runtimeModel');
+    expect(createChatSource).toContain('selectedModelId || project.model');
+    expect(createChatSource).not.toContain('project.metadata?.runtimeModel');
   });
 
   it('renders Terminal command output as a Terminal timeline response with its own avatar', () => {
@@ -361,7 +361,7 @@ describe('project list surface', () => {
     expect(terminalRoute).toContain('command,');
     expect(terminalRoute).not.toContain("from 'node:child_process'");
     expect(terminalRoute).not.toContain('execAsync(command');
-    expect(terminalRoute).not.toContain('appendSessionMessage');
+    expect(terminalRoute).not.toContain('appendProjectMessage');
     expect(terminalRoute).not.toContain("role: 'agent'");
     expect(terminalRoute).not.toContain("displayRole: 'terminal'");
     expect(terminalRoute).not.toContain("role: 'user'");
@@ -496,11 +496,11 @@ describe('project list surface', () => {
   it('keeps project chats nested under the selected project in the redesigned sidebar', () => {
     expect(homeClient).toContain('activeProjectChatId: string | null;');
     expect(homeClient).toContain('className={`m-sb__project-node${isProjectExpanded ?');
-    expect(homeClient).toContain('const visibleChatCount = session.totalChats ?? childChats.length;');
+    expect(homeClient).toContain('const visibleChatCount = project.totalChats ?? childChats.length;');
     expect(homeClient).toContain('<span className="m-sb__proj-count">{visibleChatCount}</span>');
     expect(homeClient).toContain('className="m-sb__chat-children"');
     expect(homeClient).toContain("className={`m-sb__chat-child${activeProjectChatId === chat.id ? ' m-sb__chat-child--active' : ''}`}");
-    expect(homeClient).toContain("onClick={() => onProjectChatOpen(session.id, chat.id)}");
+    expect(homeClient).toContain("onClick={() => onProjectChatOpen(project.id, chat.id)}");
     expect(homeClient).toContain("setSelectedProjectChatId(nextTab === 'project' && nextProjectView === 'chat' ? (searchParams.get('chat') ?? null) : null);");
   });
 
@@ -513,7 +513,7 @@ describe('project list surface', () => {
     expect(homeClient).toContain('function showMoreProjectChats(projectId: string)');
     expect(homeClient).toContain("params.set('limit', String(limit));");
     expect(homeClient).toContain('next[projectId] = currentCount + SIDEBAR_PROJECT_CHAT_PAGE_SIZE;');
-    expect(homeClient).toContain('expandedProjectIds.has(session.id)');
+    expect(homeClient).toContain('expandedProjectIds.has(project.id)');
     expect(homeClient).toContain('childChats.slice(0, visibleSidebarChatLimit).map((chat) => (');
     expect(homeClient).toContain('const hasMoreProjectChats = visibleChatCount > childChats.length;');
     expect(homeClient).toContain('className="m-sb__chat-more"');
@@ -522,13 +522,13 @@ describe('project list surface', () => {
 
   it('uses the sidebar project row for expand and exposes icon-only project actions', () => {
     expect(homeClient).toContain('const [creatingProjectChatIds, setCreatingProjectChatIds] = useState<Set<string>>(() => new Set());');
-    expect(homeClient).toContain('async function createSidebarProjectChat(session: SessionSummary)');
-    expect(homeClient).toContain('onClick={() => toggleProjectChatGroup(session.id)}');
+    expect(homeClient).toContain('async function createSidebarProjectChat(project: ProjectSummary)');
+    expect(homeClient).toContain('onClick={() => toggleProjectChatGroup(project.id)}');
     expect(homeClient).toContain('className="m-sb__proj-actions"');
     expect(homeClient).toContain('aria-label={`${projectName} 새 채팅`}');
-    expect(homeClient).toContain('void createSidebarProjectChat(session);');
+    expect(homeClient).toContain('void createSidebarProjectChat(project);');
     expect(homeClient).toContain('aria-label={`${projectName} 프로젝트 화면 들어가기`}');
-    expect(homeClient).toContain('onProjectOpen(session.id);');
+    expect(homeClient).toContain('onProjectOpen(project.id);');
     expect(homeClient).not.toContain('className="m-sb__chat-toggle"');
     expect(exactCssBlock('.m-sb__proj-row')).toContain('grid-template-columns: minmax(0, 1fr) auto;');
     expect(exactCssBlock('.m-sb__proj-action')).toContain('width: 24px;');
@@ -551,7 +551,7 @@ describe('project list surface', () => {
   });
 
   it('does not keep inserting sidebar loading rows for projects with fewer than five chats', () => {
-    expect(homeClient).toContain('const totalProjectChats = session.totalChats;');
+    expect(homeClient).toContain('const totalProjectChats = project.totalChats;');
     expect(homeClient).toContain("const targetCount = typeof totalProjectChats === 'number' ? Math.min(visibleCount, totalProjectChats) : visibleCount;");
     expect(homeClient).toContain('if (targetCount <= 0 || loadedCount >= targetCount) return;');
     expect(homeClient).toContain('isLoadingProjectChats && childChats.length === 0');

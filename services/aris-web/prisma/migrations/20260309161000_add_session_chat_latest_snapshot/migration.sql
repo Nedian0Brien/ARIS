@@ -1,4 +1,4 @@
-ALTER TABLE "SessionChat"
+ALTER TABLE "ProjectChat"
 ADD COLUMN "latestPreview" TEXT NOT NULL DEFAULT '',
 ADD COLUMN "latestEventId" TEXT,
 ADD COLUMN "latestEventAt" TIMESTAMP(3),

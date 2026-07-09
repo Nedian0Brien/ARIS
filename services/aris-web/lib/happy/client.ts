@@ -1,16 +1,16 @@
 import { env } from '@/lib/config';
-import { normalizeEvents, normalizeSessionDetail, normalizeSessions } from '@/lib/happy/normalizer';
+import { normalizeEvents, normalizeProjectDetail, normalizeProjects } from '@/lib/happy/normalizer';
 import { getWorkspaceById, syncWorkspacesForUser } from '@/lib/happy/workspaces';
 import type {
   ApprovalPolicy,
-  GeminiSessionCapabilities,
+  GeminiProjectCapabilities,
   PermissionDecision,
   PermissionRequest,
-  SessionAction,
-  SessionActionResult,
-  SessionDetail,
-  SessionEventsPage,
-  SessionSummary,
+  ProjectAction,
+  ProjectActionResult,
+  ProjectDetail,
+  ProjectEventsPage,
+  ProjectSummary,
   UiEvent,
 } from '@/lib/happy/types';
 
@@ -51,24 +51,24 @@ function toActivityEpoch(value: string | null | undefined): number {
   return parsed;
 }
 
-function dedupeSessionsByWorkspacePath(sessions: SessionSummary[]): SessionSummary[] {
-  const byPath = new Map<string, SessionSummary>();
-  for (const session of sessions) {
-    const path = normalizeWorkspacePath(session.projectName);
-    const branch = typeof session.branch === 'string' && session.branch.trim()
-      ? session.branch.trim()
+function dedupeProjectsByWorkspacePath(projects: ProjectSummary[]): ProjectSummary[] {
+  const byPath = new Map<string, ProjectSummary>();
+  for (const project of projects) {
+    const path = normalizeWorkspacePath(project.projectName);
+    const branch = typeof project.branch === 'string' && project.branch.trim()
+      ? project.branch.trim()
       : '';
     const dedupeKey = branch ? `${path}#${branch}` : path;
     const existing = byPath.get(dedupeKey);
     if (!existing) {
-      byPath.set(dedupeKey, session);
+      byPath.set(dedupeKey, project);
       continue;
     }
 
     const existingAt = toActivityEpoch(existing.lastActivityAt);
-    const candidateAt = toActivityEpoch(session.lastActivityAt);
-    if (candidateAt > existingAt || (candidateAt === existingAt && session.id > existing.id)) {
-      byPath.set(dedupeKey, session);
+    const candidateAt = toActivityEpoch(project.lastActivityAt);
+    if (candidateAt > existingAt || (candidateAt === existingAt && project.id > existing.id)) {
+      byPath.set(dedupeKey, project);
     }
   }
   return [...byPath.values()];
@@ -91,14 +91,14 @@ function extractArrayPayload(raw: unknown, key: string): unknown[] {
   return Array.isArray(nested) ? nested : [];
 }
 
-function findSessionById(list: unknown[], sessionId: string): unknown | null {
+function findProjectById(list: unknown[], projectId: string): unknown | null {
   for (const item of list) {
     const obj = asObject(item);
     if (!obj) {
       continue;
     }
 
-    if (String(obj.id ?? '') === sessionId) {
+    if (String(obj.id ?? '') === projectId) {
       return obj;
     }
   }
@@ -106,7 +106,7 @@ function findSessionById(list: unknown[], sessionId: string): unknown | null {
   return null;
 }
 
-type GetSessionEventsOptions = {
+type GetProjectEventsOptions = {
   userId?: string;
   before?: string;
   after?: string;
@@ -115,7 +115,7 @@ type GetSessionEventsOptions = {
   includeUnassigned?: boolean;
 };
 
-type ImportedAgentSessionState = {
+type ImportedAgentProjectState = {
   hasMoreBefore: boolean;
 };
 
@@ -154,7 +154,7 @@ function sortEventsChronologically(events: UiEvent[]): UiEvent[] {
   });
 }
 
-function paginateEvents(events: UiEvent[], options: GetSessionEventsOptions): { events: UiEvent[]; page: SessionEventsPage } {
+function paginateEvents(events: UiEvent[], options: GetProjectEventsOptions): { events: UiEvent[]; page: ProjectEventsPage } {
   const sorted = sortEventsChronologically(events);
   const totalCount = sorted.length;
   const pageLimit = clampEventsLimit(options.limit);
@@ -202,7 +202,7 @@ function paginateEvents(events: UiEvent[], options: GetSessionEventsOptions): { 
   };
 }
 
-function filterEventsByChat(events: UiEvent[], options: GetSessionEventsOptions): UiEvent[] {
+function filterEventsByChat(events: UiEvent[], options: GetProjectEventsOptions): UiEvent[] {
   const chatId = typeof options.chatId === 'string' ? options.chatId.trim() : '';
   if (!chatId) {
     return events;
@@ -233,7 +233,7 @@ function toMessageSeq(value: unknown): number | null {
   return parsed;
 }
 
-function toSessionSeq(value: unknown): number | null {
+function toProjectSeq(value: unknown): number | null {
   const rec = asObject(value);
   if (!rec) {
     return null;
@@ -311,8 +311,8 @@ async function fetchHappy(path: string, init?: RequestInit): Promise<unknown> {
   return response.json();
 }
 
-async function fetchSessionMessagesPage(
-  sessionId: string,
+async function fetchProjectMessagesPage(
+  projectId: string,
   options: {
     afterSeq?: number;
     afterId?: string;
@@ -332,7 +332,7 @@ async function fetchSessionMessagesPage(
     params.after_seq = String(Math.max(0, Math.floor(options.afterSeq ?? 0)));
   }
   const query = new URLSearchParams(params);
-  const raw = await fetchHappy(`/v3/sessions/${encodeURIComponent(sessionId)}/messages?${query.toString()}`);
+  const raw = await fetchHappy(`/v3/projects/${encodeURIComponent(projectId)}/messages?${query.toString()}`);
   const batch = extractArrayPayload(raw, 'messages');
   const response = asObject(raw);
   const maxSeqInBatch = batch.reduce((max: number, item) => {
@@ -357,12 +357,12 @@ async function fetchSessionMessagesPage(
   };
 }
 
-async function listAllSessionMessages(sessionId: string, chatId?: string): Promise<unknown[]> {
+async function listAllProjectMessages(projectId: string, chatId?: string): Promise<unknown[]> {
   let afterSeq = 0;
   const allMessages: unknown[] = [];
 
   for (let page = 0; page < HAPPY_MESSAGES_MAX_PAGES; page += 1) {
-    const pageResult = await fetchSessionMessagesPage(sessionId, {
+    const pageResult = await fetchProjectMessagesPage(projectId, {
       afterSeq,
       limit: HAPPY_MESSAGES_BATCH_LIMIT,
       ...(chatId ? { chatId } : {}),
@@ -382,10 +382,10 @@ async function listAllSessionMessages(sessionId: string, chatId?: string): Promi
   return allMessages;
 }
 
-async function listRecentSessionMessages(
-  sessionId: string,
+async function listRecentProjectMessages(
+  projectId: string,
   latestSeq: number,
-  options: GetSessionEventsOptions,
+  options: GetProjectEventsOptions,
 ): Promise<unknown[] | null> {
   const pageLimit = clampEventsLimit(options.limit);
   const chatId = typeof options.chatId === 'string' ? options.chatId.trim() : '';
@@ -394,7 +394,7 @@ async function listRecentSessionMessages(
       Math.min(RECENT_WINDOW_MAX, Math.max(RECENT_WINDOW_MIN, pageLimit * 6)),
     );
     const afterSeq = Math.max(0, latestSeq - recentWindow);
-    const page = await fetchSessionMessagesPage(sessionId, {
+    const page = await fetchProjectMessagesPage(projectId, {
       afterSeq,
       limit: recentWindow,
       ...(chatId ? { chatId } : {}),
@@ -415,7 +415,7 @@ async function listRecentSessionMessages(
 
   for (let i = 0; i < maxScans && cursor > 0; i += 1) {
     const afterSeq = Math.max(0, cursor - scanWindow);
-    const page = await fetchSessionMessagesPage(sessionId, {
+    const page = await fetchProjectMessagesPage(projectId, {
       afterSeq,
       limit: scanWindow,
     });
@@ -445,9 +445,9 @@ async function listRecentSessionMessages(
 }
 
 async function listMessagesForAfterCursor(
-  sessionId: string,
+  projectId: string,
   latestSeq: number,
-  options: GetSessionEventsOptions,
+  options: GetProjectEventsOptions,
 ): Promise<unknown[] | null> {
   if (!options.after || options.before) {
     return null;
@@ -461,7 +461,7 @@ async function listMessagesForAfterCursor(
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(options.after);
   const chatId = typeof options.chatId === 'string' ? options.chatId.trim() : '';
   if (isUuid && !chatId) {
-    const page = await fetchSessionMessagesPage(sessionId, {
+    const page = await fetchProjectMessagesPage(projectId, {
       afterId: options.after,
       limit: recentWindow,
     });
@@ -475,7 +475,7 @@ async function listMessagesForAfterCursor(
 
   for (let i = 0; i < maxScans && cursor > 0; i += 1) {
     const afterSeq = Math.max(0, cursor - recentWindow);
-    const page = await fetchSessionMessagesPage(sessionId, {
+    const page = await fetchProjectMessagesPage(projectId, {
       afterSeq,
       limit: recentWindow,
       ...(chatId ? { chatId } : {}),
@@ -500,7 +500,7 @@ async function listMessagesForAfterCursor(
 }
 
 async function listRecentMessagesForSidebar(
-  sessionId: string,
+  projectId: string,
   latestSeq: number,
   chatCount: number,
 ): Promise<unknown[] | null> {
@@ -511,7 +511,7 @@ async function listRecentMessagesForSidebar(
     ),
   );
   const afterSeq = Math.max(0, latestSeq - windowSize);
-  const page = await fetchSessionMessagesPage(sessionId, {
+  const page = await fetchProjectMessagesPage(projectId, {
     afterSeq,
     limit: windowSize,
   });
@@ -519,7 +519,7 @@ async function listRecentMessagesForSidebar(
 }
 
 export async function listLatestEventsByChat(input: {
-  sessionId: string;
+  projectId: string;
   chatIds: string[];
   defaultChatId?: string | null;
 }): Promise<Record<string, UiEvent | null>> {
@@ -550,17 +550,17 @@ export async function listLatestEventsByChat(input: {
     }
   };
 
-  const sessionRaw = await fetchHappy('/v1/sessions');
-  const sessions = extractArrayPayload(sessionRaw, 'sessions');
-  const found = findSessionById(sessions, input.sessionId) ?? sessions[0] ?? { id: input.sessionId };
-  const latestSeq = toSessionSeq(found);
+  const sessionRaw = await fetchHappy('/v1/projects');
+  const projects = extractArrayPayload(sessionRaw, 'projects');
+  const found = findProjectById(projects, input.projectId) ?? projects[0] ?? { id: input.projectId };
+  const latestSeq = toProjectSeq(found);
 
   let baseMessages: unknown[];
   if (latestSeq !== null) {
-    const recent = await listRecentMessagesForSidebar(input.sessionId, latestSeq, normalizedChatIds.length);
+    const recent = await listRecentMessagesForSidebar(input.projectId, latestSeq, normalizedChatIds.length);
     baseMessages = recent ?? [];
   } else {
-    baseMessages = await listAllSessionMessages(input.sessionId);
+    baseMessages = await listAllProjectMessages(input.projectId);
   }
   assignLatestEvents(normalizeEvents(baseMessages));
 
@@ -576,14 +576,14 @@ export async function listLatestEventsByChat(input: {
   // If there are many missing chats, it is more efficient to fetch all messages once
   // rather than making multiple sequential paginated API calls per chat.
   if (missingChatIds.length > 3) {
-    const allMessages = await listAllSessionMessages(input.sessionId);
+    const allMessages = await listAllProjectMessages(input.projectId);
     assignLatestEvents(normalizeEvents(allMessages));
     return result;
   }
 
   let requiresFullScan = false;
   await Promise.all(missingChatIds.map(async (chatId) => {
-    const recentByChat = await listRecentSessionMessages(input.sessionId, latestSeq, {
+    const recentByChat = await listRecentProjectMessages(input.projectId, latestSeq, {
       limit: 1,
       chatId,
       includeUnassigned: input.defaultChatId === chatId,
@@ -607,7 +607,7 @@ export async function listLatestEventsByChat(input: {
     return result;
   }
 
-  const allMessages = await listAllSessionMessages(input.sessionId);
+  const allMessages = await listAllProjectMessages(input.projectId);
   assignLatestEvents(normalizeEvents(allMessages));
   return result;
 }
@@ -629,17 +629,17 @@ export async function getRuntimeHealth(): Promise<{ api: 'up' | 'down'; happy: '
   }
 }
 
-export async function listSessions(userId?: string): Promise<SessionSummary[]> {
-  const raw = await fetchHappy('/v1/sessions');
-  const sessions = dedupeSessionsByWorkspacePath(normalizeSessions(extractArrayPayload(raw, 'sessions')));
+export async function listProjects(userId?: string): Promise<ProjectSummary[]> {
+  const raw = await fetchHappy('/v1/projects');
+  const projects = dedupeProjectsByWorkspacePath(normalizeProjects(extractArrayPayload(raw, 'projects')));
 
   if (!userId) {
-    return sessions;
+    return projects;
   }
 
-  const workspaceMap = await syncWorkspacesForUser(userId, sessions);
+  const workspaceMap = await syncWorkspacesForUser(userId, projects);
 
-  return sessions.map((s) => {
+  return projects.map((s) => {
     const workspace = workspaceMap.get(s.id);
     return {
       ...s,
@@ -650,13 +650,13 @@ export async function listSessions(userId?: string): Promise<SessionSummary[]> {
   });
 }
 
-export async function createSession(input: {
+export async function createProject(input: {
   path: string;
-  agent?: SessionSummary['agent'];  // optional — 미전달 시 'claude' 기본값
+  agent?: ProjectSummary['agent'];  // optional — 미전달 시 'claude' 기본값
   approvalPolicy?: ApprovalPolicy;
   branch?: string;
-}): Promise<SessionSummary> {
-  const raw = await fetchHappy('/v1/sessions', {
+}): Promise<ProjectSummary> {
+  const raw = await fetchHappy('/v1/projects', {
     method: 'POST',
     body: JSON.stringify({
       path: input.path,
@@ -667,55 +667,55 @@ export async function createSession(input: {
   });
 
   const obj = asObject(raw);
-  const session = obj?.session;
-  if (!session) {
+  const project = obj?.project;
+  if (!project) {
     throw new Error('백엔드 응답이 올바르지 않습니다.');
   }
 
-  return normalizeSessions([session])[0];
+  return normalizeProjects([project])[0];
 }
 
-export async function getSessionDetail(sessionId: string, userId?: string): Promise<SessionDetail> {
-  const raw = await fetchHappy(`/v1/sessions/${encodeURIComponent(sessionId)}`);
+export async function getProjectDetail(projectId: string, userId?: string): Promise<ProjectDetail> {
+  const raw = await fetchHappy(`/v1/projects/${encodeURIComponent(projectId)}`);
   const obj = asObject(raw);
-  const session = obj?.session ?? raw;
-  const sessionDetail = normalizeSessionDetail(session);
+  const project = obj?.project ?? raw;
+  const projectDetail = normalizeProjectDetail(project);
 
   if (userId) {
-    const workspace = await getWorkspaceById(userId, sessionId);
+    const workspace = await getWorkspaceById(userId, projectId);
     if (workspace) {
-      sessionDetail.alias = workspace.alias || null;
-      sessionDetail.isPinned = workspace.isPinned;
-      sessionDetail.lastReadAt = workspace.lastReadAt?.toISOString() ?? null;
+      projectDetail.alias = workspace.alias || null;
+      projectDetail.isPinned = workspace.isPinned;
+      projectDetail.lastReadAt = workspace.lastReadAt?.toISOString() ?? null;
     }
   }
 
-  return sessionDetail;
+  return projectDetail;
 }
 
-export async function updateSessionApprovalPolicy(
-  sessionId: string,
+export async function updateProjectApprovalPolicy(
+  projectId: string,
   approvalPolicy: ApprovalPolicy,
-): Promise<SessionSummary> {
-  const raw = await fetchHappy(`/v1/sessions/${encodeURIComponent(sessionId)}`, {
+): Promise<ProjectSummary> {
+  const raw = await fetchHappy(`/v1/projects/${encodeURIComponent(projectId)}`, {
     method: 'PATCH',
     body: JSON.stringify({ approvalPolicy }),
   });
 
   const obj = asObject(raw);
-  const session = obj?.session;
-  if (!session) {
+  const project = obj?.project;
+  if (!project) {
     throw new Error('백엔드 응답이 올바르지 않습니다.');
   }
 
-  return normalizeSessions([session])[0];
+  return normalizeProjects([project])[0];
 }
 
-export async function getSessionEvents(
-  sessionId: string,
-  options: string | GetSessionEventsOptions = {},
-): Promise<{ session: SessionDetail; events: UiEvent[]; page: SessionEventsPage }> {
-  const resolvedOptions: GetSessionEventsOptions = typeof options === 'string'
+export async function getProjectEvents(
+  projectId: string,
+  options: string | GetProjectEventsOptions = {},
+): Promise<{ project: ProjectDetail; events: UiEvent[]; page: ProjectEventsPage }> {
+  const resolvedOptions: GetProjectEventsOptions = typeof options === 'string'
     ? { userId: options }
     : options;
   const userId = resolvedOptions.userId;
@@ -724,40 +724,40 @@ export async function getSessionEvents(
     throw new Error('before와 after를 동시에 사용할 수 없습니다.');
   }
 
-  const sessionRaw = await fetchHappy('/v1/sessions');
-  const sessions = extractArrayPayload(sessionRaw, 'sessions');
-  const found = findSessionById(sessions, sessionId) ?? sessions[0] ?? { id: sessionId };
-  const latestSeq = toSessionSeq(found);
+  const projectRaw = await fetchHappy('/v1/projects');
+  const projects = extractArrayPayload(projectRaw, 'projects');
+  const found = findProjectById(projects, projectId) ?? projects[0] ?? { id: projectId };
+  const latestSeq = toProjectSeq(found);
 
   let messages: unknown[];
   if (latestSeq !== null && !resolvedOptions.before && !resolvedOptions.after) {
-    const recent = await listRecentSessionMessages(sessionId, latestSeq, resolvedOptions);
-    messages = recent ?? await listAllSessionMessages(sessionId, resolvedOptions.chatId);
+    const recent = await listRecentProjectMessages(projectId, latestSeq, resolvedOptions);
+    messages = recent ?? await listAllProjectMessages(projectId, resolvedOptions.chatId);
   } else if (latestSeq !== null && resolvedOptions.after && !resolvedOptions.before) {
-    const recentAfter = await listMessagesForAfterCursor(sessionId, latestSeq, resolvedOptions);
-    messages = recentAfter ?? await listAllSessionMessages(sessionId, resolvedOptions.chatId);
+    const recentAfter = await listMessagesForAfterCursor(projectId, latestSeq, resolvedOptions);
+    messages = recentAfter ?? await listAllProjectMessages(projectId, resolvedOptions.chatId);
   } else {
-    messages = await listAllSessionMessages(sessionId, resolvedOptions.chatId);
+    messages = await listAllProjectMessages(projectId, resolvedOptions.chatId);
   }
 
-  const sessionDetail = normalizeSessionDetail(found);
+  const projectDetail = normalizeProjectDetail(found);
 
   if (userId) {
-    const workspace = await getWorkspaceById(userId, sessionId);
+    const workspace = await getWorkspaceById(userId, projectId);
     if (workspace) {
-      sessionDetail.alias = workspace.alias || null;
-      sessionDetail.isPinned = workspace.isPinned;
-      sessionDetail.lastReadAt = workspace.lastReadAt?.toISOString() ?? null;
+      projectDetail.alias = workspace.alias || null;
+      projectDetail.isPinned = workspace.isPinned;
+      projectDetail.lastReadAt = workspace.lastReadAt?.toISOString() ?? null;
     }
   }
 
   return {
-    session: sessionDetail,
+    project: projectDetail,
     ...paginateEvents(filterEventsByChat(normalizeEvents(messages), resolvedOptions), resolvedOptions),
   };
 }
 
-export async function getImportedAgentSessionState(chatId: string): Promise<ImportedAgentSessionState | null> {
+export async function getImportedAgentProjectState(chatId: string): Promise<ImportedAgentProjectState | null> {
   try {
     const raw = await fetchHappy(`/v1/chats/${encodeURIComponent(chatId)}/import-state`);
     const obj = asObject(raw);
@@ -800,7 +800,7 @@ export async function importLatestAgentTranscript(
   };
 }
 
-type StreamSessionEventsOptions = {
+type StreamProjectEventsOptions = {
   after?: string;
   limit?: number;
   chatId?: string;
@@ -808,31 +808,31 @@ type StreamSessionEventsOptions = {
   latestSeqHint?: number;
 };
 
-export async function streamSessionEvents(
-  sessionId: string,
-  options: StreamSessionEventsOptions = {},
+export async function streamProjectEvents(
+  projectId: string,
+  options: StreamProjectEventsOptions = {},
 ): Promise<{ events: UiEvent[]; latestSeq: number }> {
   let latestSeq = typeof options.latestSeqHint === 'number' && options.latestSeqHint > 0
     ? options.latestSeqHint
     : null;
 
   if (latestSeq === null) {
-    const sessionRaw = await fetchHappy('/v1/sessions');
-    const sessions = extractArrayPayload(sessionRaw, 'sessions');
-    const found = findSessionById(sessions, sessionId) ?? sessions[0] ?? null;
-    latestSeq = toSessionSeq(found) ?? 0;
+    const projectRaw = await fetchHappy('/v1/projects');
+    const projects = extractArrayPayload(projectRaw, 'projects');
+    const found = findProjectById(projects, projectId) ?? projects[0] ?? null;
+    latestSeq = toProjectSeq(found) ?? 0;
   }
 
   let messages: unknown[];
   if (options.after) {
-    const recentAfter = await listMessagesForAfterCursor(sessionId, latestSeq, options);
-    messages = recentAfter ?? await listAllSessionMessages(sessionId, options.chatId);
+    const recentAfter = await listMessagesForAfterCursor(projectId, latestSeq, options);
+    messages = recentAfter ?? await listAllProjectMessages(projectId, options.chatId);
   } else {
-    const recent = await listRecentSessionMessages(sessionId, latestSeq, options);
-    messages = recent ?? await listAllSessionMessages(sessionId, options.chatId);
+    const recent = await listRecentProjectMessages(projectId, latestSeq, options);
+    messages = recent ?? await listAllProjectMessages(projectId, options.chatId);
   }
 
-  const filteredOptions: GetSessionEventsOptions = {
+  const filteredOptions: GetProjectEventsOptions = {
     after: options.after,
     limit: options.limit,
     chatId: options.chatId,
@@ -848,8 +848,8 @@ export async function streamSessionEvents(
   return { events, latestSeq: nextSeq };
 }
 
-export async function appendSessionMessage(input: {
-  sessionId: string;
+export async function appendProjectMessage(input: {
+  projectId: string;
   type: 'message' | 'tool' | 'read' | 'write';
   title?: string;
   text: string;
@@ -862,14 +862,14 @@ export async function appendSessionMessage(input: {
     ? await fetchHappy(`/v1/chats/${encodeURIComponent(chatId)}/events`, {
         method: 'POST',
         body: JSON.stringify({
-          sessionId: input.sessionId,
+          projectId: input.projectId,
           type: input.type,
           title: input.title,
           text: input.text,
           meta: input.meta,
         }),
       })
-    : await fetchHappy(`/v3/sessions/${encodeURIComponent(input.sessionId)}/messages`, {
+    : await fetchHappy(`/v3/projects/${encodeURIComponent(input.projectId)}/messages`, {
         method: 'POST',
         body: JSON.stringify({
           type: input.type,
@@ -890,8 +890,8 @@ export async function appendSessionMessage(input: {
 }
 
 export async function submitUserPrompt(input: {
-  sessionId: string;
-  runtimeSessionId?: string;
+  projectId: string;
+  runtimeProjectId?: string;
   title?: string;
   text: string;
   meta?: Record<string, unknown>;
@@ -903,15 +903,15 @@ export async function submitUserPrompt(input: {
     ? await fetchHappy(`/v1/chats/${encodeURIComponent(chatId)}/user-prompts`, {
         method: 'POST',
         body: JSON.stringify({
-          sessionId: input.sessionId,
-          ...(input.runtimeSessionId ? { runtimeSessionId: input.runtimeSessionId } : {}),
+          projectId: input.projectId,
+          ...(input.runtimeProjectId ? { runtimeProjectId: input.runtimeProjectId } : {}),
           type: 'message',
           title: input.title,
           text: input.text,
           meta: input.meta,
         }),
       })
-    : await fetchHappy(`/v1/sessions/${encodeURIComponent(input.sessionId)}/user-prompts`, {
+    : await fetchHappy(`/v1/projects/${encodeURIComponent(input.projectId)}/user-prompts`, {
         method: 'POST',
         body: JSON.stringify({
           type: 'message',
@@ -932,16 +932,16 @@ export async function submitUserPrompt(input: {
 }
 
 export async function runChatTerminalCommand(input: {
-  sessionId: string;
-  runtimeSessionId?: string;
+  projectId: string;
+  runtimeProjectId?: string;
   chatId: string;
   command: string;
 }): Promise<UiEvent[]> {
   const raw = await fetchHappy(`/v1/chats/${encodeURIComponent(input.chatId)}/terminal/commands`, {
     method: 'POST',
     body: JSON.stringify({
-      sessionId: input.sessionId,
-      ...(input.runtimeSessionId ? { runtimeSessionId: input.runtimeSessionId } : {}),
+      projectId: input.projectId,
+      ...(input.runtimeProjectId ? { runtimeProjectId: input.runtimeProjectId } : {}),
       command: input.command,
     }),
   });
@@ -960,8 +960,8 @@ export async function runChatTerminalCommand(input: {
   throw new Error('백엔드 응답에서 터미널 실행 결과를 읽을 수 없습니다.');
 }
 
-export async function getSessionRealtimeEvents(input: {
-  sessionId: string;
+export async function getProjectRealtimeEvents(input: {
+  projectId: string;
   afterCursor?: number;
   limit?: number;
   chatId?: string;
@@ -978,7 +978,7 @@ export async function getSessionRealtimeEvents(input: {
   }
 
   const raw = await fetchHappy(
-    `/v1/sessions/${encodeURIComponent(input.sessionId)}/realtime-events${query.toString() ? `?${query.toString()}` : ''}`,
+    `/v1/projects/${encodeURIComponent(input.projectId)}/realtime-events${query.toString() ? `?${query.toString()}` : ''}`,
   );
   const obj = asObject(raw);
   const events = normalizeEvents(extractArrayPayload(obj, 'events'));
@@ -988,8 +988,8 @@ export async function getSessionRealtimeEvents(input: {
   return { events, cursor };
 }
 
-export async function getGeminiSessionCapabilities(sessionId: string): Promise<GeminiSessionCapabilities> {
-  const raw = await fetchHappy(`/v1/sessions/${encodeURIComponent(sessionId)}/providers/gemini/capabilities`);
+export async function getGeminiProjectCapabilities(projectId: string): Promise<GeminiProjectCapabilities> {
+  const raw = await fetchHappy(`/v1/projects/${encodeURIComponent(projectId)}/providers/gemini/capabilities`);
   const obj = asObject(raw);
   const capabilities = asObject(obj?.capabilities);
   if (!capabilities) {
@@ -1016,7 +1016,7 @@ export async function getGeminiSessionCapabilities(sessionId: string): Promise<G
   };
 
   return {
-    sessionId: typeof capabilities.sessionId === 'string' ? capabilities.sessionId : sessionId,
+    projectId: typeof capabilities.projectId === 'string' ? capabilities.projectId : projectId,
     fetchedAt: typeof capabilities.fetchedAt === 'string' ? capabilities.fetchedAt : new Date().toISOString(),
     modes: {
       currentModeId: typeof modesRecord?.currentModeId === 'string' ? modesRecord.currentModeId : null,
@@ -1031,14 +1031,14 @@ export async function getGeminiSessionCapabilities(sessionId: string): Promise<G
 
 export async function listPermissionRequests(
   input: string | {
-    sessionId?: string;
+    projectId?: string;
     chatId?: string;
     includeUnassigned?: boolean;
   } = {},
 ): Promise<PermissionRequest[]> {
-  const options = typeof input === 'string' ? { sessionId: input } : input;
-  const sessionId = typeof options.sessionId === 'string' && options.sessionId.trim().length > 0
-    ? options.sessionId.trim()
+  const options = typeof input === 'string' ? { projectId: input } : input;
+  const projectId = typeof options.projectId === 'string' && options.projectId.trim().length > 0
+    ? options.projectId.trim()
     : undefined;
   const chatId = typeof options.chatId === 'string' && options.chatId.trim().length > 0
     ? options.chatId.trim()
@@ -1046,8 +1046,8 @@ export async function listPermissionRequests(
   const includeUnassigned = options.includeUnassigned === true;
   const params = new URLSearchParams();
   params.set('state', 'pending');
-  if (sessionId) {
-    params.set('sessionId', sessionId);
+  if (projectId) {
+    params.set('projectId', projectId);
   }
   if (chatId) {
     params.set('chatId', chatId);
@@ -1061,7 +1061,7 @@ export async function listPermissionRequests(
     const rawChatId = typeof rec?.chatId === 'string' ? rec.chatId.trim() : '';
     return {
       id: String(rec?.id ?? `perm-${idx}`),
-      sessionId: String(rec?.sessionId ?? 'unknown'),
+      projectId: String(rec?.projectId ?? 'unknown'),
       ...(rawChatId ? { chatId: rawChatId } : {}),
       agent: (() => {
         const value = String(rec?.agent ?? 'unknown');
@@ -1085,7 +1085,7 @@ export async function listPermissionRequests(
   });
 
   return list.filter((item) => {
-    if (sessionId && item.sessionId !== sessionId) {
+    if (projectId && item.projectId !== projectId) {
       return false;
     }
     if (!chatId) {
@@ -1116,20 +1116,20 @@ export async function decidePermissionRequest(input: {
   };
 }
 
-export async function getSessionRuntimeState(
-  sessionId: string,
+export async function getProjectRuntimeState(
+  projectId: string,
   options: { chatId?: string } = {},
-): Promise<{ sessionId: string; isRunning: boolean }> {
+): Promise<{ projectId: string; isRunning: boolean }> {
   const chatId = typeof options.chatId === 'string' && options.chatId.trim().length > 0
     ? options.chatId.trim()
     : undefined;
-  const deriveFromSessions = async () => {
-    const raw = await fetchHappy('/v1/sessions');
-    const sessions = extractArrayPayload(raw, 'sessions');
-    const found = findSessionById(sessions, sessionId) ?? { id: sessionId };
-    const detail = normalizeSessionDetail(found);
+  const deriveFromProjects = async () => {
+    const raw = await fetchHappy('/v1/projects');
+    const projects = extractArrayPayload(raw, 'projects');
+    const found = findProjectById(projects, projectId) ?? { id: projectId };
+    const detail = normalizeProjectDetail(found);
     return {
-      sessionId,
+      projectId,
       isRunning: detail.status === 'running',
     };
   };
@@ -1137,43 +1137,43 @@ export async function getSessionRuntimeState(
   if (runtimeStatusEndpointSupported !== false) {
     try {
       const query = chatId ? `?chatId=${encodeURIComponent(chatId)}` : '';
-      const raw = await fetchHappy(`/v1/sessions/${encodeURIComponent(sessionId)}/runtime${query}`);
+      const raw = await fetchHappy(`/v1/projects/${encodeURIComponent(projectId)}/runtime${query}`);
       const obj = asObject(raw);
       runtimeStatusEndpointSupported = true;
       return {
-        sessionId: String(obj?.sessionId ?? sessionId),
+        projectId: String(obj?.projectId ?? projectId),
         isRunning: Boolean(obj?.isRunning),
       };
     } catch (error) {
       if (error instanceof HappyHttpError && error.status === 404) {
         runtimeStatusEndpointSupported = false;
         if (chatId) {
-          // Legacy fallback (`/v1/sessions`) is session-scoped and cannot
+          // The collection fallback is project-scoped and cannot
           // represent chat-scoped runtime state safely.
-          return { sessionId, isRunning: false };
+          return { projectId, isRunning: false };
         }
-        return deriveFromSessions();
+          return deriveFromProjects();
       }
       throw error;
     }
   }
 
-  const obj = await deriveFromSessions();
+  const obj = await deriveFromProjects();
   return {
-    sessionId: obj.sessionId,
+    projectId: obj.projectId,
     isRunning: obj.isRunning,
   };
 }
 
-export async function runSessionAction(
-  sessionId: string,
-  action: SessionAction,
+export async function runProjectAction(
+  projectId: string,
+  action: ProjectAction,
   options: { chatId?: string } = {},
-): Promise<SessionActionResult> {
+): Promise<ProjectActionResult> {
   const chatId = typeof options.chatId === 'string' && options.chatId.trim().length > 0
     ? options.chatId.trim()
     : undefined;
-  await fetchHappy(`/v1/sessions/${encodeURIComponent(sessionId)}/actions`, {
+  await fetchHappy(`/v1/projects/${encodeURIComponent(projectId)}/actions`, {
     method: 'POST',
     body: JSON.stringify({
       action,
@@ -1182,7 +1182,7 @@ export async function runSessionAction(
   });
 
   return {
-    sessionId,
+    projectId,
     ...(chatId ? { chatId } : {}),
     action,
     accepted: true,
@@ -1191,36 +1191,36 @@ export async function runSessionAction(
   };
 }
 
-export async function runWorkspaceDeleteAction(sessionId: string): Promise<SessionActionResult> {
-  const raw = await fetchHappy('/v1/sessions');
-  const sessions = normalizeSessions(extractArrayPayload(raw, 'sessions'));
-  const target = sessions.find((session) => session.id === sessionId);
+export async function runProjectWorkspaceDeleteAction(projectId: string): Promise<ProjectActionResult> {
+  const raw = await fetchHappy('/v1/projects');
+  const projects = normalizeProjects(extractArrayPayload(raw, 'projects'));
+  const target = projects.find((project) => project.id === projectId);
 
   if (!target) {
-    return runSessionAction(sessionId, 'kill');
+    return runProjectAction(projectId, 'kill');
   }
 
   const normalizedPath = normalizeWorkspacePath(target.projectName);
-  const relatedSessionIds = Array.from(new Set(
-    sessions
-      .filter((session) => normalizeWorkspacePath(session.projectName) === normalizedPath)
-      .map((session) => session.id),
+  const relatedProjectIds = Array.from(new Set(
+    projects
+      .filter((project) => normalizeWorkspacePath(project.projectName) === normalizedPath)
+      .map((project) => project.id),
   ));
 
-  const orderedSessionIds = [
-    sessionId,
-    ...relatedSessionIds.filter((id) => id !== sessionId),
+  const orderedProjectIds = [
+    projectId,
+    ...relatedProjectIds.filter((id) => id !== projectId),
   ];
 
-  for (const relatedSessionId of orderedSessionIds) {
-    await runSessionAction(relatedSessionId, 'kill');
+  for (const relatedProjectId of orderedProjectIds) {
+    await runProjectAction(relatedProjectId, 'kill');
   }
 
   return {
-    sessionId,
+    projectId,
     action: 'kill',
     accepted: true,
-    message: `KILL acknowledged (${orderedSessionIds.length} sessions)`,
+    message: `KILL acknowledged (${orderedProjectIds.length} projects)`,
     at: new Date().toISOString(),
   };
 }

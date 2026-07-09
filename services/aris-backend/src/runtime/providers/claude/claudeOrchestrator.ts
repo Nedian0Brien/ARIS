@@ -6,7 +6,7 @@ import type {
   ClaudeActionEvent,
   ClaudeCommandExecutor,
   ClaudePermissionRequest,
-  ClaudeRuntimeSession,
+  ClaudeRuntimeProject,
   ClaudeTextEvent,
   ClaudeTurnResult,
 } from './types.js';
@@ -64,7 +64,7 @@ export function recoverClaudeThreadIdFromMessages(
 }
 
 export async function runClaudeProviderTurn(input: {
-  session: ClaudeRuntimeSession;
+  session: ClaudeRuntimeProject;
   sessionOwner?: ClaudeSessionStateOwner;
   prompt: string;
   chatId?: string;

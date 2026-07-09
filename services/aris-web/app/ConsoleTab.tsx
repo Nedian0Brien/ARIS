@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Lock, Minus, Plus, FolderOpen } from 'lucide-react';
 import type { AuthenticatedUser } from '@/lib/auth/types';
-import type { SessionSummary } from '@/lib/happy/types';
+import type { ProjectSummary } from '@/lib/happy/types';
 import styles from './ConsoleTab.module.css';
 
 // xterm CSS는 클라이언트 번들에만 포함
@@ -11,7 +11,7 @@ import '@xterm/xterm/css/xterm.css';
 
 type Props = {
   user: AuthenticatedUser;
-  initialSessions: SessionSummary[];
+  initialProjects: ProjectSummary[];
 };
 
 const EXTRA_KEYS: { label: string; value: string }[] = [
@@ -28,7 +28,7 @@ const EXTRA_KEYS: { label: string; value: string }[] = [
   { label: 'End', value: '\x1b[F' },
 ];
 
-export function ConsoleTab({ user, initialSessions }: Props) {
+export function ConsoleTab({ user, initialProjects }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<import('@xterm/xterm').Terminal | null>(null);
   const fitAddonRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
@@ -37,7 +37,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectCountRef = useRef(0);
   const connectionIdRef = useRef(0);
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [reconnectCount, setReconnectCount] = useState(0);
@@ -74,7 +74,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
     return () => mq.removeEventListener('change', handler);
   }, []);
 
-  const connect = useCallback(async (sessionId: string | null, isRetry = false) => {
+  const connect = useCallback(async (projectId: string | null, isRetry = false) => {
     const currentConnId = ++connectionIdRef.current;
 
     // 기존 타이머 취소
@@ -144,7 +144,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
 
     // WebSocket 연결
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsPath = sessionId ? `/ws/terminal/${encodeURIComponent(sessionId)}` : '/ws/terminal';
+    const wsPath = projectId ? `/ws/terminal/${encodeURIComponent(projectId)}` : '/ws/terminal';
     const ws = new WebSocket(`${protocol}//${window.location.host}${wsPath}`);
     ws.binaryType = 'arraybuffer';
     wsRef.current = ws;
@@ -168,7 +168,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
       setConnected(false);
       
       // 재연결 로직 (최대 5회)
-      if (sessionId) { // 워크스페이스가 지정된 경우만 자동 재연결 시도
+      if (projectId) { // 워크스페이스가 지정된 경우만 자동 재연결 시도
         reconnectCountRef.current++;
         const nextCount = reconnectCountRef.current;
 
@@ -179,7 +179,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
           
           if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
           reconnectTimeoutRef.current = setTimeout(() => {
-            connect(sessionId, true);
+            connect(projectId, true);
           }, delay);
         } else {
           setIsReconnecting(false);
@@ -200,13 +200,13 @@ export function ConsoleTab({ user, initialSessions }: Props) {
   // 워크스페이스 변경 시 재연결
   useEffect(() => {
     if (user.role !== 'operator') return;
-    connect(selectedSessionId);
+    connect(selectedProjectId);
     return () => {
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
       wsRef.current?.close();
       termRef.current?.dispose();
     };
-  }, [selectedSessionId, connect, user.role]);
+  }, [selectedProjectId, connect, user.role]);
 
   // ResizeObserver로 자동 리사이즈
   useEffect(() => {
@@ -255,7 +255,7 @@ export function ConsoleTab({ user, initialSessions }: Props) {
     );
   }
 
-  const activeSessions = initialSessions.filter(
+  const activeProjects = initialProjects.filter(
     (s) => s.status === 'running' || s.status === 'idle',
   );
 
@@ -272,12 +272,12 @@ export function ConsoleTab({ user, initialSessions }: Props) {
       <div className={styles.consoleHeader}>
         <div className={styles.selectorWrapper}>
           <select
-            className={styles.sessionSelector}
-            value={selectedSessionId ?? ''}
-            onChange={(e) => setSelectedSessionId(e.target.value || null)}
+            className={styles.projectSelector}
+            value={selectedProjectId ?? ''}
+            onChange={(e) => setSelectedProjectId(e.target.value || null)}
           >
             <option value="">새 터미널</option>
-            {activeSessions.map((s) => (
+            {activeProjects.map((s) => (
               <option key={s.id} value={s.id}>
                 [{s.agent}] {s.alias ?? formatPath(s.projectName) ?? s.id.slice(0, 8)}
               </option>
@@ -330,16 +330,16 @@ export function ConsoleTab({ user, initialSessions }: Props) {
           )}
 
           {/* QuickDir 버튼 */}
-          {activeSessions.length > 0 && (
+          {activeProjects.length > 0 && (
             <div className={styles.quickDirScroll}>
-              {activeSessions.map((s) => {
+              {activeProjects.map((s) => {
                 const label = s.alias ?? formatPath(s.projectName) ?? s.id.slice(0, 8);
                 return (
                   <button
                     key={s.id}
                     className={styles.quickDirBtn}
                     onClick={() => {
-                      setSelectedSessionId(s.id);
+                      setSelectedProjectId(s.id);
                     }}
                     title={`워크스페이스로 전환: ${label}`}
                   >

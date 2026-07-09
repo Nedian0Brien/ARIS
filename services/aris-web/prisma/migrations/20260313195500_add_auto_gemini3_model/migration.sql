@@ -1,8 +1,8 @@
-ALTER TABLE "SessionChat"
-DROP CONSTRAINT IF EXISTS "SessionChat_model_allowed_check";
+ALTER TABLE "ProjectChat"
+DROP CONSTRAINT IF EXISTS "ProjectChat_model_allowed_check";
 
-ALTER TABLE "SessionChat"
-ADD CONSTRAINT "SessionChat_model_allowed_check"
+ALTER TABLE "ProjectChat"
+ADD CONSTRAINT "ProjectChat_model_allowed_check"
 CHECK (
   "model" IS NULL
   OR (

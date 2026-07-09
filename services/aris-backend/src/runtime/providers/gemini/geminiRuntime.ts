@@ -2,7 +2,7 @@ import type { ProviderRuntime } from '../../contracts/providerRuntime.js';
 import { ScopeQueue } from '../../scopeQueue.js';
 import { GeminiSessionRegistry, buildGeminiScopeKey } from './geminiSessionRegistry.js';
 import { recoverGeminiThreadIdFromMessages } from './geminiSessionSource.js';
-import type { GeminiMessageHistoryLoader, GeminiRuntimeSession, GeminiTurnExecutor, GeminiTurnResult } from './types.js';
+import type { GeminiMessageHistoryLoader, GeminiRuntimeProject, GeminiTurnExecutor, GeminiTurnResult } from './types.js';
 
 function extractObservedThreadIdFromError(error: unknown): string | undefined {
   if (!error || typeof error !== 'object') {
@@ -18,7 +18,7 @@ export function createGeminiRuntime(input: {
   registry?: GeminiSessionRegistry;
   listMessages?: GeminiMessageHistoryLoader;
   executeTurn?: GeminiTurnExecutor;
-} = {}): ProviderRuntime<GeminiRuntimeSession, GeminiTurnResult> {
+} = {}): ProviderRuntime<GeminiRuntimeProject, GeminiTurnResult> {
   const registry = input.registry ?? new GeminiSessionRegistry();
   const scopeQueue = new ScopeQueue();
 

@@ -3,10 +3,10 @@
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { CSSProperties, ChangeEvent } from 'react';
-import { useSessionEvents } from '@/lib/hooks/useSessionEvents';
+import { useProjectEvents } from '@/lib/hooks/useProjectEvents';
 import { usePermissions } from '@/lib/hooks/usePermissions';
-import { useSessionRuntime } from '@/lib/hooks/useSessionRuntime';
-import { useSessionSyncLeader } from '@/lib/hooks/useSessionSyncLeader';
+import { useProjectRuntime } from '@/lib/hooks/useProjectRuntime';
+import { useProjectSyncLeader } from '@/lib/hooks/useProjectSyncLeader';
 import type { ModelSettingsResponse } from '@/lib/settings/providerModels';
 import {
   getLatestAgentEventTimestampSince,
@@ -21,7 +21,7 @@ import { hydratePersistedPermissions, mergeRenderablePermissions } from '@/lib/h
 import { stripImageAttachmentPromptPrefix } from '@/lib/chatImageAttachments';
 import { resolveAvailableChatCommands, type ChatCommandId } from './chatCommands';
 import { createPortal } from 'react-dom';
-import type { ApprovalPolicy, ChatImageAttachment, PermissionRequest, SessionChat, UiEvent } from '@/lib/happy/types';
+import type { ApprovalPolicy, ChatImageAttachment, PermissionRequest, ProjectChat, UiEvent } from '@/lib/happy/types';
 import { UsageProbeModal } from './UsageProbeModal';
 import { buildPermissionTimelineItems } from './chatTimeline';
 import { shouldShowDebugToggleInHeader } from './chatDebugMode';
@@ -29,7 +29,7 @@ import { deriveWorkspaceTitle } from './workspaceHome';
 import { buildWorkspacePagerItems, moveWorkspacePager } from './workspace-panels/pagerModel';
 import { useWorkspacePanels } from './workspace-panels/useWorkspacePanels';
 import { useChatRunActions } from './chat-screen/actions/useChatRunActions';
-import { useChatSessionActions } from './chat-screen/actions/useChatSessionActions';
+import { useChatProjectActions } from './chat-screen/actions/useChatSessionActions';
 import { ChatCenterPane } from './chat-screen/center-pane/ChatCenterPane';
 import { ChatComposer } from './chat-screen/center-pane/ChatComposer';
 import { ChatHeader } from './chat-screen/center-pane/ChatHeader';
@@ -86,7 +86,7 @@ import {
   activateSessionScrollOrchestrator,
   deactivateSessionScrollOrchestrator,
   dispatchSessionScrollPhaseEvent,
-  useSessionScrollOrchestrator,
+  useProjectScrollOrchestrator,
 } from './useSessionScrollOrchestrator';
 import { recordScrollDebugEvent } from './scrollDebug';
 import {
@@ -124,7 +124,7 @@ import {
   resolveDefaultModelId,
   resolveGeminiModeOptions,
   saveRecentFile,
-  sortSessionChats,
+  sortProjectChats,
 } from './chat-screen/helpers';
 import type {
   AgentMeta,
@@ -209,7 +209,7 @@ export function ChatInterface({
   initialEvents: UiEvent[];
   initialHasMoreBefore: boolean;
   initialPermissions: PermissionRequest[];
-  initialChats: SessionChat[];
+  initialChats: ProjectChat[];
   activeChatId: string | null;
   isOperator: boolean;
   projectName: string;
@@ -249,7 +249,7 @@ export function ChatInterface({
     initialShowWorkspaceHome,
   });
   const sessionSyncScopeKey = surfaceMode === 'parallel-panel' ? activeChatIdResolved : null;
-  const { isLeader: isSessionSyncLeader } = useSessionSyncLeader(sessionId, sessionSyncScopeKey);
+  const { isLeader: isSessionSyncLeader } = useProjectSyncLeader(sessionId, sessionSyncScopeKey);
   const {
     activeChatRuntimeUi,
     chatRuntimeUiByChat,
@@ -481,11 +481,11 @@ export function ChatInterface({
 
     const chatId = activeChat.id;
     void fetch(
-      `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chatId)}`,
+      `/api/runtime/projects/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chatId)}`,
       { method: 'DELETE' },
-    ).then((r) => r.json()).then((body: { chats?: SessionChat[] }) => {
+    ).then((r) => r.json()).then((body: { chats?: ProjectChat[] }) => {
       if (Array.isArray(body.chats)) {
-        setChats(sortSessionChats(body.chats));
+        setChats(sortProjectChats(body.chats));
       } else {
         setChats((prev) => prev.filter((c) => c.id !== chatId));
       }
@@ -520,7 +520,7 @@ export function ChatInterface({
     isLoadingOlder,
     hasLoadedCurrentChat,
     resetToLatestWindow,
-  } = useSessionEvents(
+  } = useProjectEvents(
     sessionId,
     activeChatIdResolved,
     includeUnassignedEvents,
@@ -530,7 +530,7 @@ export function ChatInterface({
     isSessionSyncLeader,
     initialShowChatEntryLoading,
   );
-  const { isRunning: runtimeRunning, runtimeError } = useSessionRuntime(
+  const { isRunning: runtimeRunning, runtimeError } = useProjectRuntime(
     sessionId,
     activeChatIdResolved,
     isSessionSyncLeader && (
@@ -588,7 +588,7 @@ export function ChatInterface({
     renamingChatId,
     resetChatUiState,
     setChatMutationError,
-  } = useChatSessionActions({
+  } = useChatProjectActions({
     activeAgentFlavor,
     activeChat,
     activeChatIdResolved,
@@ -763,16 +763,16 @@ export function ChatInterface({
   });
   const isChatEntryTailRestorePending = isInitialChatEntryPendingReveal || isTailLayoutSettling;
   const chatEntryPendingRevealClassName = showChatTransitionLoading ? styles.chatEntryPendingReveal : '';
-  const { phase: sessionScrollPhase } = useSessionScrollOrchestrator();
-  const sessionScrollPhaseRef = useRef<SessionScrollPhase>('idle');
+  const { phase: projectScrollPhase } = useProjectScrollOrchestrator();
+  const projectScrollPhaseRef = useRef<SessionScrollPhase>('idle');
   const resumeSettleRafRef = useRef(0);
   const resumeSettleTimeoutRef = useRef(0);
   const resumePreviousMetricsRef = useRef<{ scrollTop: number | null; viewportHeight: number | null } | null>(null);
   const resumeStableFrameCountRef = useRef(0);
 
   useEffect(() => {
-    sessionScrollPhaseRef.current = sessionScrollPhase;
-  }, [sessionScrollPhase]);
+    projectScrollPhaseRef.current = projectScrollPhase;
+  }, [projectScrollPhase]);
 
   useEffect(() => {
     return () => {
@@ -801,7 +801,7 @@ export function ChatInterface({
       source: 'resume:complete',
       streamElement: scrollRef.current,
       detail: {
-        currentPhase: sessionScrollPhaseRef.current,
+        currentPhase: projectScrollPhaseRef.current,
       },
     });
     clearResumePhaseSettleLoop();
@@ -836,7 +836,7 @@ export function ChatInterface({
     dispatchSessionScrollPhaseEvent('resume-start');
 
     const settle = () => {
-      const currentPhase = sessionScrollPhaseRef.current;
+      const currentPhase = projectScrollPhaseRef.current;
       if (currentPhase !== 'resuming' && currentPhase !== 'viewport-reflow') {
         clearResumePhaseSettleLoop();
         return;
@@ -1116,7 +1116,7 @@ export function ChatInterface({
   }, [activeChatIdResolved]);
 
   const deleteUploadedImageAsset = useCallback((attachment: ChatImageAttachment, keepalive = false) => {
-    void fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/assets/images`, {
+    void fetch(`/api/runtime/projects/${encodeURIComponent(sessionId)}/assets/images`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ serverPath: attachment.serverPath }),
@@ -1308,7 +1308,7 @@ export function ChatInterface({
       const formData = new FormData();
       formData.set('file', file);
 
-      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/assets/images`, {
+      const response = await fetch(`/api/runtime/projects/${encodeURIComponent(sessionId)}/assets/images`, {
         method: 'POST',
         body: formData,
       });
@@ -1335,7 +1335,7 @@ export function ChatInterface({
     }
 
     try {
-      await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/metadata`, {
+      await fetch(`/api/runtime/projects/${encodeURIComponent(sessionId)}/metadata`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lastReadAt: new Date().toISOString() }),
@@ -1472,7 +1472,7 @@ export function ChatInterface({
       isTailLayoutSettling,
       isLoadingOlder,
       hasMoreBefore,
-      scrollPhase: sessionScrollPhase,
+      scrollPhase: projectScrollPhase,
     })) {
       return;
     }
@@ -1491,7 +1491,7 @@ export function ChatInterface({
       detail: {
         hasMoreBefore,
         isLoadingOlder,
-        sessionScrollPhase,
+        projectScrollPhase,
       },
     });
     const olderLoadResult = await loadOlder().catch(() => {
@@ -1503,7 +1503,7 @@ export function ChatInterface({
     }
 
     requestAnimationFrame(completeOlderLoad);
-  }, [captureVisibleHistoryAnchor, hasMoreBefore, isLoadingOlder, isTailLayoutSettling, loadOlder, sessionScrollPhase]);
+  }, [captureVisibleHistoryAnchor, hasMoreBefore, isLoadingOlder, isTailLayoutSettling, loadOlder, projectScrollPhase]);
 
   const handleLoadOlderButtonClick = useCallback(() => {
     void loadOlderHistory();
@@ -1645,7 +1645,7 @@ export function ChatInterface({
     providerSelections,
     runtimeStartedSinceAwaitingRef,
     isConversationNearBottom,
-    sessionScrollPhase,
+    projectScrollPhase,
     scrollConversationToBottom,
     selectedGeminiModeId,
     selectedModelId,
@@ -1757,13 +1757,13 @@ export function ChatInterface({
     }
 
     if (isMobileLayout) {
-      if (sessionScrollPhaseRef.current === 'resuming' || sessionScrollPhaseRef.current === 'viewport-reflow') {
+      if (projectScrollPhaseRef.current === 'resuming' || projectScrollPhaseRef.current === 'viewport-reflow') {
         recordScrollDebugEvent({
           kind: 'trigger',
           source: 'chat:updateStickState:suppressed',
           streamElement: stream,
           detail: {
-            currentPhase: sessionScrollPhaseRef.current,
+            currentPhase: projectScrollPhaseRef.current,
           },
         });
         return;
@@ -1779,7 +1779,7 @@ export function ChatInterface({
         source: 'chat:updateStickState',
         streamElement: stream,
         detail: {
-          currentPhase: sessionScrollPhaseRef.current,
+          currentPhase: projectScrollPhaseRef.current,
           isChatEntryTailRestorePending,
           nextState,
         },
@@ -1972,7 +1972,7 @@ export function ChatInterface({
       startResumeScrollPhase();
     };
     const onViewportChanged = () => {
-      const currentPhase = sessionScrollPhaseRef.current;
+      const currentPhase = projectScrollPhaseRef.current;
       recordScrollDebugEvent({
         kind: 'trigger',
         source: 'resume:onViewportChanged',
@@ -2032,7 +2032,7 @@ export function ChatInterface({
     };
   }, [
     isMobileLayout,
-    sessionScrollPhase,
+    projectScrollPhase,
     shouldStickToBottomRef,
     syncConversationScrollState,
   ]);
@@ -2138,7 +2138,7 @@ export function ChatInterface({
       isWorkspaceHome,
       shouldStickToBottom: shouldStickToBottomRef.current,
       isTailRestorePending: isChatEntryTailRestorePending,
-      scrollPhase: sessionScrollPhase,
+      scrollPhase: projectScrollPhase,
     })) {
       return;
     }
@@ -2192,7 +2192,7 @@ export function ChatInterface({
     isChatEntryTailRestorePending,
     latestVisibleEventId,
     pendingUserEvents.length,
-    sessionScrollPhase,
+    projectScrollPhase,
     scrollConversationToBottom,
     shouldStickToBottomRef,
   ]);
@@ -2212,7 +2212,7 @@ export function ChatInterface({
 
     if (!shouldAllowSystemScrollWrite({
       writer: 'auto-scroll',
-      scrollPhase: sessionScrollPhase,
+      scrollPhase: projectScrollPhase,
     })) {
       recordScrollDebugEvent({
         kind: 'trigger',
@@ -2220,7 +2220,7 @@ export function ChatInterface({
         detail: {
           previousChatId,
           activeChatIdResolved,
-          sessionScrollPhase,
+          projectScrollPhase,
         },
       });
       return;
@@ -2266,7 +2266,7 @@ export function ChatInterface({
     activeChatIdResolved,
     isChatEntryTailRestorePending,
     isNewChatPlaceholder,
-    sessionScrollPhase,
+    projectScrollPhase,
     scrollConversationToBottom,
     setShowScrollToBottom,
     shouldStickToBottomRef,
@@ -2537,7 +2537,7 @@ export function ChatInterface({
     void (async () => {
       try {
         const response = await fetch(
-          `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
+          `/api/runtime/projects/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
           {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -2547,7 +2547,7 @@ export function ChatInterface({
         if (!response.ok || cancelled) {
           return;
         }
-        setChats((prev) => sortSessionChats(prev.map((chat) => (
+        setChats((prev) => sortProjectChats(prev.map((chat) => (
           chat.id === activeChatIdResolved ? { ...chat, threadId: latestThreadId } : chat
         ))));
       } catch {
@@ -2559,16 +2559,16 @@ export function ChatInterface({
     };
   }, [activeChat?.threadId, activeChatIdResolved, events, eventsForChatId, sessionId, setChats]);
 
-  const handleSidebarMarkAsRead = useCallback((chat: SessionChat) => {
+  const handleSidebarMarkAsRead = useCallback((chat: ProjectChat) => {
     handleMarkChatAsRead(chat);
     closeSidebarMenu();
   }, [closeSidebarMenu, handleMarkChatAsRead]);
 
-  const handleSidebarTogglePin = useCallback((chat: SessionChat) => {
+  const handleSidebarTogglePin = useCallback((chat: ProjectChat) => {
     void handleToggleChatPin(chat);
   }, [handleToggleChatPin]);
 
-  const handleSidebarDeleteChat = useCallback((chat: SessionChat) => {
+  const handleSidebarDeleteChat = useCallback((chat: ProjectChat) => {
     void handleDeleteChat(chat);
   }, [handleDeleteChat]);
 
@@ -2798,7 +2798,7 @@ export function ChatInterface({
                   isTailLayoutSettling,
                   isLoadingOlder,
                   hasMoreBefore,
-                  scrollPhase: sessionScrollPhase,
+                  scrollPhase: projectScrollPhase,
                 })}
                 isMobileLayout={isMobileLayout}
                 isOperator={isOperator}

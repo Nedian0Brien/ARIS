@@ -14,12 +14,12 @@ const HEARTBEAT_INTERVAL_MS = 15_000;
 
 function parseUpgradeContext(url: string | undefined): UpgradeContext | null {
   const parsed = new URL(url ?? '/', 'http://localhost');
-  const match = parsed.pathname.match(/^\/v1\/sessions\/([^/]+)\/realtime-events\/ws$/);
+  const match = parsed.pathname.match(/^\/v1\/projects\/([^/]+)\/realtime-events\/ws$/);
   if (!match) {
     return null;
   }
-  const sessionId = decodeURIComponent(match[1] ?? '').trim();
-  if (!sessionId) {
+  const projectId = decodeURIComponent(match[1] ?? '').trim();
+  if (!projectId) {
     return null;
   }
   const chatIdRaw = parsed.searchParams.get('chatId');
@@ -29,7 +29,7 @@ function parseUpgradeContext(url: string | undefined): UpgradeContext | null {
   const includeUnassignedRaw = parsed.searchParams.get('includeUnassigned');
   const includeUnassigned = includeUnassignedRaw === '1' || includeUnassignedRaw === 'true';
   return {
-    sessionId,
+    projectId,
     ...(chatId ? { chatId } : {}),
     ...(includeUnassigned ? { includeUnassigned } : {}),
   };
@@ -80,14 +80,14 @@ export function installRuntimeRealtimeWebSocketGateway(
 
   wss.on('connection', (ws: WebSocket, _request: IncomingMessage, context: UpgradeContext) => {
     app.log.debug({
-      sessionId: context.sessionId,
+      projectId: context.projectId,
       chatId: context.chatId,
       includeUnassigned: context.includeUnassigned,
     }, 'runtime realtime websocket connected');
 
     sendJson(ws, {
       type: 'ready',
-      sessionId: context.sessionId,
+      projectId: context.projectId,
       ...(context.chatId ? { chatId: context.chatId } : {}),
       now: new Date().toISOString(),
     });
@@ -108,7 +108,7 @@ export function installRuntimeRealtimeWebSocketGateway(
       heartbeatTimers.delete(ws);
       if (isAbnormalWebSocketClose(code)) {
         app.log.warn({
-          sessionId: context.sessionId,
+          projectId: context.projectId,
           chatId: context.chatId,
           includeUnassigned: context.includeUnassigned,
           code,
@@ -120,7 +120,7 @@ export function installRuntimeRealtimeWebSocketGateway(
     ws.on('error', (error) => {
       app.log.warn({
         err: error,
-        sessionId: context.sessionId,
+        projectId: context.projectId,
         chatId: context.chatId,
         includeUnassigned: context.includeUnassigned,
       }, 'runtime realtime websocket error');
@@ -134,7 +134,7 @@ export function installRuntimeRealtimeWebSocketGateway(
     }
     if (!token || !isAuthorizedUpgrade(request, token)) {
       app.log.warn({
-        sessionId: context.sessionId,
+        projectId: context.projectId,
         chatId: context.chatId,
         includeUnassigned: context.includeUnassigned,
       }, 'runtime realtime websocket unauthorized upgrade');

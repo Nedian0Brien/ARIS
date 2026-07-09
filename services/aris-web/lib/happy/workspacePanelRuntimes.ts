@@ -1,19 +1,19 @@
 import path from 'node:path';
 import { prisma } from '@/lib/db/prisma';
-import { createSession, getSessionDetail, runSessionAction } from '@/lib/happy/client';
+import { createProject, getProjectDetail, runProjectAction } from '@/lib/happy/client';
 import type { AgentFlavor } from '@/lib/happy/types';
 
 const DEFAULT_WORKSPACE_TITLE = 'Default workspace';
 
 type PanelRuntimeCleanupTarget = {
-  runtimeSessionId: string | null;
+  runtimeProjectId: string | null;
 };
 
 export type WorkspacePanelRuntimeErrors = Record<string, string>;
 
 type WorkspacePanelRuntimeRow = {
   panelId: string;
-  runtimeSessionId: string | null;
+  runtimeProjectId: string | null;
   branch: string | null;
   worktreePath: string | null;
   chat: {
@@ -57,8 +57,8 @@ function computeFallbackWorktreePath(projectPath: string, branch: string): strin
   return path.join(projectPath, '.worktrees', branch);
 }
 
-async function readRuntimeHostPath(runtimeSessionId: string): Promise<string | null> {
-  const detail = await getSessionDetail(runtimeSessionId);
+async function readRuntimeHostPath(runtimeProjectId: string): Promise<string | null> {
+  const detail = await getProjectDetail(runtimeProjectId);
   return normalizeOptionalString(detail.hostPath);
 }
 
@@ -71,16 +71,16 @@ async function ensureRuntimeForPanel(input: {
 }): Promise<void> {
   const branch = normalizeOptionalString(input.panel.branch)
     ?? buildWorkspacePanelBranch({ projectId: input.projectId, panelId: input.panel.panelId });
-  const existingRuntimeSessionId = normalizeOptionalString(input.panel.runtimeSessionId);
+  const existingRuntimeProjectId = normalizeOptionalString(input.panel.runtimeProjectId);
   const existingWorktreePath = normalizeOptionalString(input.panel.worktreePath);
 
-  if (existingRuntimeSessionId && existingWorktreePath && !input.repairStale) {
+  if (existingRuntimeProjectId && existingWorktreePath && !input.repairStale) {
     return;
   }
 
-  if (existingRuntimeSessionId && input.repairStale) {
+  if (existingRuntimeProjectId && input.repairStale) {
     try {
-      const hostPath = await readRuntimeHostPath(existingRuntimeSessionId);
+      const hostPath = await readRuntimeHostPath(existingRuntimeProjectId);
       if (hostPath) {
         await prisma.workspacePanel.update({
           where: {
@@ -97,11 +97,11 @@ async function ensureRuntimeForPanel(input: {
         return;
       }
     } catch {
-      // Missing runtime sessions are recreated below.
+      // Missing runtime projects are recreated below.
     }
   }
 
-  const runtime = await createSession({
+  const runtime = await createProject({
     path: input.projectPath,
     agent: normalizeAgent(input.panel.chat.agent),
     approvalPolicy: 'on-request',
@@ -119,7 +119,7 @@ async function ensureRuntimeForPanel(input: {
       },
     },
     data: {
-      runtimeSessionId: runtime.id,
+      runtimeProjectId: runtime.id,
       branch: runtimeBranch,
       worktreePath,
     },
@@ -147,7 +147,7 @@ export async function ensureProjectWorkspacePanelRuntimes(input: {
       panels: {
         select: {
           panelId: true,
-          runtimeSessionId: true,
+          runtimeProjectId: true,
           branch: true,
           worktreePath: true,
           chat: {
@@ -181,13 +181,13 @@ export async function ensureProjectWorkspacePanelRuntimes(input: {
 }
 
 export async function cleanupWorkspacePanelRuntimes(panels: PanelRuntimeCleanupTarget[]): Promise<void> {
-  const runtimeSessionIds = Array.from(new Set(
+  const runtimeProjectIds = Array.from(new Set(
     panels
-      .map((panel) => normalizeOptionalString(panel.runtimeSessionId))
-      .filter((runtimeSessionId): runtimeSessionId is string => runtimeSessionId !== null),
+      .map((panel) => normalizeOptionalString(panel.runtimeProjectId))
+      .filter((runtimeProjectId): runtimeProjectId is string => runtimeProjectId !== null),
   ));
 
-  for (const runtimeSessionId of runtimeSessionIds) {
-    await Promise.resolve(runSessionAction(runtimeSessionId, 'kill')).catch(() => undefined);
+  for (const runtimeProjectId of runtimeProjectIds) {
+    await Promise.resolve(runProjectAction(runtimeProjectId, 'kill')).catch(() => undefined);
   }
 }

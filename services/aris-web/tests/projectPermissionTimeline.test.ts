@@ -20,7 +20,7 @@ function buildEvent(overrides: Partial<UiEvent> = {}): UiEvent {
 function buildPermission(overrides: Partial<RenderablePermissionRequest> = {}): RenderablePermissionRequest {
   return {
     id: overrides.id ?? 'perm-1',
-    sessionId: overrides.sessionId ?? 'session-1',
+    projectId: overrides.projectId ?? 'session-1',
     chatId: overrides.chatId ?? 'chat-1',
     agent: overrides.agent ?? 'codex',
     command: overrides.command ?? 'npm test',

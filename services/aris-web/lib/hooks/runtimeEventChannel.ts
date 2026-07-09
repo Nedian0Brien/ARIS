@@ -5,7 +5,7 @@ export type RuntimeEventChannelMessage = {
 };
 
 type RuntimeEventChannelUrlInput = {
-  sessionId: string;
+  projectId: string;
   chatId?: string | null;
   includeUnassigned?: boolean;
   location?: Pick<Location, 'protocol' | 'host'>;
@@ -35,7 +35,7 @@ export function buildRuntimeEventChannelUrl(input: RuntimeEventChannelUrlInput):
     }
   }
   const query = params.toString();
-  return `${protocol}//${location.host}/ws/runtime/events/${encodeURIComponent(input.sessionId)}${query ? `?${query}` : ''}`;
+  return `${protocol}//${location.host}/ws/runtime/events/${encodeURIComponent(input.projectId)}${query ? `?${query}` : ''}`;
 }
 
 export function shouldRefreshPermissionsForRuntimeMessage(message: RuntimeEventChannelMessage): boolean {
@@ -43,7 +43,7 @@ export function shouldRefreshPermissionsForRuntimeMessage(message: RuntimeEventC
 }
 
 export function shouldRefreshRuntimeForRuntimeMessage(message: RuntimeEventChannelMessage): boolean {
-  if (message.type === 'session.action' || message.type === 'session.updated' || message.type === 'session.created') {
+  if (message.type === 'project.action' || message.type === 'project.updated' || message.type === 'project.created') {
     return true;
   }
   return message.type === 'event.appended' && message.source === 'mutation';

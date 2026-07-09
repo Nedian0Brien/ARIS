@@ -40,7 +40,7 @@ import type {
   PermissionRequest,
   PermissionRisk,
   RuntimeMessage,
-  RuntimeSession,
+  RuntimeProject,
 } from '../../../types.js';
 import {
   buildCodexAppServerListenUrl,
@@ -245,7 +245,7 @@ export interface CodexRuntimeHost {
   createPermission(input: HappyRuntimePermissionInput): Promise<PermissionRequest>;
   decidePermission(permissionId: string, decision: PermissionDecision): Promise<PermissionRequest>;
   resolveExecutionCwd(cwdHint?: string, branch?: string): string;
-  resolveSessionApprovalPolicy(session: RuntimeSession): ApprovalPolicy;
+  resolveSessionApprovalPolicy(session: RuntimeProject): ApprovalPolicy;
 }
 
 // ---------------------------------------------------------------------------
@@ -254,7 +254,7 @@ export interface CodexRuntimeHost {
 
 export async function runCodexCli(
   host: CodexRuntimeHost,
-  session: RuntimeSession,
+  session: RuntimeProject,
   prompt: string,
   signal?: AbortSignal,
   threadId?: string,
@@ -284,7 +284,7 @@ export async function runCodexCli(
     }
     if (failure.retryWithFreshThread && hadThreadId) {
       host.runtimeEventLogger.logParsed({
-        sessionId: session.id,
+        projectId: session.id,
         agent: 'codex',
         ...(chatId ? { chatId } : {}),
         model,
@@ -302,7 +302,7 @@ export async function runCodexCli(
     }
 
     host.runtimeEventLogger.logParsed({
-      sessionId: session.id,
+      projectId: session.id,
       agent: 'codex',
       ...(chatId ? { chatId } : {}),
       model,
@@ -324,7 +324,7 @@ export async function runCodexCli(
 
 export async function runCodexAppServer(
   host: CodexRuntimeHost,
-  session: RuntimeSession,
+  session: RuntimeProject,
   prompt: string,
   signal?: AbortSignal,
   threadId?: string,
@@ -360,7 +360,7 @@ export async function runCodexAppServer(
     signal,
   });
   host.runtimeEventLogger.logParsed({
-    sessionId: session.id,
+    projectId: session.id,
     agent: 'codex',
     ...(chatId ? { chatId } : {}),
     model: selectedModel,
@@ -437,7 +437,7 @@ export async function runCodexAppServer(
     options: { type?: string; title?: string } = {},
   ) => {
     host.runtimeEventLogger.logParsed({
-      sessionId: session.id,
+      projectId: session.id,
       agent: 'codex',
       ...(chatId ? { chatId } : {}),
       model: selectedModel,
@@ -543,7 +543,7 @@ export async function runCodexAppServer(
     }
 
     const created = await host.createPermission({
-      sessionId: session.id,
+      projectId: session.id,
       ...(chatId ? { chatId } : {}),
       agent: session.metadata.flavor === 'codex' ? 'codex' : 'unknown',
       command,
@@ -800,7 +800,7 @@ export async function runCodexAppServer(
       const status = asString(turn?.status, '').trim() || 'completed';
       const errorMessage = asString(asRecord(turn?.error)?.message, '').trim() || undefined;
       host.runtimeEventLogger.logParsed({
-        sessionId: session.id,
+        projectId: session.id,
         agent: 'codex',
         ...(chatId ? { chatId } : {}),
         model: selectedModel,
@@ -823,7 +823,7 @@ export async function runCodexAppServer(
     lastTransportActivityAt = Date.now();
     const rawLine = rawText.trim();
     host.runtimeEventLogger.logRaw({
-      sessionId: session.id,
+      projectId: session.id,
       agent: 'codex',
       ...(chatId ? { chatId } : {}),
       model: selectedModel,
@@ -833,7 +833,7 @@ export async function runCodexAppServer(
     const payload = parseJsonLine(rawLine);
     if (!payload) {
       host.runtimeEventLogger.logParsed({
-        sessionId: session.id,
+        projectId: session.id,
         agent: 'codex',
         ...(chatId ? { chatId } : {}),
         model: selectedModel,
@@ -844,7 +844,7 @@ export async function runCodexAppServer(
       return;
     }
     host.runtimeEventLogger.logParsed({
-      sessionId: session.id,
+      projectId: session.id,
       agent: 'codex',
       ...(chatId ? { chatId } : {}),
       model: selectedModel,
@@ -1009,7 +1009,7 @@ export async function runCodexAppServer(
     });
     activeTurnId = asString(asRecord(turnStarted.turn)?.id, '').trim();
     host.runtimeEventLogger.logParsed({
-      sessionId: session.id,
+      projectId: session.id,
       agent: 'codex',
       ...(chatId ? { chatId } : {}),
       model: selectedModel,
@@ -1097,7 +1097,7 @@ export async function runCodexAppServer(
         runFailureKind = 'websocket_closed';
       }
       host.runtimeEventLogger.logParsed({
-        sessionId: session.id,
+        projectId: session.id,
         agent: 'codex',
         ...(chatId ? { chatId } : {}),
         model: selectedModel,
@@ -1118,7 +1118,7 @@ export async function runCodexAppServer(
       }
     }
     host.runtimeEventLogger.logParsed({
-      sessionId: session.id,
+      projectId: session.id,
       agent: 'codex',
       ...(chatId ? { chatId } : {}),
       model: selectedModel,
@@ -1140,7 +1140,7 @@ export async function runCodexAppServer(
 
 export async function runCodexExecCli(
   host: CodexRuntimeHost,
-  session: RuntimeSession,
+  session: RuntimeProject,
   prompt: string,
   signal?: AbortSignal,
   threadId?: string,
@@ -1179,7 +1179,7 @@ export async function runCodexExecCli(
     signal,
   });
   host.runtimeEventLogger.logParsed({
-    sessionId: session.id,
+    projectId: session.id,
     agent: 'codex',
     ...(chatId ? { chatId } : {}),
     model: selectedModel,
@@ -1210,7 +1210,7 @@ export async function runCodexExecCli(
     options: { type?: string; title?: string } = {},
   ) => {
     host.runtimeEventLogger.logParsed({
-      sessionId: session.id,
+      projectId: session.id,
       agent: 'codex',
       ...(chatId ? { chatId } : {}),
       model: selectedModel,
@@ -1251,7 +1251,7 @@ export async function runCodexExecCli(
         }
 
         const created = await host.createPermission({
-          sessionId: session.id,
+          projectId: session.id,
           ...(chatId ? { chatId } : {}),
           agent: session.metadata.flavor === 'codex' ? 'codex' : 'unknown',
           command: request.command,
@@ -1273,7 +1273,7 @@ export async function runCodexExecCli(
   stdoutLines.on('line', (line) => {
     const rawLine = line.trim();
     host.runtimeEventLogger.logRaw({
-      sessionId: session.id,
+      projectId: session.id,
       agent: 'codex',
       ...(chatId ? { chatId } : {}),
       model: selectedModel,
@@ -1283,7 +1283,7 @@ export async function runCodexExecCli(
     const payload = parseJsonLine(rawLine);
     if (!payload) {
       host.runtimeEventLogger.logParsed({
-        sessionId: session.id,
+        projectId: session.id,
         agent: 'codex',
         ...(chatId ? { chatId } : {}),
         model: selectedModel,
@@ -1294,7 +1294,7 @@ export async function runCodexExecCli(
       return;
     }
     host.runtimeEventLogger.logParsed({
-      sessionId: session.id,
+      projectId: session.id,
       agent: 'codex',
       ...(chatId ? { chatId } : {}),
       model: selectedModel,
@@ -1451,7 +1451,7 @@ export async function runCodexExecCli(
   const finalText = sanitizeAgentMessageText(lastAgentMessage.trim());
   if (signal?.aborted) {
     host.runtimeEventLogger.logParsed({
-      sessionId: session.id,
+      projectId: session.id,
       agent: 'codex',
       ...(chatId ? { chatId } : {}),
       model: selectedModel,
@@ -1474,7 +1474,7 @@ export async function runCodexExecCli(
   if (result.code !== 0 && !finalText) {
     const detail = stripAnsi(stderr).slice(0, 800) || `exit code ${result.code}`;
     host.runtimeEventLogger.logParsed({
-      sessionId: session.id,
+      projectId: session.id,
       agent: 'codex',
       ...(chatId ? { chatId } : {}),
       model: selectedModel,
@@ -1491,7 +1491,7 @@ export async function runCodexExecCli(
   }
 
   host.runtimeEventLogger.logParsed({
-    sessionId: session.id,
+    projectId: session.id,
     agent: 'codex',
     ...(chatId ? { chatId } : {}),
     model: selectedModel,

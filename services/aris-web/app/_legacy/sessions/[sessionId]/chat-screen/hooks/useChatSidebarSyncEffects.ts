@@ -8,33 +8,33 @@ import {
   hasChatErrorSignal,
   isUserEvent,
   resolveRecentSummary,
-  sortSessionChats,
+  sortProjectChats,
 } from '../helpers';
 import { resolveChatReadMarkerId } from '../../chatSidebar';
 import type { ChatApprovalFeedback, ChatSidebarSnapshot } from '../types';
-import type { SessionChat, UiEvent } from '@/lib/happy/types';
+import type { ProjectChat, UiEvent } from '@/lib/happy/types';
 
 type Params = {
   activeChatId: string | null;
   activeChatIdResolved: string | null;
   chatReadMarkers: Record<string, string>;
   chatSidebarSnapshots: Record<string, ChatSidebarSnapshot>;
-  chats: SessionChat[];
+  chats: ProjectChat[];
   events: UiEvent[];
   eventsForChatId: string | null;
-  initialChats: SessionChat[];
+  initialChats: ProjectChat[];
   isAborting: boolean;
   isAgentRunning: boolean;
   isAuxSyncReady: boolean;
   isAwaitingReply: boolean;
   isSessionSyncLeader: boolean;
   isSubmitting: boolean;
-  renderedSidebarChats: SessionChat[];
+  renderedSidebarChats: ProjectChat[];
   sessionId: string;
   setApprovalFeedbackByChat: React.Dispatch<React.SetStateAction<Record<string, ChatApprovalFeedback>>>;
   setChatReadMarkers: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   setChatSidebarSnapshots: React.Dispatch<React.SetStateAction<Record<string, ChatSidebarSnapshot>>>;
-  setChats: React.Dispatch<React.SetStateAction<SessionChat[]>>;
+  setChats: React.Dispatch<React.SetStateAction<ProjectChat[]>>;
   setSidebarApprovalLoadingChatId: (value: string | null) => void;
   upsertChatSidebarSnapshot: (chatId: string, patch: Partial<ChatSidebarSnapshot>) => void;
   visibleEvents: UiEvent[];
@@ -72,7 +72,7 @@ export function useChatSidebarSyncEffects({
   const snapshotSyncedEventRef = useRef<Record<string, string>>(buildSnapshotSyncMap(initialChats));
 
   useEffect(() => {
-    const sortedInitialChats = sortSessionChats(initialChats);
+    const sortedInitialChats = sortProjectChats(initialChats);
     const persistedReadMarkers = buildReadMarkerMap(sortedInitialChats);
     setChatReadMarkers((prev) => {
       const merged = { ...persistedReadMarkers };
@@ -254,7 +254,7 @@ export function useChatSidebarSyncEffects({
     const timer = window.setTimeout(() => {
       snapshotSyncInFlightRef.current[activeChatIdResolved] = true;
       void fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
+        `/api/runtime/projects/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(activeChatIdResolved)}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -272,11 +272,11 @@ export function useChatSidebarSyncEffects({
             return;
           }
           snapshotSyncedEventRef.current[activeChatIdResolved] = latestEventId;
-          const payload = (await response.json().catch(() => ({}))) as { chat?: SessionChat };
+          const payload = (await response.json().catch(() => ({}))) as { chat?: ProjectChat };
           if (!payload.chat) {
             return;
           }
-          setChats((prev) => sortSessionChats(prev.map((chat) => (
+          setChats((prev) => sortProjectChats(prev.map((chat) => (
             chat.id === payload.chat?.id ? payload.chat : chat
           ))));
         })
@@ -310,7 +310,7 @@ export function useChatSidebarSyncEffects({
       readMarkerSyncInFlightRef.current[chatId] = true;
       const readAt = chatSidebarSnapshots[chatId]?.latestEventAt ?? new Date().toISOString();
       void fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chatId)}`,
+        `/api/runtime/projects/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(chatId)}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -372,7 +372,7 @@ export function useChatSidebarSyncEffects({
           params.set('activeChatId', activeChatIdResolved);
         }
         const response = await fetch(
-          `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/sidebar?${params.toString()}`,
+          `/api/runtime/projects/${encodeURIComponent(sessionId)}/chats/sidebar?${params.toString()}`,
           { cache: 'no-store' },
         );
         if (!response.ok) {

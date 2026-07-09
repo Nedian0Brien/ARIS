@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/auth/guard';
-import { listProjectChats } from '@/lib/happy/projectChats';
+import { listProjectChats } from '@/lib/happy/chats';
 import { getProjectWorkspace, saveProjectWorkspace } from '@/lib/happy/projectWorkspaces';
 import type { ProjectWorkspacePanelRuntimePatch } from '@/lib/happy/projectWorkspaces';
 import { ensureProjectWorkspacePanelRuntimes } from '@/lib/happy/workspacePanelRuntimes';
@@ -20,16 +20,16 @@ function normalizePanelRuntime(input: unknown): Record<string, ProjectWorkspaceP
   for (const [panelId, value] of Object.entries(input)) {
     if (!panelId.trim() || !value || typeof value !== 'object' || Array.isArray(value)) continue;
     const record = value as {
-      runtimeSessionId?: unknown;
+      runtimeProjectId?: unknown;
       branch?: unknown;
       worktreePath?: unknown;
       meta?: unknown;
     };
     const patch: ProjectWorkspacePanelRuntimePatch = {};
-    const runtimeSessionId = normalizeOptionalString(record.runtimeSessionId);
+    const runtimeProjectId = normalizeOptionalString(record.runtimeProjectId);
     const branch = normalizeOptionalString(record.branch);
     const worktreePath = normalizeOptionalString(record.worktreePath);
-    if (runtimeSessionId !== undefined) patch.runtimeSessionId = runtimeSessionId;
+    if (runtimeProjectId !== undefined) patch.runtimeProjectId = runtimeProjectId;
     if (branch !== undefined) patch.branch = branch;
     if (worktreePath !== undefined) patch.worktreePath = worktreePath;
     if (record.meta !== undefined && (!record.meta || typeof record.meta === 'object')) {

@@ -26,7 +26,7 @@ type ImportedAgentSessionStore = {
   }): Promise<{
     id: string;
     chatId?: string | null;
-    arisSessionId?: string | null;
+    arisProjectId?: string | null;
     provider: string;
     providerSessionId: string;
     sourcePath: string;
@@ -38,7 +38,7 @@ type ImportedAgentSessionStore = {
     hasMoreBefore: boolean;
     status?: string;
   }>;
-  resolveProjectSessionIdByPath(projectPath: string): Promise<string | null>;
+  resolveProjectIdByPath(projectPath: string): Promise<string | null>;
   /**
    * Find an existing top-level chat (parentChatId IS NULL, i.e. not a subagent)
    * that already owns a provider session id — matched by Chat.threadId or by any
@@ -50,7 +50,7 @@ type ImportedAgentSessionStore = {
   findOwningChat?(providerSessionId: string): Promise<{ chatId: string; isImported: boolean } | null>;
   ensureImportedAgentChat(input: {
     importId: string;
-    arisSessionId: string;
+    arisProjectId: string;
     userId: string;
     title: string;
     parentChatId?: string | null;
@@ -64,7 +64,7 @@ type ImportedAgentSessionStore = {
    */
   markImportedAgentSessionNative?(input: {
     importId: string;
-    arisSessionId: string;
+    arisProjectId: string;
     chatId: string;
   }): Promise<void>;
   /** Refresh subagent metadata (type/status) on an already-linked subagent chat. */
@@ -78,7 +78,7 @@ type ImportedAgentSessionStore = {
     importId: string;
     provider: ImportedAgentProvider;
     providerSessionId: string;
-    sessionId: string;
+    projectId: string;
     chatId: string;
     messages: ImportedProviderMessage[];
     hasMoreBefore?: boolean;
@@ -428,8 +428,8 @@ export async function runAgentSessionImportOnce(options: AgentSessionImportRunOp
     if (imported.status === 'native') {
       continue;
     }
-    const arisSessionId = await options.store.resolveProjectSessionIdByPath(normalizedProjectPath);
-    if (!arisSessionId) {
+    const arisProjectId = await options.store.resolveProjectIdByPath(normalizedProjectPath);
+    if (!arisProjectId) {
       result.skipped += 1;
       continue;
     }
@@ -444,7 +444,7 @@ export async function runAgentSessionImportOnce(options: AgentSessionImportRunOp
       if (owning && !owning.isImported) {
         await options.store.markImportedAgentSessionNative({
           importId: imported.id,
-          arisSessionId,
+          arisProjectId,
           chatId: owning.chatId,
         });
         result.skipped += 1;
@@ -474,7 +474,7 @@ export async function runAgentSessionImportOnce(options: AgentSessionImportRunOp
       ? imported.chatId
       : (await options.store.ensureImportedAgentChat({
           importId: imported.id,
-          arisSessionId,
+          arisProjectId,
           userId: options.userId,
           title,
           ...(isSubagent
@@ -504,7 +504,7 @@ export async function runAgentSessionImportOnce(options: AgentSessionImportRunOp
       importId: imported.id,
       provider: parsed.provider,
       providerSessionId: parsed.providerSessionId,
-      sessionId: normalizedProjectPath,
+      projectId: arisProjectId,
       chatId,
       messages: selectedMessages,
       hasMoreBefore: imported.chatId

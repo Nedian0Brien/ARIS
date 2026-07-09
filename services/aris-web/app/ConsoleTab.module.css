@@ -31,7 +31,7 @@
   min-width: 0;
 }
 
-.sessionSelector {
+.projectSelector {
   flex: 1;
   min-width: 100px;
   max-width: 400px;
@@ -49,7 +49,7 @@
   white-space: nowrap;
 }
 
-.sessionSelector:focus {
+.projectSelector:focus {
   border-color: var(--primary, #3b82f6);
 }
 
@@ -255,7 +255,7 @@
     border-radius: 0;
   }
 
-  .sessionSelector {
+  .projectSelector {
     min-width: 0;
     flex: 1 1 100%;
   }
@@ -270,7 +270,7 @@
     padding: 0.625rem 0.875rem;
   }
 
-  .sessionSelector {
+  .projectSelector {
     min-width: 240px;
     flex: 1 1 320px;
   }
@@ -287,7 +287,7 @@
     flex-wrap: nowrap;
   }
 
-  .sessionSelector {
+  .projectSelector {
     flex: 1 1 460px;
   }
 

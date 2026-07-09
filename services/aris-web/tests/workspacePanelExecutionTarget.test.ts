@@ -38,7 +38,7 @@ describe('workspace panel execution target', () => {
     })).resolves.toEqual({
       projectId: 'project-1',
       projectPath: '/home/ubuntu/project/ARIS',
-      runtimeSessionId: 'project-1',
+      runtimeProjectId: 'project-1',
       executionPath: '/home/ubuntu/project/ARIS',
       workspacePanelId: null,
       branch: null,
@@ -49,7 +49,7 @@ describe('workspace panel execution target', () => {
   it('uses persisted WorkspacePanel runtime/worktree metadata as the execution target', async () => {
     mocks.workspacePanelFindFirst.mockResolvedValue({
       panelId: 'panel-1',
-      runtimeSessionId: 'runtime-panel-1',
+      runtimeProjectId: 'runtime-panel-1',
       branch: 'parallel/panel-1',
       worktreePath: '/home/ubuntu/project/ARIS/.worktrees/panel-1',
       workspace: {
@@ -67,7 +67,7 @@ describe('workspace panel execution target', () => {
     })).resolves.toEqual({
       projectId: 'project-1',
       projectPath: '/home/ubuntu/project/ARIS',
-      runtimeSessionId: 'runtime-panel-1',
+      runtimeProjectId: 'runtime-panel-1',
       executionPath: '/home/ubuntu/project/ARIS/.worktrees/panel-1',
       workspacePanelId: 'panel-1',
       branch: 'parallel/panel-1',

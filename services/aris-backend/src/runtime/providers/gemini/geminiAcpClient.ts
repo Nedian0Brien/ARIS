@@ -4,7 +4,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import type {
   ApprovalPolicy,
   GeminiCapabilityOption,
-  GeminiSessionCapabilities,
+  GeminiProjectCapabilities,
   PermissionDecision,
 } from '../../../types.js';
 import { inferActionTypeFromCommand, titleForActionType } from '../../actionType.js';
@@ -577,7 +577,7 @@ async function waitForPostPromptSettle(input: {
 
 export async function inspectGeminiAcpSessionCapabilities(
   input: GeminiAcpCapabilityDiscoveryOptions,
-): Promise<GeminiSessionCapabilities> {
+): Promise<GeminiProjectCapabilities> {
   const launchCommand = input.launchCommand ?? {
     command: 'gemini',
     args: ['--acp'],

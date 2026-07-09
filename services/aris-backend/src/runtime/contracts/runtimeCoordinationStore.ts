@@ -12,7 +12,7 @@ import type {
   PermissionRequest,
   PermissionState,
   PermissionRisk,
-  SessionAction,
+  ProjectAction,
 } from '../../types.js';
 
 /**
@@ -22,7 +22,7 @@ import type {
  * session/chat scope, agent attribution, command + reason text, and risk.
  */
 export type HappyRuntimePermissionInput = {
-  sessionId: string;
+  projectId: string;
   /**
    * `null` accepted alongside `undefined` to mirror the original inline
    * surface in runtimeCore.ts (callers occasionally pass nullable chat ids
@@ -46,8 +46,8 @@ export type RuntimeCoordinationStore = {
   decidePermission(permissionId: string, decision: PermissionDecision): Promise<PermissionRequest>;
   getPermissionById(permissionId: string): Promise<PermissionRequest | null>;
   hasRequestedAction(input: {
-    sessionId: string;
-    action: SessionAction;
+    projectId: string;
+    action: ProjectAction;
     chatId?: string;
     createdAfter?: Date;
   }): Promise<boolean>;

@@ -6,7 +6,7 @@ import { CheckCircle2, ChevronDown, ChevronLeft, ChevronUp, Copy, Eye, Loader2, 
 import { readChatImageAttachments } from '@/lib/chatImageAttachments';
 import { isAgentSwitchEvent, isRunLifecycleEvent } from '@/lib/happy/chatRuntime';
 import { ProviderLogo } from '@/components/ui/ProviderLogo';
-import type { AgentFlavor, PermissionDecision, SessionChat, UiEvent } from '@/lib/happy/types';
+import type { AgentFlavor, PermissionDecision, ProjectChat, UiEvent } from '@/lib/happy/types';
 import { PermissionRequestMessage } from '../../PermissionRequestMessage';
 import styles from '../../ChatInterface.module.css';
 import { AGENT_QUICK_STARTS } from '../constants';
@@ -71,7 +71,7 @@ export function ChatTimeline({
   onOpenPreview,
 }: {
   activeAgentFlavor: AgentFlavor;
-  activeChat: SessionChat | null;
+  activeChat: ProjectChat | null;
   agentMeta: AgentMeta;
   chatEntryPendingRevealClassName: string;
   copiedUserEventId: string | null;

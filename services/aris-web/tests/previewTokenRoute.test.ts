@@ -10,11 +10,11 @@ vi.mock('@/lib/auth/guard', () => ({
 }));
 
 type PreviewRouteModule = {
-  GET?: (request: NextRequest, context: { params: Promise<{ sessionId: string; panelId: string }> }) => Promise<Response>;
+  GET?: (request: NextRequest, context: { params: Promise<{ projectId: string; panelId: string }> }) => Promise<Response>;
 };
 
 async function loadPreviewRouteModule(): Promise<PreviewRouteModule> {
-  return import('@/app/api/runtime/sessions/[sessionId]/panels/[panelId]/preview-url/route').catch(() => ({}));
+  return import('@/app/api/runtime/projects/[projectId]/panels/[panelId]/preview-url/route').catch(() => ({}));
 }
 
 describe('preview url route', () => {
@@ -30,8 +30,8 @@ describe('preview url route', () => {
     if (typeof mod.GET !== 'function') return;
 
     const response = await mod.GET(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/panels/panel-preview-1/preview-url?port=3305&path=%2F'),
-      { params: Promise.resolve({ sessionId: 'session-1', panelId: 'panel-preview-1' }) },
+      new NextRequest('http://localhost/api/runtime/projects/session-1/panels/panel-preview-1/preview-url?port=3305&path=%2F'),
+      { params: Promise.resolve({ projectId: 'session-1', panelId: 'panel-preview-1' }) },
     );
 
     expect(response.status).toBe(200);
@@ -47,8 +47,8 @@ describe('preview url route', () => {
     if (typeof mod.GET !== 'function') return;
 
     const response = await mod.GET(
-      new NextRequest('http://localhost/api/runtime/sessions/session-1/panels/panel-preview-1/preview-url?port=nope'),
-      { params: Promise.resolve({ sessionId: 'session-1', panelId: 'panel-preview-1' }) },
+      new NextRequest('http://localhost/api/runtime/projects/session-1/panels/panel-preview-1/preview-url?port=nope'),
+      { params: Promise.resolve({ projectId: 'session-1', panelId: 'panel-preview-1' }) },
     );
 
     expect(response.status).toBe(400);

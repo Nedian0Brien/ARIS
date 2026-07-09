@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { requirePageUser } from '@/lib/auth/guard';
-import { listSessionChats } from '@/lib/happy/chats';
-import { getSessionEvents, listPermissionRequests, listSessions } from '@/lib/happy/client';
+import { listProjectChats } from '@/lib/happy/chats';
+import { getProjectEvents, listPermissionRequests, listProjects } from '@/lib/happy/client';
 import { BackendNotice } from '@/components/ui/BackendNotice';
 import { Card } from '@/components/ui';
 import { ChatInterface } from './ChatInterface';
@@ -34,8 +34,8 @@ export async function generateMetadata({
       : null;
 
     const [sessions, chats] = await Promise.all([
-      listSessions(user.id),
-      listSessionChats({ sessionId, userId: user.id, ensureDefault: false }),
+      listProjects(user.id),
+      listProjectChats({ projectId: sessionId, userId: user.id, ensureDefault: false }),
     ]);
 
     const session = sessions.find((s) => s.id === sessionId);
@@ -79,22 +79,22 @@ export default async function SessionPage({
     const isHomeView = requestedChatId === null;
     const initialModelSettings = await getUserModelSettings(user.id);
 
-    const chats = await listSessionChats({
-      sessionId,
+    const chats = await listProjectChats({
+      projectId: sessionId,
       userId: user.id,
       ensureDefault: !isHomeView,
     });
 
     // 홈 화면: 이벤트 없이 워크스페이스 메타 정보만 가져온다.
     if (isHomeView) {
-      const detail = await getSessionEvents(sessionId, {
+      const detail = await getProjectEvents(sessionId, {
         userId: user.id,
         limit: 0,
         chatId: undefined,
         includeUnassigned: false,
       });
 
-      const workspaceRootPath = await resolveWorkspaceClientPath(detail.session.projectName).catch(() => '/');
+      const workspaceRootPath = await resolveWorkspaceClientPath(detail.project.projectName).catch(() => '/');
 
       return (
         <div className="app-shell app-shell-chat-screen">
@@ -107,9 +107,9 @@ export default async function SessionPage({
               isOperator={user.role === 'operator'}
               projectName={workspaceRootPath}
               workspaceRootPath={workspaceRootPath}
-              agentFlavor={detail.session.agent}
-              sessionModel={detail.session.model}
-              approvalPolicy={detail.session.approvalPolicy}
+              agentFlavor={detail.project.agent}
+              sessionModel={detail.project.model}
+              approvalPolicy={detail.project.approvalPolicy}
               initialModelSettings={initialModelSettings}
               initialChats={chats}
               activeChatId={null}
@@ -124,20 +124,20 @@ export default async function SessionPage({
     const activeChat = chats.find((chat) => chat.id === requestedChatId) ?? chats[0];
 
     const [detail, permissions] = await Promise.all([
-      getSessionEvents(sessionId, {
+      getProjectEvents(sessionId, {
         userId: user.id,
         limit: INITIAL_EVENTS_PAGE_LIMIT,
         chatId: activeChat?.id,
         includeUnassigned: activeChat?.isDefault ?? false,
       }),
       listPermissionRequests({
-        sessionId,
+        projectId: sessionId,
         chatId: activeChat?.id,
         includeUnassigned: activeChat?.isDefault ?? false,
       }),
     ]);
 
-    const workspaceRootPath = await resolveWorkspaceClientPath(detail.session.projectName).catch(() => '/');
+    const workspaceRootPath = await resolveWorkspaceClientPath(detail.project.projectName).catch(() => '/');
 
     return (
       <div className="app-shell app-shell-chat-screen">
@@ -150,9 +150,9 @@ export default async function SessionPage({
             isOperator={user.role === 'operator'}
             projectName={workspaceRootPath}
             workspaceRootPath={workspaceRootPath}
-            agentFlavor={detail.session.agent}
-            sessionModel={detail.session.model}
-            approvalPolicy={detail.session.approvalPolicy}
+            agentFlavor={detail.project.agent}
+            sessionModel={detail.project.model}
+            approvalPolicy={detail.project.approvalPolicy}
             initialModelSettings={initialModelSettings}
             initialChats={chats}
             activeChatId={activeChat?.id ?? null}

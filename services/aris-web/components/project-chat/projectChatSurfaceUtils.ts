@@ -2,7 +2,7 @@ import type { DragEvent } from 'react';
 import type { ProviderLogoProvider } from '@/components/ui/ProviderLogo';
 import { isTerminalRunStatus, readUiEventRunStatus } from '@/lib/happy/chatRuntime';
 import { withAppBasePath } from '@/lib/routing/appPath';
-import type { SessionChat, SessionEventsPage, SessionStatus, SessionSummary, UiEvent } from '@/lib/happy/types';
+import type { ProjectChat, ProjectEventsPage, ProjectStatus, ProjectSummary, UiEvent } from '@/lib/happy/types';
 import { buildProjectChatCollectionPath, buildProjectWorkspacePath } from '@/lib/projectRuntimeAdapter';
 import {
   computeProjectPanelDropEdge,
@@ -28,7 +28,7 @@ export type ProjectRunIndicator = {
 };
 export type ProjectChatEventsResponse = {
   events?: UiEvent[];
-  page?: Partial<SessionEventsPage>;
+  page?: Partial<ProjectEventsPage>;
   error?: string;
 };
 export type ProjectChatSurfaceMode = 'full' | 'panel';
@@ -43,7 +43,7 @@ export type ProjectPanelNodeDragPayload = ProjectChatDragPayload & {
 export type ProjectWorkspacePanelRuntime = {
   panelId: string;
   chatId: string;
-  runtimeSessionId: string | null;
+  runtimeProjectId: string | null;
   branch: string | null;
   worktreePath: string | null;
 };
@@ -79,12 +79,12 @@ export type ProjectPanelGitOverview = {
 export type ProjectChatDragStartHandler = (
   event: DragEvent<HTMLElement>,
   projectId: string,
-  chat: Pick<SessionChat, 'id' | 'title'>,
+  chat: Pick<ProjectChat, 'id' | 'title'>,
 ) => void;
 export type ProjectPanelNodeDragStartHandler = (
   event: DragEvent<HTMLElement>,
   panelId: string,
-  chat: Pick<SessionChat, 'id' | 'title'>,
+  chat: Pick<ProjectChat, 'id' | 'title'>,
 ) => void;
 export type ProjectPanelDropHandler = (
   targetPanelId: string,
@@ -131,19 +131,19 @@ export const PROJECT_PANEL_NODE_DRAG_MIME = 'application/x-aris-project-panel-no
 // ---------------------------------------------------------------------------
 // Project chat surface helpers
 // ---------------------------------------------------------------------------
-export function providerFromAgent(agent: SessionSummary['agent'] | SessionChat['agent']): ModelProvider {
+export function providerFromAgent(agent: ProjectSummary['agent'] | ProjectChat['agent']): ModelProvider {
   if (agent === 'claude' || agent === 'gemini' || agent === 'codex') return agent;
   return 'codex';
 }
 
-export function normalizeReasoningEffort(value: SessionChat['modelReasoningEffort'] | null | undefined): ReasoningEffort {
+export function normalizeReasoningEffort(value: ProjectChat['modelReasoningEffort'] | null | undefined): ReasoningEffort {
   if (value === 'low') return 'Low';
   if (value === 'medium') return 'Medium';
   if (value === 'xhigh') return 'XHigh';
   return 'High';
 }
 
-export function serializeReasoningEffort(value: ReasoningEffort): SessionChat['modelReasoningEffort'] {
+export function serializeReasoningEffort(value: ReasoningEffort): ProjectChat['modelReasoningEffort'] {
   if (value === 'Low') return 'low';
   if (value === 'Medium') return 'medium';
   if (value === 'XHigh' || value === 'Max') return 'xhigh';
@@ -171,7 +171,7 @@ export async function copyToClipboard(value: string): Promise<boolean> {
   }
 }
 
-export function displayProjectName(session: SessionSummary): string {
+export function displayProjectName(session: ProjectSummary): string {
   const candidate = session.alias || session.projectName || session.id;
   const normalized = candidate.replace(/\\/g, '/').replace(/\/+$/, '');
   return normalized.split('/').filter(Boolean).pop() || candidate;
@@ -193,13 +193,13 @@ export function formatRelativeTime(value: string | null | undefined): string {
   return `${Math.floor(diffMs / day)}d ago`;
 }
 
-export function projectStatusLabel(status: SessionStatus): string {
+export function projectStatusLabel(status: ProjectStatus): string {
   if (status === 'running') return 'running';
   if (status === 'error') return 'approval';
   return 'idle';
 }
 
-export function projectStatusBadgeClass(status: SessionStatus): string {
+export function projectStatusBadgeClass(status: ProjectStatus): string {
   if (status === 'running') return 'badge--info';
   if (status === 'error') return 'badge--warning';
   return 'badge--neutral';
@@ -208,7 +208,7 @@ export function projectStatusBadgeClass(status: SessionStatus): string {
 export function writeProjectChatDragPayload(
   event: DragEvent<HTMLElement>,
   projectId: string,
-  chat: Pick<SessionChat, 'id' | 'title'>,
+  chat: Pick<ProjectChat, 'id' | 'title'>,
 ) {
   const payload = JSON.stringify({
     projectId,
@@ -226,7 +226,7 @@ export function writeProjectPanelNodeDragPayload(
   event: DragEvent<HTMLElement>,
   projectId: string,
   panelId: string,
-  chat: Pick<SessionChat, 'id' | 'title'>,
+  chat: Pick<ProjectChat, 'id' | 'title'>,
 ) {
   const payload = JSON.stringify({
     projectId,
@@ -252,8 +252,8 @@ export function readProjectChatDragPayload(event: DragEvent<HTMLElement>): Proje
     const rawPayload = event.dataTransfer.getData(PROJECT_CHAT_DRAG_MIME)
       || event.dataTransfer.getData(PROJECT_CHAT_DRAG_JSON_MIME)
       || event.dataTransfer.getData('text/plain');
-    const parsed = JSON.parse(rawPayload) as Partial<ProjectChatDragPayload> & { sessionId?: unknown };
-    const parsedProjectId = typeof parsed.projectId === 'string' ? parsed.projectId : parsed.sessionId;
+    const parsed = JSON.parse(rawPayload) as Partial<ProjectChatDragPayload>;
+    const parsedProjectId = parsed.projectId;
     if (
       typeof parsedProjectId !== 'string'
       || typeof parsed.chatId !== 'string'
@@ -281,8 +281,8 @@ export function readProjectPanelNodeDragPayload(event: DragEvent<HTMLElement>): 
 
   try {
     const rawPayload = event.dataTransfer.getData(PROJECT_PANEL_NODE_DRAG_MIME);
-    const parsed = JSON.parse(rawPayload) as Partial<ProjectPanelNodeDragPayload> & { sessionId?: unknown };
-    const parsedProjectId = typeof parsed.projectId === 'string' ? parsed.projectId : parsed.sessionId;
+    const parsed = JSON.parse(rawPayload) as Partial<ProjectPanelNodeDragPayload>;
+    const parsedProjectId = parsed.projectId;
     if (
       typeof parsedProjectId !== 'string'
       || typeof parsed.panelId !== 'string'
@@ -329,18 +329,18 @@ export async function createProjectChat(
   projectId: string,
   input: {
     title?: string;
-    agent?: SessionSummary['agent'];
+    agent?: ProjectSummary['agent'];
     model?: string | null;
     geminiMode?: string | null;
-    modelReasoningEffort?: SessionChat['modelReasoningEffort'];
+    modelReasoningEffort?: ProjectChat['modelReasoningEffort'];
   },
-): Promise<SessionChat> {
+): Promise<ProjectChat> {
   const response = await fetch(withAppBasePath(buildProjectChatCollectionPath(projectId)), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
-  const body = (await response.json().catch(() => ({}))) as { chat?: SessionChat; error?: string };
+  const body = (await response.json().catch(() => ({}))) as { chat?: ProjectChat; error?: string };
   if (!response.ok || !body.chat) {
     throw new Error(body.error ?? '새 채팅을 만들지 못했습니다.');
   }
@@ -428,7 +428,7 @@ export async function fetchProjectPanelGitOverview(projectId: string, panelId: s
   params.set('kind', 'overview');
   params.set('workspacePanelId', panelId);
   const response = await fetch(
-    withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(projectId)}/git?${params.toString()}`),
+    withAppBasePath(`/api/runtime/projects/${encodeURIComponent(projectId)}/git?${params.toString()}`),
     { cache: 'no-store' },
   );
   const body = (await response.json().catch(() => ({}))) as ProjectPanelGitOverview & { error?: string };
@@ -453,11 +453,11 @@ export function resolvePanelRuntimeBadge(
   if (runtimeRunning) {
     return {
       label: 'running',
-      detail: panelRuntime?.branch ?? panelRuntime?.runtimeSessionId ?? 'panel runtime',
+      detail: panelRuntime?.branch ?? panelRuntime?.runtimeProjectId ?? 'panel runtime',
       tone: 'running',
     };
   }
-  if (!panelRuntime?.runtimeSessionId) {
+  if (!panelRuntime?.runtimeProjectId) {
     return {
       label: 'runtime pending',
       detail: '패널 runtime/worktree 생성 대기',
@@ -467,7 +467,7 @@ export function resolvePanelRuntimeBadge(
   if (!panelRuntime.worktreePath) {
     return {
       label: 'worktree missing',
-      detail: panelRuntime.branch ?? panelRuntime.runtimeSessionId,
+      detail: panelRuntime.branch ?? panelRuntime.runtimeProjectId,
       tone: 'error',
     };
   }
@@ -506,12 +506,12 @@ export function mergeProjectChatEvents(events: UiEvent[]): UiEvent[] {
   return [...dedup.values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
 
-export function agentLabel(agent: SessionSummary['agent'], model?: string | null): string {
+export function agentLabel(agent: ProjectSummary['agent'], model?: string | null): string {
   const provider = agent === 'claude' ? 'Claude' : agent === 'gemini' ? 'Gemini' : agent === 'codex' ? 'Codex' : 'Agent';
   return model ? `${provider} · ${model}` : provider;
 }
 
-export function agentAvatarClass(agent: SessionSummary['agent'] | SessionChat['agent']): string {
+export function agentAvatarClass(agent: ProjectSummary['agent'] | ProjectChat['agent']): string {
   if (agent === 'claude') return 'msg__avatar--claude';
   if (agent === 'gemini') return 'msg__avatar--gemini';
   if (agent === 'codex') return 'msg__avatar--codex';

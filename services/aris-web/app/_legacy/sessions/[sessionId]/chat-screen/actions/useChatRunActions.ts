@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, type Dispatch, type FormEvent, type MutableRefObject, type SetStateAction } from 'react';
-import type { AgentFlavor, ApprovalPolicy, SessionChat, UiEvent } from '@/lib/happy/types';
+import type { AgentFlavor, ApprovalPolicy, ProjectChat, UiEvent } from '@/lib/happy/types';
 import { buildOptimisticUserEvent } from '../../chatComposer';
 import {
   shouldAllowSystemScrollWrite,
@@ -17,7 +17,7 @@ import {
   normalizeModelId,
   resolveAvailableGeminiModeId,
   resolveDefaultModelId,
-  sortSessionChats,
+  sortProjectChats,
 } from '../helpers';
 import type {
   ChatRuntimeUiState,
@@ -29,7 +29,7 @@ import type {
 
 type Params = {
   activeAgentFlavor: AgentFlavor;
-  activeChat: SessionChat | null;
+  activeChat: ProjectChat | null;
   activeChatIdResolved: string | null;
   addEvent: (event: UiEvent) => void;
   approvalPolicy?: ApprovalPolicy;
@@ -50,12 +50,12 @@ type Params = {
   providerSelections?: Parameters<typeof resolveDefaultModelId>[1];
   runtimeStartedSinceAwaitingRef: MutableRefObject<boolean>;
   isConversationNearBottom: () => boolean;
-  sessionScrollPhase: SessionScrollPhase;
+  projectScrollPhase: SessionScrollPhase;
   scrollConversationToBottom: (behavior?: ScrollBehavior) => void;
   selectedGeminiModeId: string;
   selectedModelId: string;
   sessionId: string;
-  setChats: Dispatch<SetStateAction<SessionChat[]>>;
+  setChats: Dispatch<SetStateAction<ProjectChat[]>>;
   setContextItems: Dispatch<SetStateAction<ContextItem[]>>;
   setPendingUserEventsByChat: Dispatch<SetStateAction<Record<string, UiEvent[]>>>;
   setPrompt: Dispatch<SetStateAction<string>>;
@@ -104,7 +104,7 @@ export function useChatRunActions({
   providerSelections,
   runtimeStartedSinceAwaitingRef,
   isConversationNearBottom,
-  sessionScrollPhase,
+  projectScrollPhase,
   scrollConversationToBottom,
   selectedGeminiModeId,
   selectedModelId,
@@ -196,7 +196,7 @@ export function useChatRunActions({
         },
       });
       try {
-        const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal`, {
+        const response = await fetch(`/api/runtime/projects/${encodeURIComponent(sessionId)}/terminal`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -218,7 +218,7 @@ export function useChatRunActions({
           addEvent(event);
         }
         const touchedAt = new Date().toISOString();
-        setChats((prev) => sortSessionChats(prev.map((chat) => (
+        setChats((prev) => sortProjectChats(prev.map((chat) => (
           chat.id === scopedChatId
             ? { ...chat, lastActivityAt: touchedAt, latestPreview: `$ ${promptText}`, latestEventAt: touchedAt }
             : chat
@@ -282,7 +282,7 @@ export function useChatRunActions({
     }));
     if (wasStickyAtSubmit && shouldAllowSystemScrollWrite({
       writer: 'auto-scroll',
-      scrollPhase: sessionScrollPhase,
+      scrollPhase: projectScrollPhase,
     })) {
       shouldStickToBottomRef.current = true;
       setShowScrollToBottom(false);
@@ -294,7 +294,7 @@ export function useChatRunActions({
     }
 
     try {
-      const response = await fetch(`/api/runtime/sessions/${sessionId}/events`, {
+      const response = await fetch(`/api/runtime/projects/${sessionId}/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -328,7 +328,7 @@ export function useChatRunActions({
       }
 
       const touchedAt = new Date().toISOString();
-      setChats((prev) => sortSessionChats(prev.map((chat) => (
+      setChats((prev) => sortProjectChats(prev.map((chat) => (
         chat.id === scopedChatId
           ? {
               ...chat,
@@ -338,7 +338,7 @@ export function useChatRunActions({
           : chat
       ))));
       void fetch(
-        `/api/runtime/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(scopedChatId)}`,
+        `/api/runtime/projects/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(scopedChatId)}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -354,11 +354,11 @@ export function useChatRunActions({
           if (!response.ok) {
             return;
           }
-          const payload = (await response.json().catch(() => ({}))) as { chat?: SessionChat };
+          const payload = (await response.json().catch(() => ({}))) as { chat?: ProjectChat };
           if (!payload.chat) {
             return;
           }
-          setChats((prev) => sortSessionChats(prev.map((chat) => (
+          setChats((prev) => sortProjectChats(prev.map((chat) => (
             chat.id === scopedChatId
               ? {
                   ...chat,
@@ -409,7 +409,7 @@ export function useChatRunActions({
     providerSelections,
     runtimeStartedSinceAwaitingRef,
     isConversationNearBottom,
-    sessionScrollPhase,
+    projectScrollPhase,
     scrollConversationToBottom,
     selectedGeminiModeId,
     selectedModelId,
@@ -432,7 +432,7 @@ export function useChatRunActions({
     updateChatRuntimeUi(scopedChatId, { isAborting: true });
 
     try {
-      const response = await fetch(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/actions`, {
+      const response = await fetch(`/api/runtime/projects/${encodeURIComponent(sessionId)}/actions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'abort', chatId: scopedChatId }),

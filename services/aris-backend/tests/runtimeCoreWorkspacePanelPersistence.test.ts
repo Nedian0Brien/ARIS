@@ -9,7 +9,7 @@ const runtimeCore = readFileSync(resolve(__dirname, '../src/runtime/runtimeCore.
 describe('RuntimeCore workspace panel persistence boundary', () => {
   it('runs through the panel runtime session while persisting events to the project session', () => {
     expect(runtimeCore).toContain('persistenceSessionId?: string');
-    expect(runtimeCore).toContain('runtimePersistenceSessionId');
+    expect(runtimeCore).toContain('runtimePersistenceProjectId');
     expect(runtimeCore).toContain('this.appendRunLifecycleEvent(persistenceSessionId');
     expect(runtimeCore).toContain('this.appendAgentMessage(persistenceSessionId');
   });

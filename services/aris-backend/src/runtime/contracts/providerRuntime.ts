@@ -1,4 +1,4 @@
-import type { AgentFlavor, ApprovalPolicy, PermissionDecision, PermissionRisk, RuntimeSession } from '../../types.js';
+import type { AgentFlavor, ApprovalPolicy, PermissionDecision, PermissionRisk, RuntimeProject } from '../../types.js';
 import type { SessionProtocolEnvelope } from './sessionProtocol.js';
 
 export type ProviderRuntimeFlavor = Exclude<AgentFlavor, 'unknown'>;
@@ -75,8 +75,8 @@ export type ProviderCommandExecutor<TCommand extends ProviderLaunchCommand = Pro
   onText?: (event: ProviderTextEvent) => Promise<void>;
 }) => Promise<ProviderCliResult>;
 
-export type ProviderRuntimeSession<TFlavor extends ProviderRuntimeFlavor = ProviderRuntimeFlavor> = Pick<RuntimeSession, 'id'> & {
-  metadata: Pick<RuntimeSession['metadata'], 'path' | 'approvalPolicy' | 'branch'> & {
+export type ProviderRuntimeProject<TFlavor extends ProviderRuntimeFlavor = ProviderRuntimeFlavor> = Pick<RuntimeProject, 'id'> & {
+  metadata: Pick<RuntimeProject['metadata'], 'path' | 'approvalPolicy' | 'branch'> & {
     flavor: TFlavor;
     model?: string;
     mode?: string;
@@ -96,7 +96,7 @@ export type ProviderSessionScope = {
   chatId?: string;
 };
 
-export type ProviderTurnRequest<TSession extends ProviderRuntimeSession = ProviderRuntimeSession> = {
+export type ProviderTurnRequest<TSession extends ProviderRuntimeProject = ProviderRuntimeProject> = {
   session: TSession;
   prompt: string;
   chatId?: string;
@@ -119,7 +119,7 @@ export type ProviderTurnResult = {
   threadIdSource: ProviderThreadIdSource;
 };
 
-export type ProviderSessionRecovery<TSession extends ProviderRuntimeSession = ProviderRuntimeSession> = {
+export type ProviderSessionRecovery<TSession extends ProviderRuntimeProject = ProviderRuntimeProject> = {
   session: TSession;
   chatId?: string;
   recoveredThreadId?: string;
@@ -128,7 +128,7 @@ export type ProviderSessionRecovery<TSession extends ProviderRuntimeSession = Pr
 };
 
 export interface ProviderRuntime<
-  TSession extends ProviderRuntimeSession = ProviderRuntimeSession,
+  TSession extends ProviderRuntimeProject = ProviderRuntimeProject,
   TResult extends ProviderTurnResult = ProviderTurnResult,
 > {
   readonly provider: TSession['metadata']['flavor'];

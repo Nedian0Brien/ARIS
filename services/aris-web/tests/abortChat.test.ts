@@ -19,11 +19,11 @@ describe('abortActiveChat', () => {
       json: async () => ({ result: { accepted: true, message: 'ok' } }),
     });
 
-    const result = await abortActiveChat({ sessionId: 'sess-1', chatId: '  chat-9  ' });
+    const result = await abortActiveChat({ projectId: 'sess-1', chatId: '  chat-9  ' });
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     const [url, init] = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(url).toBe('/api/runtime/sessions/sess-1/actions');
+    expect(url).toBe('/api/runtime/projects/sess-1/actions');
     expect(init.method).toBe('POST');
     expect(init.cache).toBe('no-store');
     expect(init.headers).toEqual({ 'Content-Type': 'application/json' });
@@ -40,7 +40,7 @@ describe('abortActiveChat', () => {
     await abortProjectChat({ projectId: 'project/a b', chatId: 'chat-1' });
 
     const [url, init] = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(url).toBe('/api/runtime/sessions/project%2Fa%20b/actions');
+    expect(url).toBe('/api/runtime/projects/project%2Fa%20b/actions');
     expect(JSON.parse(init.body as string)).toEqual({ action: 'abort', chatId: 'chat-1' });
   });
 
@@ -50,7 +50,7 @@ describe('abortActiveChat', () => {
       json: async () => ({ result: {} }),
     });
 
-    await abortActiveChat({ sessionId: 'sess-2', chatId: '   ' });
+    await abortActiveChat({ projectId: 'sess-2', chatId: '   ' });
 
     const [, init] = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(JSON.parse(init.body as string)).toEqual({ action: 'abort', chatId: undefined });
@@ -63,7 +63,7 @@ describe('abortActiveChat', () => {
       json: async () => ({ error: '권한 없음' }),
     });
 
-    await expect(abortActiveChat({ sessionId: 'sess-3' })).rejects.toThrow('권한 없음');
+    await expect(abortActiveChat({ projectId: 'sess-3' })).rejects.toThrow('권한 없음');
   });
 
   it('throws default message when error body missing', async () => {
@@ -73,6 +73,6 @@ describe('abortActiveChat', () => {
       json: async () => ({}),
     });
 
-    await expect(abortActiveChat({ sessionId: 'sess-4' })).rejects.toThrow('에이전트 실행 중단에 실패했습니다.');
+    await expect(abortActiveChat({ projectId: 'sess-4' })).rejects.toThrow('에이전트 실행 중단에 실패했습니다.');
   });
 });

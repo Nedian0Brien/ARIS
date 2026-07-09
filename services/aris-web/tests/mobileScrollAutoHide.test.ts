@@ -115,11 +115,11 @@ describe('mobileScrollAutoHide', () => {
       now: 3_000,
       isMobile: true,
       thresholds,
-      isSessionScrollActive: true,
-      sessionScrollPhase: 'resuming',
+      isProjectScrollActive: true,
+      projectScrollPhase: 'resuming',
     } as Parameters<typeof reduceAutoHideScrollState>[0] & {
-      isSessionScrollActive: boolean;
-      sessionScrollPhase: 'resuming';
+      isProjectScrollActive: boolean;
+      projectScrollPhase: 'resuming';
     });
 
     expect(next.hidden).toBe(false);
@@ -137,11 +137,11 @@ describe('mobileScrollAutoHide', () => {
       now: 3_000,
       isMobile: true,
       thresholds,
-      isSessionScrollActive: true,
-      sessionScrollPhase: 'restoring-tail',
+      isProjectScrollActive: true,
+      projectScrollPhase: 'restoring-tail',
     } as Parameters<typeof reduceAutoHideScrollState>[0] & {
-      isSessionScrollActive: boolean;
-      sessionScrollPhase: 'restoring-tail';
+      isProjectScrollActive: boolean;
+      projectScrollPhase: 'restoring-tail';
     });
 
     expect(next.hidden).toBe(false);
