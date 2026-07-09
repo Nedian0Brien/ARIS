@@ -898,6 +898,39 @@ html[data-theme='dark'] .m-theme-toggle__item--active {
   html[data-keyboard-open='true'] .app-shell-ia--chat-screen .pc-proto .cmp__input {
     max-height: min(200px, calc(var(--visual-viewport-height, 100dvh) * 0.3));
   }
+
+  /* 실기기 진단 오버레이 실측(2026-07-09)으로 확정된 마지막 원인:
+     키보드가 열리면 레이아웃 뷰포트(innerHeight)가 746→399로 줄고
+     (interactive-widget=resizes-content가 최신 iOS에서 실제 동작),
+     셸도 399로 정상 축소됐지만(#393), body만 reset.css의
+     min-height: var(--app-vh) — 키보드 오픈 중 이전 높이 746에
+     얼어붙는 값 — 를 유지해 문서가 뷰포트보다 정확히 347px 커졌다.
+     iOS는 그 여백만큼 문서를 스크롤해(sY=347) 포커스된 컴포저를
+     화면 위로 밀어올렸다(cmp rect -99..44). 347 = 746 - 399.
+
+     이 override는 원래 PR #386에 있었는데 #388에서 overflow-x: clip을
+     근본 수정으로 오판하며 삭제된 것이 회귀 지점이다 — clip은
+     overflow-y의 auto 승격만 막을 뿐 min-height 746은 없애지 못한다.
+
+     키보드가 열려 있는 동안 html/body도 실제 보이는 높이를 따르게 해
+     스크롤 여백 자체를 제거한다. position/overflow는 건드리지 않으므로
+     (#387의 position:fixed 스냅 문제와 무관) 부드럽게 동작한다.
+     data-keyboard-open은 포커스 즉시 낙관적으로 켜지므로(#387) iOS의
+     스크롤(+150ms 시점)보다 먼저 적용된다. */
+  html[data-keyboard-open='true'],
+  html[data-keyboard-open='true'] body {
+    min-height: var(--visual-viewport-height, 100dvh);
+  }
+
+  /* body의 min-height만 줄여서는 부족하다(실측: bodyMinHeight 399로
+     적용돼도 bodyScrollHeight는 746 유지) — 문서 높이는 자식 중 가장 큰
+     박스가 결정하는데, .app-shell-ia(min-height: var(--app-vh))와
+     .m-main(min-height: var(--app-vh))이 얼어붙은 746을 유지하며 body를
+     떠받치고 있었다. --app-vh를 참조하는 래퍼 체인 전체를 함께 줄인다. */
+  html[data-keyboard-open='true'] .app-shell-ia--chat-screen,
+  html[data-keyboard-open='true'] .app-shell-ia--chat-screen .m-main {
+    min-height: var(--visual-viewport-height, 100dvh);
+  }
 }
 
 .app-shell-ia--project-panel .aris-ia-shell {

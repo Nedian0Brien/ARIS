@@ -34,6 +34,29 @@ describe('mobile keyboard composer — cooperates with native scroll instead of 
     expect(resetCss).not.toMatch(/html,\s*body\s*\{[^}]*overflow-x:\s*hidden;/s);
   });
 
+  it('shrinks html/body min-height to the live visual viewport while the keyboard is open', () => {
+    // 실기기 진단 오버레이 실측으로 확정된 마지막 원인: reset.css의
+    // min-height: var(--app-vh)는 키보드 오픈 중 이전 높이(746)에 얼어붙어
+    // 문서가 뷰포트(399)보다 커지고, iOS가 그 여백만큼 문서를 스크롤해
+    // (sY=347=746-399) 컴포저를 화면 위로 밀어올렸다. 키보드가 열려 있는
+    // 동안은 html/body의 min-height도 실제 보이는 높이를 따라야 한다.
+    // (이 override는 PR #386에 있다가 #388에서 잘못 삭제됐던 규칙이다.)
+    expect(iaShellCss).toMatch(
+      /html\[data-keyboard-open='true'\],\s*\n\s*html\[data-keyboard-open='true'\] body\s*\{[^}]*min-height:\s*var\(--visual-viewport-height, 100dvh\);/,
+    );
+  });
+
+  it('also shrinks the --app-vh wrapper chain (.app-shell-ia--chat-screen, .m-main) while the keyboard is open', () => {
+    // body의 min-height만 줄여서는 부족하다(격리 재현 실측: bodyMinHeight가
+    // 399로 적용돼도 bodyScrollHeight는 746 유지). 문서 높이는 자식 중 가장
+    // 큰 박스가 결정하는데 .app-shell-ia와 .m-main이 각각
+    // min-height: var(--app-vh)로 얼어붙은 746을 유지하며 body를 떠받치고
+    // 있었다. 래퍼 체인 전체가 함께 줄어야 스크롤 여백이 사라진다.
+    expect(iaShellCss).toMatch(
+      /html\[data-keyboard-open='true'\] \.app-shell-ia--chat-screen,\s*\n\s*html\[data-keyboard-open='true'\] \.app-shell-ia--chat-screen \.m-main\s*\{[^}]*min-height:\s*var\(--visual-viewport-height, 100dvh\);/,
+    );
+  });
+
   it('still preserves the intentional page-scroll model on mobile (iOS toolbar auto-hide)', () => {
     // layout.css가 모바일에서 .app-shell-ia--chat-screen을 의도적으로
     // overflow:visible/height:auto로 두는 것은 이번 재설계와 방향이 같다 —
