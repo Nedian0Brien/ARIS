@@ -931,6 +931,26 @@ html[data-theme='dark'] .m-theme-toggle__item--active {
   html[data-keyboard-open='true'] .app-shell-ia--chat-screen .m-main {
     min-height: var(--visual-viewport-height, 100dvh);
   }
+
+  /* iOS의 네이티브 "포커스 요소 스크롤"을 따라간다(팬-추종, ChatGPT 웹과
+     동일 패턴). 실기기 오버레이 실측(2026-07-09, 2차): 위 min-height 축소가
+     정확히 적용돼 body sh=399가 됐는데도 iOS는 포커스 시점의 옛
+     레이아웃(콘텐츠 746) 기준으로 미리 결정한 스크롤(sY=347)을 그대로
+     실행하고, 콘텐츠가 줄어든 뒤에도 스크롤 위치를 다시 클램프하지
+     않는다(doc sh=746 = scrollTop 347 + clientHeight 399). 즉 콘텐츠
+     축소만으로는 이 스크롤을 막을 수 없다.
+
+     그래서 스크롤과 싸우지 않고 그만큼 콘텐츠를 따라 내린다:
+     --visual-viewport-offset-top은 ViewportHeightSync가 vv.scroll/resize
+     마다 갱신하는 실측값(= 뷰포트가 밀려난 양, 347로 확인됨)이며, 이만큼
+     translateY하면 뷰포트가 바라보는 자리(347..746)에 콘텐츠(0..399)가
+     정확히 겹친다. 스크롤이 없으면(안드로이드/정상 축소) 0px라 no-op.
+     스크롤 이벤트와 같은 태스크에서 CSS 변수가 갱신되므로 다음 페인트
+     전에 반영된다 — transition은 오히려 추종 지연을 만들므로 두지 않는다
+     (ChatGPT도 이 transform에 transition을 걸지 않는다). */
+  html[data-keyboard-open='true'] .app-shell-ia--chat-screen .m-main-scroll--project-chat-detail .pc-proto {
+    transform: translateY(var(--visual-viewport-offset-top, 0px));
+  }
 }
 
 .app-shell-ia--project-panel .aris-ia-shell {
