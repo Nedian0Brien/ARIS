@@ -947,8 +947,18 @@ html[data-theme='dark'] .m-theme-toggle__item--active {
      정확히 겹친다. 스크롤이 없으면(안드로이드/정상 축소) 0px라 no-op.
      스크롤 이벤트와 같은 태스크에서 CSS 변수가 갱신되므로 다음 페인트
      전에 반영된다 — transition은 오히려 추종 지연을 만들므로 두지 않는다
-     (ChatGPT도 이 transform에 transition을 걸지 않는다). */
-  html[data-keyboard-open='true'] .app-shell-ia--chat-screen .m-main-scroll--project-chat-detail .pc-proto {
+     (ChatGPT도 이 transform에 transition을 걸지 않는다).
+
+     transform의 대상은 반드시 세로 클리핑이 없는 최상위(app-shell)여야
+     한다. 1차 시도는 .pc-proto에 걸었는데, .pc-proto는 overflow: hidden인
+     .m-main / .m-main-scroll--project-chat-detail(높이 399) 안에 있어서
+     translateY(347)로 내려간 하단 347px — 컴포저 포함 — 이 통째로
+     클리핑되어 화면에서 사라졌다(격리 스크린샷 재현으로 확정: 화면엔 빈
+     래퍼와 헤더 슬리버만 남음). transform은 rect 좌표만 보면 정상이라
+     rect 기반 검증으로는 잡히지 않는다 — 클리핑은 픽셀에만 나타난다.
+     app-shell의 조상은 html/body뿐이고 둘 다 overflow-x: clip(세로는
+     visible)이라 아래로 내려간 콘텐츠가 잘리지 않고 그대로 렌더된다. */
+  html[data-keyboard-open='true'] .app-shell-ia--chat-screen {
     transform: translateY(var(--visual-viewport-offset-top, 0px));
   }
 }
