@@ -120,14 +120,13 @@
   }
 
   .app-shell-ia--chat-screen .aris-ia-shell {
-    /* --app-vh는 키보드가 열린 동안 이전(더 큰) 높이에 고정되므로 그대로 쓰면
-       채팅 화면 전체가 실제로 보이는 영역보다 커진 채로 남는다. 그 여백만큼
-       네이티브 "포커스 요소 스크롤"이 페이지 전체를 과도하게 끌어올리게 되므로
-       (컴포저가 화면 맨 위로 튀는 현상의 원인) 항상 실제 보이는 높이를 따르는
-       --visual-viewport-height를 쓴다. position은 절대 바꾸지 않고 height만
-       숫자로 바뀌므로 transition으로 부드럽게 이어진다. */
-    min-height: var(--visual-viewport-height, 100dvh);
-    transition: min-height 200ms var(--ease-smooth, ease);
+    /* 네이티브 팬 모델: --app-vh는 키보드 오픈 중 이전 높이에 동결된다 —
+       그게 정확히 원하는 것이다. 셸 기하가 키보드에 반응하지 않아야
+       브라우저의 visual viewport 팬이 컴포저를 키보드 위 제자리에
+       보여준다(ia-shell.css 모델 결정 주석 참고). 라이브 값
+       (--visual-viewport-height)으로 바꾸면 셸 축소 + 네이티브 팬의 이중
+       보정으로 컴포저가 화면 밖으로 나간다. */
+    min-height: var(--app-vh, 100dvh);
   }
 
   .m-sb {
@@ -323,30 +322,25 @@
      동일한 선택자 체인으로 작성한다(파일 로드 순서상 이 파일이 나중이라
      동률일 때 이 규칙이 이긴다).
 
-     --app-vh가 아니라 --visual-viewport-height를 쓴다: --app-vh는 키보드가
-     열린 동안 이전(더 큰) 높이에 고정되는데, 이 셸이 그 얼어붙은 높이를
-     그대로 쓰면 실제 보이는 영역보다 커진 채로 남아 네이티브 "포커스 요소
-     스크롤"이 그 차이만큼 페이지 전체를 과도하게 끌어올린다(컴포저가 화면
-     맨 위로 튀는 현상). position은 절대 바꾸지 않으므로(static 유지)
-     height 변화 자체는 transition으로 부드럽게 이어진다. */
+     네이티브 팬 모델: --app-vh는 키보드 오픈 중 이전 높이에 동결된다 —
+     그게 정확히 원하는 것이다. 셸 기하가 키보드에 반응하지 않아야
+     브라우저의 visual viewport 팬이 컴포저(동결된 셸의 바닥)를 키보드 위
+     제자리에 보여준다(ia-shell.css 모델 결정 주석 참고). */
   .m-main-scroll--project-chat-detail .pc-proto {
-    min-height: var(--visual-viewport-height, 100dvh);
-    transition: min-height 200ms var(--ease-smooth, ease);
+    min-height: var(--app-vh, 100dvh);
   }
 
   .pc-parallel {
-    height: var(--visual-viewport-height, 100dvh);
+    height: var(--app-vh, 100dvh);
     min-height: 0;
-    transition: height 200ms var(--ease-smooth, ease);
   }
 
   .m-main-scroll--project-chat-detail .pc-proto .shell {
     /* 부모 min-height 기준의 % 해석에 기대지 않도록 명시 높이를 사용한다.
        헤더 표시/숨김에 따라 흔들리지 않도록 상수로 고정한다(스크롤 시
        공간 확보는 .tl의 padding-top 쪽에서 처리한다). */
-    height: var(--visual-viewport-height, 100dvh);
+    height: var(--app-vh, 100dvh);
     min-height: 0;
-    transition: height 200ms var(--ease-smooth, ease);
   }
 
   .pc-proto .ch {

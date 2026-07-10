@@ -6,31 +6,38 @@ import { readCssWithImports } from './helpers/readAppStyles';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const uiResponsiveCss = readCssWithImports(resolve(__dirname, '../app/styles/ui-responsive.css'));
 
-describe('mobile chat shell tracks the live visual viewport height', () => {
-  // 실기기 스크린샷으로 재확인된 회귀: overflow-x: clip 수정만으로는 부족했다.
-  // .aris-ia-shell/.pc-proto/.shell이 여전히 얼어붙은 --app-vh(키보드가 열린
-  // 동안 이전 높이에 고정)를 쓰고 있었고, 셸 전체가 실제 보이는 영역보다
-  // 훨씬 커진 채로 남아 네이티브 "포커스 요소 스크롤"이 그 차이만큼 페이지를
-  // 과도하게 끌어올려 컴포저가 화면 맨 위까지 튀었다. position은 절대 건드리지
-  // 않고(전과 동일) 셸의 height/min-height만 --visual-viewport-height를
-  // 따르도록 복원한다 — 숫자 값이라 transition으로 부드럽게 이어진다.
+describe('mobile chat shell keeps keyboard-frozen geometry (native pan model)', () => {
+  // 네이티브 팬 모델의 불변식: 키보드가 열려도 셸 기하는 1px도 반응하지
+  // 않는다. --app-vh는 키보드 오픈 중 이전 높이에 동결되는데, 그게 정확히
+  // 원하는 것이다 — 셸이 가만히 있어야 브라우저의 visual viewport 팬이
+  // 컴포저(동결된 셸의 바닥)를 키보드 위 제자리에 보여준다.
+  // 라이브 값(--visual-viewport-height)으로 바꾸면 셸 축소 + 네이티브 팬의
+  // 이중 보정이 되어 컴포저가 화면 밖으로 나간다(실기기 오버레이 실측으로
+  // 확정된 회귀 — 이 파일의 이전 버전이 바로 그 회귀를 강제하고 있었다).
 
-  it('drives .aris-ia-shell, .pc-proto and .shell from --visual-viewport-height, not the keyboard-frozen --app-vh', () => {
+  it('drives .aris-ia-shell, .pc-proto and .shell from the keyboard-frozen --app-vh', () => {
     expect(uiResponsiveCss).toMatch(
-      /\.app-shell-ia--chat-screen \.aris-ia-shell \{[^}]*min-height:\s*var\(--visual-viewport-height, 100dvh\);/s,
+      /\.app-shell-ia--chat-screen \.aris-ia-shell \{[^}]*min-height:\s*var\(--app-vh, 100dvh\);/s,
     );
     expect(uiResponsiveCss).toMatch(
-      /\.m-main-scroll--project-chat-detail \.pc-proto \{[^}]*min-height:\s*var\(--visual-viewport-height, 100dvh\);/s,
+      /\.m-main-scroll--project-chat-detail \.pc-proto \{[^}]*min-height:\s*var\(--app-vh, 100dvh\);/s,
     );
     expect(uiResponsiveCss).toMatch(
-      /\.m-main-scroll--project-chat-detail \.pc-proto \.shell \{[^}]*height:\s*var\(--visual-viewport-height, 100dvh\);/s,
+      /\.m-main-scroll--project-chat-detail \.pc-proto \.shell \{[^}]*height:\s*var\(--app-vh, 100dvh\);/s,
     );
   });
 
-  it('transitions height/min-height smoothly instead of snapping (position is never touched, so this is safe)', () => {
-    const shellBlock = uiResponsiveCss.match(/\.m-main-scroll--project-chat-detail \.pc-proto \.shell \{([^}]*)\}/s)?.[1] ?? '';
-    expect(shellBlock).toContain('transition: height 200ms');
-    const ariaShellBlock = uiResponsiveCss.match(/\.app-shell-ia--chat-screen \.aris-ia-shell \{([^}]*)\}/s)?.[1] ?? '';
-    expect(ariaShellBlock).toContain('transition: min-height 200ms');
+  it('never references the live --visual-viewport-height for shell geometry', () => {
+    const withoutComments = uiResponsiveCss.replace(/\/\*[\s\S]*?\*\//g, '');
+    const shellBlocks = [
+      /\.app-shell-ia--chat-screen \.aris-ia-shell \{([^}]*)\}/s,
+      /\.m-main-scroll--project-chat-detail \.pc-proto \{([^}]*)\}/s,
+      /\.pc-parallel \{([^}]*)\}/s,
+      /\.m-main-scroll--project-chat-detail \.pc-proto \.shell \{([^}]*)\}/s,
+    ];
+    for (const pattern of shellBlocks) {
+      const block = withoutComments.match(pattern)?.[1] ?? '';
+      expect(block).not.toContain('--visual-viewport-height');
+    }
   });
 });

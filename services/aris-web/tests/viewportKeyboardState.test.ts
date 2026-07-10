@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { computeKeyboardOpen } from '@/components/layout/viewportKeyboardState';
 
 describe('computeKeyboardOpen — 포커스-수명 기반 키보드 판정', () => {
-  it('resizes-content 세계(iOS 실측 2026-07-10)에서 기하 인셋이 0이어도 포커스 중이면 키보드 열림', () => {
+  it('네이티브 팬 중(기하 인셋 0, iOS 실측 2026-07-10)에도 포커스 중이면 키보드 열림', () => {
     // 실기기 3차 캡처: innerH=399, vv h=399, top=347
     // → bottomInset = max(0, 399 - 399 - 347) = 0.
     // 낙관적 700ms 창은 iOS 키보드 확정(+714ms)/스크롤(+827ms) 전에 만료됐다.
