@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { ReactGrabDevBoot } from '@/components/dev/ReactGrabDevBoot';
-import { ViewportDebugOverlay } from '@/components/dev/ViewportDebugOverlay';
 import { ViewportHeightSync } from '@/components/layout/ViewportHeightSync';
 import { normalizeAppBasePath, withAppBasePath } from '@/lib/routing/appPath';
 
@@ -139,7 +138,6 @@ export default function RootLayout({
       <body>
         {process.env.NODE_ENV === 'development' ? <ReactGrabDevBoot /> : null}
         <ViewportHeightSync />
-        <ViewportDebugOverlay />
         {children}
       </body>
     </html>
