@@ -34,54 +34,31 @@ describe('mobile keyboard composer — cooperates with native scroll instead of 
     expect(resetCss).not.toMatch(/html,\s*body\s*\{[^}]*overflow-x:\s*hidden;/s);
   });
 
-  it('shrinks html/body min-height to the live visual viewport while the keyboard is open', () => {
-    // 실기기 진단 오버레이 실측으로 확정된 마지막 원인: reset.css의
-    // min-height: var(--app-vh)는 키보드 오픈 중 이전 높이(746)에 얼어붙어
-    // 문서가 뷰포트(399)보다 커지고, iOS가 그 여백만큼 문서를 스크롤해
-    // (sY=347=746-399) 컴포저를 화면 위로 밀어올렸다. 키보드가 열려 있는
-    // 동안은 html/body의 min-height도 실제 보이는 높이를 따라야 한다.
-    // (이 override는 PR #386에 있다가 #388에서 잘못 삭제됐던 규칙이다.)
-    expect(iaShellCss).toMatch(
-      /html\[data-keyboard-open='true'\],\s*\n\s*html\[data-keyboard-open='true'\] body\s*\{[^}]*min-height:\s*var\(--visual-viewport-height, 100dvh\);/,
-    );
-  });
-
-  it('also shrinks the --app-vh wrapper chain (.app-shell-ia--chat-screen, .m-main) while the keyboard is open', () => {
-    // body의 min-height만 줄여서는 부족하다(격리 재현 실측: bodyMinHeight가
-    // 399로 적용돼도 bodyScrollHeight는 746 유지). 문서 높이는 자식 중 가장
-    // 큰 박스가 결정하는데 .app-shell-ia와 .m-main이 각각
-    // min-height: var(--app-vh)로 얼어붙은 746을 유지하며 body를 떠받치고
-    // 있었다. 래퍼 체인 전체가 함께 줄어야 스크롤 여백이 사라진다.
-    expect(iaShellCss).toMatch(
-      /html\[data-keyboard-open='true'\] \.app-shell-ia--chat-screen,\s*\n\s*html\[data-keyboard-open='true'\] \.app-shell-ia--chat-screen \.m-main\s*\{[^}]*min-height:\s*var\(--visual-viewport-height, 100dvh\);/,
-    );
-  });
-
-  it('follows the native focus scroll with translateY(--visual-viewport-offset-top) on the unclipped app-shell root', () => {
-    // 실기기 오버레이 실측(2차): 콘텐츠 축소(body sh=399)가 정확히 적용돼도
-    // iOS는 포커스 시점의 옛 레이아웃 기준으로 미리 결정한 스크롤(sY=347)을
-    // 그대로 실행하고 이후 클램프하지 않는다. 콘텐츠 축소만으로는 막을 수
-    // 없으므로, ChatGPT 웹과 동일하게 밀려난 만큼(offsetTop) 콘텐츠를 따라
-    // 내려 뷰포트가 바라보는 자리에 콘텐츠를 겹친다. 스크롤이 없으면 0px라
-    // no-op이므로 안드로이드/정상 축소 경로에는 영향이 없다.
-    expect(iaShellCss).toMatch(
-      /html\[data-keyboard-open='true'\] \.app-shell-ia--chat-screen\s*\{[^}]*transform:\s*translateY\(var\(--visual-viewport-offset-top, 0px\)\);/,
-    );
-  });
-
-  it('never applies the pan-follow transform inside the overflow-hidden wrapper chain', () => {
-    // 회귀 방지: 1차 팬-추종은 .pc-proto에 transform을 걸었는데, .pc-proto는
-    // overflow: hidden인 .m-main/.m-main-scroll(높이=뷰포트) 안에 있어서
-    // 내려간 하단 347px — 컴포저 포함 — 이 통째로 클리핑되어 화면에서
-    // 사라졌다. rect 좌표는 클리핑의 영향을 받지 않아 rect 검증으로는 안
-    // 잡힌다. transform은 세로 클리핑이 없는 app-shell 루트에만 건다.
+  it('keyboard-open never changes layout geometry — the native pan model invariant', () => {
+    // 네이티브 팬 모델의 불변식: 키보드가 열려도 우리 레이아웃은 1px도
+    // 반응하지 않는다. 브라우저의 visual viewport 팬이 유일한 대응
+    // 메커니즘이다. 과거 축소 모델 보정들(min-height 축소, translateY
+    // 팬-추종)은 네이티브 팬과 이중 보정되어 컴포저를 화면 밖으로 밀었다
+    // (실기기 오버레이 실측으로 확정). data-keyboard-open에 게이트된
+    // 규칙에는 기하(min-height/height/transform/position)를 바꾸는 선언이
+    // 없어야 한다 — 허용되는 것은 입력창 자체의 max-height 상한뿐.
     const withoutComments = iaShellCss.replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(withoutComments).not.toMatch(
-      /\.pc-proto[^{]*\{[^}]*transform:\s*translateY\(var\(--visual-viewport-offset-top/,
-    );
-    expect(withoutComments).not.toMatch(
-      /\.m-main[^{]*\{[^}]*transform:\s*translateY\(var\(--visual-viewport-offset-top/,
-    );
+    const gatedBlocks = [...withoutComments.matchAll(/\[data-keyboard-open='true'\][^{]*\{([^}]*)\}/g)];
+    expect(gatedBlocks.length).toBeGreaterThan(0);
+    for (const [, body] of gatedBlocks) {
+      expect(body).not.toMatch(/(?<!max-)(min-height|height)\s*:/);
+      expect(body).not.toMatch(/transform\s*:/);
+      expect(body).not.toMatch(/position\s*:/);
+    }
+  });
+
+  it('does not opt into interactive-widget viewport resizing (the pan model relies on the resizes-visual default)', () => {
+    // interactive-widget=resizes-content를 지정하면 iOS가 키보드 오픈 시
+    // 레이아웃 뷰포트까지 줄인다(최신 iOS는 실제로 지원). 그러면 뷰포트
+    // 단위/라이브 변수 기반 축소와 네이티브 팬이 이중 보정되는 하이브리드가
+    // 되어 컴포저가 화면 밖으로 나간다 — 이 지정이 버그 연쇄의 시작점이었다.
+    const rootLayout = readFileSync(resolve(__dirname, '../app/layout.tsx'), 'utf8');
+    expect(rootLayout).not.toContain("interactiveWidget: 'resizes-content'");
   });
 
   it('still preserves the intentional page-scroll model on mobile (iOS toolbar auto-hide)', () => {

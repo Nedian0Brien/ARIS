@@ -116,10 +116,13 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  // Android/Chrome: 키보드가 열릴 때 레이아웃 뷰포트 자체를 줄여서(visual
-  // viewport가 아니라) 100dvh 등 CSS 단위가 자연스럽게 따라가게 한다.
-  // iOS Safari는 이 속성을 지원하지 않아 무시되므로 부작용이 없다.
-  interactiveWidget: 'resizes-content',
+  // interactiveWidget은 의도적으로 지정하지 않는다(기본값 resizes-visual).
+  // 키보드 대응은 네이티브 팬 모델을 쓴다: 레이아웃 뷰포트는 그대로 두고
+  // 브라우저가 visual viewport를 팬해서 포커스된 입력을 키보드 위로
+  // 보여주게 한다(ia-shell.css의 모델 결정 주석 참고). 과거
+  // resizes-content를 지정했을 때 iOS가 이를 실제로 적용하면서(구식
+  // 리서치와 달리 최신 iOS는 지원함) 레이아웃 축소와 네이티브 팬이 이중
+  // 보정되어 컴포저가 화면 밖으로 밀리는 버그 연쇄가 시작됐다.
 };
 
 export default function RootLayout({

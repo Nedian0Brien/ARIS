@@ -859,107 +859,45 @@ html[data-theme='dark'] .m-theme-toggle__item--active {
   min-height: 0;
 }
 
-/* 모바일 키보드 대응: 네이티브 스크롤과 "싸우지" 않고 "협력"한다.
-   (ChatGPT 웹 모바일의 실제 구현을 조사해 확인한 전략 — html/body는 position을
-   절대 바꾸지 않고, 포커스된 입력을 화면에 보이도록 끌어올리는 브라우저
-   네이티브 동작을 그대로 둔다.)
+/* 모바일 키보드 대응 — 네이티브 팬 모델 (모델 결정, 2026-07-10)
 
-   1차 시도는 data-keyboard-open일 때 html/body를 position:fixed로 강제
-   잠갔다. CSS 자체는 정확했지만 position:static → fixed 전환은 스펙상
-   transition이 불가능한 이산적(discrete) 값 변경이라, 네이티브 스크롤이
-   컴포저를 끌어올린 "직후" 이 잠금이 뒤늦게 걸리며 순간이동(스냅)하는
-   것으로 보였다.
+   불변식: 키보드가 열려도 우리 레이아웃은 1px도 반응하지 않는다.
 
-   2차 시도는 position:fixed 잠금과 함께 셸의 높이 추적(.aris-ia-shell/
-   .pc-proto/.shell가 --visual-viewport-height를 따르던 규칙)까지 통째로
-   제거하고, reset.css의 overflow-x: hidden → clip 전환만으로 충분하다고
-   판단했다. 이건 틀렸다: overflow-x: clip은 overflow-y가 auto로 자동
-   승격되는 것만 막을 뿐, .aris-ia-shell/.pc-proto/.shell이 여전히 얼어붙은
-   --app-vh(키보드가 열린 동안 이전 높이에 고정)를 그대로 쓰고 있었다.
-   셸 전체가 실제로 보이는 영역보다 훨씬 커진 채로 남아 있었고, 그 차이
-   (최대 수백 px)만큼 네이티브 "포커스 요소 스크롤"이 페이지 전체를
-   과도하게 끌어올려 컴포저가 화면 맨 위까지 튀는 현상으로 재현됐다
-   (실기기 스크린샷으로 확인).
+   키보드가 열리면 iOS/Android가 visual viewport를 팬해서 포커스된 입력을
+   키보드 위로 보여준다. 셸은 --app-vh(키보드 오픈 중 이전 높이에 동결)로
+   고정돼 있으므로 컴포저는 문서상 제자리(셸 바닥)에 그대로 있고, 팬 된
+   뷰포트가 바라보는 자리가 정확히 컴포저다. 브라우저가 전부 한다 —
+   우리가 계산하거나 보정할 것이 없다.
 
-   최종 수정: 셸 높이 추적을 되살리되(아래), position은 여전히 절대
-   바꾸지 않는다. height/min-height는 숫자 값이라 position과 달리
-   transition으로 부드럽게 이어진다 — 셸이 실제 보이는 영역에 맞춰
-   부드럽게 줄어들므로, 컴포저는 애초에 축소된 셸의 바닥 근처에 남아있게
-   되어 네이티브 스크롤이 거의/전혀 필요하지 않다. overflow-x: clip은
-   부수적인 방어 조치로 남겨둔다(auto 승격을 막는 것 자체는 여전히 유효).
+   이 모델이 과거에 깨졌던 진짜 원인(실기기 오버레이 실측으로 확정)은
+   레이아웃이 아니라 키보드 감지였다: bottomInset = innerHeight − vvHeight
+   − offsetTop 이 네이티브 팬(offsetTop 증가) 순간 0이 되어 "키보드
+   닫힘"으로 오판 → --app-vh 동결이 풀려 셸이 붕괴 → 컴포저가 팬 된
+   뷰포트 꼭대기로 순간이동. 지금은 포커스-수명 기반 판정
+   (viewportKeyboardState.ts)이 팬과 무관하게 kb=true를 유지하므로 동결이
+   깨지지 않는다.
 
-   .cmp__input의 auto-grow 상한도 같은 이유로 유지한다 — position/scroll과
-   무관하게 입력창 자체가 과도하게 커지지 않도록 하는 순수 시각적 제약. */
+   과거 이 자리에 있었던 축소 모델 보정들(키보드 오픈 시 html/body/래퍼
+   min-height를 --visual-viewport-height로 축소, offsetTop만큼 translateY
+   팬-추종)은 interactive-widget=resizes-content(제거됨)와 함께 걷어냈다.
+   두 모델이 공존하면 이중 보정이 된다: 셸 축소가 컴포저를 347px 올리고
+   iOS 팬이 또 347px 올려 컴포저가 화면 밖으로 나갔다. 키보드 대응
+   레이아웃 규칙을 다시 추가하고 싶다면 그것이 팬 모델의 불변식("레이아웃
+   무반응")을 깨는지 먼저 물어야 한다.
+
+   overflow-x: clip(reset.css)은 유지 — overflow-y의 auto 승격을 막아
+   문서에 불법 스크롤 여백이 생기는 것을 방지하는 팬 모델의 전제 조건. */
 @media (max-width: 767px) {
   .pc-proto .cmp__input {
     transition: max-height 150ms var(--ease-smooth, ease);
   }
 
+  /* 키보드 오픈 중 컴포저 auto-grow 상한. 레이아웃(셸 기하)이 아니라
+     입력창 자체의 시각적 제약이라 팬 모델의 불변식과 충돌하지 않는다.
+     --visual-viewport-height는 항상 라이브 값이므로 키보드 위 실공간
+     기준으로 상한이 잡힌다. */
   html[data-keyboard-open='true'] .app-shell-ia--chat-screen .pc-proto .cmp__input {
     max-height: min(200px, calc(var(--visual-viewport-height, 100dvh) * 0.3));
-  }
-
-  /* 실기기 진단 오버레이 실측(2026-07-09)으로 확정된 마지막 원인:
-     키보드가 열리면 레이아웃 뷰포트(innerHeight)가 746→399로 줄고
-     (interactive-widget=resizes-content가 최신 iOS에서 실제 동작),
-     셸도 399로 정상 축소됐지만(#393), body만 reset.css의
-     min-height: var(--app-vh) — 키보드 오픈 중 이전 높이 746에
-     얼어붙는 값 — 를 유지해 문서가 뷰포트보다 정확히 347px 커졌다.
-     iOS는 그 여백만큼 문서를 스크롤해(sY=347) 포커스된 컴포저를
-     화면 위로 밀어올렸다(cmp rect -99..44). 347 = 746 - 399.
-
-     이 override는 원래 PR #386에 있었는데 #388에서 overflow-x: clip을
-     근본 수정으로 오판하며 삭제된 것이 회귀 지점이다 — clip은
-     overflow-y의 auto 승격만 막을 뿐 min-height 746은 없애지 못한다.
-
-     키보드가 열려 있는 동안 html/body도 실제 보이는 높이를 따르게 해
-     스크롤 여백 자체를 제거한다. position/overflow는 건드리지 않으므로
-     (#387의 position:fixed 스냅 문제와 무관) 부드럽게 동작한다.
-     data-keyboard-open은 포커스 즉시 낙관적으로 켜지므로(#387) iOS의
-     스크롤(+150ms 시점)보다 먼저 적용된다. */
-  html[data-keyboard-open='true'],
-  html[data-keyboard-open='true'] body {
-    min-height: var(--visual-viewport-height, 100dvh);
-  }
-
-  /* body의 min-height만 줄여서는 부족하다(실측: bodyMinHeight 399로
-     적용돼도 bodyScrollHeight는 746 유지) — 문서 높이는 자식 중 가장 큰
-     박스가 결정하는데, .app-shell-ia(min-height: var(--app-vh))와
-     .m-main(min-height: var(--app-vh))이 얼어붙은 746을 유지하며 body를
-     떠받치고 있었다. --app-vh를 참조하는 래퍼 체인 전체를 함께 줄인다. */
-  html[data-keyboard-open='true'] .app-shell-ia--chat-screen,
-  html[data-keyboard-open='true'] .app-shell-ia--chat-screen .m-main {
-    min-height: var(--visual-viewport-height, 100dvh);
-  }
-
-  /* iOS의 네이티브 "포커스 요소 스크롤"을 따라간다(팬-추종, ChatGPT 웹과
-     동일 패턴). 실기기 오버레이 실측(2026-07-09, 2차): 위 min-height 축소가
-     정확히 적용돼 body sh=399가 됐는데도 iOS는 포커스 시점의 옛
-     레이아웃(콘텐츠 746) 기준으로 미리 결정한 스크롤(sY=347)을 그대로
-     실행하고, 콘텐츠가 줄어든 뒤에도 스크롤 위치를 다시 클램프하지
-     않는다(doc sh=746 = scrollTop 347 + clientHeight 399). 즉 콘텐츠
-     축소만으로는 이 스크롤을 막을 수 없다.
-
-     그래서 스크롤과 싸우지 않고 그만큼 콘텐츠를 따라 내린다:
-     --visual-viewport-offset-top은 ViewportHeightSync가 vv.scroll/resize
-     마다 갱신하는 실측값(= 뷰포트가 밀려난 양, 347로 확인됨)이며, 이만큼
-     translateY하면 뷰포트가 바라보는 자리(347..746)에 콘텐츠(0..399)가
-     정확히 겹친다. 스크롤이 없으면(안드로이드/정상 축소) 0px라 no-op.
-     스크롤 이벤트와 같은 태스크에서 CSS 변수가 갱신되므로 다음 페인트
-     전에 반영된다 — transition은 오히려 추종 지연을 만들므로 두지 않는다
-     (ChatGPT도 이 transform에 transition을 걸지 않는다).
-
-     transform의 대상은 반드시 세로 클리핑이 없는 최상위(app-shell)여야
-     한다. 1차 시도는 .pc-proto에 걸었는데, .pc-proto는 overflow: hidden인
-     .m-main / .m-main-scroll--project-chat-detail(높이 399) 안에 있어서
-     translateY(347)로 내려간 하단 347px — 컴포저 포함 — 이 통째로
-     클리핑되어 화면에서 사라졌다(격리 스크린샷 재현으로 확정: 화면엔 빈
-     래퍼와 헤더 슬리버만 남음). transform은 rect 좌표만 보면 정상이라
-     rect 기반 검증으로는 잡히지 않는다 — 클리핑은 픽셀에만 나타난다.
-     app-shell의 조상은 html/body뿐이고 둘 다 overflow-x: clip(세로는
-     visible)이라 아래로 내려간 콘텐츠가 잘리지 않고 그대로 렌더된다. */
-  html[data-keyboard-open='true'] .app-shell-ia--chat-screen {
-    transform: translateY(var(--visual-viewport-offset-top, 0px));
   }
 }
 
