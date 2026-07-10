@@ -107,7 +107,20 @@ describe('mobile keyboard composer — cooperates with native scroll instead of 
     // 최대한 빨리 정확한 값을 참조하도록 이 메커니즘은 유지한다.
     expect(viewportHeightSync).toContain('OPTIMISTIC_KEYBOARD_LOCK_MS');
     expect(viewportHeightSync).toContain('optimisticKeyboardOpenUntil = performance.now() + OPTIMISTIC_KEYBOARD_LOCK_MS');
-    expect(viewportHeightSync).toContain('const keyboardOpen = bottomInset > threshold || withinOptimisticWindow;');
     expect(viewportHeightSync).toMatch(/handleDocumentFocusOut[\s\S]*?optimisticKeyboardOpenUntil = 0;/);
+  });
+
+  it('keeps data-keyboard-open true for the whole focus lifetime on touch devices (ChatGPT model)', () => {
+    // 실기기 3차 실측: interactive-widget=resizes-content 하에서는 innerHeight도
+    // 함께 줄어 bottomInset이 0이 되므로 기하 측정으로는 키보드를 감지할 수
+    // 없고, 700ms 낙관적 창은 iOS 키보드 확정(+714ms)·스크롤(+827ms)보다
+    // 먼저 만료된다. 판정은 포커스-수명 기반 computeKeyboardOpen을 쓴다.
+    expect(viewportHeightSync).toContain(
+      "import { computeKeyboardOpen } from '@/components/layout/viewportKeyboardState';",
+    );
+    expect(viewportHeightSync).toMatch(
+      /const keyboardOpen = computeKeyboardOpen\(\{[\s\S]*?focusedTextInput,[\s\S]*?coarsePointer,[\s\S]*?\}\);/,
+    );
+    expect(viewportHeightSync).not.toContain('const keyboardOpen = bottomInset > threshold || withinOptimisticWindow;');
   });
 });

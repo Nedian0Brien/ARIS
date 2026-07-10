@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { dispatchSessionScrollPhaseEvent } from '@/lib/hooks/useSessionScrollOrchestrator';
 import { recordScrollDebugEvent } from '@/lib/scroll/scrollDebug';
+import { computeKeyboardOpen } from '@/components/layout/viewportKeyboardState';
 
 export const VIEWPORT_LAYOUT_CHANGE_EVENT = 'aris:viewport-layout-change';
 
@@ -32,9 +33,11 @@ const isTextInputElement = (element: Element | null): boolean => {
   return (element as HTMLElement).isContentEditable === true;
 };
 
+
 export function ViewportHeightSync() {
   useEffect(() => {
     const root = document.documentElement;
+    const coarsePointerQuery = window.matchMedia?.('(pointer: coarse)') ?? null;
     let lastNoKeyboardHeight = window.visualViewport?.height ?? window.innerHeight;
     let lastInnerWidth = window.innerWidth;
     let optimisticKeyboardOpenUntil = 0;
@@ -79,7 +82,14 @@ export function ViewportHeightSync() {
         ? KEYBOARD_INSET_THRESHOLD_FOCUSED_PX
         : KEYBOARD_INSET_THRESHOLD_DEFAULT_PX;
       const withinOptimisticWindow = performance.now() < optimisticKeyboardOpenUntil;
-      const keyboardOpen = bottomInset > threshold || withinOptimisticWindow;
+      const coarsePointer = coarsePointerQuery?.matches ?? false;
+      const keyboardOpen = computeKeyboardOpen({
+        bottomInset,
+        threshold,
+        withinOptimisticWindow,
+        focusedTextInput,
+        coarsePointer,
+      });
       const keyboardInset = keyboardOpen ? bottomInset : 0;
       const visualViewportBottomInset = keyboardOpen ? 0 : bottomInset;
 
@@ -124,6 +134,7 @@ export function ViewportHeightSync() {
           keyboardOpen,
           threshold,
           focusedTextInput,
+          coarsePointer,
           withinOptimisticWindow,
         },
       });
@@ -162,7 +173,10 @@ export function ViewportHeightSync() {
       optimisticKeyboardOpenUntil = performance.now() + OPTIMISTIC_KEYBOARD_LOCK_MS;
       clearFocusResyncTimeouts();
       updateViewportHeight('document:focusin');
-      [100, 300, 600].forEach((delay) => {
+      // 800ms 재sync는 낙관 창(700ms) 만료 직후를 재평가하기 위한 것 —
+      // 이게 없으면 마지막 재sync(600ms)에서 낙관 창으로 true가 기록된 뒤
+      // 다음 이벤트까지 stale-true로 남는다(fine pointer 환경에서 확인됨).
+      [100, 300, 600, 800].forEach((delay) => {
         const id = window.setTimeout(() => {
           updateViewportHeight(`document:focusin:resync:${delay}ms`);
         }, delay);
