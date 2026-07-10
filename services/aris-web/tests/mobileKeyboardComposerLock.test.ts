@@ -57,6 +57,18 @@ describe('mobile keyboard composer — cooperates with native scroll instead of 
     );
   });
 
+  it('follows the native focus scroll with translateY(--visual-viewport-offset-top) while the keyboard is open', () => {
+    // 실기기 오버레이 실측(2차): 콘텐츠 축소(body sh=399)가 정확히 적용돼도
+    // iOS는 포커스 시점의 옛 레이아웃 기준으로 미리 결정한 스크롤(sY=347)을
+    // 그대로 실행하고 이후 클램프하지 않는다. 콘텐츠 축소만으로는 막을 수
+    // 없으므로, ChatGPT 웹과 동일하게 밀려난 만큼(offsetTop) 콘텐츠를 따라
+    // 내려 뷰포트가 바라보는 자리에 콘텐츠를 겹친다. 스크롤이 없으면 0px라
+    // no-op이므로 안드로이드/정상 축소 경로에는 영향이 없다.
+    expect(iaShellCss).toMatch(
+      /html\[data-keyboard-open='true'\] \.app-shell-ia--chat-screen \.m-main-scroll--project-chat-detail \.pc-proto\s*\{[^}]*transform:\s*translateY\(var\(--visual-viewport-offset-top, 0px\)\);/,
+    );
+  });
+
   it('still preserves the intentional page-scroll model on mobile (iOS toolbar auto-hide)', () => {
     // layout.css가 모바일에서 .app-shell-ia--chat-screen을 의도적으로
     // overflow:visible/height:auto로 두는 것은 이번 재설계와 방향이 같다 —
