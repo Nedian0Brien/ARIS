@@ -57,7 +57,7 @@ describe('mobile keyboard composer — cooperates with native scroll instead of 
     );
   });
 
-  it('follows the native focus scroll with translateY(--visual-viewport-offset-top) while the keyboard is open', () => {
+  it('follows the native focus scroll with translateY(--visual-viewport-offset-top) on the unclipped app-shell root', () => {
     // 실기기 오버레이 실측(2차): 콘텐츠 축소(body sh=399)가 정확히 적용돼도
     // iOS는 포커스 시점의 옛 레이아웃 기준으로 미리 결정한 스크롤(sY=347)을
     // 그대로 실행하고 이후 클램프하지 않는다. 콘텐츠 축소만으로는 막을 수
@@ -65,7 +65,22 @@ describe('mobile keyboard composer — cooperates with native scroll instead of 
     // 내려 뷰포트가 바라보는 자리에 콘텐츠를 겹친다. 스크롤이 없으면 0px라
     // no-op이므로 안드로이드/정상 축소 경로에는 영향이 없다.
     expect(iaShellCss).toMatch(
-      /html\[data-keyboard-open='true'\] \.app-shell-ia--chat-screen \.m-main-scroll--project-chat-detail \.pc-proto\s*\{[^}]*transform:\s*translateY\(var\(--visual-viewport-offset-top, 0px\)\);/,
+      /html\[data-keyboard-open='true'\] \.app-shell-ia--chat-screen\s*\{[^}]*transform:\s*translateY\(var\(--visual-viewport-offset-top, 0px\)\);/,
+    );
+  });
+
+  it('never applies the pan-follow transform inside the overflow-hidden wrapper chain', () => {
+    // 회귀 방지: 1차 팬-추종은 .pc-proto에 transform을 걸었는데, .pc-proto는
+    // overflow: hidden인 .m-main/.m-main-scroll(높이=뷰포트) 안에 있어서
+    // 내려간 하단 347px — 컴포저 포함 — 이 통째로 클리핑되어 화면에서
+    // 사라졌다. rect 좌표는 클리핑의 영향을 받지 않아 rect 검증으로는 안
+    // 잡힌다. transform은 세로 클리핑이 없는 app-shell 루트에만 건다.
+    const withoutComments = iaShellCss.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(withoutComments).not.toMatch(
+      /\.pc-proto[^{]*\{[^}]*transform:\s*translateY\(var\(--visual-viewport-offset-top/,
+    );
+    expect(withoutComments).not.toMatch(
+      /\.m-main[^{]*\{[^}]*transform:\s*translateY\(var\(--visual-viewport-offset-top/,
     );
   });
 
