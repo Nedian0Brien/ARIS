@@ -505,131 +505,96 @@ html[data-theme='dark'] .pc-proto .chturn[data-open="true"] {
   background-size: 16px 16px;
 }
 
-.pc-proto .preview-page {
+/* 실동작 프리뷰 뷰포트 — iframe/파일 렌더가 디바이스 폭을 채운다 */
+.pc-proto .preview-viewport {
   display: grid;
-  grid-template-columns: 180px 1fr;
+  place-items: stretch;
   width: min(90%, 960px);
-  aspect-ratio: 16 / 10;
+  height: 86%;
   overflow: hidden;
   background: #fff;
   border-radius: var(--r-md);
   box-shadow: var(--shadow-lg);
-  color: #0F1117;
+  transform-origin: center center;
 }
 
-.pc-proto .preview-canvas[data-preview-size="768"] .preview-page {
+.pc-proto .preview-canvas[data-preview-size="768"] .preview-viewport {
   width: min(76%, 720px);
 }
 
-.pc-proto .preview-canvas[data-preview-size="390"] .preview-page {
-  grid-template-columns: 1fr;
+.pc-proto .preview-canvas[data-preview-size="390"] .preview-viewport {
   width: min(42%, 390px);
   min-width: 280px;
-  aspect-ratio: 9 / 16;
 }
 
-.pc-proto .preview-canvas[data-preview-size="390"] .preview-page__sb {
-  display: none;
-}
-
-.pc-proto .preview-page__sb {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 14px 10px;
-  background: #F7F8FA;
-  border-right: 1px solid #EEF0F4;
-}
-
-.pc-proto .preview-page__sb-logo {
-  margin-bottom: 8px;
-  color: #173FAE;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.pc-proto .preview-page__sb-item {
-  overflow: hidden;
-  padding: 4px 6px;
-  border-radius: 4px;
-  color: #4A4F58;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pc-proto .preview-page__sb-item--active {
-  background: #EDF3FF;
-  color: #173FAE;
-  font-weight: 700;
-}
-
-.pc-proto .preview-page__main {
-  min-width: 0;
-  padding: 16px 20px;
-}
-
-.pc-proto .preview-page__h {
-  margin: 0 0 4px;
-  color: #0F1117;
-  font-size: 18px;
-  font-weight: 800;
-}
-
-.pc-proto .preview-page__sub {
-  margin: 0 0 14px;
-  overflow: hidden;
-  color: #666;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pc-proto .preview-page__cards {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.pc-proto .preview-canvas[data-preview-size="390"] .preview-page__cards {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.pc-proto .preview-page__card {
-  min-width: 0;
-  padding: 10px;
+.pc-proto .preview-iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
   background: #fff;
-  border: 1px solid #EEF0F4;
-  border-radius: 8px;
 }
 
-.pc-proto .preview-page__card-t {
-  color: #0F1117;
-  font-size: 12px;
-  font-weight: 700;
+.pc-proto .preview-empty {
+  display: grid;
+  place-items: center;
+  padding: var(--sp-6);
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  text-align: center;
 }
 
-.pc-proto .preview-page__card-m {
-  overflow: hidden;
-  color: #7E8592;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.pc-proto .preview-image-wrap {
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  background:
+    linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%),
+    linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%);
+  background-position: 0 0, 8px 8px;
+  background-size: 16px 16px;
 }
 
-.pc-proto .preview-page__bar {
-  height: 3px;
-  margin-top: 8px;
-  overflow: hidden;
-  background: #EEF0F4;
+.pc-proto .preview-image {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.pc-proto .preview-url__port {
+  width: 64px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.pc-proto .preview-mode-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-subtle);
   border-radius: var(--r-full);
 }
 
-.pc-proto .preview-page__bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #5E82FD, #1E50DB);
+.pc-proto .preview-mode-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: none;
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs, 10px);
+  cursor: pointer;
 }
+
+.pc-proto .preview-mode-toggle button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-xs);
+}
+
 
 .pc-proto .preview-controls {
   position: absolute;

@@ -26,7 +26,9 @@ describe('project parallel chat drag surface', () => {
     expect(projectChatSurface).toContain('<ProjectParallelChatPane');
     expect(projectChatSurface).toContain('buildProjectRuntimeEventsPath(projectId, params)');
     expect(projectChatSurface).not.toContain('className="pc-parallel__iframe"');
-    expect(projectChatSurface).not.toContain('<iframe');
+    // 프리뷰 오버레이(dev 서버/파일 렌더)의 iframe은 별개 — 채팅 패널 소스에만 금지.
+    expect(projectChatSurfaceModule).not.toContain('<iframe');
+    expect(workspaceSidebarSource).not.toContain('<iframe');
     expect(projectChatSurface).not.toContain('/api/parallel-workspaces');
   });
 

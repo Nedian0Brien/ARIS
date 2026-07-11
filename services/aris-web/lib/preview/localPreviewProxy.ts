@@ -24,6 +24,11 @@ export function rewriteLocalPreviewHtml(html: string, previewBasePath: string): 
   );
 }
 
+// 프로젝트 채팅 화면의 프리뷰 프록시 basePath (라우트: app/__local_preview/[projectId]/[port]/[[...path]])
+export function buildLocalPreviewProxyBasePath(input: { projectId: string; port: number }): string {
+  return `${LOCAL_PREVIEW_PREFIX}/${encodeURIComponent(input.projectId)}/${input.port}`;
+}
+
 export function parseLocalPreviewPort(value: string | null): number | null {
   if (!value || !/^\d+$/.test(value)) {
     return null;
