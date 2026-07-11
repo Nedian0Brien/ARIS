@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import type {
+  ChatUsageStats,
   ApprovalPolicy,
   GeminiSessionCapabilities,
   PermissionDecision,
@@ -450,6 +451,29 @@ export class PrismaRuntimeStore {
         lastImportedAt: new Date(),
       },
     });
+  }
+
+  async updateChatUsage(input: { chatId: string; usage: ChatUsageStats }): Promise<void> {
+    try {
+      await this.db.sessionChat.update({
+        where: { id: input.chatId },
+        data: { usageStats: input.usage as unknown as Prisma.InputJsonValue },
+      });
+    } catch (error) {
+      // 삭제된 채팅에 대한 늦은 usage 알림은 무시한다.
+      if ((error as { code?: string }).code === 'P2025') {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  async getChatUsage(chatId: string): Promise<ChatUsageStats | null> {
+    const row = await this.db.sessionChat.findUnique({
+      where: { id: chatId },
+      select: { usageStats: true },
+    });
+    return (row?.usageStats as ChatUsageStats | null) ?? null;
   }
 
   async updateSubagentChatMeta(input: {

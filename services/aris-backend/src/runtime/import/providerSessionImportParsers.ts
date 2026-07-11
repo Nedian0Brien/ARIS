@@ -1,3 +1,5 @@
+import type { ChatUsageStats, ChatUsageTotals } from '../../types.js';
+
 export type ImportedAgentProvider = 'codex' | 'claude';
 
 export type ImportedProviderMessage = {
@@ -24,6 +26,12 @@ export type ParsedProviderSessionLog = {
    * in the subagent sidebar. Always false for Codex (no sidechain concept).
    */
   isSubagent: boolean;
+  /**
+   * transcript에서 수집한 실측 토큰 usage. Claude는 assistant 레코드의
+   * message.usage를 누적해 채운다. Codex rollout 파일에는 usage가 없어 null
+   * (Codex는 라이브 app-server 알림으로 수집).
+   */
+  usage: ChatUsageStats | null;
 };
 
 type ParseOptions = {
@@ -110,6 +118,7 @@ function finalizeParsedLog(input: {
   projectPath?: string;
   messages: ImportedProviderMessage[];
   isSubagent?: boolean;
+  usage?: ChatUsageStats | null;
 }): ParsedProviderSessionLog {
   const providerSessionId = input.providerSessionId ?? input.sourcePath;
   const offsets = input.messages.map((message) => message.sourceOffset);
@@ -129,6 +138,73 @@ function finalizeParsedLog(input: {
     newestCursorOffset,
     hasMoreBefore: oldestCursorOffset !== null && oldestCursorOffset > 0n,
     isSubagent: input.isSubagent ?? false,
+    usage: input.usage ?? null,
+  };
+}
+
+function asFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+// 모델명 → 컨텍스트 윈도. Claude transcript에는 윈도 크기가 없어 상수 맵을 쓴다.
+const CLAUDE_DEFAULT_CONTEXT_WINDOW = 200_000;
+
+function claudeContextWindow(model: string | null): number {
+  if (model && /\[1m\]|-1m/.test(model)) {
+    return 1_000_000;
+  }
+  return CLAUDE_DEFAULT_CONTEXT_WINDOW;
+}
+
+type ClaudeUsageAccumulator = {
+  model: string | null;
+  totalInput: number;
+  totalCached: number;
+  totalOutput: number;
+  lastTurn: ChatUsageTotals | null;
+  seen: boolean;
+};
+
+function accumulateClaudeUsage(acc: ClaudeUsageAccumulator, message: JsonRecord): void {
+  const usage = isRecord(message.usage) ? message.usage : null;
+  if (!usage) {
+    return;
+  }
+  const input = asFiniteNumber(usage.input_tokens) ?? 0;
+  const cacheRead = asFiniteNumber(usage.cache_read_input_tokens) ?? 0;
+  const cacheCreation = asFiniteNumber(usage.cache_creation_input_tokens) ?? 0;
+  const output = asFiniteNumber(usage.output_tokens) ?? 0;
+  const cached = cacheRead + cacheCreation;
+  acc.seen = true;
+  acc.model = readString(message.model) ?? acc.model;
+  acc.totalInput += input;
+  acc.totalCached += cached;
+  acc.totalOutput += output;
+  // 마지막 assistant usage의 input+cache가 현재 컨텍스트 점유의 근사치다.
+  acc.lastTurn = {
+    totalTokens: input + cached + output,
+    inputTokens: input,
+    cachedInputTokens: cached,
+    outputTokens: output,
+  };
+}
+
+function finalizeClaudeUsage(acc: ClaudeUsageAccumulator): ChatUsageStats | null {
+  if (!acc.seen) {
+    return null;
+  }
+  return {
+    provider: 'claude',
+    model: acc.model,
+    contextWindow: claudeContextWindow(acc.model),
+    total: {
+      totalTokens: acc.totalInput + acc.totalCached + acc.totalOutput,
+      inputTokens: acc.totalInput,
+      cachedInputTokens: acc.totalCached,
+      outputTokens: acc.totalOutput,
+    },
+    lastTurn: acc.lastTurn,
+    updatedAt: new Date().toISOString(),
   };
 }
 
@@ -190,6 +266,14 @@ export function parseClaudeSessionLog(contents: string, options: ParseOptions): 
   // has `isSidechain: true`; a normal top-level session has none.
   let sidechainMessages = 0;
   let mainlineMessages = 0;
+  const usageAcc: ClaudeUsageAccumulator = {
+    model: null,
+    totalInput: 0,
+    totalCached: 0,
+    totalOutput: 0,
+    lastTurn: null,
+    seen: false,
+  };
 
   for (const { line, offset } of splitJsonlWithOffsets(contents)) {
     const record = parseJsonLine(line);
@@ -209,6 +293,9 @@ export function parseClaudeSessionLog(contents: string, options: ParseOptions): 
     const role = readString(message.role) ?? type;
     if (role !== 'user' && role !== 'assistant') {
       continue;
+    }
+    if (role === 'assistant' && record.isSidechain !== true) {
+      accumulateClaudeUsage(usageAcc, message);
     }
     const text = extractContentText(message.content);
     if (!text) {
@@ -235,6 +322,7 @@ export function parseClaudeSessionLog(contents: string, options: ParseOptions): 
     sourcePath: options.sourcePath,
     projectPath,
     messages,
+    usage: finalizeClaudeUsage(usageAcc),
     // Pure-sidechain transcript => subagent. Mixed/none => treat as a normal
     // session (the import worker also detects subagents by the `/subagents/`
     // path segment, which is authoritative for the separate-file layout).

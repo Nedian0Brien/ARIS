@@ -64,3 +64,23 @@ export type PermissionRequest = {
   state: PermissionState;
   decision?: PermissionDecision | null;
 };
+
+export type ChatUsageTotals = {
+  totalTokens: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens?: number;
+};
+
+// Chat.usageStats(Json) 칼럼의 형태. Codex는 app-server의
+// thread/tokenUsage/updated에서 라이브로, Claude는 transcript import 시
+// message.usage 누적으로 채운다. Gemini는 스트림에 usage가 없어 미지원.
+export type ChatUsageStats = {
+  provider: 'codex' | 'claude' | 'gemini';
+  model: string | null;
+  contextWindow: number | null;
+  total: ChatUsageTotals;
+  lastTurn: ChatUsageTotals | null;
+  updatedAt: string;
+};

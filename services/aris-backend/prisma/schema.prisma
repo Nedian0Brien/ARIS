@@ -45,6 +45,7 @@ model SessionChat {
   latestHasErrorSignal Boolean
   lastReadAt           DateTime?
   lastReadEventId      String?
+  usageStats           Json?
   lastActivityAt       DateTime
   createdAt            DateTime
   updatedAt            DateTime
