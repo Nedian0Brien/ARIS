@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import type {
+  ChatUsageStats,
   ApprovalPolicy,
   GeminiSessionCapabilities,
   PermissionDecision,
@@ -643,6 +644,12 @@ export class RuntimeStore {
             }
             return Promise.resolve(false);
           },
+          updateChatUsage: (input) => {
+            if (this.delegate instanceof PrismaRuntimeStore) {
+              return this.delegate.updateChatUsage(input);
+            }
+            return Promise.resolve();
+          },
         },
       });
       return;
@@ -957,6 +964,13 @@ export class RuntimeStore {
         ...(runtimeSessionId !== input.sessionId ? { runtimeSessionId } : {}),
       },
     });
+  }
+
+  async getChatUsage(chatId: string): Promise<ChatUsageStats | null> {
+    if (this.delegate instanceof PrismaRuntimeStore) {
+      return this.delegate.getChatUsage(chatId);
+    }
+    return null;
   }
 
   async listRealtimeEvents(sessionId: string, options?: { afterCursor?: number; limit?: number; chatId?: string }) {

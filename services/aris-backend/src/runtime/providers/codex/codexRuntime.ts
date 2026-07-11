@@ -35,6 +35,7 @@ import { PermissionRouter, buildScopedPermissionKey } from '../../orchestration/
 import { ActiveRunRegistry } from '../../orchestration/activeRunRegistry.js';
 import type { RuntimeCoordinationStore, HappyRuntimePermissionInput } from '../../contracts/runtimeCoordinationStore.js';
 import type {
+  ChatUsageStats,
   ApprovalPolicy,
   PermissionDecision,
   PermissionRequest,
@@ -68,6 +69,7 @@ import {
   isMissingCodexThreadError,
   type CodexAppServerFailureKind,
 } from './codexProtocolMapper.js';
+import { extractCodexChatUsage } from './codexUsage.js';
 import type { CodexPermissionRequest } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -246,6 +248,8 @@ export interface CodexRuntimeHost {
   decidePermission(permissionId: string, decision: PermissionDecision): Promise<PermissionRequest>;
   resolveExecutionCwd(cwdHint?: string, branch?: string): string;
   resolveSessionApprovalPolicy(session: RuntimeSession): ApprovalPolicy;
+  /** 토큰 usage 알림을 디바운스 저장한다(선택 — 코디네이션 스토어 없는 환경은 no-op). */
+  recordChatUsage?(chatId: string, usage: ChatUsageStats): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -623,6 +627,16 @@ export async function runCodexAppServer(
   const handleServerNotification = (payload: Record<string, unknown>) => {
     const method = asString(payload.method, '').trim();
     const params = asRecord(payload.params) ?? {};
+
+    if (method === 'thread/tokenUsage/updated') {
+      if (chatId) {
+        const usage = extractCodexChatUsage(params, selectedModel ?? session.metadata.model ?? null);
+        if (usage) {
+          host.recordChatUsage?.(chatId, usage);
+        }
+      }
+      return;
+    }
 
     if (method === 'thread/started') {
       const threadRecord = asRecord(params.thread);

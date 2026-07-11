@@ -89,6 +89,7 @@ import {
 import type { ClaudeSessionLaunchMode } from './providers/claude/claudeSessionContract.js';
 import type { ClaudeActionEvent, ClaudeLaunchCommand, ClaudeResumeTarget, ClaudeTextEvent } from './providers/claude/types.js';
 import type {
+  ChatUsageStats,
   ApprovalPolicy,
   GeminiSessionCapabilities,
   PermissionDecision,
@@ -1199,7 +1200,37 @@ export class RuntimeCore {
       decidePermission: this.decidePermission.bind(this),
       resolveExecutionCwd: this.resolveExecutionCwd.bind(this),
       resolveSessionApprovalPolicy: this.resolveSessionApprovalPolicy.bind(this),
+      recordChatUsage: this.recordChatUsage.bind(this),
     };
+  }
+
+  // Codex usage 알림은 런당 100회 이상 오므로 chatId별 2초 트레일링 디바운스로
+  // 마지막 값만 저장한다(누적치라 마지막 값이 곧 최종).
+  private readonly pendingChatUsage = new Map<string, ChatUsageStats>();
+  private readonly chatUsageTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  private recordChatUsage(chatId: string, usage: ChatUsageStats): void {
+    const store = this.coordinationStore;
+    if (!store?.updateChatUsage) {
+      return;
+    }
+    this.pendingChatUsage.set(chatId, usage);
+    if (this.chatUsageTimers.has(chatId)) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      this.chatUsageTimers.delete(chatId);
+      const latest = this.pendingChatUsage.get(chatId);
+      this.pendingChatUsage.delete(chatId);
+      if (!latest) {
+        return;
+      }
+      void store.updateChatUsage?.({ chatId, usage: latest }).catch((error) => {
+        console.error(`failed to persist chat usage for ${chatId}: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }, 2_000);
+    timer.unref?.();
+    this.chatUsageTimers.set(chatId, timer);
   }
   private readonly geminiPartialTextStates = new Map<string, GeminiPartialTextState>();
   private readonly coordinationStore: RuntimeCoordinationStore | null;

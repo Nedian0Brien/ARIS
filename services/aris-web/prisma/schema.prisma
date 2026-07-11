@@ -122,6 +122,7 @@ model Chat {
   latestHasErrorSignal Boolean @default(false)
   lastReadAt     DateTime?
   lastReadEventId String?
+  usageStats     Json?
   lastActivityAt DateTime @default(now())
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

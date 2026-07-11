@@ -8,6 +8,7 @@
  */
 
 import type {
+  ChatUsageStats,
   PermissionDecision,
   PermissionRequest,
   PermissionState,
@@ -51,4 +52,6 @@ export type RuntimeCoordinationStore = {
     chatId?: string;
     createdAfter?: Date;
   }): Promise<boolean>;
+  /** 라이브 런의 토큰 usage를 Chat.usageStats에 반영한다(선택 — mock 백엔드는 미구현). */
+  updateChatUsage?(input: { chatId: string; usage: ChatUsageStats }): Promise<void>;
 };

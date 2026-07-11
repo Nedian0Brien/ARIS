@@ -1,4 +1,5 @@
 import { homedir } from 'node:os';
+import type { ChatUsageStats } from '../../types.js';
 import { join, resolve } from 'node:path';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import type {
@@ -48,6 +49,8 @@ type ImportedAgentSessionStore = {
    * imported agent session (vs a native ARIS chat).
    */
   findOwningChat?(providerSessionId: string): Promise<{ chatId: string; isImported: boolean } | null>;
+  /** transcript에서 수집한 usage를 Chat.usageStats에 반영한다(선택). */
+  updateChatUsage?(input: { chatId: string; usage: ChatUsageStats }): Promise<void>;
   ensureImportedAgentChat(input: {
     importId: string;
     arisSessionId: string;
@@ -426,6 +429,11 @@ export async function runAgentSessionImportOnce(options: AgentSessionImportRunOp
     // runtime owns these events, so importing them again would duplicate messages
     // inside the native chat. Nothing to do.
     if (imported.status === 'native') {
+      // 네이티브(ARIS 발) 채팅은 이벤트를 재수입하지 않지만, usage는 transcript가
+      // 유일한 실측 소스이므로 여기서 갱신한다.
+      if (imported.chatId && parsed.usage && options.store.updateChatUsage) {
+        await options.store.updateChatUsage({ chatId: imported.chatId, usage: parsed.usage });
+      }
       continue;
     }
     const arisSessionId = await options.store.resolveProjectSessionIdByPath(normalizedProjectPath);
@@ -493,6 +501,9 @@ export async function runAgentSessionImportOnce(options: AgentSessionImportRunOp
         subagentType: candidate.subagentType ?? null,
         subagentStatus,
       });
+    }
+    if (parsed.usage && options.store.updateChatUsage) {
+      await options.store.updateChatUsage({ chatId, usage: parsed.usage });
     }
     const selectedMessages = imported.chatId
       ? selectNewerMessages(parsed.messages, imported.newestCursorOffset, remainingEvents)
