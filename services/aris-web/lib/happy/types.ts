@@ -72,6 +72,24 @@ export type ChatImageAttachment = {
   previewUrl: string;
 };
 
+export type ChatUsageTotals = {
+  totalTokens: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens?: number;
+};
+
+// 백엔드 Chat.usageStats(Json)의 미러 — GET /v1/sessions/:id/runtime 응답에 동봉된다.
+export type ChatUsageStats = {
+  provider: 'codex' | 'claude' | 'gemini';
+  model: string | null;
+  contextWindow: number | null;
+  total: ChatUsageTotals;
+  lastTurn: ChatUsageTotals | null;
+  updatedAt: string;
+};
+
 export type UiEventKind =
   | 'text_reply'
   | 'run_execution'

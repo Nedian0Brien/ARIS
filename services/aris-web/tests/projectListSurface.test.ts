@@ -510,6 +510,16 @@ describe('project list surface', () => {
     expect(projectChatSurface).toContain('matchWorkspaceFileBadge');
   });
 
+  it('renders context usage from measured stats instead of hardcoded values', () => {
+    // 링/게이지는 실측 usage에서 계산 — 하드코딩 수치 재유입 방지.
+    expect(projectChatSurface).toContain('computeContextUsageRatio');
+    expect(projectChatSurface).toContain('strokeDashoffset={CTX_RING_CIRCUMFERENCE * (1 - ratio)}');
+    expect(projectChatSurface).toContain('usage: chatUsage');
+    expect(projectChatSurface).not.toContain('strokeDashoffset="194"');
+    // 프리뷰 목업(PR-6에서 실물화)은 예외 — 사이드바 소스에는 하드코딩 % 금지.
+    expect(workspaceSidebarSource).not.toMatch(/width: '\d+(\.\d+)?%'/);
+  });
+
   it('renders functional workspace panes instead of one static Run panel', () => {
     expect(projectChatSurface).toContain("workspaceTab === 'run'");
     expect(projectChatSurface).toContain("workspaceTab === 'files'");

@@ -722,3 +722,24 @@ export function matchWorkspaceFileBadge(
   if (match.staged && !match.unstaged) return { label: 'A', tone: 'staged' };
   return { label: 'M', tone: 'modified' };
 }
+
+
+export function formatTokenCount(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value) || value < 0) return '—';
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
+  return String(Math.round(value));
+}
+
+// 컨텍스트 사용률 = 마지막 턴의 총 토큰(입력+캐시+출력) / 모델 컨텍스트 윈도.
+// 누적 total이 아니라 lastTurn을 쓰는 이유: 누적치는 캐시 재사용 때문에 윈도를
+// 수십 배 초과할 수 있어 "지금 컨텍스트가 얼마나 찼나"와 무관하다.
+export function computeContextUsageRatio(usage: {
+  contextWindow: number | null;
+  lastTurn: { totalTokens: number } | null;
+} | null | undefined): number | null {
+  if (!usage?.contextWindow || usage.contextWindow <= 0) return null;
+  const lastTurnTokens = usage.lastTurn?.totalTokens;
+  if (lastTurnTokens == null || lastTurnTokens < 0) return null;
+  return Math.min(1, lastTurnTokens / usage.contextWindow);
+}
