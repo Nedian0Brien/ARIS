@@ -116,6 +116,8 @@ import { ProjectActionCard } from '@/components/project-chat/ProjectActionCard';
 import { ProjectPermissionRequestMessage } from '@/components/project-chat/ProjectPermissionRequestMessage';
 import { buildProjectChatTimelineItems } from '@/components/project-chat/permissionsTimeline';
 import { WorkspaceSidebar } from '@/components/project-chat/workspace/WorkspaceSidebar';
+import { GitDiffOverlay } from '@/components/project-chat/workspace/GitDiffOverlay';
+import { useWorkspaceGit } from '@/components/project-chat/workspace/hooks/useWorkspaceGit';
 import { ProjectPreviewOverlay } from '@/components/project-chat/workspace/PreviewOverlay';
 import { useDensityStore } from './cmd-display/densityStore';
 import { computeAutoDensity } from './cmd-display/densityRules';
@@ -135,8 +137,8 @@ import {
   createProjectChat,
   createProjectPanelId,
   displayProjectName,
-  fetchProjectPanelGitOverview,
   fetchProjectWorkspaceLayout,
+  fetchWorkspaceGitDiff,
   formatRelativeTime,
   getEventText,
   hasProjectChatDragPayload,
@@ -167,12 +169,13 @@ import {
   type ProjectChatEventsResponse,
   type ProjectChatSurfaceMode,
   type ProjectPanelDropHandler,
-  type ProjectPanelGitOverview,
+  type ProjectPanelGitFile,
   type ProjectPanelNodeDragStartHandler,
   type ProjectPanelRuntimeErrors,
   type ProjectWorkspacePanelRuntime,
   type ProjectWorkspacePanelRuntimeMap,
   type ReasoningEffort,
+  type WorkspaceGitDiff,
   type WorkspaceTab,
   isProjectTimestampAfter,
 } from './projectChatSurfaceUtils';
@@ -509,7 +512,6 @@ function ProjectParallelPanelTree({
   panelState,
   recentPreview,
   session,
-  tokenLabel,
   workspaceOpen,
 }: {
   chats: SessionChat[];
@@ -530,7 +532,6 @@ function ProjectParallelPanelTree({
   panelState: ProjectParallelPanelTreeState;
   recentPreview: string;
   session: SessionSummary;
-  tokenLabel: string;
   workspaceOpen: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -574,7 +575,6 @@ function ProjectParallelPanelTree({
         session={session}
         showClose={Object.keys(panelState.panels).length > 1}
         isWorkspaceActive={workspaceOpen && panelState.activePanelId === node.panelId}
-        tokenLabel={tokenLabel}
       />
     );
   }
@@ -610,7 +610,6 @@ function ProjectParallelPanelTree({
           panelState={panelState}
           recentPreview={recentPreview}
           session={session}
-          tokenLabel={tokenLabel}
           workspaceOpen={workspaceOpen}
         />
       </div>
@@ -641,7 +640,6 @@ function ProjectParallelPanelTree({
           panelState={panelState}
           recentPreview={recentPreview}
           session={session}
-          tokenLabel={tokenLabel}
           workspaceOpen={workspaceOpen}
         />
       </div>
@@ -670,7 +668,6 @@ function ProjectParallelChatPane({
   session,
   showClose,
   isWorkspaceActive,
-  tokenLabel,
 }: {
   chat: SessionChat;
   isActivePanel: boolean;
@@ -692,7 +689,6 @@ function ProjectParallelChatPane({
   session: SessionSummary;
   showClose: boolean;
   isWorkspaceActive: boolean;
-  tokenLabel: string;
 }) {
   const projectId = session.id;
   const [events, setEvents] = useState<UiEvent[]>([]);
@@ -1164,7 +1160,6 @@ function ProjectParallelChatPane({
           selectedProvider={selectedProvider}
         />
       </div>
-      <div className="pc-parallel-chat__meta">{tokenLabel}</div>
       {dropEdge && <ProjectParallelDropOverlay edge={dropEdge} />}
     </article>
   );
@@ -1174,7 +1169,6 @@ function ProjectParallelChatPane({
 // ProjectChatSurface
 // ---------------------------------------------------------------------------
 export function ProjectChatSurface({
-  fileCount,
   isOperator,
   modelLabel,
   onBackToChatList,
@@ -1189,9 +1183,7 @@ export function ProjectChatSurface({
   session,
   surfaceMode = 'full',
   themeMode,
-  tokenLabel,
 }: {
-  fileCount: number;
   isOperator: boolean;
   modelLabel: string;
   onBackToChatList: () => void;
@@ -1206,7 +1198,6 @@ export function ProjectChatSurface({
   session: SessionSummary;
   surfaceMode?: ProjectChatSurfaceMode;
   themeMode?: ThemeMode;
-  tokenLabel: string;
 }) {
   const projectId = session.id;
   const [chats, setChats] = useState<SessionChat[]>([]);
@@ -1307,9 +1298,8 @@ export function ProjectChatSurface({
   const activeWorkspaceChat = activeWorkspacePanel
     ? chats.find((candidate) => candidate.id === activeWorkspacePanel.chatId) ?? activeChat
     : activeChat;
-  const [workspaceGitOverview, setWorkspaceGitOverview] = useState<ProjectPanelGitOverview | null>(null);
-  const [workspaceGitLoading, setWorkspaceGitLoading] = useState(false);
-  const [workspaceGitError, setWorkspaceGitError] = useState<string | null>(null);
+  const [workspaceGitDiff, setWorkspaceGitDiff] = useState<WorkspaceGitDiff | null>(null);
+  const [workspaceGitDiffLoading, setWorkspaceGitDiffLoading] = useState(false);
   const visibleEvents = events;
   const persistedPermissions = useMemo(
     () => hydratePersistedPermissions(visibleEvents),
@@ -1498,35 +1488,42 @@ export function ProjectChatSurface({
     projectId,
     workspacePanelId: activeWorkspacePanelId,
   });
-  const refreshWorkspaceGit = useCallback(() => {
-    if (!activeWorkspacePanelId) {
-      setWorkspaceGitOverview(null);
-      setWorkspaceGitError('선택된 병렬 패널이 없습니다.');
-      return;
-    }
-
-    setWorkspaceGitLoading(true);
-    setWorkspaceGitError(null);
-    void fetchProjectPanelGitOverview(projectId, activeWorkspacePanelId)
-      .then(setWorkspaceGitOverview)
-      .catch((gitError) => {
-        setWorkspaceGitOverview(null);
-        setWorkspaceGitError(gitError instanceof Error ? gitError.message : 'Git 정보를 불러오지 못했습니다.');
+  // 패널이 없으면 프로젝트 루트 git status로 폴백한다(과거: 영구 에러 상태).
+  const workspaceGit = useWorkspaceGit(projectId, activeWorkspacePanelId, workspaceTab === 'git');
+  const workspaceGitDiffReqRef = useRef(0);
+  const openWorkspaceGitDiff = useCallback((file: ProjectPanelGitFile) => {
+    const scope: WorkspaceGitDiff['scope'] = file.staged && !file.unstaged && !file.untracked ? 'staged' : 'working';
+    const reqId = workspaceGitDiffReqRef.current + 1;
+    workspaceGitDiffReqRef.current = reqId;
+    setWorkspaceGitDiffLoading(true);
+    setWorkspaceGitDiff(null);
+    void fetchWorkspaceGitDiff(projectId, activeWorkspacePanelId, file.path, scope)
+      .then((next) => {
+        if (reqId === workspaceGitDiffReqRef.current) setWorkspaceGitDiff(next);
       })
-      .finally(() => setWorkspaceGitLoading(false));
+      .catch((diffError) => {
+        if (reqId !== workspaceGitDiffReqRef.current) return;
+        setWorkspaceGitDiff({
+          path: file.path,
+          scope,
+          diff: diffError instanceof Error ? `diff 조회 실패: ${diffError.message}` : 'diff 조회 실패',
+        });
+      })
+      .finally(() => {
+        if (reqId === workspaceGitDiffReqRef.current) setWorkspaceGitDiffLoading(false);
+      });
   }, [activeWorkspacePanelId, projectId]);
+  const closeWorkspaceGitDiff = useCallback(() => {
+    workspaceGitDiffReqRef.current += 1;
+    setWorkspaceGitDiff(null);
+    setWorkspaceGitDiffLoading(false);
+  }, []);
   const densityFor = useDensityStore((s) => s.densityFor);
   const terminalSnippets = [
     { id: 'test', name: 'test target', cmd: 'npm test -- --run tests/projectListSurface.test.ts', tag: 'test' },
     { id: 'mobile', name: 'mobile guard', cmd: 'npm test -- --run tests/mobileOverflowLayout.test.ts', tag: 'mobile' },
     { id: 'typecheck', name: 'typecheck', cmd: 'npx tsc --noEmit', tag: 'type' },
     { id: 'build', name: 'build', cmd: 'npm run build', tag: 'build' },
-  ];
-  const contextItems = [
-    { id: 'ctx-project', name: displayProjectName(session), tokens: tokenLabel },
-    { id: 'ctx-route', name: projectChatRoute, tokens: 'route' },
-    { id: 'ctx-prototype', name: 'design/chat-prototype.html', tokens: 'source' },
-    { id: 'ctx-mode', name: `${COMPOSER_MODE_COPY[composerMode]} mode`, tokens: selectedEffort },
   ];
   const runStepItems = visibleEvents.slice(-4).map((item) => ({
     id: item.id,
@@ -2012,36 +2009,6 @@ export function ProjectChatSurface({
     setParallelPanelRuntimeErrors({});
     void saveProjectWorkspaceLayout(projectId, null).catch(() => undefined);
   }, [parallelLayoutHydrated, parallelLayoutStorageKey, parallelPanelState, projectId, surfaceMode]);
-
-  useEffect(() => {
-    if (workspaceTab !== 'git') return;
-    if (!activeWorkspacePanelId) {
-      setWorkspaceGitOverview(null);
-      setWorkspaceGitError('선택된 병렬 패널이 없습니다.');
-      return;
-    }
-
-    let cancelled = false;
-    setWorkspaceGitLoading(true);
-    setWorkspaceGitError(null);
-    void fetchProjectPanelGitOverview(projectId, activeWorkspacePanelId)
-      .then((overview) => {
-        if (!cancelled) setWorkspaceGitOverview(overview);
-      })
-      .catch((gitError) => {
-        if (!cancelled) {
-          setWorkspaceGitOverview(null);
-          setWorkspaceGitError(gitError instanceof Error ? gitError.message : 'Git 정보를 불러오지 못했습니다.');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setWorkspaceGitLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeWorkspacePanelId, projectId, workspaceTab]);
 
   const handleRepairProjectParallelPanelRuntime = useCallback((panelId: string) => {
     if (!parallelPanelState?.panels[panelId]) return;
@@ -2801,7 +2768,6 @@ export function ProjectChatSurface({
               </div>
               <div className="pc-chat-side-stat"><span>Total chats</span><strong>{chats.length || session.totalChats || 0}</strong></div>
               <div className="pc-chat-side-stat"><span>Active signal</span><strong>{projectStatusLabel(session.status)}</strong></div>
-              <div className="pc-chat-side-stat"><span>Context</span><strong>{tokenLabel}</strong></div>
             </article>
           </aside>
         </div>
@@ -2859,7 +2825,6 @@ export function ProjectChatSurface({
                 panelState={parallelPanelState}
                 recentPreview={recentPreview}
                 session={session}
-                tokenLabel={tokenLabel}
                 workspaceOpen={workspaceOpen}
               />
             </div>
@@ -2874,13 +2839,13 @@ export function ProjectChatSurface({
             workspaceFiles={workspaceFiles}
             selectedWorkspaceFile={selectedWorkspaceFile}
             openWorkspaceFilePreview={openWorkspaceFilePreview}
-            workspaceGitOverview={workspaceGitOverview}
-            workspaceGitLoading={workspaceGitLoading}
-            workspaceGitError={workspaceGitError}
-            refreshWorkspaceGit={refreshWorkspaceGit}
+            workspaceGitOverview={workspaceGit.overview}
+            workspaceGitLoading={workspaceGit.loading}
+            workspaceGitError={workspaceGit.error}
+            refreshWorkspaceGit={workspaceGit.refresh}
             activeWorkspacePanelRuntime={activeWorkspacePanelRuntime}
             draftTerminalCommand={draftTerminalCommand}
-            contextItems={contextItems}
+            onOpenGitDiff={openWorkspaceGitDiff}
             handleCopy={handleCopy}
             session={session}
             activeChat={activeChat}
@@ -2915,7 +2880,7 @@ export function ProjectChatSurface({
                   </time>
                 </span>
               )}
-              <span className="ch__meta">{agentLabel(activeAgent, activeModelLabel)} · {tokenLabel} · {fileCount} files</span>
+              <span className="ch__meta">{agentLabel(activeAgent, activeModelLabel)}</span>
             </div>
             <div className="ch__actions">
               <button type="button" className="ch__action" aria-label="Share chat route" onClick={() => handleCopy(projectChatRoute, 'Chat route')}>
@@ -3300,13 +3265,13 @@ export function ProjectChatSurface({
           workspaceFiles={workspaceFiles}
           selectedWorkspaceFile={selectedWorkspaceFile}
           openWorkspaceFilePreview={openWorkspaceFilePreview}
-          workspaceGitOverview={workspaceGitOverview}
-          workspaceGitLoading={workspaceGitLoading}
-          workspaceGitError={workspaceGitError}
-          refreshWorkspaceGit={refreshWorkspaceGit}
+          workspaceGitOverview={workspaceGit.overview}
+          workspaceGitLoading={workspaceGit.loading}
+          workspaceGitError={workspaceGit.error}
+          refreshWorkspaceGit={workspaceGit.refresh}
           activeWorkspacePanelRuntime={activeWorkspacePanelRuntime}
           draftTerminalCommand={draftTerminalCommand}
-          contextItems={contextItems}
+          onOpenGitDiff={openWorkspaceGitDiff}
           handleCopy={handleCopy}
           session={session}
           activeChat={activeChat}
@@ -3314,7 +3279,6 @@ export function ProjectChatSurface({
           setPreviewState={setPreviewState}
           selectedProvider={selectedProvider}
           activeModelLabel={activeModelLabel}
-          tokenLabel={tokenLabel}
           projectRunActive={projectRunActive}
           handleStopActiveChat={handleStopActiveChat}
           visibleEventsCount={visibleEvents.length}
@@ -3329,7 +3293,6 @@ export function ProjectChatSurface({
           terminalSnippets={terminalSnippets}
           setDraftTerminalCommand={setDraftTerminalCommand}
           setPrompt={setPrompt}
-          fileCount={fileCount}
         />
       </div>
       <ProjectPreviewOverlay
@@ -3347,11 +3310,14 @@ export function ProjectChatSurface({
         workspaceTab={workspaceTab}
         selectedWorkspaceFile={selectedWorkspaceFile}
         projectPath={projectPath}
-        tokenLabel={tokenLabel}
       />
       </>
       )}
       {copyFeedback && <div className="pc-toast" data-copy-feedback role="status">{copyFeedback}</div>}
+      {typeof document !== 'undefined' && (workspaceGitDiff || workspaceGitDiffLoading) && createPortal(
+        <GitDiffOverlay diff={workspaceGitDiff} loading={workspaceGitDiffLoading} onClose={closeWorkspaceGitDiff} />,
+        document.body,
+      )}
       {typeof document !== 'undefined' && (workspaceFilePreview || workspaceFilePreviewLoading) && createPortal(
         <div
           className="pc-file-preview-overlay"

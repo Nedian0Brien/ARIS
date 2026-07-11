@@ -35,12 +35,12 @@ import {
   type ExpandedTurnState,
   type ModelProvider,
   type PreviewState,
+  type ProjectPanelGitFile,
   type ProjectPanelGitOverview,
   type ProjectWorkspacePanelRuntime,
   type WorkspaceTab,
 } from '../projectChatSurfaceUtils';
 
-export type WorkspaceContextItem = { id: string; name: string; tokens: string };
 export type WorkspaceRunStepItem = { id: string; title: string; cmd: string; time: string };
 export type WorkspaceHistoryTurnItem = {
   id: string;
@@ -66,7 +66,7 @@ type WorkspaceSidebarCommonProps = {
   refreshWorkspaceGit: () => void;
   activeWorkspacePanelRuntime: ProjectWorkspacePanelRuntime | null;
   draftTerminalCommand: string;
-  contextItems: WorkspaceContextItem[];
+  onOpenGitDiff: (file: ProjectPanelGitFile) => void;
   handleCopy: (value: string, label: string) => void;
   session: SessionSummary;
   activeChat: SessionChat | null;
@@ -85,7 +85,6 @@ type ProjectWorkspaceSidebarProps = WorkspaceSidebarCommonProps & {
   setPreviewState: (state: PreviewState) => void;
   selectedProvider: ModelProvider;
   activeModelLabel: string;
-  tokenLabel: string;
   projectRunActive: boolean;
   handleStopActiveChat: () => Promise<void>;
   visibleEventsCount: number;
@@ -100,7 +99,6 @@ type ProjectWorkspaceSidebarProps = WorkspaceSidebarCommonProps & {
   terminalSnippets: WorkspaceTerminalSnippet[];
   setDraftTerminalCommand: (value: string) => void;
   setPrompt: Dispatch<SetStateAction<string>>;
-  fileCount: number;
 };
 
 export type WorkspaceSidebarProps = PanelWorkspaceSidebarProps | ProjectWorkspaceSidebarProps;
@@ -201,6 +199,7 @@ function WorkspaceGitPane({
   activeWorkspacePanelRuntime,
   cwdFallback,
   branchFallback,
+  onOpenGitDiff,
 }: Pick<
   WorkspaceSidebarCommonProps,
   | 'workspaceTab'
@@ -209,7 +208,11 @@ function WorkspaceGitPane({
   | 'workspaceGitError'
   | 'refreshWorkspaceGit'
   | 'activeWorkspacePanelRuntime'
-> & { cwdFallback: string; branchFallback: string }) {
+> & {
+  cwdFallback: string;
+  branchFallback: string;
+  onOpenGitDiff: (file: ProjectPanelGitFile) => void;
+}) {
   return (
     <div className={`ws__pane${workspaceTab === 'git' ? ' ws__pane--active' : ''}`} data-pane="git">
       <div className="file-tree__head">
@@ -240,11 +243,17 @@ function WorkspaceGitPane({
           <div className="file-row file-row--state">변경된 파일이 없습니다.</div>
         )}
         {workspaceGitOverview?.files.slice(0, 60).map((file) => (
-          <div key={`${file.path}:${file.indexStatus}:${file.workTreeStatus}`} className="pc-panel-git-file">
+          <button
+            key={`${file.path}:${file.indexStatus}:${file.workTreeStatus}`}
+            type="button"
+            className="pc-panel-git-file pc-panel-git-file--action"
+            title={`${file.path} diff 보기`}
+            onClick={() => onOpenGitDiff(file)}
+          >
             <span>{file.indexStatus}{file.workTreeStatus}</span>
             <strong title={file.path}>{file.path}</strong>
             <em>{file.conflicted ? 'conflict' : file.untracked ? 'new' : file.staged ? 'staged' : 'modified'}</em>
-          </div>
+          </button>
         ))}
       </div>
     </div>
@@ -278,7 +287,7 @@ function PanelWorkspaceSidebar({
   refreshWorkspaceGit,
   activeWorkspacePanelRuntime,
   draftTerminalCommand,
-  contextItems,
+  onOpenGitDiff,
   handleCopy,
   session,
   activeChat,
@@ -342,6 +351,7 @@ function PanelWorkspaceSidebar({
           activeWorkspacePanelRuntime={activeWorkspacePanelRuntime}
           cwdFallback=""
           branchFallback="branch pending"
+          onOpenGitDiff={onOpenGitDiff}
         />
         <div className={`ws__pane${workspaceTab === 'terminal' ? ' ws__pane--active' : ''}`} data-pane="terminal">
           <div className="term">
@@ -354,14 +364,8 @@ function PanelWorkspaceSidebar({
         </div>
         <div className={`ws__pane${workspaceTab === 'context' ? ' ws__pane--active' : ''}`} data-pane="context">
           <div className="ctx-group">
-            <div className="ctx-group__head"><span className="ctx-group__title">Panel context</span><span className="ctx-group__count">{contextItems.length}</span></div>
-            {contextItems.map((item) => (
-              <button key={item.id} type="button" className="ctx-item" onClick={() => handleCopy(item.name, 'Context item')}>
-                <FileText size={13} className="ctx-item__icon" />
-                <span className="ctx-item__name">{item.name}</span>
-                <span className="ctx-item__tokens">{item.tokens}</span>
-              </button>
-            ))}
+            <div className="ctx-group__head"><span className="ctx-group__title">Panel context</span></div>
+            <div className="ws-empty-state">토큰 사용량 실측 수집을 준비 중입니다. 수집이 연결되면 이 자리에 패널 컨텍스트 사용량이 표시됩니다.</div>
           </div>
         </div>
         <WorkspaceSubagentsPane workspaceTab={workspaceTab} session={session} activeChat={activeChat} />
@@ -385,7 +389,7 @@ function ProjectWorkspaceSidebar({
   refreshWorkspaceGit,
   activeWorkspacePanelRuntime,
   draftTerminalCommand,
-  contextItems,
+  onOpenGitDiff,
   handleCopy,
   session,
   activeChat,
@@ -393,7 +397,6 @@ function ProjectWorkspaceSidebar({
   setPreviewState,
   selectedProvider,
   activeModelLabel,
-  tokenLabel,
   projectRunActive,
   handleStopActiveChat,
   visibleEventsCount,
@@ -408,7 +411,6 @@ function ProjectWorkspaceSidebar({
   terminalSnippets,
   setDraftTerminalCommand,
   setPrompt,
-  fileCount,
 }: ProjectWorkspaceSidebarProps) {
   return (
     <aside ref={workspaceRef} className="shell__workspace ws ws-pane" aria-label={`${projectName} workspace`}>
@@ -433,7 +435,6 @@ function ProjectWorkspaceSidebar({
           <span className="ws__pill"><span className="ws__pill-dot" />{projectStatusLabel(session.status)}</span>
         </div>
         <div className="ws__status-right">
-          <span>{tokenLabel}</span>
           <button
             type="button"
             className="ws__stop"
@@ -449,13 +450,12 @@ function ProjectWorkspaceSidebar({
         <div className={`ws__pane${workspaceTab === 'run' ? ' ws__pane--active' : ''}`} data-pane="run">
           <div className="run-summary">
             <div className="run-summary__cell"><span className="run-summary__label">Steps</span><span className="run-summary__value">{visibleEventsCount}</span></div>
-            <div className="run-summary__cell"><span className="run-summary__label">Tokens</span><span className="run-summary__value">{tokenLabel}</span></div>
             <div className="run-summary__cell"><span className="run-summary__label">Activity</span><span className="run-summary__value">{formatRelativeTime(selectedChatTimestamp)}</span></div>
           </div>
           <div className="ws-card ws-card--run">
             <div className="ws-card__head">
-              <div className="ws-card__title">Run · {activeChat?.id ? `#${activeChat.id.slice(-4)}` : '#0142'}</div>
-              <div className="ws-card__meta">{formatRelativeTime(selectedChatTimestamp)} · {tokenLabel} tokens</div>
+              <div className="ws-card__title">Run · {activeChat?.id ? `#${activeChat.id.slice(-4)}` : '—'}</div>
+              <div className="ws-card__meta">{formatRelativeTime(selectedChatTimestamp)}</div>
             </div>
             <div className="run-steps">
               {runStepItems.length > 0 ? (
@@ -540,6 +540,7 @@ function ProjectWorkspaceSidebar({
           activeWorkspacePanelRuntime={activeWorkspacePanelRuntime}
           cwdFallback={projectPath}
           branchFallback="project branch"
+          onOpenGitDiff={onOpenGitDiff}
         />
         <div className={`ws__pane${workspaceTab === 'terminal' ? ' ws__pane--active' : ''}`} data-pane="terminal">
           <div className="term">
@@ -580,16 +581,8 @@ function ProjectWorkspaceSidebar({
         </div>
         <div className={`ws__pane${workspaceTab === 'context' ? ' ws__pane--active' : ''}`} data-pane="context">
           <div className="ctx-summary">
-            <div className="ctx-ring" aria-label={`${tokenLabel} context usage`}>
-              <svg viewBox="0 0 80 80" width="80" height="80" aria-hidden="true">
-                <circle className="ctx-ring__track" cx="40" cy="40" r="34" strokeWidth="6" fill="none" />
-                <circle className="ctx-ring__fill" cx="40" cy="40" r="34" strokeWidth="6" fill="none" strokeDasharray="214" strokeDashoffset="194" strokeLinecap="round" />
-              </svg>
-              <div className="ctx-ring__center">9.2%</div>
-            </div>
             <div className="ctx-summary__body">
-              <div className="ctx-summary__title">Context usage</div>
-              <div className="ctx-summary__meta">{tokenLabel} / 200k tokens</div>
+              <div className="ctx-summary__title">Context</div>
               <div className="ctx-summary__split">
                 <div className="ctx-summary__split-cell"><div className="ctx-summary__split-label">Model</div><div className="ctx-summary__split-value">{activeModelLabel}</div></div>
                 <div className="ctx-summary__split-cell"><div className="ctx-summary__split-label">Mode</div><div className="ctx-summary__split-value">{COMPOSER_MODE_COPY[composerMode]}</div></div>
@@ -597,22 +590,17 @@ function ProjectWorkspaceSidebar({
             </div>
           </div>
           <div className="ctx-group">
-            <div className="ctx-group__head"><span className="ctx-group__title">Attached context</span><span className="ctx-group__count">{contextItems.length}</span></div>
-            {contextItems.map((item) => (
-              <button key={item.id} type="button" className="ctx-item" onClick={() => handleCopy(item.name, 'Context item')}>
-                <FileText size={13} className="ctx-item__icon" />
-                <span className="ctx-item__name">{item.name}</span>
-                <span className="ctx-item__tokens">{item.tokens}</span>
-              </button>
-            ))}
+            <div className="ctx-group__head"><span className="ctx-group__title">Context usage</span></div>
+            <div className="ws-empty-state">토큰 사용량 실측 수집을 준비 중입니다. 수집이 연결되면 이 자리에 컨텍스트 사용량이 표시됩니다.</div>
           </div>
         </div>
         <WorkspaceSubagentsPane workspaceTab={workspaceTab} session={session} activeChat={activeChat} />
       </div>
       <div className="ws__footer">
-        <div className="ws__footer-row"><span className="ws__footer-label">Context usage</span><span className="ws__footer-value">{tokenLabel} / 200k</span></div>
-        <div className="ws__footer-bar"><div className="ws__footer-fill" style={{ width: '9.2%' }} /></div>
-        <div className="ws__footer-meta"><span>project scoped</span><span>{fileCount} files</span></div>
+        <div className="ws__footer-meta">
+          <span>project scoped</span>
+          <span>{workspaceGitOverview ? `${workspaceGitOverview.trackedFileCount} files` : '— files'}</span>
+        </div>
       </div>
     </aside>
   );

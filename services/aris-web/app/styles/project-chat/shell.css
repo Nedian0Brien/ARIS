@@ -532,6 +532,76 @@
 }
 
 .pc-panel-file span,
+/* Git 탭 파일 행이 diff 열기 버튼이 되면서 필요한 버튼 리셋 */
+button.pc-panel-git-file {
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.pc-panel-git-file:hover,
+button.pc-panel-git-file:focus-visible {
+  background: var(--bg-hover, rgba(127, 127, 127, 0.08));
+}
+
+.pc-git-diff-card {
+  display: flex;
+  flex-direction: column;
+  max-height: min(80vh, 720px);
+}
+
+.pc-git-diff-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pc-git-diff-head strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--text-xs);
+}
+
+.pc-git-diff-scope {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs, 10px);
+  text-transform: uppercase;
+}
+
+.pc-git-diff-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.pc-git-diff-line--add {
+  background: rgba(46, 160, 67, 0.15);
+}
+
+.pc-git-diff-line--del {
+  background: rgba(248, 81, 73, 0.15);
+}
+
+.pc-git-diff-line--hunk {
+  color: var(--text-tertiary);
+}
+
 .pc-panel-git-file strong {
   min-width: 0;
   overflow: hidden;

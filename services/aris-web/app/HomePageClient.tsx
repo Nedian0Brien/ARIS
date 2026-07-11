@@ -370,15 +370,6 @@ function projectStatusBadgeClass(status: SessionStatus): string {
   return 'badge--neutral';
 }
 
-function deriveProjectFileCount(session: SessionSummary, index: number): number {
-  return Math.max(18, (session.totalChats ?? 0) * 7 + index * 11 + 24);
-}
-
-function deriveProjectTokenLabel(session: SessionSummary, index: number): string {
-  const total = Math.max(9.1, (session.totalChats ?? 0) * 11.8 + index * 7.4);
-  return `${total.toFixed(1)}k`;
-}
-
 function buildProjectDetailPath(sessionId: string, view: ProjectView = 'chats', chatId?: string | null): string {
   const params = new URLSearchParams();
   params.set('tab', 'project');
@@ -1453,8 +1444,6 @@ function ProjectDetailSurface({
   const status = statusClass(session.status);
   const totalChats = session.totalChats ?? 0;
   const activeChats = session.status === 'running' || session.status === 'error' ? 1 : 0;
-  const fileCount = deriveProjectFileCount(session, index);
-  const tokenLabel = deriveProjectTokenLabel(session, index);
   const modelLabel = session.model || session.metadata?.runtimeModel || 'default model';
   const recentPreview = createChatPreview(session);
   const [isCreatingHeaderChat, setIsCreatingHeaderChat] = useState(false);
@@ -1500,7 +1489,6 @@ function ProjectDetailSurface({
     return (
       <div className="m-main-scroll m-main-scroll--project-chat-detail">
         <ProjectChatSurface
-          fileCount={fileCount}
           isOperator={isOperator}
           modelLabel={modelLabel}
           onBackToChatList={() => onProjectViewChange('chats')}
@@ -1515,7 +1503,6 @@ function ProjectDetailSurface({
           session={session}
           surfaceMode={surfaceMode}
           themeMode={themeMode}
-          tokenLabel={tokenLabel}
         />
       </div>
     );
@@ -1572,16 +1559,8 @@ function ProjectDetailSurface({
             </div>
           </div>
           <div>
-            <div className="proj-stat-label">Files tracked</div>
-            <div className="proj-stat-value">{fileCount}</div>
-          </div>
-          <div>
             <div className="proj-stat-label">Last activity</div>
             <div className="proj-stat-value">{formatRelativeTime(session.lastActivityAt)}</div>
-          </div>
-          <div>
-            <div className="proj-stat-label">Tokens used</div>
-            <div className="proj-stat-value">{tokenLabel}</div>
           </div>
         </div>
       </section>
@@ -1635,7 +1614,6 @@ function ProjectDetailSurface({
         >
           <FileText size={14} />
           Files
-          <span className="proj-tab__count">{fileCount}</span>
         </button>
         <button
           type="button"
@@ -1658,7 +1636,6 @@ function ProjectDetailSurface({
       <section className="proj-pane">
         {projectView === 'chats' ? (
           <ProjectChatSurface
-            fileCount={fileCount}
             isOperator={isOperator}
             modelLabel={modelLabel}
             onBackToChatList={() => onProjectViewChange('chats')}
@@ -1669,20 +1646,19 @@ function ProjectDetailSurface({
             selectedChatId={selectedChatId}
             session={session}
             surfaceMode={surfaceMode}
-            tokenLabel={tokenLabel}
           />
         ) : projectView === 'files' ? (
           <ProjectPlaceholderPanel
             Icon={FileText}
             title="Files"
-            eyebrow={`${fileCount} tracked files`}
+            eyebrow="Workspace files"
             body={`${projectPath}의 작업 파일과 첨부 맥락을 프로젝트 화면 안에서 이어서 다룰 예정입니다.`}
           />
         ) : projectView === 'context' ? (
           <ProjectPlaceholderPanel
             Icon={Database}
             title="Context"
-            eyebrow="6 linked assets"
+            eyebrow="Linked assets"
             body={`${projectName}의 런타임 메모리, 최근 결정, 작업 지침을 같은 프로젝트 범위로 묶습니다.`}
           />
         ) : (
@@ -1697,7 +1673,7 @@ function ProjectDetailSurface({
               <div className="proj-chat__meta">
                 <span className={`badge badge--dot ${projectStatusBadgeClass(session.status)}`}>{projectStatusLabel(session.status)}</span>
                 <span>{session.agent} · {modelLabel}</span>
-                <span>{tokenLabel} · project scope</span>
+                <span>project scope</span>
               </div>
             </button>
             <article className="proj-card proj-card--recent-chats">
@@ -1941,12 +1917,8 @@ function ProjectSurface({
                   </div>
                 </div>
                 <div className="proj-list-stat">
-                  <div className="proj-list-stat__label">Files</div>
-                  <div className="proj-list-stat__val">{deriveProjectFileCount(session, index)}</div>
-                </div>
-                <div className="proj-list-stat">
-                  <div className="proj-list-stat__label">Tokens</div>
-                  <div className="proj-list-stat__val">{deriveProjectTokenLabel(session, index)}</div>
+                  <div className="proj-list-stat__label">Last activity</div>
+                  <div className="proj-list-stat__val">{formatRelativeTime(session.lastActivityAt)}</div>
                 </div>
               </div>
               <ProjectRecentChatRows

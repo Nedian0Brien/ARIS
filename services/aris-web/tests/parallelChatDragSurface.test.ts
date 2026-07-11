@@ -120,7 +120,7 @@ describe('project parallel chat drag surface', () => {
     expect(projectChatSurface).toContain('workspacePanelId: panelId');
     expect(projectChatSurface).toContain('workspacePanelId: activeWorkspacePanelId');
     expect(projectChatSurface).toContain('useWorkspaceFiles');
-    expect(projectChatSurface).toContain('fetchProjectPanelGitOverview');
+    expect(projectChatSurface).toContain('useWorkspaceGit(projectId, activeWorkspacePanelId');
     expect(projectChatSurface).toContain('pc-parallel-workspace');
     expect(projectChatSurface).toContain('onOpenPanelWorkspaceTab');
     expect(projectChatSurface).toContain("data-tab=\"git\"");

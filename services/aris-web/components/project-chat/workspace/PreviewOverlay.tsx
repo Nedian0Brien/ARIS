@@ -38,7 +38,6 @@ export type ProjectPreviewOverlayProps = {
   workspaceTab: WorkspaceTab;
   selectedWorkspaceFile: string;
   projectPath: string;
-  tokenLabel: string;
 };
 
 export function ProjectPreviewOverlay({
@@ -56,7 +55,6 @@ export function ProjectPreviewOverlay({
   workspaceTab,
   selectedWorkspaceFile,
   projectPath,
-  tokenLabel,
 }: ProjectPreviewOverlayProps) {
   return (
     <>
@@ -91,7 +89,7 @@ export function ProjectPreviewOverlay({
               </aside>
               <main className="preview-page__main">
                 <h2 className="preview-page__h">{activeChat?.title ?? 'Project chat'}</h2>
-                <p className="preview-page__sub">{agentLabel(activeAgent, activeModelLabel)} · {COMPOSER_MODE_COPY[composerMode]} · {tokenLabel}</p>
+                <p className="preview-page__sub">{agentLabel(activeAgent, activeModelLabel)} · {COMPOSER_MODE_COPY[composerMode]}</p>
                 <div className="preview-page__cards">
                   <div className="preview-page__card">
                     <div className="preview-page__card-t">Workspace</div>
