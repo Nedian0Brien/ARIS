@@ -118,6 +118,8 @@ import { buildProjectChatTimelineItems } from '@/components/project-chat/permiss
 import { WorkspaceSidebar } from '@/components/project-chat/workspace/WorkspaceSidebar';
 import { GitDiffOverlay } from '@/components/project-chat/workspace/GitDiffOverlay';
 import { useWorkspaceGit } from '@/components/project-chat/workspace/hooks/useWorkspaceGit';
+import { useTerminalRunner } from '@/components/project-chat/workspace/hooks/useTerminalRunner';
+import { useSavedTerminalSnippets } from '@/components/project-chat/workspace/hooks/useSavedTerminalSnippets';
 import { ProjectPreviewOverlay } from '@/components/project-chat/workspace/PreviewOverlay';
 import { useDensityStore } from './cmd-display/densityStore';
 import { computeAutoDensity } from './cmd-display/densityRules';
@@ -1285,7 +1287,7 @@ export function ProjectChatSurface({
   } | null>(null);
   const [workspaceFilePreviewLoading, setWorkspaceFilePreviewLoading] = useState(false);
   const [workspaceFilePreviewSaving, setWorkspaceFilePreviewSaving] = useState(false);
-  const [draftTerminalCommand, setDraftTerminalCommand] = useState('npm test -- --run tests/projectListSurface.test.ts');
+  const [draftTerminalCommand, setDraftTerminalCommand] = useState('');
   const [previewDevice, setPreviewDevice] = useState<'1200' | '768' | '390'>('1200');
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
@@ -1490,6 +1492,17 @@ export function ProjectChatSurface({
   });
   // 패널이 없으면 프로젝트 루트 git status로 폴백한다(과거: 영구 에러 상태).
   const workspaceGit = useWorkspaceGit(projectId, activeWorkspacePanelId, workspaceTab === 'git');
+  const mergeTerminalEvents = useCallback((submitted: UiEvent[]) => {
+    setEvents((previous) => mergeProjectChatEvents([...previous, ...submitted]));
+  }, []);
+  const workspaceTerminal = useTerminalRunner({
+    projectId,
+    chatId: activeWorkspaceChat?.id ?? activeChat?.id ?? null,
+    workspacePanelId: activeWorkspacePanelId,
+    // 패널 채팅 이벤트는 해당 패널의 폴링이 수거한다 — 메인 타임라인에만 즉시 병합.
+    onEvents: activeWorkspacePanelId ? undefined : mergeTerminalEvents,
+  });
+  const savedTerminalSnippets = useSavedTerminalSnippets(projectId);
   const workspaceGitDiffReqRef = useRef(0);
   const openWorkspaceGitDiff = useCallback((file: ProjectPanelGitFile) => {
     const scope: WorkspaceGitDiff['scope'] = file.staged && !file.unstaged && !file.untracked ? 'staged' : 'working';
@@ -2857,6 +2870,8 @@ export function ProjectChatSurface({
             refreshWorkspaceGit={workspaceGit.refresh}
             activeWorkspacePanelRuntime={activeWorkspacePanelRuntime}
             draftTerminalCommand={draftTerminalCommand}
+            setDraftTerminalCommand={setDraftTerminalCommand}
+            terminal={workspaceTerminal}
             onOpenGitDiff={openWorkspaceGitDiff}
             handleCopy={handleCopy}
             session={session}
@@ -3283,6 +3298,8 @@ export function ProjectChatSurface({
           refreshWorkspaceGit={workspaceGit.refresh}
           activeWorkspacePanelRuntime={activeWorkspacePanelRuntime}
           draftTerminalCommand={draftTerminalCommand}
+          setDraftTerminalCommand={setDraftTerminalCommand}
+          terminal={workspaceTerminal}
           onOpenGitDiff={openWorkspaceGitDiff}
           handleCopy={handleCopy}
           session={session}
@@ -3303,8 +3320,7 @@ export function ProjectChatSurface({
           activeAgent={activeAgent}
           composerMode={composerMode}
           terminalSnippets={terminalSnippets}
-          setDraftTerminalCommand={setDraftTerminalCommand}
-          setPrompt={setPrompt}
+          savedSnippets={savedTerminalSnippets}
         />
       </div>
       <ProjectPreviewOverlay
