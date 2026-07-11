@@ -1219,7 +1219,7 @@ export function ProjectChatSurface({
   const [projectRunNowMs, setProjectRunNowMs] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
   const activeChat = selectedChatId ? chats.find((chat) => chat.id === selectedChatId) ?? null : null;
-  const { isRunning: runtimeRunning } = useSessionRuntime(projectId, selectedChatId, Boolean(selectedChatId));
+  const { isRunning: runtimeRunning, usage: chatUsage } = useSessionRuntime(projectId, selectedChatId, Boolean(selectedChatId));
   const {
     displayPermissions,
     loadingPermissionId,
@@ -1302,6 +1302,14 @@ export function ProjectChatSurface({
   const activeWorkspaceChat = activeWorkspacePanel
     ? chats.find((candidate) => candidate.id === activeWorkspacePanel.chatId) ?? activeChat
     : activeChat;
+  // 병렬 모드 사이드바의 usage는 활성 패널 채팅 기준. 일반 모드에서는 이 훅이
+  // 비활성이라 추가 폴링이 없고, 병렬 모드에서만 활성 패널 1건에 폴링이 붙는다.
+  const { usage: workspacePanelUsage } = useSessionRuntime(
+    activeWorkspacePanelRuntime?.runtimeSessionId ?? projectId,
+    activeWorkspaceChat?.id ?? null,
+    Boolean(activeWorkspacePanelId && activeWorkspaceChat),
+  );
+  const workspaceUsage = activeWorkspacePanelId ? workspacePanelUsage : chatUsage;
   const [workspaceGitDiff, setWorkspaceGitDiff] = useState<WorkspaceGitDiff | null>(null);
   const [workspaceGitDiffLoading, setWorkspaceGitDiffLoading] = useState(false);
   const visibleEvents = events;
@@ -2872,6 +2880,7 @@ export function ProjectChatSurface({
             draftTerminalCommand={draftTerminalCommand}
             setDraftTerminalCommand={setDraftTerminalCommand}
             terminal={workspaceTerminal}
+            usage={workspaceUsage}
             onOpenGitDiff={openWorkspaceGitDiff}
             handleCopy={handleCopy}
             session={session}
@@ -3300,6 +3309,7 @@ export function ProjectChatSurface({
           draftTerminalCommand={draftTerminalCommand}
           setDraftTerminalCommand={setDraftTerminalCommand}
           terminal={workspaceTerminal}
+          usage={workspaceUsage}
           onOpenGitDiff={openWorkspaceGitDiff}
           handleCopy={handleCopy}
           session={session}

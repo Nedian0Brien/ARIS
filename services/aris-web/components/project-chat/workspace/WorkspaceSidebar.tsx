@@ -22,7 +22,7 @@ import { ProviderLogo } from '@/components/ui/ProviderLogo';
 import { SubagentPanel } from '@/components/project-chat/SubagentPanel';
 import { MarkdownContent } from '@/components/chat/MarkdownContent';
 import { GitActionMark } from '@/components/project-chat/helpers/actionMarks';
-import type { SessionChat, SessionSummary } from '@/lib/happy/types';
+import type { ChatUsageStats, SessionChat, SessionSummary } from '@/lib/happy/types';
 import type { WorkspaceFileItem, WorkspaceFilesApi } from '@/lib/hooks/useWorkspaceFiles';
 import type { WorkspaceTerminalApi } from './hooks/useTerminalRunner';
 import type { SavedTerminalSnippetsApi } from './hooks/useSavedTerminalSnippets';
@@ -30,7 +30,9 @@ import {
   COMPOSER_MODE_COPY,
   agentAvatarClass,
   agentLabel,
+  computeContextUsageRatio,
   formatRelativeTime,
+  formatTokenCount,
   matchWorkspaceFileBadge,
   projectStatusLabel,
   providerFromAgent,
@@ -77,6 +79,7 @@ type WorkspaceSidebarCommonProps = {
   draftTerminalCommand: string;
   setDraftTerminalCommand: (value: string) => void;
   terminal: WorkspaceTerminalApi;
+  usage: ChatUsageStats | null;
   onOpenGitDiff: (file: ProjectPanelGitFile) => void;
   handleCopy: (value: string, label: string) => void;
   session: SessionSummary;
@@ -277,6 +280,74 @@ function WorkspaceGitPane({
   );
 }
 
+const CTX_RING_CIRCUMFERENCE = 214;
+
+// 실측 usage가 있으면 링(마지막 턴 컨텍스트 점유율)과 토큰 분해를 렌더한다.
+function WorkspaceContextUsage({ usage }: { usage: ChatUsageStats | null }) {
+  const ratio = computeContextUsageRatio(usage);
+  if (!usage) {
+    return (
+      <div className="ctx-group">
+        <div className="ctx-group__head"><span className="ctx-group__title">Context usage</span></div>
+        <div className="ws-empty-state">토큰 사용량이 아직 수집되지 않았습니다. 다음 런부터 실측치가 표시됩니다.</div>
+      </div>
+    );
+  }
+  const percentLabel = ratio !== null ? `${(ratio * 100).toFixed(1)}%` : '—';
+  return (
+    <>
+      <div className="ctx-summary">
+        {ratio !== null && (
+          <div className="ctx-ring" aria-label={`컨텍스트 사용률 ${percentLabel}`}>
+            <svg viewBox="0 0 80 80" width="80" height="80" aria-hidden="true">
+              <circle className="ctx-ring__track" cx="40" cy="40" r="34" strokeWidth="6" fill="none" />
+              <circle
+                className="ctx-ring__fill"
+                cx="40"
+                cy="40"
+                r="34"
+                strokeWidth="6"
+                fill="none"
+                strokeDasharray={CTX_RING_CIRCUMFERENCE}
+                strokeDashoffset={CTX_RING_CIRCUMFERENCE * (1 - ratio)}
+                strokeLinecap="round"
+              />
+            </svg>
+            <div className="ctx-ring__center">{percentLabel}</div>
+          </div>
+        )}
+        <div className="ctx-summary__body">
+          <div className="ctx-summary__title">Context usage</div>
+          <div className="ctx-summary__meta">
+            {usage.lastTurn ? `${formatTokenCount(usage.lastTurn.totalTokens)} / ${formatTokenCount(usage.contextWindow)} tokens` : `윈도 ${formatTokenCount(usage.contextWindow)} tokens`}
+          </div>
+          <div className="ctx-summary__split">
+            <div className="ctx-summary__split-cell"><div className="ctx-summary__split-label">Model</div><div className="ctx-summary__split-value">{usage.model ?? '—'}</div></div>
+            <div className="ctx-summary__split-cell"><div className="ctx-summary__split-label">Provider</div><div className="ctx-summary__split-value">{usage.provider}</div></div>
+          </div>
+        </div>
+      </div>
+      <div className="ctx-group">
+        <div className="ctx-group__head"><span className="ctx-group__title">누적 사용량</span><span className="ctx-group__count">{formatTokenCount(usage.total.totalTokens)}</span></div>
+        <div className="ctx-item ctx-item--static">
+          <span className="ctx-item__name">Input (cached 포함)</span>
+          <span className="ctx-item__tokens">{formatTokenCount(usage.total.inputTokens + usage.total.cachedInputTokens)}</span>
+        </div>
+        <div className="ctx-item ctx-item--static">
+          <span className="ctx-item__name">Output</span>
+          <span className="ctx-item__tokens">{formatTokenCount(usage.total.outputTokens)}</span>
+        </div>
+        {usage.total.reasoningOutputTokens != null && (
+          <div className="ctx-item ctx-item--static">
+            <span className="ctx-item__name">Reasoning</span>
+            <span className="ctx-item__tokens">{formatTokenCount(usage.total.reasoningOutputTokens)}</span>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 function WorkspaceTerminalConsole({
   terminal,
   draftTerminalCommand,
@@ -380,6 +451,7 @@ function PanelWorkspaceSidebar({
   draftTerminalCommand,
   setDraftTerminalCommand,
   terminal,
+  usage,
   onOpenGitDiff,
   handleCopy,
   session,
@@ -458,10 +530,7 @@ function PanelWorkspaceSidebar({
           />
         </div>
         <div className={`ws__pane${workspaceTab === 'context' ? ' ws__pane--active' : ''}`} data-pane="context">
-          <div className="ctx-group">
-            <div className="ctx-group__head"><span className="ctx-group__title">Panel context</span></div>
-            <div className="ws-empty-state">토큰 사용량 실측 수집을 준비 중입니다. 수집이 연결되면 이 자리에 패널 컨텍스트 사용량이 표시됩니다.</div>
-          </div>
+          <WorkspaceContextUsage usage={usage} />
         </div>
         <WorkspaceSubagentsPane workspaceTab={workspaceTab} session={session} activeChat={activeChat} />
       </div>
@@ -486,6 +555,7 @@ function ProjectWorkspaceSidebar({
   draftTerminalCommand,
   setDraftTerminalCommand,
   terminal,
+  usage,
   onOpenGitDiff,
   handleCopy,
   session,
@@ -531,6 +601,7 @@ function ProjectWorkspaceSidebar({
           <span className="ws__pill"><span className="ws__pill-dot" />{projectStatusLabel(session.status)}</span>
         </div>
         <div className="ws__status-right">
+          {usage && <span title="누적 토큰">{formatTokenCount(usage.total.totalTokens)}</span>}
           <button
             type="button"
             className="ws__stop"
@@ -704,14 +775,25 @@ function ProjectWorkspaceSidebar({
               </div>
             </div>
           </div>
-          <div className="ctx-group">
-            <div className="ctx-group__head"><span className="ctx-group__title">Context usage</span></div>
-            <div className="ws-empty-state">토큰 사용량 실측 수집을 준비 중입니다. 수집이 연결되면 이 자리에 컨텍스트 사용량이 표시됩니다.</div>
-          </div>
+          <WorkspaceContextUsage usage={usage} />
         </div>
         <WorkspaceSubagentsPane workspaceTab={workspaceTab} session={session} activeChat={activeChat} />
       </div>
       <div className="ws__footer">
+        {usage?.lastTurn && usage.contextWindow ? (
+          <>
+            <div className="ws__footer-row">
+              <span className="ws__footer-label">Context usage</span>
+              <span className="ws__footer-value">{formatTokenCount(usage.lastTurn.totalTokens)} / {formatTokenCount(usage.contextWindow)}</span>
+            </div>
+            <div className="ws__footer-bar">
+              <div
+                className="ws__footer-fill"
+                style={{ width: `${((computeContextUsageRatio(usage) ?? 0) * 100).toFixed(1)}%` }}
+              />
+            </div>
+          </>
+        ) : null}
         <div className="ws__footer-meta">
           <span>project scoped</span>
           <span>{workspaceGitOverview ? `${workspaceGitOverview.trackedFileCount} files` : '— files'}</span>

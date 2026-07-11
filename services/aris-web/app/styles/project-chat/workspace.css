@@ -491,6 +491,14 @@
   flex-shrink: 0;
 }
 
+/* 실측 usage 분해 행 — 버튼이 아닌 정적 행 */
+.pc-proto .ctx-item--static {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: default;
+}
+
 /* 사이드바 터미널 원샷 러너 (실행 콘솔) */
 .pc-proto .term__err {
   color: #E5877E;

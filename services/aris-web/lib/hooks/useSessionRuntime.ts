@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { redirectToLoginWithNext } from '@/lib/hooks/authRedirect';
+import type { ChatUsageStats } from '@/lib/happy/types';
 import {
   buildRuntimeEventChannelUrl,
   shouldRefreshRuntimeForRuntimeMessage,
@@ -8,6 +9,7 @@ import {
 
 const RUNTIME_POLL_INTERVAL_MS = 3000;
 const runtimeStateCache = new Map<string, boolean>();
+const runtimeUsageCache = new Map<string, ChatUsageStats | null>();
 const isDocumentVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
 
 type RuntimePollResolutionInput =
@@ -52,6 +54,7 @@ export function resolveRuntimePollResolution(input: RuntimePollResolutionInput):
 export function useSessionRuntime(sessionId: string, chatId?: string | null, enabled = true) {
   const cacheKey = `${sessionId}:${chatId?.trim() || '__default__'}`;
   const [isRunning, setIsRunning] = useState(() => runtimeStateCache.get(cacheKey) ?? false);
+  const [usage, setUsage] = useState<ChatUsageStats | null>(() => runtimeUsageCache.get(cacheKey) ?? null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const lastKnownRunningRef = useRef(runtimeStateCache.get(cacheKey) ?? false);
 
@@ -62,6 +65,7 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null, ena
     let realtimeSocket: WebSocket | null = null;
     lastKnownRunningRef.current = runtimeStateCache.get(cacheKey) ?? false;
     setIsRunning(lastKnownRunningRef.current);
+    setUsage(runtimeUsageCache.get(cacheKey) ?? null);
     setRuntimeError(null);
 
     if (!enabled) {
@@ -104,8 +108,11 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null, ena
         if (!response.ok) {
           throw new Error(`Runtime status sync failed (${response.status})`);
         }
-        const body = (await response.json()) as { isRunning?: boolean };
+        const body = (await response.json()) as { isRunning?: boolean; usage?: ChatUsageStats | null };
         if (!disposed) {
+          const nextUsage = body.usage ?? null;
+          runtimeUsageCache.set(cacheKey, nextUsage);
+          setUsage(nextUsage);
           const resolution = resolveRuntimePollResolution({
             previousIsRunning: lastKnownRunningRef.current,
             nextIsRunning: Boolean(body.isRunning),
@@ -179,5 +186,5 @@ export function useSessionRuntime(sessionId: string, chatId?: string | null, ena
     };
   }, [cacheKey, sessionId, chatId, enabled]);
 
-  return { isRunning, runtimeError };
+  return { isRunning, runtimeError, usage };
 }
