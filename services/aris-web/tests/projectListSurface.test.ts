@@ -474,7 +474,9 @@ describe('project list surface', () => {
     expect(projectChatSurface).toContain('className="ws-card__title">Run ·');
     expect(projectChatSurface).toContain('className="ws-card__meta"');
     expect(projectChatSurface).toContain('className="run-step ws-run-step"');
-    expect(projectChatSurface).toContain('className="run-step__dot ws-run-step__dot run-step__dot--done ws-run-step__dot--done"');
+    // 스텝 dot은 런 활성 중 최신 작업이 running, 나머지는 done — 실상태 반영.
+    expect(projectChatSurface).toContain("item.running ? 'run-step__dot--running ws-run-step__dot--running' : 'run-step__dot--done ws-run-step__dot--done'");
+    expect(projectChatSurface).toContain('<span className="run-summary__label">Duration</span>');
     expect(projectChatSurface).toContain('className="run-step__body ws-run-step__body"');
     expect(projectChatSurface).toContain('className="run-step__time ws-run-step__time"');
     expect(projectChatSurface).toContain('className="ws-empty-state"');

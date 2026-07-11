@@ -144,7 +144,9 @@ import {
   hasProjectChatDragPayload,
   isProjectChatTimelineNearBottom,
   mergeProjectChatEvents,
+  isWorkspaceRunStepEvent,
   normalizeReasoningEffort,
+  pairChatTurns,
   projectStatusBadgeClass,
   projectStatusLabel,
   providerFromAgent,
@@ -1316,8 +1318,6 @@ export function ProjectChatSurface({
   }, [providerOptions, selectedProvider, selectedModelId]);
   const activeModelLabel = activeOption.label || runtimeModelLabel;
   const activeAgent: SessionSummary['agent'] = selectedProvider;
-  const userTurns = visibleEvents.filter((item) => readEventRole(item) === 'user');
-  const representativeAgentEvent = visibleEvents.find((item) => readEventRole(item) !== 'user');
   const activeRunStartedAt = submittedRunStartedAt ?? runtimeRunStartedAt;
   const projectRunIndicator = resolveProjectRunIndicator({
     events,
@@ -1525,13 +1525,18 @@ export function ProjectChatSurface({
     { id: 'typecheck', name: 'typecheck', cmd: 'npx tsc --noEmit', tag: 'type' },
     { id: 'build', name: 'build', cmd: 'npm run build', tag: 'build' },
   ];
-  const runStepItems = visibleEvents.slice(-4).map((item) => ({
+  const runStepEvents = visibleEvents.filter(isWorkspaceRunStepEvent);
+  const runStepItems = runStepEvents.map((item, index) => ({
     id: item.id,
     title: item.title || item.kind,
     cmd: eventCommand(item),
     time: formatRelativeTime(item.timestamp),
-    state: 'done' as const,
+    // 실행 계획 정보가 이벤트에 없어 pending은 표현 불가 — 런 활성 중 최신 작업만 running.
+    running: projectRunActive && index === runStepEvents.length - 1,
   }));
+  const runDurationLabel = projectRunIndicator
+    ? formatElapsedDuration(projectRunIndicator.startedAt, projectRunNowMs)
+    : null;
   const showTransientFeedback = (message: string) => {
     setCopyFeedback(message);
     window.setTimeout(() => {
@@ -1791,24 +1796,31 @@ export function ProjectChatSurface({
     }, 1800);
   };
 
-  const handleJumpToTurn = (turnId: string) => {
-    setExpandedTurnId(turnId);
-    setHighlightedMessageId(turnId);
+  const handleJumpToEvent = (eventId: string) => {
+    setExpandedTurnId(eventId);
+    setHighlightedMessageId(eventId);
     suppressChromeScroll(1000);
-    timelineRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    const escaped = typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(eventId) : eventId;
+    const target = timelineRef.current?.querySelector(`[data-event-id="${escaped}"]`);
+    if (target instanceof HTMLElement) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      // 밀도 스택으로 접힌 이벤트 등 앵커가 없으면 타임라인 상단으로.
+      timelineRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    }
     window.setTimeout(() => {
       setHighlightedMessageId(null);
     }, 1800);
   };
-  const historyTurnItems = userTurns.slice(-3).map((item, turnIndex) => ({
-    id: item.id,
-    timestamp: item.timestamp,
-    text: getEventText(item),
-    open: turnIndex === 0,
-    state: turnIndex === 0 ? 'running' : 'answered',
-    agentText: representativeAgentEvent ? getEventText(representativeAgentEvent) : '프로젝트 맥락을 기준으로 응답을 준비합니다.',
+  const historyTurnItems = pairChatTurns(visibleEvents, 10).map((turn) => ({
+    id: turn.id,
+    timestamp: turn.timestamp,
+    text: turn.text,
+    state: turn.isLatest && projectRunActive ? 'running' : 'answered',
+    agentText: turn.agentText
+      ?? (turn.isLatest && projectRunActive ? '응답을 생성하는 중…' : '이 턴에는 텍스트 응답이 없습니다.'),
   }));
-  const defaultExpandedTurnId = historyTurnItems[0]?.id ?? null;
+  const defaultExpandedTurnId = historyTurnItems.at(-1)?.id ?? null;
   const visibleExpandedTurnId = expandedTurnId === '__none__'
     ? null
     : expandedTurnId ?? defaultExpandedTurnId;
@@ -2644,7 +2656,7 @@ export function ProjectChatSurface({
       flushStack();
       const permission = timelineItem.permission;
       rendered.push(
-        <div key={permission.id} className={`msg msg--permission${highlightedMessageId === permission.id ? ' msg--highlight' : ''}`}>
+        <div key={permission.id} data-event-id={permission.id} className={`msg msg--permission${highlightedMessageId === permission.id ? ' msg--highlight' : ''}`}>
           <ProjectPermissionRequestMessage
             permission={permission}
             disabled={!isOperator}
@@ -2675,7 +2687,7 @@ export function ProjectChatSurface({
 
     if (runStatusEvent) {
       rendered.push(
-        <div key={item.id} className={`msg msg--run-status${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
+        <div key={item.id} data-event-id={item.id} className={`msg msg--run-status${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
           <ProjectRunStatusChip event={item} />
         </div>,
       );
@@ -2684,7 +2696,7 @@ export function ProjectChatSurface({
 
     if (d.kind === 'action') {
       rendered.push(
-        <div key={item.id} className={`msg msg--action${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
+        <div key={item.id} data-event-id={item.id} className={`msg msg--action${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
           <ProjectActionCard
             event={item}
             density={d.density}
@@ -2700,7 +2712,7 @@ export function ProjectChatSurface({
 
     // Default (non-action) branch — preserve the existing JSX for user/agent/terminal messages.
     rendered.push(
-      <div key={item.id} className={`msg${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
+      <div key={item.id} data-event-id={item.id} className={`msg${highlightedMessageId === item.id ? ' msg--highlight' : ''}`}>
         {renderNonAction(item)}
       </div>,
     );
@@ -3281,13 +3293,13 @@ export function ProjectChatSurface({
           activeModelLabel={activeModelLabel}
           projectRunActive={projectRunActive}
           handleStopActiveChat={handleStopActiveChat}
-          visibleEventsCount={visibleEvents.length}
+          runDurationLabel={runDurationLabel}
           selectedChatTimestamp={selectedChatTimestamp}
           runStepItems={runStepItems}
           historyTurnItems={historyTurnItems}
           visibleExpandedTurnId={visibleExpandedTurnId}
           setExpandedTurnId={setExpandedTurnId}
-          handleJumpToTurn={handleJumpToTurn}
+          handleJumpToEvent={handleJumpToEvent}
           activeAgent={activeAgent}
           composerMode={composerMode}
           terminalSnippets={terminalSnippets}
