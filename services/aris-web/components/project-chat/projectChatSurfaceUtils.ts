@@ -74,7 +74,13 @@ export type ProjectPanelGitOverview = {
   unstagedCount: number;
   untrackedCount: number;
   conflictedCount: number;
+  trackedFileCount: number;
   files: ProjectPanelGitFile[];
+};
+export type WorkspaceGitDiff = {
+  path: string;
+  scope: 'working' | 'staged';
+  diff: string;
 };
 export type ProjectChatDragStartHandler = (
   event: DragEvent<HTMLElement>,
@@ -423,10 +429,13 @@ export async function saveProjectWorkspaceLayout(
   };
 }
 
-export async function fetchProjectPanelGitOverview(projectId: string, panelId: string): Promise<ProjectPanelGitOverview> {
+// workspacePanelId가 없으면 서버가 프로젝트 루트를 대상으로 해석한다(executionTarget의 project 폴백).
+export async function fetchProjectPanelGitOverview(projectId: string, panelId: string | null): Promise<ProjectPanelGitOverview> {
   const params = new URLSearchParams();
   params.set('kind', 'overview');
-  params.set('workspacePanelId', panelId);
+  if (panelId) {
+    params.set('workspacePanelId', panelId);
+  }
   const response = await fetch(
     withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(projectId)}/git?${params.toString()}`),
     { cache: 'no-store' },
@@ -434,6 +443,30 @@ export async function fetchProjectPanelGitOverview(projectId: string, panelId: s
   const body = (await response.json().catch(() => ({}))) as ProjectPanelGitOverview & { error?: string };
   if (!response.ok) {
     throw new Error(body.error ?? 'Git 정보를 불러오지 못했습니다.');
+  }
+  return body;
+}
+
+export async function fetchWorkspaceGitDiff(
+  projectId: string,
+  panelId: string | null,
+  filePath: string,
+  scope: WorkspaceGitDiff['scope'],
+): Promise<WorkspaceGitDiff> {
+  const params = new URLSearchParams();
+  params.set('kind', 'diff');
+  params.set('path', filePath);
+  params.set('scope', scope);
+  if (panelId) {
+    params.set('workspacePanelId', panelId);
+  }
+  const response = await fetch(
+    withAppBasePath(`/api/runtime/sessions/${encodeURIComponent(projectId)}/git?${params.toString()}`),
+    { cache: 'no-store' },
+  );
+  const body = (await response.json().catch(() => ({}))) as WorkspaceGitDiff & { error?: string };
+  if (!response.ok) {
+    throw new Error(body.error ?? 'diff를 불러오지 못했습니다.');
   }
   return body;
 }

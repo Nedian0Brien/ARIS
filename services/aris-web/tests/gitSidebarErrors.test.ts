@@ -129,6 +129,7 @@ describe('git sidebar runtime errors', () => {
       'branch --show-current',
       'rev-parse --abbrev-ref --symbolic-full-name @{upstream}',
       'rev-list --left-right --count @{upstream}...HEAD',
+      'ls-files --cached',
     ]);
   });
 });

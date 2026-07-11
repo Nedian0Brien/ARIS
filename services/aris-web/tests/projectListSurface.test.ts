@@ -465,7 +465,8 @@ describe('project list surface', () => {
   it('keeps the workspace metrics while restyling run details as chat-screen-v1 cards', () => {
     expect(projectChatSurface).toContain('<div className="run-summary">');
     expect(projectChatSurface).toContain('<span className="run-summary__label">Steps</span>');
-    expect(projectChatSurface).toContain('<span className="run-summary__label">Tokens</span>');
+    // Tokens 셀은 실측 usage 파이프라인이 붙기 전까지 표시하지 않는다(가짜 지표 금지).
+    expect(projectChatSurface).not.toContain('<span className="run-summary__label">Tokens</span>');
     expect(projectChatSurface).toContain('<span className="run-summary__label">Activity</span>');
     expect(projectChatSurface).toContain('className="ws-card ws-card--run"');
     expect(projectChatSurface).toContain('className="chist ws-card ws-card--history"');
@@ -482,6 +483,21 @@ describe('project list surface', () => {
     expect(uiCss).toContain('.pc-proto .ws-run-step {');
     expect(uiCss).toContain('.pc-proto .ws-empty-state {');
     expect(uiCss).toContain('grid-template-columns: auto minmax(0, 1fr) auto;');
+  });
+
+  it('keeps fabricated metrics out of the workspace surfaces', () => {
+    // 가짜 수치(수식으로 지어낸 토큰/파일 수, 하드코딩 링/게이지) 재유입 방지.
+    expect(homeClient).not.toContain('deriveProjectTokenLabel');
+    expect(homeClient).not.toContain('deriveProjectFileCount');
+    expect(projectChatSurface).not.toContain('9.2%');
+    expect(projectChatSurface).not.toContain("'#0142'");
+    expect(projectChatSurface).not.toContain('/ 200k');
+    expect(projectChatSurface).not.toContain('design/chat-prototype.html');
+    expect(projectChatSurface).not.toContain('tokenLabel');
+    expect(projectChatSurface).not.toContain('fileCount');
+    // Git 탭은 패널이 없으면 프로젝트 루트로 폴백한다 — 영구 에러 문구 금지.
+    expect(projectChatSurface).not.toContain('선택된 병렬 패널이 없습니다.');
+    expect(projectChatSurface).toContain('trackedFileCount');
   });
 
   it('renders functional workspace panes instead of one static Run panel', () => {

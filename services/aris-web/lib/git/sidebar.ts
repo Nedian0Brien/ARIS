@@ -34,6 +34,7 @@ export type GitSidebarOverview = {
   unstagedCount: number;
   untrackedCount: number;
   conflictedCount: number;
+  trackedFileCount: number;
   files: GitFileEntry[];
 };
 
@@ -216,7 +217,7 @@ function formatGitOutput(stdout: string, stderr: string, fallback: string): stri
 export async function getGitSidebarOverview(projectPath: string): Promise<GitSidebarOverview> {
   const resolved = await resolveGitWorkspace(projectPath);
 
-  const [statusResult, branchResult, upstreamResult, aheadBehindResult] = await Promise.all([
+  const [statusResult, branchResult, upstreamResult, aheadBehindResult, trackedFilesResult] = await Promise.all([
     runGitCommand(resolved.runtimePath, ['status', '--porcelain=v1', '-z', '--untracked-files=all']),
     runGitCommand(resolved.runtimePath, ['branch', '--show-current']),
     runGitCommand(resolved.runtimePath, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']).catch(() => ({
@@ -225,6 +226,10 @@ export async function getGitSidebarOverview(projectPath: string): Promise<GitSid
     })),
     runGitCommand(resolved.runtimePath, ['rev-list', '--left-right', '--count', '@{upstream}...HEAD']).catch(() => ({
       stdout: '0 0',
+      stderr: '',
+    })),
+    runGitCommand(resolved.runtimePath, ['ls-files', '--cached']).catch(() => ({
+      stdout: '',
       stderr: '',
     })),
   ]);
@@ -247,6 +252,7 @@ export async function getGitSidebarOverview(projectPath: string): Promise<GitSid
     unstagedCount,
     untrackedCount,
     conflictedCount,
+    trackedFileCount: trackedFilesResult.stdout.split('\n').filter(Boolean).length,
     files,
   };
 }
