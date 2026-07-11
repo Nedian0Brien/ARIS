@@ -6,7 +6,11 @@ import { readAppStyles } from './helpers/readAppStyles';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const homeClient = readFileSync(resolve(__dirname, '../app/HomePageClient.tsx'), 'utf8');
-const projectChatSurface = readFileSync(resolve(__dirname, '../components/project-chat/ProjectChatSurface.tsx'), 'utf8');
+const projectChatSurfaceModule = readFileSync(resolve(__dirname, '../components/project-chat/ProjectChatSurface.tsx'), 'utf8');
+const workspaceSidebarSource = readFileSync(resolve(__dirname, '../components/project-chat/workspace/WorkspaceSidebar.tsx'), 'utf8');
+const previewOverlaySource = readFileSync(resolve(__dirname, '../components/project-chat/workspace/PreviewOverlay.tsx'), 'utf8');
+// 사이드바·프리뷰 마크업은 workspace/로 추출됨 — 화면 단위 정적 단언은 세 파일을 하나의 소스로 본다.
+const projectChatSurface = [projectChatSurfaceModule, workspaceSidebarSource, previewOverlaySource].join('\n');
 const projectChatSurfaceUtils = readFileSync(resolve(__dirname, '../components/project-chat/projectChatSurfaceUtils.ts'), 'utf8');
 const projectActionCard = readFileSync(resolve(__dirname, '../components/project-chat/ProjectActionCard.tsx'), 'utf8');
 const projectRunStatusChip = readFileSync(resolve(__dirname, '../components/project-chat/ProjectRunStatusChip.tsx'), 'utf8');
