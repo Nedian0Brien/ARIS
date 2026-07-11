@@ -1344,7 +1344,6 @@ export function ProjectChatSurface({
     ?? session.lastActivityAt
     ?? new Date().toISOString();
   const projectChatRoute = `/?tab=project&project=${projectId}&view=chat${selectedChatId ? `&chat=${selectedChatId}` : ''}`;
-  const previewTarget = `aris.lawdigest.kr${projectChatRoute}`;
   const parallelLayoutStorageKey = useMemo(() => createProjectPanelLayoutStorageKey(projectId), [projectId]);
   const prototypeRef = useRef<HTMLDivElement | null>(null);
   const composerWrapRef = useRef<HTMLElement | null>(null);
@@ -3334,20 +3333,12 @@ export function ProjectChatSurface({
         />
       </div>
       <ProjectPreviewOverlay
-        previewTarget={previewTarget}
+        projectId={projectId}
         previewDevice={previewDevice}
         setPreviewDevice={setPreviewDevice}
         setPreviewState={setPreviewState}
         handleCopy={handleCopy}
-        showTransientFeedback={showTransientFeedback}
-        session={session}
-        activeChat={activeChat}
-        activeAgent={activeAgent}
-        activeModelLabel={activeModelLabel}
-        composerMode={composerMode}
-        workspaceTab={workspaceTab}
         selectedWorkspaceFile={selectedWorkspaceFile}
-        projectPath={projectPath}
       />
       </>
       )}

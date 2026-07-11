@@ -516,6 +516,16 @@ describe('project list surface', () => {
     expect(projectChatSurface).toContain('strokeDashoffset={CTX_RING_CIRCUMFERENCE * (1 - ratio)}');
     expect(projectChatSurface).toContain('usage: chatUsage');
     expect(projectChatSurface).not.toContain('strokeDashoffset="194"');
+  });
+
+  it('drives the preview overlay from the local dev proxy instead of a drawn mock', () => {
+    expect(previewOverlaySource).toContain('buildLocalPreviewProxyBasePath');
+    expect(previewOverlaySource).toContain('className="preview-iframe"');
+    expect(previewOverlaySource).toContain("mode === 'server'");
+    // 목업 시절의 가짜 토스트·그림 페이지 재유입 방지.
+    expect(previewOverlaySource).not.toContain('Screenshot staged');
+    expect(previewOverlaySource).not.toContain('Preview zoom');
+    expect(previewOverlaySource).not.toContain('preview-page__bar-fill');
     // 프리뷰 목업(PR-6에서 실물화)은 예외 — 사이드바 소스에는 하드코딩 % 금지.
     expect(workspaceSidebarSource).not.toMatch(/width: '\d+(\.\d+)?%'/);
   });
