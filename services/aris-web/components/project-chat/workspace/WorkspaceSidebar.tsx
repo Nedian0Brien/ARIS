@@ -1,6 +1,6 @@
 'use client';
 
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import type { RefObject } from 'react';
 import {
   Bot,
   ChevronRight,
@@ -24,11 +24,14 @@ import { MarkdownContent } from '@/components/chat/MarkdownContent';
 import { GitActionMark } from '@/components/project-chat/helpers/actionMarks';
 import type { SessionChat, SessionSummary } from '@/lib/happy/types';
 import type { WorkspaceFileItem, WorkspaceFilesApi } from '@/lib/hooks/useWorkspaceFiles';
+import type { WorkspaceTerminalApi } from './hooks/useTerminalRunner';
+import type { SavedTerminalSnippetsApi } from './hooks/useSavedTerminalSnippets';
 import {
   COMPOSER_MODE_COPY,
   agentAvatarClass,
   agentLabel,
   formatRelativeTime,
+  matchWorkspaceFileBadge,
   projectStatusLabel,
   providerFromAgent,
   type ComposerMode,
@@ -72,6 +75,8 @@ type WorkspaceSidebarCommonProps = {
   refreshWorkspaceGit: () => void;
   activeWorkspacePanelRuntime: ProjectWorkspacePanelRuntime | null;
   draftTerminalCommand: string;
+  setDraftTerminalCommand: (value: string) => void;
+  terminal: WorkspaceTerminalApi;
   onOpenGitDiff: (file: ProjectPanelGitFile) => void;
   handleCopy: (value: string, label: string) => void;
   session: SessionSummary;
@@ -103,8 +108,7 @@ type ProjectWorkspaceSidebarProps = WorkspaceSidebarCommonProps & {
   activeAgent: SessionSummary['agent'];
   composerMode: ComposerMode;
   terminalSnippets: WorkspaceTerminalSnippet[];
-  setDraftTerminalCommand: (value: string) => void;
-  setPrompt: Dispatch<SetStateAction<string>>;
+  savedSnippets: SavedTerminalSnippetsApi;
 };
 
 export type WorkspaceSidebarProps = PanelWorkspaceSidebarProps | ProjectWorkspaceSidebarProps;
@@ -130,9 +134,10 @@ function WorkspaceFilesPane({
   workspaceFiles,
   selectedWorkspaceFile,
   openWorkspaceFilePreview,
+  workspaceGitOverview,
 }: Pick<
   WorkspaceSidebarCommonProps,
-  'workspaceTab' | 'workspaceFiles' | 'selectedWorkspaceFile' | 'openWorkspaceFilePreview'
+  'workspaceTab' | 'workspaceFiles' | 'selectedWorkspaceFile' | 'openWorkspaceFilePreview' | 'workspaceGitOverview'
 >) {
   return (
     <div className={`ws__pane${workspaceTab === 'files' ? ' ws__pane--active' : ''}`} data-pane="files">
@@ -171,26 +176,32 @@ function WorkspaceFilesPane({
         {!workspaceFiles.loading && !workspaceFiles.error && workspaceFiles.items.length === 0 && (
           <div className="file-row file-row--state">빈 디렉터리</div>
         )}
-        {workspaceFiles.items.map((file: WorkspaceFileItem) => (
-          <button
-            key={file.path}
-            type="button"
-            className={`file-row${selectedWorkspaceFile === file.path ? ' file-row--selected' : ''}`}
-            onClick={() => {
-              if (file.isDirectory) {
-                workspaceFiles.cdInto(file);
-              } else {
-                openWorkspaceFilePreview(file);
-              }
-            }}
-          >
-            <span className={`file-row__icon${file.isDirectory ? ' file-row__icon--dir' : ''}`}>
-              {file.isDirectory ? <FolderOpen size={13} /> : <FileText size={13} />}
-            </span>
-            <span className="file-row__name">{file.name}</span>
-            <span className="file-row__meta">{file.isDirectory ? 'dir' : 'file'}</span>
-          </button>
-        ))}
+        {workspaceFiles.items.map((file: WorkspaceFileItem) => {
+          const badge = workspaceGitOverview
+            ? matchWorkspaceFileBadge(workspaceGitOverview.files, file.path, file.isDirectory)
+            : null;
+          return (
+            <button
+              key={file.path}
+              type="button"
+              className={`file-row${selectedWorkspaceFile === file.path ? ' file-row--selected' : ''}`}
+              onClick={() => {
+                if (file.isDirectory) {
+                  workspaceFiles.cdInto(file);
+                } else {
+                  openWorkspaceFilePreview(file);
+                }
+              }}
+            >
+              <span className={`file-row__icon${file.isDirectory ? ' file-row__icon--dir' : ''}`}>
+                {file.isDirectory ? <FolderOpen size={13} /> : <FileText size={13} />}
+              </span>
+              <span className="file-row__name">{file.name}</span>
+              {badge && <span className="file-row__badge" data-tone={badge.tone}>{badge.label}</span>}
+              <span className="file-row__meta">{file.isDirectory ? 'dir' : 'file'}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -266,6 +277,80 @@ function WorkspaceGitPane({
   );
 }
 
+function WorkspaceTerminalConsole({
+  terminal,
+  draftTerminalCommand,
+  setDraftTerminalCommand,
+  disabled,
+  tag,
+  contextLine,
+}: Pick<WorkspaceSidebarCommonProps, 'terminal' | 'draftTerminalCommand' | 'setDraftTerminalCommand'> & {
+  disabled: boolean;
+  tag: string;
+  contextLine: string | null;
+}) {
+  return (
+    <div className="term">
+      <div className="term__head">
+        <div className="term__head-left">
+          <span className="term__dots"><span className="term__dot term__dot--r" /><span className="term__dot term__dot--y" /><span className="term__dot term__dot--g" /></span>
+          <span className="term__tag">{tag}</span>
+        </div>
+        <button
+          type="button"
+          className="term__clear"
+          onClick={terminal.clear}
+          disabled={terminal.entries.length === 0}
+        >
+          Clear
+        </button>
+      </div>
+      <div className="term__body">
+        {contextLine ? <div className="term__line"><span className="term__dim">{contextLine}</span></div> : null}
+        {terminal.entries.length === 0 ? (
+          <div className="term__line"><span className="term__dim">명령을 입력하면 워크스페이스에서 실행됩니다 (30초 제한 · 출력 12k 잘림 · 결과는 타임라인에 기록).</span></div>
+        ) : null}
+        {terminal.entries.map((entry) => (
+          <div key={entry.id} className="term__entry">
+            <div className="term__line"><span className="term__prompt">$</span><span>{entry.command}</span></div>
+            {entry.output ? <pre className="term__output">{entry.output}</pre> : null}
+            {entry.running ? (
+              <div className="term__line"><span className="term__dim">실행 중…</span></div>
+            ) : entry.error ? (
+              <div className="term__line"><span className="term__err">✗</span><span className="term__dim">{entry.error}</span></div>
+            ) : (
+              <div className="term__line">
+                {entry.exitCode === 0 ? <span className="term__ok">✓</span> : <span className="term__err">✗</span>}
+                <span className="term__dim">exit {entry.exitCode ?? '?'}</span>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <form
+        className="term__input-row"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const command = draftTerminalCommand.trim();
+          if (!command || terminal.running || disabled) return;
+          terminal.run(command);
+          setDraftTerminalCommand('');
+        }}
+      >
+        <span className="term__prompt">$</span>
+        <input
+          className="term__input"
+          value={draftTerminalCommand}
+          onChange={(event) => setDraftTerminalCommand(event.target.value)}
+          placeholder={disabled ? '채팅을 선택하면 실행할 수 있습니다' : '명령 입력 후 Enter'}
+          disabled={disabled || terminal.running}
+          aria-label="터미널 명령"
+        />
+      </form>
+    </div>
+  );
+}
+
 function WorkspaceSubagentsPane({
   workspaceTab,
   session,
@@ -293,6 +378,8 @@ function PanelWorkspaceSidebar({
   refreshWorkspaceGit,
   activeWorkspacePanelRuntime,
   draftTerminalCommand,
+  setDraftTerminalCommand,
+  terminal,
   onOpenGitDiff,
   handleCopy,
   session,
@@ -347,6 +434,7 @@ function PanelWorkspaceSidebar({
           workspaceFiles={workspaceFiles}
           selectedWorkspaceFile={selectedWorkspaceFile}
           openWorkspaceFilePreview={openWorkspaceFilePreview}
+          workspaceGitOverview={workspaceGitOverview}
         />
         <WorkspaceGitPane
           workspaceTab={workspaceTab}
@@ -360,13 +448,14 @@ function PanelWorkspaceSidebar({
           onOpenGitDiff={onOpenGitDiff}
         />
         <div className={`ws__pane${workspaceTab === 'terminal' ? ' ws__pane--active' : ''}`} data-pane="terminal">
-          <div className="term">
-            <div className="term__head"><span className="term__tag">bash · selected panel</span><span className="term__dim">{activeWorkspacePanelRuntime?.runtimeSessionId ?? projectId}</span></div>
-            <div className="term__body">
-              <div className="term__line"><span className="term__prompt">~/aris$</span><span>{draftTerminalCommand}</span></div>
-              <div className="term__line"><span className="term__dim">cwd · {activeWorkspacePanelRuntime?.worktreePath ?? projectPath}</span></div>
-            </div>
-          </div>
+          <WorkspaceTerminalConsole
+            terminal={terminal}
+            draftTerminalCommand={draftTerminalCommand}
+            setDraftTerminalCommand={setDraftTerminalCommand}
+            disabled={!activeWorkspaceChat}
+            tag="bash · selected panel"
+            contextLine={`cwd · ${activeWorkspacePanelRuntime?.worktreePath ?? projectPath}`}
+          />
         </div>
         <div className={`ws__pane${workspaceTab === 'context' ? ' ws__pane--active' : ''}`} data-pane="context">
           <div className="ctx-group">
@@ -395,6 +484,8 @@ function ProjectWorkspaceSidebar({
   refreshWorkspaceGit,
   activeWorkspacePanelRuntime,
   draftTerminalCommand,
+  setDraftTerminalCommand,
+  terminal,
   onOpenGitDiff,
   handleCopy,
   session,
@@ -415,8 +506,7 @@ function ProjectWorkspaceSidebar({
   activeAgent,
   composerMode,
   terminalSnippets,
-  setDraftTerminalCommand,
-  setPrompt,
+  savedSnippets,
 }: ProjectWorkspaceSidebarProps) {
   return (
     <aside ref={workspaceRef} className="shell__workspace ws ws-pane" aria-label={`${projectName} workspace`}>
@@ -536,6 +626,7 @@ function ProjectWorkspaceSidebar({
           workspaceFiles={workspaceFiles}
           selectedWorkspaceFile={selectedWorkspaceFile}
           openWorkspaceFilePreview={openWorkspaceFilePreview}
+          workspaceGitOverview={workspaceGitOverview}
         />
         <WorkspaceGitPane
           workspaceTab={workspaceTab}
@@ -549,39 +640,57 @@ function ProjectWorkspaceSidebar({
           onOpenGitDiff={onOpenGitDiff}
         />
         <div className={`ws__pane${workspaceTab === 'terminal' ? ' ws__pane--active' : ''}`} data-pane="terminal">
-          <div className="term">
-            <div className="term__head">
-              <div className="term__head-left">
-                <span className="term__dots"><span className="term__dot term__dot--r" /><span className="term__dot term__dot--y" /><span className="term__dot term__dot--g" /></span>
-                <span className="term__tag">bash · project chat</span>
-              </div>
-              <span className="term__dim">{composerMode}</span>
-            </div>
-            <div className="term__body">
-              <div className="term__line"><span className="term__prompt">~/aris$</span><span>{draftTerminalCommand}</span></div>
-              <div className="term__line"><span className="term__dim">selected · {selectedWorkspaceFile}</span></div>
-              <div className="term__line"><span className="term__ok">✓</span><span>ready to run in this project context</span></div>
-            </div>
-          </div>
+          <WorkspaceTerminalConsole
+            terminal={terminal}
+            draftTerminalCommand={draftTerminalCommand}
+            setDraftTerminalCommand={setDraftTerminalCommand}
+            disabled={!activeChat}
+            tag="bash · project chat"
+            contextLine={null}
+          />
           <div className="snip-group">
             <div className="snip-group__head">
               <span className="snip-group__label"><Terminal size={12} />Snippets</span>
-              <span className="snip-group__count">{terminalSnippets.length}</span>
+              <button
+                type="button"
+                className="snip-group__save"
+                onClick={() => savedSnippets.save(draftTerminalCommand)}
+                disabled={!draftTerminalCommand.trim()}
+              >
+                현재 명령 저장
+              </button>
             </div>
             {terminalSnippets.map((snippet) => (
               <button
                 key={snippet.id}
                 type="button"
                 className="snip-row"
-                onClick={() => {
-                  setDraftTerminalCommand(snippet.cmd);
-                  setPrompt((value) => value || snippet.cmd);
-                }}
+                onClick={() => setDraftTerminalCommand(snippet.cmd)}
               >
                 <span className="snip-row__name">{snippet.name}</span>
                 <span className="snip-row__cmd">{snippet.cmd}</span>
                 <span className="snip-row__tag">{snippet.tag}</span>
               </button>
+            ))}
+            {savedSnippets.snippets.map((snippet) => (
+              <div key={snippet.id} className="snip-row snip-row--saved">
+                <button
+                  type="button"
+                  className="snip-row__insert"
+                  onClick={() => setDraftTerminalCommand(snippet.cmd)}
+                >
+                  <span className="snip-row__name">saved</span>
+                  <span className="snip-row__cmd">{snippet.cmd}</span>
+                </button>
+                <button
+                  type="button"
+                  className="snip-row__remove"
+                  aria-label="스니펫 삭제"
+                  onClick={() => savedSnippets.remove(snippet.id)}
+                >
+                  <X size={11} />
+                </button>
+              </div>
             ))}
           </div>
         </div>

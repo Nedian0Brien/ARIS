@@ -684,3 +684,41 @@ export function pairChatTurns(events: UiEvent[], limit: number): ProjectChatTurn
   }
   return turns.slice(-limit);
 }
+
+export type WorkspaceFileBadge = {
+  label: string;
+  tone: 'conflict' | 'new' | 'staged' | 'modified';
+};
+
+// /workspace 가상 경로를 저장소 상대 경로로 환원한다.
+export function relativeWorkspacePath(path: string): string {
+  return path.replace(/^\/workspace\/?/, '');
+}
+
+// Files 탭 행에 붙일 git 상태 배지. 워크스페이스 루트가 저장소 루트의 하위
+// 폴더일 수 있어(git 경로는 저장소 루트 기준) suffix 매칭을 폴백으로 둔다.
+export function matchWorkspaceFileBadge(
+  files: ProjectPanelGitFile[],
+  itemPath: string,
+  isDirectory: boolean,
+): WorkspaceFileBadge | null {
+  const rel = relativeWorkspacePath(itemPath);
+  if (!rel) return null;
+
+  if (isDirectory) {
+    const prefix = `${rel}/`;
+    let count = files.filter((file) => file.path.startsWith(prefix)).length;
+    if (count === 0) {
+      count = files.filter((file) => file.path.includes(`/${prefix}`)).length;
+    }
+    return count > 0 ? { label: String(count), tone: 'modified' } : null;
+  }
+
+  const match = files.find((file) => file.path === rel)
+    ?? files.find((file) => file.path.endsWith(`/${rel}`));
+  if (!match) return null;
+  if (match.conflicted) return { label: 'C', tone: 'conflict' };
+  if (match.untracked) return { label: 'U', tone: 'new' };
+  if (match.staged && !match.unstaged) return { label: 'A', tone: 'staged' };
+  return { label: 'M', tone: 'modified' };
+}

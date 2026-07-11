@@ -502,6 +502,14 @@ describe('project list surface', () => {
     expect(projectChatSurface).toContain('trackedFileCount');
   });
 
+  it('runs sidebar terminal commands through the real terminal endpoint', () => {
+    // Terminal 탭은 그림이 아니라 원샷 러너다 — 정적 목업 문구 재유입 방지.
+    expect(projectChatSurface).toContain('useTerminalRunner({');
+    expect(projectChatSurface).toContain('className="term__input"');
+    expect(projectChatSurface).not.toContain('ready to run in this project context');
+    expect(projectChatSurface).toContain('matchWorkspaceFileBadge');
+  });
+
   it('renders functional workspace panes instead of one static Run panel', () => {
     expect(projectChatSurface).toContain("workspaceTab === 'run'");
     expect(projectChatSurface).toContain("workspaceTab === 'files'");

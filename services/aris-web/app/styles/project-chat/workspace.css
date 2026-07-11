@@ -491,6 +491,143 @@
   flex-shrink: 0;
 }
 
+/* 사이드바 터미널 원샷 러너 (실행 콘솔) */
+.pc-proto .term__err {
+  color: #E5877E;
+}
+
+.pc-proto .term__clear {
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs, 10px);
+  cursor: pointer;
+}
+
+.pc-proto .term__clear:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pc-proto .term__entry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 0;
+}
+
+.pc-proto .term__output {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 4px 0 4px 14px;
+  color: var(--text-secondary);
+  font-size: var(--text-2xs, 10px);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.pc-proto .term__input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.pc-proto .term__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.pc-proto .term__input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* Files 탭 git 상태 배지 */
+.pc-proto .file-row__badge {
+  flex: 0 0 auto;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  text-align: center;
+  font-size: var(--text-2xs, 10px);
+  font-weight: 600;
+  color: #C9CDD6;
+  background: rgba(127, 127, 127, 0.18);
+}
+
+.pc-proto .file-row__badge[data-tone='modified'] {
+  color: #E8C06B;
+  background: rgba(232, 192, 107, 0.14);
+}
+
+.pc-proto .file-row__badge[data-tone='new'] {
+  color: #8BCF9A;
+  background: rgba(46, 160, 67, 0.14);
+}
+
+.pc-proto .file-row__badge[data-tone='staged'] {
+  color: #7FB4FF;
+  background: rgba(47, 107, 255, 0.16);
+}
+
+.pc-proto .file-row__badge[data-tone='conflict'] {
+  color: #E5877E;
+  background: rgba(248, 81, 73, 0.16);
+}
+
+/* 저장 스니펫 */
+.pc-proto .snip-group__save {
+  border: 0;
+  background: none;
+  color: var(--b-500, #2F6BFF);
+  font-size: var(--text-2xs, 10px);
+  cursor: pointer;
+}
+
+.pc-proto .snip-group__save:disabled {
+  color: var(--text-tertiary);
+  cursor: default;
+}
+
+.pc-proto .snip-row--saved {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+.pc-proto .snip-row--saved .snip-row__insert {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pc-proto .snip-row__remove {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.pc-proto .snip-row__remove:hover {
+  color: #E5877E;
+}
+
 .pc-proto .term__ok {
   color: #8BCF9A;
 }
