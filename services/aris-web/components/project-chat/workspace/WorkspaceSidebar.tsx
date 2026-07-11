@@ -41,7 +41,13 @@ import {
   type WorkspaceTab,
 } from '../projectChatSurfaceUtils';
 
-export type WorkspaceRunStepItem = { id: string; title: string; cmd: string; time: string };
+export type WorkspaceRunStepItem = {
+  id: string;
+  title: string;
+  cmd: string;
+  time: string;
+  running: boolean;
+};
 export type WorkspaceHistoryTurnItem = {
   id: string;
   timestamp: string;
@@ -87,13 +93,13 @@ type ProjectWorkspaceSidebarProps = WorkspaceSidebarCommonProps & {
   activeModelLabel: string;
   projectRunActive: boolean;
   handleStopActiveChat: () => Promise<void>;
-  visibleEventsCount: number;
+  runDurationLabel: string | null;
   selectedChatTimestamp: string;
   runStepItems: WorkspaceRunStepItem[];
   historyTurnItems: WorkspaceHistoryTurnItem[];
   visibleExpandedTurnId: string | null;
   setExpandedTurnId: (value: ExpandedTurnState) => void;
-  handleJumpToTurn: (turnId: string) => void;
+  handleJumpToEvent: (eventId: string) => void;
   activeAgent: SessionSummary['agent'];
   composerMode: ComposerMode;
   terminalSnippets: WorkspaceTerminalSnippet[];
@@ -399,13 +405,13 @@ function ProjectWorkspaceSidebar({
   activeModelLabel,
   projectRunActive,
   handleStopActiveChat,
-  visibleEventsCount,
+  runDurationLabel,
   selectedChatTimestamp,
   runStepItems,
   historyTurnItems,
   visibleExpandedTurnId,
   setExpandedTurnId,
-  handleJumpToTurn,
+  handleJumpToEvent,
   activeAgent,
   composerMode,
   terminalSnippets,
@@ -449,7 +455,8 @@ function ProjectWorkspaceSidebar({
       <div className="ws__body">
         <div className={`ws__pane${workspaceTab === 'run' ? ' ws__pane--active' : ''}`} data-pane="run">
           <div className="run-summary">
-            <div className="run-summary__cell"><span className="run-summary__label">Steps</span><span className="run-summary__value">{visibleEventsCount}</span></div>
+            <div className="run-summary__cell"><span className="run-summary__label">Steps</span><span className="run-summary__value">{runStepItems.length}</span></div>
+            <div className="run-summary__cell"><span className="run-summary__label">Duration</span><span className="run-summary__value">{runDurationLabel ?? '—'}</span></div>
             <div className="run-summary__cell"><span className="run-summary__label">Activity</span><span className="run-summary__value">{formatRelativeTime(selectedChatTimestamp)}</span></div>
           </div>
           <div className="ws-card ws-card--run">
@@ -460,8 +467,8 @@ function ProjectWorkspaceSidebar({
             <div className="run-steps">
               {runStepItems.length > 0 ? (
                 runStepItems.map((item) => (
-                  <button key={item.id} type="button" className="run-step ws-run-step" onClick={() => handleCopy(item.cmd, 'Run step')}>
-                    <span className="run-step__dot ws-run-step__dot run-step__dot--done ws-run-step__dot--done" />
+                  <button key={item.id} type="button" className="run-step ws-run-step" title="타임라인에서 보기" onClick={() => handleJumpToEvent(item.id)}>
+                    <span className={`run-step__dot ws-run-step__dot ${item.running ? 'run-step__dot--running ws-run-step__dot--running' : 'run-step__dot--done ws-run-step__dot--done'}`} />
                     <div className="run-step__body ws-run-step__body">
                       <div className="run-step__title ws-run-step__title">{item.title}</div>
                       <div className="run-step__cmd ws-run-step__time">{item.cmd}</div>
@@ -512,8 +519,7 @@ function ProjectWorkspaceSidebar({
                       </div>
                       <div className="chturn__agent-text"><MarkdownContent body={item.agentText} /></div>
                       <div className="chturn__actions">
-                        <button type="button" className="chturn__btn" onClick={() => handleJumpToTurn(item.id)}><ChevronRight size={11} />Jump</button>
-                        <button type="button" className="chturn__btn" data-preview-open onClick={() => setPreviewState('open')}><FileText size={11} />Preview</button>
+                        <button type="button" className="chturn__btn" onClick={() => handleJumpToEvent(item.id)}><ChevronRight size={11} />Jump</button>
                         <button type="button" className="chturn__btn" onClick={() => handleCopy(`${item.text}\n\n${item.agentText}`, 'Turn summary')}><Copy size={11} />Copy</button>
                       </div>
                     </div>

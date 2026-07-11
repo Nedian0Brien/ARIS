@@ -630,3 +630,57 @@ export function resolveProjectRunIndicator({
   }
   return null;
 }
+
+const WORKSPACE_RUN_STEP_KINDS = new Set<UiEvent['kind']>([
+  'run_execution',
+  'exec_execution',
+  'git_execution',
+  'docker_execution',
+  'command_execution',
+  'file_list',
+  'file_read',
+  'file_write',
+]);
+
+// Run 탭 스텝은 작업성 이벤트만 센다 — 텍스트 응답·think·run_status 제외.
+export function isWorkspaceRunStepEvent(event: UiEvent): boolean {
+  return WORKSPACE_RUN_STEP_KINDS.has(event.kind);
+}
+
+export type ProjectChatTurnPair = {
+  id: string;
+  timestamp: string;
+  text: string;
+  agentText: string | null;
+  isLatest: boolean;
+};
+
+// 사용자 턴별 응답 페어링: 각 user 이벤트에 "다음 user 이벤트 전의 마지막
+// 에이전트 text_reply"를 묶는다. terminal 응답은 에이전트 답변이 아니므로 제외.
+export function pairChatTurns(events: UiEvent[], limit: number): ProjectChatTurnPair[] {
+  const turns: ProjectChatTurnPair[] = [];
+  let current: ProjectChatTurnPair | null = null;
+  for (const event of events) {
+    const role = readEventRole(event);
+    if (role === 'user') {
+      current = {
+        id: event.id,
+        timestamp: event.timestamp,
+        text: getEventText(event),
+        agentText: null,
+        isLatest: false,
+      };
+      turns.push(current);
+      continue;
+    }
+    if (!current || role === 'terminal') continue;
+    if (event.kind === 'text_reply') {
+      current.agentText = getEventText(event);
+    }
+  }
+  const latest = turns.at(-1);
+  if (latest) {
+    latest.isLatest = true;
+  }
+  return turns.slice(-limit);
+}
