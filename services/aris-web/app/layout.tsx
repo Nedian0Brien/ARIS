@@ -8,6 +8,18 @@ const appBasePath = normalizeAppBasePath(process.env.NEXT_PUBLIC_ARIS_WEB_ASSET_
 
 const themeBootScript = `
 (() => {
+  const syncThemeColorMeta = (resolved) => {
+    // iOS Safari 15+는 하단 바가 축소될 때 그 영역을 theme-color 메타로 칠한다.
+    // 메타가 없으면 시스템 다크 모드에서 Safari 기본 다크 크롬색(검정)이 쓰여
+    // 라이트 테마 페이지 아래에 검은 띠가 남는다. 색상은 tokens.css의 --canvas와 동기 유지.
+    let meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'theme-color');
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute('content', resolved === 'dark' ? '#08090c' : '#F7F8FA');
+  };
   try {
     const key = 'aris-theme';
     const stored = localStorage.getItem(key);
@@ -17,8 +29,10 @@ const themeBootScript = `
     const root = document.documentElement;
     root.dataset.theme = resolved;
     root.dataset.themeMode = mode;
+    syncThemeColorMeta(resolved);
   } catch {
     document.documentElement.dataset.theme = 'light';
+    syncThemeColorMeta('light');
   }
 })();
 `;
