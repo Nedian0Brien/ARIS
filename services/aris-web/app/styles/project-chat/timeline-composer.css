@@ -1254,6 +1254,117 @@ html[data-theme='dark'] .pc-proto .pc-action-stack {
   box-shadow: 0 0 0 3px var(--mc-ring-soft);
 }
 
+/* 컴포저 테두리를 따라 도는 글로우. 링(마스크)은 고정하고 그 안의
+   conic-gradient만 회전시켜, 사각형 모서리가 실제 테두리와 항상
+   일치하도록 한다 (마스킹된 박스 자체를 rotate()하면 모서리가 어긋난다). */
+.pc-proto .glow-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 17px;
+  padding: 3px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.pc-proto .cmp-pill .glow-ring {
+  inset: -3px;
+  border-radius: var(--r-full);
+}
+
+.pc-proto .cmp--generating .glow-ring,
+.pc-proto .cmp-pill--generating .glow-ring {
+  opacity: 1;
+}
+
+.pc-proto .glow-ring__spin {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1600px;
+  height: 1600px;
+  transform: translate(-50%, -50%) rotate(0deg);
+  background: conic-gradient(from 0deg, transparent 0deg 260deg, var(--mc-ring) 300deg, #fff 315deg, var(--mc-ring) 330deg, transparent 360deg);
+  animation: pc-glow-spin 2.6s linear infinite;
+  animation-play-state: paused;
+}
+
+.pc-proto .cmp--generating .glow-ring__spin,
+.pc-proto .cmp-pill--generating .glow-ring__spin {
+  animation-play-state: running;
+}
+
+@keyframes pc-glow-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-proto .glow-ring__spin {
+    animation: none;
+  }
+
+  .pc-proto .cmp--generating .glow-ring,
+  .pc-proto .cmp-pill--generating .glow-ring {
+    opacity: 0.85;
+  }
+}
+
+/* 타임라인의 "응답 생성 중" 매트릭스 펄스 점 인디케이터 */
+.pc-proto .msg--generating .msg__body {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+}
+
+.pc-proto .cmp-generating-loader {
+  --dot: 6px;
+  --gap: 5px;
+  display: grid;
+  grid-template-columns: repeat(3, var(--dot));
+  grid-template-rows: repeat(3, var(--dot));
+  gap: var(--gap);
+}
+
+.pc-proto .cmp-generating-loader span {
+  width: var(--dot);
+  height: var(--dot);
+  border-radius: 50%;
+  background: var(--mc-ring);
+  opacity: 0.22;
+  animation: pc-matrix-pulse 1.6s ease-in-out infinite;
+}
+
+.pc-proto .cmp-generating-loader span:nth-child(1) { animation-delay: 0s; }
+.pc-proto .cmp-generating-loader span:nth-child(2) { animation-delay: 0.12s; }
+.pc-proto .cmp-generating-loader span:nth-child(3) { animation-delay: 0.24s; }
+.pc-proto .cmp-generating-loader span:nth-child(4) { animation-delay: 0.12s; }
+.pc-proto .cmp-generating-loader span:nth-child(5) { animation-delay: 0.24s; }
+.pc-proto .cmp-generating-loader span:nth-child(6) { animation-delay: 0.36s; }
+.pc-proto .cmp-generating-loader span:nth-child(7) { animation-delay: 0.24s; }
+.pc-proto .cmp-generating-loader span:nth-child(8) { animation-delay: 0.36s; }
+.pc-proto .cmp-generating-loader span:nth-child(9) { animation-delay: 0.48s; }
+
+@keyframes pc-matrix-pulse {
+  0%, 70%, 100% { opacity: 0.22; transform: scale(1); }
+  35% { opacity: 1; transform: scale(1.4); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-proto .cmp-generating-loader span {
+    animation: pc-matrix-pulse-reduced 1.6s ease-in-out infinite;
+  }
+
+  @keyframes pc-matrix-pulse-reduced {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+  }
+}
+
 .pc-proto .cmp__top,
 .pc-proto .cmp__toolbar {
   display: flex;

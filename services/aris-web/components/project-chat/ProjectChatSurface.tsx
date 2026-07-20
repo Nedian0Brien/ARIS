@@ -278,7 +278,8 @@ function ProjectChatComposer({
 
   return (
     <footer ref={composerWrapRef} className="cmp-wrap">
-      <form ref={formRef} className="cmp" onSubmit={onSubmit}>
+      <form ref={formRef} className={`cmp${isRunning ? ' cmp--generating' : ''}`} onSubmit={onSubmit}>
+        <div className="glow-ring" aria-hidden="true"><div className="glow-ring__spin" /></div>
         <div className="cmp__top">
           <div className="cmp-mode" role="tablist" aria-label="Mode">
             {(['agent', 'plan', 'terminal'] as ComposerMode[]).map((mode) => (
@@ -2739,6 +2740,23 @@ export function ProjectChatSurface({
   });
   flushStack();
 
+  if (projectRunIndicator?.tone === 'running' || projectRunIndicator?.tone === 'submitting') {
+    rendered.push(
+      <div key="pc-generating" className="msg msg--generating" role="status" aria-live="polite">
+        <span className={`msg__avatar ${agentAvatarClass(activeAgent)}`}>
+          <ProviderLogo provider={selectedProvider} />
+        </span>
+        <div className="msg__body">
+          <div className="cmp-generating-loader" aria-label="응답 생성 중">
+            <span /><span /><span />
+            <span /><span /><span />
+            <span /><span /><span />
+          </div>
+        </div>
+      </div>,
+    );
+  }
+
   if (!selectedChatId) {
     return (
       <div className="pc-chat-directory" data-project-chat-list>
@@ -3024,7 +3042,8 @@ export function ProjectChatSurface({
 
           <footer ref={composerWrapRef} className="cmp-wrap">
             {isComposerCollapsed && (
-              <div className="cmp-pill">
+              <div className={`cmp-pill${projectRunActive ? ' cmp-pill--generating' : ''}`}>
+                <div className="glow-ring" aria-hidden="true"><div className="glow-ring__spin" /></div>
                 <button
                   type="button"
                   className="cmp-pill__add"
@@ -3060,7 +3079,8 @@ export function ProjectChatSurface({
                 </button>
               </div>
             )}
-            <form className="cmp" onSubmit={handleSubmit}>
+            <form className={`cmp${projectRunActive ? ' cmp--generating' : ''}`} onSubmit={handleSubmit}>
+              <div className="glow-ring" aria-hidden="true"><div className="glow-ring__spin" /></div>
               <div className="cmp__top">
                 <div className="cmp-mode" role="tablist" aria-label="Mode">
                   {(['agent', 'plan', 'terminal'] as ComposerMode[]).map((mode) => (
